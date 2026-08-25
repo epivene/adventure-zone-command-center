@@ -1,133 +1,95 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { GoogleWorkspaceReadClient } from "./google-api-types";
-import { GoogleHistoricalBackfillRepository } from "./google-historical-backfill-repository";
-import { GoogleHistoricalBackfillService } from "./google-historical-backfill-service";
+import { GoogleHistoricalRunLease } from "./google-historical-run-lease";
 
-function recoveryPool(updatedAt: Date) {
+function fakePool(updatedAt: Date) {
   const state = {
     status: "running",
     next_page_token: "same-page-token",
-    first_batch_approved: false,
     processed_count: 0,
-    attached_count: 0,
-    ignored_count: 0,
-    needs_review_count: 0,
-    failed_count: 0,
-    skipped_count: 0,
     updated_at: updatedAt,
   };
-  const query = vi.fn(async (text: string) => {
+  let batchStatus = "running";
+  const query = vi.fn(async (text: string, values?: unknown[]) => {
     if (text.includes("FROM google_workspace_connections")) {
       return { rows: [{ id: "connection-id" }] };
     }
     if (
       text.includes("UPDATE google_workspace_historical_gmail_backfill_state") &&
       text.includes("status = 'error'") &&
-      text.includes("status = 'running'")
+      text.includes("RETURNING connection_id")
     ) {
-      if (Date.now() - state.updated_at.getTime() > 120_000) {
+      const staleMs = Number(values?.[1] ?? 0);
+      if (state.status === "running" && Date.now() - state.updated_at.getTime() > staleMs) {
         state.status = "error";
+        return { rows: [{ connection_id: "connection-id" }] };
       }
       return { rows: [] };
     }
-    if (text.includes("UPDATE google_workspace_historical_gmail_batches") && text.includes("status = 'error'")) {
+    if (
+      text.includes("UPDATE google_workspace_historical_gmail_batches") &&
+      text.includes("status = 'error'")
+    ) {
+      if (batchStatus === "running") batchStatus = "error";
       return { rows: [] };
     }
-    if (text.includes("SELECT status") && text.includes("historical_gmail_backfill_state")) {
-      return { rows: [state] };
+    if (
+      text.includes("UPDATE google_workspace_historical_gmail_backfill_state") &&
+      text.includes("SET status = 'running'") &&
+      text.includes("RETURNING connection_id")
+    ) {
+      if (state.status === "running") return { rows: [] };
+      state.status = "running";
+      state.updated_at = new Date();
+      return { rows: [{ connection_id: "connection-id" }] };
+    }
+    if (
+      text.includes("UPDATE google_workspace_historical_gmail_backfill_state") &&
+      text.includes("SET updated_at = now()") &&
+      text.includes("status = 'running'")
+    ) {
+      if (state.status === "running") state.updated_at = new Date();
+      return { rows: [] };
     }
     return { rows: [] };
   });
-  return { query, state };
+  return { query, state, get batchStatus() { return batchStatus; } };
 }
 
-function message(id: string) {
-  return {
-    id,
-    threadId: `thread-${id}`,
-    labelIds: ["INBOX"],
-    internalDateMs: 1,
-    snippet: "hello",
-    headers: {
-      from: "outside@example.com",
-      to: "TheAdventureZone12@gmail.com",
-      cc: "",
-      subject: "Hello",
-      date: "",
-    },
-    hasAttachments: false,
-  };
-}
+describe("GoogleHistoricalRunLease", () => {
+  it("turns a stale running lease into retryable error without moving the Gmail cursor", async () => {
+    const pool = fakePool(new Date(Date.now() - 10 * 60_000));
+    const lease = new GoogleHistoricalRunLease(pool, { staleAfterMs: 120_000 });
 
-describe("historical Gmail interrupted-run recovery", () => {
-  it("turns a stale running heartbeat into a retryable error without moving the cursor or counts", async () => {
-    const pool = recoveryPool(new Date(Date.now() - 10 * 60_000));
-    const repository = new GoogleHistoricalBackfillRepository(pool);
+    const recovered = await lease.recoverStale();
 
-    const state = await repository.getState();
-
-    expect(state.status).toBe("error");
-    expect(state.nextPageToken).toBe("same-page-token");
-    expect(state.cumulative.processed).toBe(0);
-    expect(state.firstBatchApproved).toBe(false);
-    expect(pool.query).toHaveBeenCalledWith(expect.stringContaining("status = 'running'"), expect.anything());
+    expect(recovered).toBe(true);
+    expect(pool.state.status).toBe("error");
+    expect(pool.state.next_page_token).toBe("same-page-token");
+    expect(pool.state.processed_count).toBe(0);
+    expect(pool.batchStatus).toBe("error");
   });
 
-  it("leaves a fresh running heartbeat alone", async () => {
-    const pool = recoveryPool(new Date());
-    const repository = new GoogleHistoricalBackfillRepository(pool);
+  it("leaves a fresh running lease alone", async () => {
+    const pool = fakePool(new Date());
+    const lease = new GoogleHistoricalRunLease(pool, { staleAfterMs: 120_000 });
 
-    const state = await repository.getState();
-
-    expect(state.status).toBe("running");
-    expect(state.nextPageToken).toBe("same-page-token");
+    await expect(lease.recoverStale()).resolves.toBe(false);
+    expect(pool.state.status).toBe("running");
+    expect(pool.batchStatus).toBe("running");
   });
 
-  it("refreshes the running heartbeat while a real batch request is processing", async () => {
-    const client: GoogleWorkspaceReadClient = {
-      authorizationUrl: () => "",
-      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
-      accountIdentity: async () => ({ subject: null, email: "theadventurezone12@gmail.com" }),
-      listLabels: async () => [],
-      listCalendars: async () => [],
-      listMessagePage: async () => ({
-        messages: [
-          { id: "m1", threadId: "thread-m1" },
-          { id: "m2", threadId: "thread-m2" },
-        ],
-        nextPageToken: "older",
-      }),
-      getMessageMetadata: async (id) => message(id),
-    };
-    const heartbeat = vi.fn(async () => undefined);
-    const repository = {
-      getState: async () => ({
-        status: "not_started" as const,
-        nextPageToken: null,
-        firstBatchApproved: false,
-        cumulative: { processed: 0, attached: 0, ignored: 0, needsReview: 0, failed: 0, skipped: 0 },
-      }),
-      beginBatch: async () => ({ batchId: "batch-1" }),
-      heartbeat,
-      hasOutcome: async () => false,
-      recordOutcome: async () => undefined,
-      finishBatch: async () => undefined,
-      markError: async () => undefined,
-    };
-    const service = new GoogleHistoricalBackfillService({
-      connection: { createReadClient: async () => client },
-      repository,
-      classifier: { classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }) },
-      validationRepository: {
-        upsertRows: async () => undefined,
-        upsertReviewItems: async () => undefined,
-      },
-    });
+  it("atomically refuses a second live run and refreshes the heartbeat for the owner request", async () => {
+    const pool = fakePool(new Date(Date.now() - 10 * 60_000));
+    pool.state.status = "error";
+    const lease = new GoogleHistoricalRunLease(pool, { staleAfterMs: 120_000 });
 
-    await service.runNextBatch();
+    await expect(lease.acquire()).resolves.toBe(true);
+    await expect(lease.acquire()).resolves.toBe(false);
 
-    expect(heartbeat).toHaveBeenCalledWith("batch-1");
-    expect(heartbeat.mock.calls.length).toBeGreaterThanOrEqual(2);
+    const before = pool.state.updated_at.getTime();
+    await new Promise((resolve) => setTimeout(resolve, 2));
+    await lease.heartbeat();
+    expect(pool.state.updated_at.getTime()).toBeGreaterThanOrEqual(before);
   });
 });
