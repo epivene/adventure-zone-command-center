@@ -28,12 +28,14 @@ function escapeHtml(value: string) {
 
 function eventIcon(event: RenderEvent, focused: boolean) {
   const color = event.travelLegColor || "#64748b";
+  const isPotential = event.status !== "confirmed";
+  const isDimmed = isPotential || event.planningEmphasis === "dimmed";
   const classes = ["az-route-pin", focused ? "az-route-pin--focused" : "", event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : ""]
     .filter(Boolean)
     .join(" ");
   return L.divIcon({
     className: "az-route-marker-wrap",
-    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};width:22px;height:22px"><span class="az-route-pin__dot"></span></span>`,
+    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};width:22px;height:22px;opacity:${isDimmed ? "0.62" : "1"}"><span class="az-route-pin__dot"></span></span>`,
     iconSize: [26, 32],
     iconAnchor: [13, 30],
     popupAnchor: [0, -28],
