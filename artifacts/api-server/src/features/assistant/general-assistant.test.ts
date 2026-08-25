@@ -21,6 +21,11 @@ describe("isLeadDiscoveryQuestion", () => {
     expect(isLeadDiscoveryQuestion("Find vendor opportunities at fairs in Idaho in August 2027")).toBe(true);
   });
 
+  it("recognizes simple nearby event discovery without magic date wording", () => {
+    expect(isLeadDiscoveryQuestion("Find events around Miles City")).toBe(true);
+    expect(isLeadDiscoveryQuestion("Scout fairs within 200 miles of Miles City")).toBe(true);
+  });
+
   it("does not steal simple named-profile searches", () => {
     expect(isLeadDiscoveryQuestion("Find Water Lantern Festival")).toBe(false);
     expect(isLeadDiscoveryQuestion("Find Morton County Fair")).toBe(false);
