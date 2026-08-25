@@ -1,6 +1,6 @@
 import { PostgresLeadScoutCrmSearch, type LeadScoutCrmSearch } from "./lead-scout-crm-search";
 import { LeadScoutRepository } from "./lead-scout-repository";
-import { ScoutGeocoder } from "./scout-geography";
+import { ScoutAreaResolver, ScoutGeocoder, type ScoutSearchPlace } from "./scout-geography";
 import type { LeadDiscoveryCriteria, LeadScoutRunView } from "./lead-scout-types";
 
 export type ScoutEventCategory =
@@ -44,12 +44,15 @@ export type RadiusScoutScope = {
   dateEnd: string;
   categories: ScoutEventCategory[];
   historyFilter: ScoutHistoryFilter;
+  searchPlaces: Array<Pick<ScoutSearchPlace, "name" | "placeType" | "distanceMiles">>;
+  searchAreaIncomplete: boolean;
 };
 
 type RadiusCriteria = LeadDiscoveryCriteria & { radiusScope: RadiusScoutScope };
 
 type Repository = Pick<LeadScoutRepository, "createRun" | "setCriteria" | "setCrmReady" | "getRun" | "setFailed">;
 type Geocoder = Pick<ScoutGeocoder, "resolve">;
+type AreaResolver = Pick<ScoutAreaResolver, "listPlaces">;
 
 function manualCityRegion(anchor: RadiusScoutAnchorInput) {
   if (anchor.city?.trim() || anchor.region?.trim()) {
@@ -76,11 +79,23 @@ function categoryKeywords(categories: ScoutEventCategory[]) {
   return categories.map((category) => labels[category]);
 }
 
+function uniquePlaceNames(anchorCity: string | null, places: ScoutSearchPlace[]) {
+  const names = new Map<string, string>();
+  if (anchorCity) names.set(anchorCity.toLowerCase(), anchorCity);
+  for (const place of places) {
+    const key = place.name.trim().toLowerCase();
+    if (key && !names.has(key)) names.set(key, place.name.trim());
+    if (names.size >= 120) break;
+  }
+  return [...names.values()];
+}
+
 export class RadiusLeadScoutService {
   constructor(
     private readonly repository: Repository = new LeadScoutRepository(),
     private readonly crmSearch: LeadScoutCrmSearch = new PostgresLeadScoutCrmSearch(),
     private readonly geocoder: Geocoder = new ScoutGeocoder(),
+    private readonly areaResolver: AreaResolver = new ScoutAreaResolver(),
   ) {}
 
   async create(input: { actorId: string; request: RadiusScoutRequest }): Promise<LeadScoutRunView> {
@@ -97,6 +112,15 @@ export class RadiusLeadScoutService {
       longitude = resolved.longitude;
     }
 
+    let searchPlaces: ScoutSearchPlace[] = [];
+    let searchAreaIncomplete = false;
+    try {
+      searchPlaces = await this.areaResolver.listPlaces({ latitude, longitude }, input.request.radiusMiles);
+    } catch {
+      searchAreaIncomplete = true;
+    }
+    const searchCities = uniquePlaceNames(city, searchPlaces);
+
     const scope: RadiusScoutScope = {
       mode: "radius",
       anchor: {
@@ -111,6 +135,12 @@ export class RadiusLeadScoutService {
       dateEnd: input.request.dateEnd,
       categories: input.request.categories,
       historyFilter: input.request.historyFilter,
+      searchPlaces: searchPlaces.map((place) => ({
+        name: place.name,
+        placeType: place.placeType,
+        distanceMiles: Math.round(place.distanceMiles * 10) / 10,
+      })),
+      searchAreaIncomplete,
     };
     const criteria: RadiusCriteria = {
       originalQuestion: `Scout ${input.request.radiusMiles} miles around ${input.request.anchor.label}`,
@@ -119,7 +149,7 @@ export class RadiusLeadScoutService {
       month: null,
       year: Number(input.request.dateStart.slice(0, 4)) || null,
       regions: [],
-      cities: [],
+      cities: searchCities,
       geoMode: "radius",
       routeId: null,
       legId: null,
@@ -130,7 +160,10 @@ export class RadiusLeadScoutService {
       fitIntent: "either",
       radiusScope: scope,
     };
-    const summary = `${input.request.dateStart}–${input.request.dateEnd} · ${input.request.radiusMiles} miles around ${input.request.anchor.label} · ${input.request.categories.length} event types`;
+    const areaSummary = searchCities.length
+      ? ` · ${searchCities.length} nearby communities queued`
+      : searchAreaIncomplete ? " · area lookup incomplete" : "";
+    const summary = `${input.request.dateStart}–${input.request.dateEnd} · ${input.request.radiusMiles} miles around ${input.request.anchor.label} · ${input.request.categories.length} event types${areaSummary}`;
     const runId = await this.repository.createRun({
       actorId: input.actorId,
       question: criteria.originalQuestion,
