@@ -54,7 +54,7 @@ export function LeadScoutCandidateCard({
       ? "Already in Command Center"
       : candidate.crmMatchStatus === "possible_match"
         ? "Possible match"
-        : "Unsaved prospect";
+        : "Found";
   const relevantSourceIds = new Set(candidate.facts.flatMap((fact) => fact.sourceIds));
   const relevantSources = sources.filter((source) => relevantSourceIds.has(source.id));
   const reviewable = candidate.reviewStatus !== "dismissed" && candidate.reviewStatus !== "saved";
@@ -93,7 +93,7 @@ export function LeadScoutCandidateCard({
 
       {candidate.fitScore != null ? (
         <div className="mt-3 rounded-lg bg-slate-50 p-3">
-          <p className="text-sm font-bold text-slate-900">Adventure Zone fit: {candidate.fitScore}/100</p>
+          <p className="text-sm font-bold text-slate-900">Scout Score: {candidate.fitScore}%</p>
           {candidate.fitReasons.length ? <p className="mt-1 text-xs text-slate-600">{candidate.fitReasons.slice(0, 3).join(" · ")}</p> : candidate.fitRationale ? <p className="mt-1 text-xs text-slate-600">{candidate.fitRationale}</p> : null}
           {candidate.fitCautions.length ? <ul className="mt-2 grid gap-1 text-xs text-amber-800">{candidate.fitCautions.slice(0, 3).map((caution) => <li key={caution}>Caution: {caution}</li>)}</ul> : null}
         </div>
@@ -128,7 +128,7 @@ export function LeadScoutCandidateCard({
         {candidate.reviewStatus !== "saved" && candidate.crmMatchStatus === "existing" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Open profile</a> : null}
         {candidate.crmMatchStatus === "possible_match" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Review match</a> : null}
         {showSave ? (
-          <button className="button-primary" disabled={!canSave} onClick={() => onSaveAsLead(candidate.id)} title={canSave ? undefined : "Stop the active Scout before saving this prospect."} type="button">Save as lead</button>
+          <button className="button-primary" disabled={!canSave} onClick={() => onSaveAsLead(candidate.id)} title={canSave ? undefined : "Stop the active Scout before creating this profile."} type="button">Create Profile</button>
         ) : null}
         {canDeepen ? (
           <button className="button-secondary" disabled={deepResearchPending} onClick={() => onResearchDeeper(candidate.id)} type="button">
