@@ -16,12 +16,15 @@ import {
   getLeadScoutRun,
   saveLeadScoutCandidate,
   startLeadScout,
+  startRadiusLeadScout,
   stopLeadScout,
   type LeadScoutSaveResult,
   type LeadScoutSaveSubmission,
+  type RadiusScoutRequest,
 } from "@/features/assistant/lead-scout-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import type {
+  ActiveAssistantContext,
   AssistantAnswer,
   AssistantContextBundle,
   AssistantLeadMatch,
@@ -39,6 +42,17 @@ import { ScoutLaunchForm, type RadiusScoutSubmission } from "./scout-launch-form
 const generalPrompts = ["Find a profile", "Who needs follow-up?", "Find profiles in Minnesota", "Find Christmas events"];
 type AssistantDrawerMode = "assistant" | "scout";
 
+type ScoutContextPrefill = {
+  kind: "booking" | "event_family";
+  recordId: string;
+  label: string;
+  city?: string;
+  region?: string;
+  initialDateStart?: string;
+  initialDateEnd?: string;
+  hasLocation: boolean;
+};
+
 function resultHref(result: AssistantProfileSearchResult) {
   if (result.kind === "organization") return `/profiles/${result.id}`;
   if (result.kind === "contact") return `/contacts/${result.id}`;
@@ -47,6 +61,45 @@ function resultHref(result: AssistantProfileSearchResult) {
 
 function isTransientPollFailure(cause: unknown) {
   return cause instanceof TypeError && /failed to fetch|network|load failed|networkerror/i.test(cause.message);
+}
+
+function dateOnly(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
+  return value.slice(0, 10);
+}
+
+function shiftDateOnly(value: string | undefined, days: number): string | undefined {
+  if (!value) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function contextualScoutPrefill(
+  context: ActiveAssistantContext,
+  bundle: AssistantContextBundle | null,
+): ScoutContextPrefill | null {
+  if (!context || !["booking", "event_family"].includes(context.kind)) return null;
+  const currentBooking = bundle && typeof bundle.currentBooking === "object" && bundle.currentBooking
+    ? bundle.currentBooking as Record<string, unknown>
+    : null;
+  const city = typeof currentBooking?.city === "string" ? currentBooking.city : undefined;
+  const region = typeof currentBooking?.region === "string" ? currentBooking.region : undefined;
+  const startsAt = dateOnly(currentBooking?.startsAt);
+  const endsAt = dateOnly(currentBooking?.endsAt) ?? startsAt;
+  const location = [city, region].filter(Boolean).join(", ");
+  return {
+    kind: context.kind as "booking" | "event_family",
+    recordId: context.recordId,
+    label: context.label || location || "Selected event",
+    city,
+    region,
+    initialDateStart: shiftDateOnly(startsAt, -7),
+    initialDateEnd: shiftDateOnly(endsAt, 7),
+    hasLocation: Boolean(city || region),
+  };
 }
 
 export function AssistantDrawer() {
@@ -60,6 +113,7 @@ export function AssistantDrawer() {
   const [generalResponse, setGeneralResponse] = useState<GeneralAssistantResponse | null>(null);
   const [leadScoutRun, setLeadScoutRun] = useState<LeadScoutRunView | null>(null);
   const [drawerMode, setDrawerMode] = useState<AssistantDrawerMode>("assistant");
+  const [scoutPrefill, setScoutPrefill] = useState<ScoutContextPrefill | null>(null);
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [scoutActionBusy, setScoutActionBusy] = useState(false);
@@ -70,6 +124,10 @@ export function AssistantDrawer() {
   const generalGeneration = useRef(0);
 
   const contextKey = useMemo(() => activeContext ? `${activeContext.kind}:${activeContext.recordId}` : "general", [activeContext]);
+  const availableContextPrefill = useMemo(
+    () => contextualScoutPrefill(activeContext, contextBundle),
+    [activeContext, contextBundle],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -79,7 +137,7 @@ export function AssistantDrawer() {
   useEffect(() => {
     if (!isOpen) return;
     setAnswers([]); setConversationId(undefined); setContextBundle(null); setBrief(null); setGeneralResponse(null);
-    setLeadScoutRun(null); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null);
+    setLeadScoutRun(null); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null); setScoutPrefill(null);
     if (activeContext) setDrawerMode("assistant");
 
     let cancelled = false;
@@ -232,8 +290,44 @@ export function AssistantDrawer() {
     }
   }
 
-  function handleScoutLaunch(_submission: RadiusScoutSubmission) {
-    setError("Radius Scout search is not connected yet on this feature branch.");
+  async function handleScoutLaunch(submission: RadiusScoutSubmission) {
+    if (scoutActionBusy) return;
+    setScoutActionBusy(true);
+    setError(null);
+    try {
+      const usingContext = scoutPrefill && submission.anchorLabel.trim() === scoutPrefill.label.trim();
+      const anchor: RadiusScoutRequest["anchor"] = usingContext
+        ? {
+            kind: scoutPrefill.kind,
+            recordId: scoutPrefill.recordId,
+            label: scoutPrefill.label,
+            city: scoutPrefill.city,
+            region: scoutPrefill.region,
+          }
+        : { kind: "manual", label: submission.anchorLabel.trim() };
+      const run = await startRadiusLeadScout({
+        anchor,
+        radiusMiles: submission.radiusMiles,
+        dateStart: submission.dateStart,
+        dateEnd: submission.dateEnd,
+        categories: submission.categories,
+        historyFilter: submission.historyFilter,
+      });
+      setLeadScoutRun(run);
+      setDrawerMode("scout");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start Radius Scout.");
+    } finally {
+      setScoutActionBusy(false);
+    }
+  }
+
+  function launchContextScout() {
+    if (!availableContextPrefill) return;
+    setScoutPrefill(availableContextPrefill);
+    setLeadScoutRun(null);
+    setError(availableContextPrefill.hasLocation ? null : "This event has no saved location yet. Enter a city, state, or address before scouting.");
+    setDrawerMode("scout");
   }
 
   function useResultAsContext(result: AssistantProfileSearchResult) {
@@ -249,6 +343,7 @@ export function AssistantDrawer() {
 
   if (!isOpen) return null;
   const generalMode = !activeContext;
+  const contextualScoutMode = Boolean(activeContext && drawerMode === "scout");
   const results = generalResponse?.kind === "profile_results" ? generalResponse.results : [];
 
   return (
@@ -275,7 +370,7 @@ export function AssistantDrawer() {
                   >Ask Assistant</button>
                   <button
                     className={drawerMode === "scout" ? "button-primary" : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"}
-                    onClick={() => { setDrawerMode("scout"); setError(null); }}
+                    onClick={() => { setScoutPrefill(null); setDrawerMode("scout"); setError(null); }}
                     type="button"
                   >Scout Events</button>
                 </div>
@@ -302,8 +397,42 @@ export function AssistantDrawer() {
               {scoutPollingWarning ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{scoutPollingWarning}</p> : null}
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
             </div>
-          ) : loading ? <p className="py-10 text-center text-sm text-slate-500">Building Booking Brief…</p> : (
+          ) : loading ? <p className="py-10 text-center text-sm text-slate-500">Building Booking Brief…</p> : contextualScoutMode ? (
             <div className="grid gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-slate-700">Scouting around {activeContext?.label ?? "this event"}</p>
+                <button className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700" onClick={() => { setDrawerMode("assistant"); setError(null); }} type="button">Back to Assistant</button>
+              </div>
+              {!leadScoutRun ? (
+                <ScoutLaunchForm
+                  disabled={scoutActionBusy}
+                  initialAnchor={scoutPrefill?.label ?? availableContextPrefill?.label ?? ""}
+                  initialDateStart={scoutPrefill?.initialDateStart ?? availableContextPrefill?.initialDateStart ?? ""}
+                  initialDateEnd={scoutPrefill?.initialDateEnd ?? availableContextPrefill?.initialDateEnd ?? ""}
+                  key={`${activeContext?.kind}:${activeContext?.recordId}:scout`}
+                  onSubmit={handleScoutLaunch}
+                />
+              ) : (
+                <LeadDiscoveryResults
+                  run={leadScoutRun}
+                  webScoutAvailable
+                  onOpenProfile={openLeadMatch}
+                  onUseContext={useLeadMatchAsContext}
+                  onFindNewLeads={findNewLeads}
+                  onStopSearch={() => { void stopSearch(); }}
+                  onContinueSearch={continueSearch}
+                  onResearchDeeper={researchDeeper}
+                  onNotFit={markNotFit}
+                  onSaveCandidate={saveScoutCandidate}
+                />
+              )}
+              {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
+            </div>
+          ) : (
+            <div className="grid gap-4">
+              {availableContextPrefill ? (
+                <button className="button-primary w-full" onClick={launchContextScout} type="button">Scout Around This Event</button>
+              ) : null}
               {brief ? <BookingBriefCard brief={brief} context={contextBundle} /> : null}
               {answers.length > 0 ? <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Conversation</p> : null}
               {answers.map((answer, index) => <AssistantMessage answer={answer} key={`${answer.mode}-${index}`} />)}
@@ -311,7 +440,7 @@ export function AssistantDrawer() {
             </div>
           )}
         </div>
-        {(generalMode ? drawerMode === "assistant" : true) ? (
+        {(generalMode ? drawerMode === "assistant" : !contextualScoutMode) ? (
           <form className="border-t border-slate-200 bg-white p-4" onSubmit={handleSubmit}>
             <label className="sr-only" htmlFor="booking-assistant-question">Ask Booking Assistant</label>
             <textarea className="min-h-20 w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" disabled={asking} id="booking-assistant-question" maxLength={4000} onChange={(event) => setQuestion(event.currentTarget.value)} placeholder={generalMode ? "Find a profile, or ask for events by date, state, route, or leg…" : "Ask what happened last year, what they normally book, what you may be forgetting…"} value={question} />
