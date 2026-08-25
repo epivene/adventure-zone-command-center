@@ -17,6 +17,7 @@ import {
   followUpOpeningLabels,
   type FollowUpOpeningMode,
 } from "@/features/calls/follow-up-opening";
+import { naturalGuidedCallSay } from "@/features/calls/natural-guided-call-copy";
 
 const labels: Record<GuidedCallScriptKind, string> = {
   first_outreach: "First outreach",
@@ -52,10 +53,21 @@ export function GuidedCallScriptCard({
   }, [lastOutcome]);
 
   const autoFollowUpMode = useMemo(() => detectFollowUpOpeningMode(lastOutcome), [lastOutcome]);
-  const isFollowUpOpening = kind === "follow_up" && node.id === script.startNodeId;
+  const hasAdminOverride = overrides.some((override) => (
+    override.scriptKind === kind
+    && override.nodeId === node.id
+    && Boolean(override.sayText?.trim())
+  ));
+  const isFollowUpOpening = kind === "follow_up" && node.id === script.startNodeId && !hasAdminOverride;
+  const naturalSpokenText = naturalGuidedCallSay({
+    kind,
+    nodeId: node.id,
+    fallback: node.say,
+    hasAdminOverride,
+  });
   const spokenText = isFollowUpOpening
     ? followUpOpeningFor({ mode: followUpOpeningMode, lastOutcome }).say
-    : node.say;
+    : naturalSpokenText;
 
   return (
     <section
