@@ -7,6 +7,12 @@ export type ResolvedScoutLocation = ScoutPoint & {
   displayName: string;
 };
 
+export type ScoutSearchPlace = ScoutPoint & {
+  name: string;
+  placeType: string;
+  distanceMiles: number;
+};
+
 const EARTH_RADIUS_MILES = 3958.7613;
 
 function radians(value: number) {
@@ -32,6 +38,14 @@ type NominatimRow = {
   lon?: string;
   display_name?: string;
 };
+
+type OverpassElement = {
+  lat?: number;
+  lon?: number;
+  tags?: { name?: string; place?: string };
+};
+
+type OverpassPayload = { elements?: OverpassElement[] };
 
 export class ScoutGeocoder {
   constructor(private readonly fetchFn: typeof fetch = fetch) {}
@@ -64,5 +78,42 @@ export class ScoutGeocoder {
       longitude,
       displayName: row.display_name?.trim() || value,
     };
+  }
+}
+
+export class ScoutAreaResolver {
+  constructor(private readonly fetchFn: typeof fetch = fetch) {}
+
+  async listPlaces(anchor: ScoutPoint, radiusMiles: number, signal?: AbortSignal): Promise<ScoutSearchPlace[]> {
+    const radiusMeters = Math.max(1, Math.round(radiusMiles * 1609.344));
+    const query = `[out:json][timeout:25];node["place"~"^(city|town|village|hamlet)$"](around:${radiusMeters},${anchor.latitude},${anchor.longitude});out body;`;
+    const response = await this.fetchFn("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        "user-agent": "AdventureZoneCommandCenter/1.0",
+      },
+      body: new URLSearchParams({ data: query }),
+      signal,
+    });
+    if (!response.ok) throw new Error(`SCOUT_AREA_LOOKUP_FAILED_${response.status}`);
+    const payload = await response.json() as OverpassPayload;
+    const unique = new Map<string, ScoutSearchPlace>();
+    for (const element of payload.elements ?? []) {
+      const name = element.tags?.name?.trim();
+      const placeType = element.tags?.place?.trim();
+      if (!name || !placeType || !Number.isFinite(element.lat) || !Number.isFinite(element.lon)) continue;
+      const point = { latitude: Number(element.lat), longitude: Number(element.lon) };
+      const miles = distanceMiles(anchor, point);
+      if (miles > radiusMiles) continue;
+      const key = name.toLowerCase();
+      const next: ScoutSearchPlace = { name, placeType, ...point, distanceMiles: miles };
+      const current = unique.get(key);
+      if (!current || next.distanceMiles < current.distanceMiles) unique.set(key, next);
+    }
+    return [...unique.values()]
+      .sort((a, b) => a.distanceMiles - b.distanceMiles || a.name.localeCompare(b.name))
+      .slice(0, 120);
   }
 }
