@@ -1,10 +1,8 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
-import {
-  GoogleRecentValidationService,
-  type GoogleRecentValidationResult,
-} from "@/features/google-workspace/google-recent-validation-service";
+import { GoogleAiRecentValidationService } from "@/features/google-workspace/google-ai-recent-validation-service";
+import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
   PostgresGoogleValidationRepository,
@@ -158,7 +156,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
-  const service = options?.service ?? new GoogleRecentValidationService();
+  const service = options?.service ?? new GoogleAiRecentValidationService();
   const mappingReconciler =
     options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
   const reviewReconciler =
