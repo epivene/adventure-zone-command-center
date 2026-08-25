@@ -186,7 +186,7 @@ export function AssistantDrawer() {
   }, [activeContext, contextKey, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || activeContext || !leadScoutRun || !["running", "stopping"].includes(leadScoutRun.status)) return;
+    if (!isOpen || !leadScoutRun || !["running", "stopping"].includes(leadScoutRun.status)) return;
     let cancelled = false;
     const runId = leadScoutRun.id;
     const interval = window.setInterval(() => {
@@ -206,7 +206,7 @@ export function AssistantDrawer() {
         });
     }, 1500);
     return () => { cancelled = true; window.clearInterval(interval); };
-  }, [activeContext, isOpen, leadScoutRun?.id, leadScoutRun?.status]);
+  }, [isOpen, leadScoutRun?.id, leadScoutRun?.status]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -360,15 +360,13 @@ export function AssistantDrawer() {
   }
 
   function restorePreviousScoutRun() {
-    setScoutRunHistory((current) => {
-      const previous = current[current.length - 1];
-      if (!previous) return current;
-      setLeadScoutRun(previous);
-      setScoutPrefill(null);
-      setError(null);
-      setDrawerMode("scout");
-      return current.slice(0, -1);
-    });
+    const previous = scoutRunHistory[scoutRunHistory.length - 1];
+    if (!previous) return;
+    setLeadScoutRun(previous);
+    setScoutPrefill(null);
+    setError(null);
+    setDrawerMode("scout");
+    setScoutRunHistory((current) => current.slice(0, -1));
   }
 
   function useResultAsContext(result: AssistantProfileSearchResult) {
