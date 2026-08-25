@@ -21,6 +21,7 @@ import { ensureCallScriptSettingsSchema } from "./features/calls/call-script-set
 import { ensureBusinessSourceSeed } from "./features/business-sources/business-source-seed";
 import { ensureCommercialOfferSeed } from "./features/commercial-offers/commercial-offer-seed";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
+import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -211,6 +212,9 @@ async function runPostListenMaintenance() {
   await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
   await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
   await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
+  await runStartupStep("approved profile startup import", () =>
+    importApprovedProfilesAtStartup(port),
+  );
   await runStartupStep("booking assistant business knowledge seed", () =>
     new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
       "system:booking-assistant-seed",
