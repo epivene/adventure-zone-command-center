@@ -64,6 +64,7 @@ import EventProfileNewPage from "@/pages/EventProfileNewPage";
 import EventProfileEditPage from "@/pages/EventProfileEditPage";
 import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
 import AttendanceHistoryImportPage from "@/pages/AttendanceHistoryImportPage";
+import LeadIntakePage from "@/pages/LeadIntakePage";
 import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
 import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
 import SettingsBusinessSourcesPage from "@/pages/SettingsBusinessSourcesPage";
@@ -204,6 +205,7 @@ function ActMigrationRedirect() {
 function SettingsStub() {
   const tools = [
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
+    ["Excel lead lists", "/imports/leads", "Import Amy's event lists and review every source row before research or drafting."],
     ["Attendance history", "/imports/attendance-history", "Review historical attendance records before attaching them to profiles."],
     ["Email templates", "/settings/communication-templates", "Maintain reviewed communication templates and placeholder wording."],
     ["Paper notes", "/settings/paper-notes", "Review imported paper booking notes."],
@@ -283,6 +285,7 @@ function AdminProtectedApp() {
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>
           <Route path="/operations/legs" component={LegManagementPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
+          <Route path="/imports/leads" component={LeadIntakePage} />
           <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
           <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
           <Route path="/calls/new"><CallsRedirect /></Route>

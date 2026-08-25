@@ -105,4 +105,16 @@ describe("LeadIntakeRepository", () => {
       originalValues: { State: "CO", City: "Aspen", Company: "Aspen Filmfest" },
     }));
   });
+
+  it("lists saved imports newest first so review work can be resumed", async () => {
+    const { client, repository } = await setup();
+    clients.push(client);
+    await repository.importWorkbook({ originalFilename: "older.xls", fileSha256: "c".repeat(64), importedBy: "owner", rows: [row] }, new Date("2026-08-24T12:00:00Z"));
+    await repository.importWorkbook({ originalFilename: "newer.xls", fileSha256: "d".repeat(64), importedBy: "owner", rows: [row] }, new Date("2026-08-25T12:00:00Z"));
+
+    expect(await repository.listBatches()).toEqual([
+      expect.objectContaining({ originalFilename: "newer.xls", rowCount: 1 }),
+      expect.objectContaining({ originalFilename: "older.xls", rowCount: 1 }),
+    ]);
+  }, 15_000);
 });

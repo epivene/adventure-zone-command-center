@@ -14,6 +14,7 @@ const bookingPrefixes = [
   "/calendar",
   "/calls",
   "/research-sources",
+  "/imports/leads",
   "/needs-answer",
   "/quick-add",
   "/office-coordinator",

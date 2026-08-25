@@ -29,6 +29,10 @@ router.post("/lead-intake/imports", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/lead-intake/imports", async (_req, res): Promise<void> => {
+  res.json({ batches: await repository.listBatches() });
+});
+
 router.get("/lead-intake/imports/:batchId", async (req, res): Promise<void> => {
   const batchId = param(req.params.batchId);
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(batchId)) {

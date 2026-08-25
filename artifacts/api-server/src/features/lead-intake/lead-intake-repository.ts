@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { leadImportBatches, leadImportRows } from "@/db/schema";
@@ -111,5 +111,10 @@ export class LeadIntakeRepository {
       .where(eq(leadImportRows.batchId, batchId))
       .orderBy(asc(leadImportRows.sheetName), asc(leadImportRows.sourceRowNumber));
     return { ...batch, rows };
+  }
+
+  async listBatches() {
+    return this.database.select().from(leadImportBatches)
+      .orderBy(desc(leadImportBatches.createdAt));
   }
 }
