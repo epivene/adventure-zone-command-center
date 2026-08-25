@@ -34,8 +34,10 @@ import { AssistantMessage } from "./assistant-message";
 import { BookingBriefCard } from "./booking-brief-card";
 import { LeadDiscoveryResults } from "./lead-discovery-results";
 import { ProfileSearchResults } from "./profile-search-results";
+import { ScoutLaunchForm, type RadiusScoutSubmission } from "./scout-launch-form";
 
 const generalPrompts = ["Find a profile", "Who needs follow-up?", "Find profiles in Minnesota", "Find Christmas events"];
+type AssistantDrawerMode = "assistant" | "scout";
 
 function resultHref(result: AssistantProfileSearchResult) {
   if (result.kind === "organization") return `/profiles/${result.id}`;
@@ -57,6 +59,7 @@ export function AssistantDrawer() {
   const [answers, setAnswers] = useState<AssistantAnswer[]>([]);
   const [generalResponse, setGeneralResponse] = useState<GeneralAssistantResponse | null>(null);
   const [leadScoutRun, setLeadScoutRun] = useState<LeadScoutRunView | null>(null);
+  const [drawerMode, setDrawerMode] = useState<AssistantDrawerMode>("assistant");
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
   const [scoutActionBusy, setScoutActionBusy] = useState(false);
@@ -77,6 +80,7 @@ export function AssistantDrawer() {
     if (!isOpen) return;
     setAnswers([]); setConversationId(undefined); setContextBundle(null); setBrief(null); setGeneralResponse(null);
     setLeadScoutRun(null); setError(null); setScoutPollingWarning(null); setOffline(false); setSavedAt(null);
+    if (activeContext) setDrawerMode("assistant");
 
     let cancelled = false;
     if (!activeContext) {
@@ -143,8 +147,14 @@ export function AssistantDrawer() {
           return;
         }
         const result = await askGeneralAssistant(submitted);
-        if (result.kind === "lead_discovery") { setGeneralResponse(null); setLeadScoutRun(result.run); }
-        else { setLeadScoutRun(null); setGeneralResponse(result); }
+        if (result.kind === "lead_discovery") {
+          setGeneralResponse(null);
+          setLeadScoutRun(result.run);
+          setDrawerMode("scout");
+        } else {
+          setLeadScoutRun(null);
+          setGeneralResponse(result);
+        }
         return;
       }
       const result = await askBookingAssistant({ context: activeContext, question: submitted, conversationId });
@@ -222,6 +232,10 @@ export function AssistantDrawer() {
     }
   }
 
+  function handleScoutLaunch(_submission: RadiusScoutSubmission) {
+    setError("Radius Scout search is not connected yet on this feature branch.");
+  }
+
   function useResultAsContext(result: AssistantProfileSearchResult) {
     selectExplicitContext({ kind: result.kind, recordId: result.id, label: result.label });
     setGeneralResponse(null); setLeadScoutRun(null); setQuestion("");
@@ -252,11 +266,25 @@ export function AssistantDrawer() {
             <div className="grid gap-4">
               <div className="rounded-xl border border-slate-200 bg-white p-5">
                 <h3 className="font-bold text-slate-950">General Command Terminal</h3>
-                <p className="mt-1 text-sm text-slate-600">Find a customer, contact, event family, seasonal event, overdue follow-up, or ask for events in a specific date/route area. Pick a result and I’ll use it for your next questions.</p>
-                <div className="mt-3 flex flex-wrap gap-2">{generalPrompts.map((prompt) => <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>)}</div>
+                <p className="mt-1 text-sm text-slate-600">Find existing Command Center records with Ask Assistant, or use Scout Events to hunt for new opportunities around a location.</p>
+                <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="Assistant mode">
+                  <button
+                    className={drawerMode === "assistant" ? "button-primary" : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"}
+                    onClick={() => { setDrawerMode("assistant"); setError(null); }}
+                    type="button"
+                  >Ask Assistant</button>
+                  <button
+                    className={drawerMode === "scout" ? "button-primary" : "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"}
+                    onClick={() => { setDrawerMode("scout"); setError(null); }}
+                    type="button"
+                  >Scout Events</button>
+                </div>
+                {drawerMode === "assistant" ? <div className="mt-3 flex flex-wrap gap-2">{generalPrompts.map((prompt) => <button className="rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-orange-800 hover:bg-orange-100" key={prompt} onClick={() => setQuestion(prompt)} type="button">{prompt}</button>)}</div> : null}
               </div>
-              {generalResponse ? <p className="text-sm text-slate-700">{generalResponse.kind === "answer" ? generalResponse.answer.text : generalResponse.text}</p> : null}
-              {leadScoutRun ? (
+
+              {drawerMode === "scout" && !leadScoutRun ? <ScoutLaunchForm disabled={scoutActionBusy} onSubmit={handleScoutLaunch} /> : null}
+              {drawerMode === "assistant" && generalResponse ? <p className="text-sm text-slate-700">{generalResponse.kind === "answer" ? generalResponse.answer.text : generalResponse.text}</p> : null}
+              {drawerMode === "scout" && leadScoutRun ? (
                 <LeadDiscoveryResults
                   run={leadScoutRun}
                   webScoutAvailable
@@ -270,7 +298,7 @@ export function AssistantDrawer() {
                   onSaveCandidate={saveScoutCandidate}
                 />
               ) : null}
-              <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} />
+              {drawerMode === "assistant" ? <ProfileSearchResults results={results} onOpenProfile={openResult} onUseContext={useResultAsContext} /> : null}
               {scoutPollingWarning ? <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-800">{scoutPollingWarning}</p> : null}
               {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
             </div>
@@ -283,14 +311,16 @@ export function AssistantDrawer() {
             </div>
           )}
         </div>
-        <form className="border-t border-slate-200 bg-white p-4" onSubmit={handleSubmit}>
-          <label className="sr-only" htmlFor="booking-assistant-question">Ask Booking Assistant</label>
-          <textarea className="min-h-20 w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" disabled={asking} id="booking-assistant-question" maxLength={4000} onChange={(event) => setQuestion(event.currentTarget.value)} placeholder={generalMode ? "Find a profile, or ask for events by date, state, route, or leg…" : "Ask what happened last year, what they normally book, what you may be forgetting…"} value={question} />
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <p className="text-xs text-slate-500">{generalMode ? "General search uses structured Command Terminal records first." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Terminal data first."}</p>
-            <button className="button-primary min-w-24" disabled={asking || !question.trim()} type="submit">{asking ? "Thinking…" : "Ask"}</button>
-          </div>
-        </form>
+        {(generalMode ? drawerMode === "assistant" : true) ? (
+          <form className="border-t border-slate-200 bg-white p-4" onSubmit={handleSubmit}>
+            <label className="sr-only" htmlFor="booking-assistant-question">Ask Booking Assistant</label>
+            <textarea className="min-h-20 w-full resize-none rounded-xl border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" disabled={asking} id="booking-assistant-question" maxLength={4000} onChange={(event) => setQuestion(event.currentTarget.value)} placeholder={generalMode ? "Find a profile, or ask for events by date, state, route, or leg…" : "Ask what happened last year, what they normally book, what you may be forgetting…"} value={question} />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <p className="text-xs text-slate-500">{generalMode ? "General search uses structured Command Terminal records first." : offline ? "Offline questions use the saved brief when possible." : "Routine questions use saved Command Terminal data first."}</p>
+              <button className="button-primary min-w-24" disabled={asking || !question.trim()} type="submit">{asking ? "Thinking…" : "Ask"}</button>
+            </div>
+          </form>
+        ) : null}
       </section>
     </div>
   );
