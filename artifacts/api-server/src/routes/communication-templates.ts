@@ -6,6 +6,7 @@ import { db } from "@workspace/db";
 import { communicationTemplates, officeAccounts } from "@/db/schema";
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
+import { ensureRouteFillOutreachTemplateSeed } from "@/features/communication-templates/route-fill-outreach-template-seed";
 import { validateAuthoredTemplateText } from "@/features/communication-templates/communication-template-authoring";
 import {
   allowedTemplatePlaceholders,
@@ -37,7 +38,10 @@ function validateCopy(subjectTemplate: string | null, bodyTemplate: string) {
   return validateAuthoredTemplateText({ subjectTemplate, bodyTemplate }).placeholders;
 }
 function templateId(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
-async function seed() { await ensureCommunicationTemplateSeed(db); }
+async function seed() {
+  await ensureCommunicationTemplateSeed(db);
+  await ensureRouteFillOutreachTemplateSeed(db);
+}
 
 router.get("/communication-templates", async (req, res): Promise<void> => {
   try {
