@@ -5,7 +5,6 @@ import {
   getGoogleHistoricalBackfill,
   pauseGoogleHistoricalBackfill,
   runNextGoogleHistoricalBatch,
-  type GoogleHistoricalBackfillState,
   type GoogleHistoricalBackfillView,
   type GoogleHistoricalBatchResult,
 } from "@/features/google-workspace/google-workspace-client";
@@ -40,6 +39,7 @@ export function GoogleHistoricalBackfill() {
       await reload();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not run historical Gmail batch.");
+      await reload().catch(() => undefined);
     } finally {
       setBusy(null);
     }
@@ -83,15 +83,20 @@ export function GoogleHistoricalBackfill() {
   }
 
   const { state } = view;
+  const retryingFirst = state.status === "error" && state.cumulative.processed === 0;
+  const retryingLater =
+    state.status === "error" &&
+    state.firstBatchApproved &&
+    state.cumulative.processed > 0;
   const canRunFirst =
     view.syncEnabled &&
     view.validationStatus === "approved" &&
-    state.status === "not_started";
+    (state.status === "not_started" || retryingFirst);
   const canContinue =
     view.syncEnabled &&
     view.validationStatus === "approved" &&
     state.firstBatchApproved &&
-    (state.status === "ready" || state.status === "running");
+    (state.status === "ready" || retryingLater);
   const awaitingApproval = state.status === "awaiting_approval";
   const cumulative = state.cumulative;
 
@@ -144,14 +149,11 @@ export function GoogleHistoricalBackfill() {
         <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/30">
           <p className="font-bold text-orange-900 dark:text-orange-200">First 250 are parked for review</p>
           <p className="mt-1 text-sm text-orange-800 dark:text-orange-300">
-            Review the profile matches and Needs Review queue. Nothing older will run until you approve this first historical batch.
+            Review the profile matches and Needs Review queue. Nothing older will run until you approve this first historical batch. You can leave this page and come back later; the batch stays parked.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void approveFirst()} type="button">
               {busy === "approve" ? "Approving…" : "Approve first batch"}
-            </button>
-            <button className="button-secondary px-4 py-2" disabled={busy !== null} onClick={() => void pause()} type="button">
-              Keep reviewing
             </button>
           </div>
         </div>
@@ -160,21 +162,34 @@ export function GoogleHistoricalBackfill() {
       <div className="flex flex-wrap gap-2">
         {canRunFirst ? (
           <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void runNext()} type="button">
-            {busy === "run" ? "Processing first 250…" : "Run first 250"}
+            {busy === "run"
+              ? "Processing first 250…"
+              : retryingFirst
+                ? "Retry first 250"
+                : "Run first 250"}
           </button>
         ) : null}
         {canContinue ? (
           <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void runNext()} type="button">
-            {busy === "run" ? "Processing next 250…" : "Continue next 250"}
+            {busy === "run"
+              ? "Processing next 250…"
+              : retryingLater
+                ? "Retry current 250"
+                : "Continue next 250"}
           </button>
         ) : null}
-        {view.syncEnabled && state.status !== "complete" && state.status !== "paused" ? (
-          <button className="button-secondary px-4 py-2" disabled={busy !== null || awaitingApproval} onClick={() => void pause()} type="button">
+        {view.syncEnabled && (state.status === "ready" || state.status === "running") ? (
+          <button className="button-secondary px-4 py-2" disabled={busy !== null} onClick={() => void pause()} type="button">
             {busy === "pause" ? "Pausing…" : "Pause"}
           </button>
         ) : null}
       </div>
 
+      {state.status === "error" ? (
+        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+          This batch stopped before its cursor advanced. Reconnect Google if needed, then retry the same 250 safely.
+        </p>
+      ) : null}
       {state.status === "complete" ? (
         <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Historical Gmail backfill reached the end of the mailbox.</p>
       ) : null}
