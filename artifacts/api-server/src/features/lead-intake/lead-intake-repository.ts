@@ -1,9 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { leadImportBatches, leadImportRows } from "@/db/schema";
+import { leadImportBatches, leadImportEvidence, leadImportRows } from "@/db/schema";
 
 type DrizzleDatabase = typeof database;
 
@@ -110,7 +110,18 @@ export class LeadIntakeRepository {
     const rows = await this.database.select().from(leadImportRows)
       .where(eq(leadImportRows.batchId, batchId))
       .orderBy(asc(leadImportRows.sheetName), asc(leadImportRows.sourceRowNumber));
-    return { ...batch, rows };
+    const evidence = rows.length
+      ? await this.database.select().from(leadImportEvidence)
+        .where(inArray(leadImportEvidence.rowId, rows.map((row) => row.id)))
+        .orderBy(asc(leadImportEvidence.createdAt))
+      : [];
+    const evidenceByRow = new Map<string, typeof evidence>();
+    for (const item of evidence) {
+      const values = evidenceByRow.get(item.rowId) ?? [];
+      values.push(item);
+      evidenceByRow.set(item.rowId, values);
+    }
+    return { ...batch, rows: rows.map((row) => ({ ...row, evidence: evidenceByRow.get(row.id) ?? [] })) };
   }
 
   async listBatches() {

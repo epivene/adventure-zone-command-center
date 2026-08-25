@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { contacts, organizations } from "./schema";
 
 export const leadImportBatchStatusValues = ["review", "archived"] as const;
 export const leadImportRowStateValues = [
@@ -8,6 +9,8 @@ export const leadImportRowStateValues = [
   "verified",
   "skipped",
 ] as const;
+export const leadEvidenceFieldValues = ["event_dates", "recipient_email"] as const;
+export const leadEvidenceSourceKindValues = ["crm_contact", "act_description", "official_website", "manual"] as const;
 
 export type LeadImportBatchStatus = (typeof leadImportBatchStatusValues)[number];
 export type LeadImportRowState = (typeof leadImportRowStateValues)[number];
@@ -48,6 +51,20 @@ export const leadImportRows = pgTable("lead_import_rows", {
   industry: text("industry"),
   warnings: jsonb("warnings").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
   state: text("state").$type<LeadImportRowState>().default("needs_review").notNull(),
+  reviewVersion: integer("review_version").default(0).notNull(),
+  selectedOrganizationId: uuid("selected_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
+  selectedContactId: uuid("selected_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
+  contactMode: text("contact_mode").$type<"existing" | "manual" | null>(),
+  confirmedEventName: text("confirmed_event_name"),
+  confirmedStartDate: date("confirmed_start_date"),
+  confirmedEndDate: date("confirmed_end_date"),
+  confirmedContactName: text("confirmed_contact_name"),
+  confirmedContactRole: text("confirmed_contact_role"),
+  confirmedRecipientEmail: text("confirmed_recipient_email"),
+  recipientConfirmed: boolean("recipient_confirmed").default(false).notNull(),
+  introductionSuitable: boolean("introduction_suitable").default(false).notNull(),
+  confirmedBy: text("confirmed_by"),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
@@ -58,4 +75,25 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_source_row_positive", sql`${table.sourceRowNumber} > 0`),
   check("lead_import_rows_fingerprint_valid", sql`${table.sourceFingerprint} ~ '^[0-9a-f]{64}$'`),
   check("lead_import_rows_state_valid", sql`${table.state} in ('needs_review','needs_correction','verified','skipped')`),
+  check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
+  check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual')`),
+  check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
+]);
+
+export const leadImportEvidence = pgTable("lead_import_evidence", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "cascade" }),
+  field: text("field").$type<(typeof leadEvidenceFieldValues)[number]>().notNull(),
+  candidateValue: text("candidate_value").notNull(),
+  sourceKind: text("source_kind").$type<(typeof leadEvidenceSourceKindValues)[number]>().notNull(),
+  sourceReference: text("source_reference").notNull(),
+  selected: boolean("selected").default(false).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("lead_import_evidence_row_field_idx").on(table.rowId, table.field),
+  uniqueIndex("lead_import_evidence_one_selected_field").on(table.rowId, table.field).where(sql`${table.selected}`),
+  check("lead_import_evidence_field_valid", sql`${table.field} in ('event_dates','recipient_email')`),
+  check("lead_import_evidence_source_kind_valid", sql`${table.sourceKind} in ('crm_contact','act_description','official_website','manual')`),
+  check("lead_import_evidence_reference_nonblank", sql`btrim(${table.sourceReference}) <> ''`),
 ]);
