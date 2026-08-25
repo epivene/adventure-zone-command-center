@@ -7,6 +7,7 @@ import { createRequireOfficeMiddleware } from "@/features/office/office-middlewa
 import { DrizzlePackageIntelligenceSettingsRepository } from "@/features/packages/package-intelligence-settings";
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
+import { ensureRouteFillOutreachTemplateSeed } from "@/features/communication-templates/route-fill-outreach-template-seed";
 import { renderCommunicationTemplate } from "@/features/communication-templates/communication-template-service";
 import {
   allowedTemplatePlaceholders,
@@ -57,6 +58,11 @@ async function activePackages(): Promise<PackageChoice[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function seedTemplates(): Promise<void> {
+  await ensureCommunicationTemplateSeed(db);
+  await ensureRouteFillOutreachTemplateSeed(db);
+}
+
 function templateMutationError(res: any, err: unknown): boolean {
   const code = err instanceof Error ? err.message : "";
   if (code === "INVALID_TEMPLATE_PLACEHOLDER") {
@@ -76,7 +82,7 @@ function templateMutationError(res: any, err: unknown): boolean {
 
 router.get("/office/communication-templates", requireOffice, async (req, res): Promise<void> => {
   try {
-    await ensureCommunicationTemplateSeed(db);
+    await seedTemplates();
     const repository = new CommunicationTemplateRepository(db);
     const [records, packages] = await Promise.all([
       repository.listForOffice(req.officeAccount!.accountId),
@@ -192,7 +198,7 @@ router.post("/office/communication-templates/:templateId/render", requireOffice,
   }
 
   try {
-    await ensureCommunicationTemplateSeed(db);
+    await seedTemplates();
     const repository = new CommunicationTemplateRepository(db);
     const template = await repository.getById(templateId);
     if (!template || !canOfficeUseTemplate(template, req.officeAccount!.accountId)) {
