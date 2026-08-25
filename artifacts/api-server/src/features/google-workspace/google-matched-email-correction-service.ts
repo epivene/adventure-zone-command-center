@@ -15,6 +15,15 @@ type BaseDecision = {
   now: Date;
 };
 
+function valid(input: BaseDecision): boolean {
+  return Boolean(
+    input.messageId.trim() &&
+      input.threadId.trim() &&
+      input.actorId.trim() &&
+      Number.isFinite(input.now.getTime()),
+  );
+}
+
 export class GoogleMatchedEmailCorrectionService {
   constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
 
@@ -30,6 +39,9 @@ export class GoogleMatchedEmailCorrectionService {
   }
 
   async assign(input: BaseDecision & { organizationId: string }): Promise<void> {
+    if (!valid(input) || !input.organizationId.trim()) {
+      throw new Error("GOOGLE_WORKSPACE_MATCHED_CORRECTION_INVALID");
+    }
     const connectionId = await this.connectionId();
     const target = await this.pool.query(
       `SELECT id FROM organizations
@@ -59,8 +71,20 @@ export class GoogleMatchedEmailCorrectionService {
          reviewed_by = EXCLUDED.reviewed_by,
          reviewed_at = EXCLUDED.reviewed_at,
          updated_at = EXCLUDED.updated_at`,
-      [connectionId, input.messageId, input.threadId, input.subject, input.from, input.to,
-       input.internalDateMs, evidence, input.hasAttachments, input.organizationId, input.actorId, input.now],
+      [
+        connectionId,
+        input.messageId,
+        input.threadId,
+        input.subject,
+        input.from,
+        input.to,
+        input.internalDateMs,
+        evidence,
+        input.hasAttachments,
+        input.organizationId,
+        input.actorId,
+        input.now,
+      ],
     );
 
     await this.pool.query(
@@ -76,9 +100,18 @@ export class GoogleMatchedEmailCorrectionService {
          updated_at = EXCLUDED.updated_at`,
       [connectionId, input.messageId, input.threadId, input.organizationId, evidence, input.now],
     );
+
+    await this.pool.query(
+      `INSERT INTO google_workspace_audit_events (
+         actor_kind, actor_id, action, target_type, target_id, metadata, created_at
+       ) VALUES ('owner',$1,'validation_matched_profile_corrected','gmail_message',$2,
+                 jsonb_build_object('organizationId',$3),$4)`,
+      [input.actorId, input.messageId, input.organizationId, input.now],
+    );
   }
 
   async ignore(input: BaseDecision): Promise<void> {
+    if (!valid(input)) throw new Error("GOOGLE_WORKSPACE_MATCHED_CORRECTION_INVALID");
     const connectionId = await this.connectionId();
     await this.pool.query(
       `INSERT INTO google_workspace_validation_review_items (
@@ -100,13 +133,29 @@ export class GoogleMatchedEmailCorrectionService {
          reviewed_by = EXCLUDED.reviewed_by,
          reviewed_at = EXCLUDED.reviewed_at,
          updated_at = EXCLUDED.updated_at`,
-      [connectionId, input.messageId, input.threadId, input.subject, input.from, input.to,
-       input.internalDateMs, input.hasAttachments, input.actorId, input.now],
+      [
+        connectionId,
+        input.messageId,
+        input.threadId,
+        input.subject,
+        input.from,
+        input.to,
+        input.internalDateMs,
+        input.hasAttachments,
+        input.actorId,
+        input.now,
+      ],
     );
     await this.pool.query(
       `DELETE FROM google_workspace_validation_mappings
         WHERE connection_id = $1 AND message_id = $2`,
       [connectionId, input.messageId],
+    );
+    await this.pool.query(
+      `INSERT INTO google_workspace_audit_events (
+         actor_kind, actor_id, action, target_type, target_id, metadata, created_at
+       ) VALUES ('owner',$1,'validation_matched_email_ignored','gmail_message',$2,'{}'::jsonb,$3)`,
+      [input.actorId, input.messageId, input.now],
     );
   }
 }
