@@ -157,7 +157,7 @@ export class GoogleReviewAssignmentDiagnosticService {
       text: `INSERT INTO google_workspace_audit_events (
          actor_kind, actor_id, action, target_type, target_id, metadata, created_at
        ) VALUES ('owner', $1, 'validation_review_resolved', 'gmail_message', $2,
-                 jsonb_build_object('organizationId', $3), $4)`,
+                 jsonb_build_object('organizationId', $3::text), $4)`,
       values: [input.actorId, input.messageId, input.organizationId, input.now],
     });
   }
