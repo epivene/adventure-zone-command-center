@@ -30,10 +30,10 @@ function cachedSnapshot() {
     kind: "organization" as const,
     recordId: "org-1",
     label: "County Fair",
-    savedAt: "2026-08-25T12:00:00Z",
+    savedAt: new Date().toISOString(),
     brief: {
       headline: "County Fair",
-      generatedAt: "2026-08-25T12:00:00Z",
+      generatedAt: new Date().toISOString(),
       items: [
         {
           key: "contact",
@@ -48,7 +48,7 @@ function cachedSnapshot() {
       sources: [
         { id: "src-contact", kind: "contact", recordId: "contact-1", label: "Amy Smith", occurredAt: null },
       ],
-      generatedAt: "2026-08-25T12:00:00Z",
+      generatedAt: new Date().toISOString(),
     },
   };
 }
@@ -130,6 +130,22 @@ describe("local-first booking assistant routing", () => {
     });
 
     expect(result.answer.mode).toBe("cloud");
+    expect(cloud.askBookingAssistant).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses live cloud data online when the cached profile is older than 24 hours", async () => {
+    cache.getAssistantSnapshot.mockResolvedValue({
+      ...cachedSnapshot(),
+      savedAt: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const result = await askBookingAssistantLocalFirst({
+      context: contextRef,
+      question: "Who is the primary contact?",
+    });
+
+    expect(result.answer.mode).toBe("cloud");
+    expect(localAnswer.tryOnDeviceSemanticAnswer).not.toHaveBeenCalled();
     expect(cloud.askBookingAssistant).toHaveBeenCalledTimes(1);
   });
 
