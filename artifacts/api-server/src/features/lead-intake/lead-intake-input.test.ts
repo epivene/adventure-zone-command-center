@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importLeadWorkbookSchema } from "./lead-intake-input";
+import { importLeadWorkbookSchema, leadImportActor } from "./lead-intake-input";
 
 const valid = {
   originalFilename: "Sept Week 3.xls",
@@ -23,5 +23,10 @@ describe("importLeadWorkbookSchema", () => {
 
   it("rejects more than 5,000 rows", () => {
     expect(importLeadWorkbookSchema.safeParse({ ...valid, rows: Array(5_001).fill(valid.rows[0]) }).success).toBe(false);
+  });
+
+  it("records the single-owner actor when middleware uses an empty namespace id", () => {
+    expect(leadImportActor("")).toBe("owner");
+    expect(leadImportActor("  amy  ")).toBe("amy");
   });
 });

@@ -27,3 +27,7 @@ export const importLeadWorkbookSchema = z.object({
   fileSha256: z.string().regex(/^[0-9a-f]{64}$/),
   rows: z.array(leadImportRowSchema).min(1).max(5_000),
 }).strict();
+
+export function leadImportActor(value: unknown): string {
+  return String(value ?? "").trim() || "owner";
+}

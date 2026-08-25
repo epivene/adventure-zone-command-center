@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 
-import { importLeadWorkbookSchema } from "@/features/lead-intake/lead-intake-input";
+import { importLeadWorkbookSchema, leadImportActor } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
 
 const router: IRouter = Router();
@@ -20,7 +20,7 @@ router.post("/lead-intake/imports", async (req, res): Promise<void> => {
   try {
     const result = await repository.importWorkbook({
       ...parsed.data,
-      importedBy: String((req as any).userId ?? "owner"),
+      importedBy: leadImportActor((req as any).userId),
     });
     res.status(result.reused ? 200 : 201).json(result);
   } catch (err) {
