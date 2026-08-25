@@ -40,6 +40,7 @@ Scout monitors only profiles created from saved Scout Results. It evaluates:
 2. **Application deadline approaching**
    - A known deadline crosses the 30-day, 14-day, 7-day, or 1-day threshold.
    - Each threshold is separately deduplicated.
+   - Initial setup emits only the most urgent currently applicable threshold rather than creating every already-crossed threshold at once.
 
 3. **Dates announced**
    - Previously unknown event dates become available from reliable sources.
@@ -159,6 +160,8 @@ type ScoutAlertSnapshot = {
 };
 ```
 
+The initial snapshot is seeded from the saved Scout candidate, accepted CRM profile fields, stored facts, and stored sources. Establishing this baseline does not produce “changed” alerts; only deadline and grouped critical-gap rules may alert during initial setup.
+
 The snapshot does not store complete scraped pages, hidden model reasoning, or social-media content dumps.
 
 ## Evidence rules
@@ -193,13 +196,14 @@ The watch automatically becomes `complete` when the linked booking is completed,
 1. Claim one due active watch using `FOR UPDATE SKIP LOCKED` and a lease.
 2. Load the linked candidate, run criteria, facts, sources, organization, booking, and primary organizer contact.
 3. Build or load the previous normalized snapshot.
-4. Run daily local alert evaluation.
-5. If external research is due, call `LeadScoutProvider.enrichCandidate` with bounded known sources.
-6. Select reliable evidence using the existing Lead Scout evidence hierarchy.
-7. Build the new snapshot.
-8. Compare snapshots and generate idempotent alert drafts.
-9. Persist alerts and the new snapshot transactionally.
-10. Reset failure state and schedule the next evaluation/research.
+4. If no snapshot exists, persist the baseline without generating change alerts.
+5. Run daily local alert evaluation.
+6. If external research is due, call `LeadScoutProvider.enrichCandidate` with bounded known sources.
+7. Select reliable evidence using the existing Lead Scout evidence hierarchy.
+8. Build the new snapshot.
+9. Compare snapshots and generate idempotent alert drafts.
+10. Persist alerts and the new snapshot transactionally.
+11. Reset failure state and schedule the next evaluation/research.
 
 On provider failure, the watch stores a bounded safe error summary and uses exponential backoff: 6 hours, 12 hours, 24 hours, then a maximum of 7 days. Three consecutive failures create one monitoring-problem alert.
 
