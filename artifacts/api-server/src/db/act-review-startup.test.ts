@@ -8,6 +8,8 @@ function fakeClient(options?: {
   leadScoutRelease2Ready?: boolean;
   leadScoutRelease3Ready?: boolean;
   paperNotesReady?: boolean;
+  assistantJobsReady?: boolean;
+  scoutAlertsReady?: boolean;
 }) {
   const queries: string[] = [];
   let released = false;
@@ -23,6 +25,12 @@ function fakeClient(options?: {
       if (sql.includes("paper_note_batches") && sql.includes("paper_note_pages") && sql.includes("as ready")) {
         return { rows: [{ ready: options?.paperNotesReady ?? true }] };
       }
+      if (sql.includes("assistant_jobs") && sql.includes("assistant_job_findings") && sql.includes("as ready")) {
+        return { rows: [{ ready: options?.assistantJobsReady ?? true }] };
+      }
+      if (sql.includes("scout_alert_watches") && sql.includes("scout_alerts_visible_idx") && sql.includes("as ready")) {
+        return { rows: [{ ready: options?.scoutAlertsReady ?? true }] };
+      }
       return { rows: [] };
     },
     release() { released = true; },
@@ -31,7 +39,7 @@ function fakeClient(options?: {
 }
 
 describe("runActReviewMigrationsAtStartup", () => {
-  it("pre-acquires the migration lock without waiting and checks all research schemas", async () => {
+  it("pre-acquires the migration lock without waiting and checks all additive schemas", async () => {
     const { client, queries, wasReleased } = fakeClient();
     const runMigrations = vi.fn(async (options: any) => {
       const migrationClient = await options.pool.connect();
@@ -50,6 +58,8 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(queries.some((sql) => sql.includes("candidate_key") && sql.includes("AS ready"))).toBe(true);
     expect(queries.some((sql) => sql.includes("enrichment_status") && sql.includes("coverage_gaps"))).toBe(true);
     expect(queries.some((sql) => sql.includes("paper_note_batches") && sql.includes("paper_note_pages"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("assistant_jobs") && sql.includes("assistant_job_findings"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("scout_alert_watches") && sql.includes("scout_alerts_visible_idx"))).toBe(true);
     expect(queries).toContain("SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))");
     expect(queries).toContain("RESET statement_timeout");
     expect(queries).toContain("RESET lock_timeout");
@@ -93,6 +103,24 @@ describe("runActReviewMigrationsAtStartup", () => {
     expect(applied).toContain("066_paper_notes_importer.sql");
     expect(queries.some((sql) => sql.includes("create table if not exists paper_note_batches"))).toBe(true);
     expect(queries.some((sql) => sql.includes("create table if not exists paper_note_pages"))).toBe(true);
+    expect(runMigrations).toHaveBeenCalledTimes(1);
+  });
+
+  it("adds the assistant command job schema when needed", async () => {
+    const { client, queries } = fakeClient({ assistantJobsReady: false });
+    const runMigrations = vi.fn(async () => []);
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
+    expect(applied).toEqual(["067_assistant_command_jobs.sql"]);
+    expect(queries.some((sql) => sql.includes("create table if not exists assistant_jobs"))).toBe(true);
+  });
+
+  it("adds the Scout Alerts schema when needed", async () => {
+    const { client, queries } = fakeClient({ scoutAlertsReady: false });
+    const runMigrations = vi.fn(async () => []);
+    const applied = await runActReviewMigrationsAtStartup({ pool: { connect: async () => client }, runMigrations });
+    expect(applied).toEqual(["068_scout_alerts.sql"]);
+    expect(queries.some((sql) => sql.includes("create table if not exists scout_alert_watches"))).toBe(true);
+    expect(queries.some((sql) => sql.includes("create table if not exists scout_alerts"))).toBe(true);
     expect(runMigrations).toHaveBeenCalledTimes(1);
   });
 
