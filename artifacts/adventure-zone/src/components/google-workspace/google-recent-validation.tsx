@@ -21,11 +21,48 @@ const evidenceLabels: Record<string, string> = {
   ambiguous_profile_name_subject: "Multiple profile names fit subject",
   exact_profile_name_body: "Profile name in email content",
   ambiguous_profile_name_body: "Multiple profile names fit email content",
+  weighted_profile_text_match: "Flexible event/profile match",
+  weighted_profile_text_ambiguous: "Multiple flexible profile matches",
+  weighted_profile_body_match: "Flexible match from email content",
+  weighted_profile_body_ambiguous: "Multiple content matches",
+  ai_profile_match: "AI profile match",
+  ai_ignore: "AI marked irrelevant",
+  ai_needs_review: "AI needs review",
   exact_profile_name_text: "Exact profile name in subject/snippet",
   ambiguous_organization_domain: "Multiple organization domain matches",
 };
 
-function ValidationRow({ row }: { row: GoogleRecentValidationRow }) {
+type AiTriage = {
+  outcome: "match" | "ignore" | "review";
+  profileId: string | null;
+  confidence: "high" | "medium" | "low";
+  reason: string;
+  providerName: string;
+};
+
+type AiValidationRow = GoogleRecentValidationRow & {
+  aiTriage?: AiTriage;
+};
+
+type AiValidationResult = Omit<
+  GoogleRecentValidationResult,
+  "aiEnabled" | "matched" | "needsReview" | "ignored"
+> & {
+  aiEnabled: boolean;
+  aiStatus?: "enabled" | "disabled" | "unavailable";
+  aiProvider?: string | null;
+  aiCounts?: {
+    attempted: number;
+    matched: number;
+    ignored: number;
+    review: number;
+  };
+  matched: AiValidationRow[];
+  needsReview: AiValidationRow[];
+  ignored: AiValidationRow[];
+};
+
+function ValidationRow({ row }: { row: AiValidationRow }) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/40">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -61,6 +98,12 @@ function ValidationRow({ row }: { row: GoogleRecentValidationRow }) {
           ))}
         </div>
       ) : null}
+      {row.aiTriage ? (
+        <div className="mt-2 rounded-md border border-violet-200 bg-violet-50 px-2.5 py-2 text-xs text-violet-900 dark:border-violet-900 dark:bg-violet-950/30 dark:text-violet-200">
+          <span className="font-semibold">AI {row.aiTriage.outcome} · {row.aiTriage.confidence} confidence:</span>{" "}
+          {row.aiTriage.reason}
+        </div>
+      ) : null}
       {row.matchedContact ? <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Matched contact: {row.matchedContact.name}</p> : null}
       {row.resolvedOrganization ? (
         <p className="mt-1 text-sm font-semibold text-emerald-800 dark:text-emerald-300">Profile: {row.resolvedOrganization.name}</p>
@@ -73,7 +116,7 @@ function ValidationRow({ row }: { row: GoogleRecentValidationRow }) {
   );
 }
 
-function ResultSection({ title, rows }: { title: string; rows: GoogleRecentValidationRow[] }) {
+function ResultSection({ title, rows }: { title: string; rows: AiValidationRow[] }) {
   if (rows.length === 0) return null;
   return (
     <section className="grid gap-2">
@@ -139,32 +182,46 @@ function ApprovalControls({
 }
 
 export function GoogleRecentValidation({ result }: { result: GoogleRecentValidationResult }) {
+  const enhanced = result as unknown as AiValidationResult;
   const [showIgnored, setShowIgnored] = useState(false);
-  const [validationStatus, setValidationStatus] = useState<GoogleValidationStatus>(result.validationStatus);
-  const [unresolvedCount, setUnresolvedCount] = useState(result.counts.needsReview);
+  const [validationStatus, setValidationStatus] = useState<GoogleValidationStatus>(enhanced.validationStatus);
+  const [unresolvedCount, setUnresolvedCount] = useState(enhanced.counts.needsReview);
 
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{result.counts.discovered} checked</div>
-        <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{result.counts.matched} matched</div>
+        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{enhanced.counts.discovered} checked</div>
+        <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{enhanced.counts.matched} matched</div>
         <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{unresolvedCount} needs review</div>
-        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{result.counts.ignored} ignored</div>
+        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{enhanced.counts.ignored} ignored</div>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400">AI is off. The newest {result.checkedLimit} messages are checked with headers first; unresolved messages may use readable Gmail thread text temporarily for profile matching. Body text is not returned or saved for ignored mail, and this does not start the historical import.</p>
-      <ResultSection title="Matched to profiles" rows={result.matched} />
-      {result.counts.needsReview > 0 ? (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+        {enhanced.aiEnabled ? (
+          <>
+            <p className="font-semibold text-violet-800 dark:text-violet-300">AI triage is on{enhanced.aiProvider ? ` · ${enhanced.aiProvider}` : ""}</p>
+            <p className="mt-1">Deterministic matching runs first. Uncertain messages may use readable Gmail thread text temporarily, then AI can match a supplied profile, ignore unrelated mail, or leave it for review. Ignored body text is not returned or stored.</p>
+            {enhanced.aiCounts ? <p className="mt-1">AI checked {enhanced.aiCounts.attempted}: {enhanced.aiCounts.matched} matched · {enhanced.aiCounts.ignored} ignored · {enhanced.aiCounts.review} left for review.</p> : null}
+          </>
+        ) : enhanced.aiStatus === "unavailable" ? (
+          <p className="font-semibold text-amber-800 dark:text-amber-300">AI triage is enabled but the AI provider is unavailable. Deterministic matching is still running.</p>
+        ) : (
+          <p>AI triage is off. The newest {enhanced.checkedLimit} messages use deterministic headers and temporary readable Gmail text only.</p>
+        )}
+        <p className="mt-1">The full historical import does not start from this check.</p>
+      </div>
+      <ResultSection title="Matched to profiles" rows={enhanced.matched} />
+      {enhanced.counts.needsReview > 0 ? (
         <GoogleValidationReview onPendingCountChange={setUnresolvedCount} />
       ) : null}
-      {result.ignored.length > 0 ? (
+      {enhanced.ignored.length > 0 ? (
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{result.ignored.length} ignored in this sample</p>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{enhanced.ignored.length} ignored in this sample</p>
             <button aria-expanded={showIgnored} className="text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300" onClick={() => setShowIgnored((current) => !current)} type="button">
               {showIgnored ? "Hide ignored email" : "Review ignored email"}
             </button>
           </div>
-          {showIgnored ? <div className="mt-3 grid max-h-96 gap-2 overflow-y-auto border-t border-slate-200 pt-3 dark:border-slate-700">{result.ignored.map((row) => <ValidationRow key={row.id} row={row} />)}</div> : null}
+          {showIgnored ? <div className="mt-3 grid max-h-96 gap-2 overflow-y-auto border-t border-slate-200 pt-3 dark:border-slate-700">{enhanced.ignored.map((row) => <ValidationRow key={row.id} row={row} />)}</div> : null}
         </section>
       ) : null}
       <ApprovalControls status={validationStatus} unresolvedCount={unresolvedCount} onStatus={setValidationStatus} />
