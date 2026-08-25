@@ -19,6 +19,7 @@ type Evidence = {
   contacts: Array<{ id: string; name: string; emails: string[] }>;
   organizations: Array<{ id: string; name: string; domains: string[] }>;
   profiles: Array<{ id: string; name: string }>;
+  learnedAddressTargets?: Map<string, { id: string; name: string }>;
   existingThreadTarget: null | {
     id: string;
     name: string;
@@ -143,9 +144,9 @@ export function classifyGoogleMessageRelevance(input: {
     for (const candidate of weighted.candidates) addCandidate(candidate);
   }
 
-  // Once the message text points at one or more CRM profiles, contact/domain
-  // relationships are supporting evidence only. They must not auto-attach the
-  // message to a different profile when the event evidence itself is unresolved.
+  // Once the message text points at one or more CRM profiles, contact/domain/
+  // learned-address relationships are supporting evidence only. They must not
+  // auto-attach the message to a different profile when event evidence is unresolved.
   const hasEventProfileCandidates = candidates.some(
     (candidate) => candidate.kind === "profile",
   );
@@ -156,6 +157,25 @@ export function classifyGoogleMessageRelevance(input: {
   const emails = participantEmails(message, mailboxEmails);
   const emailSet = new Set(emails);
 
+  const learnedMatches = new Map<string, { id: string; name: string }>();
+  for (const email of emails) {
+    const target = evidence.learnedAddressTargets?.get(normalize(email));
+    if (target) learnedMatches.set(target.id, target);
+  }
+  if (learnedMatches.size === 1) {
+    const learned = [...learnedMatches.values()][0];
+    evidenceCodes.push("learned_external_email");
+    addCandidate({ id: learned.id, name: learned.name, kind: "profile" });
+    if (!hasEventProfileCandidates) {
+      return { status: "matched", evidenceCodes, candidates };
+    }
+  } else if (learnedMatches.size > 1) {
+    evidenceCodes.push("learned_external_email_ambiguous");
+    for (const learned of learnedMatches.values()) {
+      addCandidate({ id: learned.id, name: learned.name, kind: "profile" });
+    }
+  }
+
   for (const contact of evidence.contacts) {
     if (contact.emails.some((email) => emailSet.has(normalize(email)))) {
       evidenceCodes.push("exact_contact_email");
@@ -164,7 +184,8 @@ export function classifyGoogleMessageRelevance(input: {
   }
   if (
     evidenceCodes.includes("exact_contact_email") &&
-    !hasEventProfileCandidates
+    !hasEventProfileCandidates &&
+    learnedMatches.size === 0
   ) {
     return { status: "matched", evidenceCodes, candidates };
   }
@@ -186,7 +207,7 @@ export function classifyGoogleMessageRelevance(input: {
     const organization = organizationMatches[0];
     evidenceCodes.push("exact_organization_domain");
     addCandidate({ id: organization.id, name: organization.name, kind: "organization" });
-    if (!hasEventProfileCandidates) {
+    if (!hasEventProfileCandidates && learnedMatches.size === 0) {
       return { status: "matched", evidenceCodes, candidates };
     }
   }
@@ -207,6 +228,7 @@ export function classifyGoogleMessageRelevance(input: {
 
   if (
     hasEventProfileCandidates ||
+    learnedMatches.size > 1 ||
     evidenceCodes.includes("approved_business_label") ||
     evidenceCodes.includes("exact_profile_name_text") ||
     evidenceCodes.includes("ambiguous_profile_name_subject") ||
