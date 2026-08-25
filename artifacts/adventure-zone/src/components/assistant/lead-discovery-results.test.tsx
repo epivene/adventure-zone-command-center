@@ -101,7 +101,7 @@ describe("LeadDiscoveryResults", () => {
     expect(screen.getByText("Usually occurs in September")).toBeTruthy();
   });
 
-  it("does not expose an enabled web action before Release 2", () => {
+  it("does not expose an enabled Scout Search action before Release 2", () => {
     render(
       <LeadDiscoveryResults
         run={run}
@@ -112,8 +112,8 @@ describe("LeadDiscoveryResults", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Find me new leads" })).toHaveProperty("disabled", true);
-    expect(screen.getByText(/web scouting is not enabled yet/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start Scout Search" })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/Scout Search is not enabled yet/i)).toBeTruthy();
   });
 
   it("calls the existing profile/context actions for CRM matches", () => {

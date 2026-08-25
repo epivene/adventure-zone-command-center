@@ -72,7 +72,7 @@ export function LeadScoutSaveDialog({
       }
       onClose();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save this prospect as a lead.");
+      setError(cause instanceof Error ? cause.message : "Could not create this profile.");
     } finally {
       setSaving(false);
     }
@@ -81,21 +81,21 @@ export function LeadScoutSaveDialog({
   return (
     <div className="fixed inset-0 z-[70] grid place-items-center bg-slate-950/40 p-4" role="presentation">
       <form
-        aria-label="Save Lead Scout prospect"
+        aria-label="Create Scout profile"
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
         onSubmit={submit}
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 className="text-lg font-bold text-slate-950">Save as lead</h3>
-            <p className="mt-1 text-sm text-slate-600">Review what will become the real Command Center profile. Research details stay with Scout unless you accept them here.</p>
+            <h3 className="text-lg font-bold text-slate-950">Scout Profile Draft</h3>
+            <p className="mt-1 text-sm text-slate-600">Review the event details before creating a real Command Center profile. Scout Notes and research sources will be saved with it.</p>
           </div>
           <button className="button-secondary" onClick={onClose} type="button">Cancel</button>
         </div>
 
         <div className="mt-5 grid gap-4">
           <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Lead name
+            Profile name
             <input className="rounded-lg border border-slate-300 px-3 py-2 font-normal" onChange={(event) => setName(event.currentTarget.value)} value={name} />
           </label>
           <div className="grid grid-cols-[1fr_5rem] gap-3">
@@ -172,7 +172,7 @@ export function LeadScoutSaveDialog({
 
         <div className="mt-5 flex justify-end gap-2">
           <button className="button-secondary" onClick={onClose} type="button">Cancel</button>
-          <button className="button-primary" disabled={!canSave || saving} type="submit">{saving ? "Saving…" : "Save as lead"}</button>
+          <button className="button-primary" disabled={!canSave || saving} type="submit">{saving ? "Creating…" : "Create Profile"}</button>
         </div>
       </form>
     </div>
