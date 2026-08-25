@@ -214,14 +214,14 @@ describe("AssistantDrawer general mode", () => {
     expect(screen.getByRole("button", { name: "Use as context" })).toBeTruthy();
   });
 
-  it("renders CRM-first lead discovery with Find me new leads enabled", async () => {
+  it("renders CRM-first discovery with Start Scout Search enabled", async () => {
     vi.mocked(askGeneralAssistant).mockResolvedValueOnce({ kind: "lead_discovery", text: "I found 1 existing Command Center possibility.", run: leadRun as any });
     render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
     fireEvent.change(screen.getByLabelText("Ask Booking Assistant"), { target: { value: leadRun.originalQuestion } });
     fireEvent.click(screen.getByRole("button", { name: "Ask" }));
     await waitFor(() => expect(screen.getByText("Montana September Fair")).toBeTruthy());
-    expect(screen.getByRole("button", { name: "Find me new leads" })).not.toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Start Scout Search" })).not.toHaveProperty("disabled", true);
   });
 
   it("restores the latest Lead Scout run when General Command Center reopens", async () => {
@@ -232,18 +232,18 @@ describe("AssistantDrawer general mode", () => {
     expect(getLatestLeadScoutRun).toHaveBeenCalledTimes(1);
   });
 
-  it("starts web scouting with preserved criteria and renders partial unsaved prospects", async () => {
+  it("starts Scout Search with preserved criteria and renders temporary results", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(leadRun as any);
     vi.mocked(startLeadScout).mockResolvedValueOnce(runningRun as any);
     render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Find me new leads" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Find me new leads" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Start Scout Search" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Start Scout Search" }));
     await waitFor(() => expect(screen.getByText("Silver Valley Days")).toBeTruthy());
     expect(startLeadScout).toHaveBeenCalledWith(leadRun.id);
-    expect(screen.getByText("Unsaved prospect")).toBeTruthy();
+    expect(screen.getByText("Found")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Not a fit" })).toHaveProperty("disabled", true);
-    expect(screen.getByRole("button", { name: "Save as lead" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Create Profile" })).toHaveProperty("disabled", true);
   });
 
   it("queues Research deeper for one prospect and resumes run polling state", async () => {
@@ -257,7 +257,7 @@ describe("AssistantDrawer general mode", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Researching deeper…" })).toHaveProperty("disabled", true));
   });
 
-  it("saves a completed unsaved prospect and flips the card to In Command Center", async () => {
+  it("creates a profile from a completed Scout result and links it to Command Center", async () => {
     vi.mocked(getLatestLeadScoutRun).mockResolvedValueOnce(completedRun as any);
     vi.mocked(saveLeadScoutCandidate).mockResolvedValueOnce({
       kind: "created",
@@ -267,13 +267,13 @@ describe("AssistantDrawer general mode", () => {
     });
     render(<AssistantContextProvider><OpenAssistant /><AssistantDrawer /></AssistantContextProvider>);
     fireEvent.click(screen.getByRole("button", { name: "open" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save as lead" })).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: "Save as lead" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create Profile" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Create Profile" }));
 
-    const dialog = await screen.findByRole("form", { name: "Save Lead Scout prospect" });
+    const dialog = await screen.findByRole("form", { name: "Create Scout profile" });
     fireEvent.change(within(dialog).getByLabelText("First action"), { target: { value: "call" } });
     fireEvent.change(within(dialog).getByLabelText("First follow-up date"), { target: { value: "2026-08-24" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save as lead" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create Profile" }));
 
     await waitFor(() => expect(saveLeadScoutCandidate).toHaveBeenCalledWith(
       leadRun.id,
@@ -289,7 +289,7 @@ describe("AssistantDrawer general mode", () => {
         nextActionDueAt: "2026-08-24",
       }),
     ));
-    await waitFor(() => expect(screen.queryByRole("form", { name: "Save Lead Scout prospect" })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole("form", { name: "Create Scout profile" })).toBeNull());
     expect(screen.getByText("In Command Center")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Open profile" })).toHaveAttribute("href", "/profiles/profile-1");
   });
@@ -303,7 +303,7 @@ describe("AssistantDrawer general mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Not a fit" }));
     await waitFor(() => expect(dismissLeadScoutCandidate).toHaveBeenCalledWith(leadRun.id, runningRun.candidates[0].id));
     await waitFor(() => expect(screen.queryByText("Silver Valley Days")).toBeNull());
-    expect(screen.getByText(/No Scout prospects remain/i)).toBeTruthy();
+    expect(screen.getByText(/No Scout Results remain/i)).toBeTruthy();
   });
 
   it("stops and continues a Scout run without losing partial prospects", async () => {
