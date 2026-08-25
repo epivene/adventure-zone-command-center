@@ -27,5 +27,6 @@ describe("lead intake profile search", () => {
     const results = await createLeadIntakeClient(api).searchProfiles("Alamosa ARTs Festival");
 
     expect(results).toEqual([profile]);
+    expect(api.get).toHaveBeenCalledWith("/organizations?q=Alamosa%20ARTs%20Festival&pageSize=10");
   });
 });
