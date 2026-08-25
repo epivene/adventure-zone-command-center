@@ -1,17 +1,36 @@
 import { pool as defaultPool } from "@workspace/db";
 
-import type { GoogleRecentValidationResult, GoogleValidationRow } from "./google-recent-validation-service";
+import type { GoogleValidationRow } from "./google-recent-validation-service";
 
 type QueryResult = { rows: Array<Record<string, unknown>> };
 type SqlPool = { query(text: string, values?: unknown[]): Promise<QueryResult> };
+
+export type GoogleValidationResultLike = {
+  checkedLimit: number;
+  aiEnabled: boolean;
+  historicalImportStarted: false;
+  validationStatus: "not_started" | "ready_for_review" | "approved" | "rejected";
+  counts: {
+    discovered: number;
+    matched: number;
+    needsReview: number;
+    ignored: number;
+  };
+  matched: GoogleValidationRow[];
+  needsReview: GoogleValidationRow[];
+  ignored: GoogleValidationRow[];
+};
 
 type Decision = {
   state: "resolved" | "ignored";
   organization: { id: string; name: string } | null;
 };
 
-function withEvidence(row: GoogleValidationRow, code: string): GoogleValidationRow {
-  return { ...row, evidenceCodes: [...new Set([...row.evidenceCodes, code])] };
+function withEvidence<T extends GoogleValidationRow>(row: T, code: string): T {
+  return {
+    ...row,
+    evidenceCodes: [...new Set([...row.evidenceCodes, code])],
+  } as T;
 }
 
 export class GoogleValidationManualDecisionOverlay {
@@ -27,7 +46,7 @@ export class GoogleValidationManualDecisionOverlay {
     return typeof id === "string" && id ? id : null;
   }
 
-  async apply<T extends GoogleRecentValidationResult>(result: T): Promise<T> {
+  async apply<T extends GoogleValidationResultLike>(result: T): Promise<T> {
     const connectionId = await this.connectionId();
     if (!connectionId) return result;
 
@@ -69,6 +88,8 @@ export class GoogleValidationManualDecisionOverlay {
     const matched: GoogleValidationRow[] = [];
     const needsReview: GoogleValidationRow[] = [];
     const ignored: GoogleValidationRow[] = [];
+    const originalMatched = new Set(result.matched.map((row) => row.id));
+    const originalReview = new Set(result.needsReview.map((row) => row.id));
 
     for (const row of rows) {
       const decision = decisions.get(row.id);
@@ -82,9 +103,9 @@ export class GoogleValidationManualDecisionOverlay {
           ...withEvidence(row, "manual_profile_assignment"),
           resolvedOrganization: decision.organization,
         });
-      } else if (result.matched.some((item) => item.id === row.id)) {
+      } else if (originalMatched.has(row.id)) {
         matched.push(row);
-      } else if (result.needsReview.some((item) => item.id === row.id)) {
+      } else if (originalReview.has(row.id)) {
         needsReview.push(row);
       } else {
         ignored.push(row);
