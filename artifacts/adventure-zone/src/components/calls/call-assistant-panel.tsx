@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { askBookingAssistant } from "@/features/assistant/assistant-api";
+import { askBookingAssistantLocalFirst } from "@/features/assistant/on-device-ai-assistant";
 import { saveNeedsAnswer } from "@/features/assistant/needs-answer-api";
 import type { ActiveAssistantContext } from "@/features/assistant/assistant-types";
 
@@ -45,7 +45,7 @@ export function CallAssistantPanel({
         setError("There isn't enough linked CRM context to answer this safely.");
         return;
       }
-      const result = await askBookingAssistant({ context, question: trimmed });
+      const result = await askBookingAssistantLocalFirst({ context, question: trimmed });
       setAnswer(result.answer.text);
       setConfidence(result.answer.confidence);
     } catch {
