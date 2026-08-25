@@ -8,6 +8,7 @@ import type {
   LeadScoutEvidenceFact,
   LeadScoutSourceCategory,
   LeadScoutSourceInput,
+  RadiusScoutCriteriaScope,
 } from "./lead-scout-types";
 import type { LeadScoutProvider } from "./lead-scout-provider";
 
@@ -17,12 +18,6 @@ type WebSearchAction = { type?: string; url?: string; sources?: unknown[] };
 type ResponseContent = { type?: string; text?: string; annotations?: unknown[] };
 type ResponseOutput = { type?: string; content?: ResponseContent[]; action?: WebSearchAction };
 type ResponsesPayload = { output_text?: string; output?: ResponseOutput[] };
-type RadiusCriteriaScope = {
-  anchor?: { label?: string; city?: string; region?: string; latitude?: number; longitude?: number };
-  radiusMiles?: number;
-  searchPlaces?: Array<{ name?: string; placeType?: string; distanceMiles?: number }>;
-  searchAreaIncomplete?: boolean;
-};
 
 const sourceCategories = new Set<LeadScoutSourceCategory>([
   "official_event", "government", "tourism_chamber", "vendor_application", "venue_partner",
@@ -119,9 +114,8 @@ function overlapsCriteria(criteria: LeadDiscoveryCriteria, startsAt: string, end
   return end >= criteria.dateFrom && startsAt <= criteria.dateThrough;
 }
 
-function radiusScope(criteria: LeadDiscoveryCriteria): RadiusCriteriaScope | null {
-  const value = (criteria as LeadDiscoveryCriteria & { radiusScope?: RadiusCriteriaScope }).radiusScope;
-  return value && typeof value === "object" ? value : null;
+function radiusScope(criteria: LeadDiscoveryCriteria): RadiusScoutCriteriaScope | null {
+  return criteria.radiusScope ?? null;
 }
 
 function normalizeSources(raw: unknown, allowedUrls: Set<string>) {
@@ -167,8 +161,8 @@ function normalizeCandidates(raw: unknown, criteria: LeadDiscoveryCriteria, allo
   const result: LeadScoutCandidateInput[] = [];
   const radius = radiusScope(criteria);
   const radiusCounties = (radius?.searchPlaces ?? [])
-    .filter((place) => place.placeType === "county" && typeof place.name === "string")
-    .map((place) => String(place.name).trim().toLowerCase())
+    .filter((place) => place.placeType === "county")
+    .map((place) => place.name.trim().toLowerCase())
     .filter(Boolean);
   for (const value of raw) {
     if (!value || typeof value !== "object") continue;
@@ -261,8 +255,8 @@ function criteriaText(criteria: LeadDiscoveryCriteria) {
     radiusScope: radius ? {
       anchor: radius.anchor,
       radiusMiles: radius.radiusMiles,
-      searchPlaces: (radius.searchPlaces ?? []).slice(0, 160),
-      searchAreaIncomplete: Boolean(radius.searchAreaIncomplete),
+      searchPlaces: radius.searchPlaces.slice(0, 160),
+      searchAreaIncomplete: radius.searchAreaIncomplete,
     } : null,
   });
 }
