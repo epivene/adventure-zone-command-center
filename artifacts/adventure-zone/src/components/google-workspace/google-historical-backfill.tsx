@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { retryGoogleHistoricalFailures } from "@/features/google-workspace/google-historical-backfill-client";
 import {
   approveFirstGoogleHistoricalBatch,
   getGoogleHistoricalBackfill,
@@ -16,7 +17,8 @@ function summaryFromBatch(batch: GoogleHistoricalBatchResult | null): string | n
 export function GoogleHistoricalBackfill() {
   const [view, setView] = useState<GoogleHistoricalBackfillView | null>(null);
   const [lastBatch, setLastBatch] = useState<GoogleHistoricalBatchResult | null>(null);
-  const [busy, setBusy] = useState<"run" | "approve" | null>(null);
+  const [retryNotice, setRetryNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"run" | "approve" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function reload() {
@@ -32,6 +34,7 @@ export function GoogleHistoricalBackfill() {
   async function runNext() {
     setBusy("run");
     setError(null);
+    setRetryNotice(null);
     try {
       const result = await runNextGoogleHistoricalBatch();
       setLastBatch(result);
@@ -52,6 +55,23 @@ export function GoogleHistoricalBackfill() {
       setView((current) => current ? { ...current, state: result.state } : current);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not approve the first historical batch.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function retryFailures() {
+    setBusy("retry");
+    setError(null);
+    setRetryNotice(null);
+    try {
+      const result = await retryGoogleHistoricalFailures();
+      setRetryNotice(
+        `${result.attempted} retried · ${result.attached} attached · ${result.ignored} ignored · ${result.needsReview} review · ${result.failed} still failed`,
+      );
+      await reload();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not retry failed historical email.");
     } finally {
       setBusy(null);
     }
@@ -83,6 +103,10 @@ export function GoogleHistoricalBackfill() {
     view.validationStatus === "approved" &&
     state.firstBatchApproved &&
     (state.status === "ready" || retryingLater);
+  const canRetryFailures =
+    view.syncEnabled &&
+    view.validationStatus === "approved" &&
+    state.cumulative.failed > 0;
   const awaitingApproval = state.status === "awaiting_approval";
   const cumulative = state.cumulative;
 
@@ -130,6 +154,11 @@ export function GoogleHistoricalBackfill() {
           {summaryFromBatch(lastBatch)}
         </p>
       ) : null}
+      {retryNotice ? (
+        <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+          {retryNotice}
+        </p>
+      ) : null}
 
       {awaitingApproval ? (
         <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/30">
@@ -162,6 +191,11 @@ export function GoogleHistoricalBackfill() {
               : retryingLater
                 ? "Retry current 250"
                 : "Continue next 250"}
+          </button>
+        ) : null}
+        {canRetryFailures ? (
+          <button className="button-secondary px-4 py-2" disabled={busy !== null} onClick={() => void retryFailures()} type="button">
+            {busy === "retry" ? "Retrying failed messages…" : "Retry failed messages"}
           </button>
         ) : null}
       </div>
