@@ -70,6 +70,7 @@ export type EventProfileActivityRecord = {
   contactId: string | null;
   bookingId: string | null;
   kind: string;
+  subject?: string | null;
   body: string;
   occurredAt: Date;
   createdAt: Date;
@@ -78,6 +79,34 @@ export type EventProfileActivityRecord = {
   actSourceType: string | null;
   historicalDateUnknown?: boolean;
   paperNoteSource?: { activityId: string } | null;
+};
+
+export type EventProfileScoutNoteSource = {
+  url: string;
+  title: string;
+  publisher: string | null;
+  category: string;
+  retrievedAt: string;
+};
+
+export type EventProfileScoutNote = {
+  id: string;
+  occurredAt: Date;
+  runId: string;
+  candidateId: string;
+  createdAt: string;
+  originalQuestion: string;
+  criteriaSummary: string | null;
+  fitScore: number | null;
+  summary: string;
+  positives: string[];
+  cautions: string[];
+  coverageGaps: string[];
+  suggestedNextAction: {
+    kind: "call" | "email" | "prepare_quote";
+    dueAt: string;
+  };
+  sources: EventProfileScoutNoteSource[];
 };
 
 export type EventProfileFollowUpRecord = {
@@ -128,6 +157,7 @@ export type EventProfile = {
   selectedContactId: string | null;
   bookings: EventProfileBookingRecord[];
   notes: EventProfileActivityRecord[];
+  scoutNotes: EventProfileScoutNote[];
   history: EventProfileActivityRecord[];
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
@@ -215,15 +245,99 @@ function dedupeImportedActActivities(records: EventProfileActivityRecord[]) {
     });
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+    : [];
+}
+
+function safePublicUrl(value: unknown) {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" || parsed.protocol === "http:" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function parseScoutSource(value: unknown): EventProfileScoutNoteSource | null {
+  if (!isRecord(value)) return null;
+  const url = safePublicUrl(value.url);
+  if (!url || typeof value.title !== "string") return null;
+  return {
+    url,
+    title: value.title.trim() || url,
+    publisher: typeof value.publisher === "string" ? value.publisher : null,
+    category: typeof value.category === "string" ? value.category : "other",
+    retrievedAt: typeof value.retrievedAt === "string" ? value.retrievedAt : "",
+  };
+}
+
+function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScoutNote | null {
+  if (activity.kind !== "approved_suggestion" || activity.subject !== "Scout Notes") return null;
+  try {
+    const value: unknown = JSON.parse(activity.body);
+    if (!isRecord(value) || value.type !== "scout_note" || value.version !== 1) return null;
+    if (
+      typeof value.runId !== "string"
+      || typeof value.candidateId !== "string"
+      || typeof value.createdAt !== "string"
+      || typeof value.originalQuestion !== "string"
+      || typeof value.summary !== "string"
+      || !isRecord(value.suggestedNextAction)
+      || !["call", "email", "prepare_quote"].includes(String(value.suggestedNextAction.kind))
+      || typeof value.suggestedNextAction.dueAt !== "string"
+    ) return null;
+
+    const actionKind = value.suggestedNextAction.kind as EventProfileScoutNote["suggestedNextAction"]["kind"];
+    return {
+      id: activity.id,
+      occurredAt: activity.occurredAt,
+      runId: value.runId,
+      candidateId: value.candidateId,
+      createdAt: value.createdAt,
+      originalQuestion: value.originalQuestion,
+      criteriaSummary: typeof value.criteriaSummary === "string" ? value.criteriaSummary : null,
+      fitScore: typeof value.fitScore === "number" && Number.isFinite(value.fitScore) ? value.fitScore : null,
+      summary: value.summary,
+      positives: stringList(value.positives),
+      cautions: stringList(value.cautions),
+      coverageGaps: stringList(value.coverageGaps),
+      suggestedNextAction: {
+        kind: actionKind,
+        dueAt: value.suggestedNextAction.dueAt,
+      },
+      sources: Array.isArray(value.sources)
+        ? value.sources.map(parseScoutSource).filter((source): source is EventProfileScoutNoteSource => Boolean(source))
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 function splitProfileActivities(records: EventProfileActivityRecord[]) {
   const activities = dedupeImportedActActivities(records);
+  const scoutNotes = activities
+    .map(parseScoutNote)
+    .filter((note): note is EventProfileScoutNote => Boolean(note));
+  const scoutActivityIds = new Set(scoutNotes.map((note) => note.id));
   return {
     notes: activities.filter((activity) =>
-      !activity.importedFromAct
-      || activity.actSourceType === "note"
-      || activity.actSourceType === "paper_note"
-      || activity.actSourceType == null,
+      !scoutActivityIds.has(activity.id)
+      && (
+        !activity.importedFromAct
+        || activity.actSourceType === "note"
+        || activity.actSourceType === "paper_note"
+        || activity.actSourceType == null
+      ),
     ),
+    scoutNotes,
     history: activities.filter((activity) =>
       activity.importedFromAct
       && (activity.actSourceType === "history" || activity.actSourceType === "activity"),
@@ -267,6 +381,7 @@ export function buildEventProfile(
       || left.id.localeCompare(right.id),
     ),
     notes: timeline.notes,
+    scoutNotes: timeline.scoutNotes,
     history: timeline.history,
     followUps: records.followUps.toSorted((left, right) =>
       Number(left.completedAt !== null) - Number(right.completedAt !== null)
@@ -393,6 +508,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         contactId: activities.contactId,
         bookingId: activities.bookingId,
         kind: activities.kind,
+        subject: activities.subject,
         body: activities.body,
         occurredAt: activities.timelineSortAt,
         sourceOccurredAt: activities.occurredAt,
@@ -438,6 +554,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       contactId: activity.contactId,
       bookingId: activity.bookingId,
       kind: activity.kind,
+      subject: activity.subject,
       body: activity.body,
       occurredAt: activity.occurredAt,
       createdAt: activity.createdAt,
