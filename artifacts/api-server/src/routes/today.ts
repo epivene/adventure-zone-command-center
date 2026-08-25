@@ -18,10 +18,13 @@ import {
   snoozeTodayNextSteps,
 } from "@/features/follow-ups/today-next-step";
 import { listTripsInWindow } from "@/features/trips/trip-repository";
+import { ScoutAlertRepository } from "@/features/assistant/scout-alert-repository";
 import { businessDayBounds } from "@/lib/business-date";
 import { emptyOfficeCoordinatorAttention, loadOfficeCoordinatorAttention } from "@/features/office/office-owner-attention";
 
 const router: IRouter = Router();
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const ONE_YEAR_MS = 366 * 24 * 60 * 60 * 1000;
 
 type TodayCallablePhone = {
   id: string;
@@ -49,13 +52,18 @@ router.get("/today", async (req, res): Promise<void> => {
     const now = new Date();
     const { start, end } = businessDayBounds(now);
     const operationsProvider = createBookingOperationsSummaryProvider(db);
-    const [baseDashboard, upcomingEvents, todayTrips, officeCoordinatorAttention] = await Promise.all([
+    const scoutAlertRepository = new ScoutAlertRepository();
+    const [baseDashboard, upcomingEvents, todayTrips, officeCoordinatorAttention, scoutAlerts] = await Promise.all([
       getTodayDashboard(now, null, { followUps: followUpsPage, needsFollowUpPlan: planPage }, null),
       listTodayUpcomingEvents(db, start, TODAY_UPCOMING_EVENT_LIMIT),
       listTripsInWindow(db, start, end),
       loadOfficeCoordinatorAttention(db).catch((error) => {
         req.log.warn({ err: error }, "Office Coordinator attention could not be loaded for Today");
         return emptyOfficeCoordinatorAttention();
+      }),
+      scoutAlertRepository.listVisible(now).catch((error) => {
+        req.log.warn({ err: error }, "Scout Alerts could not be loaded for Today");
+        return [];
       }),
     ]);
     const enrichedDashboard = await enrichTodayDashboardOperations({ ...baseDashboard, upcomingEvents }, operationsProvider);
@@ -70,11 +78,54 @@ router.get("/today", async (req, res): Promise<void> => {
       nextCall,
       needsFollowUpPlanTotal: needsFollowUpPlan.length,
       officeCoordinatorAttention,
+      scoutAlerts,
+      scoutAlertTotal: scoutAlerts.length,
+      scoutUrgentAlertTotal: scoutAlerts.filter((alert) => alert.severity === "urgent").length,
       todayTrips: todayTrips.map((trip) => ({ id: trip.id, name: trip.name, legName: trip.legName, legColor: trip.legColor, startDate: trip.startDate, endDate: trip.endDate, stopCount: trip.stopCount, vehicleName: trip.vehicleName })),
     });
   } catch (err) {
     req.log.error({ err }, "Failed to load today dashboard");
     res.status(500).json({ error: "Failed to load dashboard" });
+  }
+});
+
+router.post("/today/scout-alerts/:alertId/snooze", async (req, res): Promise<void> => {
+  try {
+    const alertId = req.params.alertId;
+    const until = new Date(typeof req.body?.until === "string" ? req.body.until : Number.NaN);
+    const now = new Date();
+    if (!alertId || !UUID_PATTERN.test(alertId) || !Number.isFinite(until.getTime()) || until <= now || until.getTime() - now.getTime() > ONE_YEAR_MS) {
+      res.status(400).json({ ok: false, error: "Choose a valid future snooze date." });
+      return;
+    }
+    const updated = await new ScoutAlertRepository().snooze(alertId, until);
+    if (!updated) {
+      res.status(404).json({ ok: false, error: "Scout Alert not found." });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to snooze Scout Alert");
+    res.status(500).json({ ok: false, error: "Could not snooze this Scout Alert." });
+  }
+});
+
+router.post("/today/scout-alerts/:alertId/dismiss", async (req, res): Promise<void> => {
+  try {
+    const alertId = req.params.alertId;
+    if (!alertId || !UUID_PATTERN.test(alertId)) {
+      res.status(400).json({ ok: false, error: "Scout Alert id is invalid." });
+      return;
+    }
+    const updated = await new ScoutAlertRepository().dismiss(alertId);
+    if (!updated) {
+      res.status(404).json({ ok: false, error: "Scout Alert not found." });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (err) {
+    req.log.error({ err }, "Failed to dismiss Scout Alert");
+    res.status(500).json({ ok: false, error: "Could not dismiss this Scout Alert." });
   }
 });
 

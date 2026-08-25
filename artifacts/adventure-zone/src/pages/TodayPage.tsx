@@ -6,6 +6,7 @@ import { CallQueueWorkspace } from "@/components/today/call-queue-workspace";
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
 import { RenewalsSection } from "@/components/today/renewals-section";
+import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scout-alerts-section";
 import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
@@ -60,6 +61,7 @@ export default function TodayPage() {
   const [error, setError] = useState<string | null>(null);
   const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
   const [profileTarget, setProfileTarget] = useState<LabeledProfileSheetTarget | null>(null);
+  const [scoutAlerts, setScoutAlerts] = useState<ScoutAlertView[]>([]);
   const [manageNextSteps, setManageNextSteps] = useState(false);
   const [selectedNextSteps, setSelectedNextSteps] = useState<Set<string>>(new Set());
   const [hiddenNextSteps, setHiddenNextSteps] = useState<Set<string>>(new Set());
@@ -72,7 +74,12 @@ export default function TodayPage() {
 
   useEffect(() => {
     Promise.all([apiGet<any>("/today"), apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig)])
-      .then(([d, config]) => { setDashboard(d); setCallingConfig(config); setLoading(false); })
+      .then(([d, config]) => {
+        setDashboard(d);
+        setScoutAlerts(Array.isArray(d.scoutAlerts) ? d.scoutAlerts : []);
+        setCallingConfig(config);
+        setLoading(false);
+      })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
 
@@ -91,6 +98,17 @@ export default function TodayPage() {
       bookingId: linkParams.get("bookingId") ?? undefined,
       label: element?.textContent?.trim() || "Side profile",
     });
+  }
+
+  async function snoozeScoutAlert(alertId: string) {
+    const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    await apiPost(`/today/scout-alerts/${alertId}/snooze`, { until });
+    setScoutAlerts((current) => current.filter((alert) => alert.id !== alertId));
+  }
+
+  async function dismissScoutAlert(alertId: string) {
+    await apiPost(`/today/scout-alerts/${alertId}/dismiss`, {});
+    setScoutAlerts((current) => current.filter((alert) => alert.id !== alertId));
   }
 
   async function clearNextSteps(bookingIds: string[]) {
@@ -161,6 +179,7 @@ export default function TodayPage() {
   const overdueCount = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
   const contractCount = dashboard.contractCount ?? 0;
   const visibleRouteWarningCount = dashboard.visibleRouteWarningCount ?? 0;
+  const urgentScoutAlertCount = scoutAlerts.filter((alert) => alert.severity === "urgent").length;
   const focus = deriveTodayFocus({
     overdueFollowUpCount: overdueCount,
     followUpCount: followUps.length,
@@ -206,7 +225,7 @@ export default function TodayPage() {
             <summary className="cursor-pointer font-bold">Calls & follow-ups <span className="ml-1 text-slate-500">({followUps.length})</span>{overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}</summary>
             <div className="mt-4">
               {callingConfig.assistedCallingEnabled
-                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} />
+                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} />
                 : <div className="grid gap-4"><NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} /><FollowUpList followUps={followUps} now={now} /></div>}
             </div>
           </details>
@@ -221,6 +240,13 @@ export default function TodayPage() {
             </div>
           </details>
         ) : null}
+
+        <ScoutAlertsSection
+          alerts={scoutAlerts}
+          urgentCount={urgentScoutAlertCount}
+          onSnooze={snoozeScoutAlert}
+          onDismiss={dismissScoutAlert}
+        />
 
         {nextStepItems.length || undoBookingIds.length ? (
           <details id="my-work-decisions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
