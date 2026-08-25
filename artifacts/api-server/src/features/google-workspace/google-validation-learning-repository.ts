@@ -99,14 +99,14 @@ export class GoogleValidationLearningRepository {
         LIMIT 1`,
     );
     const row = connection.rows[0];
-    const connectionId = typeof row?.id === "string" ? row.id : null;
-    if (!connectionId) {
+    if (!row || typeof row.id !== "string" || !row.id) {
       return {
         mailboxEmails: new Set<string>(),
         threadTargets: new Map(),
         addressTargets: new Map(),
       };
     }
+    const connectionId = row.id;
 
     const mailboxEmails = new Set<string>();
     if (typeof row.account_email === "string" && row.account_email.trim()) {
