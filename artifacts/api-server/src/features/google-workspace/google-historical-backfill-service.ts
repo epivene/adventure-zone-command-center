@@ -11,6 +11,7 @@ import {
   GoogleHistoricalMessageClassifier,
   type GoogleHistoricalClassification,
 } from "./google-historical-message-classifier";
+import { GoogleProfileFileService } from "./google-profile-file-service";
 import {
   PostgresGoogleValidationRepository,
   type GoogleValidationMappingInput,
@@ -54,6 +55,13 @@ type ClassifierAccess = {
 type ValidationRepositoryAccess = {
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
+};
+
+type FileServiceAccess = {
+  copyApprovedThreadAttachments(input: {
+    organizationId: string;
+    threadId: string;
+  }): Promise<unknown>;
 };
 
 function safeErrorCode(error: unknown): string {
@@ -107,18 +115,25 @@ export class GoogleHistoricalBackfillService {
   private readonly repository: RepositoryAccess;
   private readonly classifier: ClassifierAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
+  private readonly fileService: FileServiceAccess;
 
   constructor(options?: {
     connection?: ConnectionAccess;
     repository?: RepositoryAccess;
     classifier?: ClassifierAccess;
     validationRepository?: ValidationRepositoryAccess;
+    fileService?: FileServiceAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
     this.classifier = options?.classifier ?? new GoogleHistoricalMessageClassifier();
     this.validationRepository =
       options?.validationRepository ?? new PostgresGoogleValidationRepository();
+    this.fileService =
+      options?.fileService ??
+      (options
+        ? { copyApprovedThreadAttachments: async () => undefined }
+        : new GoogleProfileFileService());
   }
 
   async runNextBatch(): Promise<GoogleHistoricalBatchResult> {
@@ -168,10 +183,8 @@ export class GoogleHistoricalBackfillService {
       failed: 0,
       skipped: 0,
     };
-    const batchThreadTargets = new Map<
-      string,
-      { id: string; name: string }
-    >();
+    const batchThreadTargets = new Map<string, { id: string; name: string }>();
+    const copiedFileThreads = new Set<string>();
 
     for (const ref of page.messages) {
       if (await this.repository.hasOutcome(ref.id)) {
@@ -231,6 +244,16 @@ export class GoogleHistoricalBackfillService {
             organizationId: classification.organization.id,
           });
           counts.attached += 1;
+
+          if (!copiedFileThreads.has(message.threadId)) {
+            copiedFileThreads.add(message.threadId);
+            await this.fileService
+              .copyApprovedThreadAttachments({
+                organizationId: classification.organization.id,
+                threadId: message.threadId,
+              })
+              .catch(() => undefined);
+          }
         } else if (classification.outcome === "needs_review") {
           await this.validationRepository.upsertReviewItems([
             reviewInput(message, classification),
