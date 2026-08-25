@@ -26,6 +26,10 @@ export type ScoutNoteView = {
   sources: ScoutNoteSource[];
 };
 
+function noteTime(value: Date | string) {
+  return value instanceof Date ? value.getTime() : new Date(value).getTime();
+}
+
 function readableDate(value: Date | string) {
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return null;
@@ -54,11 +58,9 @@ function uniqueItems(values: string[]) {
 export function ScoutNotesPanel({ notes }: { notes: ScoutNoteView[] }) {
   if (!notes.length) return null;
 
-  const orderedNotes = notes.toSorted((left, right) => {
-    const leftTime = new Date(left.occurredAt).getTime();
-    const rightTime = new Date(right.occurredAt).getTime();
-    return rightTime - leftTime || left.id.localeCompare(right.id);
-  });
+  const orderedNotes = notes.toSorted((left, right) =>
+    noteTime(right.occurredAt) - noteTime(left.occurredAt) || left.id.localeCompare(right.id),
+  );
 
   return (
     <section aria-labelledby="scout-notes-heading" className="overflow-hidden rounded-xl border border-orange-200 bg-white shadow-sm">
