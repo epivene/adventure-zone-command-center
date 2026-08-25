@@ -47,6 +47,16 @@ export function FollowUpList({ followUps, now }: { followUps: FollowUpSummary[];
                       if (result.ok) setItems((current) => current.map((f) => f.id === id ? { ...f, kind: result.followUp.kind, dueAt: result.followUp.dueAt } : f));
                       return result;
                     }}
+                    onSkip={(id) => {
+                      setItems((current) => current.filter((f) => f.id !== id));
+                    }}
+                    onDismiss={async (id) => {
+                      const target = items.find((f) => f.id === id);
+                      if (!target) return { ok: false, error: "Follow-up not found." };
+                      const result = await editFollowUpAction({ followUpId: id, kind: target.kind, dueAt: target.dueAt, completed: true, outcome: "Dismissed" });
+                      if (result.ok) setItems((current) => current.filter((f) => f.id !== id));
+                      return result;
+                    }}
                     onDelete={async (id) => {
                       const result = await deleteFollowUpAction(id);
                       if (result.ok) setItems((current) => current.filter((f) => f.id !== id));
