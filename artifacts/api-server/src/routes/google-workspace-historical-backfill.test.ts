@@ -42,6 +42,13 @@ function app(options?: {
       nextPageAvailable: true,
       state: "awaiting_approval" as const,
     })),
+    retryFailures: vi.fn(async () => ({
+      attempted: 2,
+      attached: 1,
+      ignored: 1,
+      needsReview: 0,
+      failed: 0,
+    })),
   };
   const validation = {
     getStatus: vi.fn(async () => options?.validationStatus ?? "approved" as const),
@@ -99,6 +106,23 @@ describe("Google Workspace historical Gmail backfill routes", () => {
     expect(response.body.processed).toBe(250);
     expect(response.body.state).toBe("awaiting_approval");
     expect(service.runNextBatch).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries only failed message outcomes without advancing the cursor", async () => {
+    const { server, service } = app();
+    const response = await request(server)
+      .post("/google-workspace/historical-gmail/retry-failures")
+      .send({});
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({
+      attempted: 2,
+      attached: 1,
+      ignored: 1,
+      needsReview: 0,
+      failed: 0,
+    });
+    expect(service.retryFailures).toHaveBeenCalledWith(250);
   });
 
   it("approves the first historical batch explicitly", async () => {
