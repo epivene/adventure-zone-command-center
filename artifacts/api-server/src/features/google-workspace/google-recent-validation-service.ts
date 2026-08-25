@@ -272,7 +272,13 @@ async function withTransientBodyEvidence(input: {
   client: GoogleWorkspaceReadClient;
   profiles: GoogleValidationEvidenceSnapshot["profiles"];
 }): Promise<GoogleRelevanceResult> {
-  if (input.result.status === "matched" || !input.client.getThreadDetail) {
+  const learnedAddressMatch =
+    input.result.status === "matched" &&
+    input.result.evidenceCodes.includes("learned_external_email");
+  if (
+    (input.result.status === "matched" && !learnedAddressMatch) ||
+    !input.client.getThreadDetail
+  ) {
     return input.result;
   }
 
