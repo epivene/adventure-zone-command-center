@@ -4,18 +4,19 @@
 
 **Goal:** Add an opt-in local semantic AI layer to the Booking Assistant so strong cached-context matches can be answered on-device before using paid cloud AI.
 
-**Architecture:** Extend the existing offline cache/assistant API path with a pure task router, bounded local document builder, lazy Transformers.js embedding runtime, and client-side semantic answer path. Deterministic answers remain first, local semantic AI is second, and the existing cloud API remains the fallback.
+**Architecture:** Extend the existing offline cache/assistant API path with a pure task router, bounded local document builder, lazy CDN-loaded Transformers.js embedding runtime, and client-side semantic answer path. Deterministic answers remain first, local semantic AI is second, and the existing cloud API remains the fallback.
 
-**Tech Stack:** React 19, TypeScript 5.9, Vite 7, Vitest 4, localStorage, `@huggingface/transformers`, existing assistant cache/API types.
+**Tech Stack:** React 19, TypeScript 5.9, Vite 7, Vitest 4, localStorage, pinned Transformers.js 4.2.0 browser ES module, existing assistant cache/API types.
 
 **Spec:** `docs/superpowers/specs/2026-08-25-on-device-ai-design.md`
 
 ## Global Constraints
 
-- No model download until the user explicitly enables On-Device AI on that device.
+- No runtime/model download until the user explicitly enables On-Device AI on that device.
 - Deterministic cached answers always run before semantic inference.
 - Local semantic answers may only use bounded cached assistant context already present in the browser.
 - No server/database migration is required.
+- Do not modify `package.json` or `pnpm-lock.yaml` for the local AI runtime; use the pinned browser CDN module.
 - Strong local match threshold starts at cosine similarity `0.48`.
 - At most 80 local documents and 1,200 characters per document.
 - Model/runtime failures must never break the existing assistant.
@@ -72,8 +73,6 @@ export function buildLocalAssistantDocuments(
 - Create: `artifacts/adventure-zone/src/features/assistant/on-device-ai-runtime.test.ts`
 - Create: `artifacts/adventure-zone/src/features/assistant/on-device-ai-ranking.ts`
 - Create: `artifacts/adventure-zone/src/features/assistant/on-device-ai-ranking.test.ts`
-- Modify: `artifacts/adventure-zone/package.json`
-- Modify: `pnpm-lock.yaml`
 
 **Interfaces:**
 
@@ -94,6 +93,7 @@ export type OnDeviceAiProgress = {
 
 export function isOnDeviceAiEnabled(): boolean;
 export function setOnDeviceAiEnabled(enabled: boolean): void;
+export function initializeOnDeviceAi(): Promise<void>;
 export function subscribeOnDeviceAi(listener: (state: OnDeviceAiProgress) => void): () => void;
 export function getOnDeviceAiState(): OnDeviceAiProgress;
 export function embedLocalTexts(texts: string[]): Promise<number[][]>;
@@ -108,10 +108,9 @@ export function rankLocalDocuments(input: {
 - [ ] Write failing ranking tests for cosine ordering, zero-vector safety, stable ties, and score preservation.
 - [ ] Run focused ranking test and verify RED.
 - [ ] Implement ranking.
-- [ ] Write runtime tests with mocked dynamic import: disabled never imports, enable stores local preference, model loads once, progress emits, failure becomes `error`, disable blocks future inference.
+- [ ] Write runtime tests with an injected CDN module loader: disabled never loads, enable stores local preference, explicit initialization loads once, progress emits, failure becomes `error`, disable blocks future inference.
 - [ ] Run runtime test and verify RED.
-- [ ] Add `@huggingface/transformers` dependency and lockfile entries compatible with Render frozen-lockfile installs.
-- [ ] Implement lazy `feature-extraction` pipeline using `onnx-community/all-MiniLM-L6-v2-ONNX`, `pooling: "mean"`, `normalize: true`, browser cache enabled, WASM default with WebGPU retry only when supported.
+- [ ] Implement a lazy Vite-ignored dynamic import of `https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.2.0`; create the `feature-extraction` pipeline for `onnx-community/all-MiniLM-L6-v2-ONNX`, use mean pooling/normalization, enable browser cache, and keep WASM as the broad fallback.
 - [ ] Run runtime/ranking tests and verify GREEN.
 
 ---
@@ -134,7 +133,7 @@ export type ClientAssistantAnswer = Omit<AssistantAnswer, "mode"> & {
 Behavior for `askBookingAssistant`:
 
 1. load cached snapshot if available,
-2. run existing deterministic offline answer logic first,
+2. run existing deterministic cached answer logic first,
 3. if router says semantic and local AI is enabled/ready-or-loadable, build documents and rank embeddings,
 4. if top score >= 0.48, return 1-3 grounded snippets as `mode: "on_device"` without calling `/assistant/ask`,
 5. otherwise use existing cloud path when online,
@@ -162,8 +161,8 @@ Behavior for `askBookingAssistant`:
 - loading: progress/initializing state,
 - ready: `On-device ready · Turn off`,
 - error/unavailable: compact explanation with normal assistant still usable,
-- enabling explicitly initializes/downloads the model,
-- disabling only turns use off; browser cache may remain.
+- enabling explicitly initializes/downloads the runtime/model,
+- disabling only turns use off; browser caches may remain.
 
 - [ ] Write failing UI tests for disabled-no-download, enable, loading, ready, error, and turn-off states.
 - [ ] Run focused component test and verify RED.
@@ -199,6 +198,6 @@ pnpm exec vitest run \
 
 - [ ] Run `pnpm --filter @workspace/adventure-zone run typecheck`.
 - [ ] Run `pnpm --filter @workspace/adventure-zone run build`.
-- [ ] Confirm `pnpm install --frozen-lockfile` accepts the updated lockfile.
-- [ ] Review final diff for accidental model auto-loading, server answer-mode changes, cloud-call regressions, or unrelated UI changes.
+- [ ] Confirm `package.json` and `pnpm-lock.yaml` are unchanged by this feature.
+- [ ] Review final diff for accidental runtime/model auto-loading, server answer-mode changes, cloud-call regressions, or unrelated UI changes.
 - [ ] Open PR with exact verification evidence and merge only after the branch is reviewable.
