@@ -6,6 +6,7 @@ import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
 import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
+import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
 import { ProfileSourceDocuments } from "@/components/profiles/profile-source-documents";
 import { HistoricalEventDates } from "@/components/profiles/historical-event-dates";
@@ -74,6 +75,10 @@ export default function EventProfilePage() {
           occurredAt: toDate(note.occurredAt),
           createdAt: toDate(note.createdAt),
           updatedAt: toDate(note.updatedAt),
+        })),
+        scoutNotes: (d.scoutNotes ?? []).map((note: any) => ({
+          ...note,
+          occurredAt: toDate(note.occurredAt),
         })),
         followUps: (d.followUps ?? []).map((followUp: any) => ({ ...followUp, dueAt: toDate(followUp.dueAt), completedAt: toDate(followUp.completedAt) })),
         bookings: (d.bookings ?? []).map((booking: any) => ({ ...booking, startsAt: toDate(booking.startsAt), endsAt: toDate(booking.endsAt) })),
@@ -209,6 +214,7 @@ export default function EventProfilePage() {
       </div>
 
       {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
+      {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
       {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
       {!profileEditing && profileId ? <ProfileSourceDocuments mode="owner" profileId={profileId} /> : null}
