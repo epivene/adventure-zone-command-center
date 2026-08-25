@@ -11,6 +11,8 @@ import type {
 } from "./on-device-ai-client-types";
 import { routeLocalAssistantQuestion } from "./on-device-ai-router";
 
+const ONLINE_LOCAL_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 function sourceList(snapshot: AssistantCachedSnapshot, sourceIds: readonly string[]): AssistantSourceReference[] {
   const ids = new Set(sourceIds);
   return snapshot.context.sources.filter((source) => ids.has(source.id));
@@ -119,6 +121,11 @@ function offlineFallback(snapshot: AssistantCachedSnapshot, conversationId?: str
   }, conversationId);
 }
 
+function freshEnoughForOnlineLocalUse(snapshot: AssistantCachedSnapshot) {
+  const savedAt = new Date(snapshot.savedAt).getTime();
+  return Number.isFinite(savedAt) && Date.now() - savedAt <= ONLINE_LOCAL_CACHE_MAX_AGE_MS;
+}
+
 export async function askBookingAssistantLocalFirst(input: {
   context: Exclude<ActiveAssistantContext, null>;
   question: string;
@@ -126,16 +133,17 @@ export async function askBookingAssistantLocalFirst(input: {
 }): Promise<ClientAssistantAskResponse> {
   const cached = await getAssistantSnapshot(input.context).catch(() => null);
   const online = typeof navigator === "undefined" || navigator.onLine !== false;
+  const localSnapshot = cached && (!online || freshEnoughForOnlineLocalUse(cached)) ? cached : null;
   const intent = routeLocalAssistantQuestion(input.question);
 
-  if (cached && intent === "exact_cached_answer") {
-    const exact = exactCachedAnswer(input.question, cached, online ? "deterministic" : "offline_cached");
-    if (exact) return response(cached, exact, input.conversationId);
+  if (localSnapshot && intent === "exact_cached_answer") {
+    const exact = exactCachedAnswer(input.question, localSnapshot, online ? "deterministic" : "offline_cached");
+    if (exact) return response(localSnapshot, exact, input.conversationId);
   }
 
-  if (cached && intent === "semantic_cached_search") {
-    const local = await tryOnDeviceSemanticAnswer(input.question, cached).catch(() => null);
-    if (local) return response(cached, local, input.conversationId);
+  if (localSnapshot && intent === "semantic_cached_search") {
+    const local = await tryOnDeviceSemanticAnswer(input.question, localSnapshot).catch(() => null);
+    if (local) return response(localSnapshot, local, input.conversationId);
   }
 
   if (!online) {
