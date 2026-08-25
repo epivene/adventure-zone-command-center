@@ -38,20 +38,42 @@ export async function ensureLeadIntakeSchema(
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
       and (
-        select count(*) = 15 from information_schema.columns
+        select count(*) = 14 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_rows'
           and column_name = any(array[
             'review_version', 'selected_organization_id', 'selected_contact_id', 'contact_mode',
             'confirmed_event_name', 'confirmed_start_date', 'confirmed_end_date', 'confirmed_contact_name',
             'confirmed_contact_role', 'confirmed_recipient_email', 'recipient_confirmed',
-            'introduction_suitable', 'confirmed_by', 'confirmed_at', 'updated_at'
+            'introduction_suitable', 'confirmed_by', 'confirmed_at'
           ])
       )
-      and exists (
-        select 1 from pg_constraint
-        where conname = 'lead_import_rows_confirmed_date_range_valid'
-          and conrelid = 'lead_import_rows'::regclass
+      and (
+        select count(*) = 5 from pg_constraint
+        where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+          and conname = any(array[
+            'lead_import_rows_review_version_nonnegative', 'lead_import_rows_contact_mode_valid',
+            'lead_import_rows_confirmed_date_range_valid', 'lead_import_rows_selected_organization_fk',
+            'lead_import_rows_selected_contact_fk'
+          ])
       )
+      and (
+        select count(*) = 9 from information_schema.columns
+        where table_schema = current_schema() and table_name = 'lead_import_evidence'
+          and column_name = any(array[
+            'id', 'row_id', 'field', 'candidate_value', 'source_kind', 'source_reference',
+            'selected', 'created_by', 'created_at'
+          ])
+      )
+      and (
+        select count(*) = 5 from pg_constraint
+        where conrelid = to_regclass(current_schema() || '.lead_import_evidence')
+          and conname = any(array[
+            'lead_import_evidence_row_fk', 'lead_import_evidence_field_valid',
+            'lead_import_evidence_source_kind_valid', 'lead_import_evidence_reference_nonblank',
+            'lead_import_evidence_created_by_nonblank'
+          ])
+      )
+      and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       ) as ready
   `);

@@ -1,7 +1,7 @@
 alter table lead_import_rows
   add column if not exists review_version integer not null default 0,
-  add column if not exists selected_organization_id uuid references organizations(id) on delete restrict,
-  add column if not exists selected_contact_id uuid references contacts(id) on delete restrict,
+  add column if not exists selected_organization_id uuid,
+  add column if not exists selected_contact_id uuid,
   add column if not exists contact_mode text,
   add column if not exists confirmed_event_name text,
   add column if not exists confirmed_start_date date,
@@ -16,28 +16,36 @@ alter table lead_import_rows
 
 do $$
 begin
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_review_version_nonnegative' and conrelid = 'lead_import_rows'::regclass) then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_review_version_nonnegative' and conrelid = to_regclass(current_schema() || '.lead_import_rows')) then
     alter table lead_import_rows add constraint lead_import_rows_review_version_nonnegative check (review_version >= 0);
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_contact_mode_valid' and conrelid = 'lead_import_rows'::regclass) then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_contact_mode_valid' and conrelid = to_regclass(current_schema() || '.lead_import_rows')) then
     alter table lead_import_rows add constraint lead_import_rows_contact_mode_valid check (contact_mode is null or contact_mode in ('existing', 'manual'));
   end if;
-  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_confirmed_date_range_valid' and conrelid = 'lead_import_rows'::regclass) then
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_confirmed_date_range_valid' and conrelid = to_regclass(current_schema() || '.lead_import_rows')) then
     alter table lead_import_rows add constraint lead_import_rows_confirmed_date_range_valid
       check (confirmed_start_date is null or confirmed_end_date is null or confirmed_end_date >= confirmed_start_date);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_selected_organization_fk' and conrelid = to_regclass(current_schema() || '.lead_import_rows')) then
+    alter table lead_import_rows add constraint lead_import_rows_selected_organization_fk
+      foreign key (selected_organization_id) references organizations(id) on delete restrict;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'lead_import_rows_selected_contact_fk' and conrelid = to_regclass(current_schema() || '.lead_import_rows')) then
+    alter table lead_import_rows add constraint lead_import_rows_selected_contact_fk
+      foreign key (selected_contact_id) references contacts(id) on delete restrict;
   end if;
 end
 $$;
 
 create table if not exists lead_import_evidence (
   id uuid primary key default gen_random_uuid(),
-  row_id uuid not null references lead_import_rows(id) on delete cascade,
-  field text not null check (field in ('event_dates', 'recipient_email')),
+  row_id uuid not null constraint lead_import_evidence_row_fk references lead_import_rows(id) on delete cascade,
+  field text not null constraint lead_import_evidence_field_valid check (field in ('event_dates', 'recipient_email')),
   candidate_value text not null,
-  source_kind text not null check (source_kind in ('crm_contact', 'act_description', 'official_website', 'manual')),
-  source_reference text not null check (btrim(source_reference) <> ''),
+  source_kind text not null constraint lead_import_evidence_source_kind_valid check (source_kind in ('crm_contact', 'act_description', 'official_website', 'manual')),
+  source_reference text not null constraint lead_import_evidence_reference_nonblank check (btrim(source_reference) <> ''),
   selected boolean not null default false,
-  created_by text not null check (btrim(created_by) <> ''),
+  created_by text not null constraint lead_import_evidence_created_by_nonblank check (btrim(created_by) <> ''),
   created_at timestamptz not null default now()
 );
 
