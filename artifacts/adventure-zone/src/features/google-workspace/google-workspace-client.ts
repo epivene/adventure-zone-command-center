@@ -104,6 +104,47 @@ export type GoogleValidationReviewItem = {
   resolvedOrganizationId: string | null;
 };
 
+export type GoogleHistoricalBackfillStatus =
+  | "not_started"
+  | "running"
+  | "awaiting_approval"
+  | "ready"
+  | "complete"
+  | "paused"
+  | "error";
+
+export type GoogleHistoricalBackfillState = {
+  status: GoogleHistoricalBackfillStatus;
+  nextPageToken: string | null;
+  firstBatchApproved: boolean;
+  cumulative: {
+    processed: number;
+    attached: number;
+    ignored: number;
+    needsReview: number;
+    failed: number;
+    skipped: number;
+  };
+};
+
+export type GoogleHistoricalBackfillView = {
+  syncEnabled: boolean;
+  validationStatus: GoogleValidationStatus;
+  state: GoogleHistoricalBackfillState;
+};
+
+export type GoogleHistoricalBatchResult = {
+  batchId: string;
+  processed: number;
+  attached: number;
+  ignored: number;
+  needsReview: number;
+  failed: number;
+  skipped: number;
+  nextPageAvailable: boolean;
+  state: GoogleHistoricalBackfillStatus;
+};
+
 export type GoogleProfileEmailConversation = {
   threadId: string;
   subject: string;
@@ -277,6 +318,45 @@ export async function decideGoogleWorkspaceValidationSample(
     await apiFetch("/google-workspace/validation/decision", {
       method: "POST",
       body: JSON.stringify({ decision }),
+    }),
+  );
+}
+
+export async function getGoogleHistoricalBackfill(): Promise<GoogleHistoricalBackfillView> {
+  return responseJson(
+    await apiFetch("/google-workspace/historical-gmail"),
+  );
+}
+
+export async function runNextGoogleHistoricalBatch(): Promise<GoogleHistoricalBatchResult> {
+  return responseJson(
+    await apiFetch("/google-workspace/historical-gmail/run-next", {
+      method: "POST",
+      body: "{}",
+    }),
+  );
+}
+
+export async function approveFirstGoogleHistoricalBatch(): Promise<{
+  ok: true;
+  state: GoogleHistoricalBackfillState;
+}> {
+  return responseJson(
+    await apiFetch("/google-workspace/historical-gmail/approve-first-batch", {
+      method: "POST",
+      body: "{}",
+    }),
+  );
+}
+
+export async function pauseGoogleHistoricalBackfill(): Promise<{
+  ok: true;
+  state: GoogleHistoricalBackfillState;
+}> {
+  return responseJson(
+    await apiFetch("/google-workspace/historical-gmail/pause", {
+      method: "POST",
+      body: "{}",
     }),
   );
 }
