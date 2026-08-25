@@ -14,6 +14,31 @@ const researched: RelatedEventOpportunity = {
   rationale: "A very long research narrative that must never be inserted into Notes.",
 };
 
+const scoutNote = {
+  type: "scout_note" as const,
+  version: 1 as const,
+  runId: "30000000-0000-4000-8000-000000000001",
+  candidateId: "40000000-0000-4000-8000-000000000001",
+  createdAt: "2026-08-19T18:10:00.000Z",
+  originalQuestion: "Find family-friendly events in Idaho in September 2026",
+  criteriaSummary: "Idaho · September 2026",
+  fitScore: 88,
+  summary: "Strong family fit",
+  positives: ["family audience"],
+  cautions: ["Confirm that no inflatable provider is already contracted"],
+  coverageGaps: ["Power availability has not been verified"],
+  suggestedNextAction: { kind: "prepare_quote" as const, dueAt: "2026-08-24" },
+  sources: [
+    {
+      url: "https://example.org/silver-valley-days",
+      title: "Official Silver Valley Days event page",
+      publisher: "Silver Valley Days",
+      category: "official_event",
+      retrievedAt: "2026-08-19T18:05:00.000Z",
+    },
+  ],
+};
+
 function accepted(overrides: Record<string, unknown> = {}) {
   return {
     name: "Silver Valley Days",
@@ -80,6 +105,7 @@ describe("ResearchProspectIntakeService", () => {
       accepted: accepted() as any,
       nextActionKind: "call",
       nextActionDueAt: "2026-08-24",
+      scoutNote: { ...scoutNote, suggestedNextAction: { kind: "call", dueAt: "2026-08-24" } },
     });
 
     expect(result).toEqual({ kind: "duplicate", match: expect.objectContaining({ status: "possible_match", organizationId: "org-existing" }) });
@@ -93,7 +119,7 @@ describe("ResearchProspectIntakeService", () => {
     expect(fake.createLead).not.toHaveBeenCalled();
   });
 
-  it("creates new_lead + possible intake from accepted structured fields only", async () => {
+  it("creates new_lead + possible intake and keeps approved Scout Notes in the same store call", async () => {
     const fake = store();
     const service = new ResearchProspectIntakeService(fake as never);
 
@@ -102,6 +128,7 @@ describe("ResearchProspectIntakeService", () => {
       accepted: accepted() as any,
       nextActionKind: "prepare_quote",
       nextActionDueAt: "2026-08-24",
+      scoutNote,
     });
 
     expect(result).toEqual({ kind: "created", profileId: "profile-1", bookingId: "booking-1" });
@@ -113,6 +140,7 @@ describe("ResearchProspectIntakeService", () => {
         nextActionKind: "prepare_quote",
         nextActionDueAt: "2026-08-24",
       },
+      scoutNote,
     });
     const serialized = JSON.stringify(fake.createLead.mock.calls[0]?.[0]);
     expect(serialized).not.toContain(researched.rationale);
