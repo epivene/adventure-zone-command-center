@@ -67,7 +67,10 @@ export function createLeadIntakeClient(api: Api) {
       return (await api.get<{ batch: LeadImportBatch }>(`/lead-intake/imports/${batchId}`)).batch;
     },
     async searchProfiles(query: string) {
-      return (await api.get<{ organizations: LeadProfileOption[] }>(`/organizations?q=${encodeURIComponent(query)}&pageSize=10`)).organizations;
+      const response = await api.get<{ organizations: { records: LeadProfileOption[] } }>(
+        `/organizations?q=${encodeURIComponent(query)}&pageSize=10`,
+      );
+      return response.organizations.records;
     },
     async listProfileContacts(organizationId: string) {
       return (await api.get<{ contacts: LeadContactOption[] }>(`/lead-intake/organizations/${organizationId}/contacts`)).contacts;
