@@ -49,4 +49,25 @@ describe("Scout geography", () => {
     expect(places.map((place) => place.name)).toEqual(["Miles City", "Billings"]);
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps counties whose administrative boundary intersects the circle", async () => {
+    const fetchFn = vi.fn(async (_url, init) => {
+      const encoded = String(init?.body ?? "");
+      expect(encoded).toContain("admin_level%22%3D%226%22");
+      return new Response(JSON.stringify({ elements: [
+        { lat: 46.4083, lon: -105.8406, tags: { name: "Miles City", place: "city" } },
+        {
+          center: { lat: 43.0, lon: -108.0 },
+          tags: { name: "Custer County", boundary: "administrative", admin_level: "6" },
+        },
+      ] }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    const places = await new ScoutAreaResolver(fetchFn as typeof fetch).listPlaces(milesCity, 200);
+
+    expect(places).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "Miles City", placeType: "city" }),
+      expect.objectContaining({ name: "Custer County", placeType: "county" }),
+    ]));
+  });
 });
