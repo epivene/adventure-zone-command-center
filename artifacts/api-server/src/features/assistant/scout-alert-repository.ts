@@ -174,17 +174,20 @@ export class ScoutAlertRepository {
          order by least(watch.next_evaluation_at, watch.next_research_at), watch.created_at, watch.id
          for update skip locked
          limit 1
+       ), claimed as (
+         update scout_alert_watches watch
+         set worker_id = $1,
+             lease_expires_at = $3,
+             updated_at = $2
+         from claimable
+         where watch.id = claimable.id
+         returning watch.*
        )
-       update scout_alert_watches watch
-       set worker_id = $1,
-           lease_expires_at = $3,
-           updated_at = $2
-       from claimable
-       inner join lead_scout_candidates candidate on candidate.id = watch.candidate_id
-       where watch.id = claimable.id
-       returning watch.id, watch.worker_id, watch.actor_id, candidate.run_id,
-         watch.candidate_id, watch.organization_id, watch.booking_id,
-         watch.next_research_at, watch.failure_count, watch.snapshot, watch.lease_expires_at`,
+       select claimed.id, claimed.worker_id, claimed.actor_id, candidate.run_id,
+         claimed.candidate_id, claimed.organization_id, claimed.booking_id,
+         claimed.next_research_at, claimed.failure_count, claimed.snapshot, claimed.lease_expires_at
+       from claimed
+       inner join lead_scout_candidates candidate on candidate.id = claimed.candidate_id`,
       [input.workerId, input.now.toISOString(), leaseExpiresAt.toISOString()],
     );
     const row = result.rows[0];
