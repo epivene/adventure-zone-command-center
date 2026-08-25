@@ -19,6 +19,12 @@ export type GoogleHistoricalBackfillOutcome =
   | "failed"
   | "skipped";
 
+export type GoogleHistoricalFailedOutcome = {
+  batchId: string;
+  messageId: string;
+  threadId: string;
+};
+
 export type GoogleHistoricalBackfillState = {
   status: GoogleHistoricalBackfillStatus;
   nextPageToken: string | null;
@@ -237,6 +243,56 @@ export class GoogleHistoricalBackfillRepository {
         input.outcome,
         input.organizationId ?? null,
         input.errorCode ?? null,
+      ],
+    );
+  }
+
+  async listFailedOutcomes(limit = 250): Promise<GoogleHistoricalFailedOutcome[]> {
+    const bounded = Math.min(250, Math.max(1, Math.trunc(limit)));
+    const connectionId = await this.connectionId();
+    const result = await this.pool.query(
+      `SELECT batch_id, message_id, thread_id
+         FROM google_workspace_historical_gmail_outcomes
+        WHERE connection_id = $1
+          AND outcome = 'failed'
+        ORDER BY updated_at ASC, message_id ASC
+        LIMIT $2`,
+      [connectionId, bounded],
+    );
+    return result.rows.flatMap((row) =>
+      typeof row.batch_id === "string" &&
+      typeof row.message_id === "string" &&
+      typeof row.thread_id === "string"
+        ? [{
+            batchId: row.batch_id,
+            messageId: row.message_id,
+            threadId: row.thread_id,
+          }]
+        : [],
+    );
+  }
+
+  async applyRetrySummary(input: {
+    resolvedFailed: number;
+    attached: number;
+    ignored: number;
+    needsReview: number;
+  }): Promise<void> {
+    const connectionId = await this.connectionId();
+    await this.pool.query(
+      `UPDATE google_workspace_historical_gmail_backfill_state
+          SET failed_count = GREATEST(0, failed_count - $2),
+              attached_count = attached_count + $3,
+              ignored_count = ignored_count + $4,
+              needs_review_count = needs_review_count + $5,
+              updated_at = now()
+        WHERE connection_id = $1`,
+      [
+        connectionId,
+        finiteCount(input.resolvedFailed),
+        finiteCount(input.attached),
+        finiteCount(input.ignored),
+        finiteCount(input.needsReview),
       ],
     );
   }
