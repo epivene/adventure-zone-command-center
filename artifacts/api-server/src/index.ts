@@ -25,6 +25,11 @@ import {
   LeadScoutWorkerLoop,
   systemLeadScoutWorkerLoopScheduler,
 } from "./features/assistant/lead-scout-worker-loop";
+import { ScoutAlertWorker } from "./features/assistant/scout-alert-worker";
+import {
+  ScoutAlertWorkerLoop,
+  systemScoutAlertWorkerLoopScheduler,
+} from "./features/assistant/scout-alert-worker-loop";
 import { AssistantJobWorker } from "./features/assistant/assistant-job-worker";
 import {
   AssistantJobWorkerLoop,
@@ -60,6 +65,13 @@ const leadScoutLoop = new LeadScoutWorkerLoop({
   workerId: `lead-scout-${randomUUID()}`,
   clock: { now: () => new Date() },
   scheduler: systemLeadScoutWorkerLoopScheduler,
+});
+
+const scoutAlertLoop = new ScoutAlertWorkerLoop({
+  worker: new ScoutAlertWorker(),
+  workerId: `scout-alert-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemScoutAlertWorkerLoopScheduler,
 });
 
 const assistantJobLoop = new AssistantJobWorkerLoop({
@@ -121,6 +133,7 @@ const shutdown = createActServerShutdown({
     await Promise.all([
       runtime?.close(),
       leadScoutLoop.close(),
+      scoutAlertLoop.close(),
       assistantJobLoop.close(),
       paperNoteLoop.close(),
     ]);
@@ -253,6 +266,7 @@ async function runPostListenMaintenance() {
 async function startBackgroundWorkers() {
   if (shutdownRequested) return;
   leadScoutLoop.start();
+  scoutAlertLoop.start();
   assistantJobLoop.start();
   paperNoteLoop.start();
 
