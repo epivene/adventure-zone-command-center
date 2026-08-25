@@ -20,6 +20,11 @@ export type GoogleMessageRef = {
   threadId: string;
 };
 
+export type GoogleMessagePage = {
+  messages: GoogleMessageRef[];
+  nextPageToken: string | null;
+};
+
 export type GoogleMessageMetadata = {
   id: string;
   threadId: string;
@@ -74,6 +79,10 @@ export interface GoogleWorkspaceReadClient {
   listLabels(): Promise<GoogleLabelSummary[]>;
   listCalendars(): Promise<GoogleCalendarSummary[]>;
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
+  listMessagePage?(input: {
+    maxResults: number;
+    pageToken?: string | null;
+  }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;

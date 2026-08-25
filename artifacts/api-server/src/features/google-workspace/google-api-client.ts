@@ -2,6 +2,7 @@ import type {
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,
+  GoogleMessagePage,
   GoogleMessageRef,
   GoogleThreadAttachment,
   GoogleThreadDetail,
@@ -402,6 +403,37 @@ export function createGoogleWorkspaceReadClient(input: {
       return refs;
     },
 
+    async listMessagePage(input): Promise<GoogleMessagePage> {
+      if (!Number.isInteger(input.maxResults) || input.maxResults < 1 || input.maxResults > 250) {
+        throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
+      }
+      const url = new URL(`${gmailBaseEndpoint}/messages`);
+      url.searchParams.set("maxResults", String(input.maxResults));
+      url.searchParams.set("includeSpamTrash", "false");
+      const pageToken = input.pageToken?.trim();
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const payload = await authorizedJson(url.toString());
+      const values = Array.isArray(payload.messages) ? payload.messages : [];
+      const messages = values.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const message = value as Record<string, unknown>;
+        if (
+          typeof message.id !== "string" ||
+          !message.id.trim() ||
+          typeof message.threadId !== "string" ||
+          !message.threadId.trim()
+        ) return [];
+        return [{ id: message.id, threadId: message.threadId }];
+      });
+      return {
+        messages,
+        nextPageToken:
+          typeof payload.nextPageToken === "string" && payload.nextPageToken.trim()
+            ? payload.nextPageToken.trim()
+            : null,
+      };
+    },
+
     async getMessageMetadata(id: string): Promise<GoogleMessageMetadata> {
       const messageId = id.trim();
       if (!messageId) {
@@ -531,6 +563,7 @@ export type {
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,
+  GoogleMessagePage,
   GoogleMessageRef,
   GoogleThreadDetail,
   GoogleWorkspaceReadClient,
