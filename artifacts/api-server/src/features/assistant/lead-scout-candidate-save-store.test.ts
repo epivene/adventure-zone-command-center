@@ -19,12 +19,36 @@ async function database() {
       matched_booking_id uuid,
       saved_organization_id uuid,
       saved_booking_id uuid,
+      enriched_at timestamptz,
+      updated_at timestamptz not null default now()
+    );
+    create table scout_alert_watches (
+      id uuid primary key default gen_random_uuid(),
+      candidate_id uuid not null unique references lead_scout_candidates(id) on delete cascade,
+      actor_id text not null,
+      organization_id uuid not null,
+      booking_id uuid,
+      status text not null default 'active',
+      snapshot jsonb,
+      next_evaluation_at timestamptz not null,
+      next_research_at timestamptz not null,
+      last_evaluated_at timestamptz,
+      last_researched_at timestamptz,
+      last_error text,
+      failure_count integer not null default 0,
+      worker_id text,
+      lease_expires_at timestamptz,
+      created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
   `);
   const run = await client.query(`insert into lead_scout_runs(actor_id) values ('owner-a') returning id`);
   const runId = String(run.rows[0]?.id);
-  const candidate = await client.query(`insert into lead_scout_candidates(run_id) values ($1) returning id`, [runId]);
+  const candidate = await client.query(
+    `insert into lead_scout_candidates(run_id, enriched_at)
+     values ($1, timestamptz '2026-08-20T12:00:00Z') returning id`,
+    [runId],
+  );
   return {
     client,
     runId,
@@ -37,7 +61,7 @@ describe("PostgresLeadScoutCandidateSaveLinker", () => {
   const clients: PGlite[] = [];
   afterEach(async () => Promise.all(clients.splice(0).map((client) => client.close())));
 
-  it("atomically links an actor-owned unsaved candidate to its new CRM records", async () => {
+  it("atomically links an actor-owned result and activates one Scout watch", async () => {
     const db = await database(); clients.push(db.client);
     expect(await db.linker.markSaved({
       runId: db.runId,
@@ -57,9 +81,35 @@ describe("PostgresLeadScoutCandidateSaveLinker", () => {
       saved_organization_id: "10000000-0000-4000-8000-000000000001",
       saved_booking_id: "20000000-0000-4000-8000-000000000001",
     });
+
+    const watch = (await db.client.query(`
+      select candidate_id, actor_id, organization_id, booking_id, status,
+        next_evaluation_at <= now() as evaluation_due,
+        next_research_at = timestamptz '2026-08-27T12:00:00Z' as research_scheduled
+      from scout_alert_watches where candidate_id=$1
+    `, [db.candidateId])).rows[0];
+    expect(watch).toMatchObject({
+      candidate_id: db.candidateId,
+      actor_id: "owner-a",
+      organization_id: "10000000-0000-4000-8000-000000000001",
+      booking_id: "20000000-0000-4000-8000-000000000001",
+      status: "active",
+      evaluation_due: true,
+      research_scheduled: true,
+    });
+
+    expect(await db.linker.markSaved({
+      runId: db.runId,
+      actorId: "owner-a",
+      candidateId: db.candidateId,
+      profileId: "10000000-0000-4000-8000-000000000001",
+      bookingId: "20000000-0000-4000-8000-000000000001",
+    })).toBe(false);
+    const count = await db.client.query(`select count(*)::int as count from scout_alert_watches`);
+    expect(count.rows[0]?.count).toBe(1);
   });
 
-  it("does not link another actor's, dismissed, possible-match, or already-saved candidate", async () => {
+  it("does not link or activate a watch for another actor's, dismissed, possible-match, or already-saved result", async () => {
     const db = await database(); clients.push(db.client);
     const input = {
       runId: db.runId,
@@ -76,5 +126,8 @@ describe("PostgresLeadScoutCandidateSaveLinker", () => {
     expect(await db.linker.markSaved({ ...input, actorId: "owner-a" })).toBe(false);
     await db.client.query(`update lead_scout_candidates set review_status='saved', crm_match_status='new_prospect' where id=$1`, [db.candidateId]);
     expect(await db.linker.markSaved({ ...input, actorId: "owner-a" })).toBe(false);
+
+    const count = await db.client.query(`select count(*)::int as count from scout_alert_watches`);
+    expect(count.rows[0]?.count).toBe(0);
   });
 });
