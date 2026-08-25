@@ -2,10 +2,48 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import { LeadScoutService } from "@/features/assistant/lead-scout-service";
+import {
+  RadiusLeadScoutService,
+  type RadiusScoutRequest,
+} from "@/features/assistant/lead-scout-radius";
 import { isResearchProspectValidationError } from "@/features/profile-research/research-prospect-intake";
 
 const createSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const uuidSchema = z.uuid().transform((value) => value.toLowerCase());
+const scoutCategorySchema = z.enum([
+  "fair",
+  "festival",
+  "rodeo",
+  "powwow",
+  "community_celebration",
+  "car_show",
+  "expo_show",
+  "parade",
+  "other_family_community",
+]);
+const radiusScoutSchema = z.object({
+  anchor: z.object({
+    kind: z.enum(["booking", "event_family", "manual", "candidate"]),
+    recordId: z.string().trim().min(1).max(200).optional(),
+    label: z.string().trim().min(1).max(300),
+    city: z.string().trim().min(1).max(160).optional(),
+    region: z.string().trim().regex(/^[A-Za-z]{2}$/).optional(),
+    address: z.string().trim().min(1).max(500).optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+  }).strict().refine((anchor) => {
+    if (anchor.kind !== "manual") return Boolean(anchor.recordId || anchor.city || anchor.address || anchor.label);
+    return Boolean(anchor.city || anchor.address || anchor.label);
+  }, "Choose a valid event or location."),
+  radiusMiles: z.union([z.literal(25), z.literal(50), z.literal(100), z.literal(150), z.literal(200), z.literal(300)]),
+  dateStart: z.iso.date(),
+  dateEnd: z.iso.date(),
+  categories: z.array(scoutCategorySchema).min(1),
+  historyFilter: z.enum(["all", "hide_booked", "hide_booked_and_dismissed"]),
+}).strict().refine((value) => value.dateEnd >= value.dateStart, {
+  message: "End date must be on or after start date.",
+  path: ["dateEnd"],
+});
 const saveCandidateSchema = z.object({
   accepted: z.object({
     name: z.string().trim().min(1).max(300),
@@ -26,6 +64,7 @@ type LeadScoutRouteService = Pick<
   LeadScoutService,
   "createCrmDiscovery" | "getRun" | "getLatestRun" | "startWeb" | "stopWeb" | "continueWeb" | "deepenCandidate" | "dismissCandidate" | "saveCandidate"
 >;
+type RadiusScoutRouteService = Pick<RadiusLeadScoutService, "create">;
 
 function actorId(req: any) {
   return String(req.userId ?? "");
@@ -67,6 +106,7 @@ function sendError(req: any, res: any, error: unknown) {
 
 export function createAssistantLeadScoutRouter(
   service: LeadScoutRouteService = new LeadScoutService(),
+  radiusService: RadiusScoutRouteService = new RadiusLeadScoutService(),
 ): IRouter {
   const router: IRouter = Router();
 
@@ -83,6 +123,23 @@ export function createAssistantLeadScoutRouter(
         return;
       }
       res.json({ run: result });
+    } catch (error) {
+      sendError(req, res, error);
+    }
+  });
+
+  router.post("/assistant/lead-scout/radius", async (req, res): Promise<void> => {
+    const parsed = radiusScoutSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the Radius Scout request." });
+      return;
+    }
+    try {
+      const run = await radiusService.create({
+        actorId: actorId(req),
+        request: parsed.data as RadiusScoutRequest,
+      });
+      res.status(201).json({ run });
     } catch (error) {
       sendError(req, res, error);
     }
