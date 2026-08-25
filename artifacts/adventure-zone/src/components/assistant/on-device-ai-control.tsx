@@ -36,6 +36,23 @@ export function OnDeviceAiControl() {
     );
   }
 
+  if (state.status === "available") {
+    return (
+      <div className="border-b border-slate-200 bg-slate-50 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-bold text-slate-800">On-device AI enabled</p>
+            <p className="mt-0.5 text-[11px] leading-4 text-slate-500">Local matching is enabled on this device. Load the model now, or it will load when an eligible local question needs it.</p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button className="button-secondary" onClick={() => { void retry(); }} type="button">Load now</button>
+            <button className="button-secondary" onClick={() => setOnDeviceAiEnabled(false)} type="button">Turn off</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (state.status === "loading") {
     const progress = state.progress == null ? null : Math.round(state.progress);
     return (
