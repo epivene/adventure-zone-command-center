@@ -36,6 +36,7 @@ function renderCard(item: LeadScoutCandidate, options?: {
   onResearchDeeper?: ReturnType<typeof vi.fn>;
   onNotFit?: ReturnType<typeof vi.fn>;
   onSaveAsLead?: ReturnType<typeof vi.fn>;
+  onScoutAround?: ReturnType<typeof vi.fn>;
 }) {
   return render(
     <LeadScoutCandidateCard
@@ -46,6 +47,7 @@ function renderCard(item: LeadScoutCandidate, options?: {
       onResearchDeeper={options?.onResearchDeeper ?? vi.fn()}
       onNotFit={options?.onNotFit ?? vi.fn()}
       onSaveAsLead={options?.onSaveAsLead ?? vi.fn()}
+      onScoutAround={options?.onScoutAround}
     />,
   );
 }
@@ -64,6 +66,25 @@ describe("LeadScoutCandidateCard", () => {
     expect(screen.getByText(/No official power requirements/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Research deeper" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Not a fit" })).toBeTruthy();
+  });
+
+  it("offers Scout Around This Event when the result has a usable city and state", () => {
+    const onScoutAround = vi.fn();
+    renderCard(candidate("new_prospect"), { onScoutAround });
+
+    fireEvent.click(screen.getByRole("button", { name: "Scout Around This Event" }));
+
+    expect(onScoutAround).toHaveBeenCalledWith(expect.objectContaining({
+      id: "c1",
+      name: "Silver Valley Days",
+      city: "Kellogg",
+      region: "ID",
+    }));
+  });
+
+  it("hides Scout Around This Event until the result has a usable location", () => {
+    renderCard({ ...candidate("new_prospect"), city: null }, { onScoutAround: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Scout Around This Event" })).toBeNull();
   });
 
   it("only enables Create Profile for a reviewable new result", () => {

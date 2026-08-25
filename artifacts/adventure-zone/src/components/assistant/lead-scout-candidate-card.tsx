@@ -37,6 +37,7 @@ export function LeadScoutCandidateCard({
   onResearchDeeper,
   onNotFit,
   onSaveAsLead = () => undefined,
+  onScoutAround,
 }: {
   candidate: LeadScoutCandidate;
   sources: LeadScoutSource[];
@@ -45,6 +46,7 @@ export function LeadScoutCandidateCard({
   onResearchDeeper(candidateId: string): void;
   onNotFit(candidateId: string): void;
   onSaveAsLead?: (candidateId: string) => void;
+  onScoutAround?: (candidate: LeadScoutCandidate) => void;
 }) {
   const location = [candidate.city, candidate.region].filter(Boolean).join(", ");
   const savedProfileId = candidate.savedOrganizationId ?? candidate.matchedOrganizationId;
@@ -63,6 +65,7 @@ export function LeadScoutCandidateCard({
     || (candidate.enrichmentStatus === "needs_enrichment" && Boolean(candidate.deepenRequestedAt));
   const showNotFit = reviewable && candidate.crmMatchStatus !== "existing";
   const showSave = reviewable && candidate.crmMatchStatus === "new_prospect";
+  const canScoutAround = Boolean(onScoutAround && candidate.city && candidate.region);
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -124,6 +127,7 @@ export function LeadScoutCandidateCard({
 
       <div className="mt-3 flex flex-wrap gap-2">
         {candidate.website ? <a className="button-secondary" href={candidate.website} rel="noreferrer" target="_blank">Open event page</a> : null}
+        {canScoutAround ? <button className="button-secondary" onClick={() => onScoutAround?.(candidate)} type="button">Scout Around This Event</button> : null}
         {candidate.reviewStatus === "saved" && savedProfileId ? <a className="button-primary" href={`/profiles/${savedProfileId}`}>Open profile</a> : null}
         {candidate.reviewStatus !== "saved" && candidate.crmMatchStatus === "existing" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Open profile</a> : null}
         {candidate.crmMatchStatus === "possible_match" && candidate.matchedOrganizationId ? <a className="button-secondary" href={`/profiles/${candidate.matchedOrganizationId}`}>Review match</a> : null}

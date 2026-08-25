@@ -2,6 +2,7 @@ import { useState } from "react";
 
 import type {
   AssistantLeadMatch,
+  LeadScoutCandidate,
   LeadScoutRunView,
 } from "@/features/assistant/assistant-types";
 import type {
@@ -83,6 +84,7 @@ export function LeadDiscoveryResults({
   onResearchDeeper = () => undefined,
   onNotFit = () => undefined,
   onSaveCandidate,
+  onScoutAroundCandidate,
 }: {
   run: LeadScoutRunView;
   webScoutAvailable: boolean;
@@ -94,6 +96,7 @@ export function LeadDiscoveryResults({
   onResearchDeeper?: (candidateId: string) => void;
   onNotFit?: (candidateId: string) => void;
   onSaveCandidate?: (candidateId: string, input: LeadScoutSaveSubmission) => Promise<LeadScoutSaveResult>;
+  onScoutAroundCandidate?: (candidate: LeadScoutCandidate) => void;
 }) {
   const [saveCandidateId, setSaveCandidateId] = useState<string | null>(null);
   const confirmed = run.crmMatches.filter((match) => match.dateConfidence === "confirmed");
@@ -103,6 +106,9 @@ export function LeadDiscoveryResults({
   const visibleCandidates = run.candidates.filter((candidate) => candidate.reviewStatus !== "dismissed");
   const canReview = run.status !== "running" && run.status !== "stopping";
   const selectedCandidate = saveCandidateId ? run.candidates.find((candidate) => candidate.id === saveCandidateId) ?? null : null;
+  const radiusScope = run.criteria?.radiusScope;
+  const communitiesChecked = radiusScope?.searchPlaces.filter((place) => place.placeType !== "county").length ?? 0;
+  const countiesChecked = radiusScope?.searchPlaces.filter((place) => place.placeType === "county").length ?? 0;
 
   return (
     <div className="grid gap-4">
@@ -111,6 +117,21 @@ export function LeadDiscoveryResults({
         <p className="mt-1 font-semibold text-slate-950">{run.criteriaSummary || run.originalQuestion}</p>
         <p className="mt-2 text-sm text-slate-700">I checked Command Center first. Likely recurring matches are based on saved past dates and are not treated as confirmed current-year events.</p>
       </section>
+
+      {radiusScope ? (
+        <section className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Radius coverage</p>
+          <p className="mt-1 text-sm font-semibold text-slate-900">
+            {radiusScope.radiusMiles} miles around {radiusScope.anchor.label}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {communitiesChecked} {communitiesChecked === 1 ? "community" : "communities"} · {countiesChecked} {countiesChecked === 1 ? "county" : "counties"} queued
+          </p>
+          {radiusScope.searchAreaIncomplete ? (
+            <p className="mt-2 text-xs font-semibold text-amber-700">Some geographic area checks could not complete, so this run may have partial coverage.</p>
+          ) : null}
+        </section>
+      ) : null}
 
       {run.crmMatches.length ? <>
         <MatchGroup title="Confirmed matches" matches={confirmed} requestedYear={run.criteria?.year ?? null} onOpenProfile={onOpenProfile} onUseContext={onUseContext} />
@@ -136,6 +157,7 @@ export function LeadDiscoveryResults({
               onResearchDeeper={onResearchDeeper}
               onNotFit={onNotFit}
               onSaveAsLead={setSaveCandidateId}
+              onScoutAround={onScoutAroundCandidate}
             />
           ))}
         </section>

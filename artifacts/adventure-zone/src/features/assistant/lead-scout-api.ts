@@ -1,6 +1,37 @@
 import { apiGet, apiPost } from "@/lib/auth-token";
 import type { LeadScoutRunView } from "./assistant-types";
 
+export type ScoutEventCategory =
+  | "fair"
+  | "festival"
+  | "rodeo"
+  | "powwow"
+  | "community_celebration"
+  | "car_show"
+  | "expo_show"
+  | "parade"
+  | "other_family_community";
+
+export type ScoutHistoryFilter = "all" | "hide_booked" | "hide_booked_and_dismissed";
+
+export type RadiusScoutRequest = {
+  anchor: {
+    kind: "booking" | "event_family" | "manual" | "candidate";
+    recordId?: string;
+    label: string;
+    city?: string;
+    region?: string;
+    address?: string;
+    latitude?: number;
+    longitude?: number;
+  };
+  radiusMiles: 25 | 50 | 100 | 150 | 200 | 300;
+  dateStart: string;
+  dateEnd: string;
+  categories: ScoutEventCategory[];
+  historyFilter: ScoutHistoryFilter;
+};
+
 export type LeadScoutSaveSubmission = {
   accepted: {
     name: string;
@@ -49,6 +80,11 @@ async function transientFetchRetry<T>(operation: () => Promise<T>): Promise<T> {
       await new Promise<void>((resolve) => window.setTimeout(resolve, delays[attempt]));
     }
   }
+}
+
+export async function startRadiusLeadScout(input: RadiusScoutRequest): Promise<LeadScoutRunView> {
+  const response = await apiPost<{ run: LeadScoutRunView }>("/assistant/lead-scout/radius", input);
+  return response.run;
 }
 
 export async function getLeadScoutRun(runId: string): Promise<LeadScoutRunView> {
