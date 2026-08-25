@@ -101,12 +101,15 @@ export class RadiusLeadScoutService {
       dateThrough: input.request.dateEnd,
       month: null,
       year: Number(input.request.dateStart.slice(0, 4)) || null,
-      regions: region ? [region] : [],
-      cities: city ? [city] : [],
+      regions: [],
+      cities: [],
       geoMode: "radius",
       routeId: null,
       legId: null,
-      eventKeywords: categoryKeywords(input.request.categories),
+      eventKeywords: [
+        ...categoryKeywords(input.request.categories),
+        `within ${input.request.radiusMiles} miles of ${input.request.anchor.label}`,
+      ],
       fitIntent: "either",
       radiusScope: scope,
     };
