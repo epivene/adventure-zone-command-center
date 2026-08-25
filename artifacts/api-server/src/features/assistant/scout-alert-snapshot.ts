@@ -125,10 +125,6 @@ function dateRange(value: string) {
   return iso.length ? [iso[0]!, iso[1] ?? iso[0]!] : naturalDateRange(value);
 }
 
-function sourceByUrl(sources: LeadScoutSourceInput[]) {
-  return new Map(sources.map((source) => [source.url, source] as const));
-}
-
 function reliableFact(
   facts: LeadScoutEvidenceFact[],
   sources: LeadScoutSourceInput[],
