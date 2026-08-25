@@ -1,0 +1,151 @@
+import { Router, type IRouter, type Request } from "express";
+
+import { GoogleHistoricalBackfillRepository } from "@/features/google-workspace/google-historical-backfill-repository";
+import { GoogleHistoricalBackfillService } from "@/features/google-workspace/google-historical-backfill-service";
+import { PostgresGoogleValidationRepository } from "@/features/google-workspace/google-validation-repository";
+
+type RepositoryAccess = {
+  getState(): Promise<unknown>;
+  approveFirstBatch(actorId: string): Promise<void>;
+  pause(actorId: string): Promise<void>;
+};
+
+type ServiceAccess = {
+  runNextBatch(): Promise<unknown>;
+  retryFailures(limit?: number): Promise<unknown>;
+};
+
+type ValidationAccess = {
+  getStatus(): Promise<"not_started" | "ready_for_review" | "approved" | "rejected">;
+};
+
+type OwnerRequest = Request & { userId?: string };
+
+function ownerActorId(req: Request): string {
+  return ((req as OwnerRequest).userId || "owner").trim() || "owner";
+}
+
+function syncEnabledFromEnv(): boolean {
+  return process.env.GOOGLE_WORKSPACE_SYNC_ENABLED?.trim().toLowerCase() === "true";
+}
+
+function safeCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && code.startsWith("GOOGLE_WORKSPACE_")) return code;
+  }
+  if (error instanceof Error && error.message.startsWith("GOOGLE_WORKSPACE_")) {
+    return error.message;
+  }
+  return "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_FAILED";
+}
+
+function statusFor(code: string): number {
+  if (
+    code === "GOOGLE_WORKSPACE_HISTORICAL_SYNC_DISABLED" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_VALIDATION_APPROVAL_REQUIRED" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_PAUSED" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_COMPLETE" ||
+    code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
+    code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+  ) return 409;
+  if (
+    code === "GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE" ||
+    code === "GOOGLE_WORKSPACE_HISTORICAL_RETRY_UNAVAILABLE"
+  ) return 503;
+  return 500;
+}
+
+export function createGoogleWorkspaceHistoricalBackfillRouter(options?: {
+  repository?: RepositoryAccess;
+  service?: ServiceAccess;
+  validation?: ValidationAccess;
+  syncEnabled?: boolean;
+  actorId?: (req: Request) => string;
+}): IRouter {
+  const router: IRouter = Router();
+  const repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
+  const service = options?.service ?? new GoogleHistoricalBackfillService();
+  const validation = options?.validation ?? new PostgresGoogleValidationRepository();
+  const syncEnabled = options?.syncEnabled ?? syncEnabledFromEnv();
+  const actorId = options?.actorId ?? ownerActorId;
+
+  async function requireRunGates(): Promise<void> {
+    if (!syncEnabled) throw new Error("GOOGLE_WORKSPACE_HISTORICAL_SYNC_DISABLED");
+    if ((await validation.getStatus()) !== "approved") {
+      throw new Error("GOOGLE_WORKSPACE_HISTORICAL_VALIDATION_APPROVAL_REQUIRED");
+    }
+  }
+
+  router.get("/google-workspace/historical-gmail", async (_req, res): Promise<void> => {
+    try {
+      res.json({
+        syncEnabled,
+        validationStatus: await validation.getStatus(),
+        state: await repository.getState(),
+      });
+    } catch (error) {
+      const code = safeCode(error);
+      res.status(statusFor(code)).json({ error: code });
+    }
+  });
+
+  router.post(
+    "/google-workspace/historical-gmail/run-next",
+    async (_req, res): Promise<void> => {
+      try {
+        await requireRunGates();
+        res.json(await service.runNextBatch());
+      } catch (error) {
+        const code = safeCode(error);
+        res.status(statusFor(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/historical-gmail/retry-failures",
+    async (_req, res): Promise<void> => {
+      try {
+        await requireRunGates();
+        res.json(await service.retryFailures(250));
+      } catch (error) {
+        const code = safeCode(error);
+        res.status(statusFor(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/historical-gmail/approve-first-batch",
+    async (req, res): Promise<void> => {
+      try {
+        await requireRunGates();
+        await repository.approveFirstBatch(actorId(req));
+        res.json({ ok: true, state: await repository.getState() });
+      } catch (error) {
+        const code = safeCode(error);
+        res.status(statusFor(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/historical-gmail/pause",
+    async (req, res): Promise<void> => {
+      try {
+        if (!syncEnabled) throw new Error("GOOGLE_WORKSPACE_HISTORICAL_SYNC_DISABLED");
+        await repository.pause(actorId(req));
+        res.json({ ok: true, state: await repository.getState() });
+      } catch (error) {
+        const code = safeCode(error);
+        res.status(statusFor(code)).json({ error: code });
+      }
+    },
+  );
+
+  return router;
+}
+
+export default createGoogleWorkspaceHistoricalBackfillRouter();

@@ -160,6 +160,46 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(requests.filter((url) => url.includes("calendarList"))).toHaveLength(2);
   });
 
+  it("returns one bounded Gmail message page and its next page token", async () => {
+    const requests: string[] = [];
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url === "https://oauth2.googleapis.com/token") {
+          return response({ access_token: "access-token", expires_in: 3600 });
+        }
+        if (url.includes("/messages")) {
+          return response({
+            messages: [
+              { id: "m1", threadId: "t1" },
+              { id: "m2", threadId: "t2" },
+            ],
+            nextPageToken: "older-page",
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    });
+
+    await expect(
+      client.listMessagePage?.({ maxResults: 250, pageToken: "current-page" }),
+    ).resolves.toEqual({
+      messages: [
+        { id: "m1", threadId: "t1" },
+        { id: "m2", threadId: "t2" },
+      ],
+      nextPageToken: "older-page",
+    });
+
+    const gmailRequest = new URL(requests.find((url) => url.includes("/messages"))!);
+    expect(gmailRequest.searchParams.get("maxResults")).toBe("250");
+    expect(gmailRequest.searchParams.get("pageToken")).toBe("current-page");
+    expect(gmailRequest.searchParams.get("includeSpamTrash")).toBe("false");
+  });
+
   it("maps a revoked refresh token to reauthorization required", async () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
@@ -187,6 +227,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "getThreadDetail",
       "listCalendars",
       "listLabels",
+      "listMessagePage",
       "listRecentMessageRefs",
     ]);
   });

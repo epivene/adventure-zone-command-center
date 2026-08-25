@@ -140,7 +140,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           }),
         );
 
-        res.json({ validationSampleOnly: true, conversations });
+        res.json({ validationSampleOnly: false, historicalBackfillIncluded: true, conversations });
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });

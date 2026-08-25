@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Cloud, LockKeyhole, Unplug } from "lucide-react";
 
+import { GoogleHistoricalBackfill } from "@/components/google-workspace/google-historical-backfill";
 import { GoogleRecentValidation } from "@/components/google-workspace/google-recent-validation";
 import { GoogleScopePreview } from "@/components/google-workspace/google-scope-preview";
 import {
@@ -460,7 +461,7 @@ export function SettingsGoogleWorkspacePage({
                     Check the newest 100 normal Gmail messages, excluding Spam and Trash, so profile-related or clearly business-related mail is not left behind just because it lives outside one of the saved folders.
                   </p>
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    AI stays off and this does not start the historical import.
+                    This safety check does not itself start the historical import.
                   </p>
                 </div>
                 <button
@@ -476,12 +477,9 @@ export function SettingsGoogleWorkspacePage({
             </section>
           ) : null}
 
-          <section className="rounded-xl border border-slate-200 bg-slate-50 p-5">
-            <h2 className="font-bold text-slate-900">Historical syncing is still disabled</h2>
-            <p className="mt-1 max-w-3xl text-sm text-slate-600">
-              The recent email check is only a bounded validation sample. Email bodies, files, and full calendar history will remain untouched until the matching results are reviewed and the historical rollout is explicitly approved.
-            </p>
-          </section>
+          {settings.connection && settings.labels.length > 0 ? (
+            <GoogleHistoricalBackfill />
+          ) : null}
         </>
       ) : null}
     </div>
