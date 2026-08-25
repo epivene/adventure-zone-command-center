@@ -36,6 +36,7 @@ import businessSourceDocumentLinksRouter from "./business-source-document-links"
 import googleWorkspaceOAuthCallbackRouter from "./google-workspace-oauth-callback";
 import googleWorkspaceSettingsRouter from "./google-workspace-settings";
 import googleWorkspaceValidationRouter from "./google-workspace-validation";
+import googleWorkspaceMatchedCorrectionsRouter from "./google-workspace-matched-corrections";
 import googleWorkspaceProfileEmailRouter from "./google-workspace-profile-email";
 import actMigrationRouter from "./act-migration";
 import actReplacementRouter from "./act-replacement";
@@ -175,6 +176,7 @@ router.use(profilePhotoRouter);
 router.use(settingsRouter);
 router.use(googleWorkspaceSettingsRouter);
 router.use(googleWorkspaceValidationRouter);
+router.use(googleWorkspaceMatchedCorrectionsRouter);
 router.use(googleWorkspaceProfileEmailRouter);
 router.use(actRecoveryRouter);
 router.use(actReplacementRouter);

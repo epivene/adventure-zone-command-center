@@ -1,7 +1,6 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
-import { GoogleAiRecentValidationService } from "@/features/google-workspace/google-ai-recent-validation-service";
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
@@ -11,6 +10,7 @@ import {
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
 import { GoogleValidationReviewReconciler } from "@/features/google-workspace/google-validation-review-reconciler";
+import { GoogleValidationWithManualOverlayService } from "@/features/google-workspace/google-validation-with-manual-overlay-service";
 
 const inputSchema = z
   .object({
@@ -156,7 +156,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
-  const service = options?.service ?? new GoogleAiRecentValidationService();
+  const service = options?.service ?? new GoogleValidationWithManualOverlayService();
   const mappingReconciler =
     options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
   const reviewReconciler =

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { GoogleMatchedEmailActions } from "@/components/google-workspace/google-matched-email-actions";
 import { GoogleValidationReview } from "@/components/google-workspace/google-validation-review";
 import {
   decideGoogleWorkspaceValidationSample,
@@ -28,6 +29,8 @@ const evidenceLabels: Record<string, string> = {
   ai_profile_match: "AI profile match",
   ai_ignore: "AI marked irrelevant",
   ai_needs_review: "AI needs review",
+  manual_profile_assignment: "Manually corrected profile",
+  manual_ignore: "Manually ignored",
   exact_profile_name_text: "Exact profile name in subject/snippet",
   ambiguous_organization_domain: "Multiple organization domain matches",
 };
@@ -62,7 +65,17 @@ type AiValidationResult = Omit<
   ignored: AiValidationRow[];
 };
 
-function ValidationRow({ row }: { row: AiValidationRow }) {
+function ValidationRow({
+  row,
+  editable = false,
+  onAssigned,
+  onIgnored,
+}: {
+  row: AiValidationRow;
+  editable?: boolean;
+  onAssigned?(profile: { id: string; name: string }): void;
+  onIgnored?(): void;
+}) {
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-950/40">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -112,16 +125,39 @@ function ValidationRow({ row }: { row: AiValidationRow }) {
       ) : row.candidates.length > 0 ? (
         <p className="mt-2 text-xs text-slate-600 dark:text-slate-300">Possible match: {row.candidates.map((candidate) => candidate.name).join(", ")}</p>
       ) : null}
+      {editable && onAssigned && onIgnored ? (
+        <GoogleMatchedEmailActions row={row} onAssigned={onAssigned} onIgnored={onIgnored} />
+      ) : null}
     </article>
   );
 }
 
-function ResultSection({ title, rows }: { title: string; rows: AiValidationRow[] }) {
+function ResultSection({
+  title,
+  rows,
+  editable = false,
+  onAssigned,
+  onIgnored,
+}: {
+  title: string;
+  rows: AiValidationRow[];
+  editable?: boolean;
+  onAssigned?(row: AiValidationRow, profile: { id: string; name: string }): void;
+  onIgnored?(row: AiValidationRow): void;
+}) {
   if (rows.length === 0) return null;
   return (
     <section className="grid gap-2">
       <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">{title}</h4>
-      {rows.map((row) => <ValidationRow key={row.id} row={row} />)}
+      {rows.map((row) => (
+        <ValidationRow
+          editable={editable}
+          key={row.id}
+          onAssigned={onAssigned ? (profile) => onAssigned(row, profile) : undefined}
+          onIgnored={onIgnored ? () => onIgnored(row) : undefined}
+          row={row}
+        />
+      ))}
     </section>
   );
 }
@@ -186,14 +222,38 @@ export function GoogleRecentValidation({ result }: { result: GoogleRecentValidat
   const [showIgnored, setShowIgnored] = useState(false);
   const [validationStatus, setValidationStatus] = useState<GoogleValidationStatus>(enhanced.validationStatus);
   const [unresolvedCount, setUnresolvedCount] = useState(enhanced.counts.needsReview);
+  const [matchedRows, setMatchedRows] = useState<AiValidationRow[]>(enhanced.matched);
+  const [ignoredRows, setIgnoredRows] = useState<AiValidationRow[]>(enhanced.ignored);
+
+  function assignMatched(row: AiValidationRow, profile: { id: string; name: string }) {
+    setMatchedRows((current) => current.map((item) => item.id === row.id
+      ? {
+          ...item,
+          resolvedOrganization: profile,
+          evidenceCodes: [...new Set([...item.evidenceCodes, "manual_profile_assignment"])],
+        }
+      : item));
+  }
+
+  function ignoreMatched(row: AiValidationRow) {
+    setMatchedRows((current) => current.filter((item) => item.id !== row.id));
+    setIgnoredRows((current) => [
+      {
+        ...row,
+        resolvedOrganization: null,
+        evidenceCodes: [...new Set([...row.evidenceCodes, "manual_ignore"])],
+      },
+      ...current.filter((item) => item.id !== row.id),
+    ]);
+  }
 
   return (
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-700 dark:bg-slate-900 dark:text-slate-200">{enhanced.counts.discovered} checked</div>
-        <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{enhanced.counts.matched} matched</div>
+        <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">{matchedRows.length} matched</div>
         <div className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">{unresolvedCount} needs review</div>
-        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{enhanced.counts.ignored} ignored</div>
+        <div className="rounded-lg bg-slate-50 p-3 text-sm font-semibold text-slate-600 dark:bg-slate-900 dark:text-slate-300">{ignoredRows.length} ignored</div>
       </div>
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
         {enhanced.aiEnabled ? (
@@ -209,19 +269,19 @@ export function GoogleRecentValidation({ result }: { result: GoogleRecentValidat
         )}
         <p className="mt-1">The full historical import does not start from this check.</p>
       </div>
-      <ResultSection title="Matched to profiles" rows={enhanced.matched} />
+      <ResultSection editable onAssigned={assignMatched} onIgnored={ignoreMatched} title="Matched to profiles" rows={matchedRows} />
       {enhanced.counts.needsReview > 0 ? (
         <GoogleValidationReview onPendingCountChange={setUnresolvedCount} />
       ) : null}
-      {enhanced.ignored.length > 0 ? (
+      {ignoredRows.length > 0 ? (
         <section className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{enhanced.ignored.length} ignored in this sample</p>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{ignoredRows.length} ignored in this sample</p>
             <button aria-expanded={showIgnored} className="text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300" onClick={() => setShowIgnored((current) => !current)} type="button">
               {showIgnored ? "Hide ignored email" : "Review ignored email"}
             </button>
           </div>
-          {showIgnored ? <div className="mt-3 grid max-h-96 gap-2 overflow-y-auto border-t border-slate-200 pt-3 dark:border-slate-700">{enhanced.ignored.map((row) => <ValidationRow key={row.id} row={row} />)}</div> : null}
+          {showIgnored ? <div className="mt-3 grid max-h-96 gap-2 overflow-y-auto border-t border-slate-200 pt-3 dark:border-slate-700">{ignoredRows.map((row) => <ValidationRow key={row.id} row={row} />)}</div> : null}
         </section>
       ) : null}
       <ApprovalControls status={validationStatus} unresolvedCount={unresolvedCount} onStatus={setValidationStatus} />
