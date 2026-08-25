@@ -60,12 +60,12 @@ services:
         sync: false
       - key: GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY
         sync: false
-      # Phase 1 establishes connection and scope only. Historical processing and AI
-      # remain explicitly disabled until their later rollout gates are approved.
+      # Historical processing remains disabled. The bounded recent-email safety check
+      # may use the app's existing AI provider for MATCH / IGNORE / NEEDS REVIEW triage.
       - key: GOOGLE_WORKSPACE_SYNC_ENABLED
         value: "false"
       - key: GOOGLE_WORKSPACE_AI_ENABLED
-        value: "false"
+        value: "true"
       # Act! settings are server-only. Never expose these through Vite.
       - key: ACT_API_BASE_URL
         value: https://apius.act.com/act.web.api
