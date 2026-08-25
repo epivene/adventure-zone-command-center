@@ -135,4 +135,64 @@ describe("GoogleRecentValidationService confirmed relationship learning", () => 
     });
     expect(result.ignored.map((row) => row.id)).toContain("internal");
   });
+
+  it("lets clear body event evidence override a learned address from an older event", async () => {
+    const readClient = client({
+      incoming: message({
+        id: "incoming",
+        threadId: "new-event-thread",
+        from: "Christina <christina@saltaevents.com>",
+        subject: "Vendor details",
+      }),
+    });
+    readClient.getThreadDetail = async () => ({
+      id: "new-event-thread",
+      subject: "Vendor details",
+      originalGmailUrl: "",
+      messages: [{
+        id: "body-message",
+        internalDateMs: 1787680000000,
+        from: "Christina <christina@saltaevents.com>",
+        to: "TheAdventureZone12@gmail.com",
+        cc: "",
+        subject: "Vendor details",
+        date: "",
+        direction: "incoming" as const,
+        bodyText: "We are contacting you about Logan Pride Festival in Logan, Utah.",
+        attachments: [],
+      }],
+    });
+
+    const service = new GoogleRecentValidationService({
+      ...baseOptions(readClient),
+      evidence: {
+        load: async () => ({
+          contacts: [],
+          organizations: [],
+          profiles: [
+            { id: "old", name: "Gaylord Memorial Weekend Festival" },
+            { id: "new", name: "Logan Pride Festival" },
+          ],
+        }),
+      },
+      learning: {
+        load: async () => ({
+          mailboxEmails: new Set(["theadventurezone12@gmail.com"]),
+          threadTargets: new Map(),
+          addressTargets: new Map([
+            ["christina@saltaevents.com", { id: "old", name: "Gaylord Memorial Weekend Festival" }],
+          ]),
+        }),
+      },
+    });
+
+    const result = await service.run(100);
+
+    expect(result.matched).toHaveLength(1);
+    expect(result.matched[0]).toMatchObject({
+      id: "incoming",
+      resolvedOrganization: { id: "new", name: "Logan Pride Festival" },
+      evidenceCodes: expect.arrayContaining(["exact_profile_name_body"]),
+    });
+  });
 });
