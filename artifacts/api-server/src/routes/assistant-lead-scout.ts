@@ -10,6 +10,7 @@ import { isResearchProspectValidationError } from "@/features/profile-research/r
 
 const createSchema = z.object({ question: z.string().trim().min(1).max(4000) }).strict();
 const uuidSchema = z.uuid().transform((value) => value.toLowerCase());
+const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a valid YYYY-MM-DD date.");
 const scoutCategorySchema = z.enum([
   "fair",
   "festival",
@@ -36,8 +37,8 @@ const radiusScoutSchema = z.object({
     return Boolean(anchor.city || anchor.address || anchor.label);
   }, "Choose a valid event or location."),
   radiusMiles: z.union([z.literal(25), z.literal(50), z.literal(100), z.literal(150), z.literal(200), z.literal(300)]),
-  dateStart: z.iso.date(),
-  dateEnd: z.iso.date(),
+  dateStart: dateOnlySchema,
+  dateEnd: dateOnlySchema,
   categories: z.array(scoutCategorySchema).min(1),
   historyFilter: z.enum(["all", "hide_booked", "hide_booked_and_dismissed"]),
 }).strict().refine((value) => value.dateEnd >= value.dateStart, {
@@ -71,6 +72,10 @@ function actorId(req: any) {
 }
 
 function sendError(req: any, res: any, error: unknown) {
+  if (error instanceof Error && error.message === "SCOUT_ANCHOR_NOT_RESOLVED") {
+    res.status(400).json({ error: "Choose a valid event or location." });
+    return;
+  }
   if (error instanceof Error && error.message === "LEAD_SCOUT_RUN_NOT_FOUND") {
     res.status(404).json({ error: "Lead Scout run not found." });
     return;
