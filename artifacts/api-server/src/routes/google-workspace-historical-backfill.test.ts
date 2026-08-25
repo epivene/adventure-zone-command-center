@@ -24,9 +24,12 @@ function state(overrides: Record<string, unknown> = {}) {
 function app(options?: {
   syncEnabled?: boolean;
   validationStatus?: "not_started" | "ready_for_review" | "approved" | "rejected";
+  initialStatus?: string;
+  recoverStale?: boolean;
 }) {
+  let currentState = state({ status: options?.initialStatus ?? "not_started" });
   const repository = {
-    getState: vi.fn(async () => state()),
+    getState: vi.fn(async () => currentState),
     approveFirstBatch: vi.fn(async () => undefined),
     pause: vi.fn(async () => undefined),
   };
@@ -50,6 +53,24 @@ function app(options?: {
       failed: 0,
     })),
   };
+  const lease = {
+    recoverStale: vi.fn(async () => {
+      if (options?.recoverStale) {
+        currentState = state({ status: "error" });
+        return true;
+      }
+      return false;
+    }),
+    acquire: vi.fn(async () => {
+      if (currentState.status === "running") return false;
+      currentState = state({ status: "running" });
+      return true;
+    }),
+    heartbeat: vi.fn(async () => undefined),
+    markErrorIfRunning: vi.fn(async () => {
+      if (currentState.status === "running") currentState = state({ status: "error" });
+    }),
+  };
   const validation = {
     getStatus: vi.fn(async () => options?.validationStatus ?? "approved" as const),
   };
@@ -58,11 +79,12 @@ function app(options?: {
   server.use(createGoogleWorkspaceHistoricalBackfillRouter({
     repository,
     service,
+    lease,
     validation,
     syncEnabled: options?.syncEnabled ?? true,
     actorId: () => "owner",
   }));
-  return { server, repository, service };
+  return { server, repository, service, lease };
 }
 
 describe("Google Workspace historical Gmail backfill routes", () => {
@@ -73,6 +95,28 @@ describe("Google Workspace historical Gmail backfill routes", () => {
     expect(response.status).toBe(200);
     expect(response.body.syncEnabled).toBe(false);
     expect(response.body.state.status).toBe("not_started");
+    expect(service.runNextBatch).not.toHaveBeenCalled();
+  });
+
+  it("repairs a stale running state so the UI can offer a safe retry", async () => {
+    const { server, lease, repository } = app({ initialStatus: "running", recoverStale: true });
+    const response = await request(server).get("/google-workspace/historical-gmail");
+
+    expect(response.status).toBe(200);
+    expect(response.body.state.status).toBe("error");
+    expect(lease.recoverStale).toHaveBeenCalledTimes(1);
+    expect(repository.getState).toHaveBeenCalledTimes(2);
+  });
+
+  it("refuses to run while a fresh live lease is already running", async () => {
+    const { server, lease, service } = app({ initialStatus: "running", recoverStale: false });
+    const response = await request(server)
+      .post("/google-workspace/historical-gmail/run-next")
+      .send({});
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_ALREADY_RUNNING");
+    expect(lease.recoverStale).toHaveBeenCalledTimes(1);
     expect(service.runNextBatch).not.toHaveBeenCalled();
   });
 
@@ -97,7 +141,7 @@ describe("Google Workspace historical Gmail backfill routes", () => {
   });
 
   it("runs exactly one batch when both safety gates are satisfied", async () => {
-    const { server, service } = app();
+    const { server, service, lease } = app();
     const response = await request(server)
       .post("/google-workspace/historical-gmail/run-next")
       .send({});
@@ -105,6 +149,8 @@ describe("Google Workspace historical Gmail backfill routes", () => {
     expect(response.status).toBe(200);
     expect(response.body.processed).toBe(250);
     expect(response.body.state).toBe("awaiting_approval");
+    expect(lease.acquire).toHaveBeenCalledTimes(1);
+    expect(lease.heartbeat).toHaveBeenCalled();
     expect(service.runNextBatch).toHaveBeenCalledTimes(1);
   });
 
