@@ -12,6 +12,8 @@ describe("ensureLeadIntakeSchema", () => {
     await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
     expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
+    expect(query.mock.calls[0]?.[0]).toContain("original_filename");
+    expect(query.mock.calls[0]?.[0]).toContain("source_fingerprint");
     expect(query.mock.calls[0]?.[0]).toContain("review_version");
     expect(query.mock.calls[0]?.[0]).toContain("confirmed_recipient_email");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_confirmed_date_range_valid");
@@ -24,12 +26,22 @@ describe("ensureLeadIntakeSchema", () => {
   it("runs both lead-intake migrations when the schema is incomplete", async () => {
     const query = vi.fn()
       .mockResolvedValueOnce({ rows: [{ ready: false }] })
-      .mockResolvedValueOnce({ rows: [] });
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ready: true }] });
     const loadSql = vi.fn().mockResolvedValue("-- base migration\n-- review evidence migration");
 
     await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
     expect(loadSql).toHaveBeenCalledOnce();
-    expect(query).toHaveBeenLastCalledWith("-- base migration\n-- review evidence migration");
+    expect(query.mock.calls[1]?.[0]).toBe("-- base migration\n-- review evidence migration");
+  });
+
+  it("fails closed when a partial schema remains incomplete after migration", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ ready: false }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ready: false }] });
+    await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "-- attempted repair" }))
+      .rejects.toThrow("schema is incomplete after migration");
   });
 
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {
@@ -41,7 +53,7 @@ describe("ensureLeadIntakeSchema", () => {
       }
       return client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
     };
-    const loadSql = async () => `${await readFile("069_excel_lead_intake.sql", "utf8")}\n${await readFile("20260825_lead_review_evidence.sql", "utf8")}`;
+    const loadSql = async () => `${await readFile(new URL("../../../../lib/db/migrations/069_excel_lead_intake.sql", import.meta.url), "utf8")}\n${await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8")}`;
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);

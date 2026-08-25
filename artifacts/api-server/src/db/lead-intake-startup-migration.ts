@@ -31,16 +31,27 @@ export async function ensureLeadIntakeSchema(
   client: MigrationClient,
   options?: { loadSql?: () => Promise<string> },
 ): Promise<boolean> {
-  const marker = await client.query(`
+  const readinessSql = `
     select
       (
       to_regclass(current_schema() || '.lead_import_batches') is not null
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
       and (
-        select count(*) = 14 from information_schema.columns
+        select count(*) = 8 from information_schema.columns
+        where table_schema = current_schema() and table_name = 'lead_import_batches'
+          and column_name = any(array[
+            'id', 'original_filename', 'file_sha256', 'status', 'row_count', 'imported_by',
+            'created_at', 'updated_at'
+          ])
+      )
+      and (
+        select count(*) = 33 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_rows'
           and column_name = any(array[
+            'id', 'batch_id', 'sheet_name', 'source_row_number', 'source_fingerprint',
+            'original_values', 'company', 'phone', 'address_1', 'address_2', 'city', 'region',
+            'postal_code', 'website', 'industry', 'warnings', 'state', 'created_at', 'updated_at',
             'review_version', 'selected_organization_id', 'selected_contact_id', 'contact_mode',
             'confirmed_event_name', 'confirmed_start_date', 'confirmed_end_date', 'confirmed_contact_name',
             'confirmed_contact_role', 'confirmed_recipient_email', 'recipient_confirmed',
@@ -76,8 +87,13 @@ export async function ensureLeadIntakeSchema(
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       ) as ready
-  `);
+  `;
+  const marker = await client.query(readinessSql);
   if (marker.rows[0]?.["ready"] === true) return false;
   await client.query(await (options?.loadSql ?? loadMigrationSql)());
+  const verified = await client.query(readinessSql);
+  if (verified.rows[0]?.["ready"] !== true) {
+    throw new Error("Lead intake schema is incomplete after migration; startup stopped to protect review data.");
+  }
   return true;
 }
