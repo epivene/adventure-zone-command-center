@@ -37,6 +37,7 @@ import googleWorkspaceOAuthCallbackRouter from "./google-workspace-oauth-callbac
 import googleWorkspaceSettingsRouter from "./google-workspace-settings";
 import googleWorkspaceValidationRouter from "./google-workspace-validation";
 import googleWorkspaceMatchedCorrectionsRouter from "./google-workspace-matched-corrections";
+import googleWorkspaceHistoricalBackfillRouter from "./google-workspace-historical-backfill";
 import googleWorkspaceProfileEmailRouter from "./google-workspace-profile-email";
 import actMigrationRouter from "./act-migration";
 import actReplacementRouter from "./act-replacement";
@@ -179,6 +180,7 @@ router.use(settingsRouter);
 router.use(googleWorkspaceSettingsRouter);
 router.use(googleWorkspaceValidationRouter);
 router.use(googleWorkspaceMatchedCorrectionsRouter);
+router.use(googleWorkspaceHistoricalBackfillRouter);
 router.use(googleWorkspaceProfileEmailRouter);
 router.use(actRecoveryRouter);
 router.use(actReplacementRouter);
