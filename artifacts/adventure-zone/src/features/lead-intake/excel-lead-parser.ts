@@ -92,10 +92,9 @@ export async function parseLeadWorkbook(
   }
   if (rows.length === 0) throw new Error("The workbook does not contain any event rows.");
 
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    byteView.buffer.slice(byteView.byteOffset, byteView.byteOffset + byteView.byteLength),
-  );
+  const digestInput = new Uint8Array(byteView.byteLength);
+  digestInput.set(byteView);
+  const digest = await crypto.subtle.digest("SHA-256", digestInput);
   const fileSha256 = Array.from(new Uint8Array(digest), (value) =>
     value.toString(16).padStart(2, "0"),
   ).join("");
