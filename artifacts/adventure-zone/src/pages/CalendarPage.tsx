@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { HistorySuggestions } from "@/components/calendar/history-suggestions";
+import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import { businessDateKey } from "@/lib/business-date";
 import { calendarInitialMonth, normalizeCalendarBookingDates } from "@/features/calendar/calendar-display";
+import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 
 function buildDateWindow(monthKey: string): { from: string; to: string } {
   const [year, month] = monthKey.split("-").map(Number);
@@ -73,6 +75,9 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
     return true;
   }) as CalendarEvent[], [events, legId, status, season]);
 
+  const routeConflicts = useMemo(() => findSameLegDateConflicts(
+    scopedEvents.filter((event) => !isActActivity(event)) as any[],
+  ), [scopedEvents]);
   const hasExplicitStatusFilter = Boolean(status && status !== "all");
   const potentialBookingCount = useMemo(() => scopedEvents.filter((event) => !isActActivity(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [scopedEvents]);
   const filteredEvents = useMemo(() => {
@@ -111,6 +116,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
         </header>
       ) : calendarTools}
 
+      <RouteConflictWarning conflicts={routeConflicts} />
       {showSuggestions ? <section className="rounded-2xl border border-orange-100 bg-white p-5 shadow-sm"><HistorySuggestions /></section> : null}
       {loading ? <p className="text-slate-500">Loading calendar…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : <EventCalendar events={filteredEvents} initialMonth={activeMonth} onMonthChange={handleMonthChange} />}
     </div>
