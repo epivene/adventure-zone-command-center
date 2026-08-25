@@ -168,6 +168,10 @@ export class GoogleHistoricalBackfillService {
       failed: 0,
       skipped: 0,
     };
+    const batchThreadTargets = new Map<
+      string,
+      { id: string; name: string }
+    >();
 
     for (const ref of page.messages) {
       if (await this.repository.hasOutcome(ref.id)) {
@@ -196,8 +200,17 @@ export class GoogleHistoricalBackfillService {
       }
 
       try {
-        const classification = await this.classifier.classify(message, client);
+        const inheritedTarget = batchThreadTargets.get(message.threadId);
+        const classification: GoogleHistoricalClassification = inheritedTarget
+          ? {
+              outcome: "attached",
+              organization: inheritedTarget,
+              evidenceCodes: ["existing_thread_association"],
+            }
+          : await this.classifier.classify(message, client);
+
         if (classification.outcome === "attached") {
+          batchThreadTargets.set(message.threadId, classification.organization);
           await this.validationRepository.upsertRows([{
             messageId: message.id,
             threadId: message.threadId,
