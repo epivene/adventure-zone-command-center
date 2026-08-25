@@ -79,13 +79,14 @@ function categoryKeywords(categories: ScoutEventCategory[]) {
   return categories.map((category) => labels[category]);
 }
 
-function uniquePlaceNames(anchorCity: string | null, places: ScoutSearchPlace[]) {
+function uniqueNames(values: string[], limit: number) {
   const names = new Map<string, string>();
-  if (anchorCity) names.set(anchorCity.toLowerCase(), anchorCity);
-  for (const place of places) {
-    const key = place.name.trim().toLowerCase();
-    if (key && !names.has(key)) names.set(key, place.name.trim());
-    if (names.size >= 120) break;
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (!names.has(key)) names.set(key, trimmed);
+    if (names.size >= limit) break;
   }
   return [...names.values()];
 }
@@ -119,7 +120,14 @@ export class RadiusLeadScoutService {
     } catch {
       searchAreaIncomplete = true;
     }
-    const searchCities = uniquePlaceNames(city, searchPlaces);
+    const searchCities = uniqueNames([
+      ...(city ? [city] : []),
+      ...searchPlaces.filter((place) => place.placeType !== "county").map((place) => place.name),
+    ], 120);
+    const searchCounties = uniqueNames(
+      searchPlaces.filter((place) => place.placeType === "county").map((place) => place.name),
+      60,
+    );
 
     const scope: RadiusScoutScope = {
       mode: "radius",
@@ -156,12 +164,17 @@ export class RadiusLeadScoutService {
       eventKeywords: [
         ...categoryKeywords(input.request.categories),
         `within ${input.request.radiusMiles} miles of ${input.request.anchor.label}`,
+        ...searchCounties.slice(0, 40).map((county) => `${county} events`),
       ],
       fitIntent: "either",
       radiusScope: scope,
     };
-    const areaSummary = searchCities.length
-      ? ` · ${searchCities.length} nearby communities queued`
+    const coverageParts = [
+      searchCities.length ? `${searchCities.length} communities` : null,
+      searchCounties.length ? `${searchCounties.length} counties` : null,
+    ].filter(Boolean).join(" + ");
+    const areaSummary = coverageParts
+      ? ` · ${coverageParts} queued`
       : searchAreaIncomplete ? " · area lookup incomplete" : "";
     const summary = `${input.request.dateStart}–${input.request.dateEnd} · ${input.request.radiusMiles} miles around ${input.request.anchor.label} · ${input.request.categories.length} event types${areaSummary}`;
     const runId = await this.repository.createRun({
