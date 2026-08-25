@@ -1,5 +1,4 @@
 import type { ParsedLeadWorkbook } from "@/features/lead-intake/excel-lead-parser";
-import { apiGet, apiPost } from "@/lib/auth-token";
 
 export type LeadImportBatchSummary = {
   id: string;
@@ -26,7 +25,23 @@ export type LeadImportReviewRow = {
   industry: string | null;
   warnings: string[];
   state: "needs_review" | "needs_correction" | "verified" | "skipped";
+  reviewVersion: number;
+  selectedOrganizationId: string | null;
+  selectedContactId: string | null;
+  contactMode: "existing" | "manual" | null;
+  confirmedEventName: string | null;
+  confirmedStartDate: string | null;
+  confirmedEndDate: string | null;
+  confirmedContactName: string | null;
+  confirmedContactRole: string | null;
+  confirmedRecipientEmail: string | null;
+  recipientConfirmed: boolean;
+  introductionSuitable: boolean;
+  evidence: Array<{ field: "event_dates" | "recipient_email"; candidateValue: string; sourceKind: string; sourceReference: string; selected: boolean }>;
 };
+
+export type LeadProfileOption = { id: string; name: string; city: string | null; region: string | null };
+export type LeadContactOption = { id: string; firstName: string; lastName: string; email: string | null; role: string | null; jobTitle: string | null };
 
 export type LeadImportBatch = LeadImportBatchSummary & { rows: LeadImportReviewRow[] };
 
@@ -50,7 +65,14 @@ export function createLeadIntakeClient(api: Api) {
     async getBatch(batchId: string) {
       return (await api.get<{ batch: LeadImportBatch }>(`/lead-intake/imports/${batchId}`)).batch;
     },
+    async searchProfiles(query: string) {
+      return (await api.get<{ organizations: LeadProfileOption[] }>(`/organizations?q=${encodeURIComponent(query)}&pageSize=10`)).organizations;
+    },
+    async listProfileContacts(organizationId: string) {
+      return (await api.get<{ contacts: LeadContactOption[] }>(`/lead-intake/organizations/${organizationId}/contacts`)).contacts;
+    },
+    async confirmReview(rowId: string, body: unknown) {
+      return api.post<{ rowId: string; state: "verified"; reviewVersion: number }>(`/lead-intake/rows/${rowId}/confirm`, body);
+    },
   };
 }
-
-export const leadIntakeClient = createLeadIntakeClient({ get: apiGet, post: apiPost });

@@ -31,3 +31,28 @@ export const importLeadWorkbookSchema = z.object({
 export function leadImportActor(value: unknown): string {
   return String(value ?? "").trim() || "owner";
 }
+
+const evidenceSchema = z.object({
+  sourceKind: z.enum(["crm_contact", "act_description", "official_website", "manual"]),
+  sourceReference: z.string().trim().min(1).max(2_000),
+}).strict();
+
+export const leadReviewConfirmationSchema = z.object({
+  expectedVersion: z.number().int().min(0),
+  decision: z.object({
+    organizationId: z.string().uuid(),
+    contactMode: z.enum(["existing", "manual"]),
+    contactId: z.string().uuid().nullable(),
+    contactName: z.string().trim().max(200),
+    contactRole: z.string().trim().max(200),
+    recipientEmail: z.string().trim().max(320),
+    recipientConfirmed: z.boolean(),
+    introductionSuitable: z.boolean(),
+    eventName: z.string().trim().max(500),
+    startDate: z.string().trim().max(10),
+    endDate: z.string().trim().max(10),
+    emailEvidence: evidenceSchema,
+    dateEvidence: evidenceSchema,
+    candidateEmails: z.array(z.string().trim().max(320)).max(20).default([]),
+  }).strict(),
+}).strict();

@@ -1,17 +1,28 @@
 import { useEffect, useState } from "react";
 import { LeadImportPanel } from "@/components/lead-intake/lead-import-panel";
+import { LeadContactDateReview } from "@/components/lead-intake/lead-contact-date-review";
 import type { ParsedLeadWorkbook } from "@/features/lead-intake/excel-lead-parser";
-import { leadIntakeClient, type LeadImportBatch, type LeadImportBatchSummary } from "@/features/lead-intake/lead-intake-client";
+import {
+  leadIntakeClient,
+  type LeadContactOption,
+  type LeadImportBatch,
+  type LeadImportBatchSummary,
+  type LeadProfileOption,
+} from "@/features/lead-intake/lead-intake-client";
 
 type Client = {
   importWorkbook(workbook: ParsedLeadWorkbook): Promise<{ batchId: string; reused: boolean; rowCount: number }>;
   listBatches(): Promise<LeadImportBatchSummary[]>;
   getBatch(batchId: string): Promise<LeadImportBatch>;
+  searchProfiles(query: string): Promise<LeadProfileOption[]>;
+  listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
+  confirmReview(rowId: string, body: unknown): Promise<{ rowId: string; state: "verified"; reviewVersion: number }>;
 };
 
 export function LeadIntakePage({ client }: { client: Client }) {
   const [batches, setBatches] = useState<LeadImportBatchSummary[]>([]);
   const [selected, setSelected] = useState<LeadImportBatch | null>(null);
+  const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -41,7 +52,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
 
   async function openBatch(batchId: string) {
     setError("");
-    try { setSelected(await client.getBatch(batchId)); }
+    try { setSelected(await client.getBatch(batchId)); setSelectedRowId(null); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not open this lead import."); }
   }
 
@@ -81,7 +92,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
           </div>
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50"><tr><th className="p-3">Source</th><th className="p-3">Event</th><th className="p-3">Location</th><th className="p-3">Contact clues</th><th className="p-3">Status</th></tr></thead>
+              <thead className="bg-slate-50"><tr><th className="p-3">Source</th><th className="p-3">Event</th><th className="p-3">Location</th><th className="p-3">Contact clues</th><th className="p-3">Status</th><th className="p-3">Action</th></tr></thead>
               <tbody>{selected.rows.map((row) => (
                 <tr className="border-t border-slate-100" key={row.id}>
                   <td className="p-3">{row.sheetName} · row {row.sourceRowNumber}</td>
@@ -89,10 +100,22 @@ export function LeadIntakePage({ client }: { client: Client }) {
                   <td className="p-3">{[row.city, row.region].filter(Boolean).join(", ") || "Missing"}</td>
                   <td className="p-3">{row.phone ?? row.website ?? "Needs research"}</td>
                   <td className="p-3"><span className={row.state === "needs_correction" ? "rounded-full bg-amber-100 px-2 py-1 font-semibold text-amber-900" : "rounded-full bg-slate-100 px-2 py-1 font-semibold text-slate-700"}>{row.state.replaceAll("_", " ")}</span></td>
+                  <td className="p-3"><button className="button-secondary" onClick={() => setSelectedRowId(row.id)} type="button">Review event</button></td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
+          {selected.rows.find((row) => row.id === selectedRowId) ? (
+            <LeadContactDateReview
+              client={client}
+              onSaved={async () => {
+                const refreshed = await client.getBatch(selected.id);
+                setSelected(refreshed);
+                setSelectedRowId(selectedRowId);
+              }}
+              row={selected.rows.find((row) => row.id === selectedRowId)!}
+            />
+          ) : null}
         </section>
       ) : null}
     </div>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importLeadWorkbookSchema, leadImportActor } from "./lead-intake-input";
+import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "./lead-intake-input";
 
 const valid = {
   originalFilename: "Sept Week 3.xls",
@@ -28,5 +28,29 @@ describe("importLeadWorkbookSchema", () => {
   it("records the single-owner actor when middleware uses an empty namespace id", () => {
     expect(leadImportActor("")).toBe("owner");
     expect(leadImportActor("  amy  ")).toBe("amy");
+  });
+
+  it("accepts a versioned explicit review decision and rejects unbounded evidence", () => {
+    const review = {
+      expectedVersion: 0,
+      decision: {
+        organizationId: "10000000-0000-4000-8000-000000000001",
+        contactMode: "manual",
+        contactId: null,
+        contactName: "Lindsey",
+        contactRole: "Event organizer",
+        recipientEmail: "lilupow@aspenfilm.org",
+        recipientConfirmed: true,
+        introductionSuitable: true,
+        eventName: "Aspen Filmfest (Aspen) CO",
+        startDate: "2026-09-29",
+        endDate: "2026-10-04",
+        emailEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/contact" },
+        dateEvidence: { sourceKind: "official_website", sourceReference: "https://aspenfilm.org/festival" },
+        candidateEmails: ["lilupow@aspenfilm.org"],
+      },
+    };
+    expect(leadReviewConfirmationSchema.safeParse(review).success).toBe(true);
+    expect(leadReviewConfirmationSchema.safeParse({ ...review, decision: { ...review.decision, candidateEmails: Array(21).fill("a@example.com") } }).success).toBe(false);
   });
 });

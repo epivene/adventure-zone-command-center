@@ -4,19 +4,27 @@ import { fileURLToPath } from "node:url";
 
 type MigrationClient = { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> };
 
-async function loadMigrationSql() {
-  const here = path.dirname(fileURLToPath(import.meta.url));
+async function loadOne(here: string, filename: string) {
   const candidates = [
-    path.resolve(here, "migrations/069_excel_lead_intake.sql"),
-    path.resolve(here, "../../../../lib/db/migrations/069_excel_lead_intake.sql"),
-    path.resolve(process.cwd(), "artifacts/api-server/dist/migrations/069_excel_lead_intake.sql"),
-    path.resolve(process.cwd(), "lib/db/migrations/069_excel_lead_intake.sql"),
+    path.resolve(here, `migrations/${filename}`),
+    path.resolve(here, `../../../../lib/db/migrations/${filename}`),
+    path.resolve(process.cwd(), `artifacts/api-server/dist/migrations/${filename}`),
+    path.resolve(process.cwd(), `lib/db/migrations/${filename}`),
   ];
   let lastError: unknown = null;
   for (const candidate of candidates) {
     try { return await readFile(candidate, "utf8"); } catch (error) { lastError = error; }
   }
-  throw lastError instanceof Error ? lastError : new Error("Lead intake migration 069 could not be loaded.");
+  throw lastError instanceof Error ? lastError : new Error(`Lead intake migration ${filename} could not be loaded.`);
+}
+
+async function loadMigrationSql() {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const sql = await Promise.all([
+    loadOne(here, "069_excel_lead_intake.sql"),
+    loadOne(here, "20260825_lead_review_evidence.sql"),
+  ]);
+  return sql.join("\n\n");
 }
 
 export async function ensureLeadIntakeSchema(
@@ -25,8 +33,15 @@ export async function ensureLeadIntakeSchema(
 ): Promise<boolean> {
   const marker = await client.query(`
     select
+      (
       to_regclass(current_schema() || '.lead_import_batches') is not null
-      and to_regclass(current_schema() || '.lead_import_rows') is not null as ready
+      and to_regclass(current_schema() || '.lead_import_rows') is not null
+      and to_regclass(current_schema() || '.lead_import_evidence') is not null
+      and exists (
+        select 1 from information_schema.columns
+        where table_schema = current_schema() and table_name = 'lead_import_rows' and column_name = 'review_version'
+      )
+      ) as ready
   `);
   if (marker.rows[0]?.["ready"] === true) return false;
   await client.query(await (options?.loadSql ?? loadMigrationSql)());

@@ -1,14 +1,22 @@
 import { Router, type IRouter } from "express";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { contacts, organizationContacts, organizations } from "@/db/schema";
 
-import { importLeadWorkbookSchema, leadImportActor } from "@/features/lead-intake/lead-intake-input";
+import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
+import { LeadReviewService, LeadReviewServiceError } from "@/features/lead-intake/lead-review-service";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
+const reviewService = new LeadReviewService(db);
 
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
 router.post("/lead-intake/imports", async (req, res): Promise<void> => {
@@ -35,7 +43,7 @@ router.get("/lead-intake/imports", async (_req, res): Promise<void> => {
 
 router.get("/lead-intake/imports/:batchId", async (req, res): Promise<void> => {
   const batchId = param(req.params.batchId);
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(batchId)) {
+  if (!isUuid(batchId)) {
     res.status(400).json({ error: "Invalid lead import batch." });
     return;
   }
@@ -45,6 +53,65 @@ router.get("/lead-intake/imports/:batchId", async (req, res): Promise<void> => {
     return;
   }
   res.json({ batch });
+});
+
+router.get("/lead-intake/organizations/:organizationId/contacts", async (req, res): Promise<void> => {
+  const organizationId = param(req.params.organizationId);
+  if (!isUuid(organizationId)) {
+    res.status(400).json({ error: "Invalid profile." });
+    return;
+  }
+  const rows = await db.select({
+    id: contacts.id,
+    firstName: contacts.firstName,
+    lastName: contacts.lastName,
+    email: contacts.email,
+    jobTitle: contacts.jobTitle,
+    role: organizationContacts.role,
+  }).from(organizationContacts)
+    .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
+    .innerJoin(organizations, eq(organizations.id, organizationContacts.organizationId))
+    .where(and(
+      eq(organizationContacts.organizationId, organizationId),
+      eq(organizationContacts.active, true),
+      isNull(organizations.consolidatedIntoId),
+    ));
+  res.json({ contacts: rows });
+});
+
+router.post("/lead-intake/rows/:rowId/confirm", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId);
+  const parsed = leadReviewConfirmationSchema.safeParse(req.body);
+  if (!isUuid(rowId) || !parsed.success) {
+    res.status(400).json({ error: "Review the event, contact, recipient, dates, and evidence." });
+    return;
+  }
+  try {
+    const result = await reviewService.confirm({
+      rowId,
+      expectedVersion: parsed.data.expectedVersion,
+      reviewedBy: leadImportActor((req as any).userId),
+      decision: parsed.data.decision,
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LeadReviewServiceError) {
+      if (error.code === "ROW_NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.code === "VERSION_CONFLICT") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.code === "REVIEW_BLOCKED") {
+        res.status(422).json({ error: error.message, blockers: error.blockers });
+        return;
+      }
+    }
+    req.log.error({ error }, "Failed to confirm lead review");
+    res.status(500).json({ error: "Could not save the verified lead." });
+  }
 });
 
 export default router;
