@@ -5,10 +5,13 @@ import { contacts, organizationContacts, organizations } from "@/db/schema";
 
 import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
+import { ActProfileEvidenceRepository } from "@/features/lead-intake/act-profile-evidence-repository";
+import { createLeadProfileEvidenceHandler } from "@/features/lead-intake/lead-profile-evidence-handler";
 import { LeadReviewService, LeadReviewServiceError } from "@/features/lead-intake/lead-review-service";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
+const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
 
 function param(value: string | string[] | undefined) {
@@ -78,6 +81,11 @@ router.get("/lead-intake/organizations/:organizationId/contacts", async (req, re
     ));
   res.json({ contacts: rows });
 });
+
+router.get(
+  "/lead-intake/organizations/:organizationId/evidence",
+  createLeadProfileEvidenceHandler(profileEvidenceRepository),
+);
 
 router.post("/lead-intake/rows/:rowId/confirm", async (req, res): Promise<void> => {
   const rowId = param(req.params.rowId);
