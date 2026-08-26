@@ -504,6 +504,8 @@ implements PackageSettingsRepository {
         code: packageTemplates.code,
         name: packageTemplates.name,
         baseAttractionCount: packageTemplates.baseAttractionCount,
+        normalCapacity: packageTemplates.normalCapacity,
+        temporaryUnavailableQuantity: packageTemplates.temporaryUnavailableQuantity,
         active: packageTemplates.active,
       })
       .from(packageTemplates)
@@ -522,6 +524,8 @@ implements PackageSettingsRepository {
           code: packageTemplates.code,
           name: packageTemplates.name,
           baseAttractionCount: packageTemplates.baseAttractionCount,
+          normalCapacity: packageTemplates.normalCapacity,
+          temporaryUnavailableQuantity: packageTemplates.temporaryUnavailableQuantity,
           active: packageTemplates.active,
         })
         .from(packageTemplates)
@@ -537,6 +541,8 @@ implements PackageSettingsRepository {
         .set({
           name: input.name,
           baseAttractionCount: input.baseAttractionCount,
+          normalCapacity: input.normalCapacity,
+          temporaryUnavailableQuantity: input.temporaryUnavailableQuantity,
           active: input.active,
           updatedAt: new Date(),
         })
@@ -546,6 +552,8 @@ implements PackageSettingsRepository {
           code: packageTemplates.code,
           name: packageTemplates.name,
           baseAttractionCount: packageTemplates.baseAttractionCount,
+          normalCapacity: packageTemplates.normalCapacity,
+          temporaryUnavailableQuantity: packageTemplates.temporaryUnavailableQuantity,
           active: packageTemplates.active,
         });
       if (!updated) {
