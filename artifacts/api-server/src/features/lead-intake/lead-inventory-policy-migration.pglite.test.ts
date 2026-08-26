@@ -51,4 +51,70 @@ describe("20260826 lead inventory policy migration", () => {
       ]);
     } finally { await client.close(); }
   });
+
+  it("preserves valid admin-edited capacities including zero on rerun", async () => {
+    const client = new PGlite();
+    try {
+      await client.exec(`
+        create table package_templates (
+          id uuid primary key default gen_random_uuid(), code text not null unique, name text not null,
+          base_attraction_count integer not null, active boolean not null default true,
+          created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+        );
+        insert into package_templates (code, name, base_attraction_count) values
+          ('adventure_zone', 'Adventure Zone', 10),
+          ('pirates_rebellion', 'Pirate''s Rebellion', 3),
+          ('weekend_warriors', 'Warrior''s Playground', 5),
+          ('mini_zone', 'Mini Zone', 5);
+        create table lead_availability_snapshots (id uuid primary key default gen_random_uuid(), ready boolean not null);
+      `);
+      const migrationSql = await readFile(new URL("../../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8");
+      await client.exec(migrationSql);
+      await client.exec(`
+        update package_templates set normal_capacity = case code
+          when 'adventure_zone' then 0
+          when 'pirates_rebellion' then 2
+          when 'weekend_warriors' then 0
+          when 'mini_zone' then 4
+        end;
+      `);
+      await client.exec(migrationSql);
+      expect((await client.query("select code, normal_capacity from package_templates order by code")).rows).toEqual([
+        { code: "adventure_zone", normal_capacity: 0 },
+        { code: "mini_zone", normal_capacity: 4 },
+        { code: "pirates_rebellion", normal_capacity: 2 },
+        { code: "weekend_warriors", normal_capacity: 0 },
+      ]);
+    } finally { await client.close(); }
+  }, 15_000);
+
+  it("preserves a populated unresolved availability snapshot on rerun", async () => {
+    const client = new PGlite();
+    const packageAvailability = {
+      status: "unresolved",
+      packages: [{ packageKey: "adventure_zone", normalCapacity: 5, booked: 2, available: 3 }],
+      restrictedOptions: [{ packageKey: "pirates_rebellion_fourth", approvalRequired: true }],
+      blockers: ["ambiguous Calendar package evidence"],
+    };
+    try {
+      await client.exec(`
+        create table package_templates (
+          id uuid primary key default gen_random_uuid(), code text not null unique, name text not null,
+          base_attraction_count integer not null, active boolean not null default true,
+          created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+        );
+        create table lead_availability_snapshots (id uuid primary key default gen_random_uuid(), ready boolean not null);
+      `);
+      const migrationSql = await readFile(new URL("../../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8");
+      await client.exec(migrationSql);
+      await client.query(
+        "insert into lead_availability_snapshots (ready, package_availability) values ($1, $2::jsonb)",
+        [true, JSON.stringify(packageAvailability)],
+      );
+      await client.exec(migrationSql);
+      expect((await client.query("select ready, package_availability from lead_availability_snapshots")).rows)
+        .toEqual([{ ready: true, package_availability: packageAvailability }]);
+    } finally { await client.close(); }
+  }, 15_000);
+
 });
