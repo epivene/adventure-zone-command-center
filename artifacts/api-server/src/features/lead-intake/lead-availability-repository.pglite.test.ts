@@ -28,5 +28,7 @@ describe("LeadAvailabilityRepository", () => {
     })).resolves.toEqual({ reviewVersion: 5 });
     expect((await client.query("select review_version from lead_import_rows")).rows).toEqual([{ review_version: 5 }]);
     expect((await client.query("select proposed_start_date, ready, selected_calendar_ids, source_events from lead_availability_snapshots")).rows).toEqual([expect.objectContaining({ proposed_start_date: "2026-09-08", ready: false, selected_calendar_ids: ["zone-a"] })]);
+    await expect(repository.save({ rowId: "10000000-0000-4000-8000-000000000001", expectedVersion: 5, organizationId: "30000000-0000-4000-8000-000000000001", recipientEmail: "events@example.com", startDate: "2026-09-10", endDate: "2026-09-12", ready: true, proposedWindow: { startDate: "2026-09-08", endDate: "2026-09-13" }, checkedAt: "2026-08-26T12:00:00.000Z", checkedBy: "owner", selectedCalendarIds: ["zone-a"], sourceEvents: [{ calendarId: "zone-a", eventId: "event-2", start: { date: "2026-09-08" }, end: { date: "2026-09-14" } }], reservations: [] })).resolves.toEqual({ reviewVersion: 6 });
+    expect((await client.query("select review_version, ready, source_events from lead_availability_snapshots order by review_version")).rows).toEqual([expect.objectContaining({ review_version: 5, ready: false, source_events: [{ calendarId: "zone-a", eventId: "event-1", updated: "2026-08-25T11:00:00.000Z" }] }), expect.objectContaining({ review_version: 6, ready: true })]);
   });
 });
