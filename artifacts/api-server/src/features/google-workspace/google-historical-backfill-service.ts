@@ -1,6 +1,7 @@
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
 import type {
   GoogleMessageMetadata,
+  GoogleMessageRef,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
 import {
@@ -8,6 +9,10 @@ import {
   type GoogleHistoricalBackfillState,
   type GoogleHistoricalFailedOutcome,
 } from "./google-historical-backfill-repository";
+import {
+  GoogleHistoricalFrozenBatchStore,
+  type GoogleHistoricalFrozenBatch,
+} from "./google-historical-frozen-batch-store";
 import {
   GoogleHistoricalMessageClassifier,
   type GoogleHistoricalClassification,
@@ -51,6 +56,15 @@ type RepositoryAccess = {
     counts: GoogleHistoricalBackfillState["cumulative"];
   }): Promise<void>;
   markError?(code: string): Promise<void>;
+};
+
+type FrozenBatchAccess = {
+  load(pageToken: string | null): Promise<GoogleHistoricalFrozenBatch | null>;
+  freeze(input: {
+    batchId: string;
+    nextPageToken: string | null;
+    messages: GoogleMessageRef[];
+  }): Promise<void>;
 };
 
 type ClassifierAccess = {
@@ -129,6 +143,7 @@ export type GoogleHistoricalRetryResult = {
 export class GoogleHistoricalBackfillService {
   private readonly connection: ConnectionAccess;
   private readonly repository: RepositoryAccess;
+  private readonly frozenBatches: FrozenBatchAccess;
   private readonly classifier: ClassifierAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
   private readonly fileService: FileServiceAccess;
@@ -136,12 +151,18 @@ export class GoogleHistoricalBackfillService {
   constructor(options?: {
     connection?: ConnectionAccess;
     repository?: RepositoryAccess;
+    batchStore?: FrozenBatchAccess;
     classifier?: ClassifierAccess;
     validationRepository?: ValidationRepositoryAccess;
     fileService?: FileServiceAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
+    this.frozenBatches =
+      options?.batchStore ??
+      (options
+        ? { load: async () => null, freeze: async () => undefined }
+        : new GoogleHistoricalFrozenBatchStore());
     this.classifier = options?.classifier ?? new GoogleHistoricalMessageClassifier();
     this.validationRepository =
       options?.validationRepository ?? new PostgresGoogleValidationRepository();
@@ -189,7 +210,9 @@ export class GoogleHistoricalBackfillService {
     }
     if (
       state.status === "awaiting_approval" ||
-      (state.cumulative.processed > 0 && !state.firstBatchApproved)
+      (state.cumulative.processed > 0 &&
+        !state.firstBatchApproved &&
+        state.status !== "error")
     ) {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED");
     }
@@ -200,24 +223,41 @@ export class GoogleHistoricalBackfillService {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE");
     }
 
-    const firstBatch = state.cumulative.processed === 0;
-    const { batchId } = await this.repository.beginBatch({
-      pageToken: state.nextPageToken,
-      batchSize: HISTORICAL_BATCH_SIZE,
-    });
-
-    let page;
-    try {
-      page = await client.listMessagePage({
-        maxResults: HISTORICAL_BATCH_SIZE,
+    const firstBatch = !state.firstBatchApproved && state.nextPageToken === null;
+    let frozen = await this.frozenBatches.load(state.nextPageToken);
+    if (!frozen) {
+      const { batchId } = await this.repository.beginBatch({
         pageToken: state.nextPageToken,
+        batchSize: HISTORICAL_BATCH_SIZE,
       });
-    } catch (error) {
-      const code = safeErrorCode(error);
-      await this.repository.markError?.(code);
-      throw error;
+      let discovered;
+      try {
+        discovered = await client.listMessagePage({
+          maxResults: HISTORICAL_BATCH_SIZE,
+          pageToken: state.nextPageToken,
+        });
+        await this.frozenBatches.freeze({
+          batchId,
+          nextPageToken: discovered.nextPageToken,
+          messages: discovered.messages,
+        });
+      } catch (error) {
+        const code = safeErrorCode(error);
+        await this.repository.markError?.(code);
+        throw error;
+      }
+      frozen = {
+        batchId,
+        nextPageToken: discovered.nextPageToken,
+        messages: discovered.messages,
+      };
     }
 
+    const batchId = frozen.batchId;
+    const page = {
+      messages: frozen.messages,
+      nextPageToken: frozen.nextPageToken,
+    };
     const counts: GoogleHistoricalBackfillState["cumulative"] = {
       processed: page.messages.length,
       attached: 0,
