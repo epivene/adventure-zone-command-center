@@ -62,4 +62,23 @@ describe("lead intake profile search", () => {
     await expect(createLeadIntakeClient(api).getRelationshipEvidence("row-1")).resolves.toEqual(evidence);
     expect(api.get).toHaveBeenCalledWith("/lead-intake/rows/row-1/relationship-evidence");
   });
+
+  it("loads retained communication-block audit history", async () => {
+    const events = [{
+      id: "event-1",
+      blockId: "block-1",
+      action: "created" as const,
+      actorId: "owner:amy",
+      reason: "Requested no contact",
+      createdAt: "2026-08-26T12:00:00.000Z",
+    }];
+    const api = { get: vi.fn().mockResolvedValue({ events }), post: vi.fn() };
+    const client = createLeadIntakeClient(api) as ReturnType<typeof createLeadIntakeClient> & {
+      getCommunicationBlockHistory?: (blockId: string) => Promise<typeof events>;
+    };
+
+    expect(client.getCommunicationBlockHistory).toBeTypeOf("function");
+    await expect(client.getCommunicationBlockHistory!("block-1")).resolves.toEqual(events);
+    expect(api.get).toHaveBeenCalledWith("/lead-intake/communication-blocks/block-1/history");
+  });
 });

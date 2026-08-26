@@ -38,4 +38,61 @@ describe("LeadIntakePage", () => {
     await waitFor(() => expect(client.getBatch).toHaveBeenCalledWith("batch-1"));
     expect(await screen.findByText(/already imported/)).toBeInTheDocument();
   });
+
+  it("invalidates rendered copy immediately after a successful status mutation even when refetch fails", async () => {
+    const reviewedBatch = {
+      ...batch,
+      rows: [{
+        ...batch.rows[0],
+        state: "verified" as const,
+        reviewVersion: 7,
+        territoryStatus: "open" as const,
+        fitStatus: "approved" as const,
+      }],
+    };
+    const preview = {
+      sourceRowId: "row-1",
+      rowVersion: 7,
+      snapshotVersion: 7,
+      verifiedDateRange: { startDate: "2026-09-29", endDate: "2026-10-04" },
+      recipient: "person@example.com",
+      profileName: "Aspen Filmfest",
+      eventName: "Aspen Filmfest",
+      relationshipStatus: "new_introduction",
+      territoryStatus: "open",
+      fitStatus: "approved",
+      templateStatus: "approved" as const,
+      templateVersion: "2026-prepaid-v1",
+      templateSource: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
+      calendarEvidence: [],
+      calendarConflictSummary: { totalConflicts: 0, totalEvidenceRecords: 0, displayedEvidenceRecords: 0, truncated: false },
+      normalPackageCounts: [{ packageKey: "adventure_zone", availableQuantity: 1 }],
+      readiness: { ready: true, blockers: [] },
+      subject: "Safe subject",
+      body: "Previously rendered safe body",
+    };
+    const getBatch = vi.fn()
+      .mockResolvedValueOnce(reviewedBatch)
+      .mockRejectedValueOnce(new Error("refresh failed after save"));
+    const updateReviewStatus = vi.fn().mockResolvedValue({ rowId: "row-1", reviewVersion: 8 });
+    const client = {
+      listBatches: vi.fn().mockResolvedValue([summary]),
+      getBatch,
+      importWorkbook: vi.fn(),
+      getEmailPreview: vi.fn().mockResolvedValue(preview),
+      updateReviewStatus,
+      ...reviewMethods(),
+    };
+    render(<LeadIntakePage client={client} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Sept Week 3.xls/ }));
+    await screen.findByText("Aspen Filmfest");
+    fireEvent.click(screen.getByRole("button", { name: "Review event" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load safe preview" }));
+    expect(await screen.findByText("Previously rendered safe body")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save territory and fit" }));
+    await waitFor(() => expect(updateReviewStatus).toHaveBeenCalledOnce());
+    expect(await screen.findByRole("alert")).toHaveTextContent("refresh failed after save");
+    expect(screen.queryByText("Previously rendered safe body")).not.toBeInTheDocument();
+  });
 });

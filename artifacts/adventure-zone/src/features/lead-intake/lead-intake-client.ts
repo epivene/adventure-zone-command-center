@@ -123,6 +123,14 @@ export type LeadEmailPreview = {
   body: string | null;
 };
 export type CommunicationBlock = { id: string; targetType: string; active: boolean; organizationId?: string | null; contactId?: string | null; normalizedEmail?: string | null; rowId?: string | null; reason: string; createdAt: string };
+export type CommunicationBlockEvent = {
+  id: string;
+  blockId: string;
+  action: "created" | "removed";
+  actorId: string;
+  reason: string;
+  createdAt: string;
+};
 export type LeadImportBatch = LeadImportBatchSummary & { rows: LeadImportReviewRow[] };
 
 type Api = {
@@ -185,6 +193,11 @@ export function createLeadIntakeClient(api: Api) {
     },
     async removeCommunicationBlock(blockId: string, reason: string) {
       return api.post<{ block: CommunicationBlock }>(`/lead-intake/communication-blocks/${blockId}/remove`, { reason });
+    },
+    async getCommunicationBlockHistory(blockId: string) {
+      return (await api.get<{ events: CommunicationBlockEvent[] }>(
+        `/lead-intake/communication-blocks/${blockId}/history`,
+      )).events;
     },
   };
 }
