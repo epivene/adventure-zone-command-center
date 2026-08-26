@@ -22,6 +22,7 @@ const link: LeadGmailDraftLink = {
   body: "Hi,\n\nBody\n\nDesiree",
   gmailDraftId: "gmail-draft-1",
   gmailMessageId: "gmail-message-1",
+  activityId: "66666666-6666-4666-8666-666666666666",
   state: "created",
   lastErrorCode: null,
   idempotencyKey: "lead-gmail:11111111-1111-4111-8111-111111111111",
@@ -119,6 +120,39 @@ describe("GmailDraftService", () => {
     expect(createGmailDraft).not.toHaveBeenCalled();
     expect(store.prepare).not.toHaveBeenCalled();
     expect(store.execute).not.toHaveBeenCalled();
+  });
+
+  it("defers freshness clock reads until each serialized persistence callback has the lock", async () => {
+    const clock = vi.fn()
+      .mockReturnValueOnce(new Date("2026-08-26T12:00:00.000Z"))
+      .mockReturnValueOnce(new Date("2026-08-26T12:00:01.000Z"));
+    const store = persistence({
+      prepare: vi.fn(async (input) => {
+        expect(clock).not.toHaveBeenCalled();
+        const lockedNow = input.now();
+        const rendered = input.evaluate(readyState(), lockedNow);
+        return { kind: "prepared" as const, link: { ...reservedLink(), ...rendered } };
+      }),
+      execute: vi.fn(async (input) => {
+        expect(clock).toHaveBeenCalledTimes(1);
+        const lockedNow = input.now();
+        const outcome = await input.attempt(readyState(), reservedLink(), lockedNow);
+        if (outcome.kind !== "created") throw new Error("Expected created outcome");
+        return { ...link, gmailDraftId: outcome.draftId, gmailMessageId: outcome.messageId };
+      }),
+    });
+    const service = new GmailDraftService({
+      persistence: store,
+      connection: { createGmailDraftClient: vi.fn(async () => ({
+        connectionId: link.googleConnectionId,
+        client: { createGmailDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-1" })) },
+      })) },
+      now: clock,
+    });
+
+    await expect(service.create({ rowId: link.rowId, expectedVersion: 7, actorId: "owner-1" }))
+      .resolves.toMatchObject({ link: { state: "created" } });
+    expect(clock).toHaveBeenCalledTimes(2);
   });
 
   it("reloads current state and blocks a DO NOT SEND change immediately before Gmail", async () => {

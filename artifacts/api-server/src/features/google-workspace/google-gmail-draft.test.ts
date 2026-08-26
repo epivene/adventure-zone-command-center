@@ -74,6 +74,37 @@ describe("Google Gmail draft-only client", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("bounds the draft POST and classifies timeout abort as an uncertain single outcome", async () => {
+    vi.useFakeTimers();
+    try {
+      const draftRequests: RequestInit[] = [];
+      const client = createGoogleWorkspaceReadClient({
+        environment,
+        refreshToken: "refresh",
+        gmailDraftTimeoutMs: 25,
+        fetcher: async (input, init) => {
+          const url = String(input);
+          if (url.includes("oauth2.googleapis.com/token")) {
+            return new Response(JSON.stringify({ access_token: "access", expires_in: 3600 }), { status: 200 });
+          }
+          draftRequests.push(init ?? {});
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("Timed out", "AbortError")));
+          });
+        },
+      });
+      const pending = client.createGmailDraft!({ raw: "cmF3" });
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(pending).rejects.toMatchObject({
+        code: "GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN",
+      });
+      expect(draftRequests).toHaveLength(1);
+      expect(draftRequests[0]?.signal?.aborted).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns Gmail draft and message identifiers from a successful draft creation", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

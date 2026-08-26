@@ -2,7 +2,55 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
-import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
+import { ensureLeadIntakeSchema, isLeadGmailDraftLinkSchemaReady } from "./lead-intake-startup-migration";
+
+async function gmailDraftSchema() {
+  const client = new PGlite();
+  await client.exec(`
+    create extension if not exists pgcrypto;
+    create table organizations (id uuid primary key);
+    create table contacts (id uuid primary key);
+    create table lead_import_rows (id uuid primary key);
+    create table google_workspace_connections (id uuid primary key);
+    create table communication_templates (id uuid primary key);
+    create table activities (id uuid primary key);
+  `);
+  const migration = await readFile(
+    new URL("../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url),
+    "utf8",
+  );
+  await client.exec(migration);
+  return client;
+}
+
+describe("lead Gmail draft startup readiness", () => {
+  it("accepts only the canonical columns, defaults, constraints, foreign keys, and indexes", async () => {
+    const client = await gmailDraftSchema();
+    try {
+      const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(true);
+      await client.exec(`
+        alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_organization_fk;
+        alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_organization_fk
+          foreign key (organization_id) references contacts(id) on delete restrict;
+      `);
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(false);
+    } finally { await client.close(); }
+  }, 30_000);
+
+  it.each([
+    "alter table lead_gmail_draft_links alter column contact_id set not null",
+    "alter table lead_gmail_draft_links alter column state drop default",
+    "drop index lead_gmail_draft_links_gmail_draft_unique; create index lead_gmail_draft_links_gmail_draft_unique on lead_gmail_draft_links (gmail_draft_id)",
+  ])("rejects a structurally weakened same-name table: %s", async (mutation) => {
+    const client = await gmailDraftSchema();
+    try {
+      const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+      await client.exec(mutation);
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(false);
+    } finally { await client.close(); }
+  }, 30_000);
+});
 
 describe("ensureLeadIntakeSchema", () => {
   it("runs the canonical idempotent repair even when readiness initially passes", async () => {

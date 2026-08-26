@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  GOOGLE_WORKSPACE_READ_SCOPES,
+  GOOGLE_WORKSPACE_REQUIRED_SCOPES,
   createGoogleWorkspaceReadClient,
 } from "./google-api-client";
 import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
@@ -24,7 +24,7 @@ function response(body: unknown, status = 200) {
 }
 
 describe("GoogleWorkspaceReadClient", () => {
-  it("builds an offline authorization URL isolated to approved read scopes", () => {
+  it("builds an offline authorization URL isolated to approved least-privilege scopes", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
@@ -40,7 +40,7 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(url.searchParams.get("include_granted_scopes")).toBe("false");
     expect(url.searchParams.get("state")).toBe("oauth-state");
     expect(url.searchParams.get("scope")?.split(" ")).toEqual(
-      GOOGLE_WORKSPACE_READ_SCOPES,
+      GOOGLE_WORKSPACE_REQUIRED_SCOPES,
     );
   });
 
@@ -54,7 +54,7 @@ describe("GoogleWorkspaceReadClient", () => {
         return response({
           access_token: "access-token",
           expires_in: 3600,
-          scope: GOOGLE_WORKSPACE_READ_SCOPES.join(" "),
+          scope: GOOGLE_WORKSPACE_REQUIRED_SCOPES.join(" "),
           token_type: "Bearer",
         });
       },
@@ -62,7 +62,7 @@ describe("GoogleWorkspaceReadClient", () => {
 
     await expect(client.exchangeCode("authorization-code")).resolves.toEqual({
       refreshToken: "existing-refresh-token",
-      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      scopes: [...GOOGLE_WORKSPACE_REQUIRED_SCOPES],
     });
 
     const body = new URLSearchParams(String(calls[0]?.init?.body));
@@ -100,7 +100,7 @@ describe("GoogleWorkspaceReadClient", () => {
         return response({
           access_token: "access-token",
           expires_in: 3600,
-          scope: GOOGLE_WORKSPACE_READ_SCOPES.join(" "),
+          scope: GOOGLE_WORKSPACE_REQUIRED_SCOPES.join(" "),
           token_type: "Bearer",
         });
       }
@@ -221,6 +221,7 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(Object.keys(client).sort()).toEqual([
       "accountIdentity",
       "authorizationUrl",
+      "createGmailDraft",
       "exchangeCode",
       "getAttachment",
       "getMessageMetadata",
@@ -231,5 +232,6 @@ describe("GoogleWorkspaceReadClient", () => {
       "listMessagePage",
       "listRecentMessageRefs",
     ]);
+    expect(Object.keys(client).some((name) => /send/i.test(name))).toBe(false);
   });
 });

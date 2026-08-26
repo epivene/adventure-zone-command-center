@@ -17,6 +17,7 @@ describe("lead Gmail draft link migration", () => {
       create table lead_import_rows (id uuid primary key);
       create table google_workspace_connections (id uuid primary key);
       create table communication_templates (id uuid primary key);
+      create table activities (id uuid primary key);
     `);
     const migration = await readFile(
       fileURLToPath(new URL("../../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url)),
@@ -49,6 +50,11 @@ describe("lead Gmail draft link migration", () => {
       "select column_name, is_nullable from information_schema.columns where table_name = 'lead_gmail_draft_links'",
     );
     expect(columns.rows.find((column) => column.column_name === "contact_id")?.is_nullable).toBe("YES");
+    expect(columns.rows.find((column) => column.column_name === "activity_id")?.is_nullable).toBe("YES");
+    await expect(db.exec(`
+      update lead_gmail_draft_links
+      set state = 'created', gmail_draft_id = 'draft', gmail_message_id = 'message', completed_at = now()
+    `)).rejects.toThrow();
 
     await expect(db.exec(`
       insert into lead_gmail_draft_links (

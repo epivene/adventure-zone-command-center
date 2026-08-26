@@ -27,7 +27,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm --filter @workspace/api-server exec vitest run src/features/google-workspace/google-gmail-draft.test.ts src/features/lead-intake/gmail-draft-service.test.ts src/features/lead-intake/gmail-draft-handler.test.ts src/features/lead-intake/gmail-draft-migration.pglite.test.ts 2>&1 | tee task8-backend.log
+          pnpm --filter @workspace/api-server exec vitest run src/features/google-workspace/google-api-client.test.ts src/features/google-workspace/google-gmail-draft.test.ts src/features/google-workspace/google-connection-repository.test.ts src/routes/google-workspace-oauth-callback.test.ts src/routes/google-workspace-account-change.test.ts src/features/lead-intake/gmail-draft-service.test.ts src/features/lead-intake/gmail-draft-history.pglite.test.ts src/features/lead-intake/gmail-draft-handler.test.ts src/features/lead-intake/gmail-draft-migration.pglite.test.ts src/db/lead-intake-startup-migration.test.ts 2>&1 | tee task8-backend.log
       - id: frontend
         name: Task 8 frontend tests
         if: always()

@@ -52,6 +52,34 @@ describe("LeadEmailPreviewPanel Gmail draft action", () => {
     expect(screen.queryByRole("button", { name: /bulk/i })).not.toBeInTheDocument();
   });
 
+  it("reloads and displays an existing per-row Gmail draft without creating again", async () => {
+    const loadDraft = vi.fn(async () => ({
+      id: "link-1",
+      rowId: "row-1",
+      state: "created" as const,
+      gmailDraftId: "gmail-draft-1",
+      gmailMessageId: "message-1",
+      lastErrorCode: null,
+    }));
+    const create = vi.fn();
+    render(
+      <LeadEmailPreviewPanel
+        rowId="row-1"
+        reviewVersion={7}
+        load={async () => readyPreview}
+        loadDraft={loadDraft}
+        create={create}
+      />,
+    );
+
+    expect(await screen.findByText("Gmail draft created")).toBeInTheDocument();
+    expect(loadDraft).toHaveBeenCalledWith("row-1");
+    fireEvent.click(screen.getByRole("button", { name: "Load safe preview" }));
+    expect(await screen.findByText("Body")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Gmail Draft" })).not.toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("does not expose draft creation for a blocked preview", async () => {
     render(
       <LeadEmailPreviewPanel

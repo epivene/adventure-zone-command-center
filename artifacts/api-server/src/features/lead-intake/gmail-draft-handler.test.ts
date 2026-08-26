@@ -2,9 +2,21 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { createLeadGmailDraftHandler } from "./gmail-draft-handler";
+import { createLeadGmailDraftHandler, createLeadGmailDraftStateHandler } from "./gmail-draft-handler";
 
 describe("Create Gmail Draft route handler", () => {
+  it("loads the existing per-row state after a page reload", async () => {
+    const get = vi.fn(async () => ({ id: "link-1", rowId: "11111111-1111-4111-8111-111111111111", state: "created" }));
+    const app = express();
+    app.get("/lead-intake/rows/:rowId/gmail-draft", createLeadGmailDraftStateHandler({ get } as any));
+
+    await request(app)
+      .get("/lead-intake/rows/11111111-1111-4111-8111-111111111111/gmail-draft")
+      .expect(200)
+      .expect(({ body }) => expect(body.link).toMatchObject({ id: "link-1", state: "created" }));
+    expect(get).toHaveBeenCalledWith("11111111-1111-4111-8111-111111111111");
+  });
+
   it("exposes one individual action with a required expected review version", async () => {
     const create = vi.fn(async (input) => ({
       reused: false,
