@@ -108,12 +108,16 @@ export function LeadContactDateReview({
     setEmailSource("");
     clearRecipientApproval();
     try {
-      const [loadedContacts, evidence] = await Promise.all([
+      const [contactsResult, evidenceResult] = await Promise.allSettled([
         client.listProfileContacts(option.id),
         client.getProfileEvidence(option.id),
       ]);
-      setContacts(loadedContacts);
-      setProfileEvidence(evidence);
+      const failures: string[] = [];
+      if (contactsResult.status === "fulfilled") setContacts(contactsResult.value);
+      else failures.push(contactsResult.reason instanceof Error ? contactsResult.reason.message : "Could not load profile contacts.");
+      if (evidenceResult.status === "fulfilled") setProfileEvidence(evidenceResult.value);
+      else failures.push(evidenceResult.reason instanceof Error ? evidenceResult.reason.message : "Could not load ACT profile evidence.");
+      if (failures.length) setError(failures.join(" "));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load profile contacts and ACT evidence.");
     } finally {
@@ -306,8 +310,8 @@ export function LeadContactDateReview({
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm font-semibold">Date evidence type<select aria-label="Date evidence type" onChange={(event) => setDateSourceKind(event.currentTarget.value)} value={dateSourceKind}><option value="official_website">Official website</option><option value="act_description">ACT description</option><option value="crm_contact">CRM</option><option value="manual">Manual</option></select></label>
-        <label className="grid gap-1 text-sm font-semibold">Date source<input aria-label="Date source" onChange={(event) => setDateSource(event.currentTarget.value)} placeholder="URL or record reference" value={dateSource}/></label>
+        <label className="grid gap-1 text-sm font-semibold">Date evidence type<select aria-label="Date evidence type" onChange={(event) => { setDateSourceKind(event.currentTarget.value); clearRecipientApproval(); }} value={dateSourceKind}><option value="official_website">Official website</option><option value="act_description">ACT description</option><option value="crm_contact">CRM</option><option value="manual">Manual</option></select></label>
+        <label className="grid gap-1 text-sm font-semibold">Date source<input aria-label="Date source" onChange={(event) => { setDateSource(event.currentTarget.value); clearRecipientApproval(); }} placeholder="URL or record reference" value={dateSource}/></label>
         <label className="grid gap-1 text-sm font-semibold">Email evidence type<select aria-label="Email evidence type" onChange={(event) => { setEmailSourceKind(event.currentTarget.value); clearRecipientApproval(); }} value={emailSourceKind}><option value="crm_contact">CRM contact</option><option value="act_description">ACT description</option><option value="official_website">Official website</option><option value="manual">Manual</option></select></label>
         <label className="grid gap-1 text-sm font-semibold">Email source<input aria-label="Email source" onChange={(event) => { setEmailSource(event.currentTarget.value); clearRecipientApproval(); }} placeholder="URL or record reference" value={emailSource}/></label>
       </div>
