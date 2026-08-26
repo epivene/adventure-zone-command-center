@@ -16,7 +16,7 @@ export function createLeadGmailDraftStateHandler(service: Pick<GmailDraftService
     try {
       res.json({ link: await service.get(rowId) });
     } catch (error) {
-      req.log?.error?.({ error }, "Failed to load lead Gmail draft state");
+      (req as Request & { log?: { error?: (details: unknown, message: string) => void } }).log?.error?.({ error }, "Failed to load lead Gmail draft state");
       res.status(500).json({ error: { code: "LEAD_GMAIL_DRAFT_STATE_FAILED", message: "Could not load the Gmail draft state." } });
     }
   };
@@ -43,7 +43,7 @@ export function createLeadGmailDraftHandler(service: Pick<GmailDraftService, "cr
         res.status(status).json({ error: { code: error.code, message: error.message }, ...(error.blockers.length ? { blockers: error.blockers } : {}), ...error.details });
         return;
       }
-      req.log?.error?.({ error }, "Failed to create lead Gmail draft");
+      (req as Request & { log?: { error?: (details: unknown, message: string) => void } }).log?.error?.({ error }, "Failed to create lead Gmail draft");
       res.status(500).json({ error: { code: "LEAD_GMAIL_DRAFT_FAILED", message: "Could not create the Gmail draft." } });
     }
   };
