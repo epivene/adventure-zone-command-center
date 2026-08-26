@@ -54,7 +54,7 @@ describe("SimpleFullProfile Gmail history", () => {
   it("shows matched historical Gmail inside the primary activity history section", () => {
     render(<SimpleFullProfile profile={profile} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Notes" }));
+    fireEvent.click(screen.getByRole("button", { name: /Notes/ }));
 
     expect(screen.getByRole("heading", { name: "Activity & email history" })).toBeInTheDocument();
     expect(screen.getByTestId("profile-google-email-panel")).toHaveTextContent(
