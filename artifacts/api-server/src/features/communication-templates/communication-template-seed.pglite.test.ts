@@ -78,6 +78,36 @@ describe("approved communication-template startup", () => {
     await expect(isApprovedCommunicationTemplateSeedReady(db as never)).resolves.toBe(true);
   }, 20_000);
 
+  it("repairs legacy system-owned source provenance and is a no-op on restart", async () => {
+    const client = new PGlite(); clients.push(client);
+    await createTemplateTables(client, true);
+    await client.exec(`
+      update business_source_documents
+      set storage_reference = null, updated_at = '2026-01-02T03:04:05Z'
+      where id = '${sourceId}'
+    `);
+    const db = drizzle(client, { schema });
+
+    await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
+    await expect(isApprovedCommunicationTemplateSeedReady(db as never)).resolves.toBe(true);
+    const repaired = (await client.query(`
+      select storage_reference, reviewed_at, updated_at
+      from business_source_documents where id = '${sourceId}'
+    `)).rows[0];
+    expect(repaired).toMatchObject({
+      storage_reference: APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.storageReference,
+      reviewed_at: new Date("2026-08-25T00:00:00Z"),
+    });
+    expect(repaired?.updated_at).not.toEqual(new Date("2026-01-02T03:04:05Z"));
+
+    await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
+    const restarted = (await client.query(`
+      select storage_reference, reviewed_at, updated_at
+      from business_source_documents where id = '${sourceId}'
+    `)).rows[0];
+    expect(restarted).toEqual(repaired);
+  }, 20_000);
+
   it("handles concurrent first seed attempts atomically", async () => {
     const client = new PGlite(); clients.push(client);
     await createTemplateTables(client, true);
