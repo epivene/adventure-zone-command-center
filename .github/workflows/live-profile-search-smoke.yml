@@ -7,22 +7,24 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Diagnose live assistant profile search
+      - name: Check live assistant profile search
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
-          set -u
+          set -euo pipefail
           if [ -z "${ASSISTANT_IMPORT_TOKEN:-}" ]; then
             echo "ASSISTANT_IMPORT_TOKEN_MISSING"
             exit 2
           fi
-          BASE="https://adventure-zone-api.onrender.com"
+          BASE="https://adventure-zone-command-center.onrender.com"
           echo "=== HEALTH ==="
-          curl --silent --show-error -o /tmp/health -w "HTTP %{http_code}\n" "${BASE}/api/healthz"
-          cat /tmp/health; echo
-          echo "=== PROFILE SEARCH WITHOUT TOKEN ==="
-          curl --silent --show-error -o /tmp/noauth -w "HTTP %{http_code}\n" --get --data-urlencode "q=Gold Rush Challenge" "${BASE}/api/assistant-import/profile-search"
-          cat /tmp/noauth; echo
-          echo "=== PROFILE SEARCH WITH TOKEN ==="
-          curl --silent --show-error -o /tmp/auth -w "HTTP %{http_code}\n" -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" --get --data-urlencode "q=Gold Rush Challenge" "${BASE}/api/assistant-import/profile-search"
-          cat /tmp/auth; echo
+          curl --fail-with-body --silent --show-error "${BASE}/api/healthz"
+          echo
+          for Q in "Gold Rush Challenge" "Rides & Rods" "Don King Days"; do
+            echo "=== QUERY: $Q ==="
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search"
+            echo
+          done
