@@ -2,13 +2,13 @@
 
 ## Status
 
-**DONE — review fix round 4 completed all residual A–D items.**
+**DONE — breaker review fix round 5 closes I1–I3 and M1–M2.**
 
 ## Branch and commits
 
 - Repository/branch: `epivene/adventure-zone-command-center` / `feat/lead-safe-email-rendering`
 - Base: `9d1778937645cc6244e41da9344849b516fd0eef`
-- Implementation head before this report-only commit: `e3efc0a225f611d84628b5f6bbb243afb7e37e01`
+- Implementation head before this report-only commit: `6fd27b9da3c39bf86e9d1355eb9ffbb340b813cb`
 - RED-first tests: `ed4456db`, `db86ff6c`, `af142bfb`
 - Implementation: `56b73be9`, `ee139c33`, `617599c2`, `824a6c08`, `3d71e7af`, `4fb28870`, `958fcb4b`, `eeb694e9`, `2f0c13d2`, `ef765e5d`, `5e2a791b`, `0e7173e8`, `29aa32e0`, `0c28a3cc`, `27785497`, `c6b4a70f`, `107c4110`, `496c31f3`, `4a42cd3b`, `da16cc11`, `736048b7`, `ec3cc99b`, `3a8ed5cb`, `2ae51eb8`, `80f0d22b`
 - TDD correction: `3df3c263` fixes the actual rendered subject defect discovered by executable tests: `(Aspen) CO`, not `(Aspen CO)`.
@@ -119,3 +119,33 @@ Coverage now executes real PGlite/Drizzle repository idempotency, concurrent dup
 
 - The connector-backed workspace still is not a complete repository checkout, so the full monorepo suite, API/frontend package typechecks, and production frontend build were not available. Focused backend/frontend tests and the available TypeScript harness were run; no unavailable suite is claimed green.
 - No Gmail draft creation, Gmail mutation, send route, PR, or merge was added.
+
+## Breaker review fix round 5
+
+### Commits
+
+- `d255c0fa81a5f200024feb852aa0046eb6a6a9ef` — backend window/conflict/freshness contracts and controlled template startup lifecycle.
+- `6fd27b9da3c39bf86e9d1355eb9ffbb340b813cb` — global internal-preview controls, required removal reason, and aggregate conflict-summary UI.
+
+### Closed findings
+
+- **I1:** Preview snapshot validation now compares the persisted Task 6 window with shared `proposedBookingWindow(confirmed start/end)`. Integration coverage accepts the valid two-day/one-day buffered snapshot and rejects date or review-version changes.
+- **I2:** `communication_templates.template_version` is part of controlled startup schema readiness. Under the startup advisory lock, schema migration runs before conflict-safe insert-first seeding and exact approved-seed readiness. Exact re-seeding is a true no-op preserving reviewer/reviewed/updated timestamps. Preview requests only transactionally read/verify and never alter or seed.
+- **I3:** The sanitized conflict total comes from the persisted aggregate reservations that drive Task 6 readiness, while evidence projection reports total/displayed counts and truncation. A duplicate iCal instance with cross-calendar disagreement blocks readiness and reports one aggregate conflict even though both source classifications are individually explicit.
+- **M1:** The owner UI can create a clearly labelled global `internal_preview` block without a target. Active blocks require a user-entered removal reason, which is submitted verbatim after trimming.
+- **M2:** Availability timestamps more than the documented five-minute future-clock skew are stale; the exact boundary is accepted and one millisecond beyond it is rejected.
+
+### RED-first evidence
+
+- Backend breaker harness: 18 tests initially produced 11 expected failures covering the buffered Task 6 window, aggregate conflict summary/truncation, future timestamp skew, partial template schema/readiness, concurrent first seed, exact reseed timestamps, startup ordering, and preview request mutation.
+- Frontend breaker harness: 4 tests initially produced 3 expected failures covering targetless global preview creation, required removal reason, and aggregate summary rendering.
+
+### Final GREEN verification
+
+- `implementation`: `./node_modules/.bin/vitest run task7-round5-backend.test.ts task7-migration.pglite.test.ts --environment node` — 2 files / 19 tests passed.
+- `implementation`: `./node_modules/.bin/vitest run task7-round4-tests.test.ts task7-round4-renderer.test.ts task7-round4-block-repo.test.ts task7-round4-route.test.ts --environment node` — 4 files / 23 tests passed.
+- `implementation`: `./node_modules/.bin/vitest run task7-round5-startup-unit.test.ts --environment node -t 'checks every|runs both|fails closed when|partial availability|requires definitions'` — 5 passed / 1 skipped. The skipped full-migration case requires four unchanged SQL files absent from the connector-backed partial checkout; startup schema/version repair itself is covered by the real safe-email PGlite migration test in the 19-test run.
+- `task1-local`: `./node_modules/.bin/vitest run src/task7-round5-frontend.test.tsx src/task7-round4-preview-component.test.tsx src/lead-email-renderer.test.ts src/task7-preview-version.test.ts src/task7-allowlist-regression.test.ts` — 5 files / 14 tests passed.
+- `task1-local`: `./node_modules/.bin/tsc -p tsconfig.round5.json --noEmit` — exit 0.
+
+The temporary backend schema/type harness does not model production Drizzle enum/default metadata, so its standalone TypeScript errors are stub artifacts; backend Vitest compilation plus real PGlite behavior are green. No full monorepo/CI result is claimed. No Gmail/send, PR, merge, or restricted/commercial data was added.
