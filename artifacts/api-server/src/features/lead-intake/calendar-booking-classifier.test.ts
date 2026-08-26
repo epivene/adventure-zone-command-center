@@ -34,4 +34,5 @@ describe("classifyCalendarBooking", () => {
       packages: [],
       evidence: ["missing explicit quantity: Adventure Zone"],
     });
-  });\n});
+  });
+});
