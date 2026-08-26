@@ -7,18 +7,16 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Audit next outreach batch
+      - name: Read alternate-name profile history
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
           IDS=(
-            "Colorfest Balloon Rally|807ec298-38f2-4a58-afe2-b57e0c119271"
-            "International Arts & Crafts Festival|1f474081-dfb5-4565-8ca5-e371f0805d23"
-            "Bear Lake Brawl Triathlon|65c9d87f-61a5-41e5-a268-2591ac7dc2fe"
-            "White Sands Balloon & Music Festival|ff9640f8-9ffd-4a2f-be7b-5243350a3251"
-            "Sandy Heritage Festival|da8c4b14-71d4-4014-ab72-62b733552b7e"
+            "A Blast on the Grass|6e537d3e-01e2-482a-a02e-a842a78ba72b"
+            "Grant County Fair NM|2c3dfcd7-fb16-4995-8048-bf576fa01c25"
+            "Otero County Fair NM|af71ea65-ef9f-4abe-bf11-5ecf084b3409"
           )
           for ENTRY in "${IDS[@]}"; do
             NAME="${ENTRY%%|*}"
@@ -27,25 +25,5 @@ jobs:
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
               "${BASE}/api/assistant-import/profile-history/${ID}"
-            echo
-          done
-          QUERIES=(
-            "Hagerman"
-            "Blast on the Grass"
-            "Grant"
-            "Cliff Gila"
-            "Otero"
-            "Alamogordo"
-            "Thousand Springs"
-            "Ritter Island"
-            "Rocky Mountain Jamboree"
-            "Richfield Jamboree"
-          )
-          for Q in "${QUERIES[@]}"; do
-            echo "=== QUERY: ${Q} ==="
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search"
             echo
           done
