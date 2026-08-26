@@ -9,7 +9,7 @@ export type LeadEvidenceSourceKind = (typeof leadEvidenceSourceKinds)[number];
 
 export type LeadReviewDecision = {
   organizationId: string | null;
-  contactMode: "existing" | "manual";
+  contactMode: "existing" | "manual" | "organization_inbox";
   contactId: string | null;
   contactBelongsToOrganization?: boolean;
   contactEmailMatchesRecipient?: boolean;
@@ -37,6 +37,7 @@ export type LeadReviewBlocker =
   | "contact_required"
   | "contact_profile_mismatch"
   | "contact_role_required"
+  | "organization_inbox_person_fields_present"
   | "recipient_email_invalid"
   | "recipient_contact_mismatch"
   | "recipient_confirmation_required"
@@ -83,10 +84,14 @@ export function evaluateLeadReview(decision: LeadReviewDecision): {
     if (!text(decision.contactId)) blockers.push("contact_required");
     else if (decision.contactBelongsToOrganization !== true) blockers.push("contact_profile_mismatch");
     else if (decision.contactEmailMatchesRecipient !== true) blockers.push("recipient_contact_mismatch");
-  } else if (!text(decision.contactName)) {
-    blockers.push("contact_required");
+  } else if (decision.contactMode === "manual") {
+    if (!text(decision.contactName)) blockers.push("contact_required");
+  } else if (text(decision.contactId) || text(decision.contactName) || text(decision.contactRole)) {
+    blockers.push("organization_inbox_person_fields_present");
   }
-  if (!text(decision.contactRole)) blockers.push("contact_role_required");
+  if (decision.contactMode !== "organization_inbox" && !text(decision.contactRole)) {
+    blockers.push("contact_role_required");
+  }
 
   const recipient = normalizedEmail(decision.recipientEmail);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) blockers.push("recipient_email_invalid");
