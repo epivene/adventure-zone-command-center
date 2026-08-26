@@ -7,17 +7,31 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Check live profile notes and calls
+      - name: Check live profile history for outreach batch
+        env:
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${ASSISTANT_IMPORT_TOKEN:-}" ]; then
+            echo "ASSISTANT_IMPORT_TOKEN_MISSING"
+            exit 2
+          fi
           BASE="https://adventure-zone-command-center.onrender.com"
-          for ID in \
-            "0b0f8457-7c18-477e-a0e9-44ae5bd7e892" \
-            "1098a2b0-5d27-4121-bc93-b3672c528162" \
-            "9f7ce3bd-249a-435c-abfd-97f2762e2122"
-          do
-            echo "=== PROFILE: $ID ==="
+          while IFS='|' read -r NAME ID; do
+            echo "=== PROFILE: $NAME | $ID ==="
             curl --fail-with-body --silent --show-error \
-              "${BASE}/api/event-profiles/${ID}"
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE}/api/assistant-import/profile-history/${ID}"
             echo
-          done
+          done <<'EOF'
+Saguache Fall Festival & Quilt Show|2c6ee04a-288f-442f-8339-3aa0ceaf81d9
+Higher Ground Fair|b9b7a5f9-6be6-4338-86ca-6f8530adc55d
+Experience Rexburg|3cbd95fd-4de8-458a-b1b6-d61343cc3ed7
+Durango Autumn Arts Festival|9977e568-9d1c-4d3b-9dff-e34f83d1f440
+Cruisin' the Canyon Car Show|f656b917-0043-4551-b248-f7d023887d37
+Breck Film Fest|8f479cd9-d627-4029-874b-443fb419b075
+Colorado Highland Games|861f4cdc-ba27-41b8-b7b8-cb6f97a8d931
+Santa Cruz County Fair|0b0f8457-7c18-477e-a0e9-44ae5bd7e892
+Cochise County Fair|1098a2b0-5d27-4121-bc93-b3672c528162
+Holly Gateway Fair|9f7ce3bd-249a-435c-abfd-97f2762e2122
+EOF
