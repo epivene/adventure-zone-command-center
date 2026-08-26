@@ -87,12 +87,18 @@ async function seedAct(client: PGlite, input: {
   const versionId = `30000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
   const assignmentId = `40000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
   await client.query(
-    `insert into act_source_records(id, stream_type, latest_version_id) values ($1, 'history', $2);
-     insert into act_source_record_versions(id, source_record_id, raw_snapshot, fetched_at)
-       values ($2, $1, $3, $4);
-     insert into act_source_assignments(id, source_record_id, target_entity_type, target_entity_id)
-       values ($5, $1, 'organization', $6);`,
-    [sourceId, versionId, input.raw, input.occurredAt, assignmentId, organizationId],
+    `insert into act_source_records(id, stream_type, latest_version_id) values ($1, 'history', $2)`,
+    [sourceId, versionId],
+  );
+  await client.query(
+    `insert into act_source_record_versions(id, source_record_id, raw_snapshot, fetched_at)
+       values ($1, $2, $3, $4)`,
+    [versionId, sourceId, input.raw, input.occurredAt],
+  );
+  await client.query(
+    `insert into act_source_assignments(id, source_record_id, target_entity_type, target_entity_id)
+       values ($1, $2, 'organization', $3)`,
+    [assignmentId, sourceId, organizationId],
   );
 }
 
