@@ -35,6 +35,17 @@ function normalizedReviewName(name: string): string | null {
   return normalizeMatchingText(withoutLocationSuffix);
 }
 
+function normalizedRecordLocation(record: OrganizationFamilyRecord): {
+  city: string;
+  region: string;
+  key: string;
+} | null {
+  const city = normalizeMatchingText(record.city ?? null);
+  const region = normalizeMatchingText(record.region ?? null);
+  if (!city || !region) return null;
+  return { city, region, key: `${city}\u0000${region}` };
+}
+
 export function discoverOrganizationFamilyCandidates(
   records: readonly OrganizationFamilyRecord[],
   actRelationships: readonly OrganizationFamilyActRelationship[] = [],
@@ -145,17 +156,29 @@ export function discoverOrganizationFamilyCandidates(
         candidate.candidateIds.every((id) => candidateIdSet.has(id)),
     );
     if (alreadyCovered) continue;
+
+    const locations = bucket.map(normalizedRecordLocation);
+    const completeLocations = locations.filter(
+      (location): location is NonNullable<typeof location> => location !== null,
+    );
+    const sameCompleteLocation =
+      completeLocations.length === bucket.length &&
+      new Set(completeLocations.map((location) => location.key)).size === 1;
+    const firstLocation = sameCompleteLocation ? completeLocations[0]! : null;
+
     candidates.push({
       normalizedName: reviewName,
-      city: "",
-      region: "",
-      classification: "ambiguous_location_candidate",
-      groupKey: `organization-family:${candidateIds.join("|")}`,
+      city: firstLocation?.city ?? "",
+      region: firstLocation?.region ?? "",
+      classification: sameCompleteLocation ? "duplicate" : "ambiguous_location_candidate",
+      groupKey: `${sameCompleteLocation ? "duplicate-similar" : "organization-family"}:${candidateIds.join("|")}`,
       candidateIds,
       evidence: [
         {
           family: "name",
-          label: "strongly similar organization names",
+          label: sameCompleteLocation
+            ? "strongly similar names in the same city and state"
+            : "strongly similar organization names",
         },
       ],
     });
