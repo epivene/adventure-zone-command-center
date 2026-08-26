@@ -45,4 +45,27 @@ describe("GoogleWorkspaceReadClient calendar events", () => {
       await expect(client.listCalendarEvents?.({ calendarIds: ["zone-a"], timeMin: "2026-09-01T00:00:00.000Z", timeMax: "2026-10-01T00:00:00.000Z" })).rejects.toMatchObject({ code: "GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID" });
     }
   });
+  it.each([
+    ["invalid JSON", () => new Response("not-json")],
+    ["empty object", () => new Response(JSON.stringify({}))],
+    ["non-array items", () => new Response(JSON.stringify({ timeZone: "America/Chicago", items: {} }))],
+    ["missing ID on active event", () => new Response(JSON.stringify({ timeZone: "America/Chicago", items: [{ start: { date: "2026-09-10" }, end: { date: "2026-09-11" } }] }))],
+  ])("rejects %s Calendar event-list evidence", async (_name, response) => {
+    const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh-token", fetcher: async (input) => {
+      if (new URL(String(input)).hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }));
+      return response();
+    } });
+    await expect(client.listCalendarEvents?.({ calendarIds: ["zone-a"], timeMin: "2026-09-01T00:00:00.000Z", timeMax: "2026-10-01T00:00:00.000Z" }))
+      .rejects.toMatchObject({ code: "GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID" });
+  });
+  it("rejects invalid pagination tokens and event evidence timestamps", async () => {
+    for (const payload of [
+      { timeZone: "America/Chicago", items: [], nextPageToken: 42 },
+      { timeZone: "America/Chicago", items: [{ id: "event-1", updated: "not-a-timestamp", start: { date: "2026-09-10" }, end: { date: "2026-09-11" } }] },
+    ]) {
+      const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh-token", fetcher: async (input) => new URL(String(input)).hostname === "oauth2.googleapis.com" ? new Response(JSON.stringify({ access_token: "token", expires_in: 3600 })) : new Response(JSON.stringify(payload)) });
+      await expect(client.listCalendarEvents?.({ calendarIds: ["zone-a"], timeMin: "2026-09-01T00:00:00.000Z", timeMax: "2026-10-01T00:00:00.000Z" }))
+        .rejects.toMatchObject({ code: "GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID" });
+    }
+  });
 });

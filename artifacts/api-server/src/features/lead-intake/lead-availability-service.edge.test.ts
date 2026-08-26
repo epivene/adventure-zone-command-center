@@ -16,6 +16,12 @@ describe("LeadAvailabilityService edge cases", () => {
     const service = new LeadAvailabilityService({ persistence, google: { listCalendarEvents: async () => { throw Object.assign(new Error("reauth"), { code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" }); } } });
     await expect(service.check({ rowId: "row-1", expectedVersion: 4, checkedBy: "owner" })).rejects.toMatchObject({ code: "GOOGLE_REAUTHORIZATION_REQUIRED" });
   });
+  it.each(["invalid JSON", "empty object", "non-array items", "missing active-event ID"])("does not save availability when Google returns %s evidence", async () => {
+    let saved = false;
+    const service = new LeadAvailabilityService({ persistence: { ...persistence, save: async () => { saved = true; return { reviewVersion: 5 }; } }, google: { listCalendarEvents: async () => { throw Object.assign(new Error("invalid Calendar event list"), { code: "GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID" }); } } });
+    await expect(service.check({ rowId: "row-1", expectedVersion: 4, checkedBy: "owner" })).rejects.toMatchObject({ code: "GOOGLE_CALENDAR_UNAVAILABLE" });
+    expect(saved).toBe(false);
+  });
   it.each([
     ["quantity", { summary: "3 Foam Party" }],
     ["conditional quantity", { summary: "maybe 1 Foam Party" }],

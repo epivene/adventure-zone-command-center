@@ -20,4 +20,7 @@ describe("classifyCalendarBooking", () => {
     expect(classifyCalendarBooking({ summary: "2 Foam Party", description: "Call the office or email the venue with setup questions." }))
       .toMatchObject({ confidence: "explicit", packages: [{ packageKey: "foam-party", quantity: 2 }] });
   });
+  it.each(["-1 Foam Party", "minus 1 Foam Party", "remove 1 Foam Party", "exclude 1 Foam Party"])("treats %s as negative package evidence", (summary) => {
+    expect(classifyCalendarBooking({ summary, description: "" })).toMatchObject({ confidence: "ambiguous", packages: [] });
+  });
 });
