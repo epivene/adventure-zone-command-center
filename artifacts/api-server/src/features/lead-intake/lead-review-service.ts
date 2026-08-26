@@ -182,13 +182,15 @@ export class LeadReviewService {
         "Verify the profile and intended recipient before checking previous contact.",
       );
     }
+    const organizationId = snapshot.organizationId;
+    const recipientEmail = snapshot.recipientEmail;
     const evidence = await relationshipEvidence.list({
-      organizationId: snapshot.organizationId,
-      recipientEmail: snapshot.recipientEmail,
+      organizationId,
+      recipientEmail,
     });
     const classification = classifyLeadRelationship({
-      organizationId: snapshot.organizationId,
-      recipientEmail: snapshot.recipientEmail,
+      organizationId,
+      recipientEmail,
       anchor: now,
       evidence,
     });
@@ -234,8 +236,8 @@ export class LeadReviewService {
         );
       }
       if (
-        row.organizationId !== snapshot.organizationId
-        || row.recipientEmail.trim().toLowerCase() !== snapshot.recipientEmail.trim().toLowerCase()
+        row.organizationId !== organizationId
+        || row.recipientEmail.trim().toLowerCase() !== recipientEmail.trim().toLowerCase()
       ) {
         throw new LeadReviewServiceError(
           "VERSION_CONFLICT",
