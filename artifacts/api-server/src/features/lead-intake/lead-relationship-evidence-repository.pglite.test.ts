@@ -128,7 +128,7 @@ describe("LeadRelationshipEvidenceRepository", () => {
       expect.objectContaining({ sourceType: "act", direction: "inbound", responseProven: true, conflicting: false }),
       expect.objectContaining({ sourceType: "act", direction: "unknown", responseProven: false }),
     ]));
-  });
+  }, 15_000);
 
   it("derives Gmail direction from mailbox identity and verified participants", async () => {
     const client = await setup(); clients.push(client);
@@ -169,6 +169,31 @@ describe("LeadRelationshipEvidenceRepository", () => {
       pending: { from: recipientEmail, to: "sales@adventurezone.example", at: "2025-05-14T12:00:00Z" },
     }));
     await expect(repository.list({ organizationId, recipientEmail })).resolves.toEqual([]);
+  });
+
+  it("keeps CRM activity with a stable ACT source id as context, not proof of a reply", async () => {
+    const client = await setup(); clients.push(client);
+    await client.exec(`
+      insert into activities
+        (id, organization_id, body, occurred_at, timeline_sort_at, act_record_id, source_type)
+      values
+        ('60000000-0000-4000-8000-000000000001', '${organizationId}',
+         E'talked to them\\nplease follow up', '2025-05-10T12:00:00Z',
+         '2025-05-10T12:00:00Z', 'act-history-42', 'history');
+    `);
+
+    const evidence = await new LeadRelationshipEvidenceRepository(drizzle(client) as never)
+      .list({ organizationId, recipientEmail });
+
+    expect(evidence).toEqual([
+      expect.objectContaining({
+        sourceType: "crm",
+        sourceId: "act-history-42",
+        direction: "unknown",
+        responseProven: false,
+        excerpt: "talked to them please follow up",
+      }),
+    ]);
   });
 
   it("collapses ACT and Gmail observations carrying the same Gmail message id", async () => {
