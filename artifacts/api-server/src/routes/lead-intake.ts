@@ -16,6 +16,7 @@ import {
   CommunicationBlockRepository,
   type CommunicationBlockCreateInput,
 } from "@/features/lead-intake/communication-block-repository";
+import { normalizeRecipientBlockEmail } from "@/features/lead-intake/communication-block-target";
 import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
 import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
 import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
@@ -302,13 +303,13 @@ router.get("/lead-intake/communication-blocks/:blockId/history", async (req, res
 router.post("/lead-intake/communication-blocks", async (req, res): Promise<void> => {
   const body = req.body ?? {};
   const targetType = body.targetType;
-  const validEmail = typeof body.normalizedEmail === "string" && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.normalizedEmail.trim());
+  const normalizedEmail = normalizeRecipientBlockEmail(body.normalizedEmail);
   const exact = (type: string, key?: string) => targetType === type && Object.entries({ organizationId: body.organizationId, contactId: body.contactId, normalizedEmail: body.normalizedEmail, rowId: body.rowId }).every(([name, value]) => name === key ? Boolean(value) : !value);
   if (!String(body.reason ?? "").trim()
     || !(exact("organization", "organizationId") && isUuid(body.organizationId)
       || exact("contact", "contactId") && isUuid(body.contactId)
       || exact("lead_import_row", "rowId") && isUuid(body.rowId)
-      || exact("recipient_email", "normalizedEmail") && validEmail
+      || exact("recipient_email", "normalizedEmail") && normalizedEmail !== null
       || exact("internal_preview"))) {
     res.status(400).json({ error: "Use one valid exact target that matches the communication-block target type." }); return;
   }
@@ -321,7 +322,7 @@ router.post("/lead-intake/communication-blocks", async (req, res): Promise<void>
     if (targetType === "organization") input = { targetType, organizationId: body.organizationId, ...common };
     else if (targetType === "contact") input = { targetType, contactId: body.contactId, ...common };
     else if (targetType === "lead_import_row") input = { targetType, rowId: body.rowId, ...common };
-    else if (targetType === "recipient_email") input = { targetType, normalizedEmail: body.normalizedEmail.trim().toLowerCase(), ...common };
+    else if (targetType === "recipient_email") input = { targetType, normalizedEmail: normalizedEmail!, ...common };
     else input = { targetType: "internal_preview", ...common };
     const block = await communicationBlockRepository.create(input);
     res.status(201).json({ block });
