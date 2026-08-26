@@ -132,6 +132,31 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   check("lead_availability_snapshots_package_availability_object", sql`jsonb_typeof(${table.packageAvailability}) = 'object'`),
 ]);
 
+export const communicationBlocks = pgTable("communication_blocks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  targetType: text("target_type").$type<"organization" | "contact" | "recipient_email" | "lead_import_row" | "internal_preview">().notNull(),
+  organizationId: uuid("organization_id"),
+  contactId: uuid("contact_id"),
+  normalizedEmail: text("normalized_email"),
+  rowId: uuid("row_id"),
+  reason: text("reason").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  removedBy: text("removed_by"),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  removalReason: text("removal_reason"),
+});
+
+export const communicationBlockEvents = pgTable("communication_block_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  blockId: uuid("block_id").notNull().references(() => communicationBlocks.id, { onDelete: "cascade" }),
+  action: text("action").$type<"created" | "removed">().notNull(),
+  actorId: text("actor_id").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
 export const leadImportEvidence = pgTable("lead_import_evidence", {
   id: uuid("id").defaultRandom().primaryKey(),
   rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "cascade" }),
