@@ -92,11 +92,11 @@ describe("classifyLeadRelationship", () => {
       evidence: [
         evidence({ evidenceId: "gmail:z", recipientEmail: "contact@EXAMPLE.org" }),
         evidence({ evidenceId: "gmail:a", recipientEmail: "contact@example.org" }),
-        evidence({ evidenceId: "crm:activity-2", sourceType: "crm", sourceId: "activity-2", direction: "outbound", responseProven: false }),
+        evidence({ evidenceId: "act:activity-2", sourceType: "act", sourceId: "activity-2", direction: "outbound", responseProven: false }),
       ],
     });
 
-    expect(result.evidenceIds).toEqual(["crm:activity-2", "gmail:a"]);
+    expect(result.evidenceIds).toEqual(["act:activity-2", "gmail:a"]);
     expect(result.outcome).toBe("returning_contact");
   });
 
@@ -109,5 +109,38 @@ describe("classifyLeadRelationship", () => {
     });
 
     expect(result).toMatchObject({ outcome: "needs_review", reviewRequired: true });
+  });
+
+  it("fails closed instead of throwing when evidence has an invalid occurrence date", () => {
+    expect(() => classifyLeadRelationship({
+      organizationId,
+      recipientEmail,
+      anchor,
+      evidence: [evidence({ occurredAt: new Date(Number.NaN) })],
+    })).not.toThrow();
+    expect(classifyLeadRelationship({
+      organizationId,
+      recipientEmail,
+      anchor,
+      evidence: [evidence({ occurredAt: new Date(Number.NaN) })],
+    })).toMatchObject({ outcome: "needs_review", reviewRequired: true });
+  });
+
+  it("never accepts CRM evidence as proof of an inbound response", () => {
+    expect(classifyLeadRelationship({
+      organizationId,
+      recipientEmail,
+      anchor,
+      evidence: [evidence({ sourceType: "crm", sourceId: "activity-1" })],
+    })).toMatchObject({ outcome: "needs_review", reviewRequired: true });
+  });
+
+  it("requires review for future-dated evidence", () => {
+    expect(classifyLeadRelationship({
+      organizationId,
+      recipientEmail,
+      anchor,
+      evidence: [evidence({ occurredAt: new Date("2026-08-26T00:00:00Z") })],
+    })).toMatchObject({ outcome: "needs_review", reviewRequired: true });
   });
 });
