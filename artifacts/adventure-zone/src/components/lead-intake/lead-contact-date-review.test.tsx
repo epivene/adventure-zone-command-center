@@ -18,6 +18,12 @@ function client() {
   return {
     searchProfiles: vi.fn().mockResolvedValue([{ id: "org-1", name: "Aspen Filmfest (Aspen) CO", city: "Aspen", region: "CO" }]),
     listProfileContacts: vi.fn().mockResolvedValue([{ id: "contact-1", firstName: "Lindsey", lastName: "Powell", email: "lilupow@aspenfilm.org", role: "Event organizer", jobTitle: null }]),
+    getProfileEvidence: vi.fn().mockResolvedValue({
+      organization: { id: "org-1", name: "Aspen Filmfest (Aspen) CO", city: "Aspen", region: "CO", phone: null, website: "aspenfilm.org" },
+      contacts: [{ id: "contact-1", firstName: "Lindsey", lastName: "Powell", email: "lilupow@aspenfilm.org", role: "Event organizer", jobTitle: null }],
+      actText: [],
+      emailCandidates: [],
+    }),
     confirmReview: vi.fn().mockResolvedValue({ rowId: "row-1", state: "verified", reviewVersion: 1 }),
   };
 }
