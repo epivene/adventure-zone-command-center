@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type {
   LeadImportReviewRow,
   LeadRelationshipClassification,
+  LeadRelationshipEvidenceDetail,
   LeadRelationshipOutcome,
 } from "@/features/lead-intake/lead-intake-client";
 
 type RelationshipClient = {
   classifyRelationship(rowId: string, expectedVersion: number): Promise<LeadRelationshipClassification>;
+  getRelationshipEvidence(rowId: string): Promise<LeadRelationshipEvidenceDetail[]>;
 };
 
 const emailStyleByOutcome: Partial<Record<LeadRelationshipOutcome, string>> = {
@@ -67,6 +69,24 @@ export function LeadRelationshipReview({
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [evidenceDetails, setEvidenceDetails] = useState<LeadRelationshipEvidenceDetail[]>([]);
+  const [evidenceError, setEvidenceError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    if (!row.relationshipOutcome || !(row.relationshipEvidenceIds?.length ?? 0)) {
+      setEvidenceDetails([]);
+      setEvidenceError("");
+      return () => { active = false; };
+    }
+    setEvidenceError("");
+    void client.getRelationshipEvidence(row.id).then((details) => {
+      if (active) setEvidenceDetails(details);
+    }).catch((cause) => {
+      if (active) setEvidenceError(cause instanceof Error ? cause.message : "Could not load evidence details.");
+    });
+    return () => { active = false; };
+  }, [client, row.id, row.relationshipOutcome, row.relationshipEvidenceIds]);
 
   async function classify() {
     if (busy || row.state !== "verified") return;
@@ -114,8 +134,17 @@ export function LeadRelationshipReview({
                 Supporting source <span className="ml-2 rounded-full bg-slate-100 px-2 py-1 text-xs">{sourceLabel(evidenceId)}</span>
               </summary>
               <p className="mt-2 break-all font-mono text-xs text-slate-600">{evidenceId}</p>
+              {evidenceDetails.find((item) => item.evidenceId === evidenceId) ? (() => {
+                const detail = evidenceDetails.find((item) => item.evidenceId === evidenceId)!;
+                return <div className="mt-2 grid gap-1">
+                  <p><span className="font-semibold">Date:</span> {readableDate(detail.occurredAt) ?? "Date unavailable — review required"}</p>
+                  <p><span className="font-semibold">Direction:</span> {detail.direction}</p>
+                  <p className="whitespace-pre-wrap"><span className="font-semibold">Excerpt:</span> {detail.excerpt || "No excerpt available"}</p>
+                </div>;
+              })() : null}
             </details>
           ))}
+          {evidenceError ? <p className="text-sm text-amber-800">{evidenceError}</p> : null}
         </div>
       ) : null}
 
