@@ -102,17 +102,17 @@ export async function ensurePackageIntelligenceSchema(
       AND nullif(trim(setup_notes), '') IS NULL;
 
     UPDATE package_templates
-    SET customer_description = 'A water-focused pirate package centered on a large inflatable pool with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.'
+    SET customer_description = 'A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.'
     WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
       AND nullif(trim(customer_description), '') IS NULL;
 
     UPDATE package_templates
-    SET booking_talking_points = 'Best fit for warm-weather events that can support a large wet footprint and significant water access. Ask about pool-fill water access early because a garden-hose fill can require roughly two setup days.'
+    SET booking_talking_points = 'Best fit for warm-weather events. Confirm ordinary three-unit package footprint, power, water access, and fill timing early.'
     WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
       AND nullif(trim(booking_talking_points), '') IS NULL;
 
     UPDATE package_templates
-    SET operational_requirements = 'Plan for about 5,000–7,000 sq ft on a flat surface. Power within 75 ft: 1 x 50A/220V outlet, 6 x 110V outlets, or an approved equivalent/generator. Water is a major requirement: the source lists roughly 20,000 gallons for a smaller pool and 45,000–50,000 gallons for the larger pool. If stakes cannot be used, approved ballast is required; the reviewed source lists about 25 water barrels for this unit.'
+    SET operational_requirements = 'Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.'
     WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
       AND nullif(trim(operational_requirements), '') IS NULL;
 
