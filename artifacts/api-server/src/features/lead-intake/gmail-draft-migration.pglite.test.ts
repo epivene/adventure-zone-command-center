@@ -19,7 +19,7 @@ describe("lead Gmail draft link migration", () => {
       create table communication_templates (id uuid primary key);
     `);
     const migration = await readFile(
-      fileURLToPath(new URL("../../../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url)),
+      fileURLToPath(new URL("../../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url)),
       "utf8",
     );
     await db.exec(migration);

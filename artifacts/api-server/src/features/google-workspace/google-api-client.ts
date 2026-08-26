@@ -1,5 +1,6 @@
 import type {
   GoogleCalendarEvent,
+  GoogleGmailDraft,
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,
@@ -12,6 +13,8 @@ import type {
 } from "./google-api-types";
 import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
 
+export const GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+
 export const GOOGLE_WORKSPACE_READ_SCOPES = [
   "openid",
   "email",
@@ -19,12 +22,14 @@ export const GOOGLE_WORKSPACE_READ_SCOPES = [
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.readonly",
 ] as const;
+export const GOOGLE_WORKSPACE_REQUIRED_SCOPES = [...GOOGLE_WORKSPACE_READ_SCOPES, GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE] as const;
 
 const authorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
 const userInfoEndpoint = "https://openidconnect.googleapis.com/v1/userinfo";
 const gmailBaseEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me";
 const labelsEndpoint = `${gmailBaseEndpoint}/labels`;
+const draftsEndpoint = `${gmailBaseEndpoint}/drafts`;
 const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
@@ -43,6 +48,20 @@ type GoogleWorkspaceClientError = Error & { code: string };
 
 function clientError(code: string): GoogleWorkspaceClientError {
   return Object.assign(new Error(code), { code });
+}
+
+function gmailHeader(value: string): string {
+  if (!value.trim() || /[\r\n]/.test(value)) throw clientError("GOOGLE_WORKSPACE_GMAIL_HEADER_INVALID");
+  return value.trim();
+}
+function wrapBase64(value: string): string { return value.match(/.{1,76}/g)?.join("\r\n") ?? ""; }
+export function buildGmailRawMessage(input: { to: string; subject: string; body: string }): string {
+  const to = gmailHeader(input.to).toLowerCase();
+  const subject = gmailHeader(input.subject);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !input.body) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
+  const encodedSubject = /^[\x20-\x7E]+$/.test(subject) ? subject : `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
+  const mime = ["MIME-Version: 1.0", `To: ${to}`, `Subject: ${encodedSubject}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", wrapBase64(Buffer.from(input.body, "utf8").toString("base64"))].join("\r\n");
+  return Buffer.from(mime, "utf8").toString("base64url");
 }
 
 function scopeList(value: unknown): string[] {
@@ -289,7 +308,7 @@ export function createGoogleWorkspaceReadClient(input: {
       url.searchParams.set("client_id", input.environment.clientId);
       url.searchParams.set("redirect_uri", input.environment.redirectUri);
       url.searchParams.set("response_type", "code");
-      url.searchParams.set("scope", GOOGLE_WORKSPACE_READ_SCOPES.join(" "));
+      url.searchParams.set("scope", GOOGLE_WORKSPACE_REQUIRED_SCOPES.join(" "));
       url.searchParams.set("access_type", "offline");
       url.searchParams.set("prompt", "consent");
       url.searchParams.set("include_granted_scopes", "false");
@@ -321,6 +340,20 @@ export function createGoogleWorkspaceReadClient(input: {
         refreshToken,
         scopes: scopeList(payload.scope),
       };
+    },
+
+    async createGmailDraft(input): Promise<GoogleGmailDraft> {
+      if (!/^[A-Za-z0-9_-]+$/.test(input.raw)) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
+      const token = await currentAccessToken();
+      let response: Response;
+      try {
+        response = await fetcher(draftsEndpoint, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ message: { raw: input.raw } }) });
+      } catch { throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN"); }
+      const payload = await responseJson(response);
+      if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_CREATE_FAILED");
+      const message = payload.message && typeof payload.message === "object" ? payload.message as Record<string, unknown> : null;
+      if (typeof payload.id !== "string" || !payload.id.trim() || !message || typeof message.id !== "string" || !message.id.trim()) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
+      return { draftId: payload.id.trim(), messageId: message.id.trim() };
     },
 
     async accountIdentity() {

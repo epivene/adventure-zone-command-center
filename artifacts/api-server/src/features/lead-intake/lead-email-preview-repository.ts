@@ -102,12 +102,12 @@ export class LeadEmailPreviewRepository {
   async withSerializedState<T>(
     rowId: string,
     expectedVersion: number,
-    consume: (state: LeadEmailPreviewRepositoryResult) => T | Promise<T>,
+    consume: (state: LeadEmailPreviewRepositoryResult, tx: Transaction) => T | Promise<T>,
   ): Promise<T> {
     return this.database.transaction(async (tx) => {
       await this.acquireSafetyLock(tx);
       const state = await this.loadFromTransaction(tx, rowId, expectedVersion);
-      return consume(state);
+      return consume(state, tx);
     });
   }
 

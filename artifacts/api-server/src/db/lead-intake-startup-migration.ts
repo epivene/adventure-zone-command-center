@@ -144,6 +144,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_calendar_availability.sql"),
     loadOne(here, "20260826_lead_inventory_policy.sql"),
     loadOne(here, "20260826_lead_safe_email.sql"),
+    loadOne(here, "20260826_lead_gmail_drafts.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -249,6 +250,14 @@ export async function ensureLeadIntakeSchema(
           ])
       )
       and (${communicationBlockReadinessExpression})
+      and to_regclass(current_schema() || '.lead_gmail_draft_links') is not null
+      and (select count(*) = 21 from information_schema.columns where table_schema = current_schema() and table_name = 'lead_gmail_draft_links' and column_name = any(array['id','row_id','organization_id','contact_id','google_connection_id','communication_template_id','template_version','recipient_email','subject','body','gmail_draft_id','gmail_message_id','state','last_error_code','idempotency_key','attempt_count','actor_id','created_at','updated_at','last_attempt_at','completed_at']))
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links') and conname = 'lead_gmail_draft_links_row_unique' and contype = 'u')
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links') and conname = 'lead_gmail_draft_links_idempotency_unique' and contype = 'u')
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links') and conname = 'lead_gmail_draft_links_state_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%prepared%created%retryable_error%manual_review%')
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links') and conname = 'lead_gmail_draft_links_row_fk' and contype = 'f' and confdeltype = 'r')
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links') and conname = 'lead_gmail_draft_links_contact_fk' and contype = 'f' and confdeltype = 'r')
+      and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'lead_gmail_draft_links' and column_name = 'contact_id' and is_nullable = 'YES')
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       and to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') is not null
