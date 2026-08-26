@@ -17,6 +17,7 @@ it("shows ACT evidence and a person-free organization inbox choice", async () =>
     }),
     confirmReview: vi.fn(),
     classifyRelationship: vi.fn(),
+    getRelationshipEvidence: vi.fn().mockResolvedValue([]),
   };
   const row = {
     id: "row-1", sheetName: "CompanyList", sourceRowNumber: 2, company: "Alamosa ARTs Festival",
