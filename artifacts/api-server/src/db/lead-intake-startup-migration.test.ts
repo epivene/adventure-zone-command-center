@@ -5,10 +5,11 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchema, isLeadGmailDraftLinkSchemaReady } from "./lead-intake-startup-migration";
 import { ensureGoogleWorkspaceSchema } from "./google-workspace-startup-migration";
 
+const pgliteCompatible = (sql: string) => sql.replace(/^CREATE EXTENSION IF NOT EXISTS pgcrypto;\s*/gim, "");
+
 async function gmailDraftSchema() {
   const client = new PGlite();
   await client.exec(`
-    create extension if not exists pgcrypto;
     create table organizations (id uuid primary key);
     create table contacts (id uuid primary key);
     create table lead_import_rows (id uuid primary key);
@@ -16,10 +17,10 @@ async function gmailDraftSchema() {
     create table communication_templates (id uuid primary key);
     create table activities (id uuid primary key);
   `);
-  const migration = await readFile(
+  const migration = pgliteCompatible(await readFile(
     new URL("../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url),
     "utf8",
-  );
+  ));
   await client.exec(migration);
   return client;
 }
@@ -121,7 +122,7 @@ describe("ensureLeadIntakeSchema", () => {
     const client = new PGlite();
     const query = async (sql: string) => {
       if (sql.includes("create table if not exists lead_import_batches") || sql.includes("CREATE TABLE IF NOT EXISTS google_workspace_connections")) {
-        await client.exec(sql);
+        await client.exec(pgliteCompatible(sql));
         return { rows: [] as Array<Record<string, unknown>> };
       }
       return client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
