@@ -1,7 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { expect, it } from "vitest";
-
 import * as schema from "@/db/schema";
 import { LeadReviewService } from "./lead-review-service";
 
@@ -17,7 +16,13 @@ it("stores an organization inbox without synthetic person fields", async () => {
       confirmed_event_name text, confirmed_start_date date, confirmed_end_date date,
       confirmed_contact_name text, confirmed_contact_role text, confirmed_recipient_email text,
       recipient_confirmed boolean not null, introduction_suitable boolean not null,
-      confirmed_by text, confirmed_at timestamptz, updated_at timestamptz not null
+      confirmed_by text, confirmed_at timestamptz,
+      relationship_outcome text, relationship_anchor_at timestamptz,
+      relationship_cutoff_date date, relationship_evidence_ids jsonb not null default '[]',
+      latest_outbound_at timestamptz, latest_verified_response_at timestamptz,
+      relationship_review_required boolean not null default false,
+      relationship_classified_at timestamptz, relationship_classified_by text,
+      updated_at timestamptz not null
     );
     create table lead_import_evidence (
       id uuid primary key default gen_random_uuid(), row_id uuid not null, field text not null,
@@ -25,10 +30,18 @@ it("stores an organization inbox without synthetic person fields", async () => {
       selected boolean not null, created_by text not null, created_at timestamptz not null
     );
     insert into organizations(id) values ('10000000-0000-4000-8000-000000000001');
-    insert into lead_import_rows(id, review_version, state, recipient_confirmed, introduction_suitable, updated_at)
-      values ('30000000-0000-4000-8000-000000000001', 0, 'needs_review', false, false, now());
+    insert into lead_import_rows(
+      id, review_version, state, recipient_confirmed, introduction_suitable,
+      relationship_outcome, relationship_anchor_at, relationship_cutoff_date,
+      relationship_evidence_ids, relationship_classified_at, relationship_classified_by,
+      updated_at
+    ) values (
+      '30000000-0000-4000-8000-000000000001', 0, 'needs_review', false, false,
+      'returning_contact', '2026-08-25T18:00:00Z', '2023-08-25',
+      '["gmail:old"]', '2026-08-25T18:00:00Z', 'Desiree', now()
+    );
   `);
-  const service = new LeadReviewService(drizzle(client, { schema }) as never);
+  const service = new LeadReviewService(drizzle(client, { schema }));
 
   await service.confirm({
     rowId: "30000000-0000-4000-8000-000000000001",
@@ -53,13 +66,16 @@ it("stores an organization inbox without synthetic person fields", async () => {
   });
 
   expect((await client.query(`
-    select contact_mode, selected_contact_id, confirmed_contact_name, confirmed_contact_role
+    select contact_mode, selected_contact_id, confirmed_contact_name, confirmed_contact_role,
+           relationship_outcome, relationship_evidence_ids
     from lead_import_rows
   `)).rows).toEqual([{
     contact_mode: "organization_inbox",
     selected_contact_id: null,
     confirmed_contact_name: null,
     confirmed_contact_role: null,
+    relationship_outcome: null,
+    relationship_evidence_ids: [],
   }]);
   await client.close();
 }, 15_000);
