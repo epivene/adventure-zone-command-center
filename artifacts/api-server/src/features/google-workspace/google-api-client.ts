@@ -77,6 +77,19 @@ function partHasAttachment(value: unknown): boolean {
   return Array.isArray(part.parts) && part.parts.some(partHasAttachment);
 }
 
+function calendarEventTime(value: unknown): GoogleCalendarEvent["start"] | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const date = typeof item.date === "string" ? item.date : undefined;
+  const dateTime = typeof item.dateTime === "string" ? item.dateTime : undefined;
+  const timeZone = typeof item.timeZone === "string" ? item.timeZone : undefined;
+  if (Boolean(date) === Boolean(dateTime)) return null;
+  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (dateTime && !Number.isFinite(new Date(dateTime).valueOf())) return null;
+  if (timeZone) { try { new Intl.DateTimeFormat("en-US", { timeZone }); } catch { return null; } }
+  return { ...(date ? { date } : { dateTime: dateTime! }), ...(timeZone ? { timeZone } : {}) };
+}
+
 function headerValue(headers: unknown[], name: string): string {
   const found = headers.find((value) => {
     if (!value || typeof value !== "object") return false;
@@ -373,7 +386,9 @@ export function createGoogleWorkspaceReadClient(input: {
 
     async listCalendarEvents(input): Promise<GoogleCalendarEvent[]> {
       const calendarIds = [...new Set(input.calendarIds.map((id) => id.trim()))].filter(Boolean);
-      if (!calendarIds.length || !input.timeMin.trim() || !input.timeMax.trim()) {
+      const timeMin = new Date(input.timeMin);
+      const timeMax = new Date(input.timeMax);
+      if (!calendarIds.length || !Number.isFinite(timeMin.valueOf()) || !Number.isFinite(timeMax.valueOf()) || timeMin >= timeMax) {
         throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENTS_INPUT_INVALID");
       }
       const events: GoogleCalendarEvent[] = [];
@@ -395,9 +410,13 @@ export function createGoogleWorkspaceReadClient(input: {
             if (!value || typeof value !== "object") continue;
             const event = value as Record<string, unknown>;
             if (event.status === "cancelled" || typeof event.id !== "string" || !event.id.trim()) continue;
-            const start = event.start && typeof event.start === "object" ? event.start as GoogleCalendarEvent["start"] : null;
-            const end = event.end && typeof event.end === "object" ? event.end as GoogleCalendarEvent["end"] : null;
-            if (!start || !end || (!start.date && !start.dateTime) || (!end.date && !end.dateTime)) continue;
+            const start = calendarEventTime(event.start);
+            const end = calendarEventTime(event.end);
+            if (!start || !end || Boolean(start.date) !== Boolean(end.date)
+              || (start.date && start.date >= end.date!)
+              || (start.dateTime && new Date(start.dateTime) >= new Date(end.dateTime!))) {
+              throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+            }
             events.push({
               calendarId, calendarTimeZone, id: event.id, iCalUid: typeof event.iCalUID === "string" && event.iCalUID.trim() ? event.iCalUID.trim() : null,
               summary: typeof event.summary === "string" ? event.summary : "", description: typeof event.description === "string" ? event.description : "",

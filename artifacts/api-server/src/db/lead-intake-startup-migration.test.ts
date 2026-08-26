@@ -50,6 +50,15 @@ describe("ensureLeadIntakeSchema", () => {
       .rejects.toThrow("schema is incomplete after migration");
   });
 
+  it("fails closed for a partial availability snapshot table", async () => {
+    const client = new PGlite();
+    const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+    try {
+      await client.exec("create table lead_availability_snapshots (id uuid primary key);");
+      await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
+    } finally { await client.close(); }
+  });
+
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {
     const client = new PGlite();
     const query = async (sql: string) => {

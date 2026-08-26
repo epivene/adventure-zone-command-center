@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { googleWorkspaceCalendarScopes, googleWorkspaceConnections, leadAvailabilitySnapshots, leadImportRows } from "@/db/schema";
-import type { LeadAvailabilityPersistence, LeadAvailabilitySnapshot } from "./lead-availability-service";
+import { LeadAvailabilityServiceError, type LeadAvailabilityPersistence, type LeadAvailabilitySnapshot } from "./lead-availability-service";
 
 type DrizzleDatabase = typeof database;
 
@@ -36,14 +36,14 @@ export class LeadAvailabilityRepository implements LeadAvailabilityPersistence {
         recipientConfirmed: leadImportRows.recipientConfirmed, introductionSuitable: leadImportRows.introductionSuitable,
         startDate: leadImportRows.confirmedStartDate, endDate: leadImportRows.confirmedEndDate,
       }).from(leadImportRows).where(eq(leadImportRows.id, snapshot.rowId)).limit(1).for("update");
-      if (!row) throw Object.assign(new Error("Lead import row was not found."), { code: "ROW_NOT_FOUND" });
+      if (!row) throw new LeadAvailabilityServiceError("ROW_NOT_FOUND", "Lead import row was not found.");
       if (row.reviewVersion !== snapshot.expectedVersion || row.organizationId !== snapshot.organizationId
         || row.recipientEmail?.trim().toLowerCase() !== snapshot.recipientEmail.trim().toLowerCase()
         || row.startDate !== snapshot.startDate || row.endDate !== snapshot.endDate) {
-        throw Object.assign(new Error("This lead was changed in another review. Reload it before checking availability."), { code: "VERSION_CONFLICT" });
+        throw new LeadAvailabilityServiceError("VERSION_CONFLICT", "This lead was changed in another review. Reload it before checking availability.");
       }
       if (row.state !== "verified" || !row.recipientConfirmed || !row.introductionSuitable) {
-        throw Object.assign(new Error("Verify the profile, recipient, and dates before checking availability."), { code: "AVAILABILITY_NOT_READY" });
+        throw new LeadAvailabilityServiceError("AVAILABILITY_NOT_READY", "Verify the profile, recipient, and dates before checking availability.");
       }
       const nextVersion = row.reviewVersion + 1;
       const [updated] = await tx.update(leadImportRows).set({ reviewVersion: nextVersion, updatedAt: new Date(snapshot.checkedAt) })

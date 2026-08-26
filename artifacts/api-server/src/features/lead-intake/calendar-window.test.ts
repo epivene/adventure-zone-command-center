@@ -3,7 +3,7 @@ import { normalizeCalendarWindow } from "./calendar-window";
 
 describe("normalizeCalendarWindow", () => {
   it("converts exclusive Google all-day end dates into an inclusive occupied window", () => {
-    expect(normalizeCalendarWindow({ kind: "google", start: { date: "2026-09-10" }, end: { date: "2026-09-13" }, calendarTimeZone: "America/Chicago" }))
+    expect(normalizeCalendarWindow({ kind: "google", start: { date: "2026-09-10" }, end: { date: "2026-09-14" }, calendarTimeZone: "America/Chicago" }))
       .toEqual({ startDate: "2026-09-08", endDate: "2026-09-13" });
   });
   it("uses the event time zone instead of the server time zone for timed events", () => {

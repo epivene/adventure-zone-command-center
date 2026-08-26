@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { LeadAvailabilityService } from "./lead-availability-service";
 
-const lead = { id: "row-1", reviewVersion: 4, state: "verified", recipientConfirmed: true, introductionSuitable: true, startDate: "2026-09-10", endDate: "2026-09-12" };
+const lead = { id: "row-1", reviewVersion: 4, state: "verified", organizationId: "org-1", recipientEmail: "events@example.com", recipientConfirmed: true, introductionSuitable: true, startDate: "2026-09-10", endDate: "2026-09-12" };
 const persistence = { loadVerifiedLead: async () => lead, selectedCalendars: async () => [{ id: "zone-a", summary: "Adventure Zone", primary: false }], save: async () => ({ reviewVersion: 5 }) };
 
 describe("LeadAvailabilityService edge cases", () => {

@@ -9,11 +9,11 @@ describe("classifyCalendarBooking", () => {
     })).toEqual({
       confidence: "explicit",
       packages: [{ packageKey: "foam-party", quantity: 2 }, { packageKey: "glow-zone", quantity: 1 }],
-      evidence: ["title: 2 Foam Party", "title: 1 Glow Zone"],
+      evidence: ["explicit quantity: 2 Foam Party", "explicit quantity: 1 Glow Zone"],
     });
   });
   it("does not guess package use from ambiguous notes", () => {
     expect(classifyCalendarBooking({ summary: "Adventure Zone — Johnson school event", description: "Likely foam or glow; client will decide later." }))
-      .toEqual({ confidence: "ambiguous", packages: [], evidence: ["ambiguous package reference: foam or glow"] });
+      .toEqual({ confidence: "ambiguous", packages: [], evidence: ["ambiguous or conditional package evidence"] });
   });
 });

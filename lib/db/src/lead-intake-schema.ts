@@ -103,7 +103,7 @@ export const leadImportRows = pgTable("lead_import_rows", {
 
 export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", {
   id: uuid("id").defaultRandom().primaryKey(),
-  rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "cascade" }),
+  rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "restrict" }),
   reviewVersion: integer("review_version").notNull(),
   proposedStartDate: date("proposed_start_date").notNull(),
   proposedEndDate: date("proposed_end_date").notNull(),
@@ -114,7 +114,7 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   sourceEvents: jsonb("source_events").$type<Array<Record<string, unknown>>>().notNull(),
   reservations: jsonb("reservations").$type<Array<Record<string, unknown>>>().notNull(),
 }, (table) => [
-  index("lead_availability_snapshots_row_checked_idx").on(table.rowId, table.checkedAt),
+  index("lead_availability_snapshots_row_checked_idx").on(table.rowId, table.checkedAt.desc()),
   check("lead_availability_snapshots_window_valid", sql`${table.proposedEndDate} >= ${table.proposedStartDate}`),
   check("lead_availability_snapshots_calendar_ids_array", sql`jsonb_typeof(${table.selectedCalendarIds}) = 'array'`),
   check("lead_availability_snapshots_source_events_array", sql`jsonb_typeof(${table.sourceEvents}) = 'array'`),
