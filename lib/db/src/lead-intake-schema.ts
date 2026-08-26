@@ -135,10 +135,10 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
 export const communicationBlocks = pgTable("communication_blocks", {
   id: uuid("id").defaultRandom().primaryKey(),
   targetType: text("target_type").$type<"organization" | "contact" | "recipient_email" | "lead_import_row" | "internal_preview">().notNull(),
-  organizationId: uuid("organization_id"),
-  contactId: uuid("contact_id"),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "restrict" }),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
   normalizedEmail: text("normalized_email"),
-  rowId: uuid("row_id"),
+  rowId: uuid("row_id").references(() => leadImportRows.id, { onDelete: "restrict" }),
   reason: text("reason").notNull(),
   active: boolean("active").default(true).notNull(),
   createdBy: text("created_by").notNull(),
@@ -146,16 +146,32 @@ export const communicationBlocks = pgTable("communication_blocks", {
   removedBy: text("removed_by"),
   removedAt: timestamp("removed_at", { withTimezone: true }),
   removalReason: text("removal_reason"),
-});
+}, (table) => [
+  uniqueIndex("communication_blocks_active_target_unique")
+    .on(table.targetType, sql`coalesce(${table.organizationId}::text,'')`, sql`coalesce(${table.contactId}::text,'')`, sql`coalesce(${table.normalizedEmail},'')`, sql`coalesce(${table.rowId}::text,'')`)
+    .where(sql`${table.active}`),
+  index("communication_blocks_active_lookup_idx").on(table.active, table.normalizedEmail, table.organizationId, table.contactId, table.rowId),
+  check("communication_blocks_target_valid", sql`${table.targetType} in ('organization','contact','recipient_email','lead_import_row','internal_preview')`),
+  check("communication_blocks_exact_target", sql`(
+    (${table.targetType} = 'organization' and ${table.organizationId} is not null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+    or (${table.targetType} = 'contact' and ${table.organizationId} is null and ${table.contactId} is not null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+    or (${table.targetType} = 'lead_import_row' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is not null)
+    or (${table.targetType} = 'recipient_email' and ${table.organizationId} is null and ${table.contactId} is null and ${table.rowId} is null and ${table.normalizedEmail} = lower(btrim(${table.normalizedEmail})) and ${table.normalizedEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$')
+    or (${table.targetType} = 'internal_preview' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+  )`),
+]);
 
 export const communicationBlockEvents = pgTable("communication_block_events", {
   id: uuid("id").defaultRandom().primaryKey(),
-  blockId: uuid("block_id").notNull().references(() => communicationBlocks.id, { onDelete: "cascade" }),
+  blockId: uuid("block_id").notNull().references(() => communicationBlocks.id, { onDelete: "restrict" }),
   action: text("action").$type<"created" | "removed">().notNull(),
   actorId: text("actor_id").notNull(),
   reason: text("reason").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
-});
+}, (table) => [
+  index("communication_block_events_history_idx").on(table.blockId, table.createdAt),
+  check("communication_block_events_action_valid", sql`${table.action} in ('created','removed')`),
+]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {
   id: uuid("id").defaultRandom().primaryKey(),

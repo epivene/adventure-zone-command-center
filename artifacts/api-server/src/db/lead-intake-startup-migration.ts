@@ -4,6 +4,79 @@ import { fileURLToPath } from "node:url";
 
 type MigrationClient = { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> };
 
+const communicationBlockReadinessExpression = `
+  to_regclass(current_schema() || '.communication_blocks') is not null
+  and to_regclass(current_schema() || '.communication_block_events') is not null
+  and (
+    select count(*) = 13 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['id','target_type','organization_id','contact_id','normalized_email','row_id','reason','active','created_by','created_at','removed_by','removed_at','removal_reason'])
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and ((column_name in ('id','organization_id','contact_id','row_id') and data_type <> 'uuid')
+        or (column_name in ('target_type','normalized_email','reason','created_by','removed_by','removal_reason') and data_type <> 'text')
+        or (column_name = 'active' and data_type <> 'boolean')
+        or (column_name in ('created_at','removed_at') and data_type <> 'timestamp with time zone'))
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['id','target_type','reason','active','created_by','created_at']) and is_nullable <> 'NO'
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['organization_id','contact_id','normalized_email','row_id','removed_by','removed_at','removal_reason']) and is_nullable <> 'YES'
+  )
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'id' and column_default like '%gen_random_uuid%')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'active' and lower(column_default) in ('true','true::boolean'))
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'created_at' and lower(column_default) like '%now()%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and contype = 'p' and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'primarykey(id)%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_target_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%organization%contact%recipient_email%lead_import_row%internal_preview%')
+  and exists (
+    select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks')
+      and conname = 'communication_blocks_exact_target' and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%organization%organization_id is not null%contact_id is null%normalized_email is null%row_id is null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%contact%organization_id is null%contact_id is not null%normalized_email is null%row_id is null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%lead_import_row%organization_id is null%contact_id is null%normalized_email is null%row_id is not null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%recipient_email%organization_id is null%contact_id is null%row_id is null%lower%btrim%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%internal_preview%organization_id is null%contact_id is null%normalized_email is null%row_id is null%'
+  )
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_organization_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.organizations'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_contact_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.contacts'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_row_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.lead_import_rows'))
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_blocks_active_target_unique' and lower(indexdef) like 'create unique index%' and lower(indexdef) like '%where active%' and lower(indexdef) like '%coalesce%normalized_email%')
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_blocks_active_lookup_idx' and replace(lower(indexdef), ' ', '') like '%(active,normalized_email,organization_id,contact_id,row_id)%')
+  and (
+    select count(*) = 6 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_block_events'
+      and column_name = any(array['id','block_id','action','actor_id','reason','created_at'])
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_block_events'
+      and ((column_name in ('id','block_id') and data_type <> 'uuid')
+        or (column_name in ('action','actor_id','reason') and data_type <> 'text')
+        or (column_name = 'created_at' and data_type <> 'timestamp with time zone'))
+  )
+  and not exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = any(array['id','block_id','action','actor_id','reason','created_at']) and is_nullable <> 'NO')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = 'id' and column_default like '%gen_random_uuid%')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = 'created_at' and lower(column_default) like '%now()%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and contype = 'p' and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'primarykey(id)%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and conname = 'communication_block_events_block_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.communication_blocks'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and conname = 'communication_block_events_action_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%created%removed%')
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_block_events_history_idx' and replace(lower(indexdef), ' ', '') like '%(block_id,created_at)%')
+  and exists (select 1 from pg_proc where proname = 'communication_blocks_write_created_event' and lower(pg_get_functiondef(oid)) like '%insert into communication_block_events%created%')
+  and exists (select 1 from pg_trigger where tgrelid = to_regclass(current_schema() || '.communication_blocks') and tgname = 'communication_blocks_created_event' and not tgisinternal and tgenabled <> 'D')
+`;
+
+export async function isCommunicationBlockSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${communicationBlockReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
 async function loadOne(here: string, filename: string) {
   const candidates = [
     path.resolve(here, `migrations/${filename}`),
@@ -130,8 +203,7 @@ export async function ensureLeadIntakeSchema(
             'lead_import_evidence_created_by_nonblank'
           ])
       )
-      and to_regclass(current_schema() || '.communication_blocks') is not null
-      and to_regclass(current_schema() || '.communication_block_events') is not null
+      and (${communicationBlockReadinessExpression})
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       and to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') is not null
