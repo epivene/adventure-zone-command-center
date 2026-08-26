@@ -1,0 +1,40 @@
+{
+  "importRevision": 1,
+  "event": {
+    "id": null,
+    "name": "Rides & Rods Classic Car Show",
+    "city": "Elko",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "2026 outreach prospect for Hulk's late-season route. Rides & Rods Classic Car Show runs September 11-13, 2026 at Elko City Park. Official event contact: Stormy Remington, ridesandrods@yahoo.com, 775-385-6569. Pay-for-play inflatable family area is the intended outreach angle.",
+    "phone": "775-385-6569",
+    "website": "https://www.ridesandrodselko.com",
+    "address1": "",
+    "address2": "",
+    "postalCode": ""
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Stormy Remington",
+      "phone": "775-385-6569",
+      "email": "ridesandrods@yahoo.com",
+      "role": "Event Contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Rides & Rods Classic Car Show - 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-11",
+    "endsAt": "2026-09-13",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-08-26",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null
+}
