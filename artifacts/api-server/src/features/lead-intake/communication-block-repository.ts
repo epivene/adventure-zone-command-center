@@ -35,8 +35,21 @@ export class CommunicationBlockRepository {
       input.rowId ? eq(communicationBlocks.rowId, input.rowId) : isNull(communicationBlocks.rowId),
     )).limit(1);
     if (existing[0]) return existing[0];
-    const [created] = await this.database.insert(communicationBlocks).values({ ...input, normalizedEmail, createdBy: input.actorId }).returning();
-    return created!;
+    try {
+      const [created] = await this.database.insert(communicationBlocks).values({ ...input, normalizedEmail, createdBy: input.actorId }).returning();
+      return created!;
+    } catch (error) {
+      if ((error as { code?: string }).code !== "23505") throw error;
+      const [winner] = await this.database.select().from(communicationBlocks).where(and(
+        eq(communicationBlocks.active, true), eq(communicationBlocks.targetType, input.targetType),
+        input.organizationId ? eq(communicationBlocks.organizationId, input.organizationId) : isNull(communicationBlocks.organizationId),
+        input.contactId ? eq(communicationBlocks.contactId, input.contactId) : isNull(communicationBlocks.contactId),
+        normalizedEmail ? eq(communicationBlocks.normalizedEmail, normalizedEmail) : isNull(communicationBlocks.normalizedEmail),
+        input.rowId ? eq(communicationBlocks.rowId, input.rowId) : isNull(communicationBlocks.rowId),
+      )).limit(1);
+      if (winner) return winner;
+      throw error;
+    }
   }
 
   async remove(id: string, input: { actorId: string; reason: string }) {
