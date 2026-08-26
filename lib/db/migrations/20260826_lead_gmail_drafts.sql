@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS lead_gmail_draft_links (
 ALTER TABLE lead_gmail_draft_links
   ADD COLUMN IF NOT EXISTS activity_id uuid;
 
-DO $ BEGIN
+DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_row_fk' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
     ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_row_fk FOREIGN KEY (row_id) REFERENCES lead_import_rows(id) ON DELETE RESTRICT;
   END IF;
