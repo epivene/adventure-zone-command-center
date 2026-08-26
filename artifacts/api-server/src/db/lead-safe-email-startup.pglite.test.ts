@@ -59,8 +59,25 @@ describe("lead safe-email startup readiness", () => {
         reason: "Startup repair: retained as fail-closed internal preview block",
         created_at: expect.any(Date),
       }]);
+      await client.exec(`
+        alter table lead_import_rows
+          drop constraint lead_import_rows_territory_status_valid,
+          drop constraint lead_import_rows_fit_status_valid,
+          add constraint lead_import_rows_territory_status_valid
+            check (territory_status in ('open', 'ask_amy_dave', 'closed', 'licensing_issue', 'needs_review') or true),
+          add constraint lead_import_rows_fit_status_valid
+            check (fit_status in ('approved', 'needs_review', 'not_a_fit') or true);
+        alter table communication_blocks
+          drop constraint communication_blocks_exact_target,
+          add constraint communication_blocks_exact_target check (true);
+      `);
       await client.exec(migration);
       await expect(isCommunicationBlockSchemaReady({ query })).resolves.toBe(true);
+      await expect(client.exec("update lead_import_rows set territory_status = 'unexpected'")).rejects.toThrow();
+      await expect(client.exec(`
+        insert into communication_blocks (target_type, normalized_email, reason, created_by)
+        values ('recipient_email', 'not-an-email', 'invalid recipient', 'owner');
+      `)).rejects.toThrow();
       expect((await client.query(`
         select count(*)::int as count
         from communication_block_events
