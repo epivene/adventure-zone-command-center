@@ -31,7 +31,7 @@ function repositoryHarness() {
           account_email: values[0],
           status: "connected",
           encrypted_refresh_token: values[1],
-          granted_scopes: values[2],
+          granted_scopes: typeof values[2] === "string" ? JSON.parse(values[2]) : values[2],
           google_subject: values[3],
           connected_at: values[4],
           last_verified_at: values[4],
