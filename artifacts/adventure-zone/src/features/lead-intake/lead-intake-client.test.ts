@@ -50,4 +50,16 @@ describe("lead intake profile search", () => {
       { expectedVersion: 2 },
     );
   });
+
+  it("loads sanitized details for the evidence persisted on a classification", async () => {
+    const evidence = [{
+      evidenceId: "gmail:message-1", sourceType: "gmail" as const,
+      occurredAt: "2025-05-14T12:00:00.000Z", direction: "inbound" as const,
+      responseProven: true, excerpt: "Thanks for reaching out", conflicting: false,
+    }];
+    const api = { get: vi.fn().mockResolvedValue({ evidence }), post: vi.fn() };
+
+    await expect(createLeadIntakeClient(api).getRelationshipEvidence("row-1")).resolves.toEqual(evidence);
+    expect(api.get).toHaveBeenCalledWith("/lead-intake/rows/row-1/relationship-evidence");
+  });
 });
