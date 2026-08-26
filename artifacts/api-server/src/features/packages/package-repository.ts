@@ -180,6 +180,8 @@ class DrizzlePackageTransaction implements PackageTransaction {
       code: template.code,
       name: template.name,
       baseAttractionCount: template.baseAttractionCount,
+      normalCapacity: template.normalCapacity,
+      temporaryUnavailableQuantity: template.temporaryUnavailableQuantity,
       active: template.active,
     }));
   }
