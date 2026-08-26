@@ -20,6 +20,10 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_selected_organization_fk");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_source_kind_valid");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_one_selected_field");
+    expect(query.mock.calls[0]?.[0]).toContain("relationship_outcome");
+    expect(query.mock.calls[0]?.[0]).toContain("relationship_classified_by");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_classification_complete");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
     expect(loadSql).not.toHaveBeenCalled();
   });
 
@@ -53,7 +57,11 @@ describe("ensureLeadIntakeSchema", () => {
       }
       return client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
     };
-    const loadSql = async () => `${await readFile(new URL("../../../../lib/db/migrations/069_excel_lead_intake.sql", import.meta.url), "utf8")}\n${await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8")}`;
+    const loadSql = async () => [
+      await readFile(new URL("../../../../lib/db/migrations/069_excel_lead_intake.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
+    ].join("\n");
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
