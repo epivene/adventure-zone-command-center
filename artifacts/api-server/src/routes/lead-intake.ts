@@ -282,10 +282,11 @@ router.post("/lead-intake/rows/:rowId/review-status", async (req, res): Promise<
 
 router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<void> => {
   const rowId = param(req.params.rowId);
-  if (!isUuid(rowId)) { res.status(400).json({ error: "A valid lead row is required." }); return; }
+  const expectedVersion = Number(req.query.expectedVersion);
+  if (!isUuid(rowId) || !Number.isInteger(expectedVersion) || expectedVersion < 0) { res.status(400).json({ error: "A valid lead row and expected review version are required." }); return; }
   try {
     const [lead] = await db.select({
-      rowId: leadImportRows.id, organizationId: leadImportRows.selectedOrganizationId, contactId: leadImportRows.selectedContactId,
+      rowId: leadImportRows.id, reviewVersion: leadImportRows.reviewVersion, organizationId: leadImportRows.selectedOrganizationId, contactId: leadImportRows.selectedContactId,
       profileName: organizations.name, eventName: leadImportRows.confirmedEventName, eventCity: organizations.city, eventRegion: organizations.region,
       startDate: leadImportRows.confirmedStartDate, endDate: leadImportRows.confirmedEndDate, firstName: contacts.firstName,
       recipientEmail: leadImportRows.confirmedRecipientEmail, rowState: leadImportRows.state, recipientConfirmed: leadImportRows.recipientConfirmed,
@@ -293,12 +294,13 @@ router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<v
       territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus,
     }).from(leadImportRows).leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
       .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1);
-    if (!lead || !lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
+    if (!lead || lead.reviewVersion !== expectedVersion) { res.status(409).json({ error: "This lead changed in another review. Reload before previewing." }); return; }
+    if (!lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
     const approvedTemplate = (await new CommunicationTemplateRepository(db as any).list({ state: "active" })).find((template) => template.code === "lead_introduction_2026_prepaid");
     if (!approvedTemplate) { res.status(422).json({ error: "The approved 2026 lead-introduction template is unavailable." }); return; }
     const [snapshot] = await db.select().from(leadAvailabilitySnapshots).where(eq(leadAvailabilitySnapshots.rowId, rowId)).orderBy(desc(leadAvailabilitySnapshots.checkedAt)).limit(1);
     const blocks = await communicationBlockRepository.listActive({ rowId, organizationId: lead.organizationId, contactId: lead.contactId, recipientEmail: lead.recipientEmail });
-    const preview = buildLeadEmailPreview({ lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null }, blocks, availability: snapshot ? { ready: snapshot.ready, checkedAt: snapshot.checkedAt.toISOString(), packageAvailability: snapshot.packageAvailability as any } : null, calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [] });
+    const preview = buildLeadEmailPreview({ lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null }, blocks, availability: snapshot ? { ready: snapshot.ready, checkedAt: snapshot.checkedAt.toISOString(), reviewVersion: snapshot.reviewVersion, proposedStartDate: snapshot.proposedStartDate, proposedEndDate: snapshot.proposedEndDate, packageAvailability: snapshot.packageAvailability as any } : null, calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [] });
     res.json({ templateCode: approvedTemplate.code, sourceRow: rowId, preview });
   } catch (error) { req.log.error({ error }, "Failed to build safe lead email preview"); res.status(500).json({ error: "Could not build lead email preview." }); }
 });
