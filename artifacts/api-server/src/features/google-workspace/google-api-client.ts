@@ -353,6 +353,7 @@ export function createGoogleWorkspaceReadClient(input: {
       if (!/^[A-Za-z0-9_-]+$/.test(input.raw)) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
       const token = await currentAccessToken();
       let response: Response;
+      let payload: Record<string, unknown>;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), gmailDraftTimeoutMs);
       try {
@@ -365,12 +366,12 @@ export function createGoogleWorkspaceReadClient(input: {
           body: JSON.stringify({ message: { raw: input.raw } }),
           signal: controller.signal,
         });
+        payload = await responseJson(response);
       } catch {
         throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
       } finally {
         clearTimeout(timeout);
       }
-      const payload = await responseJson(response);
       if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_CREATE_FAILED");
       const message = payload.message && typeof payload.message === "object" ? payload.message as Record<string, unknown> : null;
       if (typeof payload.id !== "string" || !payload.id.trim() || !message || typeof message.id !== "string" || !message.id.trim()) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");

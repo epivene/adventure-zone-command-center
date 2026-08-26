@@ -13,15 +13,17 @@ export function LeadEmailPreviewPanel({
   const [draft, setDraft] = useState<LeadGmailDraftLink | null>(null);
   const [error, setError] = useState(""); const [loading, setLoading] = useState(false);
   const [creating, setCreating] = useState(false); const requestGeneration = useRef(0);
+  const draftRequestGeneration = useRef(0);
 
   useEffect(() => {
-    const generation = ++requestGeneration.current;
+    requestGeneration.current += 1;
+    const draftGeneration = ++draftRequestGeneration.current;
     setPreview(null); setDraft(null); setError(""); setLoading(false); setCreating(false);
     if (loadDraft) {
       void loadDraft(rowId)
-        .then((value) => { if (generation === requestGeneration.current) setDraft(value); })
+        .then((value) => { if (draftGeneration === draftRequestGeneration.current) setDraft(value); })
         .catch((cause) => {
-          if (generation === requestGeneration.current) setError(cause instanceof Error ? cause.message : "Could not load the Gmail draft state.");
+          if (draftGeneration === draftRequestGeneration.current) setError(cause instanceof Error ? cause.message : "Could not load the Gmail draft state.");
         });
     }
   }, [rowId, reviewVersion, invalidationKey, loadDraft]);
