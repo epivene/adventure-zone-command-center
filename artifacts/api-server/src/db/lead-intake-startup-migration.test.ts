@@ -25,6 +25,7 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_classification_complete");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
     expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_availability_snapshots");
     expect(loadSql).not.toHaveBeenCalled();
   });
 
@@ -49,6 +50,25 @@ describe("ensureLeadIntakeSchema", () => {
       .rejects.toThrow("schema is incomplete after migration");
   });
 
+  it("fails closed for a partial availability snapshot table", async () => {
+    const client = new PGlite();
+    const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+    try {
+      await client.exec("create table lead_availability_snapshots (id uuid primary key);");
+      await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
+    } finally { await client.close(); }
+  });
+
+  it("requires definitions instead of accepting malformed named availability constraints", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ ready: false }] });
+    await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
+    const marker = query.mock.calls[0]?.[0] as string;
+    expect(marker).toContain("pg_get_constraintdef");
+    expect(marker).toContain("confrelid");
+    expect(marker).toContain("is_nullable");
+    expect(marker).toContain("contype = 'p'");
+  });
+
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {
     const client = new PGlite();
     const query = async (sql: string) => {
@@ -63,6 +83,7 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_organization_inbox.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);

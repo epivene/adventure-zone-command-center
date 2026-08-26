@@ -1,4 +1,5 @@
 import type {
+  GoogleCalendarEvent,
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,
@@ -26,6 +27,7 @@ const gmailBaseEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me";
 const labelsEndpoint = `${gmailBaseEndpoint}/labels`;
 const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
 
 type TokenResponse = {
   access_token?: unknown;
@@ -73,6 +75,23 @@ function partHasAttachment(value: unknown): boolean {
     }
   }
   return Array.isArray(part.parts) && part.parts.some(partHasAttachment);
+}
+
+function calendarEventTime(value: unknown): GoogleCalendarEvent["start"] | null {
+  if (!value || typeof value !== "object") return null;
+  const item = value as Record<string, unknown>;
+  const date = typeof item.date === "string" ? item.date : undefined;
+  const dateTime = typeof item.dateTime === "string" ? item.dateTime : undefined;
+  const timeZone = typeof item.timeZone === "string" ? item.timeZone : undefined;
+  if (Boolean(date) === Boolean(dateTime)) return null;
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+    if (!Number.isFinite(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== date) return null;
+  }
+  if (dateTime && !Number.isFinite(new Date(dateTime).valueOf())) return null;
+  if (timeZone) { try { new Intl.DateTimeFormat("en-US", { timeZone }); } catch { return null; } }
+  return { ...(date ? { date } : { dateTime: dateTime! }), ...(timeZone ? { timeZone } : {}) };
 }
 
 function headerValue(headers: unknown[], name: string): string {
@@ -367,6 +386,60 @@ export function createGoogleWorkspaceReadClient(input: {
             : null;
       } while (pageToken);
       return calendars;
+    },
+
+    async listCalendarEvents(input): Promise<GoogleCalendarEvent[]> {
+      const calendarIds = [...new Set(input.calendarIds.map((id) => id.trim()))].filter(Boolean);
+      const timeMin = new Date(input.timeMin);
+      const timeMax = new Date(input.timeMax);
+      if (!calendarIds.length || !Number.isFinite(timeMin.valueOf()) || !Number.isFinite(timeMax.valueOf()) || timeMin >= timeMax) {
+        throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENTS_INPUT_INVALID");
+      }
+      const events: GoogleCalendarEvent[] = [];
+      for (const calendarId of calendarIds) {
+        let pageToken: string | null = null;
+        do {
+          const url = new URL(`${calendarBaseEndpoint}/${encodeURIComponent(calendarId)}/events`);
+          url.searchParams.set("timeMin", input.timeMin);
+          url.searchParams.set("timeMax", input.timeMax);
+          url.searchParams.set("singleEvents", "true");
+          url.searchParams.set("showDeleted", "false");
+          url.searchParams.set("maxResults", "250");
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+          const payload = await authorizedJson(url.toString());
+          if (typeof payload.timeZone !== "string" || !payload.timeZone.trim() || !Array.isArray(payload.items)) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+          const calendarTimeZone = payload.timeZone.trim();
+          try { new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone }); } catch { throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID"); }
+          const values = payload.items;
+          for (const value of values) {
+            if (!value || typeof value !== "object" || Array.isArray(value)) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+            const event = value as Record<string, unknown>;
+            if (event.status === "cancelled") continue;
+            if (typeof event.id !== "string" || !event.id.trim()) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+            const start = calendarEventTime(event.start);
+            const end = calendarEventTime(event.end);
+            const originalStartTime = event.originalStartTime === undefined || event.originalStartTime === null ? null : calendarEventTime(event.originalStartTime);
+            const updated = event.updated === undefined || event.updated === null ? null : typeof event.updated === "string" && event.updated.trim() && Number.isFinite(new Date(event.updated).valueOf()) ? event.updated : null;
+            if (!start || !end || Boolean(start.date) !== Boolean(end.date)
+              || (start.date && start.date >= end.date!)
+              || (start.dateTime && new Date(start.dateTime) >= new Date(end.dateTime!))
+              || (event.originalStartTime !== undefined && event.originalStartTime !== null && !originalStartTime)
+              || (event.updated !== undefined && event.updated !== null && !updated)) {
+              throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+            }
+            events.push({
+              calendarId, calendarTimeZone, id: event.id, iCalUid: typeof event.iCalUID === "string" && event.iCalUID.trim() ? event.iCalUID.trim() : null,
+              summary: typeof event.summary === "string" ? event.summary : "", description: typeof event.description === "string" ? event.description : "",
+              start, end, updated,
+              recurringEventId: typeof event.recurringEventId === "string" ? event.recurringEventId : null,
+              originalStartTime,
+            });
+          }
+          if (payload.nextPageToken !== undefined && (typeof payload.nextPageToken !== "string" || !payload.nextPageToken.trim())) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+          pageToken = typeof payload.nextPageToken === "string" ? payload.nextPageToken : null;
+        } while (pageToken);
+      }
+      return events;
     },
 
     async listRecentMessageRefs(limit: number): Promise<GoogleMessageRef[]> {

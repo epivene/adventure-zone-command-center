@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { contacts, organizations } from "./schema";
 
 export const leadImportBatchStatusValues = ["review", "archived"] as const;
@@ -99,6 +99,27 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_relationship_outcome_valid", sql`${table.relationshipOutcome} is null or ${table.relationshipOutcome} in ('returning_contact','reintroduction','prior_outreach_no_response','new_introduction','needs_review')`),
   check("lead_import_rows_relationship_evidence_array", sql`jsonb_typeof(${table.relationshipEvidenceIds}) = 'array'`),
   check("lead_import_rows_relationship_classification_complete", sql`${table.relationshipOutcome} is null or (${table.relationshipAnchorAt} is not null and ${table.relationshipCutoffDate} is not null and ${table.relationshipClassifiedAt} is not null and ${table.relationshipClassifiedBy} is not null)`),
+]);
+
+export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "restrict" }),
+  reviewVersion: integer("review_version").notNull(),
+  proposedStartDate: date("proposed_start_date").notNull(),
+  proposedEndDate: date("proposed_end_date").notNull(),
+  ready: boolean("ready").notNull(),
+  checkedBy: text("checked_by").notNull(),
+  checkedAt: timestamp("checked_at", { withTimezone: true }).notNull(),
+  selectedCalendarIds: jsonb("selected_calendar_ids").$type<string[]>().notNull(),
+  sourceEvents: jsonb("source_events").$type<Array<Record<string, unknown>>>().notNull(),
+  reservations: jsonb("reservations").$type<Array<Record<string, unknown>>>().notNull(),
+}, (table) => [
+  unique("lead_availability_snapshots_row_version_unique").on(table.rowId, table.reviewVersion),
+  index("lead_availability_snapshots_row_checked_idx").on(table.rowId, table.checkedAt.desc()),
+  check("lead_availability_snapshots_window_valid", sql`${table.proposedEndDate} >= ${table.proposedStartDate}`),
+  check("lead_availability_snapshots_calendar_ids_array", sql`jsonb_typeof(${table.selectedCalendarIds}) = 'array'`),
+  check("lead_availability_snapshots_source_events_array", sql`jsonb_typeof(${table.sourceEvents}) = 'array'`),
+  check("lead_availability_snapshots_reservations_array", sql`jsonb_typeof(${table.reservations}) = 'array'`),
 ]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {

@@ -69,6 +69,26 @@ export type GoogleThreadDetail = {
   messages: GoogleThreadMessage[];
 };
 
+export type GoogleCalendarEventTime = {
+  date?: string;
+  dateTime?: string;
+  timeZone?: string;
+};
+
+export type GoogleCalendarEvent = {
+  calendarId: string;
+  calendarTimeZone: string;
+  id: string;
+  iCalUid: string | null;
+  summary: string;
+  description: string;
+  start: GoogleCalendarEventTime;
+  end: GoogleCalendarEventTime;
+  updated: string | null;
+  recurringEventId: string | null;
+  originalStartTime: GoogleCalendarEventTime | null;
+};
+
 export interface GoogleWorkspaceReadClient {
   authorizationUrl(input: { state: string }): string;
   exchangeCode(code: string): Promise<{
@@ -78,6 +98,7 @@ export interface GoogleWorkspaceReadClient {
   accountIdentity(): Promise<GoogleWorkspaceAccountIdentity>;
   listLabels(): Promise<GoogleLabelSummary[]>;
   listCalendars(): Promise<GoogleCalendarSummary[]>;
+  listCalendarEvents?(input: { calendarIds: string[]; timeMin: string; timeMax: string }): Promise<GoogleCalendarEvent[]>;
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
   listMessagePage?(input: {
     maxResults: number;
