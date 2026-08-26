@@ -509,6 +509,20 @@ const migrationFiles = [
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_reservations_array' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%jsonb_typeof(reservations)%array%')
       and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'lead_availability_snapshots_row_checked_idx' and position('(row_id, checked_at desc)' in lower(indexdef)) > 0) AS ready`,
   },
+  {
+    name: "20260826_lead_inventory_policy.sql",
+    markerSql: `SELECT
+      (SELECT count(*) = 2 FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name = 'package_templates'
+         AND column_name IN ('normal_capacity', 'temporary_unavailable_quantity'))
+      AND EXISTS (SELECT 1 FROM information_schema.columns
+       WHERE table_schema = current_schema() AND table_name = 'lead_availability_snapshots'
+         AND column_name = 'package_availability' AND data_type = 'jsonb')
+      AND (SELECT count(*) = 3 FROM pg_constraint
+       WHERE conrelid IN (to_regclass(current_schema() || '.package_templates'), to_regclass(current_schema() || '.lead_availability_snapshots'))
+         AND conname IN ('package_templates_normal_capacity_nonnegative', 'package_templates_temporary_unavailable_quantity_nonnegative', 'lead_availability_snapshots_package_availability_object'))
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
