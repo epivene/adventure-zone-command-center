@@ -2,6 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 
 import {
+  createGoogleReviewNewProfile,
+  suggestedGoogleReviewProfile,
+  type GoogleReviewNewProfileInput,
+} from "@/features/google-workspace/google-review-new-profile";
+import {
   getGoogleWorkspaceValidationReview,
   ignoreGoogleWorkspaceValidationReview,
   resolveGoogleWorkspaceValidationReview,
@@ -18,6 +23,8 @@ type SearchState = {
   searching: boolean;
 };
 
+type CreateState = GoogleReviewNewProfileInput & { open: boolean };
+
 export function GoogleValidationReview({
   onPendingCountChange,
 }: {
@@ -28,6 +35,7 @@ export function GoogleValidationReview({
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [searchByMessage, setSearchByMessage] = useState<Record<string, SearchState>>({});
+  const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
 
   async function load() {
     setError(null);
@@ -76,6 +84,69 @@ export function GoogleValidationReview({
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not ignore this email.");
+    } finally {
+      setBusyMessageId(null);
+    }
+  }
+
+  function toggleCreate(item: GoogleValidationReviewItem) {
+    setCreateByMessage((current) => {
+      const existing = current[item.messageId];
+      if (existing) {
+        return {
+          ...current,
+          [item.messageId]: { ...existing, open: !existing.open },
+        };
+      }
+      return {
+        ...current,
+        [item.messageId]: {
+          ...suggestedGoogleReviewProfile(item),
+          open: true,
+        },
+      };
+    });
+  }
+
+  function updateCreate(
+    messageId: string,
+    field: keyof GoogleReviewNewProfileInput,
+    value: string,
+  ) {
+    setCreateByMessage((current) => ({
+      ...current,
+      [messageId]: {
+        ...(current[messageId] ?? {
+          profileName: "",
+          city: "",
+          region: "",
+          contactName: "",
+          contactEmail: "",
+          open: true,
+        }),
+        [field]: value,
+        open: true,
+      },
+    }));
+  }
+
+  async function createNewProfile(item: GoogleValidationReviewItem) {
+    const createState = createByMessage[item.messageId] ?? {
+      ...suggestedGoogleReviewProfile(item),
+      open: true,
+    };
+    setBusyMessageId(item.messageId);
+    setError(null);
+    try {
+      await createGoogleReviewNewProfile(item, createState);
+      setCreateByMessage((current) => {
+        const next = { ...current };
+        delete next[item.messageId];
+        return next;
+      });
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not create the new profile.");
     } finally {
       setBusyMessageId(null);
     }
@@ -130,7 +201,7 @@ export function GoogleValidationReview({
           Needs Review
         </h3>
         <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Assign uncertain business email to the right profile, or ignore it if it does not belong in the CRM.
+          Assign uncertain business email to an existing profile, create a new profile for a new opportunity, or ignore it if it does not belong in the CRM.
         </p>
         {resolvedCount || ignoredCount ? (
           <p className="mt-1 text-xs text-slate-500">
@@ -153,6 +224,7 @@ export function GoogleValidationReview({
               results: [],
               searching: false,
             };
+            const createState = createByMessage[item.messageId];
             const busy = busyMessageId === item.messageId;
             return (
               <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm dark:border-amber-900 dark:bg-slate-950/40" key={item.messageId}>
@@ -236,6 +308,84 @@ export function GoogleValidationReview({
                         </span>
                       </button>
                     ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-3">
+                  <button
+                    className="text-sm font-semibold text-orange-700 hover:underline disabled:opacity-50 dark:text-orange-300"
+                    disabled={busy}
+                    onClick={() => toggleCreate(item)}
+                    type="button"
+                  >
+                    {createState?.open ? "Cancel new profile" : "Create new profile"}
+                  </button>
+                </div>
+
+                {createState?.open ? (
+                  <div className="mt-3 grid gap-3 rounded-lg border border-orange-200 bg-orange-50/60 p-3 dark:border-orange-900 dark:bg-orange-950/20">
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      Create a new lead/profile for this opportunity, then attach this email thread to it. Review the prefilled values before saving.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="grid gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200 sm:col-span-2">
+                        New profile name
+                        <input
+                          aria-label="New profile name"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          onChange={(event) => updateCreate(item.messageId, "profileName", event.target.value)}
+                          value={createState.profileName}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        City
+                        <input
+                          aria-label="New profile city"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          onChange={(event) => updateCreate(item.messageId, "city", event.target.value)}
+                          value={createState.city}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        State
+                        <input
+                          aria-label="New profile state"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm uppercase dark:border-slate-700 dark:bg-slate-950"
+                          maxLength={2}
+                          onChange={(event) => updateCreate(item.messageId, "region", event.target.value)}
+                          value={createState.region}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Contact name
+                        <input
+                          aria-label="Contact name"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          onChange={(event) => updateCreate(item.messageId, "contactName", event.target.value)}
+                          value={createState.contactName}
+                        />
+                      </label>
+                      <label className="grid gap-1 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                        Contact email
+                        <input
+                          aria-label="Contact email"
+                          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+                          onChange={(event) => updateCreate(item.messageId, "contactEmail", event.target.value)}
+                          type="email"
+                          value={createState.contactEmail}
+                        />
+                      </label>
+                    </div>
+                    <div>
+                      <button
+                        className="button-primary px-3 py-2 text-sm"
+                        disabled={busy || !createState.profileName.trim()}
+                        onClick={() => void createNewProfile(item)}
+                        type="button"
+                      >
+                        {busy ? "Creating…" : "Create profile and attach email"}
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
