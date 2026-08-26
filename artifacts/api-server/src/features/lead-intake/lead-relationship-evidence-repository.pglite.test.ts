@@ -87,6 +87,7 @@ async function seedAct(client: PGlite, input: {
   body: string;
   occurredAt: string;
   link?: "assignment" | "external";
+  missingSourceDate?: boolean;
 }) {
   const sourceId = `20000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
   const versionId = `30000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
@@ -96,9 +97,9 @@ async function seedAct(client: PGlite, input: {
     [sourceId, versionId],
   );
   await client.query(
-    `insert into act_source_record_versions(id, source_record_id, raw_snapshot, fetched_at)
-       values ($1, $2, $3, $4)`,
-    [versionId, sourceId, input.raw, input.occurredAt],
+    `insert into act_source_record_versions(id, source_record_id, raw_snapshot, source_created_at, fetched_at)
+       values ($1, $2, $3, $4, $5)`,
+    [versionId, sourceId, input.raw, input.missingSourceDate ? null : input.occurredAt, input.occurredAt],
   );
   if (input.link === "external") {
     await client.query(
@@ -225,6 +226,29 @@ describe("LeadRelationshipEvidenceRepository", () => {
     expect(evidence).toEqual([
       expect.objectContaining({ sourceType: "act", direction: "outbound", responseProven: false }),
     ]);
+  }, 15_000);
+
+  it("does not use archive fetch time as the ACT occurrence date", async () => {
+    const client = await setup(); clients.push(client);
+    await seedAct(client, {
+      suffix: "5",
+      raw: { Direction: "Inbound", From: recipientEmail, Details: "Historical reply without source date" },
+      body: "Historical reply without source date",
+      occurredAt: "2026-08-25T12:00:00Z",
+      missingSourceDate: true,
+    });
+
+    const evidence = await new LeadRelationshipEvidenceRepository(drizzle(client) as never)
+      .list({ organizationId, recipientEmail });
+
+    expect(evidence).toEqual([
+      expect.objectContaining({
+        direction: "inbound",
+        responseProven: true,
+        conflicting: true,
+      }),
+    ]);
+    expect(evidence[0]?.occurredAt.valueOf()).toBeNaN();
   }, 15_000);
 
   it("collapses ACT and Gmail observations carrying the same Gmail message id", async () => {
