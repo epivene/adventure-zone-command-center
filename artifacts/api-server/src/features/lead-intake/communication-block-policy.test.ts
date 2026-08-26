@@ -17,9 +17,9 @@ describe("communication block policy and server preview", () => {
 
   it("withholds normal copy whenever server-owned readiness has a DO NOT SEND blocker", () => {
     const preview = buildLeadEmailPreview({
-      lead: { rowId: "row", profileName: "Fair", eventName: "Fair", eventCity: "Town", eventRegion: "UT", startDate: "2026-09-29", endDate: "2026-09-29", firstName: "Pat", recipientEmail: "pat@example.com", rowState: "verified", recipientConfirmed: true, introductionSuitable: true, relationshipOutcome: "new_introduction", territoryStatus: "open", fitStatus: "approved" },
+      lead: { rowId: "row", reviewVersion: 0, profileName: "Fair", eventName: "Fair", eventCity: "Town", eventRegion: "UT", startDate: "2026-09-29", endDate: "2026-09-29", firstName: "Pat", recipientEmail: "pat@example.com", rowState: "verified", recipientConfirmed: true, introductionSuitable: true, relationshipOutcome: "new_introduction", territoryStatus: "open", fitStatus: "approved" },
       blocks: [{ active: true, targetType: "recipient_email", normalizedEmail: "pat@example.com" }],
-      availability: { ready: true, checkedAt: "2026-08-26T12:00:00.000Z", packageAvailability: { status: "resolved", packages: [{ packageKey: "adventure_zone", availableQuantity: 1 }], restrictedOptions: [] } },
+      availability: { ready: true, reviewVersion: 0, proposedStartDate: "2026-09-29", proposedEndDate: "2026-09-29", checkedAt: "2026-08-26T12:00:00.000Z", packageAvailability: { status: "resolved", packages: [{ packageKey: "adventure_zone", availableQuantity: 1 }], restrictedOptions: [] } },
       now: new Date("2026-08-26T12:01:00.000Z"),
     });
     expect(preview.readiness).toMatchObject({ ready: false, blockers: ["do_not_send"] });
