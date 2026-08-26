@@ -281,4 +281,44 @@ export class LeadReviewService {
       return { rowId: input.rowId, reviewVersion: nextVersion, ...classification };
     });
   }
+
+  async listRelationshipEvidence(input: { rowId: string }) {
+    const relationshipEvidence = this.relationshipEvidence;
+    if (!relationshipEvidence) {
+      throw new LeadReviewServiceError("RELATIONSHIP_NOT_READY", "Previous-contact evidence is not available yet.");
+    }
+    const [row] = await this.database.select({
+      state: leadImportRows.state,
+      organizationId: leadImportRows.selectedOrganizationId,
+      recipientEmail: leadImportRows.confirmedRecipientEmail,
+      recipientConfirmed: leadImportRows.recipientConfirmed,
+      introductionSuitable: leadImportRows.introductionSuitable,
+      relationshipOutcome: leadImportRows.relationshipOutcome,
+      relationshipEvidenceIds: leadImportRows.relationshipEvidenceIds,
+    }).from(leadImportRows).where(eq(leadImportRows.id, input.rowId)).limit(1);
+    if (!row) throw new LeadReviewServiceError("ROW_NOT_FOUND", "Lead import row was not found.");
+    if (
+      row.state !== "verified" || !row.organizationId || !row.recipientEmail?.trim()
+      || !row.recipientConfirmed || !row.introductionSuitable || !row.relationshipOutcome
+    ) {
+      throw new LeadReviewServiceError(
+        "RELATIONSHIP_NOT_READY",
+        "Classify previous contact before viewing its evidence.",
+      );
+    }
+    const selectedIds = new Set(row.relationshipEvidenceIds);
+    const evidence = await relationshipEvidence.list({
+      organizationId: row.organizationId,
+      recipientEmail: row.recipientEmail,
+    });
+    return evidence.filter((item) => selectedIds.has(item.evidenceId)).map((item) => ({
+      evidenceId: item.evidenceId,
+      sourceType: item.sourceType,
+      occurredAt: Number.isFinite(item.occurredAt.valueOf()) ? item.occurredAt : null,
+      direction: item.direction,
+      responseProven: item.responseProven,
+      excerpt: item.excerpt,
+      conflicting: item.conflicting,
+    }));
+  }
 }
