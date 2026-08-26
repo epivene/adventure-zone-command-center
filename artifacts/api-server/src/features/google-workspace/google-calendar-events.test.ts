@@ -1,4 +1,3 @@
-import { describe, expect, it } from "vitest";
 import { createGoogleWorkspaceReadClient } from "./google-api-client";
 
 const environment = { clientId: "client-id", clientSecret: "secret", redirectUri: "https://api.example.com/callback", appOrigin: "https://app.example.com", tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 3)) };
@@ -32,5 +31,17 @@ describe("GoogleWorkspaceReadClient calendar events", () => {
     const eventUrls = urls.filter((url) => url.pathname.includes("/events"));
     expect(eventUrls).toHaveLength(4);
     expect(eventUrls.every((url) => url.searchParams.get("timeMin") === "2026-09-01T00:00:00.000Z" && url.searchParams.get("timeMax") === "2026-10-01T00:00:00.000Z")).toBe(true);
+  });
+  it("rejects malformed original instance times and Calendar response zones", async () => {
+    for (const payload of [
+      { timeZone: "Mars/Olympus", items: [] },
+      { timeZone: "America/Chicago", items: [{ id: "event-1", start: { date: "2026-02-30" }, end: { date: "2026-03-02" }, originalStartTime: { date: "2026-99-99" } }] },
+    ]) {
+      const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh-token", fetcher: async (input) => {
+        if (new URL(String(input)).hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }));
+        return new Response(JSON.stringify(payload));
+      } });
+      await expect(client.listCalendarEvents?.({ calendarIds: ["zone-a"], timeMin: "2026-09-01T00:00:00.000Z", timeMax: "2026-10-01T00:00:00.000Z" })).rejects.toMatchObject({ code: "GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID" });
+    }
   });
 });

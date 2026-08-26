@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
@@ -57,6 +56,15 @@ describe("ensureLeadIntakeSchema", () => {
       await client.exec("create table lead_availability_snapshots (id uuid primary key);");
       await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
     } finally { await client.close(); }
+  });
+
+  it("requires definitions instead of accepting malformed named availability constraints", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ ready: false }] });
+    await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
+    const marker = query.mock.calls[0]?.[0] as string;
+    expect(marker).toContain("pg_get_constraintdef");
+    expect(marker).toContain("confrelid");
+    expect(marker).toContain("is_nullable");
   });
 
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {

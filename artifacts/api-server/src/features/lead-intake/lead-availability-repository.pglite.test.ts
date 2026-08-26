@@ -1,4 +1,3 @@
-import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
@@ -14,7 +13,7 @@ describe("LeadAvailabilityRepository", () => {
       create table lead_import_rows (id uuid primary key, state text not null, review_version integer not null, selected_organization_id uuid, confirmed_start_date date, confirmed_end_date date, confirmed_recipient_email text, recipient_confirmed boolean not null, introduction_suitable boolean not null, updated_at timestamptz not null default now());
       create table google_workspace_connections (id uuid primary key, status text not null);
       create table google_workspace_calendar_scopes (connection_id uuid not null, calendar_id text not null, summary text not null, primary_calendar boolean not null, selected boolean not null);
-      create table lead_availability_snapshots (id uuid primary key default gen_random_uuid(), row_id uuid not null, review_version integer not null, proposed_start_date date not null, proposed_end_date date not null, ready boolean not null, checked_by text not null, checked_at timestamptz not null, selected_calendar_ids jsonb not null, source_events jsonb not null, reservations jsonb not null);
+      create table lead_availability_snapshots (id uuid primary key default gen_random_uuid(), row_id uuid not null references lead_import_rows(id) on delete restrict, review_version integer not null, proposed_start_date date not null, proposed_end_date date not null, ready boolean not null, checked_by text not null, checked_at timestamptz not null, selected_calendar_ids jsonb not null, source_events jsonb not null, reservations jsonb not null, constraint lead_availability_snapshots_row_version_unique unique (row_id, review_version));
       insert into lead_import_rows values ('10000000-0000-4000-8000-000000000001','verified',4,'30000000-0000-4000-8000-000000000001','2026-09-10','2026-09-12','events@example.com',true,true,now());
       insert into google_workspace_connections values ('20000000-0000-4000-8000-000000000001','connected');
       insert into google_workspace_calendar_scopes values ('20000000-0000-4000-8000-000000000001','zone-a','Adventure Zone',false,true);
@@ -24,11 +23,13 @@ describe("LeadAvailabilityRepository", () => {
     await expect(repository.save({
       rowId: "10000000-0000-4000-8000-000000000001", expectedVersion: 4, organizationId: "30000000-0000-4000-8000-000000000001", recipientEmail: "events@example.com", startDate: "2026-09-10", endDate: "2026-09-12",
       ready: false, proposedWindow: { startDate: "2026-09-08", endDate: "2026-09-13" }, checkedAt: "2026-08-25T12:00:00.000Z", checkedBy: "owner",
-      selectedCalendarIds: ["zone-a"], sourceEvents: [{ calendarId: "zone-a", eventId: "event-1", updated: "2026-08-25T11:00:00.000Z" }], reservations: [{ calendarEventId: "event-1", confidence: "ambiguous" }],
+      selectedCalendarIds: ["zone-a"], sourceEvents: [{ calendarId: "zone-a", eventId: "event-1", updated: "2026-08-25T11:00:00.000Z" }], reservations: [{ calendarEventId: "event-1", iCalUid: "uid-1", occupiedWindow: { startDate: "2026-09-08", endDate: "2026-09-13" }, packages: [], confidence: "ambiguous", evidence: ["missing explicit package evidence"] }],
     })).resolves.toEqual({ reviewVersion: 5 });
     expect((await client.query("select review_version from lead_import_rows")).rows).toEqual([{ review_version: 5 }]);
     expect((await client.query("select proposed_start_date, ready, selected_calendar_ids, source_events from lead_availability_snapshots")).rows).toEqual([expect.objectContaining({ proposed_start_date: "2026-09-08", ready: false, selected_calendar_ids: ["zone-a"] })]);
     await expect(repository.save({ rowId: "10000000-0000-4000-8000-000000000001", expectedVersion: 5, organizationId: "30000000-0000-4000-8000-000000000001", recipientEmail: "events@example.com", startDate: "2026-09-10", endDate: "2026-09-12", ready: true, proposedWindow: { startDate: "2026-09-08", endDate: "2026-09-13" }, checkedAt: "2026-08-26T12:00:00.000Z", checkedBy: "owner", selectedCalendarIds: ["zone-a"], sourceEvents: [{ calendarId: "zone-a", eventId: "event-2", start: { date: "2026-09-08" }, end: { date: "2026-09-14" } }], reservations: [] })).resolves.toEqual({ reviewVersion: 6 });
     expect((await client.query("select review_version, ready, source_events from lead_availability_snapshots order by review_version")).rows).toEqual([expect.objectContaining({ review_version: 5, ready: false, source_events: [{ calendarId: "zone-a", eventId: "event-1", updated: "2026-08-25T11:00:00.000Z" }] }), expect.objectContaining({ review_version: 6, ready: true })]);
+    await expect(client.exec("insert into lead_availability_snapshots (row_id, review_version, proposed_start_date, proposed_end_date, ready, checked_by, checked_at, selected_calendar_ids, source_events, reservations) values ('10000000-0000-4000-8000-000000000001', 5, '2026-09-08', '2026-09-13', false, 'owner', now(), '[]', '[]', '[]')")).rejects.toThrow();
+    await expect(client.exec("delete from lead_import_rows where id = '10000000-0000-4000-8000-000000000001'")).rejects.toThrow();
   });
 });
