@@ -127,12 +127,15 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260826_lead_safe_email.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
       await client.exec(`
         create table organizations (id uuid primary key);
         create table contacts (id uuid primary key);
         create table communication_templates (id uuid primary key);
+        create table google_workspace_connections (id uuid primary key);
+        create table activities (id uuid primary key);
       `);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);

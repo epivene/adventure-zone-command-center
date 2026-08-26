@@ -212,7 +212,7 @@ describe("GoogleWorkspaceReadClient", () => {
     });
   });
 
-  it("does not expose Google mutation methods", () => {
+  it("exposes only Gmail draft creation as a mutation and no send method", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
