@@ -10,12 +10,14 @@ describe("lead availability route contract", () => {
     expect(source).toContain("LeadAvailabilityRepository");
     expect(source).toContain("GOOGLE_REAUTHORIZATION_REQUIRED");
     expect(source).toContain("GOOGLE_CALENDAR_UNAVAILABLE");
+    expect(source).toContain("AVAILABILITY_PERSISTENCE_FAILED");
     expect(source).toContain("ROW_NOT_FOUND");
     expect(source).toContain("VERSION_CONFLICT");
     expect(source).toContain("AVAILABILITY_NOT_READY");
     expect(source).toContain("res.status(409)");
     expect(source).toContain("res.status(422)");
     expect(source).toContain("res.status(503)");
+    expect(source).toContain("res.status(500)");
     for (const forbidden of ["createDraft", "sendMail", "calendar.events.insert"]) expect(source).not.toContain(forbidden);
   });
 });
