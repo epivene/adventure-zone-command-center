@@ -7,27 +7,39 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Search next outreach batch
+      - name: Audit next outreach batch
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
-          if [ -z "${ASSISTANT_IMPORT_TOKEN:-}" ]; then
-            echo "ASSISTANT_IMPORT_TOKEN_MISSING"
-            exit 2
-          fi
           BASE="https://adventure-zone-command-center.onrender.com"
+          IDS=(
+            "Colorfest Balloon Rally|807ec298-38f2-4a58-afe2-b57e0c119271"
+            "International Arts & Crafts Festival|1f474081-dfb5-4565-8ca5-e371f0805d23"
+            "Bear Lake Brawl Triathlon|65c9d87f-61a5-41e5-a268-2591ac7dc2fe"
+            "White Sands Balloon & Music Festival|ff9640f8-9ffd-4a2f-be7b-5243350a3251"
+            "Sandy Heritage Festival|da8c4b14-71d4-4014-ab72-62b733552b7e"
+          )
+          for ENTRY in "${IDS[@]}"; do
+            NAME="${ENTRY%%|*}"
+            ID="${ENTRY##*|}"
+            echo "=== HISTORY: ${NAME} ==="
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE}/api/assistant-import/profile-history/${ID}"
+            echo
+          done
           QUERIES=(
-            "Colorfest Balloon Rally"
-            "International Arts & Crafts Festival"
-            "A Blast on the Grass"
-            "Bear Lake Brawl Triathlon"
-            "Grant County Fair"
-            "Otero County Fair"
-            "White Sands Balloon & Music Festival"
-            "Sandy Heritage Festival"
-            "Thousand Springs Festival of the Arts"
-            "Rocky Mountain ATV Jamboree"
+            "Hagerman"
+            "Blast on the Grass"
+            "Grant"
+            "Cliff Gila"
+            "Otero"
+            "Alamogordo"
+            "Thousand Springs"
+            "Ritter Island"
+            "Rocky Mountain Jamboree"
+            "Richfield Jamboree"
           )
           for Q in "${QUERIES[@]}"; do
             echo "=== QUERY: ${Q} ==="
