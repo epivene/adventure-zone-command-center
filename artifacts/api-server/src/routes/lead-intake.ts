@@ -321,6 +321,16 @@ router.post("/lead-intake/communication-blocks", async (req, res): Promise<void>
   } catch (error) { req.log.error({ error }, "Failed to create communication block"); res.status(500).json({ error: "Could not create communication block." }); }
 });
 
+router.post("/lead-intake/communication-blocks/:blockId/remove", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId) || !String(req.body?.reason ?? "").trim()) { res.status(400).json({ error: "A block ID and removal reason are required." }); return; }
+  try {
+    const block = await communicationBlockRepository.remove(blockId, { actorId: leadImportActor((req as any).userId), reason: String(req.body.reason).trim() });
+    if (!block) { res.status(404).json({ error: "Communication block not found." }); return; }
+    res.json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to remove communication block"); res.status(500).json({ error: "Could not remove communication block." }); }
+});
+
 router.delete("/lead-intake/communication-blocks/:blockId", async (req, res): Promise<void> => {
   const blockId = param(req.params.blockId);
   if (!isUuid(blockId) || !String(req.body?.reason ?? "").trim()) { res.status(400).json({ error: "A block ID and removal reason are required." }); return; }
