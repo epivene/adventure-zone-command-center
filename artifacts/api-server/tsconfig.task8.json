@@ -7,25 +7,14 @@
   "include": [],
   "files": [
     "src/db/lead-intake-startup-migration.ts",
-    "src/db/lead-intake-startup-migration.test.ts",
     "src/db/required-schema-startup.ts",
-    "src/db/required-schema-startup.test.ts",
     "src/features/google-workspace/google-api-client.ts",
-    "src/features/google-workspace/google-api-client.test.ts",
     "src/features/google-workspace/google-api-types.ts",
     "src/features/google-workspace/google-connection-repository.ts",
-    "src/features/google-workspace/google-connection-repository.test.ts",
-    "src/features/google-workspace/google-gmail-draft.test.ts",
     "src/features/lead-intake/gmail-draft-handler.ts",
-    "src/features/lead-intake/gmail-draft-handler.test.ts",
     "src/features/lead-intake/gmail-draft-service.ts",
-    "src/features/lead-intake/gmail-draft-service.test.ts",
-    "src/features/lead-intake/gmail-draft-history.pglite.test.ts",
-    "src/features/lead-intake/gmail-draft-migration.pglite.test.ts",
     "src/features/lead-intake/lead-email-preview-repository.ts",
-    "src/routes/google-workspace-oauth-callback.ts",
-    "src/routes/google-workspace-oauth-callback.test.ts",
-    "src/routes/google-workspace-account-change.test.ts"
+    "src/routes/google-workspace-oauth-callback.ts"
   ],
   "references": []
 }
