@@ -210,7 +210,9 @@ export class GoogleHistoricalBackfillService {
     }
     if (
       state.status === "awaiting_approval" ||
-      (state.cumulative.processed > 0 && !state.firstBatchApproved)
+      (state.cumulative.processed > 0 &&
+        !state.firstBatchApproved &&
+        state.status !== "error")
     ) {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED");
     }
@@ -221,7 +223,7 @@ export class GoogleHistoricalBackfillService {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_BACKFILL_UNAVAILABLE");
     }
 
-    const firstBatch = state.cumulative.processed === 0;
+    const firstBatch = !state.firstBatchApproved && state.nextPageToken === null;
     let frozen = await this.frozenBatches.load(state.nextPageToken);
     if (!frozen) {
       const { batchId } = await this.repository.beginBatch({
