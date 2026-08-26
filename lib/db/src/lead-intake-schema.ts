@@ -11,9 +11,17 @@ export const leadImportRowStateValues = [
 ] as const;
 export const leadEvidenceFieldValues = ["event_dates", "recipient_email"] as const;
 export const leadEvidenceSourceKindValues = ["crm_contact", "act_description", "official_website", "manual"] as const;
+export const leadRelationshipOutcomeValues = [
+  "returning_contact",
+  "reintroduction",
+  "prior_outreach_no_response",
+  "new_introduction",
+  "needs_review",
+] as const;
 
 export type LeadImportBatchStatus = (typeof leadImportBatchStatusValues)[number];
 export type LeadImportRowState = (typeof leadImportRowStateValues)[number];
+export type LeadRelationshipOutcome = (typeof leadRelationshipOutcomeValues)[number];
 
 export const leadImportBatches = pgTable("lead_import_batches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -65,12 +73,22 @@ export const leadImportRows = pgTable("lead_import_rows", {
   introductionSuitable: boolean("introduction_suitable").default(false).notNull(),
   confirmedBy: text("confirmed_by"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  relationshipOutcome: text("relationship_outcome").$type<LeadRelationshipOutcome | null>(),
+  relationshipAnchorAt: timestamp("relationship_anchor_at", { withTimezone: true }),
+  relationshipCutoffDate: date("relationship_cutoff_date"),
+  relationshipEvidenceIds: jsonb("relationship_evidence_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  latestOutboundAt: timestamp("latest_outbound_at", { withTimezone: true }),
+  latestVerifiedResponseAt: timestamp("latest_verified_response_at", { withTimezone: true }),
+  relationshipReviewRequired: boolean("relationship_review_required").default(false).notNull(),
+  relationshipClassifiedAt: timestamp("relationship_classified_at", { withTimezone: true }),
+  relationshipClassifiedBy: text("relationship_classified_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("lead_import_rows_source_position_unique").on(table.batchId, table.sheetName, table.sourceRowNumber),
   uniqueIndex("lead_import_rows_fingerprint_unique").on(table.batchId, table.sourceFingerprint),
   index("lead_import_rows_batch_state_idx").on(table.batchId, table.state, table.sourceRowNumber),
+  index("lead_import_rows_relationship_outcome_idx").on(table.relationshipOutcome, table.relationshipClassifiedAt),
   check("lead_import_rows_sheet_name_nonblank", sql`btrim(${table.sheetName}) <> ''`),
   check("lead_import_rows_source_row_positive", sql`${table.sourceRowNumber} > 0`),
   check("lead_import_rows_fingerprint_valid", sql`${table.sourceFingerprint} ~ '^[0-9a-f]{64}$'`),
@@ -78,6 +96,9 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
   check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual','organization_inbox')`),
   check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
+  check("lead_import_rows_relationship_outcome_valid", sql`${table.relationshipOutcome} is null or ${table.relationshipOutcome} in ('returning_contact','reintroduction','prior_outreach_no_response','new_introduction','needs_review')`),
+  check("lead_import_rows_relationship_evidence_array", sql`jsonb_typeof(${table.relationshipEvidenceIds}) = 'array'`),
+  check("lead_import_rows_relationship_classification_complete", sql`${table.relationshipOutcome} is null or (${table.relationshipAnchorAt} is not null and ${table.relationshipCutoffDate} is not null and ${table.relationshipClassifiedAt} is not null and ${table.relationshipClassifiedBy} is not null)`),
 ]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {
