@@ -20,6 +20,11 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_selected_organization_fk");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_source_kind_valid");
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_one_selected_field");
+    expect(query.mock.calls[0]?.[0]).toContain("relationship_outcome");
+    expect(query.mock.calls[0]?.[0]).toContain("relationship_classified_by");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_classification_complete");
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
+    expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
     expect(loadSql).not.toHaveBeenCalled();
   });
 
@@ -53,11 +58,26 @@ describe("ensureLeadIntakeSchema", () => {
       }
       return client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
     };
-    const loadSql = async () => `${await readFile(new URL("../../../../lib/db/migrations/069_excel_lead_intake.sql", import.meta.url), "utf8")}\n${await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8")}`;
+    const loadSql = async () => [
+      await readFile(new URL("../../../../lib/db/migrations/069_excel_lead_intake.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_review_evidence.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_organization_inbox.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
+    ].join("\n");
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
+      await expect(client.exec(`
+        insert into lead_import_batches
+          (id, original_filename, file_sha256, row_count, imported_by)
+        values
+          ('70000000-0000-4000-8000-000000000001', 'leads.xls', repeat('a', 64), 1, 'test');
+        insert into lead_import_rows
+          (batch_id, sheet_name, source_row_number, source_fingerprint, original_values, contact_mode)
+        values
+          ('70000000-0000-4000-8000-000000000001', 'Sheet1', 1, repeat('b', 64), '{}', 'organization_inbox');
+      `)).resolves.toBeDefined();
     } finally {
       await client.close();
     }

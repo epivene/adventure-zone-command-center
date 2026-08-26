@@ -4,7 +4,10 @@ import type {
   LeadImportReviewRow,
   LeadProfileEvidence,
   LeadProfileOption,
+  LeadRelationshipClassification,
+  LeadRelationshipEvidenceDetail,
 } from "@/features/lead-intake/lead-intake-client";
+import { LeadRelationshipReview } from "./lead-relationship-review";
 
 type ContactMode = "existing" | "manual" | "organization_inbox";
 
@@ -13,6 +16,8 @@ type ReviewClient = {
   listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
   getProfileEvidence(organizationId: string): Promise<LeadProfileEvidence>;
   confirmReview(rowId: string, body: unknown): Promise<unknown>;
+  classifyRelationship(rowId: string, expectedVersion: number): Promise<LeadRelationshipClassification>;
+  getRelationshipEvidence(rowId: string): Promise<LeadRelationshipEvidenceDetail[]>;
 };
 
 export function LeadContactDateReview({
@@ -47,11 +52,13 @@ export function LeadContactDateReview({
   const [busy, setBusy] = useState(false);
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [error, setError] = useState("");
+  const [relationshipDirty, setRelationshipDirty] = useState(false);
 
   function clearRecipientApproval() {
     setRecipientConfirmed(false);
     setRecipientConflictResolved(false);
     setIntroductionSuitable(false);
+    setRelationshipDirty(true);
   }
 
   useEffect(() => {
@@ -76,7 +83,8 @@ export function LeadContactDateReview({
     setRecipientConflictResolved(false);
     setIntroductionSuitable(row.introductionSuitable);
     setError("");
-  }, [row.id]);
+    setRelationshipDirty(false);
+  }, [row.id, row.reviewVersion]);
 
   async function search() {
     if (!query.trim() || busy) return;
@@ -301,11 +309,11 @@ export function LeadContactDateReview({
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="grid gap-1 text-sm font-semibold">Confirmed profile/event name<input aria-label="Confirmed profile/event name" onChange={(event) => setEventName(event.currentTarget.value)} value={eventName}/></label>
-        {contactMode !== "organization_inbox" ? <label className="grid gap-1 text-sm font-semibold">Contact name<input aria-label="Contact name" onChange={(event) => { setContactName(event.currentTarget.value); setIntroductionSuitable(false); }} value={contactName}/></label> : null}
-        <label className="grid gap-1 text-sm font-semibold">Event start date<input aria-label="Event start date" onChange={(event) => setStartDate(event.currentTarget.value)} type="date" value={startDate}/></label>
-        <label className="grid gap-1 text-sm font-semibold">Event end date<input aria-label="Event end date" onChange={(event) => setEndDate(event.currentTarget.value)} type="date" value={endDate}/></label>
-        {contactMode !== "organization_inbox" ? <label className="grid gap-1 text-sm font-semibold">Contact role<input aria-label="Contact role" onChange={(event) => { setContactRole(event.currentTarget.value); setIntroductionSuitable(false); }} value={contactRole}/></label> : null}
+        <label className="grid gap-1 text-sm font-semibold">Confirmed profile/event name<input aria-label="Confirmed profile/event name" onChange={(event) => { setEventName(event.currentTarget.value); setRelationshipDirty(true); }} value={eventName}/></label>
+        {contactMode !== "organization_inbox" ? <label className="grid gap-1 text-sm font-semibold">Contact name<input aria-label="Contact name" onChange={(event) => { setContactName(event.currentTarget.value); setIntroductionSuitable(false); setRelationshipDirty(true); }} value={contactName}/></label> : null}
+        <label className="grid gap-1 text-sm font-semibold">Event start date<input aria-label="Event start date" onChange={(event) => { setStartDate(event.currentTarget.value); setRelationshipDirty(true); }} type="date" value={startDate}/></label>
+        <label className="grid gap-1 text-sm font-semibold">Event end date<input aria-label="Event end date" onChange={(event) => { setEndDate(event.currentTarget.value); setRelationshipDirty(true); }} type="date" value={endDate}/></label>
+        {contactMode !== "organization_inbox" ? <label className="grid gap-1 text-sm font-semibold">Contact role<input aria-label="Contact role" onChange={(event) => { setContactRole(event.currentTarget.value); setIntroductionSuitable(false); setRelationshipDirty(true); }} value={contactRole}/></label> : null}
         <label className="grid gap-1 text-sm font-semibold">Recipient email<input aria-label="Recipient email" onChange={(event) => { setRecipientEmail(event.currentTarget.value); clearRecipientApproval(); }} type="email" value={recipientEmail}/></label>
       </div>
 
@@ -320,6 +328,13 @@ export function LeadContactDateReview({
       <label className="flex items-start gap-2 text-sm font-semibold"><input aria-label="This contact is appropriate for an introduction email" checked={introductionSuitable} onChange={(event) => setIntroductionSuitable(event.currentTarget.checked)} type="checkbox"/>This contact is appropriate for an introduction email</label>
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p> : null}
       <button className="button-primary justify-self-start" disabled={!ready || busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Verify event and contact"}</button>
+      {row.state === "verified" && !relationshipDirty ? (
+        <LeadRelationshipReview client={client} onClassified={onSaved} row={row} />
+      ) : row.state === "verified" ? (
+        <p className="rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">
+          Save these profile, contact, or event changes before checking previous contact again.
+        </p>
+      ) : null}
     </section>
   );
 }

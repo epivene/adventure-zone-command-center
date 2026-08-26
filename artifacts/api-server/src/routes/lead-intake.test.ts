@@ -16,9 +16,22 @@ describe("lead intake owner routes", () => {
       .toBeLessThan(routesIndex.indexOf("router.use(leadIntakeRouter)"));
   });
 
-  it("does not create profiles, contacts, calendar entries, drafts, or sends", () => {
-    for (const forbidden of ["organizations", "contacts", "calendar", "gmail", "sendMail"]) {
-      expect(routeSource.toLowerCase()).not.toContain(forbidden.toLowerCase());
+  it("does not add profile/contact mutations, calendar writes, Gmail drafts, or sends", () => {
+    for (const forbidden of ["insert(organizations", "insert(contacts", "calendar.events.insert", "createDraft", "sendMail"]) {
+      expect(routeSource).not.toContain(forbidden);
     }
+  });
+
+  it("classifies previous contact with version and verification safety responses", () => {
+    expect(routeSource).toContain('router.post("/lead-intake/rows/:rowId/classify-relationship"');
+    expect(routeSource).toContain("relationshipService.classifyRelationship");
+    expect(routeSource).toContain('error.code === "VERSION_CONFLICT"');
+    expect(routeSource).toContain('error.code === "RELATIONSHIP_NOT_READY"');
+    expect(routeSource).toContain("res.status(409)");
+    expect(routeSource).toContain("res.status(422)");
+    expect(routeSource).toContain("optionalGoogleReadClient");
+    expect(routeSource).toContain("catch {");
+    expect(routeSource).toContain('router.get("/lead-intake/rows/:rowId/relationship-evidence"');
+    expect(routeSource).toContain("relationshipService.listRelationshipEvidence");
   });
 });

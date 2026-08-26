@@ -35,7 +35,13 @@ async function setup() {
       contact_mode text, confirmed_event_name text, confirmed_start_date date, confirmed_end_date date,
       confirmed_contact_name text, confirmed_contact_role text, confirmed_recipient_email text,
       recipient_confirmed boolean not null default false, introduction_suitable boolean not null default false,
-      confirmed_by text, confirmed_at timestamptz, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+      confirmed_by text, confirmed_at timestamptz,
+      relationship_outcome text, relationship_anchor_at timestamptz,
+      relationship_cutoff_date date, relationship_evidence_ids jsonb not null default '[]',
+      latest_outbound_at timestamptz, latest_verified_response_at timestamptz,
+      relationship_review_required boolean not null default false,
+      relationship_classified_at timestamptz, relationship_classified_by text,
+      created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
     create table lead_import_evidence (
       id uuid primary key default gen_random_uuid(), row_id uuid not null references lead_import_rows(id) on delete cascade,

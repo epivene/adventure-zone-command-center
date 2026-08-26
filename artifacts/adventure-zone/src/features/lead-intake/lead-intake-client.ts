@@ -38,7 +38,44 @@ export type LeadImportReviewRow = {
   confirmedRecipientEmail: string | null;
   recipientConfirmed: boolean;
   introductionSuitable: boolean;
+  relationshipOutcome?: LeadRelationshipOutcome | null;
+  relationshipAnchorAt?: string | null;
+  relationshipCutoffDate?: string | null;
+  relationshipEvidenceIds?: string[];
+  latestOutboundAt?: string | null;
+  latestVerifiedResponseAt?: string | null;
+  relationshipReviewRequired?: boolean;
+  relationshipClassifiedAt?: string | null;
+  relationshipClassifiedBy?: string | null;
   evidence: Array<{ field: "event_dates" | "recipient_email"; candidateValue: string; sourceKind: string; sourceReference: string; selected: boolean }>;
+};
+
+export type LeadRelationshipOutcome =
+  | "returning_contact"
+  | "reintroduction"
+  | "prior_outreach_no_response"
+  | "new_introduction"
+  | "needs_review";
+
+export type LeadRelationshipClassification = {
+  rowId: string;
+  reviewVersion: number;
+  outcome: LeadRelationshipOutcome;
+  cutoffDate: string;
+  evidenceIds: string[];
+  latestOutboundAt: string | null;
+  latestVerifiedResponseAt: string | null;
+  reviewRequired: boolean;
+};
+
+export type LeadRelationshipEvidenceDetail = {
+  evidenceId: string;
+  sourceType: "act" | "gmail" | "crm";
+  occurredAt: string | null;
+  direction: "inbound" | "outbound" | "unknown";
+  responseProven: boolean;
+  excerpt: string;
+  conflicting: boolean;
 };
 
 export type LeadProfileOption = { id: string; name: string; city: string | null; region: string | null };
@@ -93,6 +130,17 @@ export function createLeadIntakeClient(api: Api) {
     },
     async confirmReview(rowId: string, body: unknown) {
       return api.post<{ rowId: string; state: "verified"; reviewVersion: number }>(`/lead-intake/rows/${rowId}/confirm`, body);
+    },
+    async classifyRelationship(rowId: string, expectedVersion: number) {
+      return api.post<LeadRelationshipClassification>(
+        `/lead-intake/rows/${rowId}/classify-relationship`,
+        { expectedVersion },
+      );
+    },
+    async getRelationshipEvidence(rowId: string) {
+      return (await api.get<{ evidence: LeadRelationshipEvidenceDetail[] }>(
+        `/lead-intake/rows/${rowId}/relationship-evidence`,
+      )).evidence;
     },
   };
 }

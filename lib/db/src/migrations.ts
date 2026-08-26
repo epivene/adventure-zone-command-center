@@ -449,6 +449,35 @@ const migrationFiles = [
         AND column_name = 'profile_image_data_url'
     ) AS ready`,
   },
+  {
+    name: "20260825_lead_relationship_classification.sql",
+    markerSql: `SELECT (
+      (SELECT COUNT(*) = 9
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'lead_import_rows'
+          AND column_name IN (
+            'relationship_outcome',
+            'relationship_anchor_at',
+            'relationship_cutoff_date',
+            'relationship_evidence_ids',
+            'latest_outbound_at',
+            'latest_verified_response_at',
+            'relationship_review_required',
+            'relationship_classified_at',
+            'relationship_classified_by'
+          ))
+      AND (SELECT COUNT(*) = 3
+        FROM pg_constraint
+        WHERE conrelid = to_regclass(current_schema() || '.lead_import_rows')
+          AND conname IN (
+            'lead_import_rows_relationship_outcome_valid',
+            'lead_import_rows_relationship_evidence_array',
+            'lead_import_rows_relationship_classification_complete'
+          ))
+      AND to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') IS NOT NULL
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
