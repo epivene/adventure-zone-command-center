@@ -1,0 +1,40 @@
+{
+  "importRevision": 1,
+  "event": {
+    "id": null,
+    "name": "International Camel & Ostrich Races",
+    "city": "Virginia City",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "2026 International Camel & Ostrich Races prospect. Family-focused three-day event September 11-13, 2026 at the Virginia City Fairgrounds. Event includes four race shows, Sunday Family Day, food trucks, craft/art vendors and other entertainment. 2026 vendor management contact is Liquid Blue Events at team@liquidblueevents.com / 775-851-4444. Adventure Zone outreach is for a possible pay-for-play seven-piece inflatable family attraction area.",
+    "phone": "775-851-4444",
+    "website": "https://visitvirginiacitynv.com/international-camel-ostrich-races-2/",
+    "address1": "758 F Street",
+    "address2": "",
+    "postalCode": "89440"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Liquid Blue Events",
+      "phone": "775-851-4444",
+      "email": "team@liquidblueevents.com",
+      "role": "Event / Vendor Management",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "International Camel & Ostrich Races - 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-11",
+    "endsAt": "2026-09-13",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-08-27",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null
+}
