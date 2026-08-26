@@ -113,6 +113,7 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   selectedCalendarIds: jsonb("selected_calendar_ids").$type<string[]>().notNull(),
   sourceEvents: jsonb("source_events").$type<Array<Record<string, unknown>>>().notNull(),
   reservations: jsonb("reservations").$type<Array<Record<string, unknown>>>().notNull(),
+  packageAvailability: jsonb("package_availability").$type<Record<string, unknown>>().notNull(),
 }, (table) => [
   unique("lead_availability_snapshots_row_version_unique").on(table.rowId, table.reviewVersion),
   index("lead_availability_snapshots_row_checked_idx").on(table.rowId, table.checkedAt.desc()),
@@ -120,6 +121,7 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   check("lead_availability_snapshots_calendar_ids_array", sql`jsonb_typeof(${table.selectedCalendarIds}) = 'array'`),
   check("lead_availability_snapshots_source_events_array", sql`jsonb_typeof(${table.sourceEvents}) = 'array'`),
   check("lead_availability_snapshots_reservations_array", sql`jsonb_typeof(${table.reservations}) = 'array'`),
+  check("lead_availability_snapshots_package_availability_object", sql`jsonb_typeof(${table.packageAvailability}) = 'object'`),
 ]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {
