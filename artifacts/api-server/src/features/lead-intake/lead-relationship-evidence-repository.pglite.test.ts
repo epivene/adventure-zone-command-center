@@ -185,6 +185,27 @@ describe("LeadRelationshipEvidenceRepository", () => {
     await expect(repository.list({ organizationId, recipientEmail })).resolves.toEqual([]);
   }, 15_000);
 
+  it("never presents a mapping-review timestamp as the Gmail message date", async () => {
+    const client = await setup(); clients.push(client);
+    await client.exec(`
+      insert into google_workspace_validation_state(connection_id, validation_status)
+        values ('50000000-0000-4000-8000-000000000001', 'approved');
+      insert into google_workspace_validation_mappings
+        (connection_id, message_id, thread_id, organization_id, contact_id, evidence_codes, updated_at)
+        values
+        ('50000000-0000-4000-8000-000000000001', 'metadata-unavailable', 'thread-missing',
+         '${organizationId}', null, '[]', '2026-08-25T12:00:00Z');
+    `);
+
+    const evidence = await new LeadRelationshipEvidenceRepository(drizzle(client) as never)
+      .list({ organizationId, recipientEmail });
+
+    expect(evidence).toEqual([
+      expect.objectContaining({ sourceId: "metadata-unavailable", conflicting: true }),
+    ]);
+    expect(evidence[0]?.occurredAt.valueOf()).toBeNaN();
+  }, 15_000);
+
   it("keeps CRM activity with a stable ACT source id as context, not proof of a reply", async () => {
     const client = await setup(); clients.push(client);
     await client.exec(`
