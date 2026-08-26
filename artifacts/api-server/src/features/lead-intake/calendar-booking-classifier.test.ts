@@ -23,4 +23,15 @@ describe("classifyCalendarBooking", () => {
   it.each(["-1 Foam Party", "minus 1 Foam Party", "remove 1 Foam Party", "exclude 1 Foam Party"])("treats %s as negative package evidence", (summary) => {
     expect(classifyCalendarBooking({ summary, description: "" })).toMatchObject({ confidence: "ambiguous", packages: [] });
   });
-});
+
+
+  it("fails closed when a bare Adventure Zone follows a different quantified package booking", () => {
+    expect(classifyCalendarBooking({
+      summary: "1 Pirate's Rebellion booking plus Adventure Zone",
+      description: "",
+    })).toEqual({
+      confidence: "ambiguous",
+      packages: [],
+      evidence: ["missing explicit quantity: Adventure Zone"],
+    });
+  });\n});
