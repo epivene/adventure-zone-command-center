@@ -9,11 +9,6 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/auth-token", () => ({ apiGet: mocks.apiGet, apiPost: mocks.apiPost }));
 vi.mock("@/lib/office-auth-context", () => ({ officeGet: mocks.officeGet }));
-vi.mock("@/components/google-workspace/profile-google-email-panel", () => ({
-  ProfileGoogleEmailPanel: ({ organizationId }: { organizationId: string }) => (
-    <div data-testid="profile-google-email-panel">Emails for {organizationId}</div>
-  ),
-}));
 
 import { ProfileSourceDocuments } from "./profile-source-documents";
 
@@ -37,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("ProfileSourceDocuments", () => {
-  it("shows owner-linked historical documents, reviewed terms, and profile Emails area", async () => {
+  it("shows owner-linked historical documents and reviewed terms", async () => {
     mocks.apiGet.mockResolvedValue({ sourceDocuments: [ravalli] });
     render(<ProfileSourceDocuments mode="owner" profileId="11111111-1111-4111-8111-111111111111" />);
     expect(await screen.findByText("Ravalli County Fair Pirate's Rebellion Contract")).toBeInTheDocument();
@@ -45,16 +40,13 @@ describe("ProfileSourceDocuments", () => {
     expect(screen.getByText("Contract p.1")).toBeInTheDocument();
     expect(mocks.apiGet).toHaveBeenCalledWith("/event-profiles/11111111-1111-4111-8111-111111111111/source-documents");
     expect(screen.getByRole("button", { name: "Open document" })).toBeInTheDocument();
-    expect(screen.getByTestId("profile-google-email-panel")).toHaveTextContent(
-      "Emails for 11111111-1111-4111-8111-111111111111",
-    );
   });
 
-  it("still gives an owner profile its Emails area even when it has no historical source documents", async () => {
+  it("renders nothing when an owner profile has no historical source documents", async () => {
     mocks.apiGet.mockResolvedValue({ sourceDocuments: [] });
-    render(<ProfileSourceDocuments mode="owner" profileId="44444444-4444-4444-8444-444444444444" />);
+    const { container } = render(<ProfileSourceDocuments mode="owner" profileId="44444444-4444-4444-8444-444444444444" />);
     await waitFor(() => expect(mocks.apiGet).toHaveBeenCalled());
-    expect(screen.getByTestId("profile-google-email-panel")).toBeInTheDocument();
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("uses only the Office-filtered endpoint in Office mode", async () => {
