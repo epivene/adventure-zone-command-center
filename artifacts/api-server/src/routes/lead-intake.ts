@@ -307,6 +307,12 @@ router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void>
   res.json({ blocks: await communicationBlockRepository.list() });
 });
 
+router.get("/lead-intake/communication-blocks/:blockId/history", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId)) { res.status(400).json({ error: "Invalid communication block." }); return; }
+  res.json({ events: await communicationBlockRepository.history(blockId) });
+});
+
 router.post("/lead-intake/communication-blocks", async (req, res): Promise<void> => {
   const body = req.body ?? {};
   const targetType = body.targetType;
