@@ -7,31 +7,17 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Check live assistant profile search
-        env:
-          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+      - name: Check live profile notes and calls
         run: |
           set -euo pipefail
-          if [ -z "${ASSISTANT_IMPORT_TOKEN:-}" ]; then
-            echo "ASSISTANT_IMPORT_TOKEN_MISSING"
-            exit 2
-          fi
           BASE="https://adventure-zone-command-center.onrender.com"
-          for Q in \
-            "Santa Cruz" \
-            "Santa Cruz County" \
-            "Sonoita" \
-            "Cochise" \
-            "Cochise County" \
-            "Douglas" \
-            "Holly Gateway" \
-            "Gateway Fair" \
-            "Holly"
+          for ID in \
+            "0b0f8457-7c18-477e-a0e9-44ae5bd7e892" \
+            "1098a2b0-5d27-4121-bc93-b3672c528162" \
+            "9f7ce3bd-249a-435c-abfd-97f2762e2122"
           do
-            echo "=== QUERY: $Q ==="
+            echo "=== PROFILE: $ID ==="
             curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search"
+              "${BASE}/api/event-profiles/${ID}"
             echo
           done
