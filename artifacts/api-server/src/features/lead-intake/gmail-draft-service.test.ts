@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { APPROVED_LEAD_INTRODUCTION_2026 } from "../communication-templates/lead-introduction-2026-approved";
+import { buildLeadEmailPreview } from "./lead-email-preview-service";
 import {
   GmailDraftService,
   GmailDraftServiceError,
@@ -83,6 +84,11 @@ function readyState(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
+function reservedLink(): LeadGmailDraftLink {
+  const preview = buildLeadEmailPreview(readyState());
+  return { ...link, subject: preview.subject!, body: preview.body!, gmailDraftId: null, gmailMessageId: null, state: "prepared" };
+}
+
 function persistence(overrides: Partial<GmailDraftPersistence> = {}): GmailDraftPersistence {
   return {
     findByRow: vi.fn(async () => null),
@@ -91,7 +97,7 @@ function persistence(overrides: Partial<GmailDraftPersistence> = {}): GmailDraft
       return { kind: "prepared" as const, link: { ...link, ...evidence, gmailDraftId: null, gmailMessageId: null, state: "prepared" as const } };
     }),
     execute: vi.fn(async (input) => {
-      const outcome = await input.attempt(readyState(), { ...link, gmailDraftId: null, gmailMessageId: null, state: "prepared" });
+      const outcome = await input.attempt(readyState(), reservedLink());
       return { ...link, state: outcome.kind === "created" ? "created" : outcome.kind, gmailDraftId: outcome.kind === "created" ? outcome.draftId : null, gmailMessageId: outcome.kind === "created" ? outcome.messageId : null, lastErrorCode: outcome.kind === "created" ? null : outcome.errorCode };
     }),
     ...overrides,
@@ -119,7 +125,7 @@ describe("GmailDraftService", () => {
     const execute = vi.fn(async (input: Parameters<GmailDraftPersistence["execute"]>[0]) => {
       await input.attempt(readyState({
         blocks: [{ id: "block", targetType: "lead_import_row", rowId: link.rowId, active: true }],
-      }), { ...link, gmailDraftId: null, gmailMessageId: null, state: "prepared" });
+      }), reservedLink());
       throw new Error("unreachable");
     });
     const store = persistence({ execute });
@@ -162,9 +168,10 @@ describe("GmailDraftService", () => {
     let capturedState = "";
     const store = persistence({
       execute: vi.fn(async (input) => {
-        const outcome = await input.attempt(readyState(), { ...link, gmailDraftId: null, gmailMessageId: null, state: "prepared" });
+        const outcome = await input.attempt(readyState(), reservedLink());
+        if (outcome.kind === "created") throw new Error("Expected a classified failure");
         capturedState = outcome.kind;
-        return { ...link, state: outcome.kind, gmailDraftId: null, gmailMessageId: null, lastErrorCode: outcome.errorCode };
+        return { ...reservedLink(), state: outcome.kind, lastErrorCode: outcome.errorCode };
       }),
     });
     const service = new GmailDraftService({
