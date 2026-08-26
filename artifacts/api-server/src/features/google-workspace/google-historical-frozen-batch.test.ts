@@ -36,35 +36,54 @@ function client(listIds: string[]): GoogleWorkspaceReadClient {
   };
 }
 
+function baseRepository() {
+  return {
+    getState: async () => ({
+      status: "ready" as const,
+      nextPageToken: "page-a",
+      firstBatchApproved: true,
+      cumulative: {
+        processed: 250,
+        attached: 200,
+        ignored: 40,
+        needsReview: 10,
+        failed: 0,
+        skipped: 0,
+      },
+    }),
+    beginBatch: vi.fn(async () => ({ batchId: "batch-2" })),
+    hasOutcome: vi.fn(async () => false),
+    recordOutcome: vi.fn(async () => undefined),
+    finishBatch: vi.fn(async () => undefined),
+    markError: vi.fn(async () => undefined),
+  };
+}
+
 describe("historical Gmail frozen batch membership", () => {
   it("freezes a newly discovered Gmail page before processing it", async () => {
     const readClient = client(["m1", "m2"]);
-    const repository = {
-      getState: async () => ({
-        status: "ready" as const,
-        nextPageToken: "page-a",
-        firstBatchApproved: true,
-        cumulative: { processed: 250, attached: 200, ignored: 40, needsReview: 10, failed: 0, skipped: 0 },
-      }),
-      loadFrozenBatch: vi.fn(async () => null),
-      beginBatch: vi.fn(async () => ({ batchId: "batch-2" })),
-      freezeBatch: vi.fn(async () => undefined),
-      hasOutcome: vi.fn(async () => false),
-      recordOutcome: vi.fn(async () => undefined),
-      finishBatch: vi.fn(async () => undefined),
-      markError: vi.fn(async () => undefined),
+    const repository = baseRepository();
+    const batchStore = {
+      load: vi.fn(async () => null),
+      freeze: vi.fn(async () => undefined),
     };
     const service = new GoogleHistoricalBackfillService({
       connection: { createReadClient: async () => readClient },
       repository,
-      classifier: { classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }) },
-      validationRepository: { upsertRows: async () => undefined, upsertReviewItems: async () => undefined },
+      batchStore,
+      classifier: {
+        classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }),
+      },
+      validationRepository: {
+        upsertRows: async () => undefined,
+        upsertReviewItems: async () => undefined,
+      },
     });
 
     await service.runNextBatch();
 
     expect(readClient.listMessagePage).toHaveBeenCalledTimes(1);
-    expect(repository.freezeBatch).toHaveBeenCalledWith({
+    expect(batchStore.freeze).toHaveBeenCalledWith({
       batchId: "batch-2",
       nextPageToken: "older-page",
       messages: [
@@ -76,14 +95,22 @@ describe("historical Gmail frozen batch membership", () => {
 
   it("reuses frozen message ids on retry instead of querying the newest Gmail page again", async () => {
     const readClient = client(["new-arrival", "different-message"]);
-    const repository = {
-      getState: async () => ({
-        status: "error" as const,
-        nextPageToken: "page-a",
-        firstBatchApproved: true,
-        cumulative: { processed: 250, attached: 200, ignored: 40, needsReview: 10, failed: 0, skipped: 0 },
-      }),
-      loadFrozenBatch: vi.fn(async () => ({
+    const repository = baseRepository();
+    repository.getState = async () => ({
+      status: "error" as const,
+      nextPageToken: "page-a",
+      firstBatchApproved: true,
+      cumulative: {
+        processed: 250,
+        attached: 200,
+        ignored: 40,
+        needsReview: 10,
+        failed: 0,
+        skipped: 0,
+      },
+    });
+    const batchStore = {
+      load: vi.fn(async () => ({
         batchId: "batch-2",
         nextPageToken: "older-page",
         messages: [
@@ -91,25 +118,26 @@ describe("historical Gmail frozen batch membership", () => {
           { id: "m2", threadId: "thread-m2" },
         ],
       })),
-      beginBatch: vi.fn(async () => ({ batchId: "should-not-be-created" })),
-      freezeBatch: vi.fn(async () => undefined),
-      hasOutcome: vi.fn(async () => false),
-      recordOutcome: vi.fn(async () => undefined),
-      finishBatch: vi.fn(async () => undefined),
-      markError: vi.fn(async () => undefined),
+      freeze: vi.fn(async () => undefined),
     };
     const service = new GoogleHistoricalBackfillService({
       connection: { createReadClient: async () => readClient },
       repository,
-      classifier: { classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }) },
-      validationRepository: { upsertRows: async () => undefined, upsertReviewItems: async () => undefined },
+      batchStore,
+      classifier: {
+        classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }),
+      },
+      validationRepository: {
+        upsertRows: async () => undefined,
+        upsertReviewItems: async () => undefined,
+      },
     });
 
     const result = await service.runNextBatch();
 
     expect(readClient.listMessagePage).not.toHaveBeenCalled();
     expect(repository.beginBatch).not.toHaveBeenCalled();
-    expect(repository.freezeBatch).not.toHaveBeenCalled();
+    expect(batchStore.freeze).not.toHaveBeenCalled();
     expect(readClient.getMessageMetadata).toHaveBeenCalledWith("m1");
     expect(readClient.getMessageMetadata).toHaveBeenCalledWith("m2");
     expect(result.processed).toBe(2);
