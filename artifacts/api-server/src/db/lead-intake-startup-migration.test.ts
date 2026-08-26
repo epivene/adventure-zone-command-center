@@ -26,6 +26,8 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
     expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
     expect(query.mock.calls[0]?.[0]).toContain("lead_availability_snapshots");
+    expect(query.mock.calls[0]?.[0]).toContain("package_availability");
+    expect(query.mock.calls[0]?.[0]).toContain("count(*) = 7");
     expect(loadSql).not.toHaveBeenCalled();
   });
 
@@ -84,6 +86,7 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_organization_inbox.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
