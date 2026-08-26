@@ -23,8 +23,10 @@ export function GoogleHistoricalBackfill() {
   const [busy, setBusy] = useState<"run" | "approve" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function reload() {
-    setView(await getGoogleHistoricalBackfill());
+  async function reload(): Promise<GoogleHistoricalBackfillView> {
+    const next = await getGoogleHistoricalBackfill();
+    setView(next);
+    return next;
   }
 
   useEffect(() => {
@@ -34,6 +36,7 @@ export function GoogleHistoricalBackfill() {
   }, []);
 
   async function runNext() {
+    const processedBefore = view?.state.cumulative.processed ?? 0;
     setBusy("run");
     setError(null);
     setRetryNotice(null);
@@ -42,8 +45,18 @@ export function GoogleHistoricalBackfill() {
       setLastBatch(result);
       await reload();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not run historical Gmail batch.");
-      await reload().catch(() => undefined);
+      const message = caught instanceof Error ? caught.message : "Could not run historical Gmail batch.";
+      try {
+        const refreshed = await reload();
+        if (refreshed.state.cumulative.processed > processedBefore) {
+          setError(null);
+          setRetryNotice("Batch completed; connection response was interrupted.");
+        } else {
+          setError(message);
+        }
+      } catch {
+        setError(message);
+      }
     } finally {
       setBusy(null);
     }
