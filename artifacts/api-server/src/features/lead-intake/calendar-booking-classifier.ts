@@ -41,7 +41,7 @@ export function classifyCalendarBooking(input: { summary: string; description: s
       const clause = packageClause(text, match.index!, match[0].length);
       const hasOtherExplicitPackage = packages.some((candidate) =>
         candidate.key !== item.key &&
-        new RegExp(`\\\\b\\\\d+\\\\s+${candidate.expression}\\\\b`, "i").test(clause),
+        new RegExp(`\\b\\d+\\s+${candidate.expression}\\b`, "i").test(clause),
       );
       if (!match[1] && /\\bbooking\\b/i.test(clause) && hasOtherExplicitPackage) {
         continue;
