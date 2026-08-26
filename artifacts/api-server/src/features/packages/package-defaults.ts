@@ -58,9 +58,9 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
     customerDescription:
       "A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.",
     bookingTalkingPoints:
-      "Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early. The restricted fourth Pirate unit is separate and approval-only because of its massive pool and extremely-flat-ground requirement.",
+      "Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.",
     operationalRequirements:
-      "Confirm event-specific footprint, power, water access, ballast, and setup details before contracting. Massive-pool and extremely-flat-ground requirements apply only to the approval-only restricted fourth Pirate unit.",
+      "Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.",
     setupNotes:
       "Schedule pool filling as part of setup, not as a day-of detail. Plan for permission to set up 1–2 days before the event and tear down the day after. The event holder provides a forklift or loader for load-out unless another arrangement is approved.",
     knowledgeReviewNote: null,
@@ -136,8 +136,8 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
   SELECT
     'pirates_rebellion', 'Pirate''s Rebellion', 750000, 3, 3, 0, 3, 3, 1, 4,
     'A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.',
-    'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early. The restricted fourth Pirate unit is separate and approval-only because of its massive pool and extremely-flat-ground requirement.',
-    'Confirm event-specific footprint, power, water access, ballast, and setup details before contracting. Massive-pool and extremely-flat-ground requirements apply only to the approval-only restricted fourth Pirate unit.',
+    'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.',
+    'Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.',
     'Schedule pool filling as part of setup, not as a day-of detail. Plan for permission to set up 1–2 days before the event and tear down the day after. The event holder provides a forklift or loader for load-out unless another arrangement is approved.',
     NULL, true
   WHERE NOT EXISTS (
