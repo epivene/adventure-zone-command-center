@@ -18,16 +18,15 @@ jobs:
           fi
           BASE="https://adventure-zone-command-center.onrender.com"
           for Q in \
-            "Saguache Fall Festival & Quilt Show" \
-            "Higher Ground Fair" \
-            "Experience Rexburg" \
-            "Durango Autumn Arts Festival" \
-            "Santa Cruz County Fair" \
-            "Cruisin' the Canyon Car Show" \
-            "Breck Film Fest" \
-            "Cochise County Fair" \
-            "Colorado Highland Games" \
-            "Holly Gateway Fair"
+            "Santa Cruz" \
+            "Santa Cruz County" \
+            "Sonoita" \
+            "Cochise" \
+            "Cochise County" \
+            "Douglas" \
+            "Holly Gateway" \
+            "Gateway Fair" \
+            "Holly"
           do
             echo "=== QUERY: $Q ==="
             curl --fail-with-body --silent --show-error \
