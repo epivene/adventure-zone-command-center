@@ -38,6 +38,14 @@ export function classifyCalendarBooking(input: { summary: string; description: s
       if (uncertainty.test(packageClause(text, match.index!, match[0].length))) {
         return { confidence: "ambiguous" as const, packages: [], evidence: ["ambiguous or conditional package evidence"] };
       }
+      const clause = packageClause(text, match.index!, match[0].length);
+      const hasOtherExplicitPackage = packages.some((candidate) =>
+        candidate.key !== item.key &&
+        new RegExp(`\\\\b\\\\d+\\\\s+${candidate.expression}\\\\b`, "i").test(clause),
+      );
+      if (!match[1] && /\\bbooking\\b/i.test(clause) && hasOtherExplicitPackage) {
+        continue;
+      }
       const quantity = match[1] ? Number(match[1]) : NaN;
       if (!Number.isInteger(quantity) || quantity < 1) {
         return { confidence: "ambiguous" as const, packages: [], evidence: [`missing explicit quantity: ${item.name}`] };
