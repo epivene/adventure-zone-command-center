@@ -13,7 +13,6 @@ describe("PostgresGmailDraftPersistence CRM history", () => {
     const client = new PGlite();
     clients.push(client);
     await client.exec(`
-      create extension if not exists pgcrypto;
       create table activities (
         id uuid primary key default gen_random_uuid(), organization_id uuid, contact_id uuid, booking_id uuid,
         kind text not null, subject text, status text, body text not null, occurred_at timestamptz,
