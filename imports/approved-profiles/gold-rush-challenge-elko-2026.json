@@ -1,0 +1,40 @@
+{
+  "importRevision": 1,
+  "event": {
+    "id": null,
+    "name": "Gold Rush Challenge",
+    "city": "Elko",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "2026 Gold Rush Bull Riding Challenge prospect. Event is September 12, 2026 at the Elko County Fairgrounds. Family-focused rodeo event with mutton busting, mini bull riding, bull riding, and women's breakaway. Organizer: Benavides Bucking Bulls LLC. Public organizer email: bbbulls804@gmail.com. Adventure Zone outreach is being made through the event contact form for a possible pay-for-play or prepaid inflatable carnival.",
+    "phone": "",
+    "website": "https://elkogoldrushchallenge.com",
+    "address1": "13 Fairgrounds Road",
+    "address2": "",
+    "postalCode": ""
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Efren Benavides",
+      "phone": "",
+      "email": "bbbulls804@gmail.com",
+      "role": "Organizer / Benavides Bucking Bulls",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Gold Rush Challenge - 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-12",
+    "endsAt": "2026-09-12",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-08-27",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null
+}
