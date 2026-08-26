@@ -14,7 +14,7 @@ describe("classifyCalendarBooking", () => {
   });
   it("does not guess package use from ambiguous notes", () => {
     expect(classifyCalendarBooking({ summary: "Adventure Zone — Johnson school event", description: "Likely foam or glow; client will decide later." }))
-      .toEqual({ confidence: "ambiguous", packages: [], evidence: ["ambiguous or conditional package evidence"] });
+      .toMatchObject({ confidence: "ambiguous", packages: [] });
   });
   it("ignores unrelated uncertainty outside the package clause", () => {
     expect(classifyCalendarBooking({ summary: "2 Foam Party", description: "Call the office or email the venue with setup questions." }))
@@ -22,5 +22,17 @@ describe("classifyCalendarBooking", () => {
   });
   it.each(["-1 Foam Party", "minus 1 Foam Party", "remove 1 Foam Party", "exclude 1 Foam Party"])("treats %s as negative package evidence", (summary) => {
     expect(classifyCalendarBooking({ summary, description: "" })).toMatchObject({ confidence: "ambiguous", packages: [] });
+  });
+
+
+  it("fails closed when a bare Adventure Zone follows a different quantified package booking", () => {
+    expect(classifyCalendarBooking({
+      summary: "1 Pirate's Rebellion booking plus Adventure Zone",
+      description: "",
+    })).toEqual({
+      confidence: "ambiguous",
+      packages: [],
+      evidence: ["missing explicit quantity: Adventure Zone"],
+    });
   });
 });

@@ -533,6 +533,8 @@ export const packageTemplates = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     baseAttractionCount: integer("base_attraction_count").notNull(),
+    normalCapacity: integer("normal_capacity").notNull(),
+    temporaryUnavailableQuantity: integer("temporary_unavailable_quantity").notNull(),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -554,6 +556,14 @@ export const packageTemplates = pgTable(
     check(
       "package_templates_base_attraction_count_positive",
       sql`${table.baseAttractionCount} > 0`,
+    ),
+    check(
+      "package_templates_normal_capacity_nonnegative",
+      sql`${table.normalCapacity} >= 0`,
+    ),
+    check(
+      "package_templates_temporary_unavailable_quantity_nonnegative",
+      sql`${table.temporaryUnavailableQuantity} >= 0`,
     ),
   ],
 );

@@ -44,6 +44,8 @@ describe("reviewed package defaults", () => {
       name: "Mini Zone",
       basePriceCents: 500000,
       baseAttractionCount: 5,
+      normalCapacity: 0,
+      temporaryUnavailableQuantity: 0,
       minimumAttractionCount: 5,
       maximumAttractionCount: 5,
       baseDurationMinDays: 1,

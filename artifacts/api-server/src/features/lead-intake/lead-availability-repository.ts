@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { googleWorkspaceCalendarScopes, googleWorkspaceConnections, leadAvailabilitySnapshots, leadImportRows } from "@/db/schema";
+import { googleWorkspaceCalendarScopes, googleWorkspaceConnections, leadAvailabilitySnapshots, leadImportRows, packageTemplates } from "@/db/schema";
 import { LeadAvailabilityServiceError, type LeadAvailabilityPersistence, type LeadAvailabilitySnapshot } from "./lead-availability-service";
 
 type DrizzleDatabase = typeof database;
@@ -26,6 +26,15 @@ export class LeadAvailabilityRepository implements LeadAvailabilityPersistence {
       .innerJoin(googleWorkspaceConnections, eq(googleWorkspaceConnections.id, googleWorkspaceCalendarScopes.connectionId))
       .where(and(eq(googleWorkspaceCalendarScopes.selected, true), eq(googleWorkspaceConnections.status, "connected")))
       .orderBy(googleWorkspaceCalendarScopes.summary, googleWorkspaceCalendarScopes.calendarId);
+  }
+
+  async packageAvailabilityTemplates() {
+    return this.database.select({
+      code: packageTemplates.code,
+      name: packageTemplates.name,
+      normalCapacity: packageTemplates.normalCapacity,
+      temporaryUnavailableQuantity: packageTemplates.temporaryUnavailableQuantity,
+    }).from(packageTemplates).where(eq(packageTemplates.active, true));
   }
 
   async save(snapshot: LeadAvailabilitySnapshot): Promise<{ reviewVersion: number }> {
@@ -55,6 +64,7 @@ export class LeadAvailabilityRepository implements LeadAvailabilityPersistence {
         proposedEndDate: snapshot.proposedWindow.endDate, ready: snapshot.ready, checkedBy: snapshot.checkedBy,
         checkedAt: new Date(snapshot.checkedAt), selectedCalendarIds: snapshot.selectedCalendarIds,
         sourceEvents: snapshot.sourceEvents, reservations: snapshot.reservations,
+        packageAvailability: snapshot.packageAvailability,
       });
       return { reviewVersion: nextVersion };
     });

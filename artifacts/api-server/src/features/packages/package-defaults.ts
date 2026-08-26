@@ -9,6 +9,8 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
     name: "Adventure Zone",
     basePriceCents: 900000,
     baseAttractionCount: 10,
+    normalCapacity: 5,
+    temporaryUnavailableQuantity: 0,
     minimumAttractionCount: 10,
     maximumAttractionCount: 12,
     baseDurationMinDays: 1,
@@ -27,6 +29,8 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
     name: "Warrior's Playground",
     basePriceCents: 750000,
     baseAttractionCount: 5,
+    normalCapacity: 1,
+    temporaryUnavailableQuantity: 0,
     minimumAttractionCount: 5,
     maximumAttractionCount: 5,
     baseDurationMinDays: 1,
@@ -45,16 +49,18 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
     name: "Pirate's Rebellion",
     basePriceCents: 750000,
     baseAttractionCount: 3,
+    normalCapacity: 3,
+    temporaryUnavailableQuantity: 0,
     minimumAttractionCount: 3,
     maximumAttractionCount: 3,
     baseDurationMinDays: 1,
     baseDurationMaxDays: 4,
     customerDescription:
-      "A water-focused pirate package centered on a large inflatable pool with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.",
+      "A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.",
     bookingTalkingPoints:
-      "Best fit for warm-weather events that can support a large wet footprint and significant water access. Ask about pool-fill water access early because a garden-hose fill can require roughly two setup days.",
+      "Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.",
     operationalRequirements:
-      "Plan for about 5,000–7,000 sq ft on a flat surface. Power within 75 ft: 1 x 50A/220V outlet, 6 x 110V outlets, or an approved equivalent/generator. Water is a major requirement: the source lists roughly 20,000 gallons for a smaller pool and 45,000–50,000 gallons for the larger pool. If stakes cannot be used, approved ballast is required; the reviewed source lists about 25 water barrels for this unit.",
+      "Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.",
     setupNotes:
       "Schedule pool filling as part of setup, not as a day-of detail. Plan for permission to set up 1–2 days before the event and tear down the day after. The event holder provides a forklift or loader for load-out unless another arrangement is approved.",
     knowledgeReviewNote: null,
@@ -63,6 +69,8 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
     name: "Mini Zone",
     basePriceCents: 500000,
     baseAttractionCount: 5,
+    normalCapacity: 0,
+    temporaryUnavailableQuantity: 0,
     minimumAttractionCount: 5,
     maximumAttractionCount: 5,
     baseDurationMinDays: 1,
@@ -83,13 +91,14 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
 export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
   INSERT INTO package_templates (
     code, name, base_price_cents, base_attraction_count,
+    normal_capacity, temporary_unavailable_quantity,
     minimum_attraction_count, maximum_attraction_count,
     base_duration_min_days, base_duration_max_days,
     customer_description, booking_talking_points,
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'adventure_zone', 'Adventure Zone', 900000, 10, 10, 12, 1, 4,
+    'adventure_zone', 'Adventure Zone', 900000, 10, 5, 0, 10, 12, 1, 4,
     'A full traveling inflatable carnival with a balanced mix of slides, obstacle and competitive attractions, bounce-house and playland options, plus carnival-style games for a wide age range.',
     'Best all-around package for fairs and community events that want something for younger kids, teens, and adults. Normal target is 10–12 main attractions; larger configurations are possible when equipment and route capacity allow. Ask about available space, power, wet rides, and carnival games.',
     'Plan for about 7,000–10,000 sq ft. Power within 75 ft: 3 x 50A/220V outlets, 18 x 110V outlets, or an approved equivalent/generator. Water is optional for operation unless wet rides are used, but a faucet/hose within 75 ft is needed for cleaning. If stakes cannot be used, approved ballast is required; the reviewed source lists about 80 water barrels for this unit.',
@@ -99,13 +108,14 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
 
   INSERT INTO package_templates (
     code, name, base_price_cents, base_attraction_count,
+    normal_capacity, temporary_unavailable_quantity,
     minimum_attraction_count, maximum_attraction_count,
     base_duration_min_days, base_duration_max_days,
     customer_description, booking_talking_points,
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'weekend_warriors', 'Warrior''s Playground', 750000, 5, 5, 5, 1, 4,
+    'weekend_warriors', 'Warrior''s Playground', 750000, 5, 1, 0, 5, 5, 1, 4,
     'A competition-focused package built around five main adrenaline attractions, including an obstacle course and action-pursuit style options, plus carnival-style games.',
     'Strong fit for older kids, teens, adults, team competition, and events that want more adrenaline than bounce-house variety. Confirm action-pursuit equipment and consumables separately because shared equipment availability must be checked.',
     'Plan for about 8,000–10,000 sq ft. Power within 75 ft: 2 x 50A/220V outlets, 12 x 110V outlets, or an approved equivalent/generator. Water is not required to operate the attractions, but access to a faucet/hose is useful for cleaning. If stakes cannot be used, approved ballast is required; the reviewed source lists about 75 water barrels for this unit.',
@@ -117,16 +127,17 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
 
   INSERT INTO package_templates (
     code, name, base_price_cents, base_attraction_count,
+    normal_capacity, temporary_unavailable_quantity,
     minimum_attraction_count, maximum_attraction_count,
     base_duration_min_days, base_duration_max_days,
     customer_description, booking_talking_points,
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'pirates_rebellion', 'Pirate''s Rebellion', 750000, 3, 3, 3, 1, 4,
-    'A water-focused pirate package centered on a large inflatable pool with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.',
-    'Best fit for warm-weather events that can support a large wet footprint and significant water access. Ask about pool-fill water access early because a garden-hose fill can require roughly two setup days.',
-    'Plan for about 5,000–7,000 sq ft on a flat surface. Power within 75 ft: 1 x 50A/220V outlet, 6 x 110V outlets, or an approved equivalent/generator. Water is a major requirement: the source lists roughly 20,000 gallons for a smaller pool and 45,000–50,000 gallons for the larger pool. If stakes cannot be used, approved ballast is required; the reviewed source lists about 25 water barrels for this unit.',
+    'pirates_rebellion', 'Pirate''s Rebellion', 750000, 3, 3, 0, 3, 3, 1, 4,
+    'A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.',
+    'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.',
+    'Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.',
     'Schedule pool filling as part of setup, not as a day-of detail. Plan for permission to set up 1–2 days before the event and tear down the day after. The event holder provides a forklift or loader for load-out unless another arrangement is approved.',
     NULL, true
   WHERE NOT EXISTS (
@@ -135,13 +146,14 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
 
   INSERT INTO package_templates (
     code, name, base_price_cents, base_attraction_count,
+    normal_capacity, temporary_unavailable_quantity,
     minimum_attraction_count, maximum_attraction_count,
     base_duration_min_days, base_duration_max_days,
     customer_description, booking_talking_points,
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'mini_zone', 'Mini Zone', 500000, 5, 5, 5, 1, 4,
+    'mini_zone', 'Mini Zone', 500000, 5, 0, 0, 5, 5, 1, 4,
     'A smaller five-attraction version of The Adventure Zone for events that need a tighter footprint or a lower starting package price.',
     'Use when a full Adventure Zone setup is more space or budget than an event needs. The source describes an obstacle course, one adventure attraction, a bounce-house combo, a slide, a playland, and carnival-style games; final equipment remains event-specific.',
     'Plan for about 4,000–7,000 sq ft. The source lists two 50A/220V power connections or a 50 kW generator and also references twelve standard outlets; confirm the exact electrical configuration before contracting. Approved ballast is required when stakes cannot be used.',

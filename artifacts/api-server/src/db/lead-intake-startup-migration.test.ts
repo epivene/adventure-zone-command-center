@@ -26,6 +26,8 @@ describe("ensureLeadIntakeSchema", () => {
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
     expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
     expect(query.mock.calls[0]?.[0]).toContain("lead_availability_snapshots");
+    expect(query.mock.calls[0]?.[0]).toContain("package_availability");
+    expect(query.mock.calls[0]?.[0]).toContain("count(*) = 7");
     expect(loadSql).not.toHaveBeenCalled();
   });
 
@@ -84,11 +86,30 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_organization_inbox.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
+      expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);
+      expect((await client.query(`
+        select conname from pg_constraint
+        where conrelid = 'package_templates'::regclass
+          and conname in (
+            'package_templates_code_nonblank',
+            'package_templates_name_nonblank',
+            'package_templates_base_attraction_count_positive'
+          )
+        order by conname
+      `)).rows).toEqual([
+        { conname: "package_templates_base_attraction_count_positive" },
+        { conname: "package_templates_code_nonblank" },
+        { conname: "package_templates_name_nonblank" },
+      ]);
+      await expect(client.exec(`
+        insert into package_templates (code, name) values ('missing-count', 'Missing count');
+      `)).rejects.toThrow();
       await expect(client.exec(`
         insert into lead_import_batches
           (id, original_filename, file_sha256, row_count, imported_by)

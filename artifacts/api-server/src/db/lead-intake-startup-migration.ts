@@ -26,6 +26,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_organization_inbox.sql"),
     loadOne(here, "20260825_lead_relationship_classification.sql"),
     loadOne(here, "20260825_lead_calendar_availability.sql"),
+    loadOne(here, "20260826_lead_inventory_policy.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -41,11 +42,11 @@ export async function ensureLeadIntakeSchema(
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
       and (
-        select count(*) = 11 from information_schema.columns
+        select count(*) = 12 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
-          and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations'])
+          and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations','package_availability'])
       )
-      and (select count(*) = 6 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_fk','lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array']))
+      and (select count(*) = 7 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_fk','lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array','lead_availability_snapshots_package_availability_object']))
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and contype = 'f' and confdeltype = 'r')
       and not exists (
         select 1 from information_schema.columns
@@ -56,9 +57,9 @@ export async function ensureLeadIntakeSchema(
             or (column_name = 'ready' and data_type <> 'boolean')
             or (column_name = 'checked_by' and data_type <> 'text')
             or (column_name = 'checked_at' and data_type <> 'timestamp with time zone')
-            or (column_name in ('selected_calendar_ids','source_events','reservations') and data_type <> 'jsonb'))
+            or (column_name in ('selected_calendar_ids','source_events','reservations','package_availability') and data_type <> 'jsonb'))
       )
-      and not exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'lead_availability_snapshots' and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations']) and is_nullable <> 'NO')
+      and not exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'lead_availability_snapshots' and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations','package_availability']) and is_nullable <> 'NO')
       and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'lead_availability_snapshots' and column_name = 'id' and column_default like '%gen_random_uuid%')
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and contype = 'p' and pg_get_constraintdef(oid) like 'PRIMARY KEY (id)%')
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_row_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.lead_import_rows') and pg_get_constraintdef(oid) like 'FOREIGN KEY (row_id) REFERENCES %lead_import_rows(id)%')
@@ -67,6 +68,7 @@ export async function ensureLeadIntakeSchema(
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_calendar_ids_array' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%jsonb_typeof(selected_calendar_ids)%array%')
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_source_events_array' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%jsonb_typeof(source_events)%array%')
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_reservations_array' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%jsonb_typeof(reservations)%array%')
+      and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = 'lead_availability_snapshots_package_availability_object' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%jsonb_typeof(package_availability)%object%')
       and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'lead_availability_snapshots_row_checked_idx' and position('(row_id, checked_at desc)' in lower(indexdef)) > 0)
       and (
         select count(*) = 8 from information_schema.columns
