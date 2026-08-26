@@ -64,5 +64,4 @@ WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
 UPDATE lead_availability_snapshots
 SET ready = false,
     package_availability = '{"status":"unresolved","packages":[],"restrictedOptions":[],"blockers":["legacy snapshot predates package-capacity evaluation"]}'::jsonb
-WHERE coalesce(package_availability->>'status', '') <> 'resolved'
-  AND coalesce(package_availability->>'status', '') <> 'unresolved';
+WHERE package_availability->>'status' = 'unresolved';
