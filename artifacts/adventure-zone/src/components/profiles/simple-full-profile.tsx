@@ -15,13 +15,14 @@ import {
   listActivityRevisionsAction,
   loadTimelinePageAction,
 } from "@/actions/activities";
+import { getGoogleProfileEmails } from "@/features/google-workspace/google-workspace-client";
 import type { ActivityTimelineItem } from "@/features/activities/activity-types";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
 
-type OpenSection = "contacts" | "events" | "notes" | null;
+type OpenSection = "contacts" | "events" | "notes" | "emails" | null;
 
 function formatDateTime(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -108,9 +109,23 @@ export function SimpleFullProfile({
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
+  const [emailCount, setEmailCount] = useState(0);
 
   useEffect(() => {
     setOptimisticActivities([]);
+  }, [profile.id]);
+
+  useEffect(() => {
+    let active = true;
+    setEmailCount(0);
+    void getGoogleProfileEmails(profile.id)
+      .then((result) => {
+        if (active) setEmailCount(result.conversations.length);
+      })
+      .catch(() => {
+        if (active) setEmailCount(0);
+      });
+    return () => { active = false; };
   }, [profile.id]);
 
   const isEditing = editing ?? internalEditing;
@@ -303,10 +318,11 @@ export function SimpleFullProfile({
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,0.75fr))_minmax(0,2.2fr)]">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,0.75fr))_minmax(0,2.2fr)]">
         {statCard({ value: profile.contacts.length, label: `Contact${profile.contacts.length === 1 ? "" : "s"}`, active: openSection === "contacts", onClick: () => toggleSection("contacts") })}
         {statCard({ value: profile.bookings.length, label: `Event${profile.bookings.length === 1 ? "" : "s"}`, active: openSection === "events", onClick: () => toggleSection("events") })}
         {statCard({ value: activities.length, label: `Note${activities.length === 1 ? "" : "s"}`, active: openSection === "notes", onClick: () => toggleSection("notes") })}
+        {statCard({ value: emailCount, label: `Email${emailCount === 1 ? "" : "s"}`, active: openSection === "emails", onClick: () => toggleSection("emails") })}
         {!nextFollowUp ? (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
             <p className="font-bold text-emerald-900">No open follow-ups</p>
@@ -367,12 +383,8 @@ export function SimpleFullProfile({
       {openSection === "notes" ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-bold">Activity & email history</h2><span className="text-xs text-slate-500">America/Denver</span></div>
+            <div><h2 className="text-lg font-bold">Activity history</h2><span className="text-xs text-slate-500">America/Denver</span></div>
             <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
-          </div>
-
-          <div className="mt-4">
-            <ProfileGoogleEmailPanel organizationId={profile.id} />
           </div>
 
           <label className="relative mt-4 block">
@@ -414,6 +426,10 @@ export function SimpleFullProfile({
             )}
           </div>
         </section>
+      ) : null}
+
+      {openSection === "emails" ? (
+        <ProfileGoogleEmailPanel organizationId={profile.id} />
       ) : null}
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
