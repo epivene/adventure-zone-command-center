@@ -159,7 +159,7 @@ export function createLeadIntakeClient(api: Api) {
       return api.post<{ block: CommunicationBlock }>("/lead-intake/communication-blocks", body);
     },
     async removeCommunicationBlock(blockId: string, reason: string) {
-      return api.post<{ block: CommunicationBlock }>(`/lead-intake/communication-blocks/${blockId}`, { _method: "DELETE", reason });
+      return api.post<{ block: CommunicationBlock }>(`/lead-intake/communication-blocks/${blockId}/remove`, { reason });
     },
   };
 }
