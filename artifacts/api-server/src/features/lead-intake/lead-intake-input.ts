@@ -41,7 +41,7 @@ export const leadReviewConfirmationSchema = z.object({
   expectedVersion: z.number().int().min(0),
   decision: z.object({
     organizationId: z.string().uuid(),
-    contactMode: z.enum(["existing", "manual"]),
+    contactMode: z.enum(["existing", "manual", "organization_inbox"]),
     contactId: z.string().uuid().nullable(),
     contactName: z.string().trim().max(200),
     contactRole: z.string().trim().max(200),

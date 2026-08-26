@@ -18,6 +18,12 @@ function client() {
   return {
     searchProfiles: vi.fn().mockResolvedValue([{ id: "org-1", name: "Aspen Filmfest (Aspen) CO", city: "Aspen", region: "CO" }]),
     listProfileContacts: vi.fn().mockResolvedValue([{ id: "contact-1", firstName: "Lindsey", lastName: "Powell", email: "lilupow@aspenfilm.org", role: "Event organizer", jobTitle: null }]),
+    getProfileEvidence: vi.fn().mockResolvedValue({
+      organization: { id: "org-1", name: "Aspen Filmfest (Aspen) CO", city: "Aspen", region: "CO", phone: null, website: "aspenfilm.org" },
+      contacts: [{ id: "contact-1", firstName: "Lindsey", lastName: "Powell", email: "lilupow@aspenfilm.org", role: "Event organizer", jobTitle: null }],
+      actText: [],
+      emailCandidates: [],
+    }),
     confirmReview: vi.fn().mockResolvedValue({ rowId: "row-1", state: "verified", reviewVersion: 1 }),
   };
 }
@@ -122,5 +128,36 @@ describe("LeadContactDateReview", () => {
     expect(screen.getByLabelText("I reviewed the other profile emails and deliberately selected this recipient")).not.toBeChecked();
     fireEvent.change(screen.getByLabelText("Contact role"), { target: { value: "Executive director" } });
     expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+  });
+
+  it("invalidates approvals when date evidence changes", async () => {
+    const api = client();
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+    fireEvent.change(await screen.findByLabelText("Existing contact"), { target: { value: "contact-1" } });
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+
+    fireEvent.change(screen.getByLabelText("Date evidence type"), { target: { value: "manual" } });
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+    fireEvent.change(screen.getByLabelText("Date source"), { target: { value: "verified source" } });
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+  });
+
+  it("keeps existing CRM contacts usable when ACT evidence loading fails", async () => {
+    const api = client();
+    api.getProfileEvidence.mockRejectedValue(new Error("ACT evidence unavailable"));
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+
+    expect(await screen.findByRole("option", { name: /Lindsey Powell/ })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("ACT evidence unavailable");
   });
 });

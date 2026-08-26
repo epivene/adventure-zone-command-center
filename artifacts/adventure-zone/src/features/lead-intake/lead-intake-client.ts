@@ -29,7 +29,7 @@ export type LeadImportReviewRow = {
   reviewVersion: number;
   selectedOrganizationId: string | null;
   selectedContactId: string | null;
-  contactMode: "existing" | "manual" | null;
+  contactMode: "existing" | "manual" | "organization_inbox" | null;
   confirmedEventName: string | null;
   confirmedStartDate: string | null;
   confirmedEndDate: string | null;
@@ -43,6 +43,19 @@ export type LeadImportReviewRow = {
 
 export type LeadProfileOption = { id: string; name: string; city: string | null; region: string | null };
 export type LeadContactOption = { id: string; firstName: string; lastName: string; email: string | null; role: string | null; jobTitle: string | null };
+export type LeadProfileEvidence = {
+  organization: { id: string; name: string; city: string | null; region: string | null; phone: string | null; website: string | null };
+  contacts: LeadContactOption[];
+  actText: Array<{
+    sourceRecordId: string;
+    sourceVersionId: string;
+    sourcePath: string;
+    kind: "description" | "business_card";
+    originalText: string;
+    emails: string[];
+  }>;
+  emailCandidates: Array<{ email: string; sourceRecordId: string; sourceVersionId: string; sourcePath: string }>;
+};
 
 export type LeadImportBatch = LeadImportBatchSummary & { rows: LeadImportReviewRow[] };
 
@@ -74,6 +87,9 @@ export function createLeadIntakeClient(api: Api) {
     },
     async listProfileContacts(organizationId: string) {
       return (await api.get<{ contacts: LeadContactOption[] }>(`/lead-intake/organizations/${organizationId}/contacts`)).contacts;
+    },
+    async getProfileEvidence(organizationId: string) {
+      return (await api.get<{ evidence: LeadProfileEvidence }>(`/lead-intake/organizations/${organizationId}/evidence`)).evidence;
     },
     async confirmReview(rowId: string, body: unknown) {
       return api.post<{ rowId: string; state: "verified"; reviewVersion: number }>(`/lead-intake/rows/${rowId}/confirm`, body);
