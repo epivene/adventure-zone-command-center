@@ -36,19 +36,21 @@ describe("LeadEmailPreviewRepository transactional contract", () => {
     });
   });
 
-  it("ensures the immutable seed before opening the preview transaction", async () => {
-    const order: string[] = [];
+  it("performs repeated previews as read-only repository loads", async () => {
+    const loads: string[] = [];
     const service = new LeadEmailPreviewService({
-      load: async () => { order.push("load"); throw new Error("stop after ordering evidence"); },
-    } as never, async () => { order.push("seed"); });
-    await expect(service.preview("30000000-0000-4000-8000-000000000001", 1)).rejects.toThrow("ordering evidence");
-    expect(order).toEqual(["seed", "load"]);
+      load: async () => { loads.push("load"); throw new Error("stop after read evidence"); },
+    } as never);
+    await expect(service.preview("30000000-0000-4000-8000-000000000001", 1)).rejects.toThrow("read evidence");
+    await expect(service.preview("30000000-0000-4000-8000-000000000001", 1)).rejects.toThrow("read evidence");
+    expect(loads).toEqual(["load", "load"]);
   });
 
   it("rejects private, unreviewed, wrong-version, and wrong-source template records", () => {
     const exact = {
       code: APPROVED_LEAD_INTRODUCTION_2026.code,
       templateVersion: APPROVED_LEAD_INTRODUCTION_2026.version,
+      name: APPROVED_LEAD_INTRODUCTION_2026.name,
       state: "active",
       ownerKind: "company",
       createdByKind: "system",
@@ -57,6 +59,8 @@ describe("LeadEmailPreviewRepository transactional contract", () => {
       category: "lead_introduction",
       subjectTemplate: APPROVED_LEAD_INTRODUCTION_2026.subject,
       bodyTemplate: APPROVED_LEAD_INTRODUCTION_2026.bodyTemplate,
+      allowedPlaceholders: [...APPROVED_LEAD_INTRODUCTION_2026.allowedPlaceholders],
+      requiredPlaceholders: [...APPROVED_LEAD_INTRODUCTION_2026.requiredPlaceholders],
       sourceNote: APPROVED_LEAD_INTRODUCTION_2026.sourceNote,
       sourceFilename: APPROVED_LEAD_INTRODUCTION_2026.sourceFilename,
       sourceDocumentId: "40000000-0000-4000-8000-000000000001",
@@ -154,7 +158,8 @@ describe("LeadEmailPreviewRepository transactional contract", () => {
         category: "lead_introduction",
         subjectTemplate: APPROVED_LEAD_INTRODUCTION_2026.subject,
         bodyTemplate: APPROVED_LEAD_INTRODUCTION_2026.bodyTemplate,
-        allowedPlaceholders: [], requiredPlaceholders: ["eventName", "eventDates"],
+        allowedPlaceholders: [...APPROVED_LEAD_INTRODUCTION_2026.allowedPlaceholders],
+        requiredPlaceholders: [...APPROVED_LEAD_INTRODUCTION_2026.requiredPlaceholders],
         accessScope: "office", state: "active", ownerKind: "company", createdByKind: "system",
         sourceDocumentId: source!.id, sourceNote: APPROVED_LEAD_INTRODUCTION_2026.sourceNote,
         reviewedBy: APPROVED_LEAD_INTRODUCTION_2026.reviewedBy, reviewedAt: new Date("2026-08-26T00:00:00Z"),
@@ -170,6 +175,19 @@ describe("LeadEmailPreviewRepository transactional contract", () => {
         subject: null,
         body: null,
       });
+      const templateBefore = (await client.query(`
+        select reviewed_by, reviewed_at, updated_at
+        from communication_templates
+        where code = '${APPROVED_LEAD_INTRODUCTION_2026.code}'
+      `)).rows[0];
+      const service = new LeadEmailPreviewService(repository);
+      await service.preview("30000000-0000-4000-8000-000000000001", 4);
+      await service.preview("30000000-0000-4000-8000-000000000001", 4);
+      expect((await client.query(`
+        select reviewed_by, reviewed_at, updated_at
+        from communication_templates
+        where code = '${APPROVED_LEAD_INTRODUCTION_2026.code}'
+      `)).rows[0]).toEqual(templateBefore);
       await expect(repository.load("30000000-0000-4000-8000-000000000001", 3)).rejects.toMatchObject({
         code: "VERSION_CONFLICT",
         details: { expectedVersion: 3, currentVersion: 4 },

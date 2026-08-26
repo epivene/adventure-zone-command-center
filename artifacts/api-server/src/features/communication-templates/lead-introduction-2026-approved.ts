@@ -27,6 +27,8 @@ export const APPROVED_LEAD_INTRODUCTION_2026 = {
   sourceNote: "Amy Library: ADVENTURE ZONE STICKY NOTES.docx.pdf; approved 2026 prepaid v1.",
   reviewedBy: "system:amy-approved-2026-prepaid-v1",
   subject: "{{profileName}} {{eventLocation}} {{eventDates}}",
+  allowedPlaceholders: ["profileName", "eventLocation", "eventDates", "contactName", "eventName", "eventCity"],
+  requiredPlaceholders: ["eventName", "eventDates"],
   bodyTemplate,
   opening,
   packages,
@@ -36,3 +38,53 @@ export const APPROVED_LEAD_INTRODUCTION_2026 = {
 } as const;
 
 export type ApprovedLeadIntroductionDefinition = typeof APPROVED_LEAD_INTRODUCTION_2026;
+
+export type ApprovedLeadIntroductionTemplateCandidate = {
+  code: string;
+  templateVersion: string | null;
+  name: string;
+  state: string;
+  ownerKind: string;
+  createdByKind: string;
+  accessScope: string;
+  channel: string;
+  category: string;
+  subjectTemplate: string | null;
+  bodyTemplate: string;
+  allowedPlaceholders: readonly string[];
+  requiredPlaceholders: readonly string[];
+  sourceNote: string | null;
+  sourceFilename: string | null;
+  sourceDocumentId: string | null;
+  reviewedBy: string | null;
+  reviewedAt: Date | null;
+};
+
+function exactList(left: readonly string[], right: readonly string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
+export function isExactApprovedLeadIntroductionTemplate(
+  candidate: ApprovedLeadIntroductionTemplateCandidate,
+): boolean {
+  const expected = APPROVED_LEAD_INTRODUCTION_2026;
+  return candidate.code === expected.code
+    && candidate.templateVersion === expected.version
+    && candidate.name === expected.name
+    && candidate.state === "active"
+    && candidate.ownerKind === "company"
+    && candidate.createdByKind === "system"
+    && candidate.accessScope === "office"
+    && candidate.channel === "email"
+    && candidate.category === "lead_introduction"
+    && candidate.subjectTemplate === expected.subject
+    && candidate.bodyTemplate === expected.bodyTemplate
+    && exactList(candidate.allowedPlaceholders, expected.allowedPlaceholders)
+    && exactList(candidate.requiredPlaceholders, expected.requiredPlaceholders)
+    && candidate.sourceNote === expected.sourceNote
+    && candidate.sourceFilename === expected.sourceFilename
+    && Boolean(candidate.sourceDocumentId)
+    && candidate.reviewedBy === expected.reviewedBy
+    && candidate.reviewedAt instanceof Date
+    && Number.isFinite(candidate.reviewedAt.valueOf());
+}

@@ -1,6 +1,8 @@
 import { isApprovedNormalPackageKey } from "./lead-package-allowlist";
 
 export const DEFAULT_AVAILABILITY_FRESHNESS_MS = 60 * 60 * 1000;
+/** Allows ordinary host/database clock drift without accepting materially future evidence. */
+export const DEFAULT_AVAILABILITY_FUTURE_SKEW_MS = 5 * 60 * 1000;
 
 export type CommunicationBlock = {
   active: boolean;
@@ -34,6 +36,7 @@ export type DraftReadinessInput = {
   } | null;
   now?: Date;
   freshnessMs?: number;
+  futureSkewMs?: number;
 };
 
 export type DraftReadiness = { ready: boolean; blockers: string[] };
@@ -80,7 +83,11 @@ export function evaluateDraftReadiness(input: DraftReadinessInput): DraftReadine
   } else {
     const checkedAt = Date.parse(availability.checkedAt);
     const age = (input.now ?? new Date()).getTime() - checkedAt;
-    if (!Number.isFinite(checkedAt) || age > (input.freshnessMs ?? DEFAULT_AVAILABILITY_FRESHNESS_MS)) {
+    if (
+      !Number.isFinite(checkedAt)
+      || age > (input.freshnessMs ?? DEFAULT_AVAILABILITY_FRESHNESS_MS)
+      || age < -(input.futureSkewMs ?? DEFAULT_AVAILABILITY_FUTURE_SKEW_MS)
+    ) {
       blockers.push("availability_stale");
     }
     if (availability.packageAvailability.status !== "resolved") blockers.push("availability_unresolved");

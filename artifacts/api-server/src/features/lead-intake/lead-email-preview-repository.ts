@@ -11,6 +11,7 @@ import {
 
 import {
   APPROVED_LEAD_INTRODUCTION_2026,
+  isExactApprovedLeadIntroductionTemplate,
   type ApprovedLeadIntroductionDefinition,
 } from "../communication-templates/lead-introduction-2026-approved";
 import { CommunicationBlockRepository } from "./communication-block-repository";
@@ -30,6 +31,7 @@ export type LeadEmailPreviewRepositoryResult = {
     packageAvailability: any;
   } | null;
   calendarEvidence: unknown[];
+  calendarReservations: unknown[];
   blocks: Awaited<ReturnType<CommunicationBlockRepository["listActive"]>>;
   approvedTemplate: LeadEmailPreviewTemplate | null;
 };
@@ -48,6 +50,7 @@ export class LeadEmailPreviewRepositoryError extends Error {
 type TemplateCandidate = {
   code: string;
   templateVersion: string | null;
+  name: string;
   state: string;
   ownerKind: string;
   createdByKind: string;
@@ -56,6 +59,8 @@ type TemplateCandidate = {
   category: string;
   subjectTemplate: string | null;
   bodyTemplate: string;
+  allowedPlaceholders: string[];
+  requiredPlaceholders: string[];
   sourceNote: string | null;
   sourceFilename: string | null;
   sourceDocumentId: string | null;
@@ -78,22 +83,7 @@ export class LeadEmailPreviewRepository {
   }
 
   static isExactApprovedTemplate(candidate: TemplateCandidate): boolean {
-    const expected = APPROVED_LEAD_INTRODUCTION_2026;
-    return candidate.code === expected.code
-      && candidate.templateVersion === expected.version
-      && candidate.state === "active"
-      && candidate.ownerKind === "company"
-      && candidate.createdByKind === "system"
-      && candidate.accessScope === "office"
-      && candidate.channel === "email"
-      && candidate.category === "lead_introduction"
-      && candidate.subjectTemplate === expected.subject
-      && candidate.bodyTemplate === expected.bodyTemplate
-      && candidate.sourceNote === expected.sourceNote
-      && candidate.sourceFilename === expected.sourceFilename
-      && Boolean(candidate.sourceDocumentId)
-      && candidate.reviewedBy === expected.reviewedBy
-      && candidate.reviewedAt instanceof Date;
+    return isExactApprovedLeadIntroductionTemplate(candidate);
   }
 
   private async loadWithinTransaction(tx: Transaction, rowId: string, expectedVersion: number): Promise<LeadEmailPreviewRepositoryResult> {
@@ -152,6 +142,7 @@ export class LeadEmailPreviewRepository {
       id: communicationTemplates.id,
       code: communicationTemplates.code,
       templateVersion: communicationTemplates.templateVersion,
+      name: communicationTemplates.name,
       state: communicationTemplates.state,
       ownerKind: communicationTemplates.ownerKind,
       createdByKind: communicationTemplates.createdByKind,
@@ -160,6 +151,8 @@ export class LeadEmailPreviewRepository {
       category: communicationTemplates.category,
       subjectTemplate: communicationTemplates.subjectTemplate,
       bodyTemplate: communicationTemplates.bodyTemplate,
+      allowedPlaceholders: communicationTemplates.allowedPlaceholders,
+      requiredPlaceholders: communicationTemplates.requiredPlaceholders,
       sourceNote: communicationTemplates.sourceNote,
       sourceFilename: businessSourceDocuments.originalFilename,
       sourceDocumentId: communicationTemplates.sourceDocumentId,
@@ -199,7 +192,15 @@ export class LeadEmailPreviewRepository {
       : null;
 
     return {
-      lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null },
+      lead: {
+        ...lead,
+        eventName: lead.eventName,
+        startDate: lead.startDate,
+        endDate: lead.endDate,
+        recipientEmail: lead.recipientEmail,
+        profileName: lead.profileName ?? lead.eventName,
+        firstName: lead.firstName ?? null,
+      },
       availability: snapshot ? {
         ready: snapshot.ready,
         checkedAt: snapshot.checkedAt.toISOString(),
@@ -209,6 +210,7 @@ export class LeadEmailPreviewRepository {
         packageAvailability: snapshot.packageAvailability,
       } : null,
       calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [],
+      calendarReservations: snapshot?.reservations as unknown[] ?? [],
       blocks,
       approvedTemplate,
     };

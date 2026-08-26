@@ -13,7 +13,6 @@ import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/feature
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
-import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
 import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
 import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
@@ -27,7 +26,6 @@ const availabilityRepository = new LeadAvailabilityRepository(db);
 const communicationBlockRepository = new CommunicationBlockRepository(db);
 const leadEmailPreviewService = new LeadEmailPreviewService(
   new LeadEmailPreviewRepository(db),
-  () => ensureCommunicationTemplateSeed(db as any),
 );
 
 async function optionalGoogleReadClient() {

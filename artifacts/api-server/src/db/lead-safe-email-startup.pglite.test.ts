@@ -2,7 +2,10 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
 
-import { isCommunicationBlockSchemaReady } from "./lead-intake-startup-migration";
+import {
+  isCommunicationBlockSchemaReady,
+  isCommunicationTemplateVersionSchemaReady,
+} from "./lead-intake-startup-migration";
 
 describe("lead safe-email startup readiness", () => {
   it("repairs a partial schema and verifies columns, exact checks, indexes, FKs, trigger, and function", async () => {
@@ -17,13 +20,16 @@ describe("lead safe-email startup readiness", () => {
         create table organizations (id uuid primary key);
         create table contacts (id uuid primary key);
         create table lead_import_rows (id uuid primary key);
+        create table communication_templates (id uuid primary key);
         create table communication_blocks (id uuid primary key default gen_random_uuid());
         create table communication_block_events (id uuid primary key default gen_random_uuid());
       `);
 
       await expect(isCommunicationBlockSchemaReady({ query })).resolves.toBe(false);
+      await expect(isCommunicationTemplateVersionSchemaReady({ query })).resolves.toBe(false);
       await client.exec(migration);
       await expect(isCommunicationBlockSchemaReady({ query })).resolves.toBe(true);
+      await expect(isCommunicationTemplateVersionSchemaReady({ query })).resolves.toBe(true);
       await client.exec(migration);
       await expect(isCommunicationBlockSchemaReady({ query })).resolves.toBe(true);
 

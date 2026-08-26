@@ -21,6 +21,7 @@ describe("safe email preview route contract", () => {
       profileName: "Aspen Filmfest", eventName: "Aspen Filmfest", relationshipStatus: "new_introduction",
       territoryStatus: "open", fitStatus: "approved", templateStatus: "approved", templateVersion: "2026-prepaid-v1",
       templateSource: "ADVENTURE ZONE STICKY NOTES.docx.pdf", calendarEvidence: [], normalPackageCounts: [],
+      calendarConflictSummary: { totalConflicts: 0, totalEvidenceRecords: 0, displayedEvidenceRecords: 0, truncated: false },
       readiness: { ready: false, blockers: ["availability_stale_for_lead_version"] }, subject: null, body: null,
     };
     const handler = createLeadEmailPreviewHandler({ preview: vi.fn().mockResolvedValue(preview) } as never);

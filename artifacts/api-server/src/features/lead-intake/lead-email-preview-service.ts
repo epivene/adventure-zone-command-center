@@ -1,5 +1,6 @@
 import type { ApprovedLeadIntroductionDefinition } from "../communication-templates/lead-introduction-2026-approved";
 import type { CommunicationBlock } from "./communication-block-policy";
+import { proposedBookingWindow } from "./calendar-window";
 import { evaluateDraftReadiness, type DraftReadinessInput } from "./draft-readiness-policy";
 import { renderLeadEmail } from "./lead-email-renderer";
 import { approvedNormalPackageForKey } from "./lead-package-allowlist";
@@ -31,6 +32,12 @@ export type LeadEmailPreviewDto = {
   templateVersion: string | null;
   templateSource: string | null;
   calendarEvidence: Array<{ calendarId: string | null; eventId: string | null; conflict: boolean }>;
+  calendarConflictSummary: {
+    totalConflicts: number;
+    totalEvidenceRecords: number;
+    displayedEvidenceRecords: number;
+    truncated: boolean;
+  };
   normalPackageCounts: Array<{ packageKey: string; availableQuantity: number }>;
   readiness: { ready: boolean; blockers: string[] };
   subject: string | null;
@@ -76,6 +83,7 @@ export function buildLeadEmailPreview(input: {
   now?: Date;
   freshnessMs?: number;
   calendarEvidence?: unknown[];
+  calendarReservations?: unknown[];
 }): LeadEmailPreviewDto {
   const baseReadiness = evaluateDraftReadiness({
     rowId: input.lead.rowId,
@@ -93,10 +101,14 @@ export function buildLeadEmailPreview(input: {
     now: input.now,
     freshnessMs: input.freshnessMs,
   });
+  const expectedWindow = proposedBookingWindow({
+    startDate: input.lead.startDate,
+    endDate: input.lead.endDate,
+  });
   const snapshotMatches = !input.availability || (
     input.availability.reviewVersion === input.lead.reviewVersion
-    && input.availability.proposedStartDate === input.lead.startDate
-    && input.availability.proposedEndDate === input.lead.endDate
+    && input.availability.proposedStartDate === expectedWindow.startDate
+    && input.availability.proposedEndDate === expectedWindow.endDate
   );
   const safetyBlockers = [
     ...(snapshotMatches ? [] : ["availability_stale_for_lead_version"]),
@@ -104,11 +116,21 @@ export function buildLeadEmailPreview(input: {
   ];
   const blockers = uniqueBlockers(baseReadiness.blockers, safetyBlockers);
   const readiness = { ready: baseReadiness.ready && safetyBlockers.length === 0, blockers };
-  const calendarEvidence = (input.calendarEvidence ?? []).slice(0, 20).map((value: any) => ({
+  const allCalendarEvidence = input.calendarEvidence ?? [];
+  const calendarEvidence = allCalendarEvidence.slice(0, 20).map((value: any) => ({
     calendarId: typeof value?.calendarId === "string" ? value.calendarId : null,
     eventId: typeof value?.eventId === "string" ? value.eventId : null,
     conflict: value?.classification?.confidence === "ambiguous" || value?.conflict === true,
   }));
+  const totalConflicts = (input.calendarReservations ?? []).filter(
+    (value: any) => value?.confidence === "ambiguous",
+  ).length;
+  const calendarConflictSummary = {
+    totalConflicts,
+    totalEvidenceRecords: allCalendarEvidence.length,
+    displayedEvidenceRecords: calendarEvidence.length,
+    truncated: allCalendarEvidence.length > calendarEvidence.length,
+  };
   const normalPackageCounts = (input.availability?.packageAvailability?.packages ?? [])
     .filter((item) => isFinite(item.availableQuantity) && approvedNormalPackageForKey(item.packageKey))
     .map((item) => ({ packageKey: item.packageKey, availableQuantity: item.availableQuantity }));
@@ -127,6 +149,7 @@ export function buildLeadEmailPreview(input: {
     templateVersion: input.approvedTemplate?.version ?? null,
     templateSource: input.approvedTemplate?.sourceFilename ?? null,
     calendarEvidence,
+    calendarConflictSummary,
     normalPackageCounts,
     readiness,
   };
@@ -147,11 +170,9 @@ export function buildLeadEmailPreview(input: {
 export class LeadEmailPreviewService {
   constructor(
     private readonly repository: Pick<LeadEmailPreviewRepository, "load">,
-    private readonly ensureApprovedTemplateSeed: () => Promise<void>,
   ) {}
 
   async preview(rowId: string, expectedVersion: number): Promise<LeadEmailPreviewDto> {
-    await this.ensureApprovedTemplateSeed();
     const state = await this.repository.load(rowId, expectedVersion);
     return buildLeadEmailPreview(state);
   }

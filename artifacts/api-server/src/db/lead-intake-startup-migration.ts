@@ -4,6 +4,23 @@ import { fileURLToPath } from "node:url";
 
 type MigrationClient = { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> };
 
+const communicationTemplateVersionReadinessExpression = `
+  to_regclass(current_schema() || '.communication_templates') is not null
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema()
+      and table_name = 'communication_templates'
+      and column_name = 'template_version'
+      and data_type = 'text'
+      and is_nullable = 'YES'
+  )
+`;
+
+export async function isCommunicationTemplateVersionSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${communicationTemplateVersionReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
 const communicationBlockReadinessExpression = `
   to_regclass(current_schema() || '.communication_blocks') is not null
   and to_regclass(current_schema() || '.communication_block_events') is not null
@@ -115,6 +132,7 @@ export async function ensureLeadIntakeSchema(
       to_regclass(current_schema() || '.lead_import_batches') is not null
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
+      and (${communicationTemplateVersionReadinessExpression})
       and (
         select count(*) = 12 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
