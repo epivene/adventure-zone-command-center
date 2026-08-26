@@ -139,4 +139,19 @@ describe("LeadReviewService relationship classification", () => {
     })).resolves.toMatchObject({ outcome: "new_introduction", reviewVersion: 2 });
     expect(transactionStarted).toBe(true);
   }, 15_000);
+
+  it("returns bounded display details only for evidence persisted on the classification", async () => {
+    const { client, service } = await setup(); clients.push(client);
+    await service.classifyRelationship({ rowId, expectedVersion: 1, reviewedBy: "Desiree", now: anchor });
+
+    await expect(service.listRelationshipEvidence({ rowId })).resolves.toEqual([{
+      evidenceId: "gmail:message-1",
+      sourceType: "gmail",
+      occurredAt: new Date("2025-05-14T12:00:00Z"),
+      direction: "inbound",
+      responseProven: true,
+      excerpt: "Thanks",
+      conflicting: false,
+    }]);
+  }, 15_000);
 });
