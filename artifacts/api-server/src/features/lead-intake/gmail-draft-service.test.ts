@@ -85,8 +85,8 @@ function readyState(overrides: Record<string, unknown> = {}) {
   } as any;
 }
 
-function reservedLink(): LeadGmailDraftLink {
-  const preview = buildLeadEmailPreview(readyState());
+function reservedLink(now = new Date("2026-08-26T12:00:00.000Z")): LeadGmailDraftLink {
+  const preview = buildLeadEmailPreview({ ...readyState(), now });
   return { ...link, subject: preview.subject!, body: preview.body!, gmailDraftId: null, gmailMessageId: null, state: "prepared" };
 }
 
