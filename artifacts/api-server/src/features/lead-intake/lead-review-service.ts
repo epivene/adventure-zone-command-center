@@ -3,12 +3,14 @@ import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { contacts, leadImportEvidence, leadImportRows, organizationContacts, organizations } from "@/db/schema";
 import { evaluateLeadReview, type LeadReviewBlocker, type LeadReviewDecision } from "./lead-review-policy";
+import { classifyLeadRelationship } from "./lead-relationship-classifier";
+import type { LeadRelationshipEvidenceSource } from "./lead-relationship-evidence-repository";
 
 type DrizzleDatabase = typeof database;
 
 export class LeadReviewServiceError extends Error {
   constructor(
-    public readonly code: "ROW_NOT_FOUND" | "VERSION_CONFLICT" | "REVIEW_BLOCKED",
+    public readonly code: "ROW_NOT_FOUND" | "VERSION_CONFLICT" | "REVIEW_BLOCKED" | "RELATIONSHIP_NOT_READY",
     message: string,
     public readonly blockers: LeadReviewBlocker[] = [],
   ) {
@@ -18,7 +20,10 @@ export class LeadReviewServiceError extends Error {
 }
 
 export class LeadReviewService {
-  constructor(private readonly database: DrizzleDatabase) {}
+  constructor(
+    private readonly database: DrizzleDatabase,
+    private readonly relationshipEvidence?: LeadRelationshipEvidenceSource,
+  ) {}
 
   async confirm(input: {
     rowId: string;
@@ -86,6 +91,15 @@ export class LeadReviewService {
         introductionSuitable: true,
         confirmedBy: input.reviewedBy.trim() || "owner",
         confirmedAt: now,
+        relationshipOutcome: null,
+        relationshipAnchorAt: null,
+        relationshipCutoffDate: null,
+        relationshipEvidenceIds: [],
+        latestOutboundAt: null,
+        latestVerifiedResponseAt: null,
+        relationshipReviewRequired: false,
+        relationshipClassifiedAt: null,
+        relationshipClassifiedBy: null,
         updatedAt: now,
       }).where(and(
         eq(leadImportRows.id, input.rowId),
@@ -121,6 +135,112 @@ export class LeadReviewService {
         },
       ]);
       return { rowId: input.rowId, state: "verified" as const, reviewVersion: nextVersion };
+    });
+  }
+
+  async classifyRelationship(input: {
+    rowId: string;
+    expectedVersion: number;
+    reviewedBy: string;
+    now?: Date;
+  }) {
+    const now = input.now ?? new Date();
+    const relationshipEvidence = this.relationshipEvidence;
+    if (!relationshipEvidence) {
+      throw new LeadReviewServiceError(
+        "RELATIONSHIP_NOT_READY",
+        "Previous-contact evidence is not available yet.",
+      );
+    }
+    return this.database.transaction(async (tx) => {
+      const [row] = await tx.select({
+        id: leadImportRows.id,
+        state: leadImportRows.state,
+        reviewVersion: leadImportRows.reviewVersion,
+        organizationId: leadImportRows.selectedOrganizationId,
+        recipientEmail: leadImportRows.confirmedRecipientEmail,
+        recipientConfirmed: leadImportRows.recipientConfirmed,
+        introductionSuitable: leadImportRows.introductionSuitable,
+        relationshipOutcome: leadImportRows.relationshipOutcome,
+        relationshipAnchorAt: leadImportRows.relationshipAnchorAt,
+        relationshipCutoffDate: leadImportRows.relationshipCutoffDate,
+        relationshipEvidenceIds: leadImportRows.relationshipEvidenceIds,
+        latestOutboundAt: leadImportRows.latestOutboundAt,
+        latestVerifiedResponseAt: leadImportRows.latestVerifiedResponseAt,
+        relationshipReviewRequired: leadImportRows.relationshipReviewRequired,
+      }).from(leadImportRows)
+        .where(eq(leadImportRows.id, input.rowId))
+        .limit(1)
+        .for("update");
+      if (!row) {
+        throw new LeadReviewServiceError("ROW_NOT_FOUND", "Lead import row was not found.");
+      }
+      if (row.reviewVersion !== input.expectedVersion) {
+        throw new LeadReviewServiceError(
+          "VERSION_CONFLICT",
+          "This lead was changed in another review. Reload it before classifying previous contact.",
+        );
+      }
+      if (
+        row.state !== "verified" ||
+        !row.organizationId ||
+        !row.recipientEmail?.trim() ||
+        !row.recipientConfirmed ||
+        !row.introductionSuitable
+      ) {
+        throw new LeadReviewServiceError(
+          "RELATIONSHIP_NOT_READY",
+          "Verify the profile and intended recipient before checking previous contact.",
+        );
+      }
+
+      const evidence = await relationshipEvidence.list({
+        organizationId: row.organizationId,
+        recipientEmail: row.recipientEmail,
+      });
+      const classification = classifyLeadRelationship({
+        organizationId: row.organizationId,
+        recipientEmail: row.recipientEmail,
+        anchor: now,
+        evidence,
+      });
+      const sameTimestamp = (left: Date | null, right: Date | null) =>
+        left?.valueOf() === right?.valueOf() && (left !== null) === (right !== null);
+      const unchanged = row.relationshipOutcome === classification.outcome
+        && row.relationshipAnchorAt?.valueOf() === now.valueOf()
+        && row.relationshipCutoffDate === classification.cutoffDate
+        && JSON.stringify(row.relationshipEvidenceIds) === JSON.stringify(classification.evidenceIds)
+        && sameTimestamp(row.latestOutboundAt, classification.latestOutboundAt)
+        && sameTimestamp(row.latestVerifiedResponseAt, classification.latestVerifiedResponseAt)
+        && row.relationshipReviewRequired === classification.reviewRequired;
+      if (unchanged) {
+        return { rowId: input.rowId, reviewVersion: row.reviewVersion, ...classification };
+      }
+
+      const nextVersion = row.reviewVersion + 1;
+      const [updated] = await tx.update(leadImportRows).set({
+        reviewVersion: nextVersion,
+        relationshipOutcome: classification.outcome,
+        relationshipAnchorAt: now,
+        relationshipCutoffDate: classification.cutoffDate,
+        relationshipEvidenceIds: classification.evidenceIds,
+        latestOutboundAt: classification.latestOutboundAt,
+        latestVerifiedResponseAt: classification.latestVerifiedResponseAt,
+        relationshipReviewRequired: classification.reviewRequired,
+        relationshipClassifiedAt: now,
+        relationshipClassifiedBy: input.reviewedBy.trim() || "owner",
+        updatedAt: now,
+      }).where(and(
+        eq(leadImportRows.id, input.rowId),
+        eq(leadImportRows.reviewVersion, input.expectedVersion),
+      )).returning({ id: leadImportRows.id });
+      if (!updated) {
+        throw new LeadReviewServiceError(
+          "VERSION_CONFLICT",
+          "This lead changed before previous contact could be classified.",
+        );
+      }
+      return { rowId: input.rowId, reviewVersion: nextVersion, ...classification };
     });
   }
 }
