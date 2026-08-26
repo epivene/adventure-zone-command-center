@@ -1,3 +1,25 @@
+CREATE TABLE IF NOT EXISTS package_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  code text NOT NULL UNIQUE,
+  name text NOT NULL,
+  base_attraction_count integer NOT NULL DEFAULT 1,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE package_templates
+  ADD COLUMN IF NOT EXISTS base_price_cents integer,
+  ADD COLUMN IF NOT EXISTS minimum_attraction_count integer,
+  ADD COLUMN IF NOT EXISTS maximum_attraction_count integer,
+  ADD COLUMN IF NOT EXISTS base_duration_min_days integer,
+  ADD COLUMN IF NOT EXISTS base_duration_max_days integer,
+  ADD COLUMN IF NOT EXISTS customer_description text,
+  ADD COLUMN IF NOT EXISTS booking_talking_points text,
+  ADD COLUMN IF NOT EXISTS operational_requirements text,
+  ADD COLUMN IF NOT EXISTS setup_notes text,
+  ADD COLUMN IF NOT EXISTS knowledge_review_note text;
+
 ALTER TABLE package_templates
   ADD COLUMN IF NOT EXISTS normal_capacity integer NOT NULL DEFAULT 0,
   ADD COLUMN IF NOT EXISTS temporary_unavailable_quantity integer NOT NULL DEFAULT 0;
@@ -33,8 +55,8 @@ WHERE code IN ('adventure_zone', 'pirates_rebellion', 'pirate_rebellion', 'weeke
 
 UPDATE package_templates
 SET customer_description = 'A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.',
-    booking_talking_points = 'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early. The restricted fourth Pirate unit is separate and approval-only because of its massive pool and extremely-flat-ground requirement.',
-    operational_requirements = 'Confirm event-specific footprint, power, water access, ballast, and setup details before contracting. Massive-pool and extremely-flat-ground requirements apply only to the approval-only restricted fourth Pirate unit.',
+    booking_talking_points = 'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.',
+    operational_requirements = 'Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.',
     updated_at = now()
 WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
   AND operational_requirements LIKE '%45,000%';
