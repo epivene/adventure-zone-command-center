@@ -224,8 +224,15 @@ export function createGoogleWorkspaceReadClient(input: {
   environment: GoogleWorkspaceEnvironment;
   refreshToken?: string;
   fetcher?: GoogleWorkspaceFetch;
+  gmailDraftTimeoutMs?: number;
 }): GoogleWorkspaceReadClient {
   const fetcher = input.fetcher ?? fetch;
+  const gmailDraftTimeoutMs =
+    typeof input.gmailDraftTimeoutMs === "number" &&
+    Number.isFinite(input.gmailDraftTimeoutMs) &&
+    input.gmailDraftTimeoutMs > 0
+      ? Math.min(input.gmailDraftTimeoutMs, 30_000)
+      : 10_000;
   let refreshToken = input.refreshToken?.trim() || null;
   let accessToken: { value: string; expiresAtMs: number } | null = null;
 
@@ -346,9 +353,23 @@ export function createGoogleWorkspaceReadClient(input: {
       if (!/^[A-Za-z0-9_-]+$/.test(input.raw)) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
       const token = await currentAccessToken();
       let response: Response;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), gmailDraftTimeoutMs);
       try {
-        response = await fetcher(draftsEndpoint, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ message: { raw: input.raw } }) });
-      } catch { throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN"); }
+        response = await fetcher(draftsEndpoint, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ message: { raw: input.raw } }),
+          signal: controller.signal,
+        });
+      } catch {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
+      } finally {
+        clearTimeout(timeout);
+      }
       const payload = await responseJson(response);
       if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_CREATE_FAILED");
       const message = payload.message && typeof payload.message === "object" ? payload.message as Record<string, unknown> : null;

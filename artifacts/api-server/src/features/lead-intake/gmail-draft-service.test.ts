@@ -94,11 +94,13 @@ function persistence(overrides: Partial<GmailDraftPersistence> = {}): GmailDraft
   return {
     findByRow: vi.fn(async () => null),
     prepare: vi.fn(async (input) => {
-      const evidence = input.evaluate(readyState());
+      const lockedNow = input.now();
+      const evidence = input.evaluate(readyState(), lockedNow);
       return { kind: "prepared" as const, link: { ...link, ...evidence, gmailDraftId: null, gmailMessageId: null, state: "prepared" as const } };
     }),
     execute: vi.fn(async (input) => {
-      const outcome = await input.attempt(readyState(), reservedLink());
+      const lockedNow = input.now();
+      const outcome = await input.attempt(readyState(), reservedLink(), lockedNow);
       return { ...link, state: outcome.kind === "created" ? "created" : outcome.kind, gmailDraftId: outcome.kind === "created" ? outcome.draftId : null, gmailMessageId: outcome.kind === "created" ? outcome.messageId : null, lastErrorCode: outcome.kind === "created" ? null : outcome.errorCode };
     }),
     ...overrides,
@@ -157,9 +159,10 @@ describe("GmailDraftService", () => {
 
   it("reloads current state and blocks a DO NOT SEND change immediately before Gmail", async () => {
     const execute = vi.fn(async (input: Parameters<GmailDraftPersistence["execute"]>[0]) => {
+      const lockedNow = input.now();
       await input.attempt(readyState({
         blocks: [{ id: "block", targetType: "lead_import_row", rowId: link.rowId, active: true }],
-      }), reservedLink());
+      }), reservedLink(), lockedNow);
       throw new Error("unreachable");
     });
     const store = persistence({ execute });
@@ -202,7 +205,8 @@ describe("GmailDraftService", () => {
     let capturedState = "";
     const store = persistence({
       execute: vi.fn(async (input) => {
-        const outcome = await input.attempt(readyState(), reservedLink());
+        const lockedNow = input.now();
+        const outcome = await input.attempt(readyState(), reservedLink(), lockedNow);
         if (outcome.kind === "created") throw new Error("Expected a classified failure");
         capturedState = outcome.kind;
         return { ...reservedLink(), state: outcome.kind, lastErrorCode: outcome.errorCode };

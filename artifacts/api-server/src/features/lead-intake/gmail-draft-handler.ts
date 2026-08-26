@@ -6,6 +6,22 @@ const bodySchema = z.object({ expectedVersion: z.number().int().min(0) }).strict
 const uuid = z.string().uuid();
 function parameter(value: string | string[] | undefined): string { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
 
+export function createLeadGmailDraftStateHandler(service: Pick<GmailDraftService, "get">) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rowId = parameter(req.params.rowId);
+    if (!uuid.safeParse(rowId).success) {
+      res.status(400).json({ error: { code: "INVALID_GMAIL_DRAFT_REQUEST", message: "A valid lead row is required." } });
+      return;
+    }
+    try {
+      res.json({ link: await service.get(rowId) });
+    } catch (error) {
+      req.log?.error?.({ error }, "Failed to load lead Gmail draft state");
+      res.status(500).json({ error: { code: "LEAD_GMAIL_DRAFT_STATE_FAILED", message: "Could not load the Gmail draft state." } });
+    }
+  };
+}
+
 export function createLeadGmailDraftHandler(service: Pick<GmailDraftService, "create">) {
   return async (req: Request, res: Response): Promise<void> => {
     const rowId = parameter(req.params.rowId);

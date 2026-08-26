@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS lead_gmail_draft_links (
   body text NOT NULL,
   gmail_draft_id text,
   gmail_message_id text,
+  activity_id uuid,
   state text NOT NULL DEFAULT 'prepared',
   last_error_code text,
   idempotency_key text NOT NULL,
@@ -24,7 +25,10 @@ CREATE TABLE IF NOT EXISTS lead_gmail_draft_links (
   completed_at timestamptz
 );
 
-DO $$ BEGIN
+ALTER TABLE lead_gmail_draft_links
+  ADD COLUMN IF NOT EXISTS activity_id uuid;
+
+DO $ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_row_fk' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
     ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_row_fk FOREIGN KEY (row_id) REFERENCES lead_import_rows(id) ON DELETE RESTRICT;
   END IF;
@@ -39,6 +43,9 @@ DO $$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_template_fk' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
     ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_template_fk FOREIGN KEY (communication_template_id) REFERENCES communication_templates(id) ON DELETE RESTRICT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_activity_fk' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
+    ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_activity_fk FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE RESTRICT;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_row_unique' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
     ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_row_unique UNIQUE (row_id);
@@ -58,12 +65,21 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_attempt_positive' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
     ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_attempt_positive CHECK (attempt_count > 0);
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'lead_gmail_draft_links_created_complete' AND conrelid = 'lead_gmail_draft_links'::regclass) THEN
-    ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_created_complete CHECK (state <> 'created' OR (gmail_draft_id IS NOT NULL AND gmail_message_id IS NOT NULL AND completed_at IS NOT NULL AND last_error_code IS NULL));
-  END IF;
+  ALTER TABLE lead_gmail_draft_links DROP CONSTRAINT IF EXISTS lead_gmail_draft_links_created_complete;
+  ALTER TABLE lead_gmail_draft_links ADD CONSTRAINT lead_gmail_draft_links_created_complete CHECK (
+    state <> 'created'
+    OR (
+      gmail_draft_id IS NOT NULL
+      AND gmail_message_id IS NOT NULL
+      AND activity_id IS NOT NULL
+      AND completed_at IS NOT NULL
+      AND last_error_code IS NULL
+    )
+  );
 END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS lead_gmail_draft_links_gmail_draft_unique ON lead_gmail_draft_links (gmail_draft_id) WHERE gmail_draft_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS lead_gmail_draft_links_gmail_message_unique ON lead_gmail_draft_links (gmail_message_id) WHERE gmail_message_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS lead_gmail_draft_links_activity_unique ON lead_gmail_draft_links (activity_id) WHERE activity_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS lead_gmail_draft_links_state_updated_idx ON lead_gmail_draft_links (state, updated_at DESC);
 CREATE INDEX IF NOT EXISTS lead_gmail_draft_links_organization_updated_idx ON lead_gmail_draft_links (organization_id, updated_at DESC);
