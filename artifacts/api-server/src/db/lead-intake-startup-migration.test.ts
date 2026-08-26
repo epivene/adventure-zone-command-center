@@ -92,6 +92,7 @@ describe("ensureLeadIntakeSchema", () => {
       await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
+      expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);
       await expect(client.exec(`
         insert into lead_import_batches
           (id, original_filename, file_sha256, row_count, imported_by)
