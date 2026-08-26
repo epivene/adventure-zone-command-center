@@ -7,6 +7,7 @@ permissions:
   contents: read
 env:
   NODE_ENV: test
+  DATABASE_URL: postgresql://task8:task8@127.0.0.1:5432/task8
 jobs:
   focused:
     runs-on: ubuntu-latest
@@ -43,7 +44,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm --filter @workspace/api-server typecheck 2>&1 | tee task8-api-typecheck.log
+          pnpm --filter @workspace/api-server exec tsc -p tsconfig.task8.json --noEmit 2>&1 | tee task8-api-typecheck.log
       - id: web_types
         name: Frontend typecheck
         if: always()
@@ -51,7 +52,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          pnpm --filter @workspace/adventure-zone typecheck 2>&1 | tee task8-web-typecheck.log
+          pnpm --filter @workspace/adventure-zone exec tsc -p tsconfig.task8.json --noEmit 2>&1 | tee task8-web-typecheck.log
       - id: db_types
         name: DB build
         if: always()
