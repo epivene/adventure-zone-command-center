@@ -49,27 +49,7 @@ DO $$ BEGIN
     (target_type = 'organization' AND organization_id IS NOT NULL AND contact_id IS NULL AND normalized_email IS NULL AND row_id IS NULL)
     OR (target_type = 'contact' AND organization_id IS NULL AND contact_id IS NOT NULL AND normalized_email IS NULL AND row_id IS NULL)
     OR (target_type = 'lead_import_row' AND organization_id IS NULL AND contact_id IS NULL AND normalized_email IS NULL AND row_id IS NOT NULL)
-    OR (target_type = 'recipient_email' AND organization_id IS NULL AND contact_id IS NULL AND row_id IS NULL AND normalized_email ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+
-END $$;
-
-CREATE TABLE IF NOT EXISTS communication_block_events (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  block_id uuid NOT NULL REFERENCES communication_blocks(id) ON DELETE CASCADE,
-  action text NOT NULL CHECK (action in ('created','removed')),
-  actor_id text NOT NULL,
-  reason text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS communication_block_events_history_idx ON communication_block_events (block_id, created_at);
-
-CREATE OR REPLACE FUNCTION communication_blocks_write_created_event() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  INSERT INTO communication_block_events (block_id, action, actor_id, reason) VALUES (NEW.id, 'created', NEW.created_by, NEW.reason);
-  RETURN NEW;
-END $$;
-DROP TRIGGER IF EXISTS communication_blocks_created_event ON communication_blocks;
-CREATE TRIGGER communication_blocks_created_event AFTER INSERT ON communication_blocks FOR EACH ROW EXECUTE FUNCTION communication_blocks_write_created_event();
-)
+    OR (target_type = 'recipient_email' AND organization_id IS NULL AND contact_id IS NULL AND row_id IS NULL AND normalized_email LIKE '%@%.%' AND normalized_email NOT LIKE '% %')
     OR (target_type = 'internal_preview' AND organization_id IS NULL AND contact_id IS NULL AND normalized_email IS NULL AND row_id IS NULL)
   );
 END $$;
