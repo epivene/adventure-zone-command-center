@@ -42,6 +42,12 @@ describe("lead Gmail draft startup readiness", () => {
     "alter table lead_gmail_draft_links alter column contact_id set not null",
     "alter table lead_gmail_draft_links alter column state drop default",
     "drop index lead_gmail_draft_links_gmail_draft_unique; create index lead_gmail_draft_links_gmail_draft_unique on lead_gmail_draft_links (gmail_draft_id)",
+    `alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_email_valid;
+     alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_email_valid
+       check (recipient_email = lower(btrim(recipient_email)))`,
+    `alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_state_valid;
+     alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_state_valid
+       check (state in ('prepared','created','retryable_error','manual_review','sent'))`,
   ])("rejects a structurally weakened same-name table: %s", async (mutation) => {
     const client = await gmailDraftSchema();
     try {
