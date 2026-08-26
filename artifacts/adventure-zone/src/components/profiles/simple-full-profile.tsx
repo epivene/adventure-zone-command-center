@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { Camera, ChevronDown, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
+import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
@@ -366,8 +367,12 @@ export function SimpleFullProfile({
       {openSection === "notes" ? (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-bold">Activity timeline</h2><span className="text-xs text-slate-500">America/Denver</span></div>
+            <div><h2 className="text-lg font-bold">Activity & email history</h2><span className="text-xs text-slate-500">America/Denver</span></div>
             <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
+          </div>
+
+          <div className="mt-4">
+            <ProfileGoogleEmailPanel organizationId={profile.id} />
           </div>
 
           <label className="relative mt-4 block">
