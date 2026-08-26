@@ -31,7 +31,8 @@ const storedFile = {
 
 beforeEach(() => {
   client.getGoogleProfileEmails.mockResolvedValue({
-    validationSampleOnly: true,
+    validationSampleOnly: false,
+    historicalBackfillIncluded: true,
     conversations: [
       {
         threadId: "thread-1",
@@ -89,10 +90,11 @@ afterEach(() => {
 });
 
 describe("ProfileGoogleEmailPanel", () => {
-  it("gives matched Gmail conversations separate Emails and Files views", async () => {
+  it("gives matched historical Gmail conversations separate Emails and Files views", async () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
     expect(await screen.findByRole("heading", { name: "Google history" })).toBeInTheDocument();
+    expect(screen.getByText(/historical backfill/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair follow up")).toBeInTheDocument();
