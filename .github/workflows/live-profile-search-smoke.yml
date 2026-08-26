@@ -7,37 +7,15 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Add restricted-territory profile notes
+      - name: Apply all restricted-territory profile notes
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          NOTE='Territory hold — New Mexico is not currently being actively pursued under current booking strategy. Do not send new outreach until this restriction is lifted or the lead is specifically approved.'
-          add_note() {
-            ORG_ID="$1"
-            BODY=$(ORG_ID="$ORG_ID" NOTE="$NOTE" python3 - <<'PY'
-          import json, os
-          print(json.dumps({
-            "organizationId": os.environ["ORG_ID"],
-            "subject": "Territory hold - New Mexico",
-            "body": os.environ["NOTE"],
-          }))
-          PY
-          )
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/profile-notes" \
-              --data-binary "${BODY}"
-            echo
-          }
-
-          add_note "637657d1-8d04-4f67-abe6-657d6bd6ae52"
-          add_note "2c3dfcd7-fb16-4995-8048-bf576fa01c25"
-          add_note "af71ea65-ef9f-4abe-bf11-5ecf084b3409"
-          add_note "ae99bddb-a67d-476c-8c40-c755f37ebbc5"
-          add_note "ff9640f8-9ffd-4a2f-be7b-5243350a3251"
-          add_note "a7063ca6-cc65-46d1-a57d-f77bce58f3dc"
-          add_note "9e53c47e-681c-4745-8d70-8c8a76bfa936"
-          add_note "304c3256-8f6d-451f-a181-e8d7ef642966"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/profile-notes/territory-holds" \
+            --data-binary '{}'
+          echo
