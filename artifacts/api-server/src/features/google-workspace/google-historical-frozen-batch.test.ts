@@ -36,14 +36,19 @@ function client(listIds: string[]): GoogleWorkspaceReadClient {
   };
 }
 
-function repository(status: "ready" | "error" = "ready") {
+function repository(input?: {
+  status?: "ready" | "error";
+  firstBatchApproved?: boolean;
+  processed?: number;
+  nextPageToken?: string | null;
+}) {
   return {
     getState: async () => ({
-      status,
-      nextPageToken: "page-a",
-      firstBatchApproved: true,
+      status: input?.status ?? "ready" as const,
+      nextPageToken: input?.nextPageToken === undefined ? "page-a" : input.nextPageToken,
+      firstBatchApproved: input?.firstBatchApproved ?? true,
       cumulative: {
-        processed: 250,
+        processed: input?.processed ?? 250,
         attached: 200,
         ignored: 40,
         needsReview: 10,
@@ -95,7 +100,7 @@ describe("historical Gmail frozen batch membership", () => {
 
   it("reuses frozen message ids on retry instead of querying the newest Gmail page again", async () => {
     const readClient = client(["new-arrival", "different-message"]);
-    const backfillRepository = repository("error");
+    const backfillRepository = repository({ status: "error" });
     const batchStore = {
       load: vi.fn(async () => ({
         batchId: "batch-2",
@@ -129,5 +134,41 @@ describe("historical Gmail frozen batch membership", () => {
     expect(readClient.getMessageMetadata).toHaveBeenCalledWith("m2");
     expect(result.processed).toBe(2);
     expect(result.nextPageAvailable).toBe(true);
+  });
+
+  it("allows an interrupted unapproved first batch to retry its frozen membership", async () => {
+    const readClient = client(["new-arrival"]);
+    const backfillRepository = repository({
+      status: "error",
+      firstBatchApproved: false,
+      processed: 150,
+      nextPageToken: null,
+    });
+    const batchStore = {
+      load: vi.fn(async () => ({
+        batchId: "first-batch",
+        nextPageToken: "older-page",
+        messages: [{ id: "original-message", threadId: "original-thread" }],
+      })),
+      freeze: vi.fn(async () => undefined),
+    };
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient },
+      repository: backfillRepository,
+      batchStore,
+      classifier: {
+        classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }),
+      },
+      validationRepository: {
+        upsertRows: async () => undefined,
+        upsertReviewItems: async () => undefined,
+      },
+    });
+
+    const result = await service.runNextBatch();
+
+    expect(readClient.listMessagePage).not.toHaveBeenCalled();
+    expect(readClient.getMessageMetadata).toHaveBeenCalledWith("original-message");
+    expect(result.state).toBe("awaiting_approval");
   });
 });
