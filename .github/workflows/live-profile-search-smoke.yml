@@ -16,7 +16,7 @@ jobs:
             echo "ASSISTANT_IMPORT_TOKEN_MISSING"
             exit 2
           fi
-          BASE="https://adventure-zone-api.onrender.com"
+          BASE="https://adventure-zone-command-center.onrender.com"
           for Q in \
             "Saguache Fall Festival & Quilt Show" \
             "Higher Ground Fair" \
