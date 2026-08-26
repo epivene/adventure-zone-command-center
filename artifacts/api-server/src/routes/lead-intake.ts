@@ -17,6 +17,14 @@ const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 
+async function optionalGoogleReadClient() {
+  try {
+    return await googleConnectionRepository.createReadClient();
+  } catch {
+    return undefined;
+  }
+}
+
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
@@ -133,7 +141,7 @@ router.post("/lead-intake/rows/:rowId/classify-relationship", async (req, res): 
     return;
   }
   try {
-    const google = await googleConnectionRepository.createReadClient();
+    const google = await optionalGoogleReadClient();
     const relationshipService = new LeadReviewService(
       db,
       new LeadRelationshipEvidenceRepository(db, google ?? undefined),
