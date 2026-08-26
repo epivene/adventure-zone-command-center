@@ -318,13 +318,21 @@ router.get("/lead-intake/communication-blocks/:blockId/history", async (req, res
 router.post("/lead-intake/communication-blocks", async (req, res): Promise<void> => {
   const body = req.body ?? {};
   const targetType = body.targetType;
-  const targets = [body.organizationId, body.contactId, body.normalizedEmail, body.rowId].filter(Boolean);
-  if (!["organization", "contact", "recipient_email", "lead_import_row", "internal_preview"].includes(targetType)
-    || !String(body.reason ?? "").trim() || (targetType === "internal_preview" ? targets.length !== 0 : targets.length !== 1)) {
-    res.status(400).json({ error: "Use one exact stable communication-block target and a reason." }); return;
+  const validEmail = typeof body.normalizedEmail === "string" && /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(body.normalizedEmail.trim());
+  const exact = (type: string, key?: string) => targetType === type && Object.entries({ organizationId: body.organizationId, contactId: body.contactId, normalizedEmail: body.normalizedEmail, rowId: body.rowId }).every(([name, value]) => name === key ? Boolean(value) : !value);
+  if (!String(body.reason ?? "").trim()
+    || !(exact("organization", "organizationId") && isUuid(body.organizationId)
+      || exact("contact", "contactId") && isUuid(body.contactId)
+      || exact("lead_import_row", "rowId") && isUuid(body.rowId)
+      || exact("recipient_email", "normalizedEmail") && validEmail
+      || exact("internal_preview"))) {
+    res.status(400).json({ error: "Use one valid exact target that matches the communication-block target type." }); return;
   }
+  if (targetType === "organization" && !(await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, body.organizationId)).limit(1))[0]) { res.status(404).json({ error: "Profile not found." }); return; }
+  if (targetType === "contact" && !(await db.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, body.contactId)).limit(1))[0]) { res.status(404).json({ error: "Contact not found." }); return; }
+  if (targetType === "lead_import_row" && !(await db.select({ id: leadImportRows.id }).from(leadImportRows).where(eq(leadImportRows.id, body.rowId)).limit(1))[0]) { res.status(404).json({ error: "Lead source row not found." }); return; }
   try {
-    const block = await communicationBlockRepository.create({ targetType, organizationId: body.organizationId ?? null, contactId: body.contactId ?? null, normalizedEmail: body.normalizedEmail ?? null, rowId: body.rowId ?? null, reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) });
+    const block = await communicationBlockRepository.create({ targetType, organizationId: body.organizationId ?? null, contactId: body.contactId ?? null, normalizedEmail: validEmail ? body.normalizedEmail.trim().toLowerCase() : null, rowId: body.rowId ?? null, reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) });
     res.status(201).json({ block });
   } catch (error) { req.log.error({ error }, "Failed to create communication block"); res.status(500).json({ error: "Could not create communication block." }); }
 });
