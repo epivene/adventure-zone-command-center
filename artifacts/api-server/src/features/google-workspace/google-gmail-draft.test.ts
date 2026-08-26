@@ -105,6 +105,32 @@ describe("Google Gmail draft-only client", () => {
     }
   });
 
+  it("bounds OAuth token acquisition in the same operation and never reaches Gmail after timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const urls: string[] = [];
+      const client = createGoogleWorkspaceReadClient({
+        environment,
+        refreshToken: "refresh",
+        gmailDraftTimeoutMs: 25,
+        fetcher: async (input, init) => {
+          urls.push(String(input));
+          return new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => reject(new DOMException("Timed out", "AbortError")));
+          });
+        },
+      });
+      const pending = client.createGmailDraft!({ raw: "cmF3" });
+      await vi.advanceTimersByTimeAsync(25);
+      await expect(pending).rejects.toMatchObject({
+        code: "GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN",
+      });
+      expect(urls).toEqual(["https://oauth2.googleapis.com/token"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns Gmail draft and message identifiers from a successful draft creation", async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);

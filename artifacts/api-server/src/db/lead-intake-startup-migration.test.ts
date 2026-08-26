@@ -3,6 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
 import { ensureLeadIntakeSchema, isLeadGmailDraftLinkSchemaReady } from "./lead-intake-startup-migration";
+import { ensureGoogleWorkspaceSchema } from "./google-workspace-startup-migration";
 
 async function gmailDraftSchema() {
   const client = new PGlite();
@@ -140,9 +141,9 @@ describe("ensureLeadIntakeSchema", () => {
         create table organizations (id uuid primary key);
         create table contacts (id uuid primary key);
         create table communication_templates (id uuid primary key);
-        create table google_workspace_connections (id uuid primary key);
         create table activities (id uuid primary key);
       `);
+      await expect(ensureGoogleWorkspaceSchema({ query })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
       expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);
