@@ -312,17 +312,17 @@ export function SettingsGoogleWorkspacePage({
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Google Workspace</h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Read-only connection for approved company Gmail labels, files, and calendars.
-          Gmail and Google Calendar will not be changed.
+          Read access for approved company Gmail labels, files, and calendars, plus Gmail draft creation.
+          Existing connections must reconnect once to authorize the narrow Gmail compose scope.
         </p>
       </header>
 
       <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
         <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
-          <p className="font-semibold">Read-only by design</p>
+          <p className="font-semibold">Draft-only Gmail compose</p>
           <p className="mt-1 text-sm text-blue-800 dark:text-blue-300">
-            This release cannot send email, move messages, change Gmail labels, or edit Google Calendar events.
+            This release can create a reviewed Gmail draft only. It cannot send email, move messages, change Gmail labels, or edit Google Calendar events.
           </p>
         </div>
       </div>

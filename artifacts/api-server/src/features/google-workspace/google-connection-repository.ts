@@ -5,8 +5,8 @@ import {
   encryptGoogleSecret,
   type EncryptedGoogleSecretV1,
 } from "./encrypted-google-secret";
-import { createGoogleWorkspaceReadClient } from "./google-api-client";
-import type { GoogleWorkspaceReadClient } from "./google-api-types";
+import { GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE, createGoogleWorkspaceReadClient } from "./google-api-client";
+import type { GoogleGmailDraftClient, GoogleWorkspaceReadClient } from "./google-api-types";
 import {
   getGoogleWorkspaceEnvironment,
   type GoogleWorkspaceEnvironment,
@@ -82,14 +82,15 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
 }
 
 function toView(row: ConnectionRow): GoogleConnectionView {
+  const missingCompose = !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
   return {
     id: row.id,
     email: row.account_email,
-    status: row.status,
+    status: row.status === "connected" && missingCompose ? "reauthorization_required" : row.status,
     grantedScopes: scopes(row.granted_scopes),
     connectedAt: dateIso(row.connected_at) as string,
     lastVerifiedAt: dateIso(row.last_verified_at),
-    lastErrorCode: row.last_error_code,
+    lastErrorCode: missingCompose ? "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED" : row.last_error_code,
   };
 }
 
@@ -216,6 +217,17 @@ export class PostgresGoogleConnectionRepository {
       environment.tokenEncryptionKey,
     );
     return this.createClient({ environment, refreshToken });
+  }
+
+  async createGmailDraftClient(): Promise<{ connectionId: string; client: GoogleGmailDraftClient } | null> {
+    const row = await this.currentRow();
+    if (!row) return null;
+    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    const environment = this.requireEnvironment();
+    const refreshToken = decryptGoogleSecret(row.encrypted_refresh_token, environment.tokenEncryptionKey);
+    const client = this.createClient({ environment, refreshToken });
+    if (!client.createGmailDraft) throw new Error("GOOGLE_WORKSPACE_GMAIL_DRAFT_CLIENT_UNAVAILABLE");
+    return { connectionId: row.id, client: { createGmailDraft: client.createGmailDraft.bind(client) } };
   }
 
   async markReauthorizationRequired(errorCode: string): Promise<void> {

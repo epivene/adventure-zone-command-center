@@ -1,0 +1,77 @@
+name: Task 8 Lead Gmail Drafts CI
+on:
+  push:
+    branches: [feat/lead-gmail-draft-creation]
+  workflow_dispatch:
+permissions:
+  contents: read
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://task8:task8@127.0.0.1:5432/task8
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - id: backend
+        name: Task 8 backend tests
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/api-server exec vitest run src/features/google-workspace/google-api-client.test.ts src/features/google-workspace/google-gmail-draft.test.ts src/features/google-workspace/google-connection-repository.test.ts src/routes/google-workspace-oauth-callback.test.ts src/routes/google-workspace-account-change.test.ts src/features/lead-intake/gmail-draft-service.test.ts src/features/lead-intake/gmail-draft-history.pglite.test.ts src/features/lead-intake/gmail-draft-handler.test.ts src/features/lead-intake/gmail-draft-migration.pglite.test.ts src/db/lead-intake-startup-migration.test.ts src/db/required-schema-startup.test.ts 2>&1 | tee task8-backend.log
+      - id: frontend
+        name: Task 8 frontend tests
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/adventure-zone exec vitest run src/components/lead-intake/lead-email-preview.gmail-draft.test.tsx src/components/lead-intake/lead-gmail-draft-state-list.test.tsx 2>&1 | tee task8-frontend.log
+      - id: api_types
+        name: API typecheck
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/api-server exec tsc -p tsconfig.task8.json --noEmit 2>&1 | tee task8-api-typecheck.log
+      - id: web_types
+        name: Frontend typecheck
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/adventure-zone exec tsc -p tsconfig.task8.json --noEmit 2>&1 | tee task8-web-typecheck.log
+      - id: db_types
+        name: DB build
+        if: always()
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/db build 2>&1 | tee task8-db-typecheck.log
+      - name: Upload focused verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: task8-verification-logs
+          path: task8-*.log
+      - name: Verification gate
+        if: always()
+        run: |
+          test "${{ steps.backend.outcome }}" = success
+          test "${{ steps.frontend.outcome }}" = success
+          test "${{ steps.api_types.outcome }}" = success
+          test "${{ steps.web_types.outcome }}" = success
+          test "${{ steps.db_types.outcome }}" = success

@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { GOOGLE_WORKSPACE_READ_SCOPES } from "@/features/google-workspace/google-api-client";
+import { GOOGLE_WORKSPACE_REQUIRED_SCOPES } from "@/features/google-workspace/google-api-client";
 import type { GoogleWorkspaceEnvironment } from "@/features/google-workspace/google-workspace-env";
 import { createGoogleWorkspaceOAuthCallbackRouter } from "./google-workspace-oauth-callback";
 
@@ -38,7 +38,7 @@ describe("Google Workspace account replacement safety", () => {
           authorizationUrl: () => "",
           exchangeCode: async () => ({
             refreshToken: "new-refresh-token",
-            scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+            scopes: [...GOOGLE_WORKSPACE_REQUIRED_SCOPES],
           }),
           accountIdentity: async () => ({
             subject: "different-subject",

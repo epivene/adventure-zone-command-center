@@ -20,6 +20,8 @@ import { parseRecipientCommunicationBlockTarget } from "@/features/lead-intake/c
 import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
 import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
 import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
+import { GmailDraftService, PostgresGmailDraftPersistence } from "@/features/lead-intake/gmail-draft-service";
+import { createLeadGmailDraftHandler, createLeadGmailDraftStateHandler } from "@/features/lead-intake/gmail-draft-handler";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
@@ -28,9 +30,12 @@ const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const availabilityRepository = new LeadAvailabilityRepository(db);
 const communicationBlockRepository = new CommunicationBlockRepository(db);
-const leadEmailPreviewService = new LeadEmailPreviewService(
-  new LeadEmailPreviewRepository(db),
-);
+const leadEmailPreviewRepository = new LeadEmailPreviewRepository(db);
+const leadEmailPreviewService = new LeadEmailPreviewService(leadEmailPreviewRepository);
+const gmailDraftService = new GmailDraftService({
+  persistence: new PostgresGmailDraftPersistence(db, leadEmailPreviewRepository),
+  connection: googleConnectionRepository,
+});
 
 async function optionalGoogleReadClient() {
   try {
@@ -289,6 +294,8 @@ router.post("/lead-intake/rows/:rowId/review-status", async (req, res): Promise<
 });
 
 router.get("/lead-intake/rows/:rowId/email-preview", createLeadEmailPreviewHandler(leadEmailPreviewService));
+router.get("/lead-intake/rows/:rowId/gmail-draft", createLeadGmailDraftStateHandler(gmailDraftService));
+router.post("/lead-intake/rows/:rowId/gmail-draft", createLeadGmailDraftHandler(gmailDraftService));
 
 router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void> => {
   res.json({ blocks: await communicationBlockRepository.list() });

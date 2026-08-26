@@ -22,6 +22,8 @@ type Client = {
   confirmReview(rowId: string, body: unknown): Promise<{ rowId: string; state: "verified"; reviewVersion: number }>;
   updateReviewStatus?: (rowId: string, body: { expectedVersion: number; territoryStatus: string; fitStatus: string }) => Promise<unknown>;
   getEmailPreview?: (rowId: string, reviewVersion: number) => Promise<any>;
+  getGmailDraft?: (rowId: string) => Promise<any>;
+  createGmailDraft?: (rowId: string, reviewVersion: number) => Promise<any>;
   listCommunicationBlocks?: () => Promise<any[]>;
   createCommunicationBlock?: (body: unknown) => Promise<unknown>;
   removeCommunicationBlock?: (id: string, reason: string) => Promise<unknown>;
@@ -134,7 +136,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
             setSelected(await client.getBatch(selected.id));
             return result;
           }} /> : null}
-          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={`email-preview-${selectedRowId}-${previewInvalidationKey}`} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} invalidationKey={previewInvalidationKey} load={client.getEmailPreview} /> : null}
+          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={`email-preview-${selectedRowId}-${previewInvalidationKey}`} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} invalidationKey={previewInvalidationKey} load={client.getEmailPreview} loadDraft={client.getGmailDraft} create={client.createGmailDraft} /> : null}
           {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} history={client.getCommunicationBlockHistory} onMutation={() => setPreviewInvalidationKey((value) => value + 1)} /> : null}
         </section>
       ) : null}

@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 
 import {
-  GOOGLE_WORKSPACE_READ_SCOPES,
+  GOOGLE_WORKSPACE_REQUIRED_SCOPES,
   createGoogleWorkspaceReadClient,
 } from "@/features/google-workspace/google-api-client";
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
@@ -102,7 +102,7 @@ function canonicalScope(scope: string): string {
   return scope === userInfoEmailScope ? "email" : scope;
 }
 
-function validateReadOnlyScopes(scopes: string[]):
+function validateWorkspaceScopes(scopes: string[]):
   | { ok: true; scopes: string[] }
   | { ok: false; error: string } {
   const granted = [
@@ -112,10 +112,10 @@ function validateReadOnlyScopes(scopes: string[]):
         .filter(Boolean),
     ),
   ];
-  const approved = new Set<string>(GOOGLE_WORKSPACE_READ_SCOPES);
+  const approved = new Set<string>(GOOGLE_WORKSPACE_REQUIRED_SCOPES);
   const grantedSet = new Set(granted);
 
-  if (GOOGLE_WORKSPACE_READ_SCOPES.some((scope) => !grantedSet.has(scope))) {
+  if (GOOGLE_WORKSPACE_REQUIRED_SCOPES.some((scope) => !grantedSet.has(scope))) {
     return { ok: false, error: "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING" };
   }
   if (granted.some((scope) => !approved.has(scope))) {
@@ -200,7 +200,7 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           environment: environmentResult.value,
         });
         const authorization = await client.exchangeCode(code);
-        const validatedScopes = validateReadOnlyScopes(authorization.scopes);
+        const validatedScopes = validateWorkspaceScopes(authorization.scopes);
         if (!validatedScopes.ok) {
           res.status(403).json({ error: validatedScopes.error });
           return;

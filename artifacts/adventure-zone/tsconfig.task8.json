@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [],
+  "exclude": [],
+  "files": [
+    "src/components/lead-intake/lead-email-preview.tsx",
+    "src/components/lead-intake/lead-gmail-draft-state-list.tsx",
+    "src/features/lead-intake/lead-intake-client.ts"
+  ],
+  "references": []
+}

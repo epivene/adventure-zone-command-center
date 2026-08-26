@@ -2,7 +2,63 @@ import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
-import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
+import { ensureLeadIntakeSchema, isLeadGmailDraftLinkSchemaReady } from "./lead-intake-startup-migration";
+import { ensureGoogleWorkspaceSchema } from "./google-workspace-startup-migration";
+
+const pgliteCompatible = (sql: string) => sql.replace(/^[ \t]*CREATE EXTENSION IF NOT EXISTS pgcrypto;\s*/gim, "");
+
+async function gmailDraftSchema() {
+  const client = new PGlite();
+  await client.exec(`
+    create table organizations (id uuid primary key);
+    create table contacts (id uuid primary key);
+    create table lead_import_rows (id uuid primary key);
+    create table google_workspace_connections (id uuid primary key);
+    create table communication_templates (id uuid primary key);
+    create table activities (id uuid primary key);
+  `);
+  const migration = pgliteCompatible(await readFile(
+    new URL("../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url),
+    "utf8",
+  ));
+  await client.exec(migration);
+  return client;
+}
+
+describe("lead Gmail draft startup readiness", () => {
+  it("accepts only the canonical columns, defaults, constraints, foreign keys, and indexes", async () => {
+    const client = await gmailDraftSchema();
+    try {
+      const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(true);
+      await client.exec(`
+        alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_organization_fk;
+        alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_organization_fk
+          foreign key (organization_id) references contacts(id) on delete restrict;
+      `);
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(false);
+    } finally { await client.close(); }
+  }, 30_000);
+
+  it.each([
+    "alter table lead_gmail_draft_links alter column contact_id set not null",
+    "alter table lead_gmail_draft_links alter column state drop default",
+    "drop index lead_gmail_draft_links_gmail_draft_unique; create index lead_gmail_draft_links_gmail_draft_unique on lead_gmail_draft_links (gmail_draft_id)",
+    `alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_email_valid;
+     alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_email_valid
+       check (recipient_email = lower(btrim(recipient_email)))`,
+    `alter table lead_gmail_draft_links drop constraint lead_gmail_draft_links_state_valid;
+     alter table lead_gmail_draft_links add constraint lead_gmail_draft_links_state_valid
+       check (state in ('prepared','created','retryable_error','manual_review','sent'))`,
+  ])("rejects a structurally weakened same-name table: %s", async (mutation) => {
+    const client = await gmailDraftSchema();
+    try {
+      const query = (sql: string) => client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
+      await client.exec(mutation);
+      await expect(isLeadGmailDraftLinkSchemaReady({ query })).resolves.toBe(false);
+    } finally { await client.close(); }
+  }, 30_000);
+});
 
 describe("ensureLeadIntakeSchema", () => {
   it("runs the canonical idempotent repair even when readiness initially passes", async () => {
@@ -65,8 +121,8 @@ describe("ensureLeadIntakeSchema", () => {
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {
     const client = new PGlite();
     const query = async (sql: string) => {
-      if (sql.includes("create table if not exists lead_import_batches")) {
-        await client.exec(sql);
+      if (sql.includes("create table if not exists lead_import_batches") || sql.includes("CREATE TABLE IF NOT EXISTS google_workspace_connections")) {
+        await client.exec(pgliteCompatible(sql));
         return { rows: [] as Array<Record<string, unknown>> };
       }
       return client.query(sql) as Promise<{ rows: Array<Record<string, unknown>> }>;
@@ -79,13 +135,16 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260826_lead_safe_email.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
       await client.exec(`
         create table organizations (id uuid primary key);
         create table contacts (id uuid primary key);
         create table communication_templates (id uuid primary key);
+        create table activities (id uuid primary key);
       `);
+      await expect(ensureGoogleWorkspaceSchema({ query })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
       expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);

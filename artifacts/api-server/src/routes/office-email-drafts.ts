@@ -6,10 +6,13 @@ import { createRequireOfficeMiddleware } from "@/features/office/office-middlewa
 import { DrizzleOfficeEmailRepository } from "@/features/office/office-email-repository";
 import { OfficeEmailError } from "@/features/office/office-email-service";
 import officeCommunicationTemplatesRouter from "./office-communication-templates";
+import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
+import { PostgresGmailDraftPersistence } from "@/features/lead-intake/gmail-draft-service";
 
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
 const drafts = new DrizzleOfficeEmailRepository(db);
+const leadGmailDrafts = new PostgresGmailDraftPersistence(db, new LeadEmailPreviewRepository(db));
 const uuid = z.string().uuid();
 const nullableNote = z.union([z.string().max(4000), z.null()]).transform((value) => value?.trim() || null);
 
@@ -47,6 +50,10 @@ function emailError(res: any, error: unknown) {
 
 router.get("/office/email-drafts", requireOffice, async (req, res) => {
   res.json({ drafts: await drafts.listForOffice(req.officeAccount!.accountId) });
+});
+
+router.get("/office/lead-gmail-drafts", requireOffice, async (_req, res) => {
+  res.json({ drafts: await leadGmailDrafts.listForOffice() });
 });
 
 router.post("/office/email-drafts", requireOffice, async (req, res): Promise<void> => {

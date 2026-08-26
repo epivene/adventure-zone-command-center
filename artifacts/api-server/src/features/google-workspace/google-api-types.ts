@@ -75,6 +75,9 @@ export type GoogleCalendarEventTime = {
   timeZone?: string;
 };
 
+export type GoogleGmailDraft = { draftId: string; messageId: string };
+export type GoogleGmailDraftClient = { createGmailDraft(input: { raw: string }): Promise<GoogleGmailDraft> };
+
 export type GoogleCalendarEvent = {
   calendarId: string;
   calendarTimeZone: string;
@@ -107,6 +110,7 @@ export interface GoogleWorkspaceReadClient {
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
+  createGmailDraft?(input: { raw: string }): Promise<GoogleGmailDraft>;
 }
 
 export type GoogleWorkspaceFetch = (

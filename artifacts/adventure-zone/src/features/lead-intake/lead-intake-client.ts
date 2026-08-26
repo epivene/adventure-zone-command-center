@@ -122,6 +122,10 @@ export type LeadEmailPreview = {
   subject: string | null;
   body: string | null;
 };
+export type LeadGmailDraftLink = {
+  id: string; rowId: string; state: "prepared" | "created" | "retryable_error" | "manual_review";
+  gmailDraftId: string | null; gmailMessageId: string | null; lastErrorCode: string | null;
+};
 export type CommunicationBlock = { id: string; targetType: string; active: boolean; organizationId?: string | null; contactId?: string | null; normalizedEmail?: string | null; rowId?: string | null; reason: string; createdAt: string };
 export type CommunicationBlockEvent = {
   id: string;
@@ -184,6 +188,12 @@ export function createLeadIntakeClient(api: Api) {
     },
     async getEmailPreview(rowId: string, expectedVersion: number) {
       return (await api.get<{ preview: LeadEmailPreview }>(`/lead-intake/rows/${rowId}/email-preview?expectedVersion=${expectedVersion}`)).preview;
+    },
+    async getGmailDraft(rowId: string) {
+      return (await api.get<{ link: LeadGmailDraftLink | null }>(`/lead-intake/rows/${rowId}/gmail-draft`)).link;
+    },
+    async createGmailDraft(rowId: string, expectedVersion: number) {
+      return api.post<{ link: LeadGmailDraftLink; reused: boolean }>(`/lead-intake/rows/${rowId}/gmail-draft`, { expectedVersion });
     },
     async listCommunicationBlocks() {
       return (await api.get<{ blocks: CommunicationBlock[] }>("/lead-intake/communication-blocks")).blocks;

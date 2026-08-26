@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { GOOGLE_WORKSPACE_READ_SCOPES } from "@/features/google-workspace/google-api-client";
+import { GOOGLE_WORKSPACE_REQUIRED_SCOPES } from "@/features/google-workspace/google-api-client";
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import type { GoogleWorkspaceEnvironment } from "@/features/google-workspace/google-workspace-env";
 import { createGoogleWorkspaceOAuthCallbackRouter } from "./google-workspace-oauth-callback";
@@ -29,7 +29,7 @@ function testApp(options?: {
     options?.exchangeCode ??
     vi.fn(async () => ({
       refreshToken: "1//refresh-token",
-      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      scopes: [...GOOGLE_WORKSPACE_REQUIRED_SCOPES],
     }));
   const accountIdentity =
     options?.accountIdentity ??
@@ -117,7 +117,7 @@ describe("Google Workspace OAuth callback", () => {
       accountEmail: "zone@example.com",
       googleSubject: "google-subject",
       refreshToken: "1//refresh-token",
-      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      scopes: [...GOOGLE_WORKSPACE_REQUIRED_SCOPES],
       now: new Date("2026-08-22T18:05:00.000Z"),
     });
     expect(response.headers.location).toBe(
@@ -138,10 +138,10 @@ describe("Google Workspace OAuth callback", () => {
     );
   });
 
-  it("refuses a connection missing any required read-only scope", async () => {
+  it("refuses a connection missing any required least-privilege scope", async () => {
     const exchangeCode = vi.fn(async () => ({
       refreshToken: "1//refresh-token",
-      scopes: GOOGLE_WORKSPACE_READ_SCOPES.filter(
+      scopes: GOOGLE_WORKSPACE_REQUIRED_SCOPES.filter(
         (scope) => scope !== "https://www.googleapis.com/auth/drive.readonly",
       ),
     }));
@@ -178,7 +178,7 @@ describe("Google Workspace OAuth callback", () => {
     const exchangeCode = vi.fn(async () => ({
       refreshToken: "1//refresh-token",
       scopes: [
-        ...GOOGLE_WORKSPACE_READ_SCOPES,
+        ...GOOGLE_WORKSPACE_REQUIRED_SCOPES,
         "https://www.googleapis.com/auth/gmail.modify",
       ],
     }));

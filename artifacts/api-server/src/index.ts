@@ -6,10 +6,7 @@ import { runStartupStep } from "./lib/startup-step";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
-import { ensurePaperNotesSchemaBeforeListen } from "./db/paper-notes-required-startup";
-import { ensureLeadIntakeSchemaBeforeListen } from "./db/lead-intake-required-startup";
-import { ensureOfficeCoordinatorSchemaBeforeListen } from "./db/office-coordinator-required-startup";
-import { ensureGoogleWorkspaceSchemaBeforeListen } from "./db/google-workspace-required-startup";
+import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
@@ -98,22 +95,7 @@ let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let shutdownRequested = false;
 
-await runStartupStep(
-  "required paper notes schema",
-  ensurePaperNotesSchemaBeforeListen,
-);
-await runStartupStep(
-  "required lead intake schema",
-  ensureLeadIntakeSchemaBeforeListen,
-);
-await runStartupStep(
-  "required office coordinator schema",
-  ensureOfficeCoordinatorSchemaBeforeListen,
-);
-await runStartupStep(
-  "required Google Workspace schema",
-  ensureGoogleWorkspaceSchemaBeforeListen,
-);
+await runRequiredSchemaStartup();
 
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");

@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { contacts, organizations } from "./schema";
+import { activities, contacts, organizations } from "./schema";
+import { communicationTemplates } from "./business-source-schema";
+import { googleWorkspaceConnections } from "./google-workspace-schema";
 
 export const leadImportBatchStatusValues = ["review", "archived"] as const;
 export const leadImportRowStateValues = [
@@ -26,6 +28,8 @@ export type LeadImportRowState = (typeof leadImportRowStateValues)[number];
 export type LeadRelationshipOutcome = (typeof leadRelationshipOutcomeValues)[number];
 export type LeadTerritoryStatus = (typeof leadTerritoryStatusValues)[number];
 export type LeadFitStatus = (typeof leadFitStatusValues)[number];
+export const leadGmailDraftStateValues = ["prepared", "created", "retryable_error", "manual_review"] as const;
+export type LeadGmailDraftState = (typeof leadGmailDraftStateValues)[number];
 
 export const leadImportBatches = pgTable("lead_import_batches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -189,4 +193,37 @@ export const leadImportEvidence = pgTable("lead_import_evidence", {
   check("lead_import_evidence_field_valid", sql`${table.field} in ('event_dates','recipient_email')`),
   check("lead_import_evidence_source_kind_valid", sql`${table.sourceKind} in ('crm_contact','act_description','official_website','manual')`),
   check("lead_import_evidence_reference_nonblank", sql`btrim(${table.sourceReference}) <> ''`),
+]);
+
+
+export const leadGmailDraftLinks = pgTable("lead_gmail_draft_links", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  rowId: uuid("row_id").notNull().references(() => leadImportRows.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
+  googleConnectionId: uuid("google_connection_id").notNull().references(() => googleWorkspaceConnections.id, { onDelete: "restrict" }),
+  communicationTemplateId: uuid("communication_template_id").notNull().references(() => communicationTemplates.id, { onDelete: "restrict" }),
+  templateVersion: text("template_version").notNull(), recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(), body: text("body").notNull(), gmailDraftId: text("gmail_draft_id"),
+  gmailMessageId: text("gmail_message_id"),
+  activityId: uuid("activity_id").references(() => activities.id, { onDelete: "restrict" }),
+  state: text("state").$type<LeadGmailDraftState>().default("prepared").notNull(),
+  lastErrorCode: text("last_error_code"), idempotencyKey: text("idempotency_key").notNull(),
+  attemptCount: integer("attempt_count").default(1).notNull(), actorId: text("actor_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }).notNull(), completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => [
+  unique("lead_gmail_draft_links_row_unique").on(table.rowId),
+  unique("lead_gmail_draft_links_idempotency_unique").on(table.idempotencyKey),
+  uniqueIndex("lead_gmail_draft_links_gmail_draft_unique").on(table.gmailDraftId).where(sql`${table.gmailDraftId} is not null`),
+  uniqueIndex("lead_gmail_draft_links_gmail_message_unique").on(table.gmailMessageId).where(sql`${table.gmailMessageId} is not null`),
+  uniqueIndex("lead_gmail_draft_links_activity_unique").on(table.activityId).where(sql`${table.activityId} is not null`),
+  index("lead_gmail_draft_links_state_updated_idx").on(table.state, table.updatedAt.desc()),
+  index("lead_gmail_draft_links_organization_updated_idx").on(table.organizationId, table.updatedAt.desc()),
+  check("lead_gmail_draft_links_state_valid", sql`${table.state} in ('prepared','created','retryable_error','manual_review')`),
+  check("lead_gmail_draft_links_email_valid", sql`${table.recipientEmail} = lower(btrim(${table.recipientEmail})) and ${table.recipientEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+\\.[^[:space:]@]+$'`),
+  check("lead_gmail_draft_links_text_nonblank", sql`btrim(${table.templateVersion}) <> '' and btrim(${table.subject}) <> '' and ${table.body} <> '' and btrim(${table.idempotencyKey}) <> '' and btrim(${table.actorId}) <> ''`),
+  check("lead_gmail_draft_links_attempt_positive", sql`${table.attemptCount} > 0`),
+  check("lead_gmail_draft_links_created_complete", sql`${table.state} <> 'created' or (${table.gmailDraftId} is not null and ${table.gmailMessageId} is not null and ${table.activityId} is not null and ${table.completedAt} is not null and ${table.lastErrorCode} is null)`),
 ]);

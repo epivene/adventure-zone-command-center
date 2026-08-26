@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true
+  },
+  "include": [],
+  "files": [
+    "src/db/lead-intake-startup-migration.ts",
+    "src/db/required-schema-startup.ts",
+    "src/features/google-workspace/google-api-client.ts",
+    "src/features/google-workspace/google-api-types.ts",
+    "src/features/google-workspace/google-connection-repository.ts",
+    "src/features/lead-intake/gmail-draft-handler.ts",
+    "src/features/lead-intake/gmail-draft-service.ts",
+    "src/features/lead-intake/lead-email-preview-repository.ts",
+    "src/routes/google-workspace-oauth-callback.ts"
+  ],
+  "references": []
+}

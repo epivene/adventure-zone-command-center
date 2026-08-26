@@ -120,6 +120,203 @@ export async function isCommunicationBlockSchemaReady(client: MigrationClient): 
   return result.rows[0]?.["ready"] === true;
 }
 
+const leadGmailDraftLinkReadinessExpression = `
+  to_regclass(current_schema() || '.lead_gmail_draft_links') is not null
+  and (
+    select count(*) = 22 from information_schema.columns
+    where table_schema = current_schema()
+      and table_name = 'lead_gmail_draft_links'
+      and column_name = any(array[
+        'id','row_id','organization_id','contact_id','google_connection_id',
+        'communication_template_id','template_version','recipient_email','subject','body',
+        'gmail_draft_id','gmail_message_id','activity_id','state','last_error_code',
+        'idempotency_key','attempt_count','actor_id','created_at','updated_at',
+        'last_attempt_at','completed_at'
+      ])
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and (
+        (column_name = any(array['id','row_id','organization_id','contact_id','google_connection_id','communication_template_id','activity_id']) and data_type <> 'uuid')
+        or (column_name = any(array['template_version','recipient_email','subject','body','gmail_draft_id','gmail_message_id','state','last_error_code','idempotency_key','actor_id']) and data_type <> 'text')
+        or (column_name = 'attempt_count' and data_type <> 'integer')
+        or (column_name = any(array['created_at','updated_at','last_attempt_at','completed_at']) and data_type <> 'timestamp with time zone')
+      )
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name = any(array[
+        'id','row_id','organization_id','google_connection_id','communication_template_id',
+        'template_version','recipient_email','subject','body','state','idempotency_key',
+        'attempt_count','actor_id','created_at','updated_at','last_attempt_at'
+      ])
+      and is_nullable <> 'NO'
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name = any(array[
+        'contact_id','gmail_draft_id','gmail_message_id','activity_id',
+        'last_error_code','completed_at'
+      ])
+      and is_nullable <> 'YES'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name = 'id' and lower(column_default) like '%gen_random_uuid%'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name = 'state' and lower(column_default) like '%prepared%'
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name = 'attempt_count' and replace(lower(column_default), ' ', '') in ('1','1::integer')
+  )
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'lead_gmail_draft_links'
+      and column_name in ('created_at','updated_at')
+      and lower(column_default) like '%now()%'
+    group by table_name
+    having count(*) = 2
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and contype = 'p'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'primarykey(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_row_unique' and contype = 'u'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'unique(row_id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_idempotency_unique' and contype = 'u'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'unique(idempotency_key)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_row_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.lead_import_rows')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(row_id)references%lead_import_rows(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_organization_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.organizations')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(organization_id)references%organizations(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_contact_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.contacts')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(contact_id)references%contacts(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_google_connection_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.google_workspace_connections')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(google_connection_id)references%google_workspace_connections(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_template_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.communication_templates')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(communication_template_id)references%communication_templates(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_activity_fk' and contype = 'f'
+      and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.activities')
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'foreignkey(activity_id)references%activities(id)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_state_valid' and contype = 'c'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') =
+        'check((state=any(array[''prepared''::text,''created''::text,''retryable_error''::text,''manual_review''::text])))'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_email_valid' and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%recipient_email%lower%btrim%recipient_email%'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like '%recipient_email~%[:space:]%@%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_text_nonblank' and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%template_version%subject%body%idempotency_key%actor_id%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_attempt_positive' and contype = 'c'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like '%attempt_count>0%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
+      and conname = 'lead_gmail_draft_links_created_complete' and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%state%created%gmail_draft_id%gmail_message_id%activity_id%completed_at%last_error_code%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_indexes
+    where schemaname = current_schema() and indexname = 'lead_gmail_draft_links_gmail_draft_unique'
+      and lower(indexdef) like 'create unique index%'
+      and replace(lower(indexdef), ' ', '') like '%(gmail_draft_id)%gmail_draft_idisnotnull%'
+  )
+  and exists (
+    select 1 from pg_indexes
+    where schemaname = current_schema() and indexname = 'lead_gmail_draft_links_gmail_message_unique'
+      and lower(indexdef) like 'create unique index%'
+      and replace(lower(indexdef), ' ', '') like '%(gmail_message_id)%gmail_message_idisnotnull%'
+  )
+  and exists (
+    select 1 from pg_indexes
+    where schemaname = current_schema() and indexname = 'lead_gmail_draft_links_activity_unique'
+      and lower(indexdef) like 'create unique index%'
+      and replace(lower(indexdef), ' ', '') like '%(activity_id)%activity_idisnotnull%'
+  )
+  and exists (
+    select 1 from pg_indexes
+    where schemaname = current_schema() and indexname = 'lead_gmail_draft_links_state_updated_idx'
+      and replace(lower(indexdef), ' ', '') like '%(state,updated_atdesc)%'
+  )
+  and exists (
+    select 1 from pg_indexes
+    where schemaname = current_schema() and indexname = 'lead_gmail_draft_links_organization_updated_idx'
+      and replace(lower(indexdef), ' ', '') like '%(organization_id,updated_atdesc)%'
+  )
+`;
+
+export async function isLeadGmailDraftLinkSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${leadGmailDraftLinkReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
 async function loadOne(here: string, filename: string) {
   const candidates = [
     path.resolve(here, `migrations/${filename}`),
@@ -144,6 +341,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_calendar_availability.sql"),
     loadOne(here, "20260826_lead_inventory_policy.sql"),
     loadOne(here, "20260826_lead_safe_email.sql"),
+    loadOne(here, "20260826_lead_gmail_drafts.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -249,6 +447,7 @@ export async function ensureLeadIntakeSchema(
           ])
       )
       and (${communicationBlockReadinessExpression})
+      and (${leadGmailDraftLinkReadinessExpression})
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       and to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') is not null
