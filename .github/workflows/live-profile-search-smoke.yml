@@ -7,44 +7,31 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Audit third outreach batch history
+      - name: Create third-batch held lead tasks
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          IDS=(
-            "Autumn Aloft|9f560f05-4ed3-4a3d-809c-6ecab4760102"
-            "Mackay Free BBQ|305b0c3a-eb81-42d8-929c-56b8857d1fff"
-            "Telluride Autumn Classic|e3626241-c92b-4289-9034-4fc405705dba"
-            "WSTR Tremonton|ac808287-7166-4ace-95a1-c0f15ca80ff8"
-            "Golden Aspen Motorcycle Rally|ae99bddb-a67d-476c-8c40-c755f37ebbc5"
-            "Rendezvous Royale|19ed5401-820b-43e2-84b9-c82e0b6c7dd0"
-            "Commerce City Eats|0f98c2f4-7e3d-4da6-9ba4-4700a39211e0"
-            "Pawtoberfest|c1d24cda-ecc8-4111-bbc3-8daece021228"
-          )
-          for ENTRY in "${IDS[@]}"; do
-            NAME="${ENTRY%%|*}"
-            ID="${ENTRY##*|}"
-            echo "=== HISTORY: ${NAME} ==="
+          create_task() {
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              "${BASE}/api/assistant-import/profile-history/${ID}"
+              -H "Content-Type: application/json" \
+              -X POST "${BASE}/api/assistant-import/office-tasks" \
+              --data-binary "$1"
             echo
-          done
-          QUERIES=(
-            "Golondrinas"
-            "Renaissance Faire"
-            "Santa Fe Renaissance"
-            "Vintage Market Days"
-            "Northern Utah"
-            "Logan vintage"
-          )
-          for Q in "${QUERIES[@]}"; do
-            echo "=== QUERY: ${Q} ==="
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search"
-            echo
-          done
+          }
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"research_update","title":"Verify 2026: Autumn Aloft Balloon Festival","instructions":"Current 2026 event dates and organizer contact could not be verified confidently. Confirm whether Autumn Aloft is taking place in 2026, verify the official dates, and obtain the current entertainment/event contact before outreach.","organizationId":"9f560f05-4ed3-4a3d-809c-6ecab4760102","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"contact_verification","title":"Verify contact: Mackay Days Free BBQ","instructions":"The 2026 Mackay Days Free BBQ is listed for Sept. 19, but the current event listing provides phone contacts rather than a verified organizer email. Contact Mike Evans (208-776-0578) or Jim McKelvey (208-390-2716) and confirm the correct recipient email before outreach.","organizationId":"305b0c3a-eb81-42d8-929c-56b8857d1fff","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"follow_up_prep","title":"Review lead: Vintage Market Days Northern Utah","instructions":"Prior organizer responses in 2023 and 2025 said inflatable entertainment is not a fit because the event is intentionally kept shopping-focused. Review whether this lead should be retired from standard outreach unless the event format changes.","organizationId":"6a57f70a-de91-4154-a307-d8642ee95833","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"contact_verification","title":"Verify contact: WSTR Tremonton Qualifier","instructions":"The 2026 World Series of Team Roping listing confirms Ben Tibbitts as the event contact at 208-681-2268, but a current email is not published. Confirm whether bentibbitts@hotmail.com is still the correct email before outreach.","organizationId":"ac808287-7166-4ace-95a1-c0f15ca80ff8","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"research_update","title":"Verify 2026: Golden Aspen Motorcycle Rally","instructions":"Verify the official 2026 dates and location and obtain a direct organizer email. The current official site provides a contact form, while the CRM profile does not have a usable recipient email.","organizationId":"ae99bddb-a67d-476c-8c40-c755f37ebbc5","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"research_update","title":"Verify 2026: Commerce City Eats","instructions":"A current 2026 Commerce City Eats event could not be verified on the city website. Confirm whether the program/event still exists, its current name and 2026 date, and the current event contact before outreach.","organizationId":"0f98c2f4-7e3d-4da6-9ba4-4700a39211e0","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
+
+          create_task '{"assignee":"Amy Kammeyer","taskType":"follow_up_prep","title":"Review lead: Pawtoberfest","instructions":"The organizer previously confirmed that their liability policy does not allow inflatables and requested no loud-noise games. The event is also a fundraiser with no hosting budget. Review whether to mark this as a non-fit for standard outreach unless an approved non-inflatable offering becomes available.","organizationId":"c1d24cda-ecc8-4111-bbc3-8daece021228","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}'
