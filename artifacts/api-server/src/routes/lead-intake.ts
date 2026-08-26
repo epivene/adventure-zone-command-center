@@ -293,7 +293,7 @@ router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<v
       introductionSuitable: leadImportRows.introductionSuitable, relationshipOutcome: leadImportRows.relationshipOutcome,
       territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus,
     }).from(leadImportRows).leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
-      .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1);
+      .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1).for("update");
     if (!lead || lead.reviewVersion !== expectedVersion) { res.status(409).json({ error: "This lead changed in another review. Reload before previewing." }); return; }
     if (!lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
     const approvedTemplate = (await new CommunicationTemplateRepository(db as any).list({ state: "active" })).find((template) => template.code === "lead_introduction_2026_prepaid");
