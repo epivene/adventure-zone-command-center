@@ -1,6 +1,5 @@
 import type {
   GoogleCalendarEvent,
-  GoogleCalendarEvent,
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,

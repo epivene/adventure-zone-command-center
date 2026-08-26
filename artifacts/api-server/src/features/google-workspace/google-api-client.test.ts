@@ -225,6 +225,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "getAttachment",
       "getMessageMetadata",
       "getThreadDetail",
+      "listCalendarEvents",
       "listCalendars",
       "listLabels",
       "listMessagePage",
