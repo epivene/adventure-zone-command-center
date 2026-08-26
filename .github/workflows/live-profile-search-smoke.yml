@@ -13,45 +13,10 @@ jobs:
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          CANDIDATES=(
-            "Amy Kammeyer"
-            "abbra.kadabra@gmail.com"
-            "abbra.kadabra"
-            "amy.kammeyer"
-            "Amy K"
-          )
-          for ASSIGNEE in "${CANDIDATES[@]}"; do
-            echo "Trying Office Coordinator account: ${ASSIGNEE}"
-            BODY=$(python - <<PY
-          import json
-          print(json.dumps({
-            "assignee": ${ASSIGNEE@Q},
-            "taskType": "follow_up_prep",
-            "title": "Follow up: White Sands Balloon & Music Festival",
-            "instructions": "2026 event status/name is unclear following the prior cancellation. Verify whether the event is happening in 2026, then confirm the official event name, dates, and current contact before outreach.",
-            "organizationId": "ff9640f8-9ffd-4a2f-be7b-5243350a3251",
-            "contactId": None,
-            "dueAt": "2026-09-01T09:00:00-06:00"
-          }))
-          PY
-          )
-            HTTP=$(curl --silent --show-error \
-              -o /tmp/task-response.json \
-              -w "%{http_code}" \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/office-tasks" \
-              --data-binary "${BODY}")
-            cat /tmp/task-response.json
-            echo
-            if [ "${HTTP}" = "201" ]; then
-              echo "TASK_CREATED_FOR=${ASSIGNEE}"
-              exit 0
-            fi
-            if [ "${HTTP}" != "404" ]; then
-              echo "Unexpected status ${HTTP}"
-              exit 1
-            fi
-          done
-          echo "No matching Office Coordinator account found."
-          exit 2
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/office-tasks" \
+            --data-binary @- <<'JSON'
+          {"assignee":"Amy Kammeyer","taskType":"follow_up_prep","title":"Follow up: White Sands Balloon & Music Festival","instructions":"2026 event status/name is unclear following the prior cancellation. Verify whether the event is happening in 2026, then confirm the official event name, dates, and current contact before outreach.","organizationId":"ff9640f8-9ffd-4a2f-be7b-5243350a3251","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}
+          JSON
