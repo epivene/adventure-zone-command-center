@@ -30,7 +30,8 @@ describe("lead email startup readiness", () => {
       ensureSchema: async () => false,
       ensureTemplateSeed: async () => undefined,
       isTemplateReady: async () => false,
-    })).rejects.toThrow("approved lead email template is incomplete");
+      getTemplateReadinessIssues: async () => ["sourceStorageReference"],
+    })).rejects.toThrow("mismatched readiness fields: sourceStorageReference");
     expect(client.release).toHaveBeenCalledOnce();
   });
 });

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { businessSourceDocuments, communicationTemplates } from "@/db/schema";
 import type { CommunicationTemplateSeed } from "./communication-template-types";
@@ -478,9 +478,54 @@ The Adventure Zone`,
 
 type Database = typeof database;
 
-export async function isApprovedCommunicationTemplateSeedReady(database: Database): Promise<boolean> {
-  try {
-    const [candidate] = await database
+async function repairLegacyApprovedLeadSourceProvenance(database: Database): Promise<void> {
+  const expected = APPROVED_LEAD_INTRODUCTION_2026;
+  const [source] = await database
+    .select({
+      id: businessSourceDocuments.id,
+      displayTitle: businessSourceDocuments.displayTitle,
+      sourceCategory: businessSourceDocuments.sourceCategory,
+      effectiveYear: businessSourceDocuments.effectiveYear,
+      accessScope: businessSourceDocuments.accessScope,
+      reviewState: businessSourceDocuments.reviewState,
+      notes: businessSourceDocuments.notes,
+      reviewedBy: businessSourceDocuments.reviewedBy,
+      reviewedAt: businessSourceDocuments.reviewedAt,
+    })
+    .from(businessSourceDocuments)
+    .where(and(
+      eq(businessSourceDocuments.originalFilename, expected.sourceFilename),
+      isNull(businessSourceDocuments.storageReference),
+    ))
+    .limit(1);
+
+  const knownLegacySystemSeed = source
+    && source.displayTitle === expected.sourceDocument.displayTitle
+    && source.sourceCategory === expected.sourceDocument.category
+    && source.effectiveYear === expected.sourceDocument.effectiveYear
+    && source.accessScope === expected.sourceDocument.accessScope
+    && source.reviewState === expected.sourceDocument.reviewState
+    && source.notes === expected.sourceDocument.notes
+    && source.reviewedBy === expected.sourceDocument.reviewedBy
+    && source.reviewedAt instanceof Date
+    && Number.isFinite(source.reviewedAt.valueOf());
+  if (!knownLegacySystemSeed) return;
+
+  await database
+    .update(businessSourceDocuments)
+    .set({
+      storageReference: expected.sourceDocument.storageReference,
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(businessSourceDocuments.id, source.id),
+      eq(businessSourceDocuments.reviewedBy, expected.sourceDocument.reviewedBy),
+      isNull(businessSourceDocuments.storageReference),
+    ));
+}
+
+async function loadApprovedCommunicationTemplateCandidate(database: Database) {
+  const [candidate] = await database
       .select({
         code: communicationTemplates.code,
         templateVersion: communicationTemplates.templateVersion,
@@ -517,10 +562,28 @@ export async function isApprovedCommunicationTemplateSeedReady(database: Databas
       )
       .where(eq(communicationTemplates.code, APPROVED_LEAD_INTRODUCTION_2026.code))
       .limit(1);
-    return Boolean(candidate && isExactApprovedLeadIntroductionTemplate(candidate));
+  return candidate;
+}
+
+export async function getApprovedCommunicationTemplateSeedIssues(database: Database): Promise<string[]> {
+  try {
+    const candidate = await loadApprovedCommunicationTemplateCandidate(database);
+    if (!candidate) return ["templateRecord"];
+    if (isExactApprovedLeadIntroductionTemplate(candidate)) return [];
+
+    const issues: string[] = [];
+    if (candidate.sourceStorageReference !== APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.storageReference) {
+      issues.push("sourceStorageReference");
+    }
+    if (issues.length === 0) issues.push("approvedTemplateFields");
+    return issues;
   } catch {
-    return false;
+    return ["readinessQuery"];
   }
+}
+
+export async function isApprovedCommunicationTemplateSeedReady(database: Database): Promise<boolean> {
+  return (await getApprovedCommunicationTemplateSeedIssues(database)).length === 0;
 }
 
 export async function ensureCommunicationTemplateSeed(
@@ -528,6 +591,7 @@ export async function ensureCommunicationTemplateSeed(
   options?: { ensureSourceSeed?: (database: Database) => Promise<void> },
 ): Promise<void> {
   await (options?.ensureSourceSeed ?? ensureBusinessSourceSeed)(database);
+  await repairLegacyApprovedLeadSourceProvenance(database);
   const sourceRows = await database
     .select({ id: businessSourceDocuments.id })
     .from(businessSourceDocuments)
