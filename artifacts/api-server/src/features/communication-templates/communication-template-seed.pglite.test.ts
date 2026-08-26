@@ -7,6 +7,7 @@ import { APPROVED_LEAD_INTRODUCTION_2026 } from "./lead-introduction-2026-approv
 import { CommunicationTemplateRepository } from "./communication-template-repository";
 import {
   ensureCommunicationTemplateSeed,
+  getApprovedCommunicationTemplateSeedIssues,
   isApprovedCommunicationTemplateSeedReady,
 } from "./communication-template-seed";
 
@@ -88,6 +89,8 @@ describe("approved communication-template startup", () => {
     `);
     const db = drizzle(client, { schema });
 
+    await expect(getApprovedCommunicationTemplateSeedIssues(db as never))
+      .resolves.toEqual(["templateRecord"]);
     await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
     await expect(isApprovedCommunicationTemplateSeedReady(db as never)).resolves.toBe(true);
     const repaired = (await client.query(`
@@ -106,6 +109,24 @@ describe("approved communication-template startup", () => {
       from business_source_documents where id = '${sourceId}'
     `)).rows[0];
     expect(restarted).toEqual(repaired);
+  }, 20_000);
+
+  it("does not rewrite a source record that is no longer the known system seed", async () => {
+    const client = new PGlite(); clients.push(client);
+    await createTemplateTables(client, true);
+    await client.exec(`
+      update business_source_documents
+      set storage_reference = null, reviewed_by = 'amy'
+      where id = '${sourceId}'
+    `);
+    const db = drizzle(client, { schema });
+
+    await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
+
+    expect((await client.query(`select storage_reference, reviewed_by from business_source_documents where id = '${sourceId}'`)).rows)
+      .toEqual([{ storage_reference: null, reviewed_by: "amy" }]);
+    await expect(getApprovedCommunicationTemplateSeedIssues(db as never))
+      .resolves.toEqual(["sourceStorageReference"]);
   }, 20_000);
 
   it("handles concurrent first seed attempts atomically", async () => {
