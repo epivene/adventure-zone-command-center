@@ -2,98 +2,131 @@
 
 Date: 2026-08-26  
 Branch: `feat/lead-gmail-draft-creation`  
-Base merge: `62343f3e067fcd8832b9a10b1aa93107f87e15cc`
+Base merge: `62343f3e067fcd8832b9a10b1aa93107f87e15cc`  
+Implementation head before this report: `4aa50639a1235431e015a4b04134a5c583d6c1df`
 
 ## Status
 
-Task 8 implementation is present on the feature branch. Static review is complete. Executable verification is blocked by GitHub Actions runner infrastructure: every branch run ends before any job step starts, so this report does **not** claim a passing test suite or typecheck.
+Task 8 and the independent-review corrections are implemented on the feature branch. Static verification is complete. Executable GREEN remains unverified because every GitHub Actions job terminates before its first step; this report does not claim passing tests or typechecks.
 
 No pull request was opened or merged.
 
-## Commit summary
+## Commit lineage
 
-- `d7b53e2ee222f538cab193e657e917f114879574` — RED contract tests for compose OAuth, MIME safety, Gmail draft client, durable idempotency/service safety, handler, migration, individual UI action, and separate Office draft state.
-- `b2fc7a45eaace33c2812851fe30b37675ac22424` — backend implementation: forward migration/schema readiness, Gmail client, connection gating, durable link persistence/service, handler.
-- `d229dd702e123b552d624c6fe11fc88c82fb6867` — POST/read routes and individual preview/Office Drafts UI.
-- `7bbed495c325b01a1e5191837ed5f502ecbc2a00` — focused CI workflow with failure-log artifact handling.
-- `43121bbda13810af727ab819ce9a9875fd6aaacf` — approved-template fixture syntax correction.
-- `c7f0adae5d6ba778b46b0bd5d83c1e56451846b3` — test fixture aligned to immutable rendered evidence.
-- `f85b0b24912c95c81c8d23c7acb8220782a24855` — explicit compose reauthorization regression coverage.
+Initial Task 8:
 
-## Files and behavior
+- `d7b53e2ee222f538cab193e657e917f114879574` — RED safety/API/UI/migration contracts.
+- `b2fc7a45eaace33c2812851fe30b37675ac22424` — durable backend, forward schema, Gmail draft-only client.
+- `d229dd702e123b552d624c6fe11fc88c82fb6867` — route and individual UI action/state.
+- `7bbed495c325b01a1e5191837ed5f502ecbc2a00`, `43121bbda13810af727ab819ce9a9875fd6aaacf`, `c7f0adae5d6ba778b46b0bd5d83c1e56451846b3`, `f85b0b24912c95c81c8d23c7acb8220782a24855` — focused workflow and test-fixture corrections.
+- `186c13c6a1a1ae9588cbb9febdec15bc80d3ae0f` — original Task 8 report.
 
-### Durable data and schema readiness
+Review correction pass:
 
-- `lib/db/migrations/20260826_lead_gmail_drafts.sql`
-- `lib/db/src/lead-intake-schema.ts`
-- `artifacts/api-server/src/db/lead-intake-startup-migration.ts`
-- `gmail-draft-migration.pglite.test.ts`
+- `e8c081a2f70852f764c1f97f146992d8172980c5` — repaired invalid literal escaped newlines in the Google connection test.
+- `69351b55312460041d695b0e56e11a4bcc71e574` — RED contracts for persisted state reload, CRM history/audit, strict readiness, lock-time clock, complete OAuth suites, and Gmail timeout.
+- `2c5e36b656121b440b88de6326541687b7e8e14e` — bounded draft mutation, lock-acquired clock, CRM activity/audit, activity link, and state-read API.
+- `2cb332d7ddb4475570d1c1291f70ba0a8c1c848c` — reload and display durable per-row Gmail draft state.
+- `cd1af26008090178ed3bb2efc8d03e210abac17d` — fail-closed canonical draft-link readiness.
+- `0146d88c0c8a48c51a717b6d99834bcdc4840f70` — complete startup and legacy Google fixtures.
+- `991e0f620d5e4287c952c1f9c46f660f7552b340` — corrected the migration dollar-quote opener.
+- `2999971816fa39986806b5273b9e77fa511b06e2`, `53e47ad1adeb7016359f3b351b88e84212fe9201` — RED and fix for the preview/durable-state lookup race; timeout now covers response parsing.
+- `dd2d4e50a6ecb416bd37dbeb1bbce685f6412405` — RED weakened-check readiness cases.
+- `72e8f03a5d7d39c9dd02baab0336c78b078c151e`, `4aa50639a1235431e015a4b04134a5c583d6c1df` — RED/GREEN for real startup ordering and one complete token-to-response timeout budget.
 
-The forward migration creates the missing `lead_gmail_draft_links` relation without rewriting an applied migration. It stores row, organization/profile, nullable contact, Google connection, template/version, recipient, rendered subject/body, Gmail draft/message identifiers, state/error, idempotency key, actor, and timestamps. Unique constraints enforce one record per lead event row and unique idempotency.
+GitHub compare reports implementation head `4aa5063` is 20 commits ahead of, zero behind, and directly descended from the base. It is also ahead of the escaped-newline fix `e8c081a`, startup fixture fix `0146d88`, and dollar-quote fix `991e0f6`.
 
-### Gmail API and authorization
+## Review corrections
 
-- `google-api-client.ts`, `google-api-types.ts`
-- `google-connection-repository.ts` and its tests
-- `google-workspace-oauth-callback.ts`
-- `google-gmail-draft.test.ts`
-- Settings copy in `SettingsGoogleWorkspacePage.tsx`
+### Durable state after reload
 
-OAuth adds only `https://www.googleapis.com/auth/gmail.compose` to the existing readonly scopes. Legacy readonly connections retain read access, show reauthorization required, and cannot create drafts until explicitly reauthorized. MIME rejects CR/LF injection, UTF-8 encodes Unicode subject/body, preserves multiline bodies, and supplies Gmail base64url raw content. The only Gmail mutation is `POST /gmail/v1/users/me/drafts`; the client exposes no send operation and does not retry POST.
+The API now exposes authenticated per-row GET and POST routes at `/lead-intake/rows/:rowId/gmail-draft`. The preview panel loads the existing durable link on row/review reload and shows:
 
-### Durable service and routes
+- Gmail draft created
+- Gmail draft requires manual review
+- Gmail draft creation can be retried
 
-- `gmail-draft-service.ts` and tests
-- `gmail-draft-handler.ts` and tests
-- `lead-email-preview-repository.ts`
-- `routes/lead-intake.ts`
-- `routes/office-email-drafts.ts`
+A created, prepared, or manual-review record never exposes another create action. A retryable definite failure may retry the same durable record. Separate request generations prevent preview loading from discarding an in-flight draft-state lookup. Mutation errors reload the durable state so an uncertain/prepared record is visible without another create attempt.
 
-The service serializes per-row work with the existing transaction/advisory-lock path, reloads current state, rejects stale expected review version, rebuilds preview/readiness/DO NOT SEND/template/snapshot evidence immediately before the Gmail call, and persists immutable rendered evidence first. A created record is idempotently returned. A definite API failure becomes retryable on the same record; an uncertain network/invalid-success outcome becomes manual review and is never automatically retried. The read endpoint is separate from `office_email_drafts`.
+### CRM/profile history and audit
 
-### Individual UI and state display
+`lead_gmail_draft_links.activity_id` links each successful draft record to one CRM `activities` row. After Gmail returns identifiers, the same serialized database transaction:
 
-- `lead-email-preview.tsx` and `lead-email-preview.gmail-draft.test.tsx`
-- `lead-intake-client.ts`, `LeadIntakePage.tsx`
-- `lead-gmail-draft-state-list.tsx` and test
-- `OfficeEmailDraftsPage.tsx`
+1. inserts an organization-linked CRM note;
+2. preserves nullable `contact_id` for organization-inbox recipients;
+3. updates the durable link to `created` with Gmail and activity identifiers;
+4. writes audit entries for the activity and lead Gmail draft transition.
 
-Each reviewed row exposes one `Create Gmail Draft` action and status. There is no bulk draft action. Office Email Drafts shows linked lead Gmail state in a separate section.
+If history/audit persistence fails after an external Gmail success, the transaction rolls back to the earlier durable `prepared` reservation, so a later request requires manual review instead of issuing another Gmail mutation.
 
-## TDD and verification evidence
+### Canonical schema readiness
 
-### RED
+The forward migration and Drizzle schema now include the activity link/FK/index. Isolated readiness verifies:
 
-The RED contract suite was committed first at `d7b53e2...`. GitHub Actions run `32970933806` concluded failure, but GitHub reports zero job steps and no log, so it cannot serve as a trustworthy executable RED transcript. The tests themselves precede production implementation in history.
+- all 22 required columns;
+- data types, required/nullable columns, ID/state/attempt/timestamp defaults;
+- primary key;
+- exact row and idempotency unique constraints;
+- row, organization, nullable contact, Google connection, communication template, and activity FKs with correct target and delete behavior;
+- state, email, nonblank text, positive attempt, and created-completeness checks;
+- partial unique Gmail draft/message/activity indexes;
+- state/updated and organization/updated lookup indexes.
 
-### Current focused verification attempt
+PGlite contracts mutate a canonical table's FK target, contact nullability, state default, index uniqueness, email check, and state set. Each weakened same-name structure must report not ready.
 
-Latest run: `32972738914` at `f85b0b2...`.
+The SQL file contains exactly one balanced `DO $$ BEGIN` / `END $$;` pair.
 
-- Job `98190059082`: conclusion `failure`
+### Complete mutation-time clock and timeout
+
+Both durable preparation and Gmail execution receive the clock callback and invoke it only after the advisory lock/row lock and current-state reload. The second clock read feeds the immediate readiness/evidence recomputation and Gmail mutation.
+
+One AbortController budget starts before refresh-token acquisition and remains active through the Gmail draft POST and response-body parsing. Token or Gmail timeout/abort maps to `GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN`, which becomes durable `manual_review` and is not automatically retried. Definite API failures remain retryable on the same idempotency record.
+
+### Startup ordering
+
+Server bootstrap now coordinates required schemas in dependency order:
+
+1. paper notes;
+2. Google Workspace;
+3. lead intake;
+4. Office coordinator.
+
+The lead Gmail FK therefore cannot run before `google_workspace_connections` exists. The empty-database startup test invokes the real Google schema migration rather than precreating the Google connection table, then runs lead-intake startup.
+
+### Legacy Google coverage
+
+Successful OAuth callback, safe-return redirect, account-change conflict, API client, and connection repository fixtures use `GOOGLE_WORKSPACE_REQUIRED_SCOPES` where full authorization is intended. The unexpected `gmail.modify` test includes all required scopes before the extra scope. A dedicated readonly fixture still proves read access remains available while compose requires explicit reauthorization.
+
+The focused workflow now includes all of these legacy suites, Task 8 service/handler/history/migration/startup suites, UI suites, API/frontend typechecks, and DB build.
+
+## Static verification at `4aa5063`
+
+GitHub compare: `ahead`, 20 commits ahead, 0 behind, 35 changed files.
+
+A connector-based scan fetched all 34 changed TS/TSX/SQL/YAML files at the exact head SHA and found:
+
+- no exact `drafts.send` or `messages.send` symbol;
+- no Gmail send endpoint/route;
+- no bulk Gmail/draft action;
+- no suspicious literal escaped-newline sequence outside intended string/regex content;
+- no broken `DO $ BEGIN`;
+- exactly two `$$` delimiter tokens, forming one opener and one closer.
+
+The only Gmail mutation endpoint in changed source remains `POST /gmail/v1/users/me/drafts`. Lead Gmail UI states do not claim that a message was sent.
+
+## Executable verification evidence
+
+Latest run: `32975888156` at `4aa50639a1235431e015a4b04134a5c583d6c1df`.
+
+- Job: `981? replaced below`
+- Actual focused job ID: `98200397488`
+- Job conclusion: `failure`
 - Job steps API: `[]`
-- Job logs: unavailable
+- Job logs URL: `null`
 - Run artifacts: `[]`
 
-The same zero-step failure occurred on all seven Task 8 branch pushes. Therefore no test assertion or typecheck failure is available to diagnose, and GREEN remains unverified.
+The same zero-step termination has occurred for every Task 8 branch push, including RED and GREEN commits. There is no assertion failure, compiler diagnostic, or log artifact to inspect.
 
-### Static verification
+## Known blocker
 
-- GitHub compare `62343f3e067fcd8832b9a10b1aa93107f87e15cc...f85b0b24912c95c81c8d23c7acb8220782a24855`: `ahead`, 7 commits, 26 changed files, 0 commits behind.
-- Fetched all 26 changed files at the head SHA and scanned for exact `drafts.send`, `messages.send`, and `/send`: no exact matches.
-- Scanned changed files for a bulk Gmail-draft action: none; only the row-level action is implemented.
-- Reviewed Gmail client endpoint/method: one POST to `/gmail/v1/users/me/drafts`; no send route or method was added.
-
-## Self-review findings
-
-- Fixed the approved-template test fixture so reserved immutable evidence is built from the real rendering path.
-- Fixed the legacy Google-connection regression expectation: a fully scoped connection is connected; a readonly connection retains reads but requires explicit compose reauthorization.
-- Confirmed `contact_id` is nullable and the implementation does not reuse `office_email_drafts`.
-- Confirmed the external Gmail call remains inside the serialized mutation-time transaction/lock window, after all current-state gates and durable reservation.
-- Confirmed uncertain outcomes are not retried automatically.
-
-## Known blockers and concerns
-
-1. GitHub Actions runner/account infrastructure terminates the job before checkout, producing no steps, logs, or artifacts. Focused tests and typechecks must be rerun in a functioning runner before merge.
-2. Because execution is blocked, TypeScript and runtime integration defects remain possible despite static review.
-3. The repository already had unrelated Microsoft Office message-send routes on the base branch; Task 8 changes add no Gmail send path or send-capable method.
+A functioning runner or authorized local checkout must execute the focused workflow before merge. Until then, TypeScript, PGlite, and runtime integration remain unverified despite the tests and static review.
