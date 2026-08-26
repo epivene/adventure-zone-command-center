@@ -255,11 +255,16 @@ export async function ensureLeadIntakeSchema(
       ) as ready
   `;
   const marker = await client.query(readinessSql);
-  if (marker.rows[0]?.["ready"] === true) return false;
+  const wasReady = marker.rows[0]?.["ready"] === true;
+
+  // Always run the forward, idempotent migrations before trusting readiness. This
+  // repairs weakened same-name constraints and wrong fail-closed metadata that a
+  // fragment-based readiness probe could otherwise mistake for canonical schema.
   await client.query(await (options?.loadSql ?? loadMigrationSql)());
+
   const verified = await client.query(readinessSql);
   if (verified.rows[0]?.["ready"] !== true) {
     throw new Error("Lead intake schema is incomplete after migration; startup stopped to protect review data.");
   }
-  return true;
+  return !wasReady;
 }
