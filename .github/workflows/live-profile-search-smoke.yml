@@ -7,23 +7,38 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Search next outreach batch profiles
+      - name: Audit third outreach batch history
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
+          IDS=(
+            "Autumn Aloft|9f560f05-4ed3-4a3d-809c-6ecab4760102"
+            "Mackay Free BBQ|305b0c3a-eb81-42d8-929c-56b8857d1fff"
+            "Telluride Autumn Classic|e3626241-c92b-4289-9034-4fc405705dba"
+            "WSTR Tremonton|ac808287-7166-4ace-95a1-c0f15ca80ff8"
+            "Golden Aspen Motorcycle Rally|ae99bddb-a67d-476c-8c40-c755f37ebbc5"
+            "Rendezvous Royale|19ed5401-820b-43e2-84b9-c82e0b6c7dd0"
+            "Commerce City Eats|0f98c2f4-7e3d-4da6-9ba4-4700a39211e0"
+            "Pawtoberfest|c1d24cda-ecc8-4111-bbc3-8daece021228"
+          )
+          for ENTRY in "${IDS[@]}"; do
+            NAME="${ENTRY%%|*}"
+            ID="${ENTRY##*|}"
+            echo "=== HISTORY: ${NAME} ==="
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE}/api/assistant-import/profile-history/${ID}"
+            echo
+          done
           QUERIES=(
-            "Autumn Aloft Balloon Festival"
-            "Mackay Days Free BBQ"
-            "Santa Fe Renaissance Faire"
-            "Telluride Autumn Classic"
-            "Vintage Market Days Northern Utah"
-            "World Series of Team Roping Tremonton Qualifier"
-            "Golden Aspen Motorcycle Rally"
-            "Rendezvous Royale"
-            "Commerce City Eats"
-            "Pawtoberfest"
+            "Golondrinas"
+            "Renaissance Faire"
+            "Santa Fe Renaissance"
+            "Vintage Market Days"
+            "Northern Utah"
+            "Logan vintage"
           )
           for Q in "${QUERIES[@]}"; do
             echo "=== QUERY: ${Q} ==="
