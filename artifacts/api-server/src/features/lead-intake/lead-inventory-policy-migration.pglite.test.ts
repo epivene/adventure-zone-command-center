@@ -7,6 +7,21 @@ describe("20260826 lead inventory policy migration", () => {
     const client = new PGlite();
     try {
       await client.exec(`
+        create table package_templates (
+          id uuid primary key default gen_random_uuid(), code text not null unique, name text not null,
+          base_attraction_count integer not null default 1, active boolean not null default true,
+          customer_description text, booking_talking_points text, operational_requirements text,
+          setup_notes text, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
+        );
+        insert into package_templates
+          (code, name, customer_description, booking_talking_points, operational_requirements, setup_notes)
+        values (
+          'pirates_rebellion', 'Pirate''s Rebellion',
+          'A water-focused pirate package centered on a large inflatable pool.',
+          'Best fit for warm-weather events that can support a massive pool.',
+          'Plan for an extremely-flat ground surface. Water requires 45,000–50,000 gallons.',
+          'Schedule pool filling as part of setup.'
+        );
         create table lead_import_rows (id uuid primary key);
         create table lead_availability_snapshots (
           id uuid primary key default gen_random_uuid(), row_id uuid not null references lead_import_rows(id),
@@ -22,6 +37,11 @@ describe("20260826 lead inventory policy migration", () => {
           ('20000000-0000-4000-8000-000000000001', 1, '2026-09-01', '2026-09-02', true, 'owner', now(), '[]', '[]', '[]');
       `);
       await client.exec(await readFile(new URL("../../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"));
+      expect((await client.query("select customer_description, booking_talking_points, operational_requirements from package_templates where code = 'pirates_rebellion'")).rows[0]).toMatchObject({
+        customer_description: expect.not.stringMatching(/massive pool|extremely.flat|45,000|50,000/i),
+        booking_talking_points: expect.not.stringMatching(/massive pool|extremely.flat|45,000|50,000/i),
+        operational_requirements: expect.not.stringMatching(/massive pool|extremely.flat|45,000|50,000/i),
+      });
       await client.exec(`update lead_availability_snapshots set package_availability = '{"status":"resolved","packages":[],"restrictedOptions":[],"blockers":[]}' where row_id = '20000000-0000-4000-8000-000000000001'; update lead_availability_snapshots set ready = true where row_id = '20000000-0000-4000-8000-000000000001';`);
       // Re-running must keep resolved evidence ready while unresolved legacy evidence stays blocked.
       await client.exec(await readFile(new URL("../../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"));
