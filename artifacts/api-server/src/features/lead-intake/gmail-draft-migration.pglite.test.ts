@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 const databases: PGlite[] = [];
+const pgliteCompatible = (sql: string) => sql.replace(/^CREATE EXTENSION IF NOT EXISTS pgcrypto;\s*/gim, "");
 afterEach(async () => { await Promise.all(databases.splice(0).map((db) => db.close())); });
 
 describe("lead Gmail draft link migration", () => {
@@ -11,7 +12,6 @@ describe("lead Gmail draft link migration", () => {
     const db = new PGlite();
     databases.push(db);
     await db.exec(`
-      create extension if not exists pgcrypto;
       create table organizations (id uuid primary key);
       create table contacts (id uuid primary key);
       create table lead_import_rows (id uuid primary key);
@@ -19,10 +19,10 @@ describe("lead Gmail draft link migration", () => {
       create table communication_templates (id uuid primary key);
       create table activities (id uuid primary key);
     `);
-    const migration = await readFile(
+    const migration = pgliteCompatible(await readFile(
       fileURLToPath(new URL("../../../../../lib/db/migrations/20260826_lead_gmail_drafts.sql", import.meta.url)),
       "utf8",
-    );
+    ));
     await db.exec(migration);
     await db.exec(migration);
 
