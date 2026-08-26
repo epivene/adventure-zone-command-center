@@ -2,7 +2,7 @@
 
 ## Status
 
-**DONE — final breaker review fix closes I1–I7 and M1–M3.**
+**READY FOR PR — final residual review findings are closed and focused verification is green.**
 
 ## Branch and commits
 
@@ -186,3 +186,25 @@ The temporary backend schema/type harness does not model production Drizzle enum
 - Actual package command attempted: `npm test -- src/features/lead-intake/lead-safe-email-migration.pglite.test.ts`. The partial checkout has no package-local install, so the package config could not resolve `vitest/config`; no package-suite pass is claimed. The same committed default-discovery test passed in the external real-PGlite harness above.
 
 No Gmail draft/send mutation, PR, or merge was added.
+
+
+## Final residual adjudication
+
+### Code head
+
+- `517dc18db6a1f095ab0f85d715bfc24c3ee1dced`
+
+### Closed residual findings
+
+- Recipient-email communication blocks now use a shared route-input parser. Ordinary addresses such as `Person@Example.com` normalize to `person@example.com`; malformed addresses and payloads containing a second stable target fail closed.
+- Lead startup always applies the forward idempotent migrations before trusting readiness. A fragment-based readiness false positive can no longer skip the canonical fail-closed constraint repair.
+- Real PGlite coverage deliberately replaces the territory, fit, and exact-target checks with permissive `OR true` / `CHECK (true)` variants, reruns the canonical migration, and proves invalid statuses and malformed recipient blocks are rejected afterward.
+
+### Fresh verification
+
+- Residual route-input suite: 1 file / 8 tests passed.
+- Residual startup PGlite suite: 1 file / 2 tests passed.
+- Full Task 7 backend harness: 1 file / 23 tests passed.
+- Task 7 frontend harness: 2 files / 17 tests passed.
+- Focused backend and frontend TypeScript checks: both exit 0.
+- Full monorepo CI remains unavailable in this connector-backed partial checkout and is not represented as green.
