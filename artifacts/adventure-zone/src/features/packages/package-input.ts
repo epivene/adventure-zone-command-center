@@ -95,15 +95,11 @@ export const packageTemplateInputSchema = z
     normalCapacity: z
       .number()
       .int("Normal capacity must be a whole number.")
-      .nonnegative("Normal capacity cannot be negative.")
-      .optional()
-      .default(0),
+      .nonnegative("Normal capacity cannot be negative."),
     temporaryUnavailableQuantity: z
       .number()
       .int("Temporary unavailable quantity must be a whole number.")
-      .nonnegative("Temporary unavailable quantity cannot be negative.")
-      .optional()
-      .default(0),
+      .nonnegative("Temporary unavailable quantity cannot be negative."),
     baseAttractionCount: z
       .number()
       .int("Suggested attraction count must be a whole number.")
