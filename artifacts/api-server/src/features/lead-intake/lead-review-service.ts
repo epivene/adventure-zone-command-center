@@ -152,6 +152,46 @@ export class LeadReviewService {
         "Previous-contact evidence is not available yet.",
       );
     }
+    const [snapshot] = await this.database.select({
+      id: leadImportRows.id,
+      state: leadImportRows.state,
+      reviewVersion: leadImportRows.reviewVersion,
+      organizationId: leadImportRows.selectedOrganizationId,
+      recipientEmail: leadImportRows.confirmedRecipientEmail,
+      recipientConfirmed: leadImportRows.recipientConfirmed,
+      introductionSuitable: leadImportRows.introductionSuitable,
+    }).from(leadImportRows).where(eq(leadImportRows.id, input.rowId)).limit(1);
+    if (!snapshot) {
+      throw new LeadReviewServiceError("ROW_NOT_FOUND", "Lead import row was not found.");
+    }
+    if (snapshot.reviewVersion !== input.expectedVersion) {
+      throw new LeadReviewServiceError(
+        "VERSION_CONFLICT",
+        "This lead was changed in another review. Reload it before classifying previous contact.",
+      );
+    }
+    if (
+      snapshot.state !== "verified" ||
+      !snapshot.organizationId ||
+      !snapshot.recipientEmail?.trim() ||
+      !snapshot.recipientConfirmed ||
+      !snapshot.introductionSuitable
+    ) {
+      throw new LeadReviewServiceError(
+        "RELATIONSHIP_NOT_READY",
+        "Verify the profile and intended recipient before checking previous contact.",
+      );
+    }
+    const evidence = await relationshipEvidence.list({
+      organizationId: snapshot.organizationId,
+      recipientEmail: snapshot.recipientEmail,
+    });
+    const classification = classifyLeadRelationship({
+      organizationId: snapshot.organizationId,
+      recipientEmail: snapshot.recipientEmail,
+      anchor: now,
+      evidence,
+    });
     return this.database.transaction(async (tx) => {
       const [row] = await tx.select({
         id: leadImportRows.id,
@@ -193,17 +233,15 @@ export class LeadReviewService {
           "Verify the profile and intended recipient before checking previous contact.",
         );
       }
-
-      const evidence = await relationshipEvidence.list({
-        organizationId: row.organizationId,
-        recipientEmail: row.recipientEmail,
-      });
-      const classification = classifyLeadRelationship({
-        organizationId: row.organizationId,
-        recipientEmail: row.recipientEmail,
-        anchor: now,
-        evidence,
-      });
+      if (
+        row.organizationId !== snapshot.organizationId
+        || row.recipientEmail.trim().toLowerCase() !== snapshot.recipientEmail.trim().toLowerCase()
+      ) {
+        throw new LeadReviewServiceError(
+          "VERSION_CONFLICT",
+          "The verified profile or recipient changed while previous contact was being checked. Reload and try again.",
+        );
+      }
       const sameTimestamp = (left: Date | null, right: Date | null) =>
         left?.valueOf() === right?.valueOf() && (left !== null) === (right !== null);
       const unchanged = row.relationshipOutcome === classification.outcome
