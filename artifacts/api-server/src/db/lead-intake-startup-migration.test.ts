@@ -93,6 +93,23 @@ describe("ensureLeadIntakeSchema", () => {
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
       expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);
+      expect((await client.query(`
+        select conname from pg_constraint
+        where conrelid = 'package_templates'::regclass
+          and conname in (
+            'package_templates_code_nonblank',
+            'package_templates_name_nonblank',
+            'package_templates_base_attraction_count_positive'
+          )
+        order by conname
+      `)).rows).toEqual([
+        { conname: "package_templates_base_attraction_count_positive" },
+        { conname: "package_templates_code_nonblank" },
+        { conname: "package_templates_name_nonblank" },
+      ]);
+      await expect(client.exec(`
+        insert into package_templates (code, name) values ('missing-count', 'Missing count');
+      `)).rejects.toThrow();
       await expect(client.exec(`
         insert into lead_import_batches
           (id, original_filename, file_sha256, row_count, imported_by)
