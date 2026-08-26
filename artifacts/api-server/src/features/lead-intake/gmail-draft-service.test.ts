@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { APPROVED_LEAD_INTRODUCTION_2026 } from "../communication-templates/lead-introduction-2026-approved";
 import {
   GmailDraftService,
   GmailDraftServiceError,
@@ -76,27 +77,7 @@ function readyState(overrides: Record<string, unknown> = {}) {
       sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
       reviewedBy: "Amy",
       reviewedAt: "2026-08-25T00:00:00.000Z",
-      definition: {
-        code: "lead_introduction_2026_prepaid",
-        version: "2026-prepaid-v1",
-        subject: "{{profile_name}} {{date_range}}",
-        bodyTemplate: "approved",
-        sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
-        sourceNote: "approved",
-        reviewedBy: "Amy",
-        sourceDocument: {},
-        copy: {
-          opening: "Hi",
-          packages: {
-            adventure_zone: "Adventure Zone",
-            pirates_rebellion: "Pirates",
-            warriors_playground: "Warrior",
-          },
-          services: "Services",
-          closing: "Closing",
-          signature: "Desiree",
-        },
-      },
+      definition: APPROVED_LEAD_INTRODUCTION_2026,,
     },
     ...overrides,
   } as any;
