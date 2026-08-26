@@ -7,37 +7,34 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Audit fourth outreach batch history
+      - name: Resolve Desiree task queue and create first held task
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          IDS=(
-            "Crestone Energy Fair|2b73d06e-833b-47d2-b96c-15addc4c521a"
-            "Prescott Intertribal Powwow|7ad109bf-fc65-4b65-a815-0463bdfedba9"
-            "Silver Threads Quilt Show|2d158aad-f3a4-4226-b334-42eb84769999"
-            "Springs Home Show|2560c658-6d2a-4ad2-96c4-d6b225057805"
-            "Stamp & Scrapbook Expo|9bcc2100-a1ce-45c6-81a2-f7df1d284f04"
-            "Bully EXPO DOG|a7063ca6-cc65-46d1-a57d-f77bce58f3dc"
-            "Telluride Blues & Brews|1f0a810b-0980-41c5-9cfe-382c68bb4242"
-            "PASEO Art Project|9e53c47e-681c-4745-8d70-8c8a76bfa936"
-            "ThirstyFest|2277206b-1c44-4936-b5bc-d9474bc3e54c"
+          for ASSIGNEE in "Desiree Conklin" "Desiree" "Desiree C"; do
+            echo "Trying ${ASSIGNEE}"
+            BODY=$(ASSIGNEE="$ASSIGNEE" python3 - <<'PY'
+          import json, os
+          print(json.dumps({
+            "assignee": os.environ["ASSIGNEE"],
+            "taskType": "research_update",
+            "title": "Review lead: Silver Threads Quilt Show",
+            "instructions": "The Silver Threads Quilt Show is not scheduled for 2026. The organizer states the biennial show will return in 2027. Hold 2026 outreach and revisit this lead for the 2027 show instead.",
+            "organizationId": "2d158aad-f3a4-4226-b334-42eb84769999",
+            "contactId": None,
+            "dueAt": "2026-09-01T09:00:00-06:00"
+          }))
+          PY
           )
-          for ENTRY in "${IDS[@]}"; do
-            NAME="${ENTRY%%|*}"
-            ID="${ENTRY##*|}"
-            echo "=== HISTORY: ${NAME} ==="
-            curl --fail-with-body --silent --show-error \
+            HTTP=$(curl --silent --show-error -o /tmp/task.json -w "%{http_code}" \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              "${BASE}/api/assistant-import/profile-history/${ID}"
-            echo
+              -H "Content-Type: application/json" \
+              -X POST "${BASE}/api/assistant-import/office-tasks" \
+              --data-binary "${BODY}")
+            cat /tmp/task.json; echo
+            if [ "$HTTP" = "201" ]; then echo "TASK_OWNER=${ASSIGNEE}"; exit 0; fi
+            if [ "$HTTP" != "404" ]; then exit 1; fi
           done
-          for Q in "Santa Fe Wine" "Wine Chile" "Santa Fe Fiesta"; do
-            echo "=== QUERY: ${Q} ==="
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search"
-            echo
-          done
+          exit 2
