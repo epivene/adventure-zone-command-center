@@ -278,7 +278,7 @@ export class LeadRelationshipEvidenceRepository implements LeadRelationshipEvide
             metadata = null;
           }
         }
-        const occurredAt = validDate(metadata?.internalDateMs, metadata?.headers.date, row.updated_at) ?? new Date(Number.NaN);
+        const occurredAt = validDate(metadata?.internalDateMs, metadata?.headers.date) ?? new Date(Number.NaN);
         evidence.push({
           evidenceId: `gmail:${messageId}`,
           sourceType: "gmail",
