@@ -1,3 +1,5 @@
+import { isApprovedNormalPackageKey } from "./lead-package-allowlist";
+
 export const DEFAULT_AVAILABILITY_FRESHNESS_MS = 60 * 60 * 1000;
 
 export type CommunicationBlock = {
@@ -55,7 +57,7 @@ function hasActiveBlock(input: DraftReadinessInput) {
 function hasNormalAvailability(input: NonNullable<DraftReadinessInput["availability"]>) {
   const restricted = new Set(input.packageAvailability?.restrictedOptions?.map((option) => option.packageKey) ?? []);
   return input.packageAvailability?.packages?.some((item) =>
-    item.availableQuantity > 0 && item.packageKey !== "mini_zone" && !restricted.has(item.packageKey),
+    item.availableQuantity > 0 && isApprovedNormalPackageKey(item.packageKey) && !restricted.has(item.packageKey),
   ) ?? false;
 }
 
