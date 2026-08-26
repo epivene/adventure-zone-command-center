@@ -31,7 +31,7 @@ describe("LeadEmailPreviewPanel Gmail draft action", () => {
   it("offers one individual Create Gmail Draft action only after a ready server preview", async () => {
     const create = vi.fn(async () => ({
       reused: false,
-      link: { id: "link-1", state: "created", gmailDraftId: "gmail-draft-1", gmailMessageId: "message-1" },
+      link: { id: "link-1", rowId: "row-1", state: "created", gmailDraftId: "gmail-draft-1", gmailMessageId: "message-1", lastErrorCode: null },
     }));
     render(
       <LeadEmailPreviewPanel
