@@ -3,7 +3,7 @@
 Date: 2026-08-26  
 Branch: `feat/lead-gmail-draft-creation`  
 Base merge: `62343f3e067fcd8832b9a10b1aa93107f87e15cc`  
-Implementation head before this report: `4aa50639a1235431e015a4b04134a5c583d6c1df`
+Implementation head before this report: `139de9cd086340fec6781a314491cd123de47414`
 
 ## Status
 
@@ -33,8 +33,9 @@ Review correction pass:
 - `2999971816fa39986806b5273b9e77fa511b06e2`, `53e47ad1adeb7016359f3b351b88e84212fe9201` — RED and fix for the preview/durable-state lookup race; timeout now covers response parsing.
 - `dd2d4e50a6ecb416bd37dbeb1bbce685f6412405` — RED weakened-check readiness cases.
 - `72e8f03a5d7d39c9dd02baab0336c78b078c151e`, `4aa50639a1235431e015a4b04134a5c583d6c1df` — RED/GREEN for real startup ordering and one complete token-to-response timeout budget.
+- `139de9cd086340fec6781a314491cd123de47414` — PGlite adapter executes the real multi-statement Google startup DDL before lead startup.
 
-GitHub compare reports implementation head `4aa5063` is 20 commits ahead of, zero behind, and directly descended from the base. It is also ahead of the escaped-newline fix `e8c081a`, startup fixture fix `0146d88`, and dollar-quote fix `991e0f6`.
+GitHub compare reports implementation head `139de9c` is 22 commits ahead of, zero behind, and directly descended from the base. It is also ahead of the escaped-newline fix `e8c081a`, startup fixture fix `0146d88`, and dollar-quote fix `991e0f6`.
 
 ## Review corrections
 
@@ -99,9 +100,9 @@ Successful OAuth callback, safe-return redirect, account-change conflict, API cl
 
 The focused workflow now includes all of these legacy suites, Task 8 service/handler/history/migration/startup suites, UI suites, API/frontend typechecks, and DB build.
 
-## Static verification at `4aa5063`
+## Static verification at `139de9c`
 
-GitHub compare: `ahead`, 20 commits ahead, 0 behind, 35 changed files.
+GitHub compare: `ahead`, 22 commits ahead, 0 behind, 35 changed files.
 
 A connector-based scan fetched all 34 changed TS/TSX/SQL/YAML files at the exact head SHA and found:
 
@@ -116,10 +117,10 @@ The only Gmail mutation endpoint in changed source remains `POST /gmail/v1/users
 
 ## Executable verification evidence
 
-Latest run: `32975888156` at `4aa50639a1235431e015a4b04134a5c583d6c1df`.
+Latest run: `32976253942` at `139de9cd086340fec6781a314491cd123de47414`.
 
 - Job: `981? replaced below`
-- Actual focused job ID: `98200397488`
+- Actual focused job ID: `98201592047`
 - Job conclusion: `failure`
 - Job steps API: `[]`
 - Job logs URL: `null`
