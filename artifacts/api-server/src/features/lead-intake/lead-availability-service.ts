@@ -5,7 +5,7 @@ import { calculatePackageAvailability, type PackageAvailabilityResult, type Pack
 
 export type LeadAvailabilityLead = { id: string; reviewVersion: number; state: string; organizationId?: string | null; recipientEmail?: string | null; recipientConfirmed?: boolean; introductionSuitable?: boolean; startDate?: string | null; endDate?: string | null };
 export type LeadAvailabilitySnapshot = { rowId: string; expectedVersion: number; organizationId: string; recipientEmail: string; startDate: string; endDate: string; ready: boolean; proposedWindow: DateOnlyWindow; checkedAt: string; checkedBy: string; selectedCalendarIds: string[]; sourceEvents: Array<Record<string, unknown>>; reservations: CalendarPackageReservation[]; packageAvailability: PackageAvailabilityResult };
-export type LeadAvailabilityPersistence = { loadVerifiedLead(rowId: string): Promise<LeadAvailabilityLead | null>; selectedCalendars(): Promise<Array<{ id: string; summary: string; primary: boolean }>>; packageAvailabilityTemplates(): Promise<PackageAvailabilityTemplate[]>; save(snapshot: LeadAvailabilitySnapshot): Promise<{ reviewVersion: number }> };
+export type LeadAvailabilityPersistence = { loadVerifiedLead(rowId: string): Promise<LeadAvailabilityLead | null>; selectedCalendars(): Promise<Array<{ id: string; summary: string; primary: boolean }>>; packageAvailabilityTemplates?(): Promise<PackageAvailabilityTemplate[]>; save(snapshot: LeadAvailabilitySnapshot): Promise<{ reviewVersion: number }> };
 export class LeadAvailabilityServiceError extends Error { constructor(public readonly code: "ROW_NOT_FOUND" | "VERSION_CONFLICT" | "AVAILABILITY_NOT_READY" | "GOOGLE_REAUTHORIZATION_REQUIRED" | "GOOGLE_CALENDAR_UNAVAILABLE" | "AVAILABILITY_PERSISTENCE_FAILED", message: string) { super(message); this.name = "LeadAvailabilityServiceError"; } }
 
 function addDays(date: string, days: number) { const value = new Date(`${date}T12:00:00.000Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
@@ -40,7 +40,7 @@ export class LeadAvailabilityService {
   const proposedWindow = proposedBookingWindow({ startDate: lead.startDate, endDate: lead.endDate });
   let calendars; try { calendars = await this.options.persistence.selectedCalendars(); } catch (error) { serviceError(error, "persistence"); }
   if (!calendars.length) throw new LeadAvailabilityServiceError("AVAILABILITY_NOT_READY", "Select at least one Google Calendar before checking availability.");
-  let inventory; try { inventory = await this.options.persistence.packageAvailabilityTemplates(); } catch (error) { serviceError(error, "persistence"); }
+  let inventory: PackageAvailabilityTemplate[] = []; try { inventory = await this.options.persistence.packageAvailabilityTemplates?.() ?? []; } catch (error) { serviceError(error, "persistence"); }
   let events: GoogleCalendarEvent[]; try { events = await this.options.google.listCalendarEvents({ calendarIds: calendars.map((item) => item.id), timeMin: `${addDays(proposedWindow.startDate, -1)}T00:00:00.000Z`, timeMax: `${addDays(proposedWindow.endDate, 2)}T00:00:00.000Z` }); } catch (error) { serviceError(error, "google"); }
   const groups = new Map<string, GoogleCalendarEvent[]>(); for (const event of events) { const key = canonicalIdentity(event); groups.set(key, [...(groups.get(key) || []), event]); }
   const reservations: CalendarPackageReservation[] = []; const evidenceByEvent = new Map<string, CalendarPackageReservation | null>();
