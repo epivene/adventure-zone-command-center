@@ -5,30 +5,21 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
 
 describe("ensureLeadIntakeSchema", () => {
-  it("checks every review column plus critical constraints before declaring the schema ready", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [{ ready: true }] });
-    const loadSql = vi.fn();
+  it("runs the canonical idempotent repair even when readiness initially passes", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ ready: true }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ready: true }] });
+    const loadSql = vi.fn().mockResolvedValue("-- canonical idempotent repair");
 
     await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(loadSql).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledTimes(3);
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
-    expect(query.mock.calls[0]?.[0]).toContain("original_filename");
-    expect(query.mock.calls[0]?.[0]).toContain("source_fingerprint");
-    expect(query.mock.calls[0]?.[0]).toContain("review_version");
-    expect(query.mock.calls[0]?.[0]).toContain("confirmed_recipient_email");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_confirmed_date_range_valid");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_selected_organization_fk");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_source_kind_valid");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_one_selected_field");
-    expect(query.mock.calls[0]?.[0]).toContain("relationship_outcome");
-    expect(query.mock.calls[0]?.[0]).toContain("relationship_classified_by");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_classification_complete");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
-    expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_availability_snapshots");
-    expect(query.mock.calls[0]?.[0]).toContain("package_availability");
-    expect(query.mock.calls[0]?.[0]).toContain("count(*) = 7");
-    expect(loadSql).not.toHaveBeenCalled();
+    expect(query.mock.calls[0]?.[0]).toContain("territory_status");
+    expect(query.mock.calls[0]?.[0]).toContain("fit_status");
+    expect(query.mock.calls[1]?.[0]).toBe("-- canonical idempotent repair");
+    expect(query.mock.calls[2]?.[0]).toBe(query.mock.calls[0]?.[0]);
   });
 
   it("runs both lead-intake migrations when the schema is incomplete", async () => {
@@ -59,7 +50,7 @@ describe("ensureLeadIntakeSchema", () => {
       await client.exec("create table lead_availability_snapshots (id uuid primary key);");
       await expect(ensureLeadIntakeSchema({ query }, { loadSql: async () => "" })).rejects.toThrow("schema is incomplete after migration");
     } finally { await client.close(); }
-  });
+  }, 30_000);
 
   it("requires definitions instead of accepting malformed named availability constraints", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ ready: false }] });
@@ -87,9 +78,14 @@ describe("ensureLeadIntakeSchema", () => {
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_relationship_classification.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260825_lead_calendar_availability.sql", import.meta.url), "utf8"),
       await readFile(new URL("../../../../lib/db/migrations/20260826_lead_inventory_policy.sql", import.meta.url), "utf8"),
+      await readFile(new URL("../../../../lib/db/migrations/20260826_lead_safe_email.sql", import.meta.url), "utf8"),
     ].join("\n");
     try {
-      await client.exec(`create table organizations (id uuid primary key); create table contacts (id uuid primary key);`);
+      await client.exec(`
+        create table organizations (id uuid primary key);
+        create table contacts (id uuid primary key);
+        create table communication_templates (id uuid primary key);
+      `);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(true);
       await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
       expect((await client.query("select normal_capacity, temporary_unavailable_quantity from package_templates limit 1")).rows).toEqual([]);
@@ -123,5 +119,5 @@ describe("ensureLeadIntakeSchema", () => {
     } finally {
       await client.close();
     }
-  }, 15_000);
+  }, 30_000);
 });

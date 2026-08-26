@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { LeadImportPanel } from "@/components/lead-intake/lead-import-panel";
 import { LeadContactDateReview } from "@/components/lead-intake/lead-contact-date-review";
+import { LeadEmailPreviewPanel } from "@/components/lead-intake/lead-email-preview";
+import { LeadCommunicationBlocks } from "@/components/lead-intake/lead-communication-blocks";
+import { LeadReviewStatusControls } from "@/components/lead-intake/lead-review-status-controls";
 import type { ParsedLeadWorkbook } from "@/features/lead-intake/excel-lead-parser";
 import {
   leadIntakeClient,
@@ -17,6 +20,12 @@ type Client = {
   searchProfiles(query: string): Promise<LeadProfileOption[]>;
   listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
   confirmReview(rowId: string, body: unknown): Promise<{ rowId: string; state: "verified"; reviewVersion: number }>;
+  updateReviewStatus?: (rowId: string, body: { expectedVersion: number; territoryStatus: string; fitStatus: string }) => Promise<unknown>;
+  getEmailPreview?: (rowId: string, reviewVersion: number) => Promise<any>;
+  listCommunicationBlocks?: () => Promise<any[]>;
+  createCommunicationBlock?: (body: unknown) => Promise<unknown>;
+  removeCommunicationBlock?: (id: string, reason: string) => Promise<unknown>;
+  getCommunicationBlockHistory?: (id: string) => Promise<any[]>;
 };
 
 export function LeadIntakePage({ client }: { client: Client }) {
@@ -26,6 +35,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [previewInvalidationKey, setPreviewInvalidationKey] = useState(0);
 
   async function loadBatches() {
     setBatches(await client.listBatches());
@@ -108,8 +118,9 @@ export function LeadIntakePage({ client }: { client: Client }) {
           {selected.rows.find((row) => row.id === selectedRowId) ? (
             <LeadContactDateReview
               client={client}
-              key={selectedRowId}
+              key={`contact-review-${selectedRowId}`}
               onSaved={async () => {
+                setPreviewInvalidationKey((value) => value + 1);
                 const refreshed = await client.getBatch(selected.id);
                 setSelected(refreshed);
                 setSelectedRowId(selectedRowId);
@@ -117,6 +128,14 @@ export function LeadIntakePage({ client }: { client: Client }) {
               row={selected.rows.find((row) => row.id === selectedRowId)!}
             />
           ) : null}
+          {client.updateReviewStatus && selected.rows.find((row) => row.id === selectedRowId) ? <LeadReviewStatusControls key={`review-status-${selectedRowId}`} row={selected.rows.find((row) => row.id === selectedRowId)!} save={async (body) => {
+            const result = await client.updateReviewStatus!(selectedRowId!, body);
+            setPreviewInvalidationKey((value) => value + 1);
+            setSelected(await client.getBatch(selected.id));
+            return result;
+          }} /> : null}
+          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={`email-preview-${selectedRowId}-${previewInvalidationKey}`} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} invalidationKey={previewInvalidationKey} load={client.getEmailPreview} /> : null}
+          {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} history={client.getCommunicationBlockHistory} onMutation={() => setPreviewInvalidationKey((value) => value + 1)} /> : null}
         </section>
       ) : null}
     </div>

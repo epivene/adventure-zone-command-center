@@ -8,7 +8,9 @@ import type {
 
 export const allowedTemplatePlaceholders = [
   "contactName",
+  "profileName",
   "eventName",
+  "eventLocation",
   "eventCity",
   "eventState",
   "eventDates",
@@ -29,6 +31,7 @@ export type TemplatePlaceholder =
 
 export type CommunicationTemplateSeed = {
   code: string;
+  templateVersion?: string | null;
   name: string;
   channel: CommunicationTemplateChannel;
   category: string;
@@ -37,11 +40,14 @@ export type CommunicationTemplateSeed = {
   subjectTemplate: string | null;
   requiredPlaceholders: readonly TemplatePlaceholder[];
   bodyTemplate: string;
+  sourceNote?: string;
+  reviewedBy?: string;
 };
 
 export type CommunicationTemplateRecord = {
   id: string;
   code: string;
+  templateVersion: string | null;
   name: string;
   channel: CommunicationTemplateChannel;
   category: string;

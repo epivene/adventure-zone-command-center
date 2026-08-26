@@ -14,6 +14,7 @@ export const BUSINESS_SOURCE_SEEDS = [
     sourceCategory: "scripts_templates",
     effectiveYear: 2026,
     accessScope: "owner",
+    storageReference: "amy-library/ADVENTURE ZONE STICKY NOTES.docx.pdf",
     notes:
       "Mixed historical and current scripts, package facts, internal notes, discounts, contacts, and ACT workflow. Reviewed selectively; never publish verbatim.",
   },

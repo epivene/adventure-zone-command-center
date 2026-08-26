@@ -11,6 +11,8 @@ export const leadImportRowStateValues = [
 ] as const;
 export const leadEvidenceFieldValues = ["event_dates", "recipient_email"] as const;
 export const leadEvidenceSourceKindValues = ["crm_contact", "act_description", "official_website", "manual"] as const;
+export const leadTerritoryStatusValues = ["open", "ask_amy_dave", "closed", "licensing_issue", "needs_review"] as const;
+export const leadFitStatusValues = ["approved", "needs_review", "not_a_fit"] as const;
 export const leadRelationshipOutcomeValues = [
   "returning_contact",
   "reintroduction",
@@ -22,6 +24,8 @@ export const leadRelationshipOutcomeValues = [
 export type LeadImportBatchStatus = (typeof leadImportBatchStatusValues)[number];
 export type LeadImportRowState = (typeof leadImportRowStateValues)[number];
 export type LeadRelationshipOutcome = (typeof leadRelationshipOutcomeValues)[number];
+export type LeadTerritoryStatus = (typeof leadTerritoryStatusValues)[number];
+export type LeadFitStatus = (typeof leadFitStatusValues)[number];
 
 export const leadImportBatches = pgTable("lead_import_batches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -71,6 +75,8 @@ export const leadImportRows = pgTable("lead_import_rows", {
   confirmedRecipientEmail: text("confirmed_recipient_email"),
   recipientConfirmed: boolean("recipient_confirmed").default(false).notNull(),
   introductionSuitable: boolean("introduction_suitable").default(false).notNull(),
+  territoryStatus: text("territory_status").$type<LeadTerritoryStatus>().default("needs_review").notNull(),
+  fitStatus: text("fit_status").$type<LeadFitStatus>().default("needs_review").notNull(),
   confirmedBy: text("confirmed_by"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   relationshipOutcome: text("relationship_outcome").$type<LeadRelationshipOutcome | null>(),
@@ -96,6 +102,8 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
   check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual','organization_inbox')`),
   check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
+  check("lead_import_rows_territory_status_valid", sql`${table.territoryStatus} in ('open','ask_amy_dave','closed','licensing_issue','needs_review')`),
+  check("lead_import_rows_fit_status_valid", sql`${table.fitStatus} in ('approved','needs_review','not_a_fit')`),
   check("lead_import_rows_relationship_outcome_valid", sql`${table.relationshipOutcome} is null or ${table.relationshipOutcome} in ('returning_contact','reintroduction','prior_outreach_no_response','new_introduction','needs_review')`),
   check("lead_import_rows_relationship_evidence_array", sql`jsonb_typeof(${table.relationshipEvidenceIds}) = 'array'`),
   check("lead_import_rows_relationship_classification_complete", sql`${table.relationshipOutcome} is null or (${table.relationshipAnchorAt} is not null and ${table.relationshipCutoffDate} is not null and ${table.relationshipClassifiedAt} is not null and ${table.relationshipClassifiedBy} is not null)`),
@@ -122,6 +130,47 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   check("lead_availability_snapshots_source_events_array", sql`jsonb_typeof(${table.sourceEvents}) = 'array'`),
   check("lead_availability_snapshots_reservations_array", sql`jsonb_typeof(${table.reservations}) = 'array'`),
   check("lead_availability_snapshots_package_availability_object", sql`jsonb_typeof(${table.packageAvailability}) = 'object'`),
+]);
+
+export const communicationBlocks = pgTable("communication_blocks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  targetType: text("target_type").$type<"organization" | "contact" | "recipient_email" | "lead_import_row" | "internal_preview">().notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "restrict" }),
+  contactId: uuid("contact_id").references(() => contacts.id, { onDelete: "restrict" }),
+  normalizedEmail: text("normalized_email"),
+  rowId: uuid("row_id").references(() => leadImportRows.id, { onDelete: "restrict" }),
+  reason: text("reason").notNull(),
+  active: boolean("active").default(true).notNull(),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  removedBy: text("removed_by"),
+  removedAt: timestamp("removed_at", { withTimezone: true }),
+  removalReason: text("removal_reason"),
+}, (table) => [
+  uniqueIndex("communication_blocks_active_target_unique")
+    .on(table.targetType, sql`coalesce(${table.organizationId}::text,'')`, sql`coalesce(${table.contactId}::text,'')`, sql`coalesce(${table.normalizedEmail},'')`, sql`coalesce(${table.rowId}::text,'')`)
+    .where(sql`${table.active}`),
+  index("communication_blocks_active_lookup_idx").on(table.active, table.normalizedEmail, table.organizationId, table.contactId, table.rowId),
+  check("communication_blocks_target_valid", sql`${table.targetType} in ('organization','contact','recipient_email','lead_import_row','internal_preview')`),
+  check("communication_blocks_exact_target", sql`(
+    (${table.targetType} = 'organization' and ${table.organizationId} is not null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+    or (${table.targetType} = 'contact' and ${table.organizationId} is null and ${table.contactId} is not null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+    or (${table.targetType} = 'lead_import_row' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is not null)
+    or (${table.targetType} = 'recipient_email' and ${table.organizationId} is null and ${table.contactId} is null and ${table.rowId} is null and ${table.normalizedEmail} is not null and ${table.normalizedEmail} = lower(btrim(${table.normalizedEmail})) and ${table.normalizedEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$')
+    or (${table.targetType} = 'internal_preview' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
+  )`),
+]);
+
+export const communicationBlockEvents = pgTable("communication_block_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  blockId: uuid("block_id").notNull().references(() => communicationBlocks.id, { onDelete: "restrict" }),
+  action: text("action").$type<"created" | "removed">().notNull(),
+  actorId: text("actor_id").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("communication_block_events_history_idx").on(table.blockId, table.createdAt),
+  check("communication_block_events_action_valid", sql`${table.action} in ('created','removed')`),
 ]);
 
 export const leadImportEvidence = pgTable("lead_import_evidence", {

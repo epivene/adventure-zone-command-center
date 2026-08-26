@@ -1,9 +1,13 @@
 import { eq } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { businessSourceDocuments } from "@/db/schema";
+import { businessSourceDocuments, communicationTemplates } from "@/db/schema";
 import type { CommunicationTemplateSeed } from "./communication-template-types";
 import { CommunicationTemplateRepository } from "./communication-template-repository";
 import { ensureBusinessSourceSeed } from "@/features/business-sources/business-source-seed";
+import {
+  APPROVED_LEAD_INTRODUCTION_2026,
+  isExactApprovedLeadIntroductionTemplate,
+} from "./lead-introduction-2026-approved";
 
 export const COMMUNICATION_TEMPLATE_SEEDS = [
   {
@@ -456,12 +460,74 @@ Thanks,
 {{senderName}}
 The Adventure Zone`,
   },
+  {
+    code: "lead_introduction_2026_prepaid",
+    templateVersion: APPROVED_LEAD_INTRODUCTION_2026.version,
+    name: APPROVED_LEAD_INTRODUCTION_2026.name,
+    channel: "email",
+    category: "lead_introduction",
+    accessScope: "office",
+    state: "active",
+    subjectTemplate: APPROVED_LEAD_INTRODUCTION_2026.subject,
+    requiredPlaceholders: APPROVED_LEAD_INTRODUCTION_2026.requiredPlaceholders,
+    bodyTemplate: APPROVED_LEAD_INTRODUCTION_2026.bodyTemplate,
+    sourceNote: APPROVED_LEAD_INTRODUCTION_2026.sourceNote,
+    reviewedBy: APPROVED_LEAD_INTRODUCTION_2026.reviewedBy,
+  },
 ] as const satisfies readonly CommunicationTemplateSeed[];
 
 type Database = typeof database;
 
-export async function ensureCommunicationTemplateSeed(database: Database): Promise<void> {
-  await ensureBusinessSourceSeed(database);
+export async function isApprovedCommunicationTemplateSeedReady(database: Database): Promise<boolean> {
+  try {
+    const [candidate] = await database
+      .select({
+        code: communicationTemplates.code,
+        templateVersion: communicationTemplates.templateVersion,
+        name: communicationTemplates.name,
+        state: communicationTemplates.state,
+        ownerKind: communicationTemplates.ownerKind,
+        createdByKind: communicationTemplates.createdByKind,
+        accessScope: communicationTemplates.accessScope,
+        channel: communicationTemplates.channel,
+        category: communicationTemplates.category,
+        subjectTemplate: communicationTemplates.subjectTemplate,
+        bodyTemplate: communicationTemplates.bodyTemplate,
+        allowedPlaceholders: communicationTemplates.allowedPlaceholders,
+        requiredPlaceholders: communicationTemplates.requiredPlaceholders,
+        sourceNote: communicationTemplates.sourceNote,
+        sourceFilename: businessSourceDocuments.originalFilename,
+        sourceDisplayTitle: businessSourceDocuments.displayTitle,
+        sourceCategory: businessSourceDocuments.sourceCategory,
+        sourceEffectiveYear: businessSourceDocuments.effectiveYear,
+        sourceAccessScope: businessSourceDocuments.accessScope,
+        sourceReviewState: businessSourceDocuments.reviewState,
+        sourceNotes: businessSourceDocuments.notes,
+        sourceStorageReference: businessSourceDocuments.storageReference,
+        sourceReviewedBy: businessSourceDocuments.reviewedBy,
+        sourceReviewedAt: businessSourceDocuments.reviewedAt,
+        sourceDocumentId: communicationTemplates.sourceDocumentId,
+        reviewedBy: communicationTemplates.reviewedBy,
+        reviewedAt: communicationTemplates.reviewedAt,
+      })
+      .from(communicationTemplates)
+      .innerJoin(
+        businessSourceDocuments,
+        eq(businessSourceDocuments.id, communicationTemplates.sourceDocumentId),
+      )
+      .where(eq(communicationTemplates.code, APPROVED_LEAD_INTRODUCTION_2026.code))
+      .limit(1);
+    return Boolean(candidate && isExactApprovedLeadIntroductionTemplate(candidate));
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureCommunicationTemplateSeed(
+  database: Database,
+  options?: { ensureSourceSeed?: (database: Database) => Promise<void> },
+): Promise<void> {
+  await (options?.ensureSourceSeed ?? ensureBusinessSourceSeed)(database);
   const sourceRows = await database
     .select({ id: businessSourceDocuments.id })
     .from(businessSourceDocuments)

@@ -1,5 +1,9 @@
-import { pool as defaultPool } from "@workspace/db";
+import { db as defaultDatabase, pool as defaultPool } from "@workspace/db";
 import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
+import {
+  ensureCommunicationTemplateSeed,
+  isApprovedCommunicationTemplateSeedReady,
+} from "../features/communication-templates/communication-template-seed";
 
 type Client = {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
@@ -10,6 +14,8 @@ type Pool = { connect(): Promise<Client> };
 export async function ensureLeadIntakeSchemaBeforeListen(options?: {
   pool?: Pool;
   ensureSchema?: (client: Client) => Promise<boolean>;
+  ensureTemplateSeed?: () => Promise<void>;
+  isTemplateReady?: () => Promise<boolean>;
 }): Promise<boolean> {
   const pool = options?.pool ?? (defaultPool as unknown as Pool);
   const client = await pool.connect();
@@ -17,7 +23,13 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
   try {
     await client.query("SELECT pg_advisory_lock(hashtext('adventure-zone:lead-intake-schema'))");
     locked = true;
-    return await (options?.ensureSchema ?? ensureLeadIntakeSchema)(client);
+    const schemaChanged = await (options?.ensureSchema ?? ensureLeadIntakeSchema)(client);
+    await (options?.ensureTemplateSeed ?? (() => ensureCommunicationTemplateSeed(defaultDatabase as never)))();
+    const templateReady = await (options?.isTemplateReady ?? (() => isApprovedCommunicationTemplateSeedReady(defaultDatabase as never)))();
+    if (!templateReady) {
+      throw new Error("The approved lead email template is incomplete after startup seeding; startup stopped to protect email review.");
+    }
+    return schemaChanged;
   } finally {
     if (locked) await client.query("SELECT pg_advisory_unlock(hashtext('adventure-zone:lead-intake-schema'))").catch(() => undefined);
     client.release();

@@ -19,6 +19,7 @@ export type BusinessSourceSeedRecord = {
   sourceCategory: string;
   effectiveYear: number | null;
   accessScope: BusinessSourceAccess;
+  storageReference?: string;
   notes: string;
 };
 
@@ -48,6 +49,7 @@ export class BusinessSourceRepository {
           effectiveYear: source.effectiveYear,
           accessScope: source.accessScope,
           reviewState: "reviewed",
+          storageReference: source.storageReference ?? null,
           notes: source.notes,
           reviewedBy: "system:business-drive-review",
           reviewedAt: new Date(),

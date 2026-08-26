@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { contacts, organizationContacts, organizations } from "@/db/schema";
+import { contacts, leadImportRows, organizationContacts, organizations } from "@/db/schema";
 
 import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
@@ -12,6 +12,14 @@ import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-
 import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/features/lead-intake/lead-availability-service";
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
+import {
+  CommunicationBlockRepository,
+  type CommunicationBlockCreateInput,
+} from "@/features/lead-intake/communication-block-repository";
+import { parseRecipientCommunicationBlockTarget } from "@/features/lead-intake/communication-block-target";
+import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
+import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
+import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
@@ -19,6 +27,10 @@ const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const availabilityRepository = new LeadAvailabilityRepository(db);
+const communicationBlockRepository = new CommunicationBlockRepository(db);
+const leadEmailPreviewService = new LeadEmailPreviewService(
+  new LeadEmailPreviewRepository(db),
+);
 
 async function optionalGoogleReadClient() {
   try {
@@ -260,6 +272,81 @@ router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Pro
     req.log.error({ error }, "Failed to check lead availability");
     res.status(500).json({ error: "Lead availability could not be recorded.", code: "AVAILABILITY_PERSISTENCE_FAILED" });
   }
+});
+
+router.post("/lead-intake/rows/:rowId/review-status", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId); const body = req.body ?? {};
+  const territory = body.territoryStatus; const fit = body.fitStatus;
+  if (!isUuid(rowId) || !Number.isInteger(body.expectedVersion)
+    || !["open", "ask_amy_dave", "closed", "licensing_issue", "needs_review"].includes(territory)
+    || !["approved", "needs_review", "not_a_fit"].includes(fit)) {
+    res.status(400).json({ error: "Use explicit territory and fit review statuses." }); return;
+  }
+  const [updated] = await db.update(leadImportRows).set({ territoryStatus: territory, fitStatus: fit, reviewVersion: body.expectedVersion + 1, updatedAt: new Date() })
+    .where(and(eq(leadImportRows.id, rowId), eq(leadImportRows.reviewVersion, body.expectedVersion))).returning({ reviewVersion: leadImportRows.reviewVersion, territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus });
+  if (!updated) { res.status(409).json({ error: "This lead changed in another review. Reload it before saving." }); return; }
+  res.json({ rowId, ...updated });
+});
+
+router.get("/lead-intake/rows/:rowId/email-preview", createLeadEmailPreviewHandler(leadEmailPreviewService));
+
+router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void> => {
+  res.json({ blocks: await communicationBlockRepository.list() });
+});
+
+router.get("/lead-intake/communication-blocks/:blockId/history", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId)) { res.status(400).json({ error: "Invalid communication block." }); return; }
+  res.json({ events: await communicationBlockRepository.history(blockId) });
+});
+
+router.post("/lead-intake/communication-blocks", async (req, res): Promise<void> => {
+  const body = req.body ?? {};
+  const targetType = body.targetType;
+  const recipientTarget = parseRecipientCommunicationBlockTarget(body);
+  const exact = (type: string, key?: string) => targetType === type && Object.entries({ organizationId: body.organizationId, contactId: body.contactId, normalizedEmail: body.normalizedEmail, rowId: body.rowId }).every(([name, value]) => name === key ? Boolean(value) : !value);
+  if (!String(body.reason ?? "").trim()
+    || !(exact("organization", "organizationId") && isUuid(body.organizationId)
+      || exact("contact", "contactId") && isUuid(body.contactId)
+      || exact("lead_import_row", "rowId") && isUuid(body.rowId)
+      || recipientTarget !== null
+      || exact("internal_preview"))) {
+    res.status(400).json({ error: "Use one valid exact target that matches the communication-block target type." }); return;
+  }
+  if (targetType === "organization" && !(await db.select({ id: organizations.id }).from(organizations).where(eq(organizations.id, body.organizationId)).limit(1))[0]) { res.status(404).json({ error: "Profile not found." }); return; }
+  if (targetType === "contact" && !(await db.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, body.contactId)).limit(1))[0]) { res.status(404).json({ error: "Contact not found." }); return; }
+  if (targetType === "lead_import_row" && !(await db.select({ id: leadImportRows.id }).from(leadImportRows).where(eq(leadImportRows.id, body.rowId)).limit(1))[0]) { res.status(404).json({ error: "Lead source row not found." }); return; }
+  try {
+    const common = { reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) };
+    let input: CommunicationBlockCreateInput;
+    if (targetType === "organization") input = { targetType, organizationId: body.organizationId, ...common };
+    else if (targetType === "contact") input = { targetType, contactId: body.contactId, ...common };
+    else if (targetType === "lead_import_row") input = { targetType, rowId: body.rowId, ...common };
+    else if (targetType === "recipient_email") input = { ...recipientTarget!, ...common };
+    else input = { targetType: "internal_preview", ...common };
+    const block = await communicationBlockRepository.create(input);
+    res.status(201).json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to create communication block"); res.status(500).json({ error: "Could not create communication block." }); }
+});
+
+router.post("/lead-intake/communication-blocks/:blockId/remove", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId) || !String(req.body?.reason ?? "").trim()) { res.status(400).json({ error: "A block ID and removal reason are required." }); return; }
+  try {
+    const block = await communicationBlockRepository.remove(blockId, { actorId: leadImportActor((req as any).userId), reason: String(req.body.reason).trim() });
+    if (!block) { res.status(404).json({ error: "Communication block not found." }); return; }
+    res.json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to remove communication block"); res.status(500).json({ error: "Could not remove communication block." }); }
+});
+
+router.delete("/lead-intake/communication-blocks/:blockId", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId) || !String(req.body?.reason ?? "").trim()) { res.status(400).json({ error: "A block ID and removal reason are required." }); return; }
+  try {
+    const block = await communicationBlockRepository.remove(blockId, { actorId: leadImportActor((req as any).userId), reason: String(req.body.reason).trim() });
+    if (!block) { res.status(404).json({ error: "Communication block not found." }); return; }
+    res.json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to remove communication block"); res.status(500).json({ error: "Could not remove communication block." }); }
 });
 
 export default router;

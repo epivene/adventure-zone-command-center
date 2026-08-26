@@ -40,6 +40,7 @@ function mapTemplate(
   return {
     id: row.id,
     code: row.code,
+    templateVersion: row.templateVersion,
     name: row.name,
     channel: row.channel,
     category: row.category,
@@ -268,13 +269,8 @@ export class CommunicationTemplateRepository {
       const allowedPlaceholders = extractTemplateTokens(
         `${seed.subjectTemplate ?? ""}\n${seed.bodyTemplate}`,
       ) as TemplatePlaceholder[];
-      const [existing] = await this.database
-        .select()
-        .from(communicationTemplates)
-        .where(eq(communicationTemplates.code, seed.code))
-        .limit(1);
-
       const values = {
+        templateVersion: seed.templateVersion ?? null,
         name: seed.name,
         channel: seed.channel,
         category: seed.category,
@@ -290,27 +286,57 @@ export class CommunicationTemplateRepository {
         createdById: null,
         sourceTemplateId: null,
         sourceDocumentId,
-        sourceNote: CURRENT_SYSTEM_SOURCE_NOTE,
-        reviewedBy: CURRENT_SYSTEM_REVIEWER,
+        sourceNote: seed.sourceNote ?? CURRENT_SYSTEM_SOURCE_NOTE,
+        reviewedBy: seed.reviewedBy ?? CURRENT_SYSTEM_REVIEWER,
         reviewedAt: new Date(),
         updatedAt: new Date(),
       };
 
-      if (!existing) {
-        await this.database
-          .insert(communicationTemplates)
-          .values({ code: seed.code, ...values });
+      const [inserted] = await this.database
+        .insert(communicationTemplates)
+        .values({ code: seed.code, ...values })
+        .onConflictDoNothing({ target: communicationTemplates.code })
+        .returning({ id: communicationTemplates.id });
+      if (inserted) {
         continue;
       }
+
+      const [existing] = await this.database
+        .select()
+        .from(communicationTemplates)
+        .where(eq(communicationTemplates.code, seed.code))
+        .limit(1);
+      if (!existing) throw new Error("TEMPLATE_SEED_CONFLICT_NOT_FOUND");
 
       const safeKnownSystemSeed =
         existing.ownerKind === "company"
         && existing.createdByKind === "system"
-        && existing.state !== "archived"
-        && existing.sourceNote === PREVIOUS_SYSTEM_SOURCE_NOTE
-        && existing.reviewedBy === PREVIOUS_SYSTEM_REVIEWER;
+        && existing.state !== "archived";
 
       if (!safeKnownSystemSeed) continue;
+
+      const exactSeed = existing.templateVersion === values.templateVersion
+        && existing.name === values.name
+        && existing.channel === values.channel
+        && existing.category === values.category
+        && existing.subjectTemplate === values.subjectTemplate
+        && existing.bodyTemplate === values.bodyTemplate
+        && existing.allowedPlaceholders.length === values.allowedPlaceholders.length
+        && existing.allowedPlaceholders.every((value, index) => value === values.allowedPlaceholders[index])
+        && existing.requiredPlaceholders.length === values.requiredPlaceholders.length
+        && existing.requiredPlaceholders.every((value, index) => value === values.requiredPlaceholders[index])
+        && existing.accessScope === values.accessScope
+        && existing.state === values.state
+        && existing.ownerKind === values.ownerKind
+        && existing.ownerOfficeAccountId === values.ownerOfficeAccountId
+        && existing.createdByKind === values.createdByKind
+        && existing.createdById === values.createdById
+        && existing.sourceTemplateId === values.sourceTemplateId
+        && existing.sourceDocumentId === values.sourceDocumentId
+        && existing.sourceNote === values.sourceNote
+        && existing.reviewedBy === values.reviewedBy
+        && existing.reviewedAt instanceof Date;
+      if (exactSeed) continue;
 
       await this.database
         .update(communicationTemplates)

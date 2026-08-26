@@ -353,6 +353,7 @@ export const communicationTemplates = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     code: text("code").notNull(),
+    templateVersion: text("template_version"),
     name: text("name").notNull(),
     channel: text("channel")
       .$type<CommunicationTemplateChannel>()

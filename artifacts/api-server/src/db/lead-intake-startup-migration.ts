@@ -4,6 +4,122 @@ import { fileURLToPath } from "node:url";
 
 type MigrationClient = { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> };
 
+const leadReviewStatusReadinessExpression = `
+  to_regclass(current_schema() || '.lead_import_rows') is not null
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+      and conname = 'lead_import_rows_territory_status_valid'
+      and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%territory_status%open%ask_amy_dave%closed%licensing_issue%needs_review%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+      and conname = 'lead_import_rows_fit_status_valid'
+      and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%fit_status%approved%needs_review%not_a_fit%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+`;
+
+export async function isLeadReviewStatusSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${leadReviewStatusReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
+const communicationTemplateVersionReadinessExpression = `
+  to_regclass(current_schema() || '.communication_templates') is not null
+  and exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema()
+      and table_name = 'communication_templates'
+      and column_name = 'template_version'
+      and data_type = 'text'
+      and is_nullable = 'YES'
+  )
+`;
+
+export async function isCommunicationTemplateVersionSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${communicationTemplateVersionReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
+const communicationBlockReadinessExpression = `
+  to_regclass(current_schema() || '.communication_blocks') is not null
+  and to_regclass(current_schema() || '.communication_block_events') is not null
+  and (
+    select count(*) = 13 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['id','target_type','organization_id','contact_id','normalized_email','row_id','reason','active','created_by','created_at','removed_by','removed_at','removal_reason'])
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and ((column_name in ('id','organization_id','contact_id','row_id') and data_type <> 'uuid')
+        or (column_name in ('target_type','normalized_email','reason','created_by','removed_by','removal_reason') and data_type <> 'text')
+        or (column_name = 'active' and data_type <> 'boolean')
+        or (column_name in ('created_at','removed_at') and data_type <> 'timestamp with time zone'))
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['id','target_type','reason','active','created_by','created_at']) and is_nullable <> 'NO'
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_blocks'
+      and column_name = any(array['organization_id','contact_id','normalized_email','row_id','removed_by','removed_at','removal_reason']) and is_nullable <> 'YES'
+  )
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'id' and column_default like '%gen_random_uuid%')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'active' and lower(column_default) in ('true','true::boolean'))
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_blocks' and column_name = 'created_at' and lower(column_default) like '%now()%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and contype = 'p' and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'primarykey(id)%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_target_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%organization%contact%recipient_email%lead_import_row%internal_preview%')
+  and exists (
+    select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks')
+      and conname = 'communication_blocks_exact_target' and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%organization%organization_id is not null%contact_id is null%normalized_email is null%row_id is null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%contact%organization_id is null%contact_id is not null%normalized_email is null%row_id is null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%lead_import_row%organization_id is null%contact_id is null%normalized_email is null%row_id is not null%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%recipient_email%organization_id is null%contact_id is null%row_id is null%normalized_email is not null%lower%btrim%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%internal_preview%organization_id is null%contact_id is null%normalized_email is null%row_id is null%'
+  )
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_organization_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.organizations'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_contact_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.contacts'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_row_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.lead_import_rows'))
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_blocks_active_target_unique' and lower(indexdef) like 'create unique index%' and lower(indexdef) like '%where active%' and lower(indexdef) like '%coalesce%normalized_email%')
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_blocks_active_lookup_idx' and replace(lower(indexdef), ' ', '') like '%(active,normalized_email,organization_id,contact_id,row_id)%')
+  and (
+    select count(*) = 6 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_block_events'
+      and column_name = any(array['id','block_id','action','actor_id','reason','created_at'])
+  )
+  and not exists (
+    select 1 from information_schema.columns
+    where table_schema = current_schema() and table_name = 'communication_block_events'
+      and ((column_name in ('id','block_id') and data_type <> 'uuid')
+        or (column_name in ('action','actor_id','reason') and data_type <> 'text')
+        or (column_name = 'created_at' and data_type <> 'timestamp with time zone'))
+  )
+  and not exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = any(array['id','block_id','action','actor_id','reason','created_at']) and is_nullable <> 'NO')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = 'id' and column_default like '%gen_random_uuid%')
+  and exists (select 1 from information_schema.columns where table_schema = current_schema() and table_name = 'communication_block_events' and column_name = 'created_at' and lower(column_default) like '%now()%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and contype = 'p' and replace(lower(pg_get_constraintdef(oid)), ' ', '') like 'primarykey(id)%')
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and conname = 'communication_block_events_block_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.communication_blocks'))
+  and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and conname = 'communication_block_events_action_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%created%removed%')
+  and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_block_events_history_idx' and replace(lower(indexdef), ' ', '') like '%(block_id,created_at)%')
+  and exists (select 1 from pg_proc where proname = 'communication_blocks_write_created_event' and lower(pg_get_functiondef(oid)) like '%insert into communication_block_events%created%')
+  and exists (select 1 from pg_proc where proname = 'communication_blocks_created_event_backfill_v2_ready')
+  and exists (select 1 from pg_trigger where tgrelid = to_regclass(current_schema() || '.communication_blocks') and tgname = 'communication_blocks_created_event' and not tgisinternal and tgenabled <> 'D')
+`;
+
+export async function isCommunicationBlockSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${communicationBlockReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
 async function loadOne(here: string, filename: string) {
   const candidates = [
     path.resolve(here, `migrations/${filename}`),
@@ -27,6 +143,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_relationship_classification.sql"),
     loadOne(here, "20260825_lead_calendar_availability.sql"),
     loadOne(here, "20260826_lead_inventory_policy.sql"),
+    loadOne(here, "20260826_lead_safe_email.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -41,6 +158,7 @@ export async function ensureLeadIntakeSchema(
       to_regclass(current_schema() || '.lead_import_batches') is not null
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
+      and (${communicationTemplateVersionReadinessExpression})
       and (
         select count(*) = 12 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
@@ -79,7 +197,7 @@ export async function ensureLeadIntakeSchema(
           ])
       )
       and (
-        select count(*) = 42 from information_schema.columns
+        select count(*) = 44 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_rows'
           and column_name = any(array[
             'id', 'batch_id', 'sheet_name', 'source_row_number', 'source_fingerprint',
@@ -91,20 +209,22 @@ export async function ensureLeadIntakeSchema(
             'introduction_suitable', 'confirmed_by', 'confirmed_at',
             'relationship_outcome', 'relationship_anchor_at', 'relationship_cutoff_date',
             'relationship_evidence_ids', 'latest_outbound_at', 'latest_verified_response_at',
-            'relationship_review_required', 'relationship_classified_at', 'relationship_classified_by'
+            'relationship_review_required', 'relationship_classified_at', 'relationship_classified_by', 'territory_status', 'fit_status'
           ])
       )
       and (
-        select count(*) = 8 from pg_constraint
+        select count(*) = 10 from pg_constraint
         where conrelid = to_regclass(current_schema() || '.lead_import_rows')
           and conname = any(array[
             'lead_import_rows_review_version_nonnegative', 'lead_import_rows_contact_mode_valid',
             'lead_import_rows_confirmed_date_range_valid', 'lead_import_rows_selected_organization_fk',
             'lead_import_rows_selected_contact_fk', 'lead_import_rows_relationship_outcome_valid',
             'lead_import_rows_relationship_evidence_array',
-            'lead_import_rows_relationship_classification_complete'
+            'lead_import_rows_relationship_classification_complete',
+            'lead_import_rows_territory_status_valid', 'lead_import_rows_fit_status_valid'
           ])
       )
+      and (${leadReviewStatusReadinessExpression})
       and exists (
         select 1 from pg_constraint
         where conrelid = to_regclass(current_schema() || '.lead_import_rows')
@@ -128,17 +248,23 @@ export async function ensureLeadIntakeSchema(
             'lead_import_evidence_created_by_nonblank'
           ])
       )
+      and (${communicationBlockReadinessExpression})
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       and to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') is not null
       ) as ready
   `;
   const marker = await client.query(readinessSql);
-  if (marker.rows[0]?.["ready"] === true) return false;
+  const wasReady = marker.rows[0]?.["ready"] === true;
+
+  // Always run the forward, idempotent migrations before trusting readiness. This
+  // repairs weakened same-name constraints and wrong fail-closed metadata that a
+  // fragment-based readiness probe could otherwise mistake for canonical schema.
   await client.query(await (options?.loadSql ?? loadMigrationSql)());
+
   const verified = await client.query(readinessSql);
   if (verified.rows[0]?.["ready"] !== true) {
     throw new Error("Lead intake schema is incomplete after migration; startup stopped to protect review data.");
   }
-  return true;
+  return !wasReady;
 }
