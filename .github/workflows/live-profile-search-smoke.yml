@@ -7,16 +7,29 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Create White Sands follow-up task
+      - name: Search next outreach batch profiles
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/office-tasks" \
-            --data-binary @- <<'JSON'
-          {"assignee":"Amy Kammeyer","taskType":"follow_up_prep","title":"Follow up: White Sands Balloon & Music Festival","instructions":"2026 event status/name is unclear following the prior cancellation. Verify whether the event is happening in 2026, then confirm the official event name, dates, and current contact before outreach.","organizationId":"ff9640f8-9ffd-4a2f-be7b-5243350a3251","contactId":null,"dueAt":"2026-09-01T09:00:00-06:00"}
-          JSON
+          QUERIES=(
+            "Autumn Aloft Balloon Festival"
+            "Mackay Days Free BBQ"
+            "Santa Fe Renaissance Faire"
+            "Telluride Autumn Classic"
+            "Vintage Market Days Northern Utah"
+            "World Series of Team Roping Tremonton Qualifier"
+            "Golden Aspen Motorcycle Rally"
+            "Rendezvous Royale"
+            "Commerce City Eats"
+            "Pawtoberfest"
+          )
+          for Q in "${QUERIES[@]}"; do
+            echo "=== QUERY: ${Q} ==="
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search"
+            echo
+          done
