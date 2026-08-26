@@ -478,6 +478,10 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') IS NOT NULL
     ) AS ready`,
   },
+  {
+    name: "20260825_lead_calendar_availability.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.lead_availability_snapshots') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

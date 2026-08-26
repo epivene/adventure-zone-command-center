@@ -9,6 +9,8 @@ import { ActProfileEvidenceRepository } from "@/features/lead-intake/act-profile
 import { createLeadProfileEvidenceHandler } from "@/features/lead-intake/lead-profile-evidence-handler";
 import { LeadReviewService, LeadReviewServiceError } from "@/features/lead-intake/lead-review-service";
 import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-relationship-evidence-repository";
+import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/features/lead-intake/lead-availability-service";
+import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 
 const router: IRouter = Router();
@@ -16,6 +18,7 @@ const repository = new LeadIntakeRepository(db);
 const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
+const availabilityRepository = new LeadAvailabilityRepository(db);
 
 async function optionalGoogleReadClient() {
   try {
@@ -23,6 +26,14 @@ async function optionalGoogleReadClient() {
   } catch {
     return undefined;
   }
+}
+
+async function createLeadAvailabilityService() {
+  const google = await googleConnectionRepository.createReadClient();
+  if (!google?.listCalendarEvents) {
+    throw Object.assign(new Error("Google Calendar is not connected for availability checks."), { code: "GOOGLE_REAUTHORIZATION_REQUIRED" });
+  }
+  return new LeadAvailabilityService({ persistence: availabilityRepository, google: google as Required<Pick<typeof google, "listCalendarEvents">> });
 }
 
 async function createRelationshipReviewService() {
@@ -196,6 +207,53 @@ router.get("/lead-intake/rows/:rowId/relationship-evidence", async (req, res): P
     }
     req.log.error({ error }, "Failed to load previous-contact evidence for lead review");
     res.status(500).json({ error: "Could not load previous-contact evidence for this lead." });
+  }
+});
+
+router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId);
+  const expectedVersion = req.body?.expectedVersion;
+  if (!isUuid(rowId) || !Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    res.status(400).json({ error: "A valid lead row and review version are required." });
+    return;
+  }
+  try {
+    const availabilityService = await createLeadAvailabilityService();
+    const result = await availabilityService.check({
+      rowId,
+      expectedVersion,
+      checkedBy: leadImportActor((req as any).userId),
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LeadAvailabilityServiceError) {
+      if (error.code === "ROW_NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.code === "VERSION_CONFLICT") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.code === "AVAILABILITY_NOT_READY") {
+        res.status(422).json({ error: error.message });
+        return;
+      }
+      if (error.code === "GOOGLE_REAUTHORIZATION_REQUIRED") {
+        res.status(409).json({ error: error.message, code: error.code });
+        return;
+      }
+      if (error.code === "GOOGLE_CALENDAR_UNAVAILABLE") {
+        res.status(503).json({ error: error.message, code: error.code });
+        return;
+      }
+    }
+    if ((error as { code?: string }).code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+      res.status(409).json({ error: "Google Calendar authorization must be renewed before checking availability.", code: "GOOGLE_REAUTHORIZATION_REQUIRED" });
+      return;
+    }
+    req.log.error({ error }, "Failed to check lead availability from Google Calendar");
+    res.status(503).json({ error: "Google Calendar could not be checked.", code: "GOOGLE_CALENDAR_UNAVAILABLE" });
   }
 });
 

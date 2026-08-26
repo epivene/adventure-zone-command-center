@@ -25,6 +25,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_review_evidence.sql"),
     loadOne(here, "20260825_lead_organization_inbox.sql"),
     loadOne(here, "20260825_lead_relationship_classification.sql"),
+    loadOne(here, "20260825_lead_calendar_availability.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -39,6 +40,7 @@ export async function ensureLeadIntakeSchema(
       to_regclass(current_schema() || '.lead_import_batches') is not null
       and to_regclass(current_schema() || '.lead_import_rows') is not null
       and to_regclass(current_schema() || '.lead_import_evidence') is not null
+      and to_regclass(current_schema() || '.lead_availability_snapshots') is not null
       and (
         select count(*) = 8 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_batches'
