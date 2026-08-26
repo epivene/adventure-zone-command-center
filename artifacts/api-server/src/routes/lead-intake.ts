@@ -27,7 +27,7 @@ async function optionalGoogleReadClient() {
 
 async function createRelationshipReviewService() {
   const google = await optionalGoogleReadClient();
-  return new LeadReviewService(db, new LeadRelationshipEvidenceRepository(db, google));
+  return new LeadReviewService(db, new LeadRelationshipEvidenceRepository(db, google ?? undefined));
 }
 
 function param(value: string | string[] | undefined) {
