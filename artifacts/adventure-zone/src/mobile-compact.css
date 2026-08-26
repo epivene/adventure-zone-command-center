@@ -1,0 +1,11 @@
+/* Compact the app on small phones without using browser zoom. */
+@media (max-width: 640px) {
+  html {
+    font-size: 90%;
+  }
+
+  /* Preserve a comfortable minimum tap target after the rem scale shrinks. */
+  button {
+    min-height: 44px;
+  }
+}
