@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { LeadImportPanel } from "@/components/lead-intake/lead-import-panel";
 import { LeadContactDateReview } from "@/components/lead-intake/lead-contact-date-review";
+import { LeadEmailPreviewPanel } from "@/components/lead-intake/lead-email-preview";
+import { LeadCommunicationBlocks } from "@/components/lead-intake/lead-communication-blocks";
 import type { ParsedLeadWorkbook } from "@/features/lead-intake/excel-lead-parser";
 import {
   leadIntakeClient,
@@ -17,6 +19,10 @@ type Client = {
   searchProfiles(query: string): Promise<LeadProfileOption[]>;
   listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
   confirmReview(rowId: string, body: unknown): Promise<{ rowId: string; state: "verified"; reviewVersion: number }>;
+  getEmailPreview?: (rowId: string) => Promise<any>;
+  listCommunicationBlocks?: () => Promise<any[]>;
+  createCommunicationBlock?: (body: unknown) => Promise<unknown>;
+  removeCommunicationBlock?: (id: string, reason: string) => Promise<unknown>;
 };
 
 export function LeadIntakePage({ client }: { client: Client }) {
@@ -117,6 +123,8 @@ export function LeadIntakePage({ client }: { client: Client }) {
               row={selected.rows.find((row) => row.id === selectedRowId)!}
             />
           ) : null}
+          {client.getEmailPreview && selectedRowId ? <LeadEmailPreviewPanel rowId={selectedRowId} load={client.getEmailPreview} /> : null}
+          {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} /> : null}
         </section>
       ) : null}
     </div>
