@@ -12,7 +12,7 @@ describe("GoogleWorkspaceReadClient calendar events", () => {
       fetcher: async (input) => {
         const url = new URL(String(input)); urls.push(url);
         if (url.hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }));
-        if (url.searchParams.get("pageToken") === "next") return new Response(JSON.stringify({ items: [{ id: "cancelled", status: "cancelled" }] }));
+        if (url.searchParams.get("pageToken") === "next") return new Response(JSON.stringify({ timeZone: "America/Chicago", items: [{ id: "cancelled", status: "cancelled" }] }));
         return new Response(JSON.stringify({ timeZone: "America/Chicago", nextPageToken: "next", items: [{
           id: "event-1", iCalUID: "ical-1", summary: "1 Foam Party", start: { date: "2026-09-10" }, end: { date: "2026-09-12" }, updated: "2026-08-25T12:00:00Z",
         }] }));

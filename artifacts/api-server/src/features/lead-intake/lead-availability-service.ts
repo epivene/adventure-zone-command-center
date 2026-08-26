@@ -58,7 +58,7 @@ export class LeadAvailabilityService {
     startDate: assessed.map((item) => item.occupiedWindow.startDate).sort()[0]!,
     endDate: assessed.map((item) => item.occupiedWindow.endDate).sort().at(-1)!,
    };
-   const reservation: CalendarPackageReservation = agreeing
+   const reservation: CalendarPackageReservation = assessed.length === 1 ? first.individual : agreeing
     ? { ...first.individual, evidence: [...first.individual.evidence.filter((item) => !item.startsWith("google-event:")), ...assessed.map((item) => `google-event:${item.event.calendarId}/${item.event.id}`)] }
     : { calendarEventId: first.event.id, iCalUid: first.event.iCalUid, occupiedWindow, packages: [], confidence: "ambiguous", evidence: ["conflicting same-instance Calendar evidence", ...assessed.flatMap((item) => [`google-event:${item.event.calendarId}/${item.event.id}`, `window:${item.occupiedWindow.startDate}/${item.occupiedWindow.endDate}`, `updated:${item.event.updated || "missing"}`, ...item.classified.evidence])] };
    reservations.push(reservation);

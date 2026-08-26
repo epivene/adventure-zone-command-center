@@ -1,6 +1,6 @@
 export type CalendarPackageReservation = { calendarEventId: string; iCalUid: string | null; occupiedWindow: { startDate: string; endDate: string }; packages: Array<{ packageKey: string; quantity: number }>; confidence: "explicit" | "ambiguous"; evidence: string[] };
 const packages = [{ key: "foam-party", name: "Foam Party" }, { key: "glow-zone", name: "Glow Zone" }] as const;
-const uncertainty = /\b(maybe|likely|possibly|tbd|to be determined|tentative|no|not|without|cancel(?:led)?|or)\b/i;
+const uncertainty = /\b(maybe|likely|possibly|tbd|to be determined|tentative|no|not|without|cancel(?:led)?|or|minus|remove|exclude)\b|[-−]\s*\d+\s*(?:foam\s+party|glow\s+zone)\b/i;
 function packageClause(text: string, index: number, length: number) {
  const start = Math.max(text.lastIndexOf("\n", index - 1), text.lastIndexOf(".", index - 1), text.lastIndexOf(";", index - 1)) + 1;
  const ends = [text.indexOf("\n", index + length), text.indexOf(".", index + length), text.indexOf(";", index + length)].filter((value) => value >= 0);

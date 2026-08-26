@@ -407,32 +407,36 @@ export function createGoogleWorkspaceReadClient(input: {
           url.searchParams.set("maxResults", "250");
           if (pageToken) url.searchParams.set("pageToken", pageToken);
           const payload = await authorizedJson(url.toString());
-          const calendarTimeZone = typeof payload.timeZone === "string" && payload.timeZone.trim()
-            ? payload.timeZone.trim() : "UTC";
+          if (typeof payload.timeZone !== "string" || !payload.timeZone.trim() || !Array.isArray(payload.items)) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+          const calendarTimeZone = payload.timeZone.trim();
           try { new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone }); } catch { throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID"); }
-          const values = Array.isArray(payload.items) ? payload.items : [];
+          const values = payload.items;
           for (const value of values) {
-            if (!value || typeof value !== "object") continue;
+            if (!value || typeof value !== "object" || Array.isArray(value)) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
             const event = value as Record<string, unknown>;
-            if (event.status === "cancelled" || typeof event.id !== "string" || !event.id.trim()) continue;
+            if (event.status === "cancelled") continue;
+            if (typeof event.id !== "string" || !event.id.trim()) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
             const start = calendarEventTime(event.start);
             const end = calendarEventTime(event.end);
             const originalStartTime = event.originalStartTime === undefined || event.originalStartTime === null ? null : calendarEventTime(event.originalStartTime);
+            const updated = event.updated === undefined || event.updated === null ? null : typeof event.updated === "string" && event.updated.trim() && Number.isFinite(new Date(event.updated).valueOf()) ? event.updated : null;
             if (!start || !end || Boolean(start.date) !== Boolean(end.date)
               || (start.date && start.date >= end.date!)
               || (start.dateTime && new Date(start.dateTime) >= new Date(end.dateTime!))
-              || (event.originalStartTime !== undefined && event.originalStartTime !== null && !originalStartTime)) {
+              || (event.originalStartTime !== undefined && event.originalStartTime !== null && !originalStartTime)
+              || (event.updated !== undefined && event.updated !== null && !updated)) {
               throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
             }
             events.push({
               calendarId, calendarTimeZone, id: event.id, iCalUid: typeof event.iCalUID === "string" && event.iCalUID.trim() ? event.iCalUID.trim() : null,
               summary: typeof event.summary === "string" ? event.summary : "", description: typeof event.description === "string" ? event.description : "",
-              start, end, updated: typeof event.updated === "string" ? event.updated : null,
+              start, end, updated,
               recurringEventId: typeof event.recurringEventId === "string" ? event.recurringEventId : null,
               originalStartTime,
             });
           }
-          pageToken = typeof payload.nextPageToken === "string" && payload.nextPageToken.trim() ? payload.nextPageToken : null;
+          if (payload.nextPageToken !== undefined && (typeof payload.nextPageToken !== "string" || !payload.nextPageToken.trim())) throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
+          pageToken = typeof payload.nextPageToken === "string" ? payload.nextPageToken : null;
         } while (pageToken);
       }
       return events;
