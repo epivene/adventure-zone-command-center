@@ -17,7 +17,7 @@ jobs:
             exit 2
           fi
           BASE="https://adventure-zone-command-center.onrender.com"
-          for Q in "Rides & Rods" "Idaho Falls Fall Family Festival" "Boise Fall Festival"; do
+          for Q in "International Camel & Ostrich Races" "Race The Rails"; do
             echo "=== QUERY: $Q ==="
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
