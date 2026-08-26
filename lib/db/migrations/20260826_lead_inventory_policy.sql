@@ -2,11 +2,14 @@ CREATE TABLE IF NOT EXISTS package_templates (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   code text NOT NULL UNIQUE,
   name text NOT NULL,
-  base_attraction_count integer NOT NULL DEFAULT 1,
+  base_attraction_count integer NOT NULL,
   active boolean NOT NULL DEFAULT true,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE package_templates
+  ALTER COLUMN base_attraction_count DROP DEFAULT;
 
 ALTER TABLE package_templates
   ADD COLUMN IF NOT EXISTS base_price_cents integer,
@@ -30,6 +33,15 @@ ALTER TABLE lead_availability_snapshots
 
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_templates_code_nonblank') THEN
+    ALTER TABLE package_templates ADD CONSTRAINT package_templates_code_nonblank CHECK (nullif(trim(code), '') IS NOT NULL);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_templates_name_nonblank') THEN
+    ALTER TABLE package_templates ADD CONSTRAINT package_templates_name_nonblank CHECK (nullif(trim(name), '') IS NOT NULL);
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_templates_base_attraction_count_positive') THEN
+    ALTER TABLE package_templates ADD CONSTRAINT package_templates_base_attraction_count_positive CHECK (base_attraction_count > 0);
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'package_templates_normal_capacity_nonnegative') THEN
     ALTER TABLE package_templates ADD CONSTRAINT package_templates_normal_capacity_nonnegative CHECK (normal_capacity >= 0);
   END IF;
