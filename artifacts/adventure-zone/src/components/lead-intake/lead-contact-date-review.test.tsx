@@ -129,4 +129,35 @@ describe("LeadContactDateReview", () => {
     fireEvent.change(screen.getByLabelText("Contact role"), { target: { value: "Executive director" } });
     expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
   });
+
+  it("invalidates approvals when date evidence changes", async () => {
+    const api = client();
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+    fireEvent.change(await screen.findByLabelText("Existing contact"), { target: { value: "contact-1" } });
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+
+    fireEvent.change(screen.getByLabelText("Date evidence type"), { target: { value: "manual" } });
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+    fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+    fireEvent.change(screen.getByLabelText("Date source"), { target: { value: "verified source" } });
+    expect(screen.getByLabelText("I confirmed this recipient email")).not.toBeChecked();
+    expect(screen.getByLabelText("This contact is appropriate for an introduction email")).not.toBeChecked();
+  });
+
+  it("keeps existing CRM contacts usable when ACT evidence loading fails", async () => {
+    const api = client();
+    api.getProfileEvidence.mockRejectedValue(new Error("ACT evidence unavailable"));
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={row} />);
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Aspen Filmfest \(Aspen\) CO/ }));
+
+    expect(await screen.findByRole("option", { name: /Lindsey Powell/ })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("ACT evidence unavailable");
+  });
 });
