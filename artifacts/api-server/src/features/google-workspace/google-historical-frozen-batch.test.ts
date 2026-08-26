@@ -36,10 +36,10 @@ function client(listIds: string[]): GoogleWorkspaceReadClient {
   };
 }
 
-function baseRepository() {
+function repository(status: "ready" | "error" = "ready") {
   return {
     getState: async () => ({
-      status: "ready" as const,
+      status,
       nextPageToken: "page-a",
       firstBatchApproved: true,
       cumulative: {
@@ -62,14 +62,14 @@ function baseRepository() {
 describe("historical Gmail frozen batch membership", () => {
   it("freezes a newly discovered Gmail page before processing it", async () => {
     const readClient = client(["m1", "m2"]);
-    const repository = baseRepository();
+    const backfillRepository = repository();
     const batchStore = {
       load: vi.fn(async () => null),
       freeze: vi.fn(async () => undefined),
     };
     const service = new GoogleHistoricalBackfillService({
       connection: { createReadClient: async () => readClient },
-      repository,
+      repository: backfillRepository,
       batchStore,
       classifier: {
         classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }),
@@ -95,20 +95,7 @@ describe("historical Gmail frozen batch membership", () => {
 
   it("reuses frozen message ids on retry instead of querying the newest Gmail page again", async () => {
     const readClient = client(["new-arrival", "different-message"]);
-    const repository = baseRepository();
-    repository.getState = async () => ({
-      status: "error" as const,
-      nextPageToken: "page-a",
-      firstBatchApproved: true,
-      cumulative: {
-        processed: 250,
-        attached: 200,
-        ignored: 40,
-        needsReview: 10,
-        failed: 0,
-        skipped: 0,
-      },
-    });
+    const backfillRepository = repository("error");
     const batchStore = {
       load: vi.fn(async () => ({
         batchId: "batch-2",
@@ -122,7 +109,7 @@ describe("historical Gmail frozen batch membership", () => {
     };
     const service = new GoogleHistoricalBackfillService({
       connection: { createReadClient: async () => readClient },
-      repository,
+      repository: backfillRepository,
       batchStore,
       classifier: {
         classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }),
@@ -136,7 +123,7 @@ describe("historical Gmail frozen batch membership", () => {
     const result = await service.runNextBatch();
 
     expect(readClient.listMessagePage).not.toHaveBeenCalled();
-    expect(repository.beginBatch).not.toHaveBeenCalled();
+    expect(backfillRepository.beginBatch).not.toHaveBeenCalled();
     expect(batchStore.freeze).not.toHaveBeenCalled();
     expect(readClient.getMessageMetadata).toHaveBeenCalledWith("m1");
     expect(readClient.getMessageMetadata).toHaveBeenCalledWith("m2");
