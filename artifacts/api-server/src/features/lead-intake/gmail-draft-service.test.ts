@@ -77,7 +77,7 @@ function readyState(overrides: Record<string, unknown> = {}) {
       sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
       reviewedBy: "Amy",
       reviewedAt: "2026-08-25T00:00:00.000Z",
-      definition: APPROVED_LEAD_INTRODUCTION_2026,,
+      definition: APPROVED_LEAD_INTRODUCTION_2026,
     },
     ...overrides,
   } as any;
