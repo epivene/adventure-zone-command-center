@@ -29,5 +29,7 @@ describe("lead intake owner routes", () => {
     expect(routeSource).toContain('error.code === "RELATIONSHIP_NOT_READY"');
     expect(routeSource).toContain("res.status(409)");
     expect(routeSource).toContain("res.status(422)");
+    expect(routeSource).toContain("optionalGoogleReadClient");
+    expect(routeSource).toContain("catch {");
   });
 });
