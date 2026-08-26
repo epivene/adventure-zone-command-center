@@ -3,7 +3,6 @@ import type { db as database } from "@/db/client";
 import {
   businessSourceDocuments,
   communicationTemplates,
-  contacts,
   leadAvailabilitySnapshots,
   leadImportRows,
   organizations,
@@ -15,6 +14,10 @@ import {
   type ApprovedLeadIntroductionDefinition,
 } from "../communication-templates/lead-introduction-2026-approved";
 import { CommunicationBlockRepository } from "./communication-block-repository";
+import {
+  acquireCommunicationSafetyLock,
+  type CommunicationSafetyLockExecutor,
+} from "./communication-safety-lock";
 import type { LeadEmailPreviewLead, LeadEmailPreviewTemplate } from "./lead-email-preview-service";
 
 type Database = typeof database;
@@ -63,6 +66,15 @@ type TemplateCandidate = {
   requiredPlaceholders: string[];
   sourceNote: string | null;
   sourceFilename: string | null;
+  sourceDisplayTitle: string | null;
+  sourceCategory: string | null;
+  sourceEffectiveYear: number | null;
+  sourceAccessScope: string | null;
+  sourceReviewState: string | null;
+  sourceNotes: string | null;
+  sourceStorageReference: string | null;
+  sourceReviewedBy: string | null;
+  sourceReviewedAt: Date | null;
   sourceDocumentId: string | null;
   reviewedBy: string | null;
   reviewedAt: Date | null;
@@ -70,16 +82,33 @@ type TemplateCandidate = {
 
 export class LeadEmailPreviewRepository {
   private readonly loadFromTransaction: (tx: Transaction, rowId: string, expectedVersion: number) => Promise<LeadEmailPreviewRepositoryResult>;
+  private readonly acquireSafetyLock: (executor: CommunicationSafetyLockExecutor) => Promise<void>;
 
   constructor(
     private readonly database: Database,
-    dependencies?: { loadFromTransaction?: (tx: Transaction, rowId: string, expectedVersion: number) => Promise<LeadEmailPreviewRepositoryResult> },
+    dependencies?: {
+      loadFromTransaction?: (tx: Transaction, rowId: string, expectedVersion: number) => Promise<LeadEmailPreviewRepositoryResult>;
+      acquireSafetyLock?: (executor: CommunicationSafetyLockExecutor) => Promise<void>;
+    },
   ) {
     this.loadFromTransaction = dependencies?.loadFromTransaction ?? ((tx, rowId, expectedVersion) => this.loadWithinTransaction(tx, rowId, expectedVersion));
+    this.acquireSafetyLock = dependencies?.acquireSafetyLock ?? acquireCommunicationSafetyLock;
   }
 
   async load(rowId: string, expectedVersion: number): Promise<LeadEmailPreviewRepositoryResult> {
-    return this.database.transaction((tx) => this.loadFromTransaction(tx, rowId, expectedVersion));
+    return this.withSerializedState(rowId, expectedVersion, (state) => state);
+  }
+
+  async withSerializedState<T>(
+    rowId: string,
+    expectedVersion: number,
+    consume: (state: LeadEmailPreviewRepositoryResult) => T | Promise<T>,
+  ): Promise<T> {
+    return this.database.transaction(async (tx) => {
+      await this.acquireSafetyLock(tx);
+      const state = await this.loadFromTransaction(tx, rowId, expectedVersion);
+      return consume(state);
+    });
   }
 
   static isExactApprovedTemplate(candidate: TemplateCandidate): boolean {
@@ -98,7 +127,8 @@ export class LeadEmailPreviewRepository {
       eventRegion: organizations.region,
       startDate: leadImportRows.confirmedStartDate,
       endDate: leadImportRows.confirmedEndDate,
-      firstName: contacts.firstName,
+      contactMode: leadImportRows.contactMode,
+      confirmedContactName: leadImportRows.confirmedContactName,
       recipientEmail: leadImportRows.confirmedRecipientEmail,
       rowState: leadImportRows.state,
       recipientConfirmed: leadImportRows.recipientConfirmed,
@@ -108,7 +138,6 @@ export class LeadEmailPreviewRepository {
       fitStatus: leadImportRows.fitStatus,
     }).from(leadImportRows)
       .leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
-      .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId))
       .where(eq(leadImportRows.id, rowId))
       .limit(1)
       .for("update", { of: leadImportRows });
@@ -155,6 +184,15 @@ export class LeadEmailPreviewRepository {
       requiredPlaceholders: communicationTemplates.requiredPlaceholders,
       sourceNote: communicationTemplates.sourceNote,
       sourceFilename: businessSourceDocuments.originalFilename,
+      sourceDisplayTitle: businessSourceDocuments.displayTitle,
+      sourceCategory: businessSourceDocuments.sourceCategory,
+      sourceEffectiveYear: businessSourceDocuments.effectiveYear,
+      sourceAccessScope: businessSourceDocuments.accessScope,
+      sourceReviewState: businessSourceDocuments.reviewState,
+      sourceNotes: businessSourceDocuments.notes,
+      sourceStorageReference: businessSourceDocuments.storageReference,
+      sourceReviewedBy: businessSourceDocuments.reviewedBy,
+      sourceReviewedAt: businessSourceDocuments.reviewedAt,
       sourceDocumentId: communicationTemplates.sourceDocumentId,
       reviewedBy: communicationTemplates.reviewedBy,
       reviewedAt: communicationTemplates.reviewedAt,
@@ -175,6 +213,15 @@ export class LeadEmailPreviewRepository {
         eq(communicationTemplates.reviewedBy, expected.reviewedBy),
         isNotNull(communicationTemplates.reviewedAt),
         eq(businessSourceDocuments.originalFilename, expected.sourceFilename),
+        eq(businessSourceDocuments.displayTitle, expected.sourceDocument.displayTitle),
+        eq(businessSourceDocuments.sourceCategory, expected.sourceDocument.category),
+        eq(businessSourceDocuments.effectiveYear, expected.sourceDocument.effectiveYear),
+        eq(businessSourceDocuments.accessScope, expected.sourceDocument.accessScope),
+        eq(businessSourceDocuments.reviewState, expected.sourceDocument.reviewState),
+        eq(businessSourceDocuments.notes, expected.sourceDocument.notes),
+        eq(businessSourceDocuments.storageReference, expected.sourceDocument.storageReference),
+        eq(businessSourceDocuments.reviewedBy, expected.sourceDocument.reviewedBy),
+        isNotNull(businessSourceDocuments.reviewedAt),
       ))
       .limit(1);
 
@@ -199,7 +246,9 @@ export class LeadEmailPreviewRepository {
         endDate: lead.endDate,
         recipientEmail: lead.recipientEmail,
         profileName: lead.profileName ?? lead.eventName,
-        firstName: lead.firstName ?? null,
+        firstName: lead.contactMode === "organization_inbox"
+          ? null
+          : lead.confirmedContactName?.trim().split(/\s+/)[0] || null,
       },
       availability: snapshot ? {
         ready: snapshot.ready,

@@ -110,8 +110,13 @@ export function buildLeadEmailPreview(input: {
     && input.availability.proposedStartDate === expectedWindow.startDate
     && input.availability.proposedEndDate === expectedWindow.endDate
   );
+  const calendarReservations = Array.isArray(input.calendarReservations) ? input.calendarReservations : [];
+  const hasAggregateAmbiguity = calendarReservations.some(
+    (value: any) => value?.confidence === "ambiguous",
+  );
   const safetyBlockers = [
     ...(snapshotMatches ? [] : ["availability_stale_for_lead_version"]),
+    ...(hasAggregateAmbiguity ? ["availability_ambiguous"] : []),
     ...(input.approvedTemplate ? [] : ["template_not_approved"]),
   ];
   const blockers = uniqueBlockers(baseReadiness.blockers, safetyBlockers);
@@ -122,7 +127,7 @@ export function buildLeadEmailPreview(input: {
     eventId: typeof value?.eventId === "string" ? value.eventId : null,
     conflict: value?.classification?.confidence === "ambiguous" || value?.conflict === true,
   }));
-  const totalConflicts = (input.calendarReservations ?? []).filter(
+  const totalConflicts = calendarReservations.filter(
     (value: any) => value?.confidence === "ambiguous",
   ).length;
   const calendarConflictSummary = {
@@ -169,11 +174,14 @@ export function buildLeadEmailPreview(input: {
 
 export class LeadEmailPreviewService {
   constructor(
-    private readonly repository: Pick<LeadEmailPreviewRepository, "load">,
+    private readonly repository: Pick<LeadEmailPreviewRepository, "withSerializedState">,
   ) {}
 
   async preview(rowId: string, expectedVersion: number): Promise<LeadEmailPreviewDto> {
-    const state = await this.repository.load(rowId, expectedVersion);
-    return buildLeadEmailPreview(state);
+    return this.repository.withSerializedState(
+      rowId,
+      expectedVersion,
+      (state) => buildLeadEmailPreview(state),
+    );
   }
 }

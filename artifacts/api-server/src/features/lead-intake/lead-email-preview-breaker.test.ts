@@ -140,6 +140,36 @@ describe("Task 6 to Task 7 snapshot contract", () => {
 });
 
 describe("Calendar conflict summary", () => {
+  it("independently blocks an aggregate ambiguous reservation even when persisted ready is true", () => {
+    const preview = buildLeadEmailPreview({
+      lead: lead(5),
+      blocks: [],
+      availability: {
+        ready: true,
+        checkedAt: now.toISOString(),
+        reviewVersion: 5,
+        proposedStartDate: "2026-09-27",
+        proposedEndDate: "2026-10-05",
+        packageAvailability: {
+          status: "resolved",
+          packages: [{ packageKey: "adventure_zone", availableQuantity: 1 }],
+          restrictedOptions: [],
+        },
+      },
+      approvedTemplate,
+      now,
+      calendarReservations: [{ confidence: "ambiguous", packageKey: null }],
+    });
+
+    expect(preview.readiness).toEqual({
+      ready: false,
+      blockers: expect.arrayContaining(["availability_ambiguous"]),
+    });
+    expect(preview.subject).toBeNull();
+    expect(preview.body).toBeNull();
+    expect(preview.calendarConflictSummary.totalConflicts).toBe(1);
+  });
+
   it("reports a grouped duplicate-instance disagreement that blocks Task 6 readiness", async () => {
     const event = {
       calendarTimeZone: "America/Chicago",

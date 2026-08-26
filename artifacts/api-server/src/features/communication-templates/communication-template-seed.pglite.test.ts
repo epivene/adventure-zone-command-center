@@ -46,8 +46,21 @@ async function createTemplateTables(client: PGlite, withVersion: boolean) {
       reviewed_at timestamptz, created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
-    insert into business_source_documents (id, original_filename, display_title, source_category, access_scope, review_state)
-    values ('${sourceId}', '${APPROVED_LEAD_INTRODUCTION_2026.sourceFilename}', 'Adventure Zone Sticky Notes', 'scripts_templates', 'owner', 'reviewed');
+    insert into business_source_documents (
+      id, original_filename, display_title, source_category, effective_year,
+      access_scope, review_state, storage_reference, notes, reviewed_by, reviewed_at
+    ) values (
+      '${sourceId}', '${APPROVED_LEAD_INTRODUCTION_2026.sourceFilename}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.displayTitle}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.category}',
+      ${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.effectiveYear},
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.accessScope}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.reviewState}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.storageReference}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.notes.replaceAll("'", "''")}',
+      '${APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.reviewedBy}',
+      '2026-08-25T00:00:00Z'
+    );
   `);
 }
 

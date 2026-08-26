@@ -25,6 +25,16 @@ export const APPROVED_LEAD_INTRODUCTION_2026 = {
   name: "INTRO 2026 EMAIL PREPAID",
   sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
   sourceNote: "Amy Library: ADVENTURE ZONE STICKY NOTES.docx.pdf; approved 2026 prepaid v1.",
+  sourceDocument: {
+    storageReference: "amy-library/ADVENTURE ZONE STICKY NOTES.docx.pdf",
+    displayTitle: "Adventure Zone Sticky Notes",
+    category: "scripts_templates",
+    effectiveYear: 2026,
+    accessScope: "owner",
+    reviewState: "reviewed",
+    notes: "Mixed historical and current scripts, package facts, internal notes, discounts, contacts, and ACT workflow. Reviewed selectively; never publish verbatim.",
+    reviewedBy: "system:business-drive-review",
+  },
   reviewedBy: "system:amy-approved-2026-prepaid-v1",
   subject: "{{profileName}} {{eventLocation}} {{eventDates}}",
   allowedPlaceholders: ["profileName", "eventLocation", "eventDates", "contactName", "eventName", "eventCity"],
@@ -55,6 +65,15 @@ export type ApprovedLeadIntroductionTemplateCandidate = {
   requiredPlaceholders: readonly string[];
   sourceNote: string | null;
   sourceFilename: string | null;
+  sourceDisplayTitle: string | null;
+  sourceCategory: string | null;
+  sourceEffectiveYear: number | null;
+  sourceAccessScope: string | null;
+  sourceReviewState: string | null;
+  sourceNotes: string | null;
+  sourceStorageReference: string | null;
+  sourceReviewedBy: string | null;
+  sourceReviewedAt: Date | null;
   sourceDocumentId: string | null;
   reviewedBy: string | null;
   reviewedAt: Date | null;
@@ -83,6 +102,16 @@ export function isExactApprovedLeadIntroductionTemplate(
     && exactList(candidate.requiredPlaceholders, expected.requiredPlaceholders)
     && candidate.sourceNote === expected.sourceNote
     && candidate.sourceFilename === expected.sourceFilename
+    && candidate.sourceDisplayTitle === expected.sourceDocument.displayTitle
+    && candidate.sourceCategory === expected.sourceDocument.category
+    && candidate.sourceEffectiveYear === expected.sourceDocument.effectiveYear
+    && candidate.sourceAccessScope === expected.sourceDocument.accessScope
+    && candidate.sourceReviewState === expected.sourceDocument.reviewState
+    && candidate.sourceNotes === expected.sourceDocument.notes
+    && candidate.sourceStorageReference === expected.sourceDocument.storageReference
+    && candidate.sourceReviewedBy === expected.sourceDocument.reviewedBy
+    && candidate.sourceReviewedAt instanceof Date
+    && Number.isFinite(candidate.sourceReviewedAt.valueOf())
     && Boolean(candidate.sourceDocumentId)
     && candidate.reviewedBy === expected.reviewedBy
     && candidate.reviewedAt instanceof Date
