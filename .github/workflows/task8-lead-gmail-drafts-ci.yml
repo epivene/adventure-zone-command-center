@@ -1,0 +1,37 @@
+name: Task 8 Lead Gmail Drafts CI
+
+on:
+  push:
+    branches:
+      - feat/lead-gmail-draft-creation
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Task 8 backend tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run             src/features/google-workspace/google-gmail-draft.test.ts             src/features/lead-intake/gmail-draft-service.test.ts             src/features/lead-intake/gmail-draft-handler.test.ts             src/features/lead-intake/gmail-draft-migration.pglite.test.ts
+      - name: Task 8 frontend tests
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run             src/components/lead-intake/lead-email-preview.gmail-draft.test.tsx             src/components/lead-intake/lead-gmail-draft-state-list.test.tsx
+      - run: pnpm --filter @workspace/api-server typecheck
+      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm --filter @workspace/db build
