@@ -22,19 +22,27 @@ const row: LeadImportReviewRow = {
 };
 
 describe("LeadRelationshipReview", () => {
-  it("shows the deterministic returning-contact style and auditable source reference", () => {
-    render(<LeadRelationshipReview client={{ classifyRelationship: vi.fn() }} onClassified={vi.fn()} row={row} />);
+  it("shows the deterministic returning-contact style and auditable source details", async () => {
+    render(<LeadRelationshipReview client={{
+      classifyRelationship: vi.fn(),
+      getRelationshipEvidence: vi.fn().mockResolvedValue([{
+        evidenceId: "gmail:message-1", sourceType: "gmail", occurredAt: "2025-05-14T12:00:00.000Z",
+        direction: "inbound", responseProven: true, excerpt: "Thanks for reaching out", conflicting: false,
+      }]),
+    }} onClassified={vi.fn()} row={row} />);
     expect(screen.getByText(/Returning contact: verified reply on May 14, 2025/)).toBeInTheDocument();
     expect(screen.getByText("Returning contact email")).toBeInTheDocument();
     expect(screen.getByText("Gmail")).toBeInTheDocument();
     fireEvent.click(screen.getByText("Supporting source"));
     expect(screen.getByText("gmail:message-1")).toBeInTheDocument();
+    expect(await screen.findByText("May 14, 2025")).toBeInTheDocument();
+    expect(screen.getByText("Thanks for reaching out")).toBeInTheDocument();
     expect(screen.getByText("Hi,")).toBeInTheDocument();
   });
 
   it("blocks a normal email style when history needs review", () => {
     render(<LeadRelationshipReview
-      client={{ classifyRelationship: vi.fn() }}
+      client={{ classifyRelationship: vi.fn(), getRelationshipEvidence: vi.fn().mockResolvedValue([]) }}
       onClassified={vi.fn()}
       row={{ ...row, relationshipOutcome: "needs_review", relationshipReviewRequired: true }}
     />);
@@ -46,7 +54,7 @@ describe("LeadRelationshipReview", () => {
     const classifyRelationship = vi.fn().mockResolvedValue({ rowId: "row-1", reviewVersion: 3 });
     const onClassified = vi.fn();
     render(<LeadRelationshipReview
-      client={{ classifyRelationship }}
+      client={{ classifyRelationship, getRelationshipEvidence: vi.fn().mockResolvedValue([]) }}
       onClassified={onClassified}
       row={{ ...row, relationshipOutcome: null, relationshipEvidenceIds: [], relationshipClassifiedAt: null }}
     />);
