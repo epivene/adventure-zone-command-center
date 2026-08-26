@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { activities, communicationTemplates, contacts, organizations } from "./schema";
+import { activities, contacts, organizations } from "./schema";
+import { communicationTemplates } from "./business-source-schema";
 import { googleWorkspaceConnections } from "./google-workspace-schema";
 
 export const leadImportBatchStatusValues = ["review", "archived"] as const;
