@@ -25,6 +25,9 @@ describe("GoogleWorkspaceReadClient calendar events", () => {
     })).resolves.toEqual([{
       calendarId: "zone-a", calendarTimeZone: "America/Chicago", id: "event-1", iCalUid: "ical-1", summary: "1 Foam Party", description: "",
       start: { date: "2026-09-10" }, end: { date: "2026-09-12" }, updated: "2026-08-25T12:00:00Z", recurringEventId: null, originalStartTime: null,
+    }, {
+      calendarId: "zone-b", calendarTimeZone: "America/Chicago", id: "event-1", iCalUid: "ical-1", summary: "1 Foam Party", description: "",
+      start: { date: "2026-09-10" }, end: { date: "2026-09-12" }, updated: "2026-08-25T12:00:00Z", recurringEventId: null, originalStartTime: null,
     }]);
     const eventUrls = urls.filter((url) => url.pathname.includes("/events"));
     expect(eventUrls).toHaveLength(4);
