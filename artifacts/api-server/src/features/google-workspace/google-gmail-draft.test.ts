@@ -94,10 +94,11 @@ describe("Google Gmail draft-only client", () => {
         },
       });
       const pending = client.createGmailDraft!({ raw: "cmF3" });
-      await vi.advanceTimersByTimeAsync(25);
-      await expect(pending).rejects.toMatchObject({
+      const rejected = expect(pending).rejects.toMatchObject({
         code: "GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN",
       });
+      await vi.advanceTimersByTimeAsync(25);
+      await rejected;
       expect(draftRequests).toHaveLength(1);
       expect(draftRequests[0]?.signal?.aborted).toBe(true);
     } finally {
@@ -121,10 +122,11 @@ describe("Google Gmail draft-only client", () => {
         },
       });
       const pending = client.createGmailDraft!({ raw: "cmF3" });
-      await vi.advanceTimersByTimeAsync(25);
-      await expect(pending).rejects.toMatchObject({
+      const rejected = expect(pending).rejects.toMatchObject({
         code: "GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN",
       });
+      await vi.advanceTimersByTimeAsync(25);
+      await rejected;
       expect(urls).toEqual(["https://oauth2.googleapis.com/token"]);
     } finally {
       vi.useRealTimers();
