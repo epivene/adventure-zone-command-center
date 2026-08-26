@@ -21,11 +21,11 @@ export function FollowUpList({ followUps, now }: { followUps: FollowUpSummary[];
   const overdueCount = items.filter((followUp) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
 
   return (
-    <section id="follow-ups" aria-label="Follow-up queue" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section id="follow-ups" aria-label="Outreach and follow-up queue" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className="text-xl font-bold">Follow-ups</h2>
-          <p className="mt-1 text-sm text-slate-600">Work straight down the queue. Overdue items stay first.</p>
+          <h2 className="text-xl font-bold">Outreach & follow-ups</h2>
+          <p className="mt-1 text-sm text-slate-600">Call, email, or use the event website. Work straight down the queue; overdue items stay first.</p>
         </div>
         {overdueCount ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">{overdueCount} overdue</span> : null}
       </div>
@@ -34,12 +34,17 @@ export function FollowUpList({ followUps, now }: { followUps: FollowUpSummary[];
         <ol className="mt-4 grid gap-2">
           {items.map((followUp) => {
             const overdue = classifyBusinessDueDate(followUp.dueAt, now) === "overdue";
+            const contactSheetHref = followUpHref(followUp);
             return (
               <li className="flex flex-col gap-2 rounded-xl border border-slate-200 p-3 sm:flex-row sm:items-start sm:justify-between" key={followUp.id}>
                 <div className="min-w-0 flex-1">
-                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={followUpHref(followUp)}>{followUp.bookingName}</Link>
+                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={contactSheetHref}>{followUp.bookingName}</Link>
                   <p className="mt-0.5 text-sm capitalize text-slate-600">{formatKind(followUp.kind)}</p>
                   <BookingOperations operations={followUp.operations} />
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Link className="button-secondary" href={contactSheetHref}>Email</Link>
+                    <Link className="button-secondary" href={contactSheetHref}>Web contact</Link>
+                  </div>
                   <FollowUpControls
                     followUp={{ id: followUp.id, kind: followUp.kind, dueAt: followUp.dueAt, completedAt: null }}
                     onEdit={async (id, input) => {
@@ -69,7 +74,7 @@ export function FollowUpList({ followUps, now }: { followUps: FollowUpSummary[];
             );
           })}
         </ol>
-      ) : <p className="mt-4 text-sm text-slate-600">No open follow-ups.</p>}
+      ) : <p className="mt-4 text-sm text-slate-600">No open outreach or follow-ups.</p>}
     </section>
   );
 }
