@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { LeadContactDateReview } from "./lead-contact-date-review";
@@ -36,4 +36,25 @@ it("shows ACT evidence and a person-free organization inbox choice", async () =>
   expect(screen.getByText("Hi,")).toBeInTheDocument();
   expect(screen.queryByLabelText("Contact name")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Contact role")).not.toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText("Event start date"), { target: { value: "2026-09-05" } });
+  fireEvent.change(screen.getByLabelText("Event end date"), { target: { value: "2026-09-05" } });
+  fireEvent.change(screen.getByLabelText("Date source"), { target: { value: "https://example.org/2026-event" } });
+  fireEvent.click(screen.getByLabelText("I confirmed this recipient email"));
+  fireEvent.click(screen.getByLabelText("This contact is appropriate for an introduction email"));
+  fireEvent.click(screen.getByRole("button", { name: "Verify event and contact" }));
+
+  await waitFor(() => expect(client.confirmReview).toHaveBeenCalledWith("row-1", expect.objectContaining({
+    decision: expect.objectContaining({
+      contactMode: "organization_inbox",
+      contactId: null,
+      contactName: "",
+      contactRole: "",
+      recipientEmail: "societyhall@gmail.com",
+      emailEvidence: {
+        sourceKind: "act_description",
+        sourceReference: "act:source-1:version:version-1:path:$.Description",
+      },
+    }),
+  })));
 });
