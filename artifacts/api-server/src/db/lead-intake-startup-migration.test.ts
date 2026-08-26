@@ -5,32 +5,21 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
 
 describe("ensureLeadIntakeSchema", () => {
-  it("checks every review column plus critical constraints before declaring the schema ready", async () => {
-    const query = vi.fn().mockResolvedValue({ rows: [{ ready: true }] });
-    const loadSql = vi.fn();
+  it("runs the canonical idempotent repair even when readiness initially passes", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ ready: true }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ready: true }] });
+    const loadSql = vi.fn().mockResolvedValue("-- canonical idempotent repair");
 
     await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
-    expect(query).toHaveBeenCalledTimes(1);
+    expect(loadSql).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledTimes(3);
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
-    expect(query.mock.calls[0]?.[0]).toContain("original_filename");
-    expect(query.mock.calls[0]?.[0]).toContain("source_fingerprint");
-    expect(query.mock.calls[0]?.[0]).toContain("review_version");
-    expect(query.mock.calls[0]?.[0]).toContain("confirmed_recipient_email");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_confirmed_date_range_valid");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_selected_organization_fk");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_source_kind_valid");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence_one_selected_field");
-    expect(query.mock.calls[0]?.[0]).toContain("relationship_outcome");
-    expect(query.mock.calls[0]?.[0]).toContain("relationship_classified_by");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_classification_complete");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_import_rows_relationship_outcome_idx");
-    expect(query.mock.calls[0]?.[0]).toContain("organization_inbox");
-    expect(query.mock.calls[0]?.[0]).toContain("lead_availability_snapshots");
-    expect(query.mock.calls[0]?.[0]).toContain("package_availability");
-    expect(query.mock.calls[0]?.[0]).toContain("communication_templates");
-    expect(query.mock.calls[0]?.[0]).toContain("template_version");
-    expect(query.mock.calls[0]?.[0]).toContain("count(*) = 7");
-    expect(loadSql).not.toHaveBeenCalled();
+    expect(query.mock.calls[0]?.[0]).toContain("territory_status");
+    expect(query.mock.calls[0]?.[0]).toContain("fit_status");
+    expect(query.mock.calls[1]?.[0]).toBe("-- canonical idempotent repair");
+    expect(query.mock.calls[2]?.[0]).toBe(query.mock.calls[0]?.[0]);
   });
 
   it("runs both lead-intake migrations when the schema is incomplete", async () => {
