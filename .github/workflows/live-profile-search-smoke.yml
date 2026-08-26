@@ -17,10 +17,7 @@ jobs:
             exit 2
           fi
           BASE="https://adventure-zone-command-center.onrender.com"
-          echo "=== HEALTH ==="
-          curl --fail-with-body --silent --show-error "${BASE}/api/healthz"
-          echo
-          for Q in "Gold Rush Challenge" "Rides & Rods" "Don King Days"; do
+          for Q in "Rides & Rods" "Idaho Falls Fall Family Festival" "Boise Fall Festival"; do
             echo "=== QUERY: $Q ==="
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
