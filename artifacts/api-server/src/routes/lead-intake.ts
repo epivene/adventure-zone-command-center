@@ -13,6 +13,7 @@ import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/feature
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
+import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { buildLeadEmailPreview } from "@/features/lead-intake/lead-email-preview-service";
 
 const router: IRouter = Router();
@@ -293,10 +294,12 @@ router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<v
     }).from(leadImportRows).leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
       .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1);
     if (!lead || !lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
+    const approvedTemplate = (await new CommunicationTemplateRepository(db as any).list({ state: "active" })).find((template) => template.code === "lead_introduction_2026_prepaid");
+    if (!approvedTemplate) { res.status(422).json({ error: "The approved 2026 lead-introduction template is unavailable." }); return; }
     const [snapshot] = await db.select().from(leadAvailabilitySnapshots).where(eq(leadAvailabilitySnapshots.rowId, rowId)).orderBy(desc(leadAvailabilitySnapshots.checkedAt)).limit(1);
     const blocks = await communicationBlockRepository.listActive({ rowId, organizationId: lead.organizationId, contactId: lead.contactId, recipientEmail: lead.recipientEmail });
     const preview = buildLeadEmailPreview({ lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null }, blocks, availability: snapshot ? { ready: snapshot.ready, checkedAt: snapshot.checkedAt.toISOString(), packageAvailability: snapshot.packageAvailability as any } : null, calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [] });
-    res.json({ templateCode: "lead_introduction_2026_prepaid", sourceRow: rowId, preview });
+    res.json({ templateCode: approvedTemplate.code, sourceRow: rowId, preview });
   } catch (error) { req.log.error({ error }, "Failed to build safe lead email preview"); res.status(500).json({ error: "Could not build lead email preview." }); }
 });
 
