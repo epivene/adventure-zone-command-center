@@ -40,6 +40,7 @@ function mapTemplate(
   return {
     id: row.id,
     code: row.code,
+    templateVersion: row.templateVersion,
     name: row.name,
     channel: row.channel,
     category: row.category,
@@ -275,6 +276,7 @@ export class CommunicationTemplateRepository {
         .limit(1);
 
       const values = {
+        templateVersion: seed.templateVersion ?? null,
         name: seed.name,
         channel: seed.channel,
         category: seed.category,
@@ -290,8 +292,8 @@ export class CommunicationTemplateRepository {
         createdById: null,
         sourceTemplateId: null,
         sourceDocumentId,
-        sourceNote: CURRENT_SYSTEM_SOURCE_NOTE,
-        reviewedBy: CURRENT_SYSTEM_REVIEWER,
+        sourceNote: seed.sourceNote ?? CURRENT_SYSTEM_SOURCE_NOTE,
+        reviewedBy: seed.reviewedBy ?? CURRENT_SYSTEM_REVIEWER,
         reviewedAt: new Date(),
         updatedAt: new Date(),
       };
@@ -306,9 +308,7 @@ export class CommunicationTemplateRepository {
       const safeKnownSystemSeed =
         existing.ownerKind === "company"
         && existing.createdByKind === "system"
-        && existing.state !== "archived"
-        && existing.sourceNote === PREVIOUS_SYSTEM_SOURCE_NOTE
-        && existing.reviewedBy === PREVIOUS_SYSTEM_REVIEWER;
+        && existing.state !== "archived";
 
       if (!safeKnownSystemSeed) continue;
 

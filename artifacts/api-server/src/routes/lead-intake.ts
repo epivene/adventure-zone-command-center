@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { contacts, leadAvailabilitySnapshots, leadImportRows, organizationContacts, organizations } from "@/db/schema";
+import { contacts, leadImportRows, organizationContacts, organizations } from "@/db/schema";
 
 import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
@@ -13,9 +13,10 @@ import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/feature
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
-import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
-import { buildLeadEmailPreview } from "@/features/lead-intake/lead-email-preview-service";
+import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
+import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
+import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
@@ -24,6 +25,10 @@ const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const availabilityRepository = new LeadAvailabilityRepository(db);
 const communicationBlockRepository = new CommunicationBlockRepository(db);
+const leadEmailPreviewService = new LeadEmailPreviewService(
+  new LeadEmailPreviewRepository(db),
+  () => ensureCommunicationTemplateSeed(db as any),
+);
 
 async function optionalGoogleReadClient() {
   try {
@@ -281,31 +286,7 @@ router.post("/lead-intake/rows/:rowId/review-status", async (req, res): Promise<
   res.json({ rowId, ...updated });
 });
 
-router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<void> => {
-  const rowId = param(req.params.rowId);
-  const expectedVersion = Number(req.query.expectedVersion);
-  if (!isUuid(rowId) || !Number.isInteger(expectedVersion) || expectedVersion < 0) { res.status(400).json({ error: "A valid lead row and expected review version are required." }); return; }
-  try {
-    const [lead] = await db.select({
-      rowId: leadImportRows.id, reviewVersion: leadImportRows.reviewVersion, organizationId: leadImportRows.selectedOrganizationId, contactId: leadImportRows.selectedContactId,
-      profileName: organizations.name, eventName: leadImportRows.confirmedEventName, eventCity: organizations.city, eventRegion: organizations.region,
-      startDate: leadImportRows.confirmedStartDate, endDate: leadImportRows.confirmedEndDate, firstName: contacts.firstName,
-      recipientEmail: leadImportRows.confirmedRecipientEmail, rowState: leadImportRows.state, recipientConfirmed: leadImportRows.recipientConfirmed,
-      introductionSuitable: leadImportRows.introductionSuitable, relationshipOutcome: leadImportRows.relationshipOutcome,
-      territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus,
-    }).from(leadImportRows).leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
-      .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1).for("update");
-    if (!lead || lead.reviewVersion !== expectedVersion) { res.status(409).json({ error: "This lead changed in another review. Reload before previewing." }); return; }
-    if (!lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
-    await ensureCommunicationTemplateSeed(db as any);
-    const approvedTemplate = (await new CommunicationTemplateRepository(db as any).list({ state: "active" })).find((template) => template.code === "lead_introduction_2026_prepaid");
-    if (!approvedTemplate) { res.status(422).json({ error: "The approved 2026 lead-introduction template is unavailable." }); return; }
-    const [snapshot] = await db.select().from(leadAvailabilitySnapshots).where(eq(leadAvailabilitySnapshots.rowId, rowId)).orderBy(desc(leadAvailabilitySnapshots.checkedAt)).limit(1);
-    const blocks = await communicationBlockRepository.listActive({ rowId, organizationId: lead.organizationId, contactId: lead.contactId, recipientEmail: lead.recipientEmail });
-    const preview = buildLeadEmailPreview({ lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null }, blocks, availability: snapshot ? { ready: snapshot.ready, checkedAt: snapshot.checkedAt.toISOString(), reviewVersion: snapshot.reviewVersion, proposedStartDate: snapshot.proposedStartDate, proposedEndDate: snapshot.proposedEndDate, packageAvailability: snapshot.packageAvailability as any } : null, calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [] });
-    res.json({ templateCode: approvedTemplate.code, sourceRow: rowId, preview });
-  } catch (error) { req.log.error({ error }, "Failed to build safe lead email preview"); res.status(500).json({ error: "Could not build lead email preview." }); }
-});
+router.get("/lead-intake/rows/:rowId/email-preview", createLeadEmailPreviewHandler(leadEmailPreviewService));
 
 router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void> => {
   res.json({ blocks: await communicationBlockRepository.list() });

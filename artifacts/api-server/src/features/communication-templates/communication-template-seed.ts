@@ -459,6 +459,7 @@ The Adventure Zone`,
   },
   {
     code: "lead_introduction_2026_prepaid",
+    templateVersion: APPROVED_LEAD_INTRODUCTION_2026.version,
     name: APPROVED_LEAD_INTRODUCTION_2026.name,
     channel: "email",
     category: "lead_introduction",
@@ -466,7 +467,9 @@ The Adventure Zone`,
     state: "active",
     subjectTemplate: APPROVED_LEAD_INTRODUCTION_2026.subject,
     requiredPlaceholders: ["eventName", "eventDates"],
-    bodyTemplate: `Approved safe lead-introduction source. The server-owned lead-email renderer supplies the verified recipient greeting, positive-normal-package sections only, and signature. My name is Desiree, and I work with Dave. We represent The Adventure Zone -- America's Best Inflatable Carnival! We’d love to come to your {{eventName}}!`,
+    bodyTemplate: APPROVED_LEAD_INTRODUCTION_2026.bodyTemplate,
+    sourceNote: APPROVED_LEAD_INTRODUCTION_2026.sourceNote,
+    reviewedBy: APPROVED_LEAD_INTRODUCTION_2026.reviewedBy,
   },
 ] as const satisfies readonly CommunicationTemplateSeed[];
 
