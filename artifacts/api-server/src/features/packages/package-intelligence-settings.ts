@@ -16,6 +16,8 @@ export type PackageIntelligenceSettingsRecord = {
   name: string;
   basePriceCents: number | null;
   baseAttractionCount: number;
+  normalCapacity: number;
+  temporaryUnavailableQuantity: number;
   minimumAttractionCount: number;
   maximumAttractionCount: number;
   baseDurationMinDays: number | null;
@@ -40,6 +42,8 @@ type DrizzleDatabase = typeof database;
 type IntelligenceRow = {
   id: string;
   base_price_cents: number | null;
+  normal_capacity: number | null;
+  temporary_unavailable_quantity: number | null;
   minimum_attraction_count: number | null;
   maximum_attraction_count: number | null;
   base_duration_min_days: number | null;
@@ -134,6 +138,8 @@ export class DrizzlePackageIntelligenceSettingsRepository {
         select
           id,
           base_price_cents,
+          normal_capacity,
+          temporary_unavailable_quantity,
           minimum_attraction_count,
           maximum_attraction_count,
           base_duration_min_days,
@@ -155,6 +161,9 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       return {
         ...record,
         basePriceCents: extra?.base_price_cents ?? null,
+        normalCapacity: extra?.normal_capacity ?? record.normalCapacity,
+        temporaryUnavailableQuantity:
+          extra?.temporary_unavailable_quantity ?? record.temporaryUnavailableQuantity,
         minimumAttractionCount:
           extra?.minimum_attraction_count ?? record.baseAttractionCount,
         maximumAttractionCount:
@@ -188,6 +197,8 @@ export class DrizzlePackageIntelligenceSettingsRepository {
       update package_templates
       set
         base_price_cents = ${data.basePriceCents},
+        normal_capacity = ${data.normalCapacity},
+        temporary_unavailable_quantity = ${data.temporaryUnavailableQuantity},
         minimum_attraction_count = ${data.minimumAttractionCount},
         maximum_attraction_count = ${data.maximumAttractionCount},
         base_duration_min_days = ${data.baseDurationMinDays},
@@ -204,6 +215,8 @@ export class DrizzlePackageIntelligenceSettingsRepository {
     return {
       ...base,
       basePriceCents: data.basePriceCents,
+      normalCapacity: data.normalCapacity,
+      temporaryUnavailableQuantity: data.temporaryUnavailableQuantity,
       minimumAttractionCount: data.minimumAttractionCount,
       maximumAttractionCount: data.maximumAttractionCount,
       baseDurationMinDays: data.baseDurationMinDays,
