@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { businessSourceDocuments } from "@/db/schema";
 import type { CommunicationTemplateSeed } from "./communication-template-types";
@@ -477,6 +477,7 @@ type Database = typeof database;
 
 export async function ensureCommunicationTemplateSeed(database: Database): Promise<void> {
   await ensureBusinessSourceSeed(database);
+  await database.execute(sql`ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS template_version text`);
   const sourceRows = await database
     .select({ id: businessSourceDocuments.id })
     .from(businessSourceDocuments)
