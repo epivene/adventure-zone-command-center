@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { GoogleValidationReview } from "@/components/google-workspace/google-validation-review";
 import { retryGoogleHistoricalFailures } from "@/features/google-workspace/google-historical-backfill-client";
 import {
   approveFirstGoogleHistoricalBatch,
@@ -18,6 +19,7 @@ export function GoogleHistoricalBackfill() {
   const [view, setView] = useState<GoogleHistoricalBackfillView | null>(null);
   const [lastBatch, setLastBatch] = useState<GoogleHistoricalBatchResult | null>(null);
   const [retryNotice, setRetryNotice] = useState<string | null>(null);
+  const [showReview, setShowReview] = useState(false);
   const [busy, setBusy] = useState<"run" | "approve" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +77,12 @@ export function GoogleHistoricalBackfill() {
     } finally {
       setBusy(null);
     }
+  }
+
+  async function historicalReviewCountChanged() {
+    await reload().catch((caught) => {
+      setError(caught instanceof Error ? caught.message : "Could not refresh historical Gmail counts.");
+    });
   }
 
   if (!view) {
@@ -149,6 +157,34 @@ export function GoogleHistoricalBackfill() {
         ))}
       </div>
 
+      {cumulative.needsReview > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/20">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-bold text-amber-900 dark:text-amber-200">
+                {cumulative.needsReview} historical email{cumulative.needsReview === 1 ? "" : "s"} need review
+              </p>
+              <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">
+                Assign each email to the right profile or ignore it before approving the batch.
+              </p>
+            </div>
+            <button
+              aria-expanded={showReview}
+              className="button-secondary px-4 py-2"
+              onClick={() => setShowReview((current) => !current)}
+              type="button"
+            >
+              {showReview ? "Hide review emails" : `Review ${cumulative.needsReview} email${cumulative.needsReview === 1 ? "" : "s"}`}
+            </button>
+          </div>
+          {showReview ? (
+            <div className="mt-3">
+              <GoogleValidationReview onPendingCountChange={() => void historicalReviewCountChanged()} />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {summaryFromBatch(lastBatch) ? (
         <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
           {summaryFromBatch(lastBatch)}
@@ -167,8 +203,8 @@ export function GoogleHistoricalBackfill() {
             Review the profile matches and Needs Review queue. Nothing older will run until you approve this first historical batch. You can leave this page and come back later; the batch stays parked.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
-            <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void approveFirst()} type="button">
-              {busy === "approve" ? "Approving…" : "Approve first batch"}
+            <button className="button-primary px-4 py-2" disabled={busy !== null || cumulative.needsReview > 0} onClick={() => void approveFirst()} type="button">
+              {busy === "approve" ? "Approving…" : cumulative.needsReview > 0 ? `Resolve ${cumulative.needsReview} review email${cumulative.needsReview === 1 ? "" : "s"} first` : "Approve first batch"}
             </button>
           </div>
         </div>

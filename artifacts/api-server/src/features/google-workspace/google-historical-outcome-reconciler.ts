@@ -24,6 +24,35 @@ export class GoogleHistoricalOutcomeReconciler {
       throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
     }
 
+    await this.pool.query(
+      `UPDATE google_workspace_historical_gmail_outcomes AS historical
+          SET outcome = 'attached',
+              organization_id = mappings.organization_id,
+              error_code = NULL,
+              updated_at = now()
+         FROM google_workspace_validation_mappings AS mappings
+        WHERE historical.connection_id = $1
+          AND historical.connection_id = mappings.connection_id
+          AND historical.message_id = mappings.message_id
+          AND historical.outcome = 'needs_review'`,
+      [connectionId],
+    );
+
+    await this.pool.query(
+      `UPDATE google_workspace_historical_gmail_outcomes AS historical
+          SET outcome = 'ignored',
+              organization_id = NULL,
+              error_code = NULL,
+              updated_at = now()
+         FROM google_workspace_validation_review_items AS review
+        WHERE historical.connection_id = $1
+          AND historical.connection_id = review.connection_id
+          AND historical.message_id = review.message_id
+          AND historical.outcome = 'needs_review'
+          AND review.review_state = 'ignored'`,
+      [connectionId],
+    );
+
     const grouped = await this.pool.query(
       `SELECT outcome, COUNT(*)::bigint AS count
          FROM google_workspace_historical_gmail_outcomes
