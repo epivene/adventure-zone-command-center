@@ -21,6 +21,10 @@ export class CommunicationBlockRepository {
 
   async list() { return this.database.select().from(communicationBlocks).orderBy(communicationBlocks.createdAt); }
 
+  async history(id: string) {
+    return this.database.select().from(communicationBlockEvents).where(eq(communicationBlockEvents.blockId, id)).orderBy(communicationBlockEvents.createdAt);
+  }
+
   async create(input: { targetType: CommunicationBlock["targetType"]; organizationId?: string | null; contactId?: string | null; normalizedEmail?: string | null; rowId?: string | null; reason: string; actorId: string }) {
     const normalizedEmail = normalizeCommunicationBlockEmail(input.normalizedEmail) || null;
     const existing = await this.database.select().from(communicationBlocks).where(and(
