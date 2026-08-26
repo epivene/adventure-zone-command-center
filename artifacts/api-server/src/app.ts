@@ -8,6 +8,7 @@ import followUpsRouter from "./routes/follow-ups";
 import assistantImportRouter from "./routes/assistant-import";
 import assistantProfileHistoryRouter from "./routes/assistant-profile-history";
 import assistantOfficeTasksRouter from "./routes/assistant-office-tasks";
+import assistantTodayFollowUpsRouter from "./routes/assistant-today-followups";
 
 const app: Express = express();
 
@@ -47,6 +48,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/assistant-import", assistantProfileHistoryRouter);
 app.use("/api/assistant-import", assistantOfficeTasksRouter);
+app.use("/api/assistant-import", assistantTodayFollowUpsRouter);
 app.use("/api/assistant-import", assistantImportRouter);
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
 app.use("/api", router);
