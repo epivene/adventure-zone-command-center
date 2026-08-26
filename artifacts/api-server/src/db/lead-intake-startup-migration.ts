@@ -27,6 +27,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_relationship_classification.sql"),
     loadOne(here, "20260825_lead_calendar_availability.sql"),
     loadOne(here, "20260826_lead_inventory_policy.sql"),
+    loadOne(here, "20260826_lead_safe_email.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -79,7 +80,7 @@ export async function ensureLeadIntakeSchema(
           ])
       )
       and (
-        select count(*) = 42 from information_schema.columns
+        select count(*) = 44 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_rows'
           and column_name = any(array[
             'id', 'batch_id', 'sheet_name', 'source_row_number', 'source_fingerprint',
@@ -91,18 +92,19 @@ export async function ensureLeadIntakeSchema(
             'introduction_suitable', 'confirmed_by', 'confirmed_at',
             'relationship_outcome', 'relationship_anchor_at', 'relationship_cutoff_date',
             'relationship_evidence_ids', 'latest_outbound_at', 'latest_verified_response_at',
-            'relationship_review_required', 'relationship_classified_at', 'relationship_classified_by'
+            'relationship_review_required', 'relationship_classified_at', 'relationship_classified_by', 'territory_status', 'fit_status'
           ])
       )
       and (
-        select count(*) = 8 from pg_constraint
+        select count(*) = 10 from pg_constraint
         where conrelid = to_regclass(current_schema() || '.lead_import_rows')
           and conname = any(array[
             'lead_import_rows_review_version_nonnegative', 'lead_import_rows_contact_mode_valid',
             'lead_import_rows_confirmed_date_range_valid', 'lead_import_rows_selected_organization_fk',
             'lead_import_rows_selected_contact_fk', 'lead_import_rows_relationship_outcome_valid',
             'lead_import_rows_relationship_evidence_array',
-            'lead_import_rows_relationship_classification_complete'
+            'lead_import_rows_relationship_classification_complete',
+            'lead_import_rows_territory_status_valid', 'lead_import_rows_fit_status_valid'
           ])
       )
       and exists (
@@ -128,6 +130,8 @@ export async function ensureLeadIntakeSchema(
             'lead_import_evidence_created_by_nonblank'
           ])
       )
+      and to_regclass(current_schema() || '.communication_blocks') is not null
+      and to_regclass(current_schema() || '.communication_block_events') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_row_field_idx') is not null
       and to_regclass(current_schema() || '.lead_import_evidence_one_selected_field') is not null
       and to_regclass(current_schema() || '.lead_import_rows_relationship_outcome_idx') is not null
