@@ -149,8 +149,8 @@ export function createLeadIntakeClient(api: Api) {
     async updateReviewStatus(rowId: string, body: { expectedVersion: number; territoryStatus: string; fitStatus: string }) {
       return api.post<{ rowId: string; reviewVersion: number; territoryStatus: string; fitStatus: string }>(`/lead-intake/rows/${rowId}/review-status`, body);
     },
-    async getEmailPreview(rowId: string) {
-      return (await api.get<{ preview: LeadEmailPreview }>(`/lead-intake/rows/${rowId}/email-preview`)).preview;
+    async getEmailPreview(rowId: string, expectedVersion: number) {
+      return (await api.get<{ preview: LeadEmailPreview }>(`/lead-intake/rows/${rowId}/email-preview?expectedVersion=${expectedVersion}`)).preview;
     },
     async listCommunicationBlocks() {
       return (await api.get<{ blocks: CommunicationBlock[] }>("/lead-intake/communication-blocks")).blocks;
