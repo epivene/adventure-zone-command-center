@@ -14,4 +14,11 @@ describe("normalizeCalendarWindow", () => {
     expect(normalizeCalendarWindow({ kind: "stored_booking", start: { date: "2026-09-08" }, end: { date: "2026-09-13" }, calendarTimeZone: "America/Chicago" }))
       .toEqual({ startDate: "2026-09-08", endDate: "2026-09-13" });
   });
+  it("keeps stored inclusive windows distinct from Google exclusive all-day ends", () => {
+    expect(normalizeCalendarWindow({ kind: "stored_booking", start: { date: "2026-09-08" }, end: { date: "2026-09-13" }, calendarTimeZone: "America/Chicago" }))
+      .toEqual({ startDate: "2026-09-08", endDate: "2026-09-13" });
+    expect(normalizeCalendarWindow({ kind: "google", start: { date: "2026-09-08" }, end: { date: "2026-09-14" }, calendarTimeZone: "America/Chicago" }))
+      .toEqual({ startDate: "2026-09-08", endDate: "2026-09-13" });
+  });
 });
+
