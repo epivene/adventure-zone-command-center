@@ -120,7 +120,7 @@ describe("ensureLeadIntakeSchema", () => {
   it("runs safely on an entirely empty database and then reports the complete schema ready", async () => {
     const client = new PGlite();
     const query = async (sql: string) => {
-      if (sql.includes("create table if not exists lead_import_batches")) {
+      if (sql.includes("create table if not exists lead_import_batches") || sql.includes("CREATE TABLE IF NOT EXISTS google_workspace_connections")) {
         await client.exec(sql);
         return { rows: [] as Array<Record<string, unknown>> };
       }
