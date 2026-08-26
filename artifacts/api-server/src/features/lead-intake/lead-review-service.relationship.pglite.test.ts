@@ -110,4 +110,33 @@ describe("LeadReviewService relationship classification", () => {
     await expect(second.service.classifyRelationship({ rowId, expectedVersion: 1, reviewedBy: "Desiree", now: anchor }))
       .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "RELATIONSHIP_NOT_READY" });
   }, 20_000);
+
+  it("loads external relationship evidence before opening the row-lock transaction", async () => {
+    const { client } = await setup(); clients.push(client);
+    const base = drizzle(client, { schema }) as never as Record<PropertyKey, unknown>;
+    let transactionStarted = false;
+    const database = new Proxy(base, {
+      get(target, property, receiver) {
+        const value = Reflect.get(target, property, receiver);
+        if (property === "transaction" && typeof value === "function") {
+          return async (...args: unknown[]) => {
+            transactionStarted = true;
+            return value.apply(target, args);
+          };
+        }
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const service = new LeadReviewService(database as never, {
+      async list() {
+        expect(transactionStarted).toBe(false);
+        return [];
+      },
+    });
+
+    await expect(service.classifyRelationship({
+      rowId, expectedVersion: 1, reviewedBy: "Desiree", now: anchor,
+    })).resolves.toMatchObject({ outcome: "new_introduction", reviewVersion: 2 });
+    expect(transactionStarted).toBe(true);
+  }, 15_000);
 });
