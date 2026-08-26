@@ -25,6 +25,11 @@ async function optionalGoogleReadClient() {
   }
 }
 
+async function createRelationshipReviewService() {
+  const google = await optionalGoogleReadClient();
+  return new LeadReviewService(db, new LeadRelationshipEvidenceRepository(db, google));
+}
+
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
@@ -141,11 +146,7 @@ router.post("/lead-intake/rows/:rowId/classify-relationship", async (req, res): 
     return;
   }
   try {
-    const google = await optionalGoogleReadClient();
-    const relationshipService = new LeadReviewService(
-      db,
-      new LeadRelationshipEvidenceRepository(db, google ?? undefined),
-    );
+    const relationshipService = await createRelationshipReviewService();
     const result = await relationshipService.classifyRelationship({
       rowId,
       expectedVersion,
@@ -169,6 +170,32 @@ router.post("/lead-intake/rows/:rowId/classify-relationship", async (req, res): 
     }
     req.log.error({ error }, "Failed to classify previous contact for lead review");
     res.status(500).json({ error: "Could not check previous contact for this lead." });
+  }
+});
+
+router.get("/lead-intake/rows/:rowId/relationship-evidence", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId);
+  if (!isUuid(rowId)) {
+    res.status(400).json({ error: "A valid lead row is required." });
+    return;
+  }
+  try {
+    const relationshipService = await createRelationshipReviewService();
+    const evidence = await relationshipService.listRelationshipEvidence({ rowId });
+    res.json({ evidence });
+  } catch (error) {
+    if (error instanceof LeadReviewServiceError) {
+      if (error.code === "ROW_NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.code === "RELATIONSHIP_NOT_READY") {
+        res.status(422).json({ error: error.message });
+        return;
+      }
+    }
+    req.log.error({ error }, "Failed to load previous-contact evidence for lead review");
+    res.status(500).json({ error: "Could not load previous-contact evidence for this lead." });
   }
 });
 
