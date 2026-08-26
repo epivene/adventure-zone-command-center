@@ -9,5 +9,6 @@ export function normalizeStoredCalendarWindow(input: { start: CalendarTime; end:
  return { startDate, endDate: input.end.date ? addDays(rawEndDate, -1) : rawEndDate };
 }
 export function normalizeCalendarWindow(input: { kind: "google" | "stored_booking"; start: CalendarTime; end: CalendarTime; calendarTimeZone: string }): DateOnlyWindow {
- return normalizeStoredCalendarWindow(input);
+ if (input.kind === "google") return normalizeStoredCalendarWindow(input);
+ return { startDate: calendarDate(input.start, input.calendarTimeZone), endDate: calendarDate(input.end, input.calendarTimeZone) };
 }
