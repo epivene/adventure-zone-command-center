@@ -21,6 +21,7 @@ function preview(rowId: string, rowVersion: number) {
     templateVersion: "2026-prepaid-v1",
     templateSource: "ADVENTURE ZONE STICKY NOTES.docx.pdf",
     calendarEvidence: [{ calendarId: "primary", eventId: "event-1", conflict: true }],
+    calendarConflictSummary: { totalConflicts: 3, totalEvidenceRecords: 24, displayedEvidenceRecords: 20, truncated: true },
     normalPackageCounts: [{ packageKey: "adventure_zone", availableQuantity: 1 }],
     readiness: { ready: true, blockers: [] },
     subject: `Subject ${rowId}`,
@@ -39,7 +40,7 @@ describe("LeadEmailPreviewPanel safety state", () => {
     expect(screen.getByText("Row 7 / snapshot 7")).toBeInTheDocument();
     expect(screen.getByText("new introduction / open / approved")).toBeInTheDocument();
     expect(screen.getByText("2026-prepaid-v1 — ADVENTURE ZONE STICKY NOTES.docx.pdf")).toBeInTheDocument();
-    expect(screen.getByText("1 conflict across 1 sanitized record")).toBeInTheDocument();
+    expect(screen.getByText("3 conflicts across 24 sanitized records (showing 20)")).toBeInTheDocument();
     expect(screen.getByText("adventure_zone: 1")).toBeInTheDocument();
 
     view.rerender(<LeadEmailPreviewPanel rowId="row-b" reviewVersion={2} invalidationKey={0} load={load} />);

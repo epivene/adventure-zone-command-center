@@ -111,6 +111,12 @@ export type LeadEmailPreview = {
   templateVersion: string | null;
   templateSource: string | null;
   calendarEvidence: Array<{ calendarId: string | null; eventId: string | null; conflict: boolean }>;
+  calendarConflictSummary: {
+    totalConflicts: number;
+    totalEvidenceRecords: number;
+    displayedEvidenceRecords: number;
+    truncated: boolean;
+  };
   normalPackageCounts: Array<{ packageKey: string; availableQuantity: number }>;
   readiness: { ready: boolean; blockers: string[] };
   subject: string | null;

@@ -41,8 +41,10 @@ export function LeadEmailPreviewPanel({
     }
   }
 
-  const conflicts = preview?.calendarEvidence.filter((item) => item.conflict).length ?? 0;
-  const records = preview?.calendarEvidence.length ?? 0;
+  const conflicts = preview?.calendarConflictSummary.totalConflicts ?? 0;
+  const records = preview?.calendarConflictSummary.totalEvidenceRecords ?? 0;
+  const displayedRecords = preview?.calendarConflictSummary.displayedEvidenceRecords ?? 0;
+  const evidenceTruncated = preview?.calendarConflictSummary.truncated ?? false;
 
   return <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
     <div><p className="text-sm font-bold uppercase tracking-wide text-orange-700">Safe email preview</p><p className="text-sm text-slate-600">This is server-owned. It never creates or sends a Gmail draft.</p></div>
@@ -55,7 +57,7 @@ export function LeadEmailPreviewPanel({
         <div><dt className="font-semibold">Source row</dt><dd>{preview.sourceRowId}</dd></div>
         <div><dt className="font-semibold">Evidence versions</dt><dd>Row {preview.rowVersion} / snapshot {preview.snapshotVersion ?? "none"}</dd></div>
         <div><dt className="font-semibold">Verified dates</dt><dd>{preview.verifiedDateRange.startDate} – {preview.verifiedDateRange.endDate}</dd></div>
-        <div><dt className="font-semibold">Calendar evidence</dt><dd>{conflicts} {conflicts === 1 ? "conflict" : "conflicts"} across {records} sanitized {records === 1 ? "record" : "records"}</dd></div>
+        <div><dt className="font-semibold">Calendar evidence</dt><dd>{conflicts} {conflicts === 1 ? "conflict" : "conflicts"} across {records} sanitized {records === 1 ? "record" : "records"}{evidenceTruncated ? ` (showing ${displayedRecords})` : ""}</dd></div>
         <div><dt className="font-semibold">Review approvals</dt><dd>{(preview.relationshipStatus ?? "unreviewed").replaceAll("_", " ")} / {preview.territoryStatus ?? "unreviewed"} / {preview.fitStatus ?? "unreviewed"}</dd></div>
         <div><dt className="font-semibold">Approved template</dt><dd>{preview.templateVersion && preview.templateSource ? `${preview.templateVersion} — ${preview.templateSource}` : "Unavailable"}</dd></div>
         <div><dt className="font-semibold">Normal packages</dt><dd>{preview.normalPackageCounts.map((item) => `${item.packageKey}: ${item.availableQuantity}`).join(", ") || "None"}</dd></div>
