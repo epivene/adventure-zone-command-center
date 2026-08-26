@@ -2,6 +2,7 @@ import { db as defaultDatabase, pool as defaultPool } from "@workspace/db";
 import { ensureLeadIntakeSchema } from "./lead-intake-startup-migration";
 import {
   ensureCommunicationTemplateSeed,
+  getApprovedCommunicationTemplateSeedIssues,
   isApprovedCommunicationTemplateSeedReady,
 } from "../features/communication-templates/communication-template-seed";
 
@@ -16,6 +17,7 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
   ensureSchema?: (client: Client) => Promise<boolean>;
   ensureTemplateSeed?: () => Promise<void>;
   isTemplateReady?: () => Promise<boolean>;
+  getTemplateReadinessIssues?: () => Promise<readonly string[]>;
 }): Promise<boolean> {
   const pool = options?.pool ?? (defaultPool as unknown as Pool);
   const client = await pool.connect();
@@ -27,7 +29,12 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
     await (options?.ensureTemplateSeed ?? (() => ensureCommunicationTemplateSeed(defaultDatabase as never)))();
     const templateReady = await (options?.isTemplateReady ?? (() => isApprovedCommunicationTemplateSeedReady(defaultDatabase as never)))();
     if (!templateReady) {
-      throw new Error("The approved lead email template is incomplete after startup seeding; startup stopped to protect email review.");
+      const issues = options?.getTemplateReadinessIssues
+        ? await options.getTemplateReadinessIssues()
+        : options?.isTemplateReady
+          ? ["approvedTemplateFields"]
+          : await getApprovedCommunicationTemplateSeedIssues(defaultDatabase as never);
+      throw new Error(`The approved lead email template is incomplete after startup seeding; mismatched readiness fields: ${issues.join(", ") || "unknown"}. Startup stopped to protect email review.`);
     }
     return schemaChanged;
   } finally {
