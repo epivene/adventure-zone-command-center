@@ -1,11 +1,11 @@
 import { useState } from "react";
 import type { LeadEmailPreview } from "@/features/lead-intake/lead-intake-client";
 
-export function LeadEmailPreviewPanel({ rowId, load }: { rowId: string; load: (rowId: string) => Promise<LeadEmailPreview> }) {
+export function LeadEmailPreviewPanel({ rowId, reviewVersion, load }: { rowId: string; reviewVersion: number; load: (rowId: string, reviewVersion: number) => Promise<LeadEmailPreview> }) {
   const [preview, setPreview] = useState<LeadEmailPreview | null>(null);
   const [error, setError] = useState("");
   async function refresh() {
-    try { setError(""); setPreview(await load(rowId)); }
+    try { setError(""); setPreview(await load(rowId, reviewVersion)); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load the safe email preview."); }
   }
   return <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
