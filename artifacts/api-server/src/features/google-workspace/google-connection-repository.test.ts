@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { GoogleWorkspaceReadClient } from "./google-api-types";
+import {\n  GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n  GOOGLE_WORKSPACE_READ_SCOPES,\n} from "./google-api-client";\nimport type { GoogleWorkspaceReadClient } from "./google-api-types";
 import {
   PostgresGoogleConnectionRepository,
   type GoogleConnectionSqlPool,
@@ -141,7 +141,7 @@ describe("PostgresGoogleConnectionRepository", () => {
       accountEmail: "zone@example.com",
       googleSubject: "google-subject",
       refreshToken,
-      scopes: ["scope-a", "scope-b"],
+      scopes: [\n        ...GOOGLE_WORKSPACE_READ_SCOPES,\n        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n      ],
       now: new Date("2026-08-22T18:00:00.000Z"),
     });
 
@@ -153,13 +153,39 @@ describe("PostgresGoogleConnectionRepository", () => {
       id: "connection-id",
       email: "zone@example.com",
       status: "connected",
-      grantedScopes: ["scope-a", "scope-b"],
+      grantedScopes: [\n        ...GOOGLE_WORKSPACE_READ_SCOPES,\n        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n      ],
       connectedAt: "2026-08-22T18:00:00.000Z",
       lastVerifiedAt: "2026-08-22T18:00:00.000Z",
       lastErrorCode: null,
     });
     expect(saved).not.toHaveProperty("refreshToken");
     expect(saved).not.toHaveProperty("encryptedRefreshToken");
+  });
+
+  it("keeps readonly access but requires explicit reauthorization before composing Gmail drafts", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => fakeClient,
+    });
+
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    await expect(repository.getCurrent()).resolves.toMatchObject({
+      status: "reauthorization_required",
+      lastErrorCode: "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED",
+    });
+    await expect(repository.createReadClient()).resolves.toBe(fakeClient);
+    await expect(repository.createGmailDraftClient()).rejects.toThrow(
+      "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    );
   });
 
   it("requires an explicit disconnect before replacing the active Google account", async () => {
