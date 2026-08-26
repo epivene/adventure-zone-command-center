@@ -1,4 +1,5 @@
 import { approvedNormalPackageForKey } from "./lead-package-allowlist";
+import { APPROVED_LEAD_INTRODUCTION_2026 } from "../communication-templates/lead-introduction-2026-approved";
 
 type PackageAvailability = {
   packages?: readonly { packageKey: string; availableQuantity: number }[];
@@ -41,19 +42,9 @@ function available(input: PackageAvailability, ...keys: string[]) {
   ) ?? false;
 }
 
-const packageCopy = {
-  adventure_zone: `Our Adventure Zone units feature 10 amazing inflatable attractions, including thrilling obstacle courses, massive slides, interactive competitions, engaging carnival-style games, fun bouncy houses, and more. Check out this short video: Adventure Zone. We can offer our colorful attractions to your attendees for $9,000 (for 1-4 days).`,
-  pirates_rebellion: `Release your inner Pirate in our Pirate’s Rebellion unit. We bring a massive inflatable pool and paddle-style boats where players can collect pirate coins while dodging sponges from other pirate ships. Two additional water/pirate-themed inflatable attractions and carnival-style games round out this all-water unit. Check out this short video: Pirate's Rebellion. This unit is available for $7,500 (for 1-4 days).`,
-  weekend_warriors: `For the teenage crowd and thrill seekers, we invite you to try one of our Warrior’s Playground units. The all-star of this unit is our Action Pursuit Gaming Arena, where you can experience the adrenaline rush of Paintball, AirSoft, or Orbeez in a safe and regulated environment (ammo extra). This, plus four more exciting attractions, and carnival-style games round out this exciting unit. Check out our video here: Warrior’s Playground. This unit is available for $7,500 (for 1-4 days).`,
-};
+const packageCopy = APPROVED_LEAD_INTRODUCTION_2026.packages;
 
-const includedServices = [
-  "complete set-up and tear-down",
-  "a supervisor and staffing for the entire event",
-  "a certificate of insurance that lists you, the event holder, as additionally insured in a $2M policy",
-  "a superb safety record entering our third decade",
-  "a fun-filled, family-friendly environment, adding a level of amusement to your event",
-];
+const includedServices = APPROVED_LEAD_INTRODUCTION_2026.services;
 
 export function renderLeadEmail(input: LeadEmailRenderInput) {
   const eventName = input.eventName.trim();
@@ -64,7 +55,7 @@ export function renderLeadEmail(input: LeadEmailRenderInput) {
 
   const sections = [
     input.firstName?.trim() ? `Hi, ${input.firstName.trim()}` : "Hi,",
-    `My name is Desiree, and I work with Dave. We represent The Adventure Zone -- America's Best Inflatable Carnival! We’d love to come to your ${eventName}!`,
+    APPROVED_LEAD_INTRODUCTION_2026.opening.replace("{{eventName}}", eventName),
   ];
   if (available(input.packageAvailability, "adventure_zone")) sections.push(packageCopy.adventure_zone);
   if (available(input.packageAvailability, "pirates_rebellion", "pirate_rebellion")) sections.push(packageCopy.pirates_rebellion);
@@ -74,8 +65,8 @@ export function renderLeadEmail(input: LeadEmailRenderInput) {
   if (!hasPackage) throw new Error("No normal package is available for rendering.");
   sections.push(`Don’t forget, with every unit, we provide:\n\n${includedServices.map((item) => `- ${item}`).join("\n")}`);
   sections.push(input.eventCity?.trim()
-    ? `We hope to join in your ${input.eventCity.trim()} celebration. Let us know how we can make that happen. If you have any questions, please let me know. We look forward to hearing from you and hope you have a phenomenal week. Take care,`
-    : `We hope to join in your ${eventName} celebration. Let us know how we can make that happen. If you have any questions, please let me know. We look forward to hearing from you and hope you have a phenomenal week. Take care,`);
-  sections.push("Desiree\nThe Adventure Zone\nPH: (435) 232-4281\nEMAIL: TheAdventureZone12@gmail.com\nWEB: https://www.the-adventure-zone.com/");
+    ? `We hope to join in your ${input.eventCity.trim()} celebration. ${APPROVED_LEAD_INTRODUCTION_2026.closing}`
+    : `We hope to join in your ${eventName} celebration. ${APPROVED_LEAD_INTRODUCTION_2026.closing}`);
+  sections.push(APPROVED_LEAD_INTRODUCTION_2026.signature);
   return { subject, body: sections.join("\n\n") };
 }
