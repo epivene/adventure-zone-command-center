@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { contacts, organizationContacts, organizations } from "@/db/schema";
+import { contacts, leadAvailabilitySnapshots, leadImportRows, organizationContacts, organizations } from "@/db/schema";
 
 import { importLeadWorkbookSchema, leadImportActor, leadReviewConfirmationSchema } from "@/features/lead-intake/lead-intake-input";
 import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-repository";
@@ -263,6 +263,27 @@ router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Pro
     req.log.error({ error }, "Failed to check lead availability");
     res.status(500).json({ error: "Lead availability could not be recorded.", code: "AVAILABILITY_PERSISTENCE_FAILED" });
   }
+});
+
+router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId);
+  if (!isUuid(rowId)) { res.status(400).json({ error: "A valid lead row is required." }); return; }
+  try {
+    const [lead] = await db.select({
+      rowId: leadImportRows.id, organizationId: leadImportRows.selectedOrganizationId, contactId: leadImportRows.selectedContactId,
+      profileName: organizations.name, eventName: leadImportRows.confirmedEventName, eventCity: organizations.city, eventRegion: organizations.region,
+      startDate: leadImportRows.confirmedStartDate, endDate: leadImportRows.confirmedEndDate, firstName: contacts.firstName,
+      recipientEmail: leadImportRows.confirmedRecipientEmail, rowState: leadImportRows.state, recipientConfirmed: leadImportRows.recipientConfirmed,
+      introductionSuitable: leadImportRows.introductionSuitable, relationshipOutcome: leadImportRows.relationshipOutcome,
+      territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus,
+    }).from(leadImportRows).leftJoin(organizations, eq(organizations.id, leadImportRows.selectedOrganizationId))
+      .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1);
+    if (!lead || !lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
+    const [snapshot] = await db.select().from(leadAvailabilitySnapshots).where(eq(leadAvailabilitySnapshots.rowId, rowId)).orderBy(desc(leadAvailabilitySnapshots.checkedAt)).limit(1);
+    const blocks = await communicationBlockRepository.listActive({ rowId, organizationId: lead.organizationId, contactId: lead.contactId, recipientEmail: lead.recipientEmail });
+    const preview = buildLeadEmailPreview({ lead: { ...lead, profileName: lead.profileName ?? lead.eventName, firstName: lead.firstName ?? null }, blocks, availability: snapshot ? { ready: snapshot.ready, checkedAt: snapshot.checkedAt.toISOString(), packageAvailability: snapshot.packageAvailability as any } : null, calendarEvidence: snapshot?.sourceEvents as unknown[] ?? [] });
+    res.json({ templateCode: "lead_introduction_2026_prepaid", sourceRow: rowId, preview });
+  } catch (error) { req.log.error({ error }, "Failed to build safe lead email preview"); res.status(500).json({ error: "Could not build lead email preview." }); }
 });
 
 router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void> => {
