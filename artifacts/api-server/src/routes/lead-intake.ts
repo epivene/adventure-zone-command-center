@@ -8,11 +8,14 @@ import { LeadIntakeRepository } from "@/features/lead-intake/lead-intake-reposit
 import { ActProfileEvidenceRepository } from "@/features/lead-intake/act-profile-evidence-repository";
 import { createLeadProfileEvidenceHandler } from "@/features/lead-intake/lead-profile-evidence-handler";
 import { LeadReviewService, LeadReviewServiceError } from "@/features/lead-intake/lead-review-service";
+import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-relationship-evidence-repository";
+import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
 const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
+const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -119,6 +122,45 @@ router.post("/lead-intake/rows/:rowId/confirm", async (req, res): Promise<void> 
     }
     req.log.error({ error }, "Failed to confirm lead review");
     res.status(500).json({ error: "Could not save the verified lead." });
+  }
+});
+
+router.post("/lead-intake/rows/:rowId/classify-relationship", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId);
+  const expectedVersion = req.body?.expectedVersion;
+  if (!isUuid(rowId) || !Number.isInteger(expectedVersion) || expectedVersion < 0) {
+    res.status(400).json({ error: "A valid lead row and review version are required." });
+    return;
+  }
+  try {
+    const google = await googleConnectionRepository.createReadClient();
+    const relationshipService = new LeadReviewService(
+      db,
+      new LeadRelationshipEvidenceRepository(db, google ?? undefined),
+    );
+    const result = await relationshipService.classifyRelationship({
+      rowId,
+      expectedVersion,
+      reviewedBy: leadImportActor((req as any).userId),
+    });
+    res.json(result);
+  } catch (error) {
+    if (error instanceof LeadReviewServiceError) {
+      if (error.code === "ROW_NOT_FOUND") {
+        res.status(404).json({ error: error.message });
+        return;
+      }
+      if (error.code === "VERSION_CONFLICT") {
+        res.status(409).json({ error: error.message });
+        return;
+      }
+      if (error.code === "RELATIONSHIP_NOT_READY" || error.code === "REVIEW_BLOCKED") {
+        res.status(422).json({ error: error.message });
+        return;
+      }
+    }
+    req.log.error({ error }, "Failed to classify previous contact for lead review");
+    res.status(500).json({ error: "Could not check previous contact for this lead." });
   }
 });
 
