@@ -7,6 +7,7 @@ import './index.css';
 import './appearance-themes.css';
 import './selection-control-fixes.css';
 import './call-workspace-flow.css';
+import './mobile-compact.css';
 
 initializeAppearance();
 
