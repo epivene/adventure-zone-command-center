@@ -1,3 +1,5 @@
+import { approvedNormalPackageForKey } from "./lead-package-allowlist";
+
 type PackageAvailability = {
   packages?: readonly { packageKey: string; availableQuantity: number }[];
   restrictedOptions?: readonly { packageKey: string; approvalRequired: true }[];
@@ -35,7 +37,7 @@ export function formatVerifiedDateRange(startDate: string, endDate: string) {
 function available(input: PackageAvailability, ...keys: string[]) {
   const restricted = new Set(input.restrictedOptions?.map((option) => option.packageKey) ?? []);
   return input.packages?.some((item) =>
-    keys.includes(item.packageKey) && item.availableQuantity > 0 && item.packageKey !== "mini_zone" && !restricted.has(item.packageKey),
+    keys.includes(item.packageKey) && approvedNormalPackageForKey(item.packageKey) !== null && item.availableQuantity > 0 && !restricted.has(item.packageKey),
   ) ?? false;
 }
 
