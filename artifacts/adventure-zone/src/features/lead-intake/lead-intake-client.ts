@@ -68,6 +68,16 @@ export type LeadRelationshipClassification = {
   reviewRequired: boolean;
 };
 
+export type LeadRelationshipEvidenceDetail = {
+  evidenceId: string;
+  sourceType: "act" | "gmail" | "crm";
+  occurredAt: string | null;
+  direction: "inbound" | "outbound" | "unknown";
+  responseProven: boolean;
+  excerpt: string;
+  conflicting: boolean;
+};
+
 export type LeadProfileOption = { id: string; name: string; city: string | null; region: string | null };
 export type LeadContactOption = { id: string; firstName: string; lastName: string; email: string | null; role: string | null; jobTitle: string | null };
 export type LeadProfileEvidence = {
@@ -126,6 +136,11 @@ export function createLeadIntakeClient(api: Api) {
         `/lead-intake/rows/${rowId}/classify-relationship`,
         { expectedVersion },
       );
+    },
+    async getRelationshipEvidence(rowId: string) {
+      return (await api.get<{ evidence: LeadRelationshipEvidenceDetail[] }>(
+        `/lead-intake/rows/${rowId}/relationship-evidence`,
+      )).evidence;
     },
   };
 }
