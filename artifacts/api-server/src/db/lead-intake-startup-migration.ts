@@ -23,6 +23,7 @@ async function loadMigrationSql() {
   const sql = await Promise.all([
     loadOne(here, "069_excel_lead_intake.sql"),
     loadOne(here, "20260825_lead_review_evidence.sql"),
+    loadOne(here, "20260825_lead_organization_inbox.sql"),
     loadOne(here, "20260825_lead_relationship_classification.sql"),
   ]);
   return sql.join("\n\n");
@@ -72,6 +73,12 @@ export async function ensureLeadIntakeSchema(
             'lead_import_rows_relationship_evidence_array',
             'lead_import_rows_relationship_classification_complete'
           ])
+      )
+      and exists (
+        select 1 from pg_constraint
+        where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+          and conname = 'lead_import_rows_contact_mode_valid'
+          and position('organization_inbox' in lower(pg_get_constraintdef(oid))) > 0
       )
       and (
         select count(*) = 9 from information_schema.columns
