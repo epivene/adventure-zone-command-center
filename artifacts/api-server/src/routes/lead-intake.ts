@@ -12,6 +12,8 @@ import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-
 import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/features/lead-intake/lead-availability-service";
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
+import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
+import { buildLeadEmailPreview } from "@/features/lead-intake/lead-email-preview-service";
 
 const router: IRouter = Router();
 const repository = new LeadIntakeRepository(db);
@@ -19,6 +21,7 @@ const profileEvidenceRepository = new ActProfileEvidenceRepository(db);
 const reviewService = new LeadReviewService(db);
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const availabilityRepository = new LeadAvailabilityRepository(db);
+const communicationBlockRepository = new CommunicationBlockRepository(db);
 
 async function optionalGoogleReadClient() {
   try {
@@ -260,6 +263,34 @@ router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Pro
     req.log.error({ error }, "Failed to check lead availability");
     res.status(500).json({ error: "Lead availability could not be recorded.", code: "AVAILABILITY_PERSISTENCE_FAILED" });
   }
+});
+
+router.get("/lead-intake/communication-blocks", async (_req, res): Promise<void> => {
+  res.json({ blocks: await communicationBlockRepository.list() });
+});
+
+router.post("/lead-intake/communication-blocks", async (req, res): Promise<void> => {
+  const body = req.body ?? {};
+  const targetType = body.targetType;
+  const targets = [body.organizationId, body.contactId, body.normalizedEmail, body.rowId].filter(Boolean);
+  if (!["organization", "contact", "recipient_email", "lead_import_row", "internal_preview"].includes(targetType)
+    || !String(body.reason ?? "").trim() || (targetType === "internal_preview" ? targets.length !== 0 : targets.length !== 1)) {
+    res.status(400).json({ error: "Use one exact stable communication-block target and a reason." }); return;
+  }
+  try {
+    const block = await communicationBlockRepository.create({ targetType, organizationId: body.organizationId ?? null, contactId: body.contactId ?? null, normalizedEmail: body.normalizedEmail ?? null, rowId: body.rowId ?? null, reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) });
+    res.status(201).json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to create communication block"); res.status(500).json({ error: "Could not create communication block." }); }
+});
+
+router.delete("/lead-intake/communication-blocks/:blockId", async (req, res): Promise<void> => {
+  const blockId = param(req.params.blockId);
+  if (!isUuid(blockId) || !String(req.body?.reason ?? "").trim()) { res.status(400).json({ error: "A block ID and removal reason are required." }); return; }
+  try {
+    const block = await communicationBlockRepository.remove(blockId, { actorId: leadImportActor((req as any).userId), reason: String(req.body.reason).trim() });
+    if (!block) { res.status(404).json({ error: "Communication block not found." }); return; }
+    res.json({ block });
+  } catch (error) { req.log.error({ error }, "Failed to remove communication block"); res.status(500).json({ error: "Could not remove communication block." }); }
 });
 
 export default router;
