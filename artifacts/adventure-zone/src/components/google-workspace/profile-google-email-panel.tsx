@@ -300,7 +300,7 @@ export function ProfileGoogleEmailPanel({
             Google history
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Approved sample email and saved Gmail attachments for this profile. Full historical import is still off.
+            Matched Gmail conversations from the approved validation sample and historical backfill, plus saved Gmail attachments for this profile.
           </p>
           <div className="mt-3 flex gap-2 border-b border-slate-200 dark:border-slate-700">
             <button
@@ -328,7 +328,7 @@ export function ProfileGoogleEmailPanel({
           {loading ? <p className="mt-3 text-sm text-slate-500">Loading emails…</p> : null}
           {!loading && !error && conversations.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">
-              No emails from the approved validation sample are attached to this profile yet.
+              No matched Gmail conversations are attached to this profile yet.
             </p>
           ) : null}
           {conversations.length > 0 ? (
