@@ -2,7 +2,7 @@ export const DEFAULT_AVAILABILITY_FRESHNESS_MS = 60 * 60 * 1000;
 
 export type CommunicationBlock = {
   active: boolean;
-  targetType: "organization" | "contact" | "recipient_email" | "lead_import_row" | "internal_preview";
+  targetType: string;
   organizationId?: string | null;
   contactId?: string | null;
   normalizedEmail?: string | null;
