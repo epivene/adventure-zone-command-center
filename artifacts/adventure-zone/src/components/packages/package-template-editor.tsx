@@ -15,6 +15,8 @@ export type PackageTemplateSettingsRecord = {
   name: string;
   basePriceCents?: number | null;
   baseAttractionCount: number;
+  normalCapacity?: number;
+  temporaryUnavailableQuantity?: number;
   minimumAttractionCount?: number;
   maximumAttractionCount?: number;
   baseDurationMinDays?: number | null;
@@ -47,6 +49,8 @@ function PackageTemplateForm({
     name: template.name,
     basePriceCents: template.basePriceCents ?? null,
     baseAttractionCount: template.baseAttractionCount,
+    normalCapacity: template.normalCapacity ?? 0,
+    temporaryUnavailableQuantity: template.temporaryUnavailableQuantity ?? 0,
     minimumAttractionCount:
       template.minimumAttractionCount ?? template.baseAttractionCount,
     maximumAttractionCount:
@@ -144,6 +148,28 @@ function PackageTemplateForm({
           <span className="text-xs font-normal text-slate-500">
             Editable starting price; leave blank if unknown.
           </span>
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Normal capacity
+          <input
+            aria-label={`${template.name} normal capacity`}
+            min={0}
+            onChange={(event) => update("normalCapacity", Number(event.currentTarget.value))}
+            step={1}
+            type="number"
+            value={value.normalCapacity}
+          />
+        </label>
+        <label className="grid gap-1 text-sm font-semibold">
+          Temporarily unavailable / maintenance
+          <input
+            aria-label={`${template.name} temporary unavailable quantity`}
+            min={0}
+            onChange={(event) => update("temporaryUnavailableQuantity", Number(event.currentTarget.value))}
+            step={1}
+            type="number"
+            value={value.temporaryUnavailableQuantity}
+          />
         </label>
         <label className="grid gap-1 text-sm font-semibold">
           Suggested count
