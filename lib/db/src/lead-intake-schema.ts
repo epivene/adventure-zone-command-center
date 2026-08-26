@@ -54,7 +54,7 @@ export const leadImportRows = pgTable("lead_import_rows", {
   reviewVersion: integer("review_version").default(0).notNull(),
   selectedOrganizationId: uuid("selected_organization_id").references(() => organizations.id, { onDelete: "restrict" }),
   selectedContactId: uuid("selected_contact_id").references(() => contacts.id, { onDelete: "restrict" }),
-  contactMode: text("contact_mode").$type<"existing" | "manual" | null>(),
+  contactMode: text("contact_mode").$type<"existing" | "manual" | "organization_inbox" | null>(),
   confirmedEventName: text("confirmed_event_name"),
   confirmedStartDate: date("confirmed_start_date"),
   confirmedEndDate: date("confirmed_end_date"),
@@ -76,7 +76,7 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_fingerprint_valid", sql`${table.sourceFingerprint} ~ '^[0-9a-f]{64}$'`),
   check("lead_import_rows_state_valid", sql`${table.state} in ('needs_review','needs_correction','verified','skipped')`),
   check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
-  check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual')`),
+  check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual','organization_inbox')`),
   check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
 ]);
 
