@@ -159,7 +159,10 @@ export type GoogleProfileEmailConversation = {
 };
 
 export type GoogleProfileEmailList = {
-  validationSampleOnly: true;
+  validationSampleOnly: false;
+  historicalBackfillIncluded: true;
+  liveGmail: true;
+  unavailableThreadCount: number;
   conversations: GoogleProfileEmailConversation[];
 };
 
