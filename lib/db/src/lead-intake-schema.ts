@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, index, integer, jsonb, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { contacts, organizations } from "./schema";
 
 export const leadImportBatchStatusValues = ["review", "archived"] as const;
@@ -114,6 +114,7 @@ export const leadAvailabilitySnapshots = pgTable("lead_availability_snapshots", 
   sourceEvents: jsonb("source_events").$type<Array<Record<string, unknown>>>().notNull(),
   reservations: jsonb("reservations").$type<Array<Record<string, unknown>>>().notNull(),
 }, (table) => [
+  unique("lead_availability_snapshots_row_version_unique").on(table.rowId, table.reviewVersion),
   index("lead_availability_snapshots_row_checked_idx").on(table.rowId, table.checkedAt.desc()),
   check("lead_availability_snapshots_window_valid", sql`${table.proposedEndDate} >= ${table.proposedStartDate}`),
   check("lead_availability_snapshots_calendar_ids_array", sql`jsonb_typeof(${table.selectedCalendarIds}) = 'array'`),

@@ -16,4 +16,8 @@ describe("classifyCalendarBooking", () => {
     expect(classifyCalendarBooking({ summary: "Adventure Zone — Johnson school event", description: "Likely foam or glow; client will decide later." }))
       .toEqual({ confidence: "ambiguous", packages: [], evidence: ["ambiguous or conditional package evidence"] });
   });
+  it("ignores unrelated uncertainty outside the package clause", () => {
+    expect(classifyCalendarBooking({ summary: "2 Foam Party", description: "Call the office or email the venue with setup questions." }))
+      .toMatchObject({ confidence: "explicit", packages: [{ packageKey: "foam-party", quantity: 2 }] });
+  });
 });

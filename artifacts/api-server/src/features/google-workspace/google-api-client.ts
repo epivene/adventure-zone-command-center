@@ -84,7 +84,11 @@ function calendarEventTime(value: unknown): GoogleCalendarEvent["start"] | null 
   const dateTime = typeof item.dateTime === "string" ? item.dateTime : undefined;
   const timeZone = typeof item.timeZone === "string" ? item.timeZone : undefined;
   if (Boolean(date) === Boolean(dateTime)) return null;
-  if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  if (date) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+    const parsedDate = new Date(`${date}T00:00:00.000Z`);
+    if (!Number.isFinite(parsedDate.valueOf()) || parsedDate.toISOString().slice(0, 10) !== date) return null;
+  }
   if (dateTime && !Number.isFinite(new Date(dateTime).valueOf())) return null;
   if (timeZone) { try { new Intl.DateTimeFormat("en-US", { timeZone }); } catch { return null; } }
   return { ...(date ? { date } : { dateTime: dateTime! }), ...(timeZone ? { timeZone } : {}) };
@@ -405,6 +409,7 @@ export function createGoogleWorkspaceReadClient(input: {
           const payload = await authorizedJson(url.toString());
           const calendarTimeZone = typeof payload.timeZone === "string" && payload.timeZone.trim()
             ? payload.timeZone.trim() : "UTC";
+          try { new Intl.DateTimeFormat("en-US", { timeZone: calendarTimeZone }); } catch { throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID"); }
           const values = Array.isArray(payload.items) ? payload.items : [];
           for (const value of values) {
             if (!value || typeof value !== "object") continue;
@@ -412,9 +417,11 @@ export function createGoogleWorkspaceReadClient(input: {
             if (event.status === "cancelled" || typeof event.id !== "string" || !event.id.trim()) continue;
             const start = calendarEventTime(event.start);
             const end = calendarEventTime(event.end);
+            const originalStartTime = event.originalStartTime === undefined || event.originalStartTime === null ? null : calendarEventTime(event.originalStartTime);
             if (!start || !end || Boolean(start.date) !== Boolean(end.date)
               || (start.date && start.date >= end.date!)
-              || (start.dateTime && new Date(start.dateTime) >= new Date(end.dateTime!))) {
+              || (start.dateTime && new Date(start.dateTime) >= new Date(end.dateTime!))
+              || (event.originalStartTime !== undefined && event.originalStartTime !== null && !originalStartTime)) {
               throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENT_RESPONSE_INVALID");
             }
             events.push({
@@ -422,7 +429,7 @@ export function createGoogleWorkspaceReadClient(input: {
               summary: typeof event.summary === "string" ? event.summary : "", description: typeof event.description === "string" ? event.description : "",
               start, end, updated: typeof event.updated === "string" ? event.updated : null,
               recurringEventId: typeof event.recurringEventId === "string" ? event.recurringEventId : null,
-              originalStartTime: event.originalStartTime && typeof event.originalStartTime === "object" ? event.originalStartTime as GoogleCalendarEvent["originalStartTime"] : null,
+              originalStartTime,
             });
           }
           pageToken = typeof payload.nextPageToken === "string" && payload.nextPageToken.trim() ? payload.nextPageToken : null;

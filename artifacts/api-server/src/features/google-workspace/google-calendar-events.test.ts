@@ -1,3 +1,4 @@
+import { describe, expect, it } from "vitest";
 import { createGoogleWorkspaceReadClient } from "./google-api-client";
 
 const environment = { clientId: "client-id", clientSecret: "secret", redirectUri: "https://api.example.com/callback", appOrigin: "https://app.example.com", tokenEncryptionKey: new Uint8Array(Buffer.alloc(32, 3)) };
@@ -35,7 +36,7 @@ describe("GoogleWorkspaceReadClient calendar events", () => {
   it("rejects malformed original instance times and Calendar response zones", async () => {
     for (const payload of [
       { timeZone: "Mars/Olympus", items: [] },
-      { timeZone: "America/Chicago", items: [{ id: "event-1", start: { date: "2026-02-30" }, end: { date: "2026-03-02" }, originalStartTime: { date: "2026-99-99" } }] },
+      { timeZone: "America/Chicago", items: [{ id: "event-1", start: { date: "2026-09-10" }, end: { date: "2026-09-11" }, originalStartTime: { date: "2026-99-99" } }] },
     ]) {
       const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh-token", fetcher: async (input) => {
         if (new URL(String(input)).hostname === "oauth2.googleapis.com") return new Response(JSON.stringify({ access_token: "token", expires_in: 3600 }));

@@ -247,13 +247,18 @@ router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Pro
         res.status(503).json({ error: error.message, code: error.code });
         return;
       }
+      if (error.code === "AVAILABILITY_PERSISTENCE_FAILED") {
+        req.log.error({ error }, "Failed to persist lead availability snapshot");
+        res.status(500).json({ error: error.message, code: error.code });
+        return;
+      }
     }
     if (((error as { code?: string }).code || (error instanceof Error ? error.message : "")) === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" || (error as { code?: string }).code === "GOOGLE_REAUTHORIZATION_REQUIRED") {
       res.status(409).json({ error: "Google Calendar authorization must be renewed before checking availability.", code: "GOOGLE_REAUTHORIZATION_REQUIRED" });
       return;
     }
-    req.log.error({ error }, "Failed to check lead availability from Google Calendar");
-    res.status(503).json({ error: "Google Calendar could not be checked.", code: "GOOGLE_CALENDAR_UNAVAILABLE" });
+    req.log.error({ error }, "Failed to check lead availability");
+    res.status(500).json({ error: "Lead availability could not be recorded.", code: "AVAILABILITY_PERSISTENCE_FAILED" });
   }
 });
 
