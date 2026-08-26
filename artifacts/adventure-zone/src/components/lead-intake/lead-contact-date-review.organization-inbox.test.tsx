@@ -16,6 +16,7 @@ it("shows ACT evidence and a person-free organization inbox choice", async () =>
       emailCandidates: [{ email: "societyhall@gmail.com", sourceRecordId: "source-1", sourceVersionId: "version-1", sourcePath: "$.Description" }],
     }),
     confirmReview: vi.fn(),
+    classifyRelationship: vi.fn(),
   };
   const row = {
     id: "row-1", sheetName: "CompanyList", sourceRowNumber: 2, company: "Alamosa ARTs Festival",
@@ -24,6 +25,9 @@ it("shows ACT evidence and a person-free organization inbox choice", async () =>
     selectedOrganizationId: null, selectedContactId: null, contactMode: null, confirmedEventName: null,
     confirmedStartDate: null, confirmedEndDate: null, confirmedContactName: null, confirmedContactRole: null,
     confirmedRecipientEmail: null, recipientConfirmed: false, introductionSuitable: false, evidence: [],
+    relationshipOutcome: null, relationshipAnchorAt: null, relationshipCutoffDate: null,
+    relationshipEvidenceIds: [], latestOutboundAt: null, latestVerifiedResponseAt: null,
+    relationshipReviewRequired: false, relationshipClassifiedAt: null, relationshipClassifiedBy: null,
   };
 
   render(<LeadContactDateReview row={row} client={client} onSaved={vi.fn()} />);
