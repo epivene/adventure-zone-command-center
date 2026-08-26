@@ -92,7 +92,7 @@ export function classifyLeadRelationship(input: {
     || item.organizationId !== input.organizationId
     || normalizedEmail(item.recipientEmail) !== recipient
     || item.direction === "unknown"
-    || (item.sourceType === "crm" && (item.direction !== "unknown" || item.responseProven))
+    || item.sourceType === "crm"
     || (item.direction === "inbound" && !item.responseProven)
     || (item.direction !== "inbound" && item.responseProven)
   );
