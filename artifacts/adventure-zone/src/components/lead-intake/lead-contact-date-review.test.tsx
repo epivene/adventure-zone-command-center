@@ -29,6 +29,7 @@ function client() {
     }),
     confirmReview: vi.fn().mockResolvedValue({ rowId: "row-1", state: "verified", reviewVersion: 1 }),
     classifyRelationship: vi.fn(),
+    getRelationshipEvidence: vi.fn().mockResolvedValue([]),
   };
 }
 
@@ -163,5 +164,26 @@ describe("LeadContactDateReview", () => {
 
     expect(await screen.findByRole("option", { name: /Lindsey Powell/ })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("ACT evidence unavailable");
+  });
+
+  it("hides a persisted relationship classification as soon as its review inputs change", () => {
+    const api = client();
+    const verifiedRow = {
+      ...row,
+      state: "verified" as const,
+      reviewVersion: 2,
+      recipientConfirmed: true,
+      introductionSuitable: true,
+      confirmedRecipientEmail: "events@aspenfilm.org",
+      relationshipOutcome: "returning_contact" as const,
+      relationshipEvidenceIds: ["gmail:message-1"],
+    };
+    render(<LeadContactDateReview client={api} onSaved={vi.fn()} row={verifiedRow} />);
+    expect(screen.getByText("Previous contact")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Recipient email"), { target: { value: "other@aspenfilm.org" } });
+
+    expect(screen.queryByText("Previous contact")).not.toBeInTheDocument();
+    expect(screen.getByText(/Save these profile, contact, or event changes/)).toBeInTheDocument();
   });
 });
