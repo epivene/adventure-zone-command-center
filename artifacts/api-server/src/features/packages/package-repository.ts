@@ -40,6 +40,8 @@ export type BookingResourceAssignmentPackageState = {
 };
 
 export type PackageTemplateRecord = PackageTemplateSummary & {
+  normalCapacity: number;
+  temporaryUnavailableQuantity: number;
   active: boolean;
 };
 
