@@ -74,6 +74,15 @@ export function calculatePackageAvailability(input: {
     }
   }
 
+  const activePackageKeys = new Set(input.packages.map((template) =>
+    canonicalPackageKey(template.code),
+  ));
+  for (const packageKey of bookedByPackage.keys()) {
+    if (!activePackageKeys.has(packageKey)) {
+      blockers.push(`unmatched Calendar package key: ${packageKey}`);
+    }
+  }
+
   return {
     status: blockers.length ? "unresolved" : "resolved",
     packages: input.packages.map((template) => {
