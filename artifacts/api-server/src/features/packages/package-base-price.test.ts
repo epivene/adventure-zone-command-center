@@ -6,6 +6,8 @@ const baseInput = {
   id: "4fbc77e5-5453-42af-9316-b0ea6ca91ae5",
   name: "Adventure Zone",
   baseAttractionCount: 10,
+  normalCapacity: 5,
+  temporaryUnavailableQuantity: 0,
   minimumAttractionCount: 10,
   maximumAttractionCount: 12,
   customerDescription: null,
