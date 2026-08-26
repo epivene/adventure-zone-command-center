@@ -43,7 +43,11 @@ export function classifyCalendarBooking(input: { summary: string; description: s
         candidate.key !== item.key &&
         new RegExp(`\\b\\d+\\s+${candidate.expression}\\b`, "i").test(clause),
       );
-      if (!match[1] && /\bbooking\b/i.test(clause) && hasOtherExplicitPackage) {
+      const isAdventureZoneBookingPrefix =
+        item.key === "adventure_zone" &&
+        match.index === 0 &&
+        /^adventure\s+zone\s+booking\s*(?:—|–|-|:)\s*/i.test(text);
+      if (!match[1] && isAdventureZoneBookingPrefix && hasOtherExplicitPackage) {
         continue;
       }
       const quantity = match[1] ? Number(match[1]) : NaN;
