@@ -250,14 +250,15 @@ const leadGmailDraftLinkReadinessExpression = `
     select 1 from pg_constraint
     where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
       and conname = 'lead_gmail_draft_links_state_valid' and contype = 'c'
-      and lower(pg_get_constraintdef(oid)) like '%prepared%created%retryable_error%manual_review%'
-      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') =
+        'check((state=any(array[''prepared''::text,''created''::text,''retryable_error''::text,''manual_review''::text])))'
   )
   and exists (
     select 1 from pg_constraint
     where conrelid = to_regclass(current_schema() || '.lead_gmail_draft_links')
       and conname = 'lead_gmail_draft_links_email_valid' and contype = 'c'
       and lower(pg_get_constraintdef(oid)) like '%recipient_email%lower%btrim%recipient_email%'
+      and replace(lower(pg_get_constraintdef(oid)), ' ', '') like '%recipient_email~%[:space:]%@%'
       and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
   )
   and exists (

@@ -238,11 +238,13 @@ export function createGoogleWorkspaceReadClient(input: {
 
   async function requestToken(
     body: URLSearchParams,
+    signal?: AbortSignal,
   ): Promise<TokenResponse> {
     const response = await fetcher(tokenEndpoint, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body,
+      signal,
     });
     const payload = (await responseJson(response)) as TokenResponse;
     if (!response.ok) {
@@ -269,7 +271,7 @@ export function createGoogleWorkspaceReadClient(input: {
     return payload.access_token;
   }
 
-  async function currentAccessToken(forceRefresh = false): Promise<string> {
+  async function currentAccessToken(forceRefresh = false, signal?: AbortSignal): Promise<string> {
     if (!forceRefresh && accessToken && Date.now() < accessToken.expiresAtMs) {
       return accessToken.value;
     }
@@ -284,6 +286,7 @@ export function createGoogleWorkspaceReadClient(input: {
         refresh_token: refreshToken,
         grant_type: "refresh_token",
       }),
+      signal,
     );
     return cacheAccessToken(payload);
   }
@@ -351,12 +354,12 @@ export function createGoogleWorkspaceReadClient(input: {
 
     async createGmailDraft(input): Promise<GoogleGmailDraft> {
       if (!/^[A-Za-z0-9_-]+$/.test(input.raw)) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
-      const token = await currentAccessToken();
       let response: Response;
       let payload: Record<string, unknown>;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), gmailDraftTimeoutMs);
       try {
+        const token = await currentAccessToken(false, controller.signal);
         response = await fetcher(draftsEndpoint, {
           method: "POST",
           headers: {
@@ -367,7 +370,16 @@ export function createGoogleWorkspaceReadClient(input: {
           signal: controller.signal,
         });
         payload = await responseJson(response);
-      } catch {
+      } catch (error) {
+        if (
+          !controller.signal.aborted &&
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof (error as { code?: unknown }).code === "string"
+        ) {
+          throw error;
+        }
         throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
       } finally {
         clearTimeout(timeout);
