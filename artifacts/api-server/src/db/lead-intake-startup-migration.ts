@@ -4,6 +4,31 @@ import { fileURLToPath } from "node:url";
 
 type MigrationClient = { query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }> };
 
+const leadReviewStatusReadinessExpression = `
+  to_regclass(current_schema() || '.lead_import_rows') is not null
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+      and conname = 'lead_import_rows_territory_status_valid'
+      and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%territory_status%open%ask_amy_dave%closed%licensing_issue%needs_review%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+  and exists (
+    select 1 from pg_constraint
+    where conrelid = to_regclass(current_schema() || '.lead_import_rows')
+      and conname = 'lead_import_rows_fit_status_valid'
+      and contype = 'c'
+      and lower(pg_get_constraintdef(oid)) like '%fit_status%approved%needs_review%not_a_fit%'
+      and lower(pg_get_constraintdef(oid)) not like '%check (true)%'
+  )
+`;
+
+export async function isLeadReviewStatusSchemaReady(client: MigrationClient): Promise<boolean> {
+  const result = await client.query(`select (${leadReviewStatusReadinessExpression}) as ready`);
+  return result.rows[0]?.["ready"] === true;
+}
+
 const communicationTemplateVersionReadinessExpression = `
   to_regclass(current_schema() || '.communication_templates') is not null
   and exists (
@@ -58,7 +83,7 @@ const communicationBlockReadinessExpression = `
       and lower(pg_get_constraintdef(oid)) like '%target_type%organization%organization_id is not null%contact_id is null%normalized_email is null%row_id is null%'
       and lower(pg_get_constraintdef(oid)) like '%target_type%contact%organization_id is null%contact_id is not null%normalized_email is null%row_id is null%'
       and lower(pg_get_constraintdef(oid)) like '%target_type%lead_import_row%organization_id is null%contact_id is null%normalized_email is null%row_id is not null%'
-      and lower(pg_get_constraintdef(oid)) like '%target_type%recipient_email%organization_id is null%contact_id is null%row_id is null%lower%btrim%'
+      and lower(pg_get_constraintdef(oid)) like '%target_type%recipient_email%organization_id is null%contact_id is null%row_id is null%normalized_email is not null%lower%btrim%'
       and lower(pg_get_constraintdef(oid)) like '%target_type%internal_preview%organization_id is null%contact_id is null%normalized_email is null%row_id is null%'
   )
   and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_blocks') and conname = 'communication_blocks_organization_fk' and contype = 'f' and confdeltype = 'r' and confrelid = to_regclass(current_schema() || '.organizations'))
@@ -86,6 +111,7 @@ const communicationBlockReadinessExpression = `
   and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.communication_block_events') and conname = 'communication_block_events_action_valid' and contype = 'c' and lower(pg_get_constraintdef(oid)) like '%created%removed%')
   and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'communication_block_events_history_idx' and replace(lower(indexdef), ' ', '') like '%(block_id,created_at)%')
   and exists (select 1 from pg_proc where proname = 'communication_blocks_write_created_event' and lower(pg_get_functiondef(oid)) like '%insert into communication_block_events%created%')
+  and exists (select 1 from pg_proc where proname = 'communication_blocks_created_event_backfill_v2_ready')
   and exists (select 1 from pg_trigger where tgrelid = to_regclass(current_schema() || '.communication_blocks') and tgname = 'communication_blocks_created_event' and not tgisinternal and tgenabled <> 'D')
 `;
 
@@ -198,6 +224,7 @@ export async function ensureLeadIntakeSchema(
             'lead_import_rows_territory_status_valid', 'lead_import_rows_fit_status_valid'
           ])
       )
+      and (${leadReviewStatusReadinessExpression})
       and exists (
         select 1 from pg_constraint
         where conrelid = to_regclass(current_schema() || '.lead_import_rows')

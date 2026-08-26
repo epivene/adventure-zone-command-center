@@ -12,7 +12,10 @@ import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-
 import { LeadAvailabilityService, LeadAvailabilityServiceError } from "@/features/lead-intake/lead-availability-service";
 import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availability-repository";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
-import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
+import {
+  CommunicationBlockRepository,
+  type CommunicationBlockCreateInput,
+} from "@/features/lead-intake/communication-block-repository";
 import { LeadEmailPreviewService } from "@/features/lead-intake/lead-email-preview-service";
 import { LeadEmailPreviewRepository } from "@/features/lead-intake/lead-email-preview-repository";
 import { createLeadEmailPreviewHandler } from "@/features/lead-intake/lead-email-preview-handler";
@@ -313,7 +316,14 @@ router.post("/lead-intake/communication-blocks", async (req, res): Promise<void>
   if (targetType === "contact" && !(await db.select({ id: contacts.id }).from(contacts).where(eq(contacts.id, body.contactId)).limit(1))[0]) { res.status(404).json({ error: "Contact not found." }); return; }
   if (targetType === "lead_import_row" && !(await db.select({ id: leadImportRows.id }).from(leadImportRows).where(eq(leadImportRows.id, body.rowId)).limit(1))[0]) { res.status(404).json({ error: "Lead source row not found." }); return; }
   try {
-    const block = await communicationBlockRepository.create({ targetType, organizationId: body.organizationId ?? null, contactId: body.contactId ?? null, normalizedEmail: validEmail ? body.normalizedEmail.trim().toLowerCase() : null, rowId: body.rowId ?? null, reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) });
+    const common = { reason: String(body.reason).trim(), actorId: leadImportActor((req as any).userId) };
+    let input: CommunicationBlockCreateInput;
+    if (targetType === "organization") input = { targetType, organizationId: body.organizationId, ...common };
+    else if (targetType === "contact") input = { targetType, contactId: body.contactId, ...common };
+    else if (targetType === "lead_import_row") input = { targetType, rowId: body.rowId, ...common };
+    else if (targetType === "recipient_email") input = { targetType, normalizedEmail: body.normalizedEmail.trim().toLowerCase(), ...common };
+    else input = { targetType: "internal_preview", ...common };
+    const block = await communicationBlockRepository.create(input);
     res.status(201).json({ block });
   } catch (error) { req.log.error({ error }, "Failed to create communication block"); res.status(500).json({ error: "Could not create communication block." }); }
 });

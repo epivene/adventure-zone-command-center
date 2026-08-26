@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as schema from "@/db/schema";
 import { CommunicationBlockRepository } from "./communication-block-repository";
@@ -32,6 +32,73 @@ afterEach(async () => {
 });
 
 describe("CommunicationBlockRepository with PostgreSQL constraints", () => {
+  it("serializes both creation and removal with the shared safety lock", async () => {
+    const created = {
+      id: "40000000-0000-4000-8000-000000000001",
+      targetType: "internal_preview",
+      organizationId: null,
+      contactId: null,
+      normalizedEmail: null,
+      rowId: null,
+      reason: "pause previews",
+      active: true,
+      createdBy: "owner:1",
+      createdAt: new Date(),
+      removedBy: null,
+      removedAt: null,
+      removalReason: null,
+    };
+    const order: string[] = [];
+    const selectResults = [[], [created]];
+    const tx = {
+      execute: vi.fn(),
+      select: vi.fn(() => ({
+        from: () => ({
+          where: () => ({
+            limit: () => {
+              order.push("select");
+              const result = selectResults.shift() ?? [];
+              return {
+                then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+                for: async () => result,
+              };
+            },
+          }),
+        }),
+      })),
+      insert: vi.fn(() => ({
+        values: () => ({
+          then: (resolve: (value: unknown) => unknown) => Promise.resolve([]).then(resolve),
+          onConflictDoNothing: () => ({ returning: async () => [created] }),
+        }),
+      })),
+      update: vi.fn(() => ({
+        set: () => ({ where: () => ({ returning: async () => [{ ...created, active: false }] }) }),
+      })),
+    };
+    const database = {
+      select: () => { throw new Error("root read escaped safety transaction"); },
+      transaction: vi.fn(async (callback: (value: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const acquireSafetyLock = vi.fn(async () => { order.push("lock"); });
+    const RepositoryWithLock = CommunicationBlockRepository as unknown as new (
+      database: unknown,
+      dependencies: { acquireSafetyLock: typeof acquireSafetyLock },
+    ) => CommunicationBlockRepository;
+    const repository = new RepositoryWithLock(database, { acquireSafetyLock });
+
+    const result = await repository.create({
+      targetType: "internal_preview",
+      reason: "pause previews",
+      actorId: "owner:1",
+    });
+    await repository.remove(result.id, { actorId: "owner:2", reason: "resume previews" });
+
+    expect(database.transaction).toHaveBeenCalledTimes(2);
+    expect(acquireSafetyLock).toHaveBeenCalledTimes(2);
+    expect(order).toEqual(["lock", "select", "lock", "select"]);
+  });
+
   it("creates one active block and one creation audit under concurrent duplicate requests", async () => {
     const { client, repository } = await createHarness();
     const input = {
@@ -81,7 +148,12 @@ describe("CommunicationBlockRepository with PostgreSQL constraints", () => {
       rowId: "30000000-0000-4000-8000-000000000001",
       reason: "wrong field",
       actorId: "owner:1",
-    })).rejects.toThrow();
+    } as any)).rejects.toThrow();
+    await expect(repository.create({
+      targetType: "recipient_email",
+      reason: "missing email",
+      actorId: "owner:1",
+    } as any)).rejects.toThrow("recipient email");
     await expect(repository.create({
       targetType: "organization",
       organizationId: "10000000-0000-4000-8000-000000000099",
@@ -93,6 +165,6 @@ describe("CommunicationBlockRepository with PostgreSQL constraints", () => {
       normalizedEmail: "not-an-email",
       reason: "malformed",
       actorId: "owner:1",
-    })).rejects.toThrow();
+    } as any)).rejects.toThrow();
   }, 20_000);
 });

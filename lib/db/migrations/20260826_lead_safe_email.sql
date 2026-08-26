@@ -3,8 +3,14 @@ ALTER TABLE lead_import_rows
   ADD COLUMN IF NOT EXISTS fit_status text;
 
 UPDATE lead_import_rows
-SET territory_status = coalesce(territory_status, 'needs_review'),
-    fit_status = coalesce(fit_status, 'needs_review');
+SET territory_status = CASE
+      WHEN territory_status in ('open','ask_amy_dave','closed','licensing_issue','needs_review') THEN territory_status
+      ELSE 'needs_review'
+    END,
+    fit_status = CASE
+      WHEN fit_status in ('approved','needs_review','not_a_fit') THEN fit_status
+      ELSE 'needs_review'
+    END;
 
 ALTER TABLE lead_import_rows
   ALTER COLUMN territory_status SET DEFAULT 'needs_review',
@@ -13,12 +19,12 @@ ALTER TABLE lead_import_rows
   ALTER COLUMN fit_status SET NOT NULL;
 
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'lead_import_rows'::regclass AND conname = 'lead_import_rows_territory_status_valid') THEN
-    ALTER TABLE lead_import_rows ADD CONSTRAINT lead_import_rows_territory_status_valid CHECK (territory_status in ('open','ask_amy_dave','closed','licensing_issue','needs_review'));
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'lead_import_rows'::regclass AND conname = 'lead_import_rows_fit_status_valid') THEN
-    ALTER TABLE lead_import_rows ADD CONSTRAINT lead_import_rows_fit_status_valid CHECK (fit_status in ('approved','needs_review','not_a_fit'));
-  END IF;
+  ALTER TABLE lead_import_rows DROP CONSTRAINT IF EXISTS lead_import_rows_territory_status_valid;
+  ALTER TABLE lead_import_rows DROP CONSTRAINT IF EXISTS lead_import_rows_fit_status_valid;
+  ALTER TABLE lead_import_rows ADD CONSTRAINT lead_import_rows_territory_status_valid
+    CHECK (territory_status in ('open','ask_amy_dave','closed','licensing_issue','needs_review'));
+  ALTER TABLE lead_import_rows ADD CONSTRAINT lead_import_rows_fit_status_valid
+    CHECK (fit_status in ('approved','needs_review','not_a_fit'));
 END $$;
 
 DO $$ BEGIN
@@ -58,6 +64,11 @@ ALTER TABLE communication_blocks
   ADD COLUMN IF NOT EXISTS removed_at timestamptz,
   ADD COLUMN IF NOT EXISTS removal_reason text;
 
+-- Legacy versions allowed a null recipient target. Drop the active-target index
+-- before fail-closed repair so conversion cannot collide with an existing global
+-- block; the canonical index is recreated after deterministic de-duplication.
+DROP INDEX IF EXISTS communication_blocks_active_target_unique;
+
 UPDATE communication_blocks
 SET id = coalesce(id, gen_random_uuid()),
     target_type = coalesce(target_type, 'internal_preview'),
@@ -65,6 +76,29 @@ SET id = coalesce(id, gen_random_uuid()),
     active = coalesce(active, true),
     created_by = coalesce(nullif(btrim(created_by), ''), 'system:startup-repair'),
     created_at = coalesce(created_at, now());
+
+UPDATE communication_blocks
+SET target_type = 'internal_preview',
+    normalized_email = NULL,
+    reason = reason || ' [Startup repair: missing recipient target; converted to global internal preview.]'
+WHERE target_type = 'recipient_email' AND normalized_email IS NULL;
+
+WITH ranked_active_targets AS (
+  SELECT id, row_number() OVER (
+    PARTITION BY target_type, coalesce(organization_id::text,''),
+      coalesce(contact_id::text,''), coalesce(normalized_email,''), coalesce(row_id::text,'')
+    ORDER BY created_at, id
+  ) AS ordinal
+  FROM communication_blocks
+  WHERE active
+)
+UPDATE communication_blocks block
+SET active = false,
+    removed_by = coalesce(block.removed_by, 'system:startup-repair'),
+    removed_at = coalesce(block.removed_at, now()),
+    removal_reason = coalesce(block.removal_reason, 'Startup repair: duplicate active communication block')
+FROM ranked_active_targets ranked
+WHERE block.id = ranked.id AND ranked.ordinal > 1;
 
 ALTER TABLE communication_blocks
   ALTER COLUMN id SET DEFAULT gen_random_uuid(),
@@ -93,6 +127,7 @@ DO $$ BEGIN
     OR (target_type = 'contact' AND organization_id IS NULL AND contact_id IS NOT NULL AND normalized_email IS NULL AND row_id IS NULL)
     OR (target_type = 'lead_import_row' AND organization_id IS NULL AND contact_id IS NULL AND normalized_email IS NULL AND row_id IS NOT NULL)
     OR (target_type = 'recipient_email' AND organization_id IS NULL AND contact_id IS NULL AND row_id IS NULL
+      AND normalized_email IS NOT NULL
       AND normalized_email = lower(btrim(normalized_email))
       AND normalized_email ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$')
     OR (target_type = 'internal_preview' AND organization_id IS NULL AND contact_id IS NULL AND normalized_email IS NULL AND row_id IS NULL)
@@ -156,6 +191,27 @@ END $$;
 
 DROP INDEX IF EXISTS communication_block_events_history_idx;
 CREATE INDEX communication_block_events_history_idx ON communication_block_events (block_id, created_at);
+
+INSERT INTO communication_block_events (block_id, action, actor_id, reason, created_at)
+SELECT block.id, 'created', block.created_by, block.reason, block.created_at
+FROM communication_blocks block
+WHERE NOT EXISTS (
+  SELECT 1 FROM communication_block_events event
+  WHERE event.block_id = block.id AND event.action = 'created'
+);
+
+INSERT INTO communication_block_events (block_id, action, actor_id, reason, created_at)
+SELECT block.id, 'removed', coalesce(block.removed_by, 'system:startup-repair'),
+  coalesce(block.removal_reason, 'Startup repair: retained historical removal'),
+  coalesce(block.removed_at, block.created_at)
+FROM communication_blocks block
+WHERE NOT block.active AND NOT EXISTS (
+  SELECT 1 FROM communication_block_events event
+  WHERE event.block_id = block.id AND event.action = 'removed'
+);
+
+CREATE OR REPLACE FUNCTION communication_blocks_created_event_backfill_v2_ready()
+RETURNS boolean LANGUAGE sql IMMUTABLE AS $$ SELECT true $$;
 
 CREATE OR REPLACE FUNCTION communication_blocks_write_created_event() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

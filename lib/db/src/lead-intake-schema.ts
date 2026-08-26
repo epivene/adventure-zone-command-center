@@ -156,7 +156,7 @@ export const communicationBlocks = pgTable("communication_blocks", {
     (${table.targetType} = 'organization' and ${table.organizationId} is not null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
     or (${table.targetType} = 'contact' and ${table.organizationId} is null and ${table.contactId} is not null and ${table.normalizedEmail} is null and ${table.rowId} is null)
     or (${table.targetType} = 'lead_import_row' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is not null)
-    or (${table.targetType} = 'recipient_email' and ${table.organizationId} is null and ${table.contactId} is null and ${table.rowId} is null and ${table.normalizedEmail} = lower(btrim(${table.normalizedEmail})) and ${table.normalizedEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$')
+    or (${table.targetType} = 'recipient_email' and ${table.organizationId} is null and ${table.contactId} is null and ${table.rowId} is null and ${table.normalizedEmail} is not null and ${table.normalizedEmail} = lower(btrim(${table.normalizedEmail})) and ${table.normalizedEmail} ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$')
     or (${table.targetType} = 'internal_preview' and ${table.organizationId} is null and ${table.contactId} is null and ${table.normalizedEmail} is null and ${table.rowId} is null)
   )`),
 ]);
