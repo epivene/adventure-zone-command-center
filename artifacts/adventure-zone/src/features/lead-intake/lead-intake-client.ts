@@ -189,6 +189,9 @@ export function createLeadIntakeClient(api: Api) {
     async getEmailPreview(rowId: string, expectedVersion: number) {
       return (await api.get<{ preview: LeadEmailPreview }>(`/lead-intake/rows/${rowId}/email-preview?expectedVersion=${expectedVersion}`)).preview;
     },
+    async getGmailDraft(rowId: string) {
+      return (await api.get<{ link: LeadGmailDraftLink | null }>(`/lead-intake/rows/${rowId}/gmail-draft`)).link;
+    },
     async createGmailDraft(rowId: string, expectedVersion: number) {
       return api.post<{ link: LeadGmailDraftLink; reused: boolean }>(`/lead-intake/rows/${rowId}/gmail-draft`, { expectedVersion });
     },
