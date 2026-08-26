@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {\n  GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n  GOOGLE_WORKSPACE_READ_SCOPES,\n} from "./google-api-client";\nimport type { GoogleWorkspaceReadClient } from "./google-api-types";
+import {
+  GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
+  GOOGLE_WORKSPACE_READ_SCOPES,
+} from "./google-api-client";
+import type { GoogleWorkspaceReadClient } from "./google-api-types";
 import {
   PostgresGoogleConnectionRepository,
   type GoogleConnectionSqlPool,
@@ -141,7 +145,10 @@ describe("PostgresGoogleConnectionRepository", () => {
       accountEmail: "zone@example.com",
       googleSubject: "google-subject",
       refreshToken,
-      scopes: [\n        ...GOOGLE_WORKSPACE_READ_SCOPES,\n        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n      ],
+      scopes: [
+        ...GOOGLE_WORKSPACE_READ_SCOPES,
+        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
+      ],
       now: new Date("2026-08-22T18:00:00.000Z"),
     });
 
@@ -153,7 +160,10 @@ describe("PostgresGoogleConnectionRepository", () => {
       id: "connection-id",
       email: "zone@example.com",
       status: "connected",
-      grantedScopes: [\n        ...GOOGLE_WORKSPACE_READ_SCOPES,\n        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,\n      ],
+      grantedScopes: [
+        ...GOOGLE_WORKSPACE_READ_SCOPES,
+        GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
+      ],
       connectedAt: "2026-08-22T18:00:00.000Z",
       lastVerifiedAt: "2026-08-22T18:00:00.000Z",
       lastErrorCode: null,
