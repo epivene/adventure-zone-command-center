@@ -11,6 +11,8 @@ export const leadImportRowStateValues = [
 ] as const;
 export const leadEvidenceFieldValues = ["event_dates", "recipient_email"] as const;
 export const leadEvidenceSourceKindValues = ["crm_contact", "act_description", "official_website", "manual"] as const;
+export const leadTerritoryStatusValues = ["open", "ask_amy_dave", "closed", "licensing_issue", "needs_review"] as const;
+export const leadFitStatusValues = ["approved", "needs_review", "not_a_fit"] as const;
 export const leadRelationshipOutcomeValues = [
   "returning_contact",
   "reintroduction",
@@ -22,6 +24,8 @@ export const leadRelationshipOutcomeValues = [
 export type LeadImportBatchStatus = (typeof leadImportBatchStatusValues)[number];
 export type LeadImportRowState = (typeof leadImportRowStateValues)[number];
 export type LeadRelationshipOutcome = (typeof leadRelationshipOutcomeValues)[number];
+export type LeadTerritoryStatus = (typeof leadTerritoryStatusValues)[number];
+export type LeadFitStatus = (typeof leadFitStatusValues)[number];
 
 export const leadImportBatches = pgTable("lead_import_batches", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -71,6 +75,8 @@ export const leadImportRows = pgTable("lead_import_rows", {
   confirmedRecipientEmail: text("confirmed_recipient_email"),
   recipientConfirmed: boolean("recipient_confirmed").default(false).notNull(),
   introductionSuitable: boolean("introduction_suitable").default(false).notNull(),
+  territoryStatus: text("territory_status").$type<LeadTerritoryStatus>().default("needs_review").notNull(),
+  fitStatus: text("fit_status").$type<LeadFitStatus>().default("needs_review").notNull(),
   confirmedBy: text("confirmed_by"),
   confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
   relationshipOutcome: text("relationship_outcome").$type<LeadRelationshipOutcome | null>(),
@@ -96,6 +102,8 @@ export const leadImportRows = pgTable("lead_import_rows", {
   check("lead_import_rows_review_version_nonnegative", sql`${table.reviewVersion} >= 0`),
   check("lead_import_rows_contact_mode_valid", sql`${table.contactMode} is null or ${table.contactMode} in ('existing','manual','organization_inbox')`),
   check("lead_import_rows_confirmed_date_range_valid", sql`${table.confirmedStartDate} is null or ${table.confirmedEndDate} is null or ${table.confirmedEndDate} >= ${table.confirmedStartDate}`),
+  check("lead_import_rows_territory_status_valid", sql`${table.territoryStatus} in ('open','ask_amy_dave','closed','licensing_issue','needs_review')`),
+  check("lead_import_rows_fit_status_valid", sql`${table.fitStatus} in ('approved','needs_review','not_a_fit')`),
   check("lead_import_rows_relationship_outcome_valid", sql`${table.relationshipOutcome} is null or ${table.relationshipOutcome} in ('returning_contact','reintroduction','prior_outreach_no_response','new_introduction','needs_review')`),
   check("lead_import_rows_relationship_evidence_array", sql`jsonb_typeof(${table.relationshipEvidenceIds}) = 'array'`),
   check("lead_import_rows_relationship_classification_complete", sql`${table.relationshipOutcome} is null or (${table.relationshipAnchorAt} is not null and ${table.relationshipCutoffDate} is not null and ${table.relationshipClassifiedAt} is not null and ${table.relationshipClassifiedBy} is not null)`),
