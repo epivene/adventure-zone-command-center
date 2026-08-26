@@ -119,7 +119,6 @@ function actEvidence(row: Row, input: { organizationId: string; recipientEmail: 
     firstStructuredText(raw, ["starttime", "scheduledate", "displaydate", "created", "createdate", "date"]),
     row.source_created_at,
     row.source_edited_at,
-    row.fetched_at,
   ) ?? new Date(Number.NaN);
   return {
     evidenceId: `act:${String(row.version_id)}`,
@@ -134,6 +133,7 @@ function actEvidence(row: Row, input: { organizationId: string; recipientEmail: 
       firstStructuredText(raw, ["subject", "regarding"]),
       firstStructuredText(raw, ["details", "body", "notetext"]),
     ),
+    conflicting: direction.conflicting || Number.isNaN(occurredAt.valueOf()),
   };
 }
 
@@ -174,7 +174,7 @@ function collapse(evidence: LeadRelationshipEvidence[]) {
       const rightPriority = right.evidenceId.startsWith("gmail:") ? 0 : 1;
       return leftPriority - rightPriority || left.evidenceId.localeCompare(right.evidenceId);
     });
-    if (ordered.every((item) => equivalent(ordered[0], item))) return ordered[0];
+    if (ordered.length === 1 || ordered.every((item) => equivalent(ordered[0], item))) return ordered[0];
     return { ...ordered[0], direction: "unknown" as const, responseProven: false, conflicting: true };
   }).sort((left, right) => left.occurredAt.valueOf() - right.occurredAt.valueOf() || left.evidenceId.localeCompare(right.evidenceId));
 }
