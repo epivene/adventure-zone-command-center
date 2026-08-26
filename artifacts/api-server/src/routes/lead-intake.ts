@@ -265,6 +265,20 @@ router.post("/lead-intake/rows/:rowId/check-availability", async (req, res): Pro
   }
 });
 
+router.post("/lead-intake/rows/:rowId/review-status", async (req, res): Promise<void> => {
+  const rowId = param(req.params.rowId); const body = req.body ?? {};
+  const territory = body.territoryStatus; const fit = body.fitStatus;
+  if (!isUuid(rowId) || !Number.isInteger(body.expectedVersion)
+    || !["open", "ask_amy_dave", "closed", "licensing_issue", "needs_review"].includes(territory)
+    || !["approved", "needs_review", "not_a_fit"].includes(fit)) {
+    res.status(400).json({ error: "Use explicit territory and fit review statuses." }); return;
+  }
+  const [updated] = await db.update(leadImportRows).set({ territoryStatus: territory, fitStatus: fit, reviewVersion: body.expectedVersion + 1, updatedAt: new Date() })
+    .where(and(eq(leadImportRows.id, rowId), eq(leadImportRows.reviewVersion, body.expectedVersion))).returning({ reviewVersion: leadImportRows.reviewVersion, territoryStatus: leadImportRows.territoryStatus, fitStatus: leadImportRows.fitStatus });
+  if (!updated) { res.status(409).json({ error: "This lead changed in another review. Reload it before saving." }); return; }
+  res.json({ rowId, ...updated });
+});
+
 router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<void> => {
   const rowId = param(req.params.rowId);
   if (!isUuid(rowId)) { res.status(400).json({ error: "A valid lead row is required." }); return; }
