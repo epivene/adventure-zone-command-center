@@ -26,7 +26,7 @@ async function loadMigrationSql() {
     loadOne(here, "20260825_lead_organization_inbox.sql"),
     loadOne(here, "20260825_lead_relationship_classification.sql"),
     loadOne(here, "20260825_lead_calendar_availability.sql"),
-    loadOne(here, "070_lead_inventory_policy.sql"),
+    loadOne(here, "20260826_lead_inventory_policy.sql"),
   ]);
   return sql.join("\n\n");
 }
@@ -46,7 +46,7 @@ export async function ensureLeadIntakeSchema(
         where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
           and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations','package_availability'])
       )
-      and (select count(*) = 6 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_fk','lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array','lead_availability_snapshots_package_availability_object']))
+      and (select count(*) = 7 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_fk','lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array','lead_availability_snapshots_package_availability_object']))
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and contype = 'f' and confdeltype = 'r')
       and not exists (
         select 1 from information_schema.columns
