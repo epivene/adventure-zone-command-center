@@ -1,4 +1,6 @@
 import type {
+  GoogleCalendarEvent,
+  GoogleCalendarEvent,
   GoogleCalendarSummary,
   GoogleLabelSummary,
   GoogleMessageMetadata,
@@ -26,6 +28,7 @@ const gmailBaseEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me";
 const labelsEndpoint = `${gmailBaseEndpoint}/labels`;
 const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
+const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
 
 type TokenResponse = {
   access_token?: unknown;
@@ -367,6 +370,47 @@ export function createGoogleWorkspaceReadClient(input: {
             : null;
       } while (pageToken);
       return calendars;
+    },
+
+    async listCalendarEvents(input): Promise<GoogleCalendarEvent[]> {
+      const calendarIds = [...new Set(input.calendarIds.map((id) => id.trim()))].filter(Boolean);
+      if (!calendarIds.length || !input.timeMin.trim() || !input.timeMax.trim()) {
+        throw clientError("GOOGLE_WORKSPACE_CALENDAR_EVENTS_INPUT_INVALID");
+      }
+      const events: GoogleCalendarEvent[] = [];
+      for (const calendarId of calendarIds) {
+        let pageToken: string | null = null;
+        do {
+          const url = new URL(`${calendarBaseEndpoint}/${encodeURIComponent(calendarId)}/events`);
+          url.searchParams.set("timeMin", input.timeMin);
+          url.searchParams.set("timeMax", input.timeMax);
+          url.searchParams.set("singleEvents", "true");
+          url.searchParams.set("showDeleted", "false");
+          url.searchParams.set("maxResults", "250");
+          if (pageToken) url.searchParams.set("pageToken", pageToken);
+          const payload = await authorizedJson(url.toString());
+          const calendarTimeZone = typeof payload.timeZone === "string" && payload.timeZone.trim()
+            ? payload.timeZone.trim() : "UTC";
+          const values = Array.isArray(payload.items) ? payload.items : [];
+          for (const value of values) {
+            if (!value || typeof value !== "object") continue;
+            const event = value as Record<string, unknown>;
+            if (event.status === "cancelled" || typeof event.id !== "string" || !event.id.trim()) continue;
+            const start = event.start && typeof event.start === "object" ? event.start as GoogleCalendarEvent["start"] : null;
+            const end = event.end && typeof event.end === "object" ? event.end as GoogleCalendarEvent["end"] : null;
+            if (!start || !end || (!start.date && !start.dateTime) || (!end.date && !end.dateTime)) continue;
+            events.push({
+              calendarId, calendarTimeZone, id: event.id, iCalUid: typeof event.iCalUID === "string" && event.iCalUID.trim() ? event.iCalUID.trim() : null,
+              summary: typeof event.summary === "string" ? event.summary : "", description: typeof event.description === "string" ? event.description : "",
+              start, end, updated: typeof event.updated === "string" ? event.updated : null,
+              recurringEventId: typeof event.recurringEventId === "string" ? event.recurringEventId : null,
+              originalStartTime: event.originalStartTime && typeof event.originalStartTime === "object" ? event.originalStartTime as GoogleCalendarEvent["originalStartTime"] : null,
+            });
+          }
+          pageToken = typeof payload.nextPageToken === "string" && payload.nextPageToken.trim() ? payload.nextPageToken : null;
+        } while (pageToken);
+      }
+      return events;
     },
 
     async listRecentMessageRefs(limit: number): Promise<GoogleMessageRef[]> {

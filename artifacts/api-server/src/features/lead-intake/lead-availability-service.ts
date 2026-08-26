@@ -1,0 +1,22 @@
+import type { GoogleWorkspaceReadClient } from "../google-workspace/google-api-types";
+import { classifyCalendarBooking, type CalendarPackageReservation } from "./calendar-booking-classifier";
+import { normalizeCalendarWindow, type DateOnlyWindow } from "./calendar-window";
+type Lead = { id: string; reviewVersion: number; state: string; recipientConfirmed?: boolean; introductionSuitable?: boolean; startDate?: string | null; endDate?: string | null };
+export type LeadAvailabilityPersistence = { loadVerifiedLead(rowId: string): Promise<Lead | null>; selectedCalendars(): Promise<Array<{ id: string; summary: string; primary: boolean }>>; save(snapshot: unknown): Promise<unknown> };
+export class LeadAvailabilityServiceError extends Error { constructor(public readonly code: "ROW_NOT_FOUND" | "VERSION_CONFLICT" | "AVAILABILITY_NOT_READY" | "GOOGLE_CALENDAR_UNAVAILABLE", message: string) { super(message); } }
+function addDay(date: string) { const value = new Date(`${date}T12:00:00.000Z`); value.setUTCDate(value.getUTCDate() + 1); return value.toISOString().slice(0, 10); }
+function overlaps(left: DateOnlyWindow, right: DateOnlyWindow) { return left.startDate <= right.endDate && right.startDate <= left.endDate; }
+export class LeadAvailabilityService {
+ constructor(private readonly options: { persistence: LeadAvailabilityPersistence; google: Required<Pick<GoogleWorkspaceReadClient, "listCalendarEvents">>; now?: () => Date }) {}
+ async check(input: { rowId: string; expectedVersion: number; checkedBy: string }) {
+  const lead = await this.options.persistence.loadVerifiedLead(input.rowId); if (!lead) throw new LeadAvailabilityServiceError("ROW_NOT_FOUND", "Lead import row was not found.");
+  if (lead.reviewVersion !== input.expectedVersion) throw new LeadAvailabilityServiceError("VERSION_CONFLICT", "This lead was changed in another review. Reload it before checking availability.");
+  if (lead.state !== "verified" || !lead.recipientConfirmed || !lead.introductionSuitable || !lead.startDate || !lead.endDate) throw new LeadAvailabilityServiceError("AVAILABILITY_NOT_READY", "Verify the profile, recipient, and dates before checking availability.");
+  const proposedWindow = normalizeCalendarWindow({ kind: "google", start: { date: lead.startDate }, end: { date: addDay(lead.endDate) }, calendarTimeZone: "UTC" });
+  const calendars = await this.options.persistence.selectedCalendars(); if (!calendars.length) throw new LeadAvailabilityServiceError("AVAILABILITY_NOT_READY", "Select at least one Google Calendar before checking availability.");
+  let events; try { events = await this.options.google.listCalendarEvents({ calendarIds: calendars.map((item) => item.id), timeMin: `${proposedWindow.startDate}T00:00:00.000Z`, timeMax: `${addDay(proposedWindow.endDate)}T00:00:00.000Z` }); } catch { throw new LeadAvailabilityServiceError("GOOGLE_CALENDAR_UNAVAILABLE", "Google Calendar could not be checked. Reauthorize or retry before proceeding."); }
+  const seen = new Set<string>(); const reservations = events.flatMap((event): CalendarPackageReservation[] => { const key = event.iCalUid ? `${event.iCalUid}|${JSON.stringify(event.originalStartTime || event.start)}|${JSON.stringify(event.end)}` : `${event.calendarId}|${event.id}`; if (seen.has(key)) return []; seen.add(key); const occupiedWindow = normalizeCalendarWindow({ kind: "google", start: event.start, end: event.end, calendarTimeZone: event.calendarTimeZone }); if (!overlaps(proposedWindow, occupiedWindow)) return []; const classified = classifyCalendarBooking({ summary: event.summary, description: event.description }); return [{ calendarEventId: event.id, iCalUid: event.iCalUid, occupiedWindow, ...classified, evidence: [...classified.evidence, `calendar:${event.calendarId}`, `updated:${event.updated || "unknown"}`] }]; });
+  const checkedAt = (this.options.now?.() ?? new Date()).toISOString(); const ready = reservations.every((item) => item.confidence === "explicit"); const result = { rowId: lead.id, reviewVersion: lead.reviewVersion + 1, ready, proposedWindow, checkedAt, reservations };
+  await this.options.persistence.save({ ...result, checkedBy: input.checkedBy, selectedCalendarIds: calendars.map((item) => item.id), sourceEvents: events.map((event) => ({ calendarId: event.calendarId, eventId: event.id, iCalUid: event.iCalUid, updated: event.updated, recurringEventId: event.recurringEventId })) }); return result;
+ }
+}

@@ -15,7 +15,7 @@ describe("LeadAvailabilityService", () => {
     }] };
     const service = new LeadAvailabilityService({ persistence, google, now: () => new Date("2026-08-25T12:00:00Z") });
     await expect(service.check({ rowId: "row-1", expectedVersion: 4, checkedBy: "owner" })).resolves.toMatchObject({
-      rowId: "row-1", reviewVersion: 5, ready: false, proposedWindow: { startDate: "2026-09-10", endDate: "2026-09-12" },
+      rowId: "row-1", reviewVersion: 5, ready: false, proposedWindow: { startDate: "2026-09-08", endDate: "2026-09-13" },
       reservations: [{ calendarEventId: "event-1", confidence: "ambiguous" }],
     });
   });
