@@ -2,13 +2,13 @@
 
 ## Status
 
-**DONE — breaker review fix round 5 closes I1–I3 and M1–M2.**
+**DONE — final breaker review fix closes I1–I7 and M1–M3.**
 
 ## Branch and commits
 
 - Repository/branch: `epivene/adventure-zone-command-center` / `feat/lead-safe-email-rendering`
 - Base: `9d1778937645cc6244e41da9344849b516fd0eef`
-- Implementation head before this report-only commit: `6fd27b9da3c39bf86e9d1355eb9ffbb340b813cb`
+- Implementation head before this report-only commit: `332cfe759011990c440cc75673dfd14697e4ea22`
 - RED-first tests: `ed4456db`, `db86ff6c`, `af142bfb`
 - Implementation: `56b73be9`, `ee139c33`, `617599c2`, `824a6c08`, `3d71e7af`, `4fb28870`, `958fcb4b`, `eeb694e9`, `2f0c13d2`, `ef765e5d`, `5e2a791b`, `0e7173e8`, `29aa32e0`, `0c28a3cc`, `27785497`, `c6b4a70f`, `107c4110`, `496c31f3`, `4a42cd3b`, `da16cc11`, `736048b7`, `ec3cc99b`, `3a8ed5cb`, `2ae51eb8`, `80f0d22b`
 - TDD correction: `3df3c263` fixes the actual rendered subject defect discovered by executable tests: `(Aspen) CO`, not `(Aspen CO)`.
@@ -149,3 +149,40 @@ Coverage now executes real PGlite/Drizzle repository idempotency, concurrent dup
 - `task1-local`: `./node_modules/.bin/tsc -p tsconfig.round5.json --noEmit` — exit 0.
 
 The temporary backend schema/type harness does not model production Drizzle enum/default metadata, so its standalone TypeScript errors are stub artifacts; backend Vitest compilation plus real PGlite behavior are green. No full monorepo/CI result is claimed. No Gmail/send, PR, merge, or restricted/commercial data was added.
+
+## Final whole-branch breaker fix
+
+### Commits
+
+- `26ad55be1a9949f51ee81b4032f1eb5fe82206d1` — non-null recipient targets, canonical constraint repair/backfill, shared preview/block advisory lock, and startup readiness.
+- `931a3d6eafb55faf2c1e7bf7aae2c9caa65f80af` — aggregate ambiguity breaker, immutable confirmed-name rendering, and exact reviewed source storage identity.
+- `332cfe759011990c440cc75673dfd14697e4ea22` — immediate stale-copy invalidation plus client/UI communication-block history.
+
+### Closed findings
+
+- **I1:** `recipient_email` now requires a non-null valid normalized address in SQL, Drizzle, the repository discriminated union, runtime validation, route construction, and real PGlite coverage. Legacy null targets are converted fail-closed and safely deduplicated against an existing global block.
+- **I2:** preview/read/render and block create/remove share one transaction-scoped advisory lock; the preview renderer executes before the serialized transaction commits.
+- **I3:** any persisted aggregate reservation with ambiguous confidence independently adds `availability_ambiguous`, regardless of a stale persisted `ready=true` flag.
+- **I4:** successful contact/status/block mutations increment invalidation before refresh; the preview remount generation removes displayed copy in the same React commit even when refresh rejects or stalls.
+- **I5:** greeting names come only from immutable `confirmed_contact_name`; mutable contact rows are not joined. `organization_inbox` always renders the generic `Hi,` form.
+- **I6:** migration readiness validates the actual territory/fit constraint definitions; migration repairs invalid values and drops/recreates corrupt same-name constraints.
+- **I7:** the committed clean PGlite fixture now creates all referenced organization/contact/lead tables before default test discovery executes the migration.
+- **M1:** exact approval verifies linked source review state, reviewer, timestamp, full reviewed metadata, and the stable `amy-library/ADVENTURE ZONE STICKY NOTES.docx.pdf` storage identity seeded through the business-source repository.
+- **M2:** migration idempotently backfills `created` audit events for every existing block from retained actor/reason/time and also reconstructs missing removal history for repaired inactive duplicates.
+- **M3:** the lead-intake client calls the retained history endpoint and the owner UI loads/renders action, actor, timestamp, and reason per block.
+
+### RED-first evidence
+
+- Final backend harness: 19 tests, 10 expected failures before implementation (DB/repository null email, shared serialization, aggregate ambiguity, corrupt constraints/backfill, reviewed provenance, and immutable name snapshot).
+- Final frontend harness: 11 tests, 4 expected failures before implementation (immediate invalidation, history client, history UI, and production mutation wiring).
+- Additional focused REDs reproduced organization-inbox name leakage, legacy null-email/global-block migration collision, and acceptance of a wrong source storage identity.
+
+### Fresh GREEN verification
+
+- `implementation`: `./node_modules/.bin/vitest run task7-final-backend.test.ts --environment node` — 1 file / 23 tests passed (real PGlite/Drizzle), 67.72s.
+- `implementation`: `../task1-local/node_modules/.bin/vitest run task7-final-frontend.test.ts task7-round5-frontend.test.ts` — 2 files / 17 tests passed.
+- `implementation`: `../task1-local/node_modules/.bin/tsc -p tsconfig.round5.json` and `../task1-local/node_modules/.bin/tsc -p tsconfig.task7-final-frontend.json` — both exit 0.
+- Focused renderer/route/startup/migration regression command: 14 passed; the one unavailable full-startup fixture failed only because unchanged `lib/db/migrations/069_excel_lead_intake.sql` is absent from this partial checkout. The safe-email migration test itself passed.
+- Actual package command attempted: `npm test -- src/features/lead-intake/lead-safe-email-migration.pglite.test.ts`. The partial checkout has no package-local install, so the package config could not resolve `vitest/config`; no package-suite pass is claimed. The same committed default-discovery test passed in the external real-PGlite harness above.
+
+No Gmail draft/send mutation, PR, or merge was added.
