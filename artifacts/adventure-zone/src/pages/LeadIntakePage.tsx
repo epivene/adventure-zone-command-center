@@ -21,7 +21,7 @@ type Client = {
   listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
   confirmReview(rowId: string, body: unknown): Promise<{ rowId: string; state: "verified"; reviewVersion: number }>;
   updateReviewStatus?: (rowId: string, body: { expectedVersion: number; territoryStatus: string; fitStatus: string }) => Promise<unknown>;
-  getEmailPreview?: (rowId: string) => Promise<any>;
+  getEmailPreview?: (rowId: string, reviewVersion: number) => Promise<any>;
   listCommunicationBlocks?: () => Promise<any[]>;
   createCommunicationBlock?: (body: unknown) => Promise<unknown>;
   removeCommunicationBlock?: (id: string, reason: string) => Promise<unknown>;
@@ -126,7 +126,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
             />
           ) : null}
           {client.updateReviewStatus && selected.rows.find((row) => row.id === selectedRowId) ? <LeadReviewStatusControls row={selected.rows.find((row) => row.id === selectedRowId)!} save={(body) => client.updateReviewStatus!(selectedRowId!, body)} /> : null}
-          {client.getEmailPreview && selectedRowId ? <LeadEmailPreviewPanel rowId={selectedRowId} load={client.getEmailPreview} /> : null}
+          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={selectedRowId} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} load={client.getEmailPreview} /> : null}
           {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} /> : null}
         </section>
       ) : null}
