@@ -95,3 +95,36 @@ export function getSpecialRequestAttractionDelta(input: {
     ? 1
     : 0;
 }
+
+export type PackageInventoryPolicy = Record<string, {
+  normalCapacity: number;
+  restrictedOptions: Array<{
+    key: string;
+    approvalRequired: true;
+    reason: string;
+  }>;
+}>;
+
+export function getPackageInventoryPolicy(): PackageInventoryPolicy {
+  return {
+    adventure_zone: { normalCapacity: 5, restrictedOptions: [] },
+    pirates_rebellion: {
+      normalCapacity: 3,
+      restrictedOptions: [{
+        key: "pirates_rebellion_restricted_fourth_unit",
+        approvalRequired: true,
+        reason: "Massive pool; requires extremely flat ground.",
+      }],
+    },
+    warriors_playground: { normalCapacity: 1, restrictedOptions: [] },
+    mini_zone: {
+      normalCapacity: 0,
+      restrictedOptions: [{
+        key: "mini_zone",
+        approvalRequired: true,
+        reason:
+          "Last-resort / Dave approval only; estimated $5,000–$6,000 with final price set by Dave.",
+      }],
+    },
+  };
+}
