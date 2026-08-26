@@ -16,7 +16,10 @@ import {
   CallWorkspace,
   type CompleteCallResult,
 } from "@/components/calls/call-workspace";
-import { callWorkspaceHref } from "@/components/today/next-call-card";
+import {
+  callWorkspaceHref,
+  eventProfileHref,
+} from "@/components/today/next-call-card";
 import {
   CopilotReason,
   type BookingCopilotReason,
@@ -185,6 +188,28 @@ function TaskMeta({ followUp }: { followUp: CallQueueItem }) {
   );
 }
 
+function outreachProfileHref(followUp: CallQueueItem) {
+  return eventProfileHref({
+    organizationId: followUp.organizationId,
+    contactId: followUp.contactId,
+    bookingId: followUp.bookingId,
+    followUpId: followUp.id,
+    action: "follow-up",
+  });
+}
+
+function OutreachContactActions({ followUp }: { followUp: CallQueueItem }) {
+  const href = outreachProfileHref(followUp);
+  if (!href) return null;
+  const classes = "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50";
+  return (
+    <>
+      <a className={classes} href={href}>Email</a>
+      <a className={classes} href={href}>Web contact</a>
+    </>
+  );
+}
+
 export function CallQueueWorkspace({
   followUps,
   initialFollowUpId,
@@ -346,8 +371,8 @@ export function CallQueueWorkspace({
     if (!selected) {
       return (
         <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" id="today-next-task">
-          <p className="font-bold text-slate-950">Calls complete</p>
-          <p className="mt-1 text-sm text-slate-600">No open calls are waiting on you.</p>
+          <p className="font-bold text-slate-950">Outreach complete</p>
+          <p className="mt-1 text-sm text-slate-600">No open outreach tasks are waiting on you.</p>
         </section>
       );
     }
@@ -374,6 +399,7 @@ export function CallQueueWorkspace({
             <TaskMeta followUp={selected} />
             <CopilotReason copilot={selected.copilot} compact />
             <div className="mt-3 flex flex-wrap gap-2">
+              <OutreachContactActions followUp={selected} />
               <button
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 disabled={queueActionBusy}
@@ -398,7 +424,7 @@ export function CallQueueWorkspace({
             onClick={() => setFocused(true)}
             type="button"
           >
-            Start
+            Start call
           </button>
         </div>
       </section>
@@ -409,8 +435,8 @@ export function CallQueueWorkspace({
     return (
       <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm" id="today-next-task">
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Done</p>
-        <h3 className="mt-1 text-xl font-bold text-emerald-950">Calls complete</h3>
-        <p className="mt-1 text-sm text-emerald-800">You finished the open call queue.</p>
+        <h3 className="mt-1 text-xl font-bold text-emerald-950">Outreach complete</h3>
+        <p className="mt-1 text-sm text-emerald-800">You finished the open outreach queue.</p>
         <button className="mt-4 text-sm font-bold text-emerald-900 underline" onClick={leaveFocus} type="button">Back to Today</button>
       </section>
     );
@@ -439,6 +465,7 @@ export function CallQueueWorkspace({
           </div>
           <CopilotReason copilot={selected.copilot} compact />
           <div className="mt-3 flex flex-wrap gap-2">
+            <OutreachContactActions followUp={selected} />
             <button className="button-secondary" disabled={queueActionBusy} onClick={handleSkip} type="button">Skip for now</button>
             <button className="button-secondary" disabled={queueActionBusy} onClick={() => void handleDismiss()} type="button">{queueActionBusy ? "Dismissing…" : "Dismiss"}</button>
           </div>
