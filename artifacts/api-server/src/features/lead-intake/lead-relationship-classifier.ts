@@ -44,7 +44,7 @@ function cutoff(anchor: Date) {
 
 function materialFingerprint(item: LeadRelationshipEvidence) {
   return JSON.stringify({
-    occurredAt: item.occurredAt.toISOString(),
+    occurredAt: Number.isFinite(item.occurredAt.valueOf()) ? item.occurredAt.toISOString() : "invalid",
     direction: item.direction,
     responseProven: item.responseProven,
     organizationId: item.organizationId,
@@ -56,6 +56,7 @@ function materialFingerprint(item: LeadRelationshipEvidence) {
 
 function newest(items: LeadRelationshipEvidence[]) {
   return items.reduce<Date | null>((latest, item) => {
+    if (!Number.isFinite(item.occurredAt.valueOf())) return latest;
     if (!latest || item.occurredAt > latest) return item.occurredAt;
     return latest;
   }, null);
@@ -86,10 +87,12 @@ export function classifyLeadRelationship(input: {
 
   const unsafe = duplicatesDisagree || !input.organizationId.trim() || !recipient || unique.some((item) =>
     Number.isNaN(item.occurredAt.valueOf())
+    || item.occurredAt > input.anchor
     || item.conflicting
     || item.organizationId !== input.organizationId
     || normalizedEmail(item.recipientEmail) !== recipient
     || item.direction === "unknown"
+    || (item.sourceType === "crm" && (item.direction !== "unknown" || item.responseProven))
     || (item.direction === "inbound" && !item.responseProven)
     || (item.direction !== "inbound" && item.responseProven)
   );
