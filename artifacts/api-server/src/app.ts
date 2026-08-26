@@ -7,6 +7,7 @@ import { requireOwnerMiddleware } from "./lib/auth";
 import followUpsRouter from "./routes/follow-ups";
 import assistantImportRouter from "./routes/assistant-import";
 import assistantProfileHistoryRouter from "./routes/assistant-profile-history";
+import assistantOfficeTasksRouter from "./routes/assistant-office-tasks";
 
 const app: Express = express();
 
@@ -45,6 +46,7 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api/assistant-import", assistantProfileHistoryRouter);
+app.use("/api/assistant-import", assistantOfficeTasksRouter);
 app.use("/api/assistant-import", assistantImportRouter);
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
 app.use("/api", router);
