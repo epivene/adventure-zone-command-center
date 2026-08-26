@@ -19,12 +19,15 @@ export function GoogleHistoricalBackfill() {
   const [view, setView] = useState<GoogleHistoricalBackfillView | null>(null);
   const [lastBatch, setLastBatch] = useState<GoogleHistoricalBatchResult | null>(null);
   const [retryNotice, setRetryNotice] = useState<string | null>(null);
+  const [interruptedNotice, setInterruptedNotice] = useState<string | null>(null);
   const [showReview, setShowReview] = useState(false);
   const [busy, setBusy] = useState<"run" | "approve" | "retry" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function reload() {
-    setView(await getGoogleHistoricalBackfill());
+  async function reload(): Promise<GoogleHistoricalBackfillView> {
+    const next = await getGoogleHistoricalBackfill();
+    setView(next);
+    return next;
   }
 
   useEffect(() => {
@@ -34,16 +37,30 @@ export function GoogleHistoricalBackfill() {
   }, []);
 
   async function runNext() {
+    const processedBefore = view?.state.cumulative.processed ?? 0;
     setBusy("run");
     setError(null);
     setRetryNotice(null);
+    setInterruptedNotice(null);
     try {
       const result = await runNextGoogleHistoricalBatch();
       setLastBatch(result);
       await reload();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Could not run historical Gmail batch.");
-      await reload().catch(() => undefined);
+      const message = caught instanceof Error ? caught.message : "Could not run historical Gmail batch.";
+      try {
+        const refreshed = await reload();
+        if (refreshed.state.cumulative.processed > processedBefore) {
+          setError(null);
+          setInterruptedNotice(
+            "Batch completed; the connection response was interrupted. Saved historical Gmail progress is intact.",
+          );
+        } else {
+          setError(message);
+        }
+      } catch {
+        setError(message);
+      }
     } finally {
       setBusy(null);
     }
@@ -66,6 +83,7 @@ export function GoogleHistoricalBackfill() {
     setBusy("retry");
     setError(null);
     setRetryNotice(null);
+    setInterruptedNotice(null);
     try {
       const result = await retryGoogleHistoricalFailures();
       setRetryNotice(
@@ -193,6 +211,11 @@ export function GoogleHistoricalBackfill() {
       {retryNotice ? (
         <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
           {retryNotice}
+        </p>
+      ) : null}
+      {interruptedNotice ? (
+        <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+          {interruptedNotice}
         </p>
       ) : null}
 
