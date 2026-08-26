@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchema, isLeadGmailDraftLinkSchemaReady } from "./lead-intake-startup-migration";
 import { ensureGoogleWorkspaceSchema } from "./google-workspace-startup-migration";
 
-const pgliteCompatible = (sql: string) => sql.replace(/^CREATE EXTENSION IF NOT EXISTS pgcrypto;\s*/gim, "");
+const pgliteCompatible = (sql: string) => sql.replace(/^[ \t]*CREATE EXTENSION IF NOT EXISTS pgcrypto;\s*/gim, "");
 
 async function gmailDraftSchema() {
   const client = new PGlite();
