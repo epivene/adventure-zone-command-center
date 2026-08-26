@@ -12,6 +12,9 @@ const row = {
   confirmedEventName: null, confirmedStartDate: null, confirmedEndDate: null,
   confirmedContactName: null, confirmedContactRole: null, confirmedRecipientEmail: null,
   recipientConfirmed: false, introductionSuitable: false, evidence: [],
+  relationshipOutcome: null, relationshipAnchorAt: null, relationshipCutoffDate: null,
+  relationshipEvidenceIds: [], latestOutboundAt: null, latestVerifiedResponseAt: null,
+  relationshipReviewRequired: false, relationshipClassifiedAt: null, relationshipClassifiedBy: null,
 };
 
 function client() {
@@ -25,6 +28,7 @@ function client() {
       emailCandidates: [],
     }),
     confirmReview: vi.fn().mockResolvedValue({ rowId: "row-1", state: "verified", reviewVersion: 1 }),
+    classifyRelationship: vi.fn(),
   };
 }
 
