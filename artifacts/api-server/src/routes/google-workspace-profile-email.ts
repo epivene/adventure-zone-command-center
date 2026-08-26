@@ -1,10 +1,7 @@
 import { Router, type IRouter } from "express";
 
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
-import type {
-  GoogleMessageMetadata,
-  GoogleWorkspaceReadClient,
-} from "@/features/google-workspace/google-api-types";
+import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import {
   GoogleProfileFileService,
   type GoogleProfileFile,
@@ -48,10 +45,18 @@ function errorCode(error: unknown): string {
 }
 
 function errorStatus(code: string): number {
-  if (code === "GOOGLE_WORKSPACE_NOT_CONNECTED") return 409;
+  if (
+    code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
+    code === "GOOGLE_WORKSPACE_NOT_AUTHENTICATED" ||
+    code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+  ) {
+    return 409;
+  }
   if (
     code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE" ||
-    code === "GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE"
+    code === "GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE" ||
+    code === "GOOGLE_WORKSPACE_API_REQUEST_FAILED" ||
+    code === "GOOGLE_WORKSPACE_OAUTH_TOKEN_REQUEST_FAILED"
   ) {
     return 503;
   }
@@ -70,29 +75,14 @@ function gmailUrl(threadId: string): string {
   return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`;
 }
 
-function latestPerThread(
-  rows: Array<{
-    mapping: GoogleApprovedValidationMapping;
-    metadata: GoogleMessageMetadata;
-  }>,
-) {
-  const byThread = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) {
-    const current = byThread.get(row.mapping.threadId);
-    if (
-      !current ||
-      (row.metadata.internalDateMs ?? 0) >
-        (current.metadata.internalDateMs ?? 0)
-    ) {
-      byThread.set(row.mapping.threadId, row);
-    }
+function mappingsByThread(mappings: GoogleApprovedValidationMapping[]) {
+  const grouped = new Map<string, GoogleApprovedValidationMapping[]>();
+  for (const mapping of mappings) {
+    const current = grouped.get(mapping.threadId) ?? [];
+    current.push(mapping);
+    grouped.set(mapping.threadId, current);
   }
-  return [...byThread.values()].sort(
-    (left, right) =>
-      (right.metadata.internalDateMs ?? 0) -
-        (left.metadata.internalDateMs ?? 0) ||
-      left.mapping.threadId.localeCompare(right.mapping.threadId),
-  );
+  return grouped;
 }
 
 export function createGoogleWorkspaceProfileEmailRouter(options?: {
@@ -113,34 +103,84 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
         const mappings = await validationRepository.listApprovedForOrganization(
           req.params.organizationId,
         );
+        const grouped = mappingsByThread(mappings);
+
+        // Profiles with no matched Gmail should render an empty live mailbox area
+        // without requiring a Google round-trip.
+        if (!grouped.size) {
+          res.json({
+            validationSampleOnly: false,
+            historicalBackfillIncluded: true,
+            liveGmail: true,
+            unavailableThreadCount: 0,
+            conversations: [],
+          });
+          return;
+        }
+
         const client = await connection.createReadClient();
         if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
-        if (!client.getMessageMetadata) {
+        if (!client.getThreadDetail) {
           throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
         }
 
-        const withMetadata = await Promise.all(
-          mappings.map(async (mapping) => ({
-            mapping,
-            metadata: await client.getMessageMetadata!(mapping.messageId),
+        const threadEntries = [...grouped.entries()];
+        const settled = await Promise.allSettled(
+          threadEntries.map(async ([threadId, threadMappings]) => ({
+            threadId,
+            threadMappings,
+            thread: await client.getThreadDetail!(threadId),
           })),
         );
-        const conversations = latestPerThread(withMetadata).map(
-          ({ mapping, metadata }) => ({
-            threadId: mapping.threadId,
-            subject: metadata.headers.subject,
-            from: metadata.headers.from,
-            to: metadata.headers.to,
-            date: metadata.headers.date,
-            internalDateMs: metadata.internalDateMs,
-            hasAttachments: metadata.hasAttachments,
-            contactId: mapping.contactId,
-            evidenceCodes: mapping.evidenceCodes,
-            originalGmailUrl: gmailUrl(mapping.threadId),
-          }),
+
+        const successes = settled.flatMap((result) =>
+          result.status === "fulfilled" ? [result.value] : [],
+        );
+        const failures = settled.flatMap((result) =>
+          result.status === "rejected" ? [result.reason] : [],
         );
 
-        res.json({ validationSampleOnly: false, historicalBackfillIncluded: true, conversations });
+        // A stale/deleted Gmail thread should not break every other matched
+        // conversation on the profile. If Gmail itself is unavailable, however,
+        // surface the real Google error instead of pretending the mailbox is empty.
+        if (!successes.length && failures.length) {
+          throw failures[0];
+        }
+
+        const conversations = successes
+          .map(({ threadId, threadMappings, thread }) => {
+            const latest = thread.messages.at(-1) ?? null;
+            return {
+              threadId,
+              subject: thread.subject || latest?.subject || "",
+              from: latest?.from ?? "",
+              to: latest?.to ?? "",
+              date: latest?.date ?? "",
+              internalDateMs: latest?.internalDateMs ?? null,
+              hasAttachments: thread.messages.some(
+                (message) => message.attachments.length > 0,
+              ),
+              contactId:
+                threadMappings.find((mapping) => mapping.contactId)?.contactId ?? null,
+              evidenceCodes: [
+                ...new Set(threadMappings.flatMap((mapping) => mapping.evidenceCodes)),
+              ],
+              originalGmailUrl: thread.originalGmailUrl || gmailUrl(threadId),
+            };
+          })
+          .sort(
+            (left, right) =>
+              (right.internalDateMs ?? 0) - (left.internalDateMs ?? 0) ||
+              left.threadId.localeCompare(right.threadId),
+          );
+
+        res.json({
+          validationSampleOnly: false,
+          historicalBackfillIncluded: true,
+          liveGmail: true,
+          unavailableThreadCount: failures.length,
+          conversations,
+        });
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });
