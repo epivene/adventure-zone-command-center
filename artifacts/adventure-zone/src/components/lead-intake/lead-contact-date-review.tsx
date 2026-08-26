@@ -4,7 +4,9 @@ import type {
   LeadImportReviewRow,
   LeadProfileEvidence,
   LeadProfileOption,
+  LeadRelationshipClassification,
 } from "@/features/lead-intake/lead-intake-client";
+import { LeadRelationshipReview } from "./lead-relationship-review";
 
 type ContactMode = "existing" | "manual" | "organization_inbox";
 
@@ -13,6 +15,7 @@ type ReviewClient = {
   listProfileContacts(organizationId: string): Promise<LeadContactOption[]>;
   getProfileEvidence(organizationId: string): Promise<LeadProfileEvidence>;
   confirmReview(rowId: string, body: unknown): Promise<unknown>;
+  classifyRelationship(rowId: string, expectedVersion: number): Promise<LeadRelationshipClassification>;
 };
 
 export function LeadContactDateReview({
@@ -320,6 +323,9 @@ export function LeadContactDateReview({
       <label className="flex items-start gap-2 text-sm font-semibold"><input aria-label="This contact is appropriate for an introduction email" checked={introductionSuitable} onChange={(event) => setIntroductionSuitable(event.currentTarget.checked)} type="checkbox"/>This contact is appropriate for an introduction email</label>
       {error ? <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{error}</p> : null}
       <button className="button-primary justify-self-start" disabled={!ready || busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Verify event and contact"}</button>
+      {row.state === "verified" ? (
+        <LeadRelationshipReview client={client} onClassified={onSaved} row={row} />
+      ) : null}
     </section>
   );
 }
