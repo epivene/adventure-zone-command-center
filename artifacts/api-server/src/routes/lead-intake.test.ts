@@ -31,5 +31,7 @@ describe("lead intake owner routes", () => {
     expect(routeSource).toContain("res.status(422)");
     expect(routeSource).toContain("optionalGoogleReadClient");
     expect(routeSource).toContain("catch {");
+    expect(routeSource).toContain('router.get("/lead-intake/rows/:rowId/relationship-evidence"');
+    expect(routeSource).toContain("relationshipService.listRelationshipEvidence");
   });
 });
