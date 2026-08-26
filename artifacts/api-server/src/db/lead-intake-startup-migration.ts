@@ -45,9 +45,20 @@ export async function ensureLeadIntakeSchema(
         where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
           and column_name = any(array['id','row_id','review_version','proposed_start_date','proposed_end_date','ready','checked_by','checked_at','selected_calendar_ids','source_events','reservations'])
       )
-      and (select count(*) = 5 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array']))
+      and (select count(*) = 6 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and conname = any(array['lead_availability_snapshots_row_fk','lead_availability_snapshots_row_version_unique','lead_availability_snapshots_window_valid','lead_availability_snapshots_calendar_ids_array','lead_availability_snapshots_source_events_array','lead_availability_snapshots_reservations_array']))
       and exists (select 1 from pg_constraint where conrelid = to_regclass(current_schema() || '.lead_availability_snapshots') and contype = 'f' and confdeltype = 'r')
-      and to_regclass(current_schema() || '.lead_availability_snapshots_row_checked_idx') is not null
+      and not exists (
+        select 1 from information_schema.columns
+        where table_schema = current_schema() and table_name = 'lead_availability_snapshots'
+          and ((column_name in ('id','row_id') and data_type <> 'uuid')
+            or (column_name = 'review_version' and data_type <> 'integer')
+            or (column_name in ('proposed_start_date','proposed_end_date') and data_type <> 'date')
+            or (column_name = 'ready' and data_type <> 'boolean')
+            or (column_name = 'checked_by' and data_type <> 'text')
+            or (column_name = 'checked_at' and data_type <> 'timestamp with time zone')
+            or (column_name in ('selected_calendar_ids','source_events','reservations') and data_type <> 'jsonb'))
+      )
+      and exists (select 1 from pg_indexes where schemaname = current_schema() and indexname = 'lead_availability_snapshots_row_checked_idx' and position('(row_id, checked_at desc)' in lower(indexdef)) > 0)
       and (
         select count(*) = 8 from information_schema.columns
         where table_schema = current_schema() and table_name = 'lead_import_batches'

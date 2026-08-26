@@ -1,6 +1,7 @@
 create table if not exists lead_availability_snapshots (
   id uuid primary key default gen_random_uuid(),
-  row_id uuid not null references lead_import_rows(id) on delete restrict,
+  row_id uuid not null,
+  constraint lead_availability_snapshots_row_fk foreign key (row_id) references lead_import_rows(id) on delete restrict,
   review_version integer not null,
   proposed_start_date date not null,
   proposed_end_date date not null,
