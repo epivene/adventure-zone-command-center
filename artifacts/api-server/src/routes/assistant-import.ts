@@ -8,6 +8,7 @@ import {
   organizationContacts,
   organizations,
 } from "@/db/schema";
+import { PostgresProfileSearchRepository } from "@/features/assistant/profile-search-repository";
 import { parseBusinessDateInput } from "@/lib/business-date";
 import eventProfilesRouter from "./event-profiles";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
@@ -27,11 +28,33 @@ function splitName(name: string) {
 
 router.use(requireAssistantImportToken);
 router.use((req, res, next) => {
-  if (req.method !== "POST" || req.path !== "/event-profiles") {
+  const isEventProfileImport = req.method === "POST" && req.path === "/event-profiles";
+  const isProfileSearch = req.method === "GET" && req.path === "/profile-search";
+  if (!isEventProfileImport && !isProfileSearch) {
     res.status(404).json({ error: "Not found" });
     return;
   }
   next();
+});
+
+router.get("/profile-search", async (req, res): Promise<void> => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (query.length < 2) {
+    res.status(400).json({ ok: false, error: "Enter at least 2 characters to search profiles." });
+    return;
+  }
+
+  const requestedLimit = typeof req.query.limit === "string" ? Number.parseInt(req.query.limit, 10) : 8;
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(requestedLimit, 20)) : 8;
+
+  try {
+    const repository = new PostgresProfileSearchRepository();
+    const results = await repository.search({ query, limit });
+    res.json({ ok: true, query, results });
+  } catch (error) {
+    req.log.error({ err: error, query }, "Failed assistant-import profile search");
+    res.status(500).json({ ok: false, error: "Profile search failed." });
+  }
 });
 
 router.post("/event-profiles", async (req, res, next): Promise<void> => {
