@@ -14,6 +14,7 @@ import { LeadAvailabilityRepository } from "@/features/lead-intake/lead-availabi
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import { CommunicationBlockRepository } from "@/features/lead-intake/communication-block-repository";
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
+import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { buildLeadEmailPreview } from "@/features/lead-intake/lead-email-preview-service";
 
 const router: IRouter = Router();
@@ -296,6 +297,7 @@ router.get("/lead-intake/rows/:rowId/email-preview", async (req, res): Promise<v
       .leftJoin(contacts, eq(contacts.id, leadImportRows.selectedContactId)).where(eq(leadImportRows.id, rowId)).limit(1).for("update");
     if (!lead || lead.reviewVersion !== expectedVersion) { res.status(409).json({ error: "This lead changed in another review. Reload before previewing." }); return; }
     if (!lead.eventName || !lead.startDate || !lead.endDate || !lead.recipientEmail) { res.status(422).json({ error: "Verify the lead before requesting a preview." }); return; }
+    await ensureCommunicationTemplateSeed(db as any);
     const approvedTemplate = (await new CommunicationTemplateRepository(db as any).list({ state: "active" })).find((template) => template.code === "lead_introduction_2026_prepaid");
     if (!approvedTemplate) { res.status(422).json({ error: "The approved 2026 lead-introduction template is unavailable." }); return; }
     const [snapshot] = await db.select().from(leadAvailabilitySnapshots).where(eq(leadAvailabilitySnapshots.rowId, rowId)).orderBy(desc(leadAvailabilitySnapshots.checkedAt)).limit(1);
