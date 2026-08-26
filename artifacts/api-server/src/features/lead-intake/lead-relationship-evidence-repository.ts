@@ -198,6 +198,15 @@ export class LeadRelationshipEvidenceRepository implements LeadRelationshipEvide
            and ((a.target_entity_type = 'organization' and a.target_entity_id = ${input.organizationId}::uuid)
              or (a.target_entity_type = 'activity' and target_activity.organization_id = ${input.organizationId}::uuid))
         union
+        select distinct s.id
+          from act_source_records s
+          inner join act_external_links e on e.source_record_id = s.id
+          left join activities target_activity
+            on e.entity_type = 'activity' and target_activity.id = e.entity_id
+         where s.stream_type in ('activity', 'note', 'history')
+           and ((e.entity_type = 'organization' and e.entity_id = ${input.organizationId}::uuid)
+             or (e.entity_type = 'activity' and target_activity.organization_id = ${input.organizationId}::uuid))
+        union
         select distinct source_record_id
           from activities
          where organization_id = ${input.organizationId}::uuid
