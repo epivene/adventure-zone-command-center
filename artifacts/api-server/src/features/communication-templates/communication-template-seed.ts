@@ -4,6 +4,7 @@ import { businessSourceDocuments } from "@/db/schema";
 import type { CommunicationTemplateSeed } from "./communication-template-types";
 import { CommunicationTemplateRepository } from "./communication-template-repository";
 import { ensureBusinessSourceSeed } from "@/features/business-sources/business-source-seed";
+import { APPROVED_LEAD_INTRODUCTION_2026 } from "./lead-introduction-2026-approved";
 
 export const COMMUNICATION_TEMPLATE_SEEDS = [
   {
@@ -458,12 +459,12 @@ The Adventure Zone`,
   },
   {
     code: "lead_introduction_2026_prepaid",
-    name: "INTRO 2026 EMAIL PREPAID (approved v1)",
+    name: APPROVED_LEAD_INTRODUCTION_2026.name,
     channel: "email",
     category: "lead_introduction",
     accessScope: "office",
     state: "active",
-    subjectTemplate: "{{eventName}} — {{eventDates}}",
+    subjectTemplate: APPROVED_LEAD_INTRODUCTION_2026.subject,
     requiredPlaceholders: ["eventName", "eventDates"],
     bodyTemplate: `Approved safe lead-introduction source. The server-owned lead-email renderer supplies the verified recipient greeting, positive-normal-package sections only, and signature. My name is Desiree, and I work with Dave. We represent The Adventure Zone -- America's Best Inflatable Carnival! We’d love to come to your {{eventName}}!`,
   },
