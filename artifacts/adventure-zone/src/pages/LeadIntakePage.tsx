@@ -34,6 +34,7 @@ export function LeadIntakePage({ client }: { client: Client }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [previewInvalidationKey, setPreviewInvalidationKey] = useState(0);
 
   async function loadBatches() {
     setBatches(await client.listBatches());
@@ -121,13 +122,19 @@ export function LeadIntakePage({ client }: { client: Client }) {
                 const refreshed = await client.getBatch(selected.id);
                 setSelected(refreshed);
                 setSelectedRowId(selectedRowId);
+                setPreviewInvalidationKey((value) => value + 1);
               }}
               row={selected.rows.find((row) => row.id === selectedRowId)!}
             />
           ) : null}
-          {client.updateReviewStatus && selected.rows.find((row) => row.id === selectedRowId) ? <LeadReviewStatusControls row={selected.rows.find((row) => row.id === selectedRowId)!} save={(body) => client.updateReviewStatus!(selectedRowId!, body)} /> : null}
-          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={selectedRowId} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} load={client.getEmailPreview} /> : null}
-          {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} /> : null}
+          {client.updateReviewStatus && selected.rows.find((row) => row.id === selectedRowId) ? <LeadReviewStatusControls key={selectedRowId} row={selected.rows.find((row) => row.id === selectedRowId)!} save={async (body) => {
+            const result = await client.updateReviewStatus!(selectedRowId!, body);
+            setSelected(await client.getBatch(selected.id));
+            setPreviewInvalidationKey((value) => value + 1);
+            return result;
+          }} /> : null}
+          {client.getEmailPreview && selected.rows.find((row) => row.id === selectedRowId) ? <LeadEmailPreviewPanel key={selectedRowId} rowId={selectedRowId!} reviewVersion={selected.rows.find((row) => row.id === selectedRowId)!.reviewVersion} invalidationKey={previewInvalidationKey} load={client.getEmailPreview} /> : null}
+          {client.listCommunicationBlocks && client.createCommunicationBlock && client.removeCommunicationBlock ? <LeadCommunicationBlocks list={client.listCommunicationBlocks} create={client.createCommunicationBlock} remove={client.removeCommunicationBlock} onMutation={() => setPreviewInvalidationKey((value) => value + 1)} /> : null}
         </section>
       ) : null}
     </div>

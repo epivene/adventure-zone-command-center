@@ -96,7 +96,26 @@ export type LeadProfileEvidence = {
   emailCandidates: Array<{ email: string; sourceRecordId: string; sourceVersionId: string; sourcePath: string }>;
 };
 
-export type LeadEmailPreview = { recipient: string; profileName: string | null; eventName: string; dateRange: { startDate: string; endDate: string }; calendarEvidence: unknown[]; packageAvailability: { packages?: Array<{ packageKey: string; availableQuantity: number }>; blockers?: string[] } | null; readiness: { ready: boolean; blockers: string[] }; subject: string | null; body: string | null };
+export type LeadEmailPreview = {
+  sourceRowId: string;
+  rowVersion: number;
+  snapshotVersion: number | null;
+  verifiedDateRange: { startDate: string; endDate: string };
+  recipient: string;
+  profileName: string | null;
+  eventName: string;
+  relationshipStatus: string | null;
+  territoryStatus: string | null;
+  fitStatus: string | null;
+  templateStatus: "approved" | "unavailable";
+  templateVersion: string | null;
+  templateSource: string | null;
+  calendarEvidence: Array<{ calendarId: string | null; eventId: string | null; conflict: boolean }>;
+  normalPackageCounts: Array<{ packageKey: string; availableQuantity: number }>;
+  readiness: { ready: boolean; blockers: string[] };
+  subject: string | null;
+  body: string | null;
+};
 export type CommunicationBlock = { id: string; targetType: string; active: boolean; organizationId?: string | null; contactId?: string | null; normalizedEmail?: string | null; rowId?: string | null; reason: string; createdAt: string };
 export type LeadImportBatch = LeadImportBatchSummary & { rows: LeadImportReviewRow[] };
 
