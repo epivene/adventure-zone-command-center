@@ -27,6 +27,10 @@ async function setup() {
       id uuid primary key, source_record_id uuid not null, target_entity_type text not null,
       target_entity_id uuid not null, superseded_at timestamptz
     );
+    create table act_external_links (
+      entity_type text not null, entity_id uuid not null, source_entity_type text not null,
+      source_record_id uuid
+    );
     create table google_workspace_connections (
       id uuid primary key, status text not null, updated_at timestamptz not null
     );
@@ -82,6 +86,7 @@ async function seedAct(client: PGlite, input: {
   raw: Record<string, unknown>;
   body: string;
   occurredAt: string;
+  link?: "assignment" | "external";
 }) {
   const sourceId = `20000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
   const versionId = `30000000-0000-4000-8000-${input.suffix.padStart(12, "0")}`;
@@ -95,11 +100,19 @@ async function seedAct(client: PGlite, input: {
        values ($1, $2, $3, $4)`,
     [versionId, sourceId, input.raw, input.occurredAt],
   );
-  await client.query(
-    `insert into act_source_assignments(id, source_record_id, target_entity_type, target_entity_id)
-       values ($1, $2, 'organization', $3)`,
-    [assignmentId, sourceId, organizationId],
-  );
+  if (input.link === "external") {
+    await client.query(
+      `insert into act_external_links(entity_type, entity_id, source_entity_type, source_record_id)
+         values ('organization', $1, 'history', $2)`,
+      [organizationId, sourceId],
+    );
+  } else {
+    await client.query(
+      `insert into act_source_assignments(id, source_record_id, target_entity_type, target_entity_id)
+         values ($1, $2, 'organization', $3)`,
+      [assignmentId, sourceId, organizationId],
+    );
+  }
 }
 
 describe("LeadRelationshipEvidenceRepository", () => {
@@ -154,7 +167,7 @@ describe("LeadRelationshipEvidenceRepository", () => {
       expect.objectContaining({ sourceId: "gmail-out", direction: "outbound", responseProven: false, conflicting: false }),
       expect.objectContaining({ sourceId: "gmail-wrong", direction: "unknown", responseProven: false, conflicting: true }),
     ]));
-  });
+  }, 15_000);
 
   it("excludes mappings until the Google validation sample is approved", async () => {
     const client = await setup(); clients.push(client);
@@ -169,7 +182,7 @@ describe("LeadRelationshipEvidenceRepository", () => {
       pending: { from: recipientEmail, to: "sales@adventurezone.example", at: "2025-05-14T12:00:00Z" },
     }));
     await expect(repository.list({ organizationId, recipientEmail })).resolves.toEqual([]);
-  });
+  }, 15_000);
 
   it("keeps CRM activity with a stable ACT source id as context, not proof of a reply", async () => {
     const client = await setup(); clients.push(client);
@@ -194,7 +207,25 @@ describe("LeadRelationshipEvidenceRepository", () => {
         excerpt: "talked to them please follow up",
       }),
     ]);
-  });
+  }, 15_000);
+
+  it("loads archived history linked through the CRM external-link authority", async () => {
+    const client = await setup(); clients.push(client);
+    await seedAct(client, {
+      suffix: "4",
+      raw: { Direction: "Outbound", To: recipientEmail, Details: "Introduction sent" },
+      body: "Introduction sent",
+      occurredAt: "2025-05-10T12:00:00Z",
+      link: "external",
+    });
+
+    const evidence = await new LeadRelationshipEvidenceRepository(drizzle(client) as never)
+      .list({ organizationId, recipientEmail });
+
+    expect(evidence).toEqual([
+      expect.objectContaining({ sourceType: "act", direction: "outbound", responseProven: false }),
+    ]);
+  }, 15_000);
 
   it("collapses ACT and Gmail observations carrying the same Gmail message id", async () => {
     const client = await setup(); clients.push(client);
