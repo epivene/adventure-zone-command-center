@@ -80,6 +80,47 @@ describe("LeadEmailPreviewPanel Gmail draft action", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
+  it("does not lose an in-flight existing draft lookup when preview loading starts", async () => {
+    let resolveDraft!: (value: {
+      id: string;
+      rowId: string;
+      state: "created";
+      gmailDraftId: string;
+      gmailMessageId: string;
+      lastErrorCode: null;
+    }) => void;
+    const existing = new Promise<{
+      id: string;
+      rowId: string;
+      state: "created";
+      gmailDraftId: string;
+      gmailMessageId: string;
+      lastErrorCode: null;
+    }>((resolve) => { resolveDraft = resolve; });
+    render(
+      <LeadEmailPreviewPanel
+        rowId="row-1"
+        reviewVersion={7}
+        load={async () => readyPreview}
+        loadDraft={async () => existing}
+        create={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Load safe preview" }));
+    expect(await screen.findByText("Body")).toBeInTheDocument();
+    resolveDraft({
+      id: "link-1",
+      rowId: "row-1",
+      state: "created",
+      gmailDraftId: "gmail-draft-1",
+      gmailMessageId: "message-1",
+      lastErrorCode: null,
+    });
+    expect(await screen.findByText("Gmail draft created")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Create Gmail Draft" })).not.toBeInTheDocument();
+  });
+
   it("does not expose draft creation for a blocked preview", async () => {
     render(
       <LeadEmailPreviewPanel
