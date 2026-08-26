@@ -56,8 +56,9 @@ const includedServices = [
 export function renderLeadEmail(input: LeadEmailRenderInput) {
   const eventName = input.eventName.trim();
   const subjectName = input.profileName?.trim() || eventName;
-  const location = [input.eventCity?.trim(), input.eventRegion?.trim()].filter(Boolean).join(" ");
-  const subject = [subjectName, location && `(${location})`, formatVerifiedDateRange(input.startDate, input.endDate)].filter(Boolean).join(" ");
+  const city = input.eventCity?.trim();
+  const region = input.eventRegion?.trim();
+  const subject = [subjectName, city && `(${city})`, region, formatVerifiedDateRange(input.startDate, input.endDate)].filter(Boolean).join(" ");
 
   const sections = [
     input.firstName?.trim() ? `Hi, ${input.firstName.trim()}` : "Hi,",
