@@ -4,9 +4,9 @@ import { LeadAvailabilityService } from "./lead-availability-service";
 describe("LeadAvailabilityService", () => {
   it("checks selected calendars, persists evidence, and blocks readiness on ambiguous reservations", async () => {
     const persistence = {
-      loadVerifiedLead: async () => ({ id: "row-1", reviewVersion: 4, state: "verified", recipientConfirmed: true, introductionSuitable: true, startDate: "2026-09-10", endDate: "2026-09-12" }),
+      loadVerifiedLead: async () => ({ id: "row-1", reviewVersion: 4, state: "verified", organizationId: "org-1", recipientEmail: "events@example.com", recipientConfirmed: true, introductionSuitable: true, startDate: "2026-09-10", endDate: "2026-09-12" }),
       selectedCalendars: async () => [{ id: "zone-a", summary: "Adventure Zone", primary: false }],
-      save: async (snapshot: unknown) => snapshot,
+      save: async () => ({ reviewVersion: 5 }),
     };
     const google = { listCalendarEvents: async () => [{
       calendarId: "zone-a", calendarTimeZone: "America/Chicago", id: "event-1", iCalUid: "ical-1",
