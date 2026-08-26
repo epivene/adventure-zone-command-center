@@ -7,23 +7,24 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Read alternate-name profile history
+      - name: Create missing next-batch profiles
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          IDS=(
-            "A Blast on the Grass|6e537d3e-01e2-482a-a02e-a842a78ba72b"
-            "Grant County Fair NM|2c3dfcd7-fb16-4995-8048-bf576fa01c25"
-            "Otero County Fair NM|af71ea65-ef9f-4abe-bf11-5ecf084b3409"
-          )
-          for ENTRY in "${IDS[@]}"; do
-            NAME="${ENTRY%%|*}"
-            ID="${ENTRY##*|}"
-            echo "=== HISTORY: ${NAME} ==="
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              "${BASE}/api/assistant-import/profile-history/${ID}"
-            echo
-          done
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/event-profiles" \
+            --data-binary @- <<'JSON'
+          {"event":{"id":null,"name":"Thousand Springs Festival of the Arts","city":"Wendell","region":"ID"},"profile":{"placeType":"festival_event","description":"2026 Thousand Springs Festival of the Arts prospect at Ritter Island, September 26-27, 2026. Family-oriented arts festival organized by the Magic Valley Arts Council.","phone":"2087342787","website":"https://magicvalleyartscouncil.org/thousand-springs-festival-of-the-arts/","address1":"Ritter Island","address2":"","postalCode":""},"contacts":[{"id":null,"name":"Magic Valley Arts Council","phone":"2087342787","email":"magicvalleyartscouncil@magicvalleyartscouncil.org","role":"Organizer","primary":true}],"booking":{"enabled":true,"name":"Thousand Springs Festival of the Arts - 2026","status":"new_lead","startsAt":"2026-09-26","endsAt":"2026-09-27","nextActionKind":"email","nextActionDueAt":"2026-08-27","travelLegId":null},"familyId":null,"parentOrganizationId":null}
+          JSON
+          echo
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/event-profiles" \
+            --data-binary @- <<'JSON'
+          {"event":{"id":null,"name":"Rocky Mountain ATV Jamboree","city":"Richfield","region":"UT"},"profile":{"placeType":"festival_event","description":"2026 Rocky Mountain ATV Jamboree prospect in Richfield, Utah, September 14-18, 2026. Adventure Zone previously reached out to Sevier Events in 2024 after Chad McWilliams directed us there.","phone":"4358930491","website":"","address1":"","address2":"","postalCode":""},"contacts":[{"id":null,"name":"Sevier Events","phone":"4358930491","email":"sevierevents@sevier.utah.gov","role":"Event Organizer","primary":true}],"booking":{"enabled":true,"name":"Rocky Mountain ATV Jamboree - 2026","status":"new_lead","startsAt":"2026-09-14","endsAt":"2026-09-18","nextActionKind":"email","nextActionDueAt":"2026-08-27","travelLegId":null},"familyId":null,"parentOrganizationId":null}
+          JSON
