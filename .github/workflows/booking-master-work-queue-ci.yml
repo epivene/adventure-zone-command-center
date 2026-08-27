@@ -5,24 +5,34 @@ on:
     paths:
       - "artifacts/api-server/src/db/schema.ts"
       - "artifacts/api-server/src/features/opportunities/**"
+      - "artifacts/api-server/src/features/today/**"
+      - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/routes/opportunities.ts"
+      - "artifacts/api-server/src/routes/opportunities.test.ts"
+      - "artifacts/api-server/src/routes/today.ts"
+      - "artifacts/api-server/src/routes/today.test.ts"
+      - "artifacts/api-server/src/routes/follow-ups.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/today/**"
+      - "artifacts/adventure-zone/src/components/today/**"
+      - "artifacts/adventure-zone/src/components/opportunities/**"
+      - "artifacts/adventure-zone/src/components/profiles/profile-primary-actions.tsx"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx"
       - "lib/db/src/booking-opportunity-schema.ts"
+      - "lib/db/src/index.ts"
       - "lib/db/src/migrations.ts"
+      - "lib/db/package.json"
       - "lib/db/migrations/070_booking_opportunities.sql"
       - ".github/workflows/booking-master-work-queue-ci.yml"
-      - ".github/workflows/booking-master-task1-marker.yml"
-
-permissions:
-  contents: write
+  workflow_dispatch:
 
 jobs:
-  register-task1-marker:
-    if: github.event.pull_request.head.ref == 'feat/booking-master-work-queue-release-1'
+  booking-master-work-queue:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          ref: feat/booking-master-work-queue-release-1
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -31,89 +41,9 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Register and verify Task 1 migration
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path('lib/db/src/migrations.ts')
-          source = path.read_text()
-          if 'name: "070_booking_opportunities.sql"' not in source:
-              anchor = '\n] as const;\n\nasync function resolveMigrationDirectory'
-              entry = '''
-  {
-    name: "070_booking_opportunities.sql",
-    markerSql: `SELECT
-      to_regclass(current_schema() || '.booking_opportunities') IS NOT NULL
-      AND to_regclass(current_schema() || '.booking_opportunity_queue_overrides') IS NOT NULL
-      AND to_regclass(current_schema() || '.booking_opportunities_organization_year_unique') IS NOT NULL
-      AS ready`,
-  },
-'''
-              if anchor not in source:
-                  raise SystemExit('migration registry anchor not found')
-              path.write_text(source.replace(anchor, entry + anchor, 1))
-          PY
-          pnpm --filter @workspace/api-server exec vitest run src/features/opportunities/opportunity-repository.test.ts
-          pnpm --filter @workspace/api-server typecheck
-          git diff --check
-      - name: Restore normal CI and commit verified marker
-        run: |
-          cat > .github/workflows/booking-master-work-queue-ci.yml <<'YAML'
-          name: Booking Master Work Queue CI
-
-          on:
-            pull_request:
-              paths:
-                - "artifacts/api-server/src/db/schema.ts"
-                - "artifacts/api-server/src/features/opportunities/**"
-                - "artifacts/api-server/src/features/today/**"
-                - "artifacts/api-server/src/features/follow-ups/**"
-                - "artifacts/api-server/src/routes/opportunities.ts"
-                - "artifacts/api-server/src/routes/opportunities.test.ts"
-                - "artifacts/api-server/src/routes/today.ts"
-                - "artifacts/api-server/src/routes/today.test.ts"
-                - "artifacts/api-server/src/routes/follow-ups.ts"
-                - "artifacts/api-server/src/routes/index.ts"
-                - "artifacts/adventure-zone/src/features/today/**"
-                - "artifacts/adventure-zone/src/components/today/**"
-                - "artifacts/adventure-zone/src/components/opportunities/**"
-                - "artifacts/adventure-zone/src/components/profiles/profile-primary-actions.tsx"
-                - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
-                - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
-                - "artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx"
-                - "lib/db/src/booking-opportunity-schema.ts"
-                - "lib/db/src/index.ts"
-                - "lib/db/src/migrations.ts"
-                - "lib/db/package.json"
-                - "lib/db/migrations/070_booking_opportunities.sql"
-                - ".github/workflows/booking-master-work-queue-ci.yml"
-            workflow_dispatch:
-
-          jobs:
-            booking-master-work-queue:
-              runs-on: ubuntu-latest
-              steps:
-                - uses: actions/checkout@v4
-                - uses: pnpm/action-setup@v4
-                  with:
-                    version: 10
-                - uses: actions/setup-node@v4
-                  with:
-                    node-version: 22
-                    cache: pnpm
-                - run: pnpm install --frozen-lockfile
-                - name: Release 1 focused API tests
-                  run: >-
-                    pnpm --filter @workspace/api-server exec vitest run
-                    src/features/opportunities/opportunity-repository.test.ts
-                - name: API typecheck
-                  run: pnpm --filter @workspace/api-server typecheck
-          YAML
-          rm -f .github/workflows/booking-master-task1-marker.yml
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add lib/db/src/migrations.ts .github/workflows/booking-master-work-queue-ci.yml
-          git add -u .github/workflows/booking-master-task1-marker.yml
-          git commit -m 'feat: register booking opportunity startup migration'
-          git push origin HEAD:feat/booking-master-work-queue-release-1
+      - name: Release 1 focused API tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/opportunities/opportunity-repository.test.ts
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
