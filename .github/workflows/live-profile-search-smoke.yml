@@ -7,40 +7,35 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Audit remaining Week 3 leads
+      - name: Check alternate names for remaining Week 3 leads
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          cat > /tmp/events.txt <<'EOF'
-          Bear Lake Caribbean Cruze Motorcycle Rally
-          Colorado Mountain Winefest
-          Greek Festival Cheyenne
-          Handmade in Colorado Expo Downtown
-          Oktoberfest Arc of Laramie County
-          Oktoberfest Grand Targhee
-          Oktoberfest Denver
-          Oktoberfest Parker
-          OktoberWest Steamboat Springs
-          Pascua Yaqui Tribe Recognition Day
-          Pirate Fest Northglenn
-          UnCorked Wine & Music Festival
+          cat > /tmp/queries.txt <<'EOF'
+          Greek Festival (Cheyenne) WY
+          Cheyenne Greek Festival
+          Oktoberfest - Arc of Laramie County (Cheyenne) WY
+          Arc Laramie County
+          Oktoberfest - Grand Targhee (Alta) WY
+          Grand Targhee Oktoberfest
+          Oktoberfest (Denver) CO
+          Denver Oktoberfest
+          Oktoberfest (Parker) CO
+          Parker Oktoberfest
+          OktoberWest (Steamboat Springs) CO
+          Steamboat OktoberWest
+          Pirate Fest, The (Northglenn) CO
+          Northglenn Pirate Festival
+          Pirate Festival Northglenn
           EOF
           while IFS= read -r Q; do
             [ -z "$Q" ] && continue
-            echo "=== QUERY: ${Q} ==="
-            RESP=$(curl --fail-with-body --silent --show-error \
+            echo "=== ${Q} ==="
+            curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
               --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search")
-            echo "$RESP" | jq -c '.results'
-            ID=$(echo "$RESP" | jq -r '[.results[] | select(.kind=="organization")][0].id // empty')
-            if [ -n "$ID" ]; then
-              echo "=== HISTORY: ${ID} ==="
-              curl --fail-with-body --silent --show-error \
-                -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-                "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
-              echo
-            fi
-          done < /tmp/events.txt
+              "${BASE}/api/assistant-import/profile-search" | jq -c '.results'
+            echo
+          done < /tmp/queries.txt
