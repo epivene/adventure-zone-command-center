@@ -7,15 +7,17 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Apply all restricted-territory profile notes
+      - name: Search Evanston Cowboy Days profile
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/profile-notes/territory-holds" \
-            --data-binary '{}'
-          echo
+          for Q in "Evanston Cowboy Days" "Cowboy Days Evanston" "Evanston WY"; do
+            echo "=== QUERY: ${Q} ==="
+            curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search"
+            echo
+          done
