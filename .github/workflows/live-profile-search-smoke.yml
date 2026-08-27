@@ -7,35 +7,24 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Check alternate names for remaining Week 3 leads
+      - name: Read remaining Week 3 relationship histories
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          cat > /tmp/queries.txt <<'EOF'
-          Greek Festival (Cheyenne) WY
-          Cheyenne Greek Festival
-          Oktoberfest - Arc of Laramie County (Cheyenne) WY
-          Arc Laramie County
-          Oktoberfest - Grand Targhee (Alta) WY
-          Grand Targhee Oktoberfest
-          Oktoberfest (Denver) CO
-          Denver Oktoberfest
-          Oktoberfest (Parker) CO
-          Parker Oktoberfest
-          OktoberWest (Steamboat Springs) CO
-          Steamboat OktoberWest
-          Pirate Fest, The (Northglenn) CO
-          Northglenn Pirate Festival
-          Pirate Festival Northglenn
+          cat > /tmp/ids.txt <<'EOF'
+          11195641-d050-408f-b0d6-58cbc14165ad Greek Festival Cheyenne
+          b808a33d-650e-4b28-9ccc-1a3dc5d26c46 Arc Oktoberfest
+          8d637750-e245-43cd-bcc1-af2cf1f0bcd7 Denver Oktoberfest
+          a128b6ae-d9c9-42ae-ac60-9abe28cfd5f6 Parker Oktoberfest
+          44f4b435-5710-4b67-a1f8-decf8345e7f8 OktoberWest
+          f24033e1-801b-43ff-9a7e-a9d6d7b426c3 Pirate Fest Northglenn
           EOF
-          while IFS= read -r Q; do
-            [ -z "$Q" ] && continue
-            echo "=== ${Q} ==="
+          while read -r ID NAME; do
+            echo "=== ${NAME} | ${ID} ==="
             curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search" | jq -c '.results'
+              "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
             echo
-          done < /tmp/queries.txt
+          done < /tmp/ids.txt
