@@ -92,7 +92,7 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
     detail: input.laterFollowUpCount
       ? `${input.laterFollowUpCount} follow-up${input.laterFollowUpCount === 1 ? " is" : "s are"} scheduled for later.`
       : "Nothing urgent is waiting on you.",
-    primaryLabel: input.laterFollowUpCount ? "View follow-ups" : "Find opportunities",
-    primaryHref: input.laterFollowUpCount ? "#my-work-calls" : "/research-sources",
+    primaryLabel: input.laterFollowUpCount ? "View later" : "Find opportunities",
+    primaryHref: input.laterFollowUpCount ? "#later-work" : "/research-sources",
   };
 }
