@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createGoogleWorkspaceReadClient } from "./google-api-client";
+import { createGoogleGmailDeliveryClient } from "./google-gmail-delivery-client";
 
 const environment = {
   clientId: "client-id",
@@ -24,9 +24,9 @@ describe("Google Gmail delivery client", () => {
       expect(JSON.parse(String(init?.body))).toEqual({ message: { raw: "cmF3" } });
       return new Response(JSON.stringify({ id: "draft-1", message: { id: "message-2", threadId: "thread-1" } }), { status: 200 });
     });
-    const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh", fetcher });
+    const client = createGoogleGmailDeliveryClient({ environment, refreshToken: "refresh", fetcher });
 
-    await expect(client.updateGmailDraft!({ draftId: "draft-1", raw: "cmF3" })).resolves.toEqual({
+    await expect(client.updateGmailDraft({ draftId: "draft-1", raw: "cmF3" })).resolves.toEqual({
       draftId: "draft-1",
       messageId: "message-2",
       threadId: "thread-1",
@@ -42,9 +42,9 @@ describe("Google Gmail delivery client", () => {
       expect(JSON.parse(String(init?.body))).toEqual({ id: "draft-1" });
       return new Response(JSON.stringify({ id: "message-sent", threadId: "thread-1", labelIds: ["SENT"] }), { status: 200 });
     });
-    const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh", fetcher });
+    const client = createGoogleGmailDeliveryClient({ environment, refreshToken: "refresh", fetcher });
 
-    await expect(client.sendGmailDraft!({ draftId: "draft-1" })).resolves.toEqual({
+    await expect(client.sendGmailDraft({ draftId: "draft-1" })).resolves.toEqual({
       messageId: "message-sent",
       threadId: "thread-1",
     });
@@ -60,9 +60,9 @@ describe("Google Gmail delivery client", () => {
       if (url.endsWith("/gmail/v1/users/me/drafts/send")) throw new TypeError("socket closed after request write");
       throw new Error(`Unexpected URL: ${url}`);
     });
-    const client = createGoogleWorkspaceReadClient({ environment, refreshToken: "refresh", fetcher });
+    const client = createGoogleGmailDeliveryClient({ environment, refreshToken: "refresh", fetcher });
 
-    await expect(client.sendGmailDraft!({ draftId: "draft-1" })).rejects.toMatchObject({
+    await expect(client.sendGmailDraft({ draftId: "draft-1" })).rejects.toMatchObject({
       code: "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
     });
     expect(urls.filter((url) => url.endsWith("/gmail/v1/users/me/drafts/send"))).toHaveLength(1);
