@@ -37,20 +37,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Guided calling tests
+      - name: API call tests
         run: >-
-          pnpm exec vitest run
-          artifacts/api-server/src/features/calls/call-email-request-outcome.test.ts
-          artifacts/api-server/src/features/calls/call-script.test.ts
-          artifacts/api-server/src/features/calls/call-script-guided.test.ts
-          artifacts/api-server/src/features/calls/call-workspace-query.test.ts
-          artifacts/api-server/src/routes/needs-answer.test.ts
-          artifacts/adventure-zone/src/features/calls/guided-call-scripts.test.ts
-          artifacts/adventure-zone/src/features/calls/guided-call-state.test.ts
-          artifacts/adventure-zone/src/components/calls/call-workspace.test.tsx
-          artifacts/adventure-zone/src/components/today/call-queue-workspace.test.tsx
-          artifacts/adventure-zone/src/components/today/call-queue-guided-call.test.tsx
-      - name: Workspace typecheck
-        run: pnpm run typecheck
-      - name: Workspace build
-        run: pnpm run build
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/calls/call-email-request-outcome.test.ts
+          src/features/calls/call-service.test.ts
+          src/features/calls/call-script.test.ts
+          src/features/calls/call-script-guided.test.ts
+          src/features/calls/call-workspace-query.test.ts
+          src/routes/needs-answer.test.ts
+      - name: Frontend calling tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/features/calls/guided-call-scripts.test.ts
+          src/features/calls/guided-call-state.test.ts
+          src/components/calls/call-workspace.test.tsx
+          src/components/today/call-queue-workspace.test.tsx
+          src/components/today/call-queue-guided-call.test.tsx
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
+      - name: DB build
+        run: pnpm --filter @workspace/db build
