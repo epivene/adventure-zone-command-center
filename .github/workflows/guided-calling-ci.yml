@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/guided-calling-console
+      - feat/call-email-request-drafts-current
   pull_request:
     paths:
       - "artifacts/api-server/src/features/calls/**"
@@ -39,6 +40,7 @@ jobs:
       - name: Guided calling tests
         run: >-
           pnpm exec vitest run
+          artifacts/api-server/src/features/calls/call-email-request-outcome.test.ts
           artifacts/api-server/src/features/calls/call-script.test.ts
           artifacts/api-server/src/features/calls/call-script-guided.test.ts
           artifacts/api-server/src/features/calls/call-workspace-query.test.ts
