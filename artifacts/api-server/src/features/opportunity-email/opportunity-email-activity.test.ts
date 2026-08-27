@@ -23,7 +23,11 @@ function harness() {
   return {
     opportunities,
     activities,
-    writer: new OpportunityEmailActivityWriter({ opportunities, activities }),
+    writer: new OpportunityEmailActivityWriter({
+      opportunities,
+      activities,
+      clock: { now: () => NOW },
+    }),
   };
 }
 
