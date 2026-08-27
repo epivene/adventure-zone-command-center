@@ -1,0 +1,58 @@
+name: Booking Master Work Queue CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/db/schema.ts"
+      - "artifacts/api-server/src/features/opportunities/**"
+      - "artifacts/api-server/src/features/today/**"
+      - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/routes/opportunities.ts"
+      - "artifacts/api-server/src/routes/opportunities.test.ts"
+      - "artifacts/api-server/src/routes/today.ts"
+      - "artifacts/api-server/src/routes/today.test.ts"
+      - "artifacts/api-server/src/routes/follow-ups.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/today/**"
+      - "artifacts/adventure-zone/src/components/today/**"
+      - "artifacts/adventure-zone/src/components/opportunities/**"
+      - "artifacts/adventure-zone/src/components/profiles/profile-primary-actions.tsx"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx"
+      - "lib/db/src/booking-opportunity-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/migrations.ts"
+      - "lib/db/package.json"
+      - "lib/db/migrations/070_booking_opportunities.sql"
+      - ".github/workflows/booking-master-work-queue-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  booking-master-work-queue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Release 1 focused tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/opportunities
+          artifacts/api-server/src/features/today
+          artifacts/api-server/src/routes/opportunities.test.ts
+          artifacts/api-server/src/routes/today.test.ts
+          artifacts/adventure-zone/src/features/today
+          artifacts/adventure-zone/src/components/today
+          artifacts/adventure-zone/src/components/opportunities
+          artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
