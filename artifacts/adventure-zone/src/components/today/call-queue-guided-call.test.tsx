@@ -80,7 +80,7 @@ function renderWorkspace(data: any): ReactNode {
 afterEach(cleanup);
 
 describe("Today guided call action", () => {
-  it("preloads a native tel link and selects the same caller without completing a call", async () => {
+  it("opens the selected caller in focus mode without completing the call", async () => {
     const loadWorkspace = vi.fn((followUp: CallQueueItem) =>
       Promise.resolve(workspace(followUp.contactName ?? followUp.bookingName)),
     );
@@ -95,15 +95,13 @@ describe("Today guided call action", () => {
       />,
     );
 
+    expect(screen.getByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+    expect(loadWorkspace).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Start call" }));
+
     expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
-    const callLinks = screen.getAllByRole("link", { name: "Start guided call" });
-    expect(callLinks[0]).toHaveAttribute("href", "tel:7015550199");
-    expect(callLinks[1]).toHaveAttribute("href", "tel:7015550112");
-
-    callLinks[1].addEventListener("click", (event) => event.preventDefault(), { capture: true });
-    fireEvent.click(callLinks[1]);
-
-    expect(await screen.findByRole("heading", { name: "Tom Erickson" })).toBeVisible();
+    expect(loadWorkspace).toHaveBeenCalledWith(followUps[0]);
     expect(completeCall).not.toHaveBeenCalled();
   });
 });
