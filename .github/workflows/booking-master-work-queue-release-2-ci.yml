@@ -64,6 +64,7 @@ jobs:
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/components/opportunities/opportunity-draft-composer.test.tsx
           src/components/opportunities/follow-up-after-send.test.tsx
+          src/components/today/ready-to-send-section.test.tsx
           --environment jsdom
       - name: Database build
         run: pnpm --filter @workspace/db build
