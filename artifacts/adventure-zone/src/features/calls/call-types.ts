@@ -33,6 +33,7 @@ export type CallDisposition =
   | "no_answer"
   | "left_voicemail"
   | "follow_up_needed"
+  | "email_requested"
   | "interested"
   | "proposal_contract_sent"
   | "booked"
@@ -152,6 +153,7 @@ export const persistedCallDisposition: Record<
   no_answer: "no_answer",
   left_voicemail: "left_voicemail",
   follow_up_needed: "follow_up_needed",
+  email_requested: "email_requested",
   interested: "interested",
   proposal_contract_sent: "proposal_sent",
   booked: "booked",
@@ -169,6 +171,7 @@ export const publicCallDisposition: Record<
   no_answer: "no_answer",
   left_voicemail: "left_voicemail",
   follow_up_needed: "follow_up_needed",
+  email_requested: "email_requested",
   interested: "interested",
   proposal_sent: "proposal_contract_sent",
   booked: "booked",
