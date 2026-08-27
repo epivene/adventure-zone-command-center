@@ -72,6 +72,8 @@ describe("deriveTodayFocus", () => {
       kind: "caught_up",
       headline: "You're caught up for now",
       detail: "39 follow-ups are scheduled for later.",
+      primaryLabel: "View later",
+      primaryHref: "#later-work",
     });
   });
 
