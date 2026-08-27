@@ -7,80 +7,40 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Create missing draft profiles
+      - name: Audit remaining Week 3 leads
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-
-          create_profile() {
-            local payload="$1"
-            local subject="$2"
-            local note="$3"
+          cat > /tmp/events.txt <<'EOF'
+          Bear Lake Caribbean Cruze Motorcycle Rally
+          Colorado Mountain Winefest
+          Greek Festival Cheyenne
+          Handmade in Colorado Expo Downtown
+          Oktoberfest Arc of Laramie County
+          Oktoberfest Grand Targhee
+          Oktoberfest Denver
+          Oktoberfest Parker
+          OktoberWest Steamboat Springs
+          Pascua Yaqui Tribe Recognition Day
+          Pirate Fest Northglenn
+          UnCorked Wine & Music Festival
+          EOF
+          while IFS= read -r Q; do
+            [ -z "$Q" ] && continue
+            echo "=== QUERY: ${Q} ==="
             RESP=$(curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/event-profiles" \
-              --data-binary "$payload")
-            echo "$RESP"
-            ID=$(printf '%s' "$RESP" | jq -r '.profileId')
-            NOTE=$(jq -n --arg id "$ID" --arg subject "$subject" --arg body "$note" \
-              '{organizationId:$id,subject:$subject,body:$body}')
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/profile-notes" \
-              --data-binary "$NOTE"
-            echo
-          }
-
-          create_profile '{
-            "event":{"id":null,"name":"The Springs Home Show","city":"Colorado Springs","region":"CO"},
-            "profile":{"placeType":"festival_event","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }' \
-          '2026 outreach draft' \
-          'Current 2026 Gmail draft is addressed to info@nationwideexpos.com for The Springs Home Show, Oct. 2-4, 2026. Prior outreach history was reviewed before drafting; the current draft intentionally circles back rather than treating the account as a brand-new introduction.'
-
-          create_profile '{
-            "event":{"id":null,"name":"A Blast on the Grass","city":"Hagerman","region":"ID"},
-            "profile":{"placeType":"festival_event","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }' \
-          '2026 outreach draft' \
-          'Current 2026 Gmail draft is addressed to hagermanchamber@gmail.com for A Blast on the Grass, Sept. 19, 2026. Prior outreach history was reviewed before drafting; Amy had reached out in past years.'
-
-          create_profile '{
-            "event":{"id":null,"name":"Holly Gateway Fair","city":"Holly","region":"CO"},
-            "profile":{"placeType":"fair","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[{"id":null,"name":"Preston","phone":"","email":"neugebauerracingllc@gmail.com","role":"Current event contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }' \
-          '2026 outreach draft' \
-          'Current 2026 Gmail draft is addressed to Preston at neugebauerracingllc@gmail.com for Holly Gateway Fair, Sept. 20-27, 2026. Amy reached out to this contact in 2024, so current outreach continues that relationship rather than starting over.'
-
-          create_profile '{
-            "event":{"id":null,"name":"Cochise County Fair","city":"Douglas","region":"AZ"},
-            "profile":{"placeType":"fair","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[{"id":null,"name":"Dominique","phone":"","email":"cochisectyfair@qwestoffice.net","role":"Current fair contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }' \
-          '2026 outreach draft' \
-          'Current 2026 Gmail draft is addressed to Dominique at cochisectyfair@qwestoffice.net for Cochise County Fair, Sept. 24-27, 2026. Relationship history reviewed for the draft includes an Arizona Fairs Association Convention conversation and Amy follow-up afterward.'
-
-          create_profile '{
-            "event":{"id":null,"name":"Santa Cruz County Fair","city":"Sonoita","region":"AZ"},
-            "profile":{"placeType":"fair","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[{"id":null,"name":"Lacy","phone":"","email":"info@sonoita-fairgrounds.com","role":"Current fair contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }' \
-          '2026 outreach draft' \
-          'Current 2026 Gmail draft is addressed to Lacy at info@sonoita-fairgrounds.com for Santa Cruz County Fair, Sept. 18-20, 2026. Prior outreach ahead of the Arizona Association of Fairs Convention was reviewed before drafting, so current outreach is a continuation rather than a cold introduction.'
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search")
+            echo "$RESP" | jq -c '.results'
+            ID=$(echo "$RESP" | jq -r '[.results[] | select(.kind=="organization")][0].id // empty')
+            if [ -n "$ID" ]; then
+              echo "=== HISTORY: ${ID} ==="
+              curl --fail-with-body --silent --show-error \
+                -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
+              echo
+            fi
+          done < /tmp/events.txt
