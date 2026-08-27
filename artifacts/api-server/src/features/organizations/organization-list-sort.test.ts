@@ -3,13 +3,13 @@ import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
 import { organizationListQuerySchema } from "./last-resort-input";
-import { buildOrganizationListOrderBy } from "./organization-repository";
+import { buildOrganizationDirectoryOrderBy } from "./organization-directory-page";
 
 const routeSource = readFileSync(new URL("../../routes/organizations.ts", import.meta.url), "utf8");
 
 function compiledOrder(sort: Parameters<typeof organizationListQuerySchema.parse>[0]) {
   const query = organizationListQuerySchema.parse(sort);
-  return buildOrganizationListOrderBy(query)
+  return buildOrganizationDirectoryOrderBy(query)
     .map((part) => new PgDialect().sqlToQuery(part).sql)
     .join(" ");
 }
