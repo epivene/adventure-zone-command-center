@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, lte, or, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { bookingOpportunityEmailState } from "@/db/schema";
@@ -10,6 +10,7 @@ import type {
 
 type DrizzleDatabase = typeof database;
 type OpportunityEmailRow = typeof bookingOpportunityEmailState.$inferSelect;
+const DISPATCH_LEASE_MS = 60_000;
 
 function toRecord(row: OpportunityEmailRow): OpportunityEmailRecord {
   return {
@@ -133,5 +134,55 @@ export class OpportunityEmailRepository {
       .where(inArray(bookingOpportunityEmailState.state, ["draft", "scheduled", "failed"]))
       .orderBy(desc(bookingOpportunityEmailState.updatedAt));
     return rows.map(toRecord);
+  }
+
+  async claimOneDue(input: {
+    workerId: string;
+    now: Date;
+  }): Promise<OpportunityEmailRecord | null> {
+    const leaseExpiresAt = new Date(input.now.getTime() + DISPATCH_LEASE_MS);
+    return this.database.transaction(async (tx) => {
+      const [candidate] = await tx
+        .select({ id: bookingOpportunityEmailState.id })
+        .from(bookingOpportunityEmailState)
+        .where(and(
+          eq(bookingOpportunityEmailState.state, "scheduled"),
+          lte(bookingOpportunityEmailState.scheduledFor, input.now),
+          or(
+            sql`${bookingOpportunityEmailState.dispatchLeaseExpiresAt} is null`,
+            lte(bookingOpportunityEmailState.dispatchLeaseExpiresAt, input.now),
+          ),
+        ))
+        .orderBy(bookingOpportunityEmailState.scheduledFor, bookingOpportunityEmailState.id)
+        .limit(1)
+        .for("update", { skipLocked: true });
+      if (!candidate) return null;
+
+      const [claimed] = await tx
+        .update(bookingOpportunityEmailState)
+        .set({
+          dispatchLeaseOwner: input.workerId,
+          dispatchLeaseExpiresAt: leaseExpiresAt,
+          dispatchAttemptCount: sql`${bookingOpportunityEmailState.dispatchAttemptCount} + 1`,
+          updatedAt: input.now,
+        })
+        .where(eq(bookingOpportunityEmailState.id, candidate.id))
+        .returning();
+      return claimed ? toRecord(claimed) : null;
+    });
+  }
+
+  async releaseLease(draftId: string, workerId: string, now: Date): Promise<void> {
+    await this.database
+      .update(bookingOpportunityEmailState)
+      .set({
+        dispatchLeaseOwner: null,
+        dispatchLeaseExpiresAt: null,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(bookingOpportunityEmailState.id, draftId),
+        eq(bookingOpportunityEmailState.dispatchLeaseOwner, workerId),
+      ));
   }
 }
