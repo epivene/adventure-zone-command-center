@@ -7,7 +7,7 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Process OktoberWest reply
+      - name: Process Telluride Autumn Classic reply
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
@@ -15,19 +15,20 @@ jobs:
           BASE="https://adventure-zone-command-center.onrender.com"
           AUTH=(-H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}")
 
-          SEARCH=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${BASE}/api/assistant-import/profile-search?q=OktoberWest&limit=10")
+          SEARCH=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${BASE}/api/assistant-import/profile-search?q=Telluride%20Autumn%20Classic&limit=10")
           echo "$SEARCH"
-          PROFILE=$(echo "$SEARCH" | jq -c '.results[] | select(.kind=="organization") | select((.label|ascii_downcase|contains("oktoberwest")))' | head -n1)
+          PROFILE=$(echo "$SEARCH" | jq -c '.results[] | select(.kind=="organization") | select((.label|ascii_downcase|contains("telluride autumn classic")))' | head -n1)
           test -n "$PROFILE"
           ID=$(echo "$PROFILE" | jq -r '.id')
           NAME=$(echo "$PROFILE" | jq -r '.label')
-          CITY=$(echo "$PROFILE" | jq -r '.city // "Steamboat Springs"')
+          CITY=$(echo "$PROFILE" | jq -r '.city // "Telluride"')
           REGION=$(echo "$PROFILE" | jq -r '.region // "CO"')
 
-          NOTE=$(jq -n --arg id "$ID" '{organizationId:$id,subject:"2026 OktoberWest reply - no space / permits",body:"Cecilia Morter replied Aug. 27, 2026 after the 2026 outreach. OktoberWest cannot accommodate Adventure Zone this year because there is no additional space; adding us would require expanding the event footprint and obtaining additional permits, and the event is only about two weeks away. This is not a hard fit rejection: Cecilia said she will save the email and reach out if things change in the future. Treat as warm future possibility; do not continue pursuing 2026. Current reply signature: Cecilia Morter, Business Development & Program Director, Steamboat Springs Chamber, cecilia@steamboatchamber.com, 970-875-7000."}')
+          NOTE=$(jq -n --arg id "$ID" '{organizationId:$id,subject:"2026 Telluride Autumn Classic reply - contact in January 2027",body:"Anita Cody replied Aug. 27, 2026 after the 2026 outreach. The 2026 event is already fully set because it is less than 30 days away. Anita explicitly invited Adventure Zone to send her a reminder in January 2027 so they can possibly consider us for the next event. This is a warm future opportunity, not a fit rejection. Do not continue pursuing 2026. Current reply contact details: Anita Cody; reply from anita@thegatedshifter.com with anita@tellurideautumnclassic.com CCd; phone 970-708-1898; Telluride Autumn Classic / Telluride Property Management."}')
           curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$NOTE"
           echo
 
-          PAYLOAD=$(jq -n --arg id "$ID" --arg name "$NAME" --arg city "$CITY" --arg region "$REGION" '{event:{id:$id,name:$name,city:$city,region:$region},profile:{placeType:"festival_event",description:"",phone:"970-875-7000",website:"https://www.steamboatchamber.com/",address1:"",address2:"",postalCode:""},contacts:[{id:null,name:"Cecilia Morter",phone:"970-875-7000",email:"cecilia@steamboatchamber.com",role:"Business Development & Program Director",primary:true}],booking:{enabled:true,name:"OktoberWest 2027 follow-up",status:"renewal_due",startsAt:"",endsAt:"",nextActionKind:"follow_up",nextActionDueAt:"2027-01-15",travelLegId:null},familyId:null,parentOrganizationId:null}')
-          curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/event-profiles" --data-binary "$PAYLOAD"
-          echo
+          PAYLOAD=$(jq -n --arg id "$ID" --arg name "$NAME" --arg city "$CITY" --arg region "$REGION" '{event:{id:$id,name:$name,city:$city,region:$region},profile:{placeType:"festival_event",description:"",phone:"970-708-1898",website:"https://www.tellurideautumnclassic.com/",address1:"",address2:"",postalCode:""},contacts:[{id:null,name:"Anita Cody",phone:"970-708-1898",email:"anita@tellurideautumnclassic.com",role:"Event contact",primary:true}],booking:{enabled:true,name:"Telluride Autumn Classic 2027 follow-up",status:"renewal_due",startsAt:"",endsAt:"",nextActionKind:"follow_up",nextActionDueAt:"2027-01-08",travelLegId:null},familyId:null,parentOrganizationId:null}')
+          RESP=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/event-profiles" --data-binary "$PAYLOAD")
+          echo "$RESP"
+          echo "$RESP" | jq -e '.ok == true and .bookingId != null' >/dev/null
