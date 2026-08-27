@@ -7,7 +7,7 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Process Telluride Autumn Classic reply
+      - name: Create verified January 2027 follow-ups
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
@@ -15,20 +15,25 @@ jobs:
           BASE="https://adventure-zone-command-center.onrender.com"
           AUTH=(-H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}")
 
-          SEARCH=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${BASE}/api/assistant-import/profile-search?q=Telluride%20Autumn%20Classic&limit=10")
-          echo "$SEARCH"
-          PROFILE=$(echo "$SEARCH" | jq -c '.results[] | select(.kind=="organization") | select((.label|ascii_downcase|contains("telluride autumn classic")))' | head -n1)
-          test -n "$PROFILE"
-          ID=$(echo "$PROFILE" | jq -r '.id')
-          NAME=$(echo "$PROFILE" | jq -r '.label')
-          CITY=$(echo "$PROFILE" | jq -r '.city // "Telluride"')
-          REGION=$(echo "$PROFILE" | jq -r '.region // "CO"')
+          find_profile() {
+            local q="$1"
+            local needle="$2"
+            local search
+            search=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${BASE}/api/assistant-import/profile-search?q=${q}&limit=10")
+            echo "$search" >&2
+            echo "$search" | jq -r --arg needle "$needle" '.results[] | select(.kind=="organization") | select((.label|ascii_downcase|contains($needle))) | .id' | head -n1
+          }
 
-          NOTE=$(jq -n --arg id "$ID" '{organizationId:$id,subject:"2026 Telluride Autumn Classic reply - contact in January 2027",body:"Anita Cody replied Aug. 27, 2026 after the 2026 outreach. The 2026 event is already fully set because it is less than 30 days away. Anita explicitly invited Adventure Zone to send her a reminder in January 2027 so they can possibly consider us for the next event. This is a warm future opportunity, not a fit rejection. Do not continue pursuing 2026. Current reply contact details: Anita Cody; reply from anita@thegatedshifter.com with anita@tellurideautumnclassic.com CCd; phone 970-708-1898; Telluride Autumn Classic / Telluride Property Management."}')
-          curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$NOTE"
-          echo
+          TELLURIDE_ID=$(find_profile "Telluride%20Autumn%20Classic" "telluride autumn classic")
+          test -n "$TELLURIDE_ID"
+          TELLURIDE_FU=$(jq -n --arg id "$TELLURIDE_ID" '{organizationId:$id,label:"January 2027 - Telluride Autumn Classic",reason:"Anita Cody specifically asked on Aug. 27, 2026 for a reminder in January 2027 so Adventure Zone can possibly be considered for the next Telluride Autumn Classic. Reach out early in the planning cycle; 2026 was already set less than 30 days before the event, not a fit rejection.",dueAt:"2027-01-08T09:00:00-07:00"}')
+          TELLURIDE_RESP=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/today-followups" --data-binary "$TELLURIDE_FU")
+          echo "$TELLURIDE_RESP"
+          echo "$TELLURIDE_RESP" | jq -e '.ok == true and (.followUpId|length) > 0 and .dueAt == "2027-01-08T16:00:00.000Z"' >/dev/null
 
-          PAYLOAD=$(jq -n --arg id "$ID" --arg name "$NAME" --arg city "$CITY" --arg region "$REGION" '{event:{id:$id,name:$name,city:$city,region:$region},profile:{placeType:"festival_event",description:"",phone:"970-708-1898",website:"https://www.tellurideautumnclassic.com/",address1:"",address2:"",postalCode:""},contacts:[{id:null,name:"Anita Cody",phone:"970-708-1898",email:"anita@tellurideautumnclassic.com",role:"Event contact",primary:true}],booking:{enabled:true,name:"Telluride Autumn Classic 2027 follow-up",status:"renewal_due",startsAt:"",endsAt:"",nextActionKind:"follow_up",nextActionDueAt:"2027-01-08",travelLegId:null},familyId:null,parentOrganizationId:null}')
-          RESP=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/event-profiles" --data-binary "$PAYLOAD")
-          echo "$RESP"
-          echo "$RESP" | jq -e '.ok == true and .bookingId != null' >/dev/null
+          OKTOBER_ID=$(find_profile "OktoberWest" "oktoberwest")
+          test -n "$OKTOBER_ID"
+          OKTOBER_FU=$(jq -n --arg id "$OKTOBER_ID" '{organizationId:$id,label:"January 2027 - OktoberWest",reason:"Cecilia Morter said on Aug. 27, 2026 that OktoberWest had no additional space and would need footprint expansion and permits, but she would save Adventure Zone information for the future. Reconnect early for 2027 before space and permits are locked in.",dueAt:"2027-01-15T09:00:00-07:00"}')
+          OKTOBER_RESP=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/today-followups" --data-binary "$OKTOBER_FU")
+          echo "$OKTOBER_RESP"
+          echo "$OKTOBER_RESP" | jq -e '.ok == true and (.followUpId|length) > 0 and .dueAt == "2027-01-15T16:00:00.000Z"' >/dev/null
