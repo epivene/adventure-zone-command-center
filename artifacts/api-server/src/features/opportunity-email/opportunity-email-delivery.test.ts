@@ -149,4 +149,16 @@ describe("OpportunityEmailService delivery", () => {
     expect(deps.workflowSink.recordSent).toHaveBeenCalledTimes(1);
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
   });
+
+  it("retries a failed scheduled intent on the same draft instead of generating a new message", async () => {
+    const failed = record({ state: "failed", scheduledFor: SCHEDULED_FOR, lastFailureCode: "SCHEDULE_FAILED" });
+    const deps = dependencies(failed);
+    const service = new OpportunityEmailService(deps as any);
+
+    const result = await service.retryDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "retry-1" });
+
+    expect(deps.gmailDraftProvider.createDraft).not.toHaveBeenCalled();
+    expect(deps.gmailDraftProvider.scheduleDraft).toHaveBeenCalledWith({ draftId: "gmail-draft-1", scheduledFor: SCHEDULED_FOR });
+    expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
+  });
 });
