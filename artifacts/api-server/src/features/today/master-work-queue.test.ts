@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { businessDayBounds } from "@/lib/business-date";
 import {
   applyEmailFailureAttention,
+  applyEmailFailuresToCandidates,
   buildMasterTodayQueue,
   type MasterWorkCandidate,
   type MasterWorkItem,
@@ -86,6 +87,23 @@ describe("buildMasterTodayQueue", () => {
       reason: "Email delivery failed: Gmail temporarily unavailable",
     });
     expect(queue.active).toEqual([]);
+  });
+
+  it("maps failed-email messages onto only the matching Opportunity candidates", () => {
+    const failed = workItem("1", { kind: "draft", reason: "Ready to Send" });
+    const healthy = workItem("2", { kind: "draft", reason: "Ready to Send" });
+    const mapped = applyEmailFailuresToCandidates(
+      [failed, healthy],
+      new Map([[failed.opportunityId!, "Gmail 503"]]),
+    );
+
+    expect(mapped).toHaveLength(2);
+    expect(mapped[0]).toMatchObject({
+      id: failed.id,
+      kind: "review",
+      reason: "Email delivery failed: Gmail 503",
+    });
+    expect(mapped[1]).toEqual(healthy);
   });
 
   it("places pinned items before smart order and uses manual order among peers", () => {
