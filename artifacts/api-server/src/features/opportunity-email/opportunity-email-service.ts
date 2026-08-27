@@ -249,7 +249,7 @@ export class OpportunityEmailService {
         }
       }
       await this.recordDeliveryFailure(existing, "send", input.requestKey, error);
-      throw error;
+      throw serviceError(errorCode(error));
     }
 
     return this.confirmSent(existing, input.requestKey, confirmation);
@@ -292,7 +292,7 @@ export class OpportunityEmailService {
       return { draft, followUpReferenceAt: confirmation.scheduledFor };
     } catch (error) {
       await this.recordDeliveryFailure(existing, "schedule", input.requestKey, error, input.scheduledFor);
-      throw error;
+      throw serviceError(errorCode(error));
     }
   }
 
