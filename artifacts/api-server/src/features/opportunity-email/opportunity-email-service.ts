@@ -76,6 +76,14 @@ export type DraftRewriteAdapter = {
 };
 
 export type OpportunityEmailWorkflowSink = {
+  recordDraftCreated?(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void>;
+  recordDraftUpdated?(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void>;
   recordSent(input: {
     opportunityId: string;
     draftId: string;
@@ -170,6 +178,10 @@ export class OpportunityEmailService {
       recipientName: context.recipientName,
       subject: generated.subject,
       body: generated.body,
+    });
+    await this.deps.workflowSink?.recordDraftCreated?.({
+      opportunityId: draft.opportunityId,
+      draftId: draft.id,
     });
 
     return { ok: true, draft };
@@ -373,7 +385,7 @@ export class OpportunityEmailService {
       body,
     });
 
-    return this.deps.emailRepository.update(existing.id, {
+    const draft = await this.deps.emailRepository.update(existing.id, {
       subject,
       body,
       state: "draft",
@@ -383,5 +395,10 @@ export class OpportunityEmailService {
       lastFailureCode: null,
       lastFailureMessage: null,
     });
+    await this.deps.workflowSink?.recordDraftUpdated?.({
+      opportunityId: existing.opportunityId,
+      draftId: existing.id,
+    });
+    return draft;
   }
 }
