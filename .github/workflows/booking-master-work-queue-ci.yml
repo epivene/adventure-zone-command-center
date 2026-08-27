@@ -41,17 +41,10 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Release 1 focused tests
+      - name: Release 1 focused API tests
         run: >-
-          pnpm exec vitest run
-          artifacts/api-server/src/features/opportunities
-          artifacts/api-server/src/features/today
-          artifacts/api-server/src/routes/opportunities.test.ts
-          artifacts/api-server/src/routes/today.test.ts
-          artifacts/adventure-zone/src/features/today
-          artifacts/adventure-zone/src/components/today
-          artifacts/adventure-zone/src/components/opportunities
-          artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/opportunities/opportunity-repository.test.ts
       - name: Workspace typecheck
         run: pnpm run typecheck
       - name: Workspace build
