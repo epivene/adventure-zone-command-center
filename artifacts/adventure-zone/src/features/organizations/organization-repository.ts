@@ -1,6 +1,7 @@
 import { and, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
 import { organizationContacts } from "@/db/schema";
+import type { ProfileSort } from "@/features/organizations/last-resort-input";
 
 export type ProfileParentContext =
   | { kind: "event_family"; id: string; name: string }
@@ -52,6 +53,7 @@ export type OrganizationListQuery = {
   hasBooking: boolean;
   hasLocations: boolean;
   showMembers: boolean;
+  sort: ProfileSort;
   includeRetired?: boolean;
   page: number;
   pageSize: number;
@@ -72,6 +74,7 @@ export function organizationOwnedRecordCondition(
 ): SQL {
   return sql`(
     (${columns.organizationId} is not null and ${matchesExplicitOrganization})
+    or (${columns.organizationId} is null and ${columns.bookingId} is not null and ${matchesBookingOrganization})
     or (${columns.organizationId} is null and ${columns.bookingId} is not null and ${matchesBookingOrganization})
     or (${columns.organizationId} is null and ${columns.bookingId} is null and ${columns.contactId} is not null and ${matchesContactAssociation})
   )`;
