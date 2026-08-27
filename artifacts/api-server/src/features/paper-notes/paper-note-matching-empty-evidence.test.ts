@@ -21,7 +21,7 @@ describe("paper note candidate query optional evidence", () => {
     });
     const compiled = dialect.sqlToQuery(query);
     expect(compiled.sql).not.toContain("array[]::text[]");
-    expect(compiled.sql).not.toContain("lower(coalesce(c.email"));
+    expect(compiled.sql).not.toContain("lower(coalesce(c.email");
     expect(compiled.sql).not.toContain("lower(trim(concat_ws(' ', c.first_name, c.last_name)))");
     expect(compiled.sql).toContain('as "exactPhone"');
     expect(compiled.sql).toContain('false as "exactEmail"');
