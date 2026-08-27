@@ -55,8 +55,8 @@ describe("POST /contacts", () => {
       postalCode: "58501",
     });
 
-    expect(response.body).toEqual({ ok: true, contactId: createdContactId });
     expect(response.status).toBe(201);
+    expect(response.body).toEqual({ ok: true, contactId: createdContactId });
     expect(createContactMock).toHaveBeenCalledOnce();
     expect(logErrorMock).not.toHaveBeenCalled();
   });
