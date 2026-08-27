@@ -1,0 +1,45 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Oktoberfest (Colorado Springs) CO",
+    "city": "Colorado Springs",
+    "region": "CO"
+  },
+  "profile": {},
+  "contacts": [
+    {
+      "name": "Carol O'Donnell",
+      "email": "carol@odonnell2.com",
+      "phone": "719-635-8803 Ext 2",
+      "role": "Organizer / O'Donnell & O'Donnell dba CS OktoberFest",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Carol O'Donnell reply — 2026 OktoberFest outreach",
+      "body": "Carol O'Donnell replied Aug. 27, 2026 and passed because the package is not in the event budget. She also explained that CS OktoberFest used to bring in one inflatable, but stopped after an unauthorized birthday-party group overloaded it and it deflated. Desiree prepared a reply explaining the pay-per-play option, full event staffing/supervision, complete setup/teardown, and $2M additional-insured coverage, and included the Adventure Zone website and video. Treat this as a budget/operations objection rather than a permanent event-fit rejection. Source: Adventure Zone Gmail thread, Aug. 27, 2026."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "2027 OktoberFest follow-up",
+      "reason": "If 2026 does not move forward, reconnect early for 2027. Carol's stated blocker was budget, and pay-per-play plus staffed/supervised operation may address the concerns she raised.",
+      "dueAt": "2027-01-15T16:00:00.000Z"
+    }
+  ]
+}
