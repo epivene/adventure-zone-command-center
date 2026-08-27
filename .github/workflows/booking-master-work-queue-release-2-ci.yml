@@ -9,6 +9,7 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-connection-repository.ts"
       - "artifacts/api-server/src/features/google-workspace/google-gmail-delivery*.ts"
       - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/features/today/master-work-queue*.ts"
       - "artifacts/api-server/src/routes/follow-ups*.ts"
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
@@ -56,6 +57,7 @@ jobs:
           src/features/opportunity-email/scheduled-email-dispatcher-loop.test.ts
           src/features/google-workspace/google-gmail-delivery.test.ts
           src/features/google-workspace/google-gmail-delivery-connection.test.ts
+          src/features/today/master-work-queue.test.ts
           src/routes/opportunity-drafts.test.ts
           src/routes/today-ready-to-send.test.ts
           src/routes/follow-ups.test.ts
