@@ -7,41 +7,25 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Week 4 batch 4 profile screen
+      - name: Finalize Week 4 batch 2 CRM outcomes
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          cat > /tmp/events.txt <<'EOF'
-          Afro Utah Festival (SLC) UT
-          Ak-Chin Native American Recognition Day (Maricopa) AZ
-          American Indian Day
-          Andelin Family Farm - Harvest Festival (Sparks) NV
-          Apple City Festival (Lander) WY
-          Bear 100 Endurance Run (Fish Haven) ID
-          Bear Lake Fall Market Days (Garden) UT
-          County Fair - Arizona State Fair(Phoenix) AZ
-          Pueblo Chile & Frijoles Festival (Pueblo) CO
-          Pyramid Lake Piute Pow Wow (Nixon) NV
-          Renner Farm Corn Maze & Pumpkin Patch (Smith) NV
-          Roam Fest (Fruita) CO
-          Run the Red Desert (S Pass) WY
-          San Luis Valley Intertribal Pow Wow (Monte Vista) CO
-          Snow Valley Garlic A Taste of Garlic (Priest River) ID
-          South Fork Par Fly (South Fork) CO
-          Standin' on the Corner Music Festival (Winslow) AZ
-          Sundown Music Festival (Denver) CO
-          WYO Film Festival (Sheridan) WY
-          EOF
-          while IFS= read -r Q; do
-            echo "=== QUERY: $Q ==="
-            RESP=$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" --get --data-urlencode "q=${Q}" "${BASE}/api/assistant-import/profile-search")
-            echo "$RESP" | jq -c '.results'
-            ID=$(echo "$RESP" | jq -r '[.results[] | select(.kind=="organization")][0].id // empty')
-            if [ -n "$ID" ]; then
-              echo "=== HISTORY: ${ID} ==="
-              curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
-            fi
-            echo
-          done < /tmp/events.txt
+          add_note() {
+            ID="$1"; SUBJECT="$2"; BODY="$3"
+            P=$(jq -n --arg id "$ID" --arg subject "$SUBJECT" --arg body "$BODY" '{organizationId:$id,subject:$subject,body:$body}')
+            curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$P"; echo
+          }
+          add_note "98e500f7-a9fe-4460-95e9-9f899b99db81" "2026 review - already contacted Aug. 26" "Adventure Zone emailed Lewis County Fair on Aug. 26, 2026 regarding the Oct. 1-4 fair. No duplicate Week 4 draft created. Current profile contact remains Michelle Koepl / lewiscountyfairboard@gmail.com."
+          add_note "bc3eeada-bde2-43b6-86ac-3c3e3d0b3251" "2026 organizer-aware outreach draft prepared" "ARTumn Festival is part of the ColoradoEvents.org family. A single organizer-aware draft was prepared to coloradoevents@gmail.com covering ARTumn Festival Sept. 19-20 and the Glenwood Springs Handmade in Colorado Expo Oct. 10-11, framed as an entertainment/sponsorship partnership rather than a normal artisan vendor application."
+          add_note "184d5aa7-0589-46bb-a3f3-8f6ef34173c8" "2026 organizer-aware outreach draft prepared" "A single ColoradoEvents.org draft was prepared to coloradoevents@gmail.com covering this Glenwood Springs Handmade in Colorado Expo, Oct. 10-11, together with ARTumn Festival. The pitch respects the organizer's juried handmade-vendor rules and asks about an entertainment/sponsorship partnership instead."
+          add_note "60289a34-6060-4493-9b24-a2fc55a9fe7e" "2026 outreach draft prepared" "Durango Cowboy Gathering is confirmed for Sept. 30-Oct. 3, 2026. A draft was prepared to info@durangocowboygathering.org using a separate family-attraction-area angle that does not compete with the event's western heritage, poetry and music focus."
+          add_note "4f2c732f-058b-4305-ad2c-e05817d12e50" "2026 outreach draft prepared" "End of the Trail Kite Festival is confirmed for Sept. 26, 2026. Current Pine Bluffs recreation contact is Sonja Fornstrom at sfornstrom@pinebluffswy.gov. The event already includes a bounce house, so the draft asks whether they would consider expanding into a larger staffed attraction area."
+          add_note "9280712d-4525-4983-9fd2-54c409f79e60" "2026 follow-up draft prepared" "Adventure Zone already contacted Autumn Gold twice in March 2026. The Sept. 26-27 event remains confirmed and family-oriented, so a follow-up draft was prepared to evsr@evsr.org rather than another introduction."
+          add_note "54d4b997-8caa-40d1-ab8b-1f06027c3d1f" "2026 outreach draft prepared" "Ferrari Farms' 2026 fall season opens Sept. 26 and runs through Nov. 1. A draft was prepared to ferrarifarmsreno@gmail.com offering a staffed attraction package as a possible add-on for selected high-traffic fall weekends."
+          add_note "e39dbf49-9a95-4790-9db0-e4ff96e44b89" "2026 outreach draft prepared - current event renamed" "The former Founders Day is now Celebrate South Salt Lake, confirmed for Sept. 18, 2026. Myrna Clark previously explained that municipal budget limitations were the obstacle. A new draft to the current arts/events address arts@sslc.gov specifically revisits the opportunity using the pay-for-play option as a possible solution to that prior budget concern."
+          add_note "0afb16fd-a86f-4cfb-a223-7219c255b2de" "2026 return outreach draft prepared" "Fruita Fall Festival is confirmed for Sept. 25-26, 2026. Adventure Zone attended previously and the profile history says the company has wanted to return since its last attendance in 2022. A relationship-aware draft was prepared to events@fruitachamber.org."
+          add_note "2c4aa458-61c0-44fb-aaf7-8c3b73403fd0" "2026 review - already contacted twice / short-format event" "Adventure Zone already emailed Great Aardvark Embark in March and May 2026. The balloon launch is a short early-morning event, making a full staffed package structurally difficult. No third Week 4 email was created."
+          add_note "e4d7a0ac-14ac-4a65-a1e3-a048529f78f8" "2026 review - current Cherry Creek event not verified" "The current ColoradoEvents.org 2026 calendar does not show a separate Handmade in Colorado Expo at Cherry Creek matching this spreadsheet lead. No duplicate organizer email was created; the active ARTumn/Glenwood opportunities were combined into one current organizer draft instead."
