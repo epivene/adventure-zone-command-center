@@ -20,7 +20,7 @@ type SortMetadataRow = {
 
 type ExecuteQuery = (query: unknown) => Promise<{ rows?: SortMetadataRow[] }>;
 
-export async function loadProfileSortMetadata(
+async function queryProfileSortMetadata(
   ids: string[],
   execute: ExecuteQuery,
 ): Promise<Map<string, ProfileSortMetadata>> {
@@ -81,6 +81,27 @@ export async function loadProfileSortMetadata(
     createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt),
     lastChangedAt: row.lastChangedAt instanceof Date ? row.lastChangedAt : new Date(row.lastChangedAt),
   }]));
+}
+
+export async function loadProfileSortMetadata(
+  ids: string[],
+  execute: ExecuteQuery,
+  reportError?: (error: unknown) => void,
+): Promise<Map<string, ProfileSortMetadata>> {
+  try {
+    return await queryProfileSortMetadata(ids, execute);
+  } catch (error) {
+    reportError?.(error);
+    return new Map();
+  }
+}
+
+export async function loadProfileSortMetadataSafely(
+  ids: string[],
+  execute: ExecuteQuery,
+  reportError?: (error: unknown) => void,
+): Promise<Map<string, ProfileSortMetadata>> {
+  return loadProfileSortMetadata(ids, execute, reportError);
 }
 
 function dateValue(value: Date | undefined): number {
