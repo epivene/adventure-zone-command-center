@@ -52,6 +52,10 @@ jobs:
           src/features/today/master-work-queue.test.ts
           src/routes/follow-ups.test.ts
           src/routes/today.test.ts
+      - name: Today navigation context test
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/features/today/today-return-context.test.ts
       - name: Build database workspace
         run: pnpm --filter @workspace/db build
       - name: API typecheck (known main-branch baseline currently fails)
