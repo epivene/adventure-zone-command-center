@@ -5,100 +5,23 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - name: Finalize remaining Week 3 CRM outcomes
+      - name: Correct adult-only event handling
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
 
-          add_note() {
-            ID="$1"; SUBJECT="$2"; BODY="$3"
-            PAYLOAD=$(jq -n --arg id "$ID" --arg subject "$SUBJECT" --arg body "$BODY" '{organizationId:$id,subject:$subject,body:$body}')
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/profile-notes" \
-              --data-binary "$PAYLOAD"
-            echo
-          }
-
-          add_followup() {
-            ID="$1"; LABEL="$2"; REASON="$3"
-            PAYLOAD=$(jq -n --arg id "$ID" --arg label "$LABEL" --arg reason "$REASON" '{organizationId:$id,label:$label,reason:$reason,dueAt:"2026-09-01T09:00:00-06:00"}')
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -X POST "${BASE}/api/assistant-import/today-followups" \
-              --data-binary "$PAYLOAD"
-            echo
-          }
-
-          # Bear Lake: unresolved 2026 date/contact; keep profile and create owner review.
-          add_note "841aa9e8-ca44-49d2-9503-f1b4f5b94d9f" "2026 outreach hold - current event details unverified" "The 2026 Bear Lake Caribbean Cruze Motorcycle Rally is still referenced in current regional materials, but an authoritative 2026 event date and current booking contact could not be verified during the Week 3 review. Do not draft outreach until the current dates and organizer/contact are confirmed."
-          add_followup "841aa9e8-ca44-49d2-9503-f1b4f5b94d9f" "Review: Bear Lake Caribbean Cruze Motorcycle Rally" "Verify the 2026 rally dates and current organizer/contact before any outreach. Current regional sources confirm the rally is still referenced, but the exact 2026 dates and booking contact were not reliably verified."
-
-          # Winefest: strict 21+ non-fit.
-          add_note "ba8b0b3c-4265-4d71-9e81-d8144f491cd5" "2026 review - strict 21+ event" "Colorado Mountain Winefest is scheduled for Sept. 19, 2026 at Riverbend Park. The official 2026 FAQ states the event is strictly 21+ and infants/young children are not permitted. This is not a fit for standard Adventure Zone family-inflatable outreach; no draft created."
-
-          # Greek Festival: current dates verified but current booking contact is unclear.
-          add_note "11195641-d050-408f-b0d6-58cbc14165ad" "2026 outreach hold - current contact verification needed" "Cheyenne Greek Festival is confirmed for Sept. 18-19, 2026 at Frontier Park. Historical Adventure Zone outreach used Rachel H / Family Promise of Cheyenne, but a current 2026 entertainment/organizer email could not be independently verified. Do not guess or reuse a possibly stale charity-partner contact without verification."
-          add_followup "11195641-d050-408f-b0d6-58cbc14165ad" "Review: Cheyenne Greek Festival" "Verify the current 2026 organizer/entertainment contact email before outreach. The event dates are confirmed for Sept. 18-19, but the historical Family Promise contact may no longer be the correct booking contact."
-
-          # Handmade Downtown: 2026 event already passed.
-          add_note "33e77783-cf8c-4166-8d42-6d7076e5b7e1" "2026 review - Downtown event already passed" "The 2026 Downtown Denver Handmade in Colorado Expo was held Aug. 22-23, 2026, so this Week 3 lead is no longer actionable for this year's event. The same organizer has other 2026 events, but those should be treated as separate event opportunities rather than drafting against the passed Downtown event."
-
-          # Arc Oktoberfest: not on current 2026 official event calendar.
-          add_note "b808a33d-650e-4b28-9ccc-1a3dc5d26c46" "2026 review - Oktoberfest not currently listed" "The Arc of Laramie County's current official 2026 events page does not list an Oktoberfest. Current featured programming includes its monthly activity calendar and other fundraisers. No 2026 Oktoberfest outreach draft was created because the event could not be verified as scheduled this year."
-
-          # Parker Oktoberfest: current 2026 event not verified.
-          add_note "a128b6ae-d9c9-42ae-ac60-9abe28cfd5f6" "2026 review - event not currently verified" "A current official 2026 Parker Oktoberfest date/event could not be verified from the organizer's current materials during Week 3 review, and current public listings indicate the event is TBD or may not be taking place. No outreach draft created until a live 2026 event is confirmed."
-
-          # Denver: exact 2026 outreach existed; follow-up draft created.
-          add_note "8d637750-e245-43cd-bcc1-af2cf1f0bcd7" "2026 follow-up draft prepared" "Adventure Zone already emailed Denver Oktoberfest on March 17, 2026. Current official dates are Sept. 18-20 and Sept. 25-27, 2026. A follow-up draft, not a new introduction, was prepared in the existing Gmail thread after confirming the event remains open to the broader public and explicitly promotes bringing kids."
-
-          # OktoberWest: update current contact and note new draft.
-          OW=$(cat <<'JSON'
-          {
-            "event":{"name":"OktoberWest (Steamboat Springs) CO","city":"Steamboat Springs","region":"CO"},
-            "profile":{"placeType":"other","description":"","phone":"(970) 879-0880","website":"https://www.steamboatchamber.com/events/annual-events/steamboat-oktoberwest/","address1":"2305 Mt. Werner Circle","address2":"Steamboat Square","postalCode":"80487"},
-            "contacts":[{"id":null,"name":"Cecilia Morter","phone":"970-875-7000","email":"cecilia@steamboatchamber.com","role":"Programs Manager / OktoberWest contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }
-          JSON
-          )
+          NOTE=$(jq -n '{
+            organizationId:"ba8b0b3c-4265-4d71-9e81-d8144f491cd5",
+            subject:"CORRECTION - adult-only events can be viable",
+            body:"Correction to the earlier Week 3 review: adult-only / 21+ status by itself is NOT a reason to classify an event as a non-fit. The Adventure Zone can make special arrangements for adult-only events by combining the inflatables into one large obstacle-course style experience. Colorado Mountain Winefest should therefore remain eligible for case-by-case consideration. For this specific event, current 2026 materials describe a curated, invitation-only activation model, so organizer fit/approval still needs to be evaluated before outreach. This note supersedes the earlier age-based non-fit reasoning."
+          }')
           curl --fail-with-body --silent --show-error \
             -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
             -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/event-profiles" \
-            --data-binary "$OW"
+            -X POST "${BASE}/api/assistant-import/profile-notes" \
+            --data-binary "$NOTE"
           echo
-          add_note "44f4b435-5710-4b67-a1f8-decf8345e7f8" "2026 outreach draft prepared" "OktoberWest is confirmed for Sept. 11-12, 2026 at Steamboat Resort. Current official materials describe the event as family-friendly and include kids' games and optional childcare. Cecilia Morter is the current event contact listed by the Chamber. A 2026 outreach draft was prepared to cecilia@steamboatchamber.com."
-
-          # Pascua Yaqui: correct stale contact email and record cultural-fit decision.
-          PY=$(cat <<'JSON'
-          {
-            "event":{"name":"Pascua Yaqui Tribe Recognition Day (Tucson) AZ","city":"Tucson","region":"AZ"},
-            "profile":{"placeType":"other","description":"","phone":"(520) 883-5000","website":"https://www.pascuayaqui-nsn.gov/","address1":"7474 S Camino de Oeste","address2":"","postalCode":"85757"},
-            "contacts":[{"id":null,"name":"Jose Zazueta","phone":"520-879-5284","email":"jose.zazueta@pascuayaqui-nsn.gov","role":"Interim Procurement Director","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }
-          JSON
-          )
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/event-profiles" \
-            --data-binary "$PY"
-          echo
-          add_note "38a12aeb-0167-4fc4-81da-a73422c48e5e" "2026 review - ceremonial/cultural fit hold" "The Tribe's official cultural materials describe Sept. 18 Recognition Day as a one-day Federal Tribal Recognition Day activity involving Prayer Leaders, Kantoras, Pahko'ola and Deer Dance societies, culminating around midnight. Standard inflatable outreach is not appropriate based on the currently verified ceremonial context. Jose Zazueta's CRM email was corrected to jose.zazueta@pascuayaqui-nsn.gov from the stale misspelled domain, using his verified Gmail correspondence."
-
-          # Pirate Fest: already contacted/followed up in 2026 and current event has bounce houses.
-          add_note "f24033e1-801b-43ff-9a7e-a9d6d7b426c3" "2026 review - already followed up / existing bounce houses" "Adventure Zone already contacted Pirate Fest in 2026 and sent a follow-up to Michael Ringling on Aug. 6. Current 2026 event information shows the all-ages Pirate Fest already includes bounce houses. No additional Week 3 email was drafted to avoid over-contacting and duplicating an entertainment offering already present."
-
-          # UnCorked: repeated decline and insurance restriction.
-          add_note "919c38ba-f1f0-4af1-a38a-7e2738e04dfc" "Do not pursue standard inflatable outreach - prior policy and decline" "Do not pursue standard Adventure Zone inflatable outreach for UnCorked unless the event's policy materially changes or they contact us. Kristine Borchers previously stated that their insurance policy specifically does not allow this type of activity, and the event later declined again in 2024. The event is also wine-centered. No 2026 draft created."
