@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.mock("@workspace/db", () => ({ pool: {} }));
+
 import { encryptGoogleSecret } from "./encrypted-google-secret";
 import { GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE } from "./google-api-client";
 import { PostgresGoogleConnectionRepository, type GoogleConnectionSqlPool } from "./google-connection-repository";
