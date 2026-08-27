@@ -1,0 +1,37 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Durango Autumn Arts Festival",
+    "city": "Durango",
+    "region": "CO"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 outreach reply — not adding this entertainment this year",
+      "body": "On Aug. 27, 2026, Jeni Heerdt replied to Desiree's outreach for the Sept. 19-20 Durango Autumn Arts Festival: 'We aren't looking to add this type of entertainment to the festival this year, but I appreciate you checking in.' Desiree replied the same morning thanking her for the response and asking her to keep The Adventure Zone in mind if anything changes. Treat this as a 2026 decline, not a permanent do-not-contact or permanent lack-of-fit decision, because the response was explicitly limited to this year. Current reply contact: Jenifer (Jeni) Heerdt, jeni@durangoarts.org. Source: Adventure Zone Gmail, Aug. 27, 2026."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "2027 Durango Autumn Arts Festival follow-up",
+      "reason": "Jeni declined this type of entertainment for 2026 specifically, without ruling out future years. Recheck the 2027 festival early enough to approach before plans are set.",
+      "dueAt": "2027-01-15T16:00:00.000Z"
+    }
+  ]
+}
