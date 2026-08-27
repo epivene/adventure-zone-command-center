@@ -19,6 +19,8 @@ function listHref(query: OrganizationListQuery) {
   if (query.hasBooking) params.set("hasBooking", "yes");
   if (query.hasLocations) params.set("hasLocations", "yes");
   if (query.showMembers) params.set("showMembers", "yes");
+  if (query.sort !== "recently_updated") params.set("sort", query.sort);
+  if (query.includeRetired) params.set("includeRetired", "true");
   if (query.page > 1) params.set("page", String(query.page));
   if (query.pageSize !== 50) params.set("pageSize", String(query.pageSize));
   const suffix = params.toString();
@@ -82,7 +84,18 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
             <span className="sr-only">Search profiles and contacts</span>
             <input className="min-h-11 w-full" defaultValue={query.search} name="q" placeholder="Search profiles, contacts, cities, phone, email…" type="search" />
           </label>
-          <div className="flex gap-2">
+          <label className="grid min-w-[12rem] gap-1 text-xs font-semibold text-slate-600">
+            <span>Sort by</span>
+            <select className="min-h-11" defaultValue={query.sort} name="sort" onChange={(event) => event.currentTarget.form?.requestSubmit()}>
+              <option value="recently_updated">Recently updated</option>
+              <option value="least_recently_updated">Least recently updated</option>
+              <option value="name_asc">A → Z</option>
+              <option value="name_desc">Z → A</option>
+              <option value="created_desc">Newest profile</option>
+              <option value="created_asc">Oldest profile</option>
+            </select>
+          </label>
+          <div className="flex items-end gap-2">
             <button className="button-primary flex-1 sm:flex-none" type="submit">Search</button>
             <Link className="button-secondary flex-1 text-center sm:flex-none" href={directoryReset}>Clear</Link>
           </div>

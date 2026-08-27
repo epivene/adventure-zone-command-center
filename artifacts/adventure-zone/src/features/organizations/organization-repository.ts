@@ -1,6 +1,7 @@
 import { and, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
 import { organizationContacts } from "@/db/schema";
+import type { ProfileSort } from "@/features/organizations/last-resort-input";
 
 export type ProfileParentContext =
   | { kind: "event_family"; id: string; name: string }
@@ -52,6 +53,7 @@ export type OrganizationListQuery = {
   hasBooking: boolean;
   hasLocations: boolean;
   showMembers: boolean;
+  sort: ProfileSort;
   includeRetired?: boolean;
   page: number;
   pageSize: number;
