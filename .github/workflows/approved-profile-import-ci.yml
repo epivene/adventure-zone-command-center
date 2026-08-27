@@ -1,6 +1,14 @@
 name: Approved Profile Import CI
 
 on:
+  push:
+    branches: [assistant-live-profile-notes-followups]
+    paths:
+      - "artifacts/api-server/src/features/approved-profile-import/**"
+      - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
+      - "artifacts/api-server/src/routes/assistant-today-followups.ts"
+      - "imports/approved-profiles/**"
+      - ".github/workflows/approved-profile-import-ci.yml"
   pull_request:
     paths:
       - "artifacts/api-server/src/features/approved-profile-import/**"
