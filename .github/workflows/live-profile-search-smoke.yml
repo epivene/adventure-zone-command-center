@@ -7,43 +7,33 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Finalize Week 4 batch 1 CRM outcomes
+      - name: Week 4 batch 2 profile screen
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-
-          add_note() {
-            ID="$1"; SUBJECT="$2"; BODY="$3"
-            PAYLOAD=$(jq -n --arg id "$ID" --arg subject "$SUBJECT" --arg body "$BODY" '{organizationId:$id,subject:$subject,body:$body}')
-            curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$PAYLOAD"
+          cat > /tmp/events.txt <<'EOF'
+          County Fair - Lewis (Nezperce) ID
+          Crested Butte ARTumn Festival (Crested Butte) CO
+          Durango Cowboy Poetry Gathering (Durango) CO
+          End of the Trail Kite Festival (Pine Bluffs) WY
+          Estes Park Autumn Gold (Estes Park, CO)
+          Ferrari Farms Fall Festival (Reno) NV
+          Founders Day (S SLC) UT
+          Fruita Fall Festival (Fruita) CO
+          Great Aardvark Embark Balloon Launch (Greeley) CO
+          Handmade in Colorado Expo (Glenwood Springs) CO
+          Handmade in Colorado Expo Cherry Creek (Denver) CO
+          EOF
+          while IFS= read -r Q; do
+            echo "=== QUERY: $Q ==="
+            RESP=$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" --get --data-urlencode "q=${Q}" "${BASE}/api/assistant-import/profile-search")
+            echo "$RESP" | jq -c '.results'
+            ID=$(echo "$RESP" | jq -r '[.results[] | select(.kind=="organization")][0].id // empty')
+            if [ -n "$ID" ]; then
+              echo "=== HISTORY: ${ID} ==="
+              curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
+            fi
             echo
-          }
-
-          add_followup() {
-            ID="$1"; LABEL="$2"; REASON="$3"
-            PAYLOAD=$(jq -n --arg id "$ID" --arg label "$LABEL" --arg reason "$REASON" '{organizationId:$id,label:$label,reason:$reason,dueAt:"2026-09-01T09:00:00-06:00"}')
-            curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/today-followups" --data-binary "$PAYLOAD"
-            echo
-          }
-
-          # Drafted leads
-          add_note "4fcbefe9-e8c0-4658-bc22-e322b5bc6401" "2026 outreach draft prepared" "Broomfield Days is confirmed for Sept. 18-20, 2026, with the main community festival on Sept. 19 at Midway Park. Prior history shows Kay Gazaway said Broomfield had a local provider at the time but would keep Adventure Zone information for the future. Current vendor information lists Jenny Morgan at jbmorgan@broomfield.org for vendor questions. A 2026 check-back draft was prepared to Jenny rather than treating the account as new."
-          add_note "5a41b8d9-3616-44c6-bb47-4478dbb9d053" "2026 follow-up draft prepared" "Adventure Zone already emailed Courtney Kenney in February 2026. The current official Pahrump Fall Festival runs Sept. 24-27, 2026 and includes a carnival, rodeo, parade, vendors, arts and crafts, and other activities. A follow-up draft was prepared to Courtney to ask whether a separate staffed inflatable attraction area could fit alongside the existing festival attractions."
-          add_note "91761e7d-f23b-4c24-8ca8-207f845f3ec9" "2026 follow-up draft prepared" "Adventure Zone already emailed Jean Ray in March 2026. Sheridan Celebrates is confirmed for Sept. 26, 2026 and Jean remains the official event coordinator. A follow-up draft was prepared rather than another cold introduction."
-          add_note "032f0816-aeb8-4f2d-a2b0-8847d1daf887" "2026 outreach draft prepared" "Riverton Fall Harvest Festival is confirmed for Sept. 26, 2026. Current vendor information still names Traci Cooper as the vendor contact, and Adventure Zone has prior outreach history to the organization. A relationship-aware 2026 draft was prepared to goriverton@gmail.com."
-          add_note "86509cbd-60c8-4ea7-a061-f1a39681448b" "2026 outreach draft prepared" "Ak-Chin Native American Recognition Day is an annual last-Saturday-in-September community event coordinated by the Him-Dak Museum. Official materials describe cultural performances, demonstrations, vendors and family/community activities; recent event materials have also included a bouncy house. A respectful 2026 outreach draft was prepared to the current official community-events email events@ak-chin.nsn.us."
-
-          # Holds needing verification
-          add_note "bc7ac73a-7f4b-49ff-9c4a-d49bae42a2b6" "2026 outreach hold - current Errl Camp date/location needs verification" "Errl Camp is a prior Adventure Zone client with important relationship history, including a request for a visually impressive, physically difficult long obstacle-course setup and a 2024 return booking. Current web materials are inconsistent/stale on the event date and location, so do not send a 2026 outreach message until the current event date/location is verified. Adult-only status is not a barrier; Adventure Zone can use the special adult obstacle-course configuration."
-          add_followup "bc7ac73a-7f4b-49ff-9c4a-d49bae42a2b6" "Review: Errl Camp 2026" "Verify the current 2026 Errl Camp date/location and organizer details before outreach. Preserve the prior-client history and adult obstacle-course setup requirements."
-
-          add_note "f50bc280-d806-4d5a-be03-618e2bbfe2a9" "2026 outreach hold - Casper Oktoberfest not officially confirmed" "Current searches did not find an authoritative organizer announcement confirming a 2026 Casper Oktoberfest date. Do not guess from third-party estimated dates; verify the organizer and 2026 event before outreach."
-          add_followup "f50bc280-d806-4d5a-be03-618e2bbfe2a9" "Review: Casper Oktoberfest 2026" "Verify whether Casper Oktoberfest is officially scheduled for 2026 and identify the current organizer/contact before outreach."
-
-          add_note "64ec258e-8c09-44d4-9819-ab090d65280d" "2026 outreach hold - Color Country OHV Jamboree date needs verification" "Color Country OHV Jamboree remains an established Parowan/Iron County Fairgrounds event, but the current official search results surfaced prior-year schedules rather than a clearly published 2026 schedule. Verify the 2026 jamboree dates/current contact before drafting."
-          add_followup "64ec258e-8c09-44d4-9819-ab090d65280d" "Review: Color Country OHV Jamboree 2026" "Verify the official 2026 OHV Jamboree dates and current event contact before outreach."
-
-          add_note "772eb6bf-e842-4bb6-895e-884ee7ce4770" "2026 outreach hold - Montrose Oktoberfest current event page not updated" "Adventure Zone already emailed All Points Transit about a Sept. 26, 2026 Montrose Oktoberfest in March 2026. The organizer's current public Oktoberfest page still displays 2025 information, so the 2026 event details should be independently confirmed before sending a follow-up."
-          add_followup "772eb6bf-e842-4bb6-895e-884ee7ce4770" "Review: Montrose Oktoberfest 2026" "Confirm the current 2026 Montrose Oktoberfest date/details with All Points Transit before following up on the March outreach."
+          done < /tmp/events.txt
