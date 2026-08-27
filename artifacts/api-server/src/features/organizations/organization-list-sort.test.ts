@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
 import { organizationListQuerySchema } from "./last-resort-input";
-import { loadProfileSortMetadata } from "./organization-list-sort";
+import {
+  loadProfileSortMetadata,
+  loadProfileSortMetadataSafely,
+} from "./organization-list-sort";
 
 const profileId = "11111111-1111-4111-8111-111111111111";
 
@@ -37,5 +40,19 @@ describe("organization list sorting", () => {
     expect(compiledSql).toMatch(/follow_ups/i);
     expect(compiledSql).toMatch(/activities/i);
     expect(compiledSql).toMatch(/updated_at/i);
+  });
+
+  it("falls back instead of taking down the Profiles page when recency metadata fails", async () => {
+    const reportError = vi.fn();
+    const metadata = await loadProfileSortMetadataSafely(
+      [profileId],
+      async () => {
+        throw new Error("statement timeout");
+      },
+      reportError,
+    );
+
+    expect(metadata.size).toBe(0);
+    expect(reportError).toHaveBeenCalledTimes(1);
   });
 });
