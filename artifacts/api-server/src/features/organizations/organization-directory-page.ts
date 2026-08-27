@@ -1,19 +1,152 @@
-import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 
 import type { db as database } from "../../db/client";
 import {
   bookings,
   contacts,
+  eventFamilyMembers,
+  followUps,
   organizationContacts,
   organizationLocations,
   organizations,
 } from "../../db/schema";
 import type { OrganizationListQuery } from "./last-resort-input";
-import {
-  buildOrganizationListCondition,
-  type MatchedOrganizationLocation,
-  type OrganizationListPage,
-} from "./organization-repository";
+
+type MatchedOrganizationLocation = {
+  id: string;
+  label: string;
+  city: string | null;
+  region: string | null;
+};
+
+type OrganizationListPage = {
+  records: Array<{
+    id: string;
+    name: string;
+    city: string | null;
+    region: string | null;
+    lastResort: boolean;
+    lastResortReason: string | null;
+    lastResortChangedAt: Date | null;
+    contactCount: number;
+    bookingCount: number;
+    primaryContactName: string | null;
+    locationCount: number;
+    matchedLocation: MatchedOrganizationLocation | null;
+    parentContext:
+      | { kind: "organization_group"; id: string; name: string }
+      | null;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
+  pageCount: number;
+};
+
+function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined {
+  const pattern = `%${query.search}%`;
+  const notRetiredCondition =
+    query.includeRetired || query.showMembers || Boolean(query.search)
+      ? undefined
+      : isNull(organizations.consolidatedIntoId);
+
+  const searchCondition = query.search
+    ? sql`(
+        ${organizations.name} ilike ${pattern}
+        or ${organizations.city} ilike ${pattern}
+        or ${organizations.phone} ilike ${pattern}
+        or exists (
+          select 1
+          from ${organizationContacts} as association
+          inner join ${contacts} as person
+            on person.id = association.contact_id
+          where association.organization_id = ${organizations.id}
+            and association.active
+            and (
+              person.first_name ilike ${pattern}
+              or person.last_name ilike ${pattern}
+              or concat_ws(' ', person.first_name, person.last_name) ilike ${pattern}
+              or person.phone ilike ${pattern}
+              or person.email ilike ${pattern}
+            )
+        )
+        or exists (
+          select 1
+          from ${organizationLocations} as loc
+          where loc.organization_id = ${organizations.id}
+            and (
+              loc.label ilike ${pattern}
+              or loc.venue_name ilike ${pattern}
+              or loc.city ilike ${pattern}
+              or loc.region ilike ${pattern}
+              or loc.postal_code ilike ${pattern}
+              or loc.address_1 ilike ${pattern}
+              or loc.website ilike ${pattern}
+              or loc.phone ilike ${pattern}
+              or loc.email ilike ${pattern}
+              or exists (
+                select 1
+                from ${contacts} as loc_contact
+                where loc_contact.organization_location_id = loc.id
+                  and (
+                    loc_contact.first_name ilike ${pattern}
+                    or loc_contact.last_name ilike ${pattern}
+                    or concat_ws(' ', loc_contact.first_name, loc_contact.last_name) ilike ${pattern}
+                    or loc_contact.phone ilike ${pattern}
+                    or loc_contact.email ilike ${pattern}
+                  )
+              )
+            )
+        )
+      )`
+    : undefined;
+
+  const lastResortCondition =
+    query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
+  const travelLegCondition = query.travelLegId
+    ? sql`exists (select 1 from ${bookings} where ${bookings.organizationId} = ${organizations.id} and ${bookings.travelLegId} = ${query.travelLegId})`
+    : undefined;
+  const typeCondition = query.placeType
+    ? sql`${organizations.placeType} = ${query.placeType}`
+    : undefined;
+  const regionCondition = query.region
+    ? sql`lower(${organizations.region}) = lower(${query.region})`
+    : undefined;
+  const phoneCondition = query.hasPhone
+    ? sql`exists (select 1 from ${organizationContacts} oc inner join ${contacts} c on c.id = oc.contact_id where oc.organization_id = ${organizations.id} and oc.active and c.phone is not null and btrim(c.phone) <> '')`
+    : undefined;
+  const emailCondition = query.hasEmail
+    ? sql`exists (select 1 from ${organizationContacts} oc inner join ${contacts} c on c.id = oc.contact_id where oc.organization_id = ${organizations.id} and oc.active and c.email is not null and btrim(c.email) <> '')`
+    : undefined;
+  const followUpCondition = query.hasFollowUp
+    ? sql`exists (select 1 from ${followUps} f where f.organization_id = ${organizations.id} or f.contact_id in (select oc.contact_id from ${organizationContacts} oc where oc.organization_id = ${organizations.id} and oc.active))`
+    : undefined;
+  const bookingCondition = query.hasBooking
+    ? sql`exists (select 1 from ${bookings} b where b.organization_id = ${organizations.id})`
+    : undefined;
+  const locationCondition = query.hasLocations
+    ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`
+    : undefined;
+  const familyMemberCondition =
+    query.showMembers || Boolean(query.search)
+      ? undefined
+      : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;
+
+  return and(
+    searchCondition,
+    notRetiredCondition,
+    lastResortCondition,
+    travelLegCondition,
+    typeCondition,
+    regionCondition,
+    phoneCondition,
+    emailCondition,
+    followUpCondition,
+    bookingCondition,
+    locationCondition,
+    familyMemberCondition,
+  ) ?? undefined;
+}
 
 export function profileLastChangedAtSql(): SQL {
   return sql`greatest(
@@ -91,7 +224,7 @@ export async function listOrganizationDirectoryPage(
   db: typeof database,
   query: OrganizationListQuery,
 ): Promise<OrganizationListPage> {
-  const condition = buildOrganizationListCondition(query);
+  const condition = buildDirectoryCondition(query);
   const [totals] = await db
     .select({ value: count() })
     .from(organizations)
