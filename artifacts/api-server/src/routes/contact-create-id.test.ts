@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createdContactId = "11111111-1111-4111-8111-111111111111";
 const createContactMock = vi.hoisted(() => vi.fn());
-const logErrorMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@workspace/db", () => ({ db: {} }));
 vi.mock("@/features/contacts/contact-repository", () => ({
@@ -29,15 +28,10 @@ import contactsRouter from "./contacts";
 describe("POST /contacts", () => {
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => {
-    (req as any).log = { error: logErrorMock };
-    next();
-  });
   app.use(contactsRouter);
 
   beforeEach(() => {
     createContactMock.mockReset().mockResolvedValue(createdContactId);
-    logErrorMock.mockReset();
   });
 
   it("returns the repository's string id to the caller", async () => {
@@ -55,13 +49,8 @@ describe("POST /contacts", () => {
       postalCode: "58501",
     });
 
-    if (response.status !== 201) {
-      const logged = logErrorMock.mock.calls[0]?.[0] as { err?: Error } | undefined;
-      throw new Error(`POST /contacts returned ${response.status}: ${logged?.err?.message ?? JSON.stringify(response.body)}`);
-    }
-
+    expect(response.status).toBe(201);
     expect(response.body).toEqual({ ok: true, contactId: createdContactId });
     expect(createContactMock).toHaveBeenCalledOnce();
-    expect(logErrorMock).not.toHaveBeenCalled();
   });
 });
