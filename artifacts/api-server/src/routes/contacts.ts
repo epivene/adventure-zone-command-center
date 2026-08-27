@@ -45,11 +45,7 @@ router.post("/contacts", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const created = await contactRepo().createContact(parsed.data);
-    const contactId = typeof created === "string"
-      ? created
-      : (created as any).id ?? (created as any).contact?.id;
-    if (!contactId) throw new Error("Created contact did not return an ID.");
+    const contactId = await contactRepo().createContact(parsed.data);
     res.status(201).json({ ok: true, contactId });
   } catch (err) {
     req.log.error({ err }, "Failed to create contact");
@@ -71,7 +67,6 @@ router.get("/contacts/:id", async (req, res): Promise<void> => {
     res.status(500).json({ error: "Failed to get contact" });
   }
 });
-
 
 router.put("/contacts/:id/phones", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
