@@ -8,6 +8,8 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
       - "artifacts/api-server/src/features/google-workspace/google-connection-repository.ts"
       - "artifacts/api-server/src/features/google-workspace/google-gmail-delivery*.ts"
+      - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/routes/follow-ups*.ts"
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
       - "artifacts/api-server/src/routes/index.ts"
@@ -60,6 +62,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/components/opportunities/opportunity-draft-composer.test.tsx
+          src/components/opportunities/follow-up-after-send.test.tsx
           --environment jsdom
       - name: Database build
         run: pnpm --filter @workspace/db build
