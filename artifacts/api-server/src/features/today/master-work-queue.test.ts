@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { businessDayBounds } from "@/lib/business-date";
 import {
+  applyEmailFailureAttention,
   buildMasterTodayQueue,
   type MasterWorkCandidate,
   type MasterWorkItem,
@@ -60,16 +61,31 @@ describe("buildMasterTodayQueue", () => {
       NOW,
     );
 
-    expect(ids(queue.needsAttention)).toEqual(["reply", "callback", "hot"]);
+    expect(ids(queue.needsAttention)).toEqual(["reply", "callback", "hot", "review"]);
     expect(ids(queue.active)).toEqual([
       "follow-up",
       "draft",
       "research",
-      "review",
       "new",
       "cleanup",
     ]);
     expect(queue.completedToday).toEqual([]);
+  });
+
+  it("turns a failed email into review work without creating a second work item", () => {
+    const candidate = applyEmailFailureAttention(
+      workItem("draft", { kind: "draft", reason: "Ready to Send" }),
+      "Gmail temporarily unavailable",
+    );
+    const queue = buildMasterTodayQueue([candidate], NOW);
+
+    expect(queue.needsAttention).toHaveLength(1);
+    expect(queue.needsAttention[0]).toMatchObject({
+      id: "draft",
+      kind: "review",
+      reason: "Email delivery failed: Gmail temporarily unavailable",
+    });
+    expect(queue.active).toEqual([]);
   });
 
   it("places pinned items before smart order and uses manual order among peers", () => {
