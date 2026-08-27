@@ -158,6 +158,22 @@ describe("ProfileInlineEditor", () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
+  it("adds the first phone row when an existing contact did not have one", async () => {
+    apiGet.mockResolvedValueOnce({
+      contact: { ...contactDetail.contact, phone: "" },
+      phones: [],
+    });
+    render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
+
+    fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "3035550177" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith("/contacts/contact-1", expect.objectContaining({
+      phones: [expect.objectContaining({ number: "3035550177", primary: true })],
+    })));
+  });
+
   it("cancels without saving", () => {
     const onCancel = vi.fn();
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} onCancel={onCancel} />);
