@@ -1,0 +1,32 @@
+name: Profile Directory Sort CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/organizations/organization-list-sort.ts"
+      - "artifacts/api-server/src/features/organizations/organization-list-sort.test.ts"
+      - "artifacts/api-server/src/features/organizations/last-resort-input.ts"
+      - "artifacts/api-server/src/routes/organizations.ts"
+      - "artifacts/adventure-zone/src/features/organizations/last-resort-input.ts"
+      - "artifacts/adventure-zone/src/features/organizations/organization-repository.ts"
+      - "artifacts/adventure-zone/src/pages/OrganizationsPage.tsx"
+      - "artifacts/adventure-zone/src/components/organizations/organization-list.tsx"
+      - ".github/workflows/profile-directory-sort-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Profile directory sort tests
+        run: pnpm exec vitest run artifacts/api-server/src/features/organizations/organization-list-sort.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
