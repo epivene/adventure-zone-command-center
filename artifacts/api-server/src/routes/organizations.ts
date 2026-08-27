@@ -13,6 +13,10 @@ import {
   organizationListQuerySchema,
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
+import {
+  loadProfileSortMetadata,
+  sortOrganizationRecords,
+} from "@/features/organizations/organization-list-sort";
 import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
@@ -192,12 +196,39 @@ router.get("/organizations", async (req, res): Promise<void> => {
     showMembers: req.query.showMembers ?? undefined,
     contact: req.query.contact ?? undefined,
     activity: req.query.activity ?? undefined,
+    sort: req.query.sort ?? undefined,
     includeRetired: req.query.includeRetired ?? undefined,
     page: req.query.page ?? undefined,
     pageSize: req.query.pageSize ?? undefined,
   });
   try {
-    const organizationPage = await orgRepo().listOrganizations(query);
+    const requestedPage = query.page;
+    const requestedPageSize = query.pageSize;
+    const allMatching = await orgRepo().listOrganizations({
+      ...query,
+      page: 1,
+      pageSize: 100_000,
+    });
+    const sortMetadata = await loadProfileSortMetadata(
+      allMatching.records.map((record) => record.id),
+      (statement) => db.execute(statement as any) as any,
+    );
+    const sortedRecords = sortOrganizationRecords(
+      allMatching.records,
+      sortMetadata,
+      query.sort,
+      query.search,
+    );
+    const pageCount = Math.max(1, Math.ceil(sortedRecords.length / requestedPageSize));
+    const page = Math.min(requestedPage, pageCount);
+    const start = (page - 1) * requestedPageSize;
+    const organizationPage = {
+      ...allMatching,
+      records: sortedRecords.slice(start, start + requestedPageSize),
+      page,
+      pageSize: requestedPageSize,
+      pageCount,
+    };
     const cardDetails = await loadProfileCardDetails(
       organizationPage.records.map((record) => record.id),
       (scope, err) => req.log.warn({ err, scope }, "Profile card enrichment query failed"),
