@@ -107,10 +107,6 @@ class MemoryBookingRepository implements BookingRepository {
           ? { followUp: cloneFollowUp(followUp), booking: { ...working.booking } }
           : null;
       },
-      findOpportunityForUpdate: async (opportunityId) =>
-        opportunityId === working.opportunity.id
-          ? { id: working.opportunity.id, status: working.opportunity.status }
-          : null,
       createBooking: async (input) => ({ id: BOOKING_ID, ...input }),
       completeFollowUp: async (followUpId, input) => {
         const current = working.followUps.get(followUpId);
@@ -148,28 +144,46 @@ class MemoryBookingRepository implements BookingRepository {
         working.booking = { ...working.booking, status: input.status };
         return { ...working.booking };
       },
-      updateOpportunityFollowUp: async (input) => {
-        if (input.opportunityId !== working.opportunity.id) {
-          throw new Error("Opportunity is missing.");
-        }
-        working.opportunity = {
-          ...working.opportunity,
-          status: "follow_up",
-          nextActionKind: input.nextActionKind,
-          nextActionDueAt: input.nextActionDueAt,
-        };
-      },
       createAuditEntry: async (_input: AuditEntry) => undefined,
     };
 
-    try {
-      const result = await operation(transaction);
-      this.state = working;
-      return result;
-    } catch (error) {
-      throw error;
-    }
+    const result = await operation(transaction);
+    this.state = working;
+    return result;
   }
+}
+
+function opportunityMutations(repository: MemoryBookingRepository) {
+  return {
+    update: async (
+      opportunityId: string,
+      patch: {
+        status?: string;
+        nextActionKind?: string | null;
+        nextActionDueAt?: Date | null;
+      },
+    ) => {
+      if (opportunityId !== repository.state.opportunity.id) {
+        throw new Error("Opportunity is missing.");
+      }
+      repository.state.opportunity = {
+        ...repository.state.opportunity,
+        status:
+          patch.status === "follow_up"
+            ? "follow_up"
+            : repository.state.opportunity.status,
+        nextActionKind:
+          patch.nextActionKind === undefined
+            ? repository.state.opportunity.nextActionKind
+            : patch.nextActionKind,
+        nextActionDueAt:
+          patch.nextActionDueAt === undefined
+            ? repository.state.opportunity.nextActionDueAt
+            : patch.nextActionDueAt,
+      };
+      return repository.state.opportunity;
+    },
+  };
 }
 
 describe("deriveOpportunityTransition", () => {
@@ -206,6 +220,7 @@ describe("OpportunityService follow-up completion", () => {
     const repository = new MemoryBookingRepository();
     const service = new OpportunityService(
       new BookingService(repository, { now: () => NOW }),
+      opportunityMutations(repository),
     );
 
     const result = await service.completeFollowUp({
@@ -241,6 +256,7 @@ describe("OpportunityService follow-up completion", () => {
     repository.failFutureFollowUpCreation = true;
     const service = new OpportunityService(
       new BookingService(repository, { now: () => NOW }),
+      opportunityMutations(repository),
     );
 
     await expect(
