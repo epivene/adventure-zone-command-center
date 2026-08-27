@@ -311,7 +311,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       </section>
 
       <div className="flex flex-wrap gap-2">
-        <button className="button-primary" disabled={saving || loadingContact || !contactLoaded} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save"}</button>
+        <button className="button-primary" disabled={saving} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save"}</button>
         <button className="button-secondary" disabled={saving} onClick={onCancel} type="button">Cancel</button>
       </div>
     </div>
