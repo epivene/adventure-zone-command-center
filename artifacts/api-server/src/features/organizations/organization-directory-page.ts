@@ -1,19 +1,19 @@
 import { and, asc, count, desc, eq, inArray, sql, type SQL } from "drizzle-orm";
 
-import type { db as database } from "@/db/client";
+import type { db as database } from "../../db/client";
 import {
   bookings,
   contacts,
   organizationContacts,
   organizationLocations,
   organizations,
-} from "@/db/schema";
-import type { OrganizationListQuery } from "@/features/organizations/last-resort-input";
+} from "../../db/schema";
+import type { OrganizationListQuery } from "./last-resort-input";
 import {
   buildOrganizationListCondition,
   type MatchedOrganizationLocation,
   type OrganizationListPage,
-} from "@/features/organizations/organization-repository";
+} from "./organization-repository";
 
 export function profileLastChangedAtSql(): SQL {
   return sql`greatest(
