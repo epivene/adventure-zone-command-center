@@ -176,12 +176,20 @@ export default function TodayPage() {
   }));
   const nextStepItems = (dashboard.needsFollowUpPlan ?? []).filter((booking: any) => !hiddenNextSteps.has(booking.id));
   const displayedNextStepItems = showAllNextSteps ? nextStepItems : nextStepItems.slice(0, 8);
-  const overdueCount = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue").length;
+  const overdueFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "overdue");
+  const dueTodayFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "today");
+  const laterFollowUps = followUps.filter((followUp: any) => classifyBusinessDueDate(followUp.dueAt, now) === "future");
+  const actionableFollowUps = [...overdueFollowUps, ...dueTodayFollowUps];
+  const overdueCount = overdueFollowUps.length;
+  const dueTodayCount = dueTodayFollowUps.length;
+  const laterCount = laterFollowUps.length;
   const contractCount = dashboard.contractCount ?? 0;
   const visibleRouteWarningCount = dashboard.visibleRouteWarningCount ?? 0;
   const urgentScoutAlertCount = scoutAlerts.filter((alert) => alert.severity === "urgent").length;
   const focus = deriveTodayFocus({
     overdueFollowUpCount: overdueCount,
+    dueTodayFollowUpCount: dueTodayCount,
+    laterFollowUpCount: laterCount,
     followUpCount: followUps.length,
     contractCount,
     decisionCount: nextStepItems.length,
@@ -220,13 +228,18 @@ export default function TodayPage() {
           <span className="text-sm font-semibold text-slate-500">Only open what you want to work on</span>
         </div>
 
-        {followUps.length ? (
+        {actionableFollowUps.length ? (
           <details id="my-work-calls" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <summary className="cursor-pointer font-bold">Calls & follow-ups <span className="ml-1 text-slate-500">({followUps.length})</span>{overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}</summary>
+            <summary className="cursor-pointer font-bold">
+              Calls & follow-ups <span className="ml-1 text-slate-500">({actionableFollowUps.length})</span>
+              {overdueCount ? <span className="ml-2 text-xs font-bold text-rose-700">{overdueCount} overdue</span> : null}
+              {dueTodayCount ? <span className="ml-2 text-xs font-bold text-orange-700">{dueTodayCount} today</span> : null}
+              {laterCount ? <span className="ml-2 text-xs font-semibold text-slate-500">{laterCount} later</span> : null}
+            </summary>
             <div className="mt-4">
               {callingConfig.assistedCallingEnabled
-                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={followUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []); return { followUps: coerceFollowUps(refreshed.followUps ?? []), followUpTotal: refreshed.followUpTotal ?? 0 }; }} remainingCount={dashboard.followUpTotal ?? followUps.length} />
-                : <div className="grid gap-4"><NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} /><FollowUpList followUps={followUps} now={now} /></div>}
+                ? <CallQueueWorkspace callingConfig={callingConfig} followUps={actionableFollowUps} initialFollowUpId={dashboard.nextCall?.id} refreshToday={async () => { const refreshed = await apiGet<any>("/today"); setDashboard(refreshed); setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []); const refreshedFollowUps = coerceFollowUps(refreshed.followUps ?? []); const refreshedActionable = refreshedFollowUps.filter((followUp: any) => { const due = classifyBusinessDueDate(followUp.dueAt, new Date()); return due === "overdue" || due === "today"; }); return { followUps: refreshedActionable, followUpTotal: refreshedActionable.length }; }} remainingCount={actionableFollowUps.length} />
+                : <div className="grid gap-4"><NextCallCard followUp={dashboard.nextCall ? { ...dashboard.nextCall, dueAt: new Date(dashboard.nextCall.dueAt) } : null} /><FollowUpList followUps={actionableFollowUps} now={now} /></div>}
             </div>
           </details>
         ) : null}
@@ -300,9 +313,11 @@ export default function TodayPage() {
       </section>
 
       <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <summary className="cursor-pointer text-lg font-bold">Later</summary>
-        <p className="mt-1 text-sm text-slate-600">Schedule detail, trips, and renewals are here when you want them.</p>
+        <summary className="cursor-pointer text-lg font-bold">Later{laterCount ? <span className="ml-2 text-sm font-semibold text-slate-500">{laterCount} scheduled follow-up{laterCount === 1 ? "" : "s"}</span> : null}</summary>
+        <p className="mt-1 text-sm text-slate-600">Future follow-ups, schedule detail, trips, and renewals are here when you want them.</p>
         <div className="mt-4 grid gap-3">
+          {laterFollowUps.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Scheduled follow-ups <span className="ml-1 text-slate-500">({laterFollowUps.length})</span></summary><div className="mt-3"><FollowUpList followUps={laterFollowUps} now={now} /></div></details> : null}
+
           {upcomingEvents.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary><ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
             const timing = classifyTodayEventTiming(event, now);
             return <li className="flex items-start justify-between gap-3 py-3" key={event.id}><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={eventProfileHref({ organizationId: event.organizationId ?? null, contactId: event.primaryContactId, bookingId: event.id }) ?? `/bookings/${event.id}`}>{event.name}</Link><span className={`rounded-full px-2 py-0.5 text-xs font-bold ${timing === "in_progress" ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{timing === "in_progress" ? "In progress" : "Upcoming"}</span></div><BookingOperations operations={event.operations} /></div>{event.startsAt ? <span className="whitespace-nowrap text-sm text-slate-600">{formatEventDateRange(event.startsAt, event.endsAt)}</span> : null}</li>;
