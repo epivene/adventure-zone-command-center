@@ -99,7 +99,7 @@ export function evaluateDraftGuardrails(
     };
   }
 
-  if (context.packageAvailability == null && context.calendarEvidence.length === 0) {
+  if (context.packageAvailability == null || context.calendarEvidence.length === 0) {
     return {
       blocker: blocker("availability_unknown", "Current package/calendar availability has not been established."),
       effectivePurpose: purpose,
