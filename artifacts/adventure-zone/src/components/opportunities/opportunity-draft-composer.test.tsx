@@ -50,7 +50,13 @@ beforeEach(() => {
     if (path.endsWith("/send")) {
       return { draft: { ...draft, state: "sent" }, followUpReferenceAt: "2026-08-27T15:00:00.000Z" };
     }
-    return { draft };
+    if (path.endsWith("/schedule")) {
+      return {
+        draft: { ...draft, state: "scheduled", scheduledFor: "2026-09-01T09:00:00.000Z" },
+        followUpReferenceAt: "2026-09-01T09:00:00.000Z",
+      };
+    }
+    return { ok: true, followUp: { id: "40000000-0000-4000-8000-000000000001" } };
   });
 });
 
@@ -105,7 +111,7 @@ describe("OpportunityDraftComposer", () => {
     expect(screen.getByLabelText("Body")).toHaveValue("Manual body");
   });
 
-  it("shows From/To/state/failure context and returns a follow-up reference after send", async () => {
+  it("opens follow-up choices from the actual sent timestamp", async () => {
     const onOutreachComplete = vi.fn();
     render(<OpportunityDraftComposer
       draft={{ ...draft, state: "failed", lastFailureMessage: "Gmail temporarily unavailable" }}
@@ -118,9 +124,34 @@ describe("OpportunityDraftComposer", () => {
     expect(screen.getByText(/Gmail temporarily unavailable/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
-    await waitFor(() => expect(onOutreachComplete).toHaveBeenCalledWith({
+    await screen.findByText("Follow up if no reply?");
+    expect(onOutreachComplete).toHaveBeenCalledWith({
       kind: "sent",
       referenceAt: "2026-08-27T15:00:00.000Z",
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "3 days" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/follow-ups", {
+      opportunityId: draft.opportunityId,
+      kind: "email",
+      dueAt: "2026-08-30T15:00:00.000Z",
+    }));
+  });
+
+  it("opens follow-up choices from the scheduled delivery timestamp", async () => {
+    render(<OpportunityDraftComposer draft={draft} fromAccount="zone@example.com" />);
+
+    fireEvent.change(screen.getByLabelText("Schedule date and time"), {
+      target: { value: "2026-09-01T09:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Schedule" }));
+
+    await screen.findByText("Follow up if no reply?");
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/follow-ups", {
+      opportunityId: draft.opportunityId,
+      kind: "email",
+      dueAt: "2026-09-08T09:00:00.000Z",
     }));
   });
 });
