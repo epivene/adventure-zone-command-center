@@ -31,6 +31,13 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Validate approved profile JSON
+        run: >-
+          node -e "const fs=require('fs'); const p='imports/approved-profiles';
+          for (const f of fs.readdirSync(p).filter(x=>x.endsWith('.json'))) {
+            JSON.parse(fs.readFileSync(p+'/'+f,'utf8'));
+          }
+          console.log('validated approved profile JSON');"
       - name: Approved profile import tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
       - name: API build
