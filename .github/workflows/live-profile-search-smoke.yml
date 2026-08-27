@@ -7,17 +7,56 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Search Evanston Cowboy Days profile
+      - name: Create Evanston profile and 2027 follow-up
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          for Q in "Evanston Cowboy Days" "Cowboy Days Evanston" "Evanston WY"; do
-            echo "=== QUERY: ${Q} ==="
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --get --data-urlencode "q=${Q}" \
-              "${BASE}/api/assistant-import/profile-search"
-            echo
-          done
+          PAYLOAD=$(python3 - <<'PY'
+          import json
+          print(json.dumps({
+            "event": {"id": None, "name": "Evanston Cowboy Days", "city": "Evanston", "region": "WY"},
+            "profile": {"placeType": "festival_event", "description": "", "phone": "", "website": "", "address1": "", "address2": "", "postalCode": ""},
+            "contacts": [{"id": None, "name": "Courtney", "phone": "", "email": "vendors.ecd@gmail.com", "role": "Event/Vendor Contact", "primary": True}],
+            "booking": {
+              "enabled": True,
+              "name": "Evanston Cowboy Days 2026",
+              "status": "declined",
+              "startsAt": "2026-09-04",
+              "endsAt": "2026-09-07",
+              "nextActionKind": "2027 early outreach",
+              "nextActionDueAt": "2027-01-04",
+              "travelLegId": None
+            },
+            "familyId": None,
+            "parentOrganizationId": None
+          }))
+          PY
+          )
+          RESP=$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/event-profiles" \
+            --data-binary "${PAYLOAD}")
+          echo "${RESP}"
+          PROFILE_ID=$(RESP="$RESP" python3 - <<'PY'
+          import json, os
+          print(json.loads(os.environ["RESP"])["profileId"])
+          PY
+          )
+          NOTE=$(PROFILE_ID="$PROFILE_ID" python3 - <<'PY'
+          import json, os
+          print(json.dumps({
+            "organizationId": os.environ["PROFILE_ID"],
+            "subject": "2026 reply - future-year invitation",
+            "body": "Courtney replied on Aug. 26, 2026 that the only large space available for Cowboy Days was already booked for bouncy houses. She invited The Adventure Zone to reach out again for future years so they can review pricing and whether it would be a good fit. Treat 2026 as a space-related decline, not a lack-of-interest decline, and contact earlier for 2027."
+          }))
+          PY
+          )
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -X POST "${BASE}/api/assistant-import/profile-notes" \
+            --data-binary "${NOTE}"
+          echo
