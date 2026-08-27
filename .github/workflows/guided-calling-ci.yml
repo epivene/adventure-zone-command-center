@@ -45,7 +45,7 @@ jobs:
           src/routes/needs-answer.test.ts
       - name: Guided calling frontend tests
         run: >-
-          pnpm --filter @workspace/adventure-zone exec vitest run
+          pnpm --filter @workspace/adventure-zone exec vitest run --environment jsdom
           src/features/calls/guided-call-scripts.test.ts
           src/features/calls/guided-call-state.test.ts
           src/components/calls/call-workspace.test.tsx
