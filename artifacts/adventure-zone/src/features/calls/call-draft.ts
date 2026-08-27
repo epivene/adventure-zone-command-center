@@ -63,7 +63,7 @@ function safeDraft(value: unknown): CallDraft | null {
     !["first_outreach", "follow_up", "contract_follow_up", "incoming_inquiry"].includes(String(draft.scriptKind)) ||
     typeof draft.note !== "string" ||
     ![
-      "no_answer", "left_voicemail", "follow_up_needed", "interested",
+      "no_answer", "left_voicemail", "follow_up_needed", "email_requested", "interested",
       "proposal_contract_sent", "booked", "declined", "move_to_last_resort",
       "spoke_with_contact", "wrong_number", "do_not_call",
     ].includes(String(draft.disposition)) ||
