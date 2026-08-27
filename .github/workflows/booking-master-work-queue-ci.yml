@@ -51,6 +51,7 @@ jobs:
           src/features/opportunities/opportunity-service.test.ts
           src/features/today/master-work-queue.test.ts
           src/routes/follow-ups.test.ts
+          src/routes/today.test.ts
       - name: Build database workspace
         run: pnpm --filter @workspace/db build
       - name: API typecheck (known main-branch baseline currently fails)
