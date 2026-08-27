@@ -47,6 +47,7 @@ jobs:
           src/features/opportunity-email/send-window.test.ts
           src/features/opportunity-email/ready-to-send-service.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher.test.ts
+          src/features/opportunity-email/scheduled-email-dispatcher-loop.test.ts
           src/routes/opportunity-drafts.test.ts
           src/routes/today-ready-to-send.test.ts
       - name: Database build
