@@ -7,61 +7,44 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Update Malad and Trailing reply profiles
+      - name: Audit current Gmail draft profiles
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-
-          # Malad: add Luke as current contact on the existing profile.
-          MALAD=$(cat <<'JSON'
-          {
-            "event":{"name":"Malad Valley Welsh Festival (Malad) ID","city":"Malad City","region":"ID"},
-            "profile":{"placeType":"other","description":"","phone":"(208) 766-4777","website":"https://welshfestival.com/","address1":"MAILING: PO Box 308","address2":"59 Bannock St","postalCode":"83252"},
-            "contacts":[{"id":null,"name":"Luke Waldron","phone":"","email":"lukewaldron5@gmail.com","role":"Current event contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"declined","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }
-          JSON
-          )
-          MRESP=$(curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/event-profiles" \
-            --data-binary "$MALAD")
-          echo "$MRESP"
-          MID=$(printf '%s' "$MRESP" | jq -r '.profileId')
-          MNOTE=$(jq -n --arg id "$MID" '{organizationId:$id,subject:"2026 reply - not interested",body:"Luke Waldron replied on Aug. 26, 2026: '"'"'Thanks for reaching out. We appreciate the offer but not something we are interested in for our event.'"'"' Treat this as a direct event-level decline for current Adventure Zone outreach. Do not schedule routine future outreach unless the relationship or event format materially changes."}')
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/profile-notes" \
-            --data-binary "$MNOTE"
-          echo
-
-          # Trailing of the Sheep: create missing profile with Laura's reply-signature contact data.
-          TRAILING=$(cat <<'JSON'
-          {
-            "event":{"id":null,"name":"Trailing of the Sheep Festival","city":"Ketchum","region":"ID"},
-            "profile":{"placeType":"festival_event","description":"","phone":"","website":"","address1":"","address2":"","postalCode":""},
-            "contacts":[{"id":null,"name":"Laura Musbach Drake","phone":"314.398.2431","email":"laura@trailingofthesheep.org","role":"Festival contact","primary":true}],
-            "booking":{"enabled":false,"name":"","status":"declined","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},
-            "familyId":null,"parentOrganizationId":null
-          }
-          JSON
-          )
-          TRESP=$(curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/event-profiles" \
-            --data-binary "$TRAILING")
-          echo "$TRESP"
-          TID=$(printf '%s' "$TRESP" | jq -r '.profileId')
-          TNOTE=$(jq -n --arg id "$TID" '{organizationId:$id,subject:"2026 reply - event fit decline",body:"Laura Musbach Drake replied on Aug. 26, 2026 that these types of activities do not align with the cultural festival they present. Current contact: Laura Musbach Drake, laura@trailingofthesheep.org, 314-398-2431. Treat this as an event-fit/non-fit decline and do not schedule normal future Adventure Zone outreach unless the festival format materially changes or they contact us."}')
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/profile-notes" \
-            --data-binary "$TNOTE"
-          echo
+          cat > /tmp/events.txt <<'EOF'
+          The Springs Home Show
+          Rendezvous Royale
+          Telluride Autumn Classic
+          Rocky Mountain ATV Jamboree
+          Thousand Springs Festival of the Arts
+          Sandy Heritage Festival
+          Bear Lake Brawl Triathlon
+          A Blast on the Grass
+          International Arts & Crafts Festival
+          Colorfest Balloon Rally
+          Breck Film Fest
+          Durango Autumn Arts Festival
+          Saguache Fall Festival & Quilt Show
+          Holly Gateway Fair
+          Cochise County Fair
+          Santa Cruz County Fair
+          Colorado Highland Games
+          Cruisin' the Canyon Car Show
+          Experience Rexburg
+          Higher Ground Fair
+          Rides & Rods Classic Car Show
+          Fall Family Festival
+          International Camel & Ostrich Races
+          EOF
+          while IFS= read -r Q; do
+            [ -z "$Q" ] && continue
+            RESP=$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search")
+            COUNT=$(printf '%s' "$RESP" | jq '.results | length')
+            echo "=== ${Q} | count=${COUNT} ==="
+            printf '%s' "$RESP" | jq -c '.results'
+          done < /tmp/events.txt
