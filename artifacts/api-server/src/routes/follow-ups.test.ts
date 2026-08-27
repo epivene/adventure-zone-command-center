@@ -93,6 +93,12 @@ function opportunityRepository() {
   };
 }
 
+function activityWriter() {
+  return {
+    recordFollowUpCreated: vi.fn(async () => undefined),
+  };
+}
+
 function ownerToken(): string {
   const issued = issueToken();
   if (!issued) throw new Error("test owner token was not issued");
@@ -124,6 +130,7 @@ function completionService() {
 function testApp(
   completion = completionService(),
   opportunities = opportunityRepository(),
+  activity = activityWriter(),
 ) {
   const app = express();
   app.use(express.json());
@@ -134,6 +141,7 @@ function testApp(
       new FollowUpService(new MemoryFollowUpRepository()),
       completion,
       opportunities,
+      activity,
     ),
   );
   return app;
@@ -155,9 +163,10 @@ describe("follow-up owner routes", () => {
     expect(response.body).toEqual({ error: "Unauthorized" });
   });
 
-  it("creates one normal follow-up linked through the Opportunity", async () => {
+  it("creates one normal follow-up linked through the Opportunity and records timeline activity", async () => {
     const opportunities = opportunityRepository();
-    const response = await request(testApp(completionService(), opportunities))
+    const activity = activityWriter();
+    const response = await request(testApp(completionService(), opportunities, activity))
       .post("/api/follow-ups")
       .set("Authorization", `Bearer ${ownerToken()}`)
       .send({ opportunityId, kind: "email", dueAt: nextDueAt });
@@ -179,6 +188,11 @@ describe("follow-up owner routes", () => {
       status: "follow_up",
       nextActionKind: "email",
       nextActionDueAt: new Date(nextDueAt),
+    });
+    expect(activity.recordFollowUpCreated).toHaveBeenCalledWith({
+      opportunityId,
+      followUpId: "40000000-0000-4000-8000-000000000004",
+      dueAt: new Date(nextDueAt),
     });
   });
 
