@@ -8,6 +8,8 @@ export type TodayFocusKind =
 
 export type TodayFocusInput = {
   overdueFollowUpCount: number;
+  dueTodayFollowUpCount: number;
+  laterFollowUpCount: number;
   followUpCount: number;
   contractCount: number;
   decisionCount: number;
@@ -22,21 +24,35 @@ export type TodayFocus = {
   primaryHref: string;
 };
 
+function attentionHeadline(count: number) {
+  return `${count} ${count === 1 ? "needs" : "need"} attention`;
+}
+
+function followUpDetail(input: TodayFocusInput) {
+  const parts: string[] = [];
+  if (input.overdueFollowUpCount) parts.push(`${input.overdueFollowUpCount} overdue`);
+  if (input.dueTodayFollowUpCount) parts.push(`${input.dueTodayFollowUpCount} due today`);
+  if (input.laterFollowUpCount) parts.push(`${input.laterFollowUpCount} scheduled for later`);
+  return parts.join(" · ");
+}
+
 export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
+  const actionableFollowUps = input.overdueFollowUpCount + input.dueTodayFollowUpCount;
+
   if (input.overdueFollowUpCount > 0) {
     return {
       kind: "overdue_followups",
-      headline: `${input.followUpCount} task${input.followUpCount === 1 ? "" : "s"} remaining`,
-      detail: `${input.overdueFollowUpCount} overdue · Start with your highest-priority follow-up`,
+      headline: attentionHeadline(actionableFollowUps),
+      detail: followUpDetail(input),
       primaryLabel: "Start",
       primaryHref: "#today-next-task",
     };
   }
-  if (input.followUpCount > 0) {
+  if (input.dueTodayFollowUpCount > 0) {
     return {
       kind: "followups",
-      headline: `${input.followUpCount} task${input.followUpCount === 1 ? "" : "s"} remaining`,
-      detail: "Next: follow up with your highest-priority event",
+      headline: attentionHeadline(actionableFollowUps),
+      detail: followUpDetail(input),
       primaryLabel: "Start",
       primaryHref: "#today-next-task",
     };
@@ -44,8 +60,8 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
   if (input.contractCount > 0) {
     return {
       kind: "contracts",
-      headline: `${input.contractCount} task${input.contractCount === 1 ? "" : "s"} remaining`,
-      detail: "Next: work the booking or contract that needs attention",
+      headline: attentionHeadline(input.contractCount),
+      detail: "Booking or contract work needs your attention",
       primaryLabel: "Start",
       primaryHref: "/bookings",
     };
@@ -53,8 +69,8 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
   if (input.decisionCount > 0) {
     return {
       kind: "decisions",
-      headline: `${input.decisionCount} task${input.decisionCount === 1 ? "" : "s"} remaining`,
-      detail: "Next: decide what happens with the highest-priority lead or past event",
+      headline: attentionHeadline(input.decisionCount),
+      detail: "Decide what happens with the highest-priority lead or past event",
       primaryLabel: "Start",
       primaryHref: "#my-work-decisions",
     };
@@ -63,7 +79,9 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
     return {
       kind: "schedule",
       headline: "Your active work is caught up",
-      detail: `${input.upcomingEventCount} upcoming event${input.upcomingEventCount === 1 ? "" : "s"} on the schedule`,
+      detail: input.laterFollowUpCount
+        ? `${input.laterFollowUpCount} follow-up${input.laterFollowUpCount === 1 ? " is" : "s are"} scheduled for later · ${input.upcomingEventCount} upcoming event${input.upcomingEventCount === 1 ? "" : "s"}`
+        : `${input.upcomingEventCount} upcoming event${input.upcomingEventCount === 1 ? "" : "s"} on the schedule`,
       primaryLabel: "View schedule",
       primaryHref: "/schedule",
     };
@@ -71,8 +89,10 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
   return {
     kind: "caught_up",
     headline: "You're caught up for now",
-    detail: "Nothing urgent is waiting on you.",
-    primaryLabel: "Find opportunities",
-    primaryHref: "/research-sources",
+    detail: input.laterFollowUpCount
+      ? `${input.laterFollowUpCount} follow-up${input.laterFollowUpCount === 1 ? " is" : "s are"} scheduled for later.`
+      : "Nothing urgent is waiting on you.",
+    primaryLabel: input.laterFollowUpCount ? "View later" : "Find opportunities",
+    primaryHref: input.laterFollowUpCount ? "#later-work" : "/research-sources",
   };
 }

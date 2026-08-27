@@ -17,6 +17,14 @@ describe("simple Today layout", () => {
     expect(todaySource).toContain("FollowUpList");
   });
 
+  it("separates due-now follow-ups from future scheduled work", () => {
+    expect(todaySource).toContain("actionableFollowUps");
+    expect(todaySource).toContain("dueTodayFollowUps");
+    expect(todaySource).toContain("laterFollowUps");
+    expect(todaySource).toContain("Scheduled follow-ups");
+    expect(todaySource.indexOf("Scheduled follow-ups")).toBeGreaterThan(todaySource.indexOf("Later"));
+  });
+
   it("hides zero-value summary cards in the reusable summary component", () => {
     expect(summarySource).toContain("visibleCards");
     expect(summarySource).toContain("if (!visibleCards.length) return null");
