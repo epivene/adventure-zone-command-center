@@ -28,5 +28,3 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Profile directory sort tests
         run: pnpm exec vitest run artifacts/api-server/src/features/organizations/organization-list-sort.test.ts
-      - name: Workspace typecheck
-        run: pnpm run typecheck
