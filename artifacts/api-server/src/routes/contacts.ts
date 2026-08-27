@@ -122,10 +122,12 @@ router.put("/contacts/:id", async (req, res): Promise<void> => {
   }
   try {
     const phones = await db.transaction(async (transaction) => {
-      const scopedPhoneRepo = createContactPhoneRepository(transaction as any);
-      const scopedContactRepo = new DrizzleContactRepository(transaction as any);
-      const savedPhones = await scopedPhoneRepo.replaceForContact(id, parsed.data.phones, new Date());
-      await scopedContactRepo.updateContact(id, parsed.data.contact);
+      const savedPhones = await createContactPhoneRepository(transaction as unknown as typeof db)
+        .replaceForContact(id, parsed.data.phones, new Date());
+      const primaryPhone = savedPhones.find((phone) => phone.primary) ?? null;
+      const updated = await new DrizzleContactRepository(transaction as unknown as typeof db)
+        .updateContact(id, { ...parsed.data.contact, phone: primaryPhone?.number ?? null });
+      if (!updated) throw new Error("Contact is missing.");
       return savedPhones;
     });
     res.json({ ok: true, phones });
