@@ -7,19 +7,27 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Create Palisade Art Festival profile
+      - name: Process OktoberWest reply
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          P=$(cat <<'JSON'
-          {"event":{"id":null,"name":"Palisade Art Festival","city":"Palisade","region":"CO"},"profile":{"placeType":"festival_event","description":"","phone":"970-406-1866","website":"https://www.mountainartfestivals.com/","address1":"120 W 8th St","address2":"Veterans Memorial Park","postalCode":"81526"},"contacts":[{"id":null,"name":"Dick & Tina Cunningham","phone":"970-406-1866","email":"mountainartfestivals@gmail.com","role":"Directors / Promoters","primary":true}],"booking":{"enabled":false,"name":"","status":"new_lead","startsAt":"","endsAt":"","nextActionKind":"","nextActionDueAt":"","travelLegId":null},"familyId":null,"parentOrganizationId":null}
-          JSON
-          )
-          RESP=$(curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/event-profiles" --data-binary "$P")
-          echo "$RESP"
-          ID=$(echo "$RESP" | jq -r '.profileId')
-          N=$(jq -n --arg id "$ID" '{organizationId:$id,subject:"2026 outreach draft prepared",body:"Palisade Art Festival is confirmed for Sept. 26-27, 2026 and is produced by Mountain Art Festivals. Current directors/promoters are Dick and Tina Cunningham; sponsorship/organizer contact is mountainartfestivals@gmail.com / 970-406-1866. Because the show is a strict juried original-art marketplace, the draft is framed as a separate family-entertainment/sponsorship partnership rather than a normal artist/vendor application."}')
-          curl --fail-with-body --silent --show-error -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$N"
+          AUTH=(-H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}")
+
+          SEARCH=$(curl --fail-with-body --silent --show-error "${AUTH[@]}" "${BASE}/api/assistant-import/profile-search?q=OktoberWest&limit=10")
+          echo "$SEARCH"
+          PROFILE=$(echo "$SEARCH" | jq -c '.results[] | select(.kind=="organization") | select((.label|ascii_downcase|contains("oktoberwest")))' | head -n1)
+          test -n "$PROFILE"
+          ID=$(echo "$PROFILE" | jq -r '.id')
+          NAME=$(echo "$PROFILE" | jq -r '.label')
+          CITY=$(echo "$PROFILE" | jq -r '.city // "Steamboat Springs"')
+          REGION=$(echo "$PROFILE" | jq -r '.region // "CO"')
+
+          NOTE=$(jq -n --arg id "$ID" '{organizationId:$id,subject:"2026 OktoberWest reply - no space / permits",body:"Cecilia Morter replied Aug. 27, 2026 after the 2026 outreach. OktoberWest cannot accommodate Adventure Zone this year because there is no additional space; adding us would require expanding the event footprint and obtaining additional permits, and the event is only about two weeks away. This is not a hard fit rejection: Cecilia said she will save the email and reach out if things change in the future. Treat as warm future possibility; do not continue pursuing 2026. Current reply signature: Cecilia Morter, Business Development & Program Director, Steamboat Springs Chamber, cecilia@steamboatchamber.com, 970-875-7000."}')
+          curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/profile-notes" --data-binary "$NOTE"
+          echo
+
+          PAYLOAD=$(jq -n --arg id "$ID" --arg name "$NAME" --arg city "$CITY" --arg region "$REGION" '{event:{id:$id,name:$name,city:$city,region:$region},profile:{placeType:"festival_event",description:"",phone:"970-875-7000",website:"https://www.steamboatchamber.com/",address1:"",address2:"",postalCode:""},contacts:[{id:null,name:"Cecilia Morter",phone:"970-875-7000",email:"cecilia@steamboatchamber.com",role:"Business Development & Program Director",primary:true}],booking:{enabled:true,name:"OktoberWest 2027 follow-up",status:"renewal_due",startsAt:"",endsAt:"",nextActionKind:"follow_up",nextActionDueAt:"2027-01-15",travelLegId:null},familyId:null,parentOrganizationId:null}')
+          curl --fail-with-body --silent --show-error "${AUTH[@]}" -H "Content-Type: application/json" -X POST "${BASE}/api/assistant-import/event-profiles" --data-binary "$PAYLOAD"
           echo
