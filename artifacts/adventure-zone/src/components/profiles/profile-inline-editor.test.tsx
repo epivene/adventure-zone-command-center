@@ -104,22 +104,24 @@ describe("ProfileInlineEditor", () => {
 
     expect(screen.getByLabelText("Profile name")).toHaveValue("16th Street Fair (Denver) CO");
     expect(screen.getByLabelText("Website")).toHaveValue("https://example.com");
-    await screen.findByDisplayValue("coloradoevents@gmail.com");
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
 
     fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "16th Street Fair" } });
     fireEvent.change(screen.getByLabelText("Phone"), { target: { value: "3035551212" } });
+    expect(screen.getByLabelText("Phone")).toHaveValue("3035551212");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(apiPatch).toHaveBeenCalledWith("/event-profiles/profile-1", expect.objectContaining({ name: "16th Street Fair" })));
     expect(apiPut).toHaveBeenCalledWith("/contacts/contact-1", expect.objectContaining({
       contact: expect.objectContaining({ phone: "3035551212", organizationName: "16th Street Fair" }),
+      phones: [expect.objectContaining({ number: "3035551212", primary: true })],
     }));
     expect(onSaved).toHaveBeenCalled();
   });
 
   it("lets the user choose a different contact without leaving the profile", async () => {
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
-    await screen.findByDisplayValue("coloradoevents@gmail.com");
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
 
     fireEvent.change(screen.getByLabelText("Contact to edit"), { target: { value: "contact-2" } });
 
@@ -130,7 +132,7 @@ describe("ProfileInlineEditor", () => {
   it("creates a new contact on the current profile without opening a separate contact page", async () => {
     const onSaved = vi.fn();
     render(<ProfileInlineEditor profile={profile as any} onSaved={onSaved} />);
-    await screen.findByDisplayValue("coloradoevents@gmail.com");
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
 
     fireEvent.click(screen.getByRole("button", { name: "Add contact" }));
     fireEvent.change(screen.getByLabelText("First name"), { target: { value: "Taylor" } });
@@ -167,7 +169,7 @@ describe("ProfileInlineEditor", () => {
     apiPatch.mockRejectedValueOnce(new Error("Could not save profile"));
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Profile name"), { target: { value: "Keep this value" } });
-    await screen.findByDisplayValue("coloradoevents@gmail.com");
+    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save profile");
     expect(screen.getByLabelText("Profile name")).toHaveValue("Keep this value");
