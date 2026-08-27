@@ -7,31 +7,30 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Update Evanston Cowboy Days profile details
+      - name: Audit Malad and Trailing profiles
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          PAYLOAD=$(python3 - <<'PY'
-          import json
-          print(json.dumps({
-            "event": {"name": "Evanston Cowboy Days", "city": "Evanston", "region": "WY"},
-            "profile": {
-              "placeType": "festival_event",
-              "description": "",
-              "phone": "307-679-8019",
-              "website": "https://www.evanstoncowboydays.com/",
-              "address1": "130 Bear River Drive",
-              "address2": "Uinta County Fairgrounds",
-              "postalCode": ""
-            }
-          }))
-          PY
-          )
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/event-profiles" \
-            --data-binary "${PAYLOAD}"
-          echo
+          for Q in "Malad Valley Welsh Festival" "Trailing of the Sheep Festival"; do
+            echo "=== QUERY: ${Q} ==="
+            RESP=$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search")
+            echo "$RESP"
+            ID=$(RESP="$RESP" python3 - <<'PY'
+import json, os
+r=json.loads(os.environ['RESP'])
+print((r.get('results') or [{}])[0].get('id',''))
+PY
+)
+            if [ -n "$ID" ]; then
+              echo "=== HISTORY: ${ID} ==="
+              curl --fail-with-body --silent --show-error \
+                -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                "${BASE}/api/assistant-import/profile-history/${ID}"
+              echo
+            fi
+          done
