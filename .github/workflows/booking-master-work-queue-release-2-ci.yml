@@ -7,6 +7,7 @@ on:
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
       - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/index.ts"
       - "artifacts/adventure-zone/src/features/opportunity-email/**"
       - "artifacts/adventure-zone/src/components/opportunities/**"
       - "artifacts/adventure-zone/src/components/today/**"
@@ -17,6 +18,7 @@ on:
       - "lib/db/src/schema/index.ts"
       - "lib/db/src/migrations.ts"
       - "lib/db/migrations/071_booking_opportunity_email_state.sql"
+      - "lib/db/migrations/072_booking_opportunity_email_dispatch.sql"
       - ".github/workflows/booking-master-work-queue-release-2-ci.yml"
   workflow_dispatch:
 
@@ -44,6 +46,7 @@ jobs:
           src/features/opportunity-email/opportunity-email-delivery.test.ts
           src/features/opportunity-email/send-window.test.ts
           src/features/opportunity-email/ready-to-send-service.test.ts
+          src/features/opportunity-email/scheduled-email-dispatcher.test.ts
           src/routes/opportunity-drafts.test.ts
           src/routes/today-ready-to-send.test.ts
       - name: Database build
