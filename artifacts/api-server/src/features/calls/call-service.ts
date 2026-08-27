@@ -145,6 +145,7 @@ function defaultCallNote(disposition: CompleteCallInput["disposition"]) {
     spoke_with_contact: "Spoke with contact.",
     wrong_number: "Wrong number.",
     do_not_call: "Marked Do Not Call.",
+    email_requested: "Asked us to send information by email.",
   }[disposition];
 }
 
