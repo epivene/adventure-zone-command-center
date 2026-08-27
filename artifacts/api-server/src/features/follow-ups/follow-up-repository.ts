@@ -4,15 +4,19 @@ import type { db as database } from "@/db/client";
 import { callSessions, followUps } from "@/db/schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import type {
+  CreateFollowUpInput,
   EditFollowUpInput,
   FollowUpError,
   FollowUpRecord,
 } from "@/features/follow-ups/follow-up-types";
 import { err, ok, type Result } from "@/lib/result";
 
-export type { EditFollowUpInput, FollowUpError, FollowUpRecord };
+export type { CreateFollowUpInput, EditFollowUpInput, FollowUpError, FollowUpRecord };
 
 export interface FollowUpRepository {
+  create(
+    input: CreateFollowUpInput,
+  ): Promise<Result<FollowUpRecord, FollowUpError>>;
   edit(
     input: EditFollowUpInput,
   ): Promise<Result<FollowUpRecord, FollowUpError>>;
@@ -37,6 +41,32 @@ function toFollowUpRecord(row: FollowUpRow): FollowUpRecord {
 
 export class DrizzleFollowUpRepository implements FollowUpRepository {
   constructor(private readonly database: DrizzleDatabase) {}
+
+  async create(
+    input: CreateFollowUpInput,
+  ): Promise<Result<FollowUpRecord, FollowUpError>> {
+    const [created] = await this.database
+      .insert(followUps)
+      .values({
+        organizationId: input.organizationId,
+        contactId: input.contactId,
+        bookingId: input.bookingId,
+        kind: input.kind,
+        dueAt: input.dueAt,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    if (!created) {
+      return err({
+        code: "INVALID_FOLLOW_UP_INPUT",
+        message: "Could not create follow-up.",
+      });
+    }
+
+    return ok(toFollowUpRecord(created));
+  }
 
   async edit(
     input: EditFollowUpInput,
