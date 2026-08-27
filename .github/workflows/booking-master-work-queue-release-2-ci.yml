@@ -1,0 +1,39 @@
+name: Booking Master Work Queue Release 2 CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
+      - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/adventure-zone/src/features/opportunity-email/**"
+      - "artifacts/adventure-zone/src/components/opportunities/**"
+      - "artifacts/adventure-zone/src/components/today/**"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage*"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "lib/db/src/booking-opportunity-email-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/src/migrations.ts"
+      - "lib/db/migrations/071_booking_opportunity_email_state.sql"
+      - ".github/workflows/booking-master-work-queue-release-2-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  release-2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Opportunity email persistence tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/opportunity-email/opportunity-email-repository.test.ts
+      - name: Database build
+        run: pnpm --filter @workspace/db build
