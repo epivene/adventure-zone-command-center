@@ -30,6 +30,16 @@ vi.mock("@/lib/manager-auth-context", () => ({
     managerApi,
   }),
 }));
+vi.mock("@/features/manager-assistant/manager-assistant-context", () => ({
+  useManagerAssistant: () => ({
+    activeContext: null,
+    setActiveContext: vi.fn(),
+    open: false,
+    openAssistant: vi.fn(),
+    closeAssistant: vi.fn(),
+    prefill: "",
+  }),
+}));
 
 import ManagerHomePage from "./ManagerHomePage";
 
