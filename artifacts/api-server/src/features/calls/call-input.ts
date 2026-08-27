@@ -22,6 +22,7 @@ const callDispositionSchema = z.enum([
   "spoke_with_contact",
   "wrong_number",
   "do_not_call",
+  "email_requested",
 ]);
 
 const nullableText = z.union([z.string(), z.null()]).transform((value) => value?.trim() || null);

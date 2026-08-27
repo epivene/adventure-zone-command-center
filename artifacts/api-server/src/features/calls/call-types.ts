@@ -40,9 +40,10 @@ export type CallDisposition =
   | "move_to_last_resort"
   | "spoke_with_contact"
   | "wrong_number"
-  | "do_not_call";
+  | "do_not_call"
+  | "email_requested";
 
-export type PersistedCallDisposition = (typeof callDispositionValues)[number];
+export type PersistedCallDisposition = (typeof callDispositionValues)[number] | "email_requested";
 
 export type CompleteCallInput = {
   requestKey: string;
@@ -161,6 +162,7 @@ export const persistedCallDisposition: Record<
   spoke_with_contact: "spoke_with_contact",
   wrong_number: "wrong_number",
   do_not_call: "do_not_call",
+  email_requested: "email_requested",
 };
 
 export const publicCallDisposition: Record<
@@ -178,6 +180,7 @@ export const publicCallDisposition: Record<
   spoke_with_contact: "spoke_with_contact",
   wrong_number: "wrong_number",
   do_not_call: "do_not_call",
+  email_requested: "email_requested",
 };
 
 export const dispositionBookingStatus: Partial<
