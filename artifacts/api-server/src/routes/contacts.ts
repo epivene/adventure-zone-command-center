@@ -45,8 +45,12 @@ router.post("/contacts", async (req, res): Promise<void> => {
     return;
   }
   try {
-    const contact = await contactRepo().createContact(parsed.data);
-    res.status(201).json({ ok: true, contactId: (contact as any).id ?? (contact as any).contact?.id });
+    const created = await contactRepo().createContact(parsed.data);
+    const contactId = typeof created === "string"
+      ? created
+      : (created as any).id ?? (created as any).contact?.id;
+    if (!contactId) throw new Error("Created contact did not return an ID.");
+    res.status(201).json({ ok: true, contactId });
   } catch (err) {
     req.log.error({ err }, "Failed to create contact");
     res.status(500).json({ ok: false, error: "Could not create contact" });
@@ -118,12 +122,10 @@ router.put("/contacts/:id", async (req, res): Promise<void> => {
   }
   try {
     const phones = await db.transaction(async (transaction) => {
-      const savedPhones = await createContactPhoneRepository(transaction as unknown as typeof db)
-        .replaceForContact(id, parsed.data.phones, new Date());
-      const primaryPhone = savedPhones.find((phone) => phone.primary) ?? null;
-      const updated = await new DrizzleContactRepository(transaction as unknown as typeof db)
-        .updateContact(id, { ...parsed.data.contact, phone: primaryPhone?.number ?? null });
-      if (!updated) throw new Error("Contact is missing.");
+      const scopedPhoneRepo = createContactPhoneRepository(transaction as any);
+      const scopedContactRepo = new DrizzleContactRepository(transaction as any);
+      const savedPhones = await scopedPhoneRepo.replaceForContact(id, parsed.data.phones, new Date());
+      await scopedContactRepo.updateContact(id, parsed.data.contact);
       return savedPhones;
     });
     res.json({ ok: true, phones });
