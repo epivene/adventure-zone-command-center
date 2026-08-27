@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -41,6 +41,7 @@ function DetailList({ items }: { items: { label: string; value: ReactNode }[] })
 
 export default function ContactDetailPage({ contactId }: { contactId: string }) {
   const { openAssistant } = useAssistantContext();
+  const [, navigate] = useLocation();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,11 @@ export default function ContactDetailPage({ contactId }: { contactId: string }) 
     }
     apiGet<any>(`/contacts/${contactId}`)
       .then((d) => {
+        const primaryProfile = (d.places ?? []).find((place: any) => place.isPrimaryPlace) ?? d.places?.[0] ?? null;
+        if (primaryProfile?.id) {
+          navigate(`/profiles/${primaryProfile.id}?contactId=${contactId}`, { replace: true });
+          return;
+        }
         const coerced = {
           ...d,
           timeline: (d.timeline ?? []).map((item: any) => ({
@@ -66,9 +72,9 @@ export default function ContactDetailPage({ contactId }: { contactId: string }) 
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
-  }, [contactId]);
+  }, [contactId, navigate]);
 
-  if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading contact…</p></div>;
+  if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Opening profile…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
   const { contact, relatedBookings, timeline, phones = [] } = data;
