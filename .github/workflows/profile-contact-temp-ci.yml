@@ -1,0 +1,24 @@
+name: Profile Contact Temporary CI
+
+on:
+  push:
+    branches:
+      - fix/profile-contact-create-edit
+
+jobs:
+  profile-contact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused contact tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/profiles/profile-inline-editor.test.tsx src/pages/ContactDetailPage.test.tsx src/pages/ContactDetailPage.route.test.tsx
+      - name: Frontend typecheck
+        run: pnpm --filter @workspace/adventure-zone exec tsc --noEmit
