@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@workspace/db", () => ({ db: {} }));
 
 import { issueToken, requireOwnerMiddleware } from "@/lib/auth";
-import { createTodayWorkRouter } from "./today";
+import { createTodayWorkRouter } from "./today-work";
 
 const OPPORTUNITY_ID = "10000000-0000-4000-8000-000000000001";
 const SECOND_ID = "10000000-0000-4000-8000-000000000002";
@@ -58,11 +58,7 @@ describe("Today master queue controls", () => {
       .send({ businessDate: BUSINESS_DATE, pinned: true });
 
     expect(response.status).toBe(200);
-    expect(service.pin).toHaveBeenCalledWith(
-      OPPORTUNITY_ID,
-      BUSINESS_DATE,
-      true,
-    );
+    expect(service.pin).toHaveBeenCalledWith(OPPORTUNITY_ID, BUSINESS_DATE, true);
   });
 
   it("sets or clears urgent priority", async () => {
@@ -96,10 +92,7 @@ describe("Today master queue controls", () => {
     const response = await request(app)
       .post("/api/today/work/reorder")
       .set("Authorization", `Bearer ${ownerToken()}`)
-      .send({
-        businessDate: BUSINESS_DATE,
-        opportunityIds: [SECOND_ID, OPPORTUNITY_ID],
-      });
+      .send({ businessDate: BUSINESS_DATE, opportunityIds: [SECOND_ID, OPPORTUNITY_ID] });
 
     expect(response.status).toBe(200);
     expect(service.reorder).toHaveBeenCalledWith(
@@ -120,22 +113,10 @@ describe("Today master queue controls", () => {
   });
 
   it.each([
-    [
-      `/api/today/work/not-a-uuid/pin`,
-      { businessDate: BUSINESS_DATE, pinned: true },
-    ],
-    [
-      `/api/today/work/${OPPORTUNITY_ID}/pin`,
-      { businessDate: "08/26/2026", pinned: true },
-    ],
-    [
-      `/api/today/work/${OPPORTUNITY_ID}/snooze`,
-      { businessDate: BUSINESS_DATE, until: "not-a-date" },
-    ],
-    [
-      "/api/today/work/reorder",
-      { businessDate: BUSINESS_DATE, opportunityIds: [OPPORTUNITY_ID, OPPORTUNITY_ID] },
-    ],
+    [`/api/today/work/not-a-uuid/pin`, { businessDate: BUSINESS_DATE, pinned: true }],
+    [`/api/today/work/${OPPORTUNITY_ID}/pin`, { businessDate: "08/26/2026", pinned: true }],
+    [`/api/today/work/${OPPORTUNITY_ID}/snooze`, { businessDate: BUSINESS_DATE, until: "not-a-date" }],
+    ["/api/today/work/reorder", { businessDate: BUSINESS_DATE, opportunityIds: [OPPORTUNITY_ID, OPPORTUNITY_ID] }],
   ])("rejects invalid control payloads for %s", async (path, body) => {
     const { app } = testApp();
     const response = await request(app)
@@ -151,10 +132,7 @@ describe("Today master queue controls", () => {
     const response = await request(app)
       .post("/api/today/work/reorder")
       .set("Authorization", `Bearer ${ownerToken()}`)
-      .send({
-        businessDate: BUSINESS_DATE,
-        opportunityIds: [OPPORTUNITY_ID, SECOND_ID],
-      });
+      .send({ businessDate: BUSINESS_DATE, opportunityIds: [OPPORTUNITY_ID, SECOND_ID] });
 
     expect(response.status).toBe(409);
   });
