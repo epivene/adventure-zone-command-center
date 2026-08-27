@@ -57,8 +57,8 @@ vi.mock("@workspace/db", () => ({ db: { transaction: async (callback: (transacti
 } } }));
 vi.mock("@/features/contacts/contact-repository", () => ({
   DrizzleContactRepository: class {
-    createContact = createContact;
-    updateContact = updateContact;
+    async createContact(input: unknown) { return createContact(input); }
+    async updateContact(id: string, input: unknown) { return updateContact(id, input); }
     async getContactDetail(id: string) {
       if (id !== contactId) return null;
       return {
