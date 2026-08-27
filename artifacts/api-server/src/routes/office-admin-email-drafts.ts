@@ -68,7 +68,11 @@ router.post("/office-admin/email-drafts/:draftId/send", async (req, res): Promis
     res.json({ draft });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Email delivery failed.";
-    await drafts.restoreSubmittedAfterFailure(draftId, message).catch(() => undefined);
+    try {
+      await drafts.restoreSubmittedAfterFailure(draftId, message);
+    } catch {
+      // Preserve the original delivery failure response even if restoring state fails.
+    }
     if (error instanceof MailConfigurationError) {
       res.status(503).json({ error: message });
       return;
