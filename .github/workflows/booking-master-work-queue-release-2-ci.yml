@@ -40,5 +40,6 @@ jobs:
           src/features/opportunity-email/draft-context-resolver.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
           src/features/opportunity-email/opportunity-email-service.test.ts
+          src/features/opportunity-email/opportunity-email-rewrite.test.ts
       - name: Database build
         run: pnpm --filter @workspace/db build
