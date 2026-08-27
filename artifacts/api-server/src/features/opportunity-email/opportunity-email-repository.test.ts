@@ -8,6 +8,7 @@ import { OpportunityEmailRepository } from "./opportunity-email-repository";
 const ORGANIZATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OPPORTUNITY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CONTACT_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const NOW = new Date("2026-08-28T14:00:00.000Z");
 
 let client: PGlite;
 let repository: OpportunityEmailRepository;
@@ -58,6 +59,9 @@ beforeEach(async () => {
       last_failure_message text,
       send_request_key text,
       schedule_request_key text,
+      dispatch_lease_owner text,
+      dispatch_lease_expires_at timestamptz,
+      dispatch_attempt_count integer not null default 0,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
@@ -114,5 +118,56 @@ describe("OpportunityEmailRepository", () => {
 
     expect((await repository.findBySendRequestKey("send-1"))?.id).toBe(created.id);
     expect((await repository.findByScheduleRequestKey("schedule-1"))?.id).toBe(created.id);
+  });
+
+  it("claims only due scheduled work and prevents a second worker before lease expiry", async () => {
+    const due = await repository.create(makeDraft({
+      state: "scheduled",
+      scheduledFor: new Date("2026-08-28T13:55:00.000Z"),
+      scheduleRequestKey: "schedule-due",
+    }));
+
+    const first = await repository.claimOneDue({ workerId: "worker-1", now: NOW });
+    const second = await repository.claimOneDue({ workerId: "worker-2", now: NOW });
+
+    expect(first?.id).toBe(due.id);
+    expect(second).toBeNull();
+  });
+
+  it("does not claim future scheduled work", async () => {
+    await repository.create(makeDraft({
+      state: "scheduled",
+      scheduledFor: new Date("2026-08-28T14:05:00.000Z"),
+      scheduleRequestKey: "schedule-future",
+    }));
+
+    await expect(repository.claimOneDue({ workerId: "worker-1", now: NOW })).resolves.toBeNull();
+  });
+
+  it("reclaims a scheduled draft after a stale dispatch lease expires", async () => {
+    const due = await repository.create(makeDraft({
+      state: "scheduled",
+      scheduledFor: new Date("2026-08-28T13:55:00.000Z"),
+      scheduleRequestKey: "schedule-stale",
+    }));
+
+    expect((await repository.claimOneDue({ workerId: "worker-1", now: NOW }))?.id).toBe(due.id);
+    const afterLease = new Date(NOW.getTime() + 61_000);
+    expect((await repository.claimOneDue({ workerId: "worker-2", now: afterLease }))?.id).toBe(due.id);
+  });
+
+  it("releases only the current worker's dispatch lease", async () => {
+    const due = await repository.create(makeDraft({
+      state: "scheduled",
+      scheduledFor: new Date("2026-08-28T13:55:00.000Z"),
+      scheduleRequestKey: "schedule-release",
+    }));
+    await repository.claimOneDue({ workerId: "worker-1", now: NOW });
+
+    await repository.releaseLease(due.id, "worker-2", NOW);
+    await expect(repository.claimOneDue({ workerId: "worker-3", now: NOW })).resolves.toBeNull();
+
+    await repository.releaseLease(due.id, "worker-1", NOW);
+    expect((await repository.claimOneDue({ workerId: "worker-3", now: NOW }))?.id).toBe(due.id);
   });
 });
