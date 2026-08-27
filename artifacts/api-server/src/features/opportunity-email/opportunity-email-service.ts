@@ -57,10 +57,6 @@ export type GmailDraftProvider = {
     threadId?: string | null;
   }>;
   sendDraft?(input: { draftId: string }): Promise<ConfirmedSend>;
-  scheduleDraft?(input: {
-    draftId: string;
-    scheduledFor: Date;
-  }): Promise<{ scheduledFor: Date }>;
   reconcileSend?(input: { draftId: string }): Promise<ConfirmedSend | null>;
 };
 
@@ -267,33 +263,20 @@ export class OpportunityEmailService {
     }
 
     const existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
-    if (!this.deps.gmailDraftProvider.scheduleDraft) {
-      throw serviceError("OPPORTUNITY_EMAIL_SCHEDULE_UNAVAILABLE");
-    }
-
-    try {
-      const confirmation = await this.deps.gmailDraftProvider.scheduleDraft({
-        draftId: existing.gmailDraftId!,
-        scheduledFor: input.scheduledFor,
-      });
-      const draft = await this.deps.emailRepository.update(existing.id, {
-        state: "scheduled",
-        scheduledFor: confirmation.scheduledFor,
-        sentAt: null,
-        scheduleRequestKey: input.requestKey,
-        lastFailureCode: null,
-        lastFailureMessage: null,
-      });
-      await this.deps.workflowSink?.recordScheduled({
-        opportunityId: existing.opportunityId,
-        draftId: existing.id,
-        scheduledFor: confirmation.scheduledFor,
-      });
-      return { draft, followUpReferenceAt: confirmation.scheduledFor };
-    } catch (error) {
-      await this.recordDeliveryFailure(existing, "schedule", input.requestKey, error, input.scheduledFor);
-      throw serviceError(errorCode(error));
-    }
+    const draft = await this.deps.emailRepository.update(existing.id, {
+      state: "scheduled",
+      scheduledFor: input.scheduledFor,
+      sentAt: null,
+      scheduleRequestKey: input.requestKey,
+      lastFailureCode: null,
+      lastFailureMessage: null,
+    });
+    await this.deps.workflowSink?.recordScheduled({
+      opportunityId: existing.opportunityId,
+      draftId: existing.id,
+      scheduledFor: input.scheduledFor,
+    });
+    return { draft, followUpReferenceAt: input.scheduledFor };
   }
 
   async retryDraft(input: {
