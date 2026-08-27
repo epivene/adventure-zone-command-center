@@ -9,9 +9,20 @@ import { FollowUpService } from "@/features/follow-ups/follow-up-service";
 import type { EditFollowUpInput } from "@/features/follow-ups/follow-up-types";
 import { OpportunityRepository } from "@/features/opportunities/opportunity-repository";
 import { OpportunityService } from "@/features/opportunities/opportunity-service";
+import type { OpportunityRecord, UpdateOpportunityInput } from "@/features/opportunities/opportunity-types";
 
-type FollowUpMutationService = Pick<FollowUpService, "edit" | "delete">;
+type FollowUpMutationService = Pick<FollowUpService, "create" | "edit" | "delete">;
 type OpportunityCompletionService = Pick<OpportunityService, "completeFollowUp">;
+type OpportunityFollowUpRepository = {
+  get(id: string): Promise<OpportunityRecord | null>;
+  update(id: string, patch: UpdateOpportunityInput): Promise<OpportunityRecord>;
+};
+
+const createSchema = z.object({
+  opportunityId: z.string().uuid(),
+  kind: z.string().trim().min(1),
+  dueAt: z.coerce.date().refine((value) => Number.isFinite(value.getTime())),
+});
 
 const completionSchema = z.object({
   followUpId: z.string().uuid(),
@@ -34,6 +45,10 @@ function defaultOpportunityCompletionService(): OpportunityService {
     new BookingService(new DrizzleBookingRepository(db)),
     new OpportunityRepository(db),
   );
+}
+
+function defaultOpportunityRepository(): OpportunityFollowUpRepository {
+  return new OpportunityRepository(db);
 }
 
 function toFollowUpId(value: string | string[]): string {
@@ -67,8 +82,48 @@ export function createFollowUpsRouter(
   service: FollowUpMutationService = defaultFollowUpService(),
   completionService: OpportunityCompletionService =
     defaultOpportunityCompletionService(),
+  opportunities: OpportunityFollowUpRepository = defaultOpportunityRepository(),
 ): IRouter {
   const router: IRouter = Router();
+
+  router.post("/", async (req, res): Promise<void> => {
+    const parsed = createSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({ ok: false, error: "A valid Opportunity, follow-up kind, and due date are required." });
+      return;
+    }
+
+    try {
+      const opportunity = await opportunities.get(parsed.data.opportunityId);
+      if (!opportunity) {
+        res.status(404).json({ ok: false, error: "Opportunity not found." });
+        return;
+      }
+
+      const result = await service.create({
+        organizationId: opportunity.organizationId,
+        contactId: opportunity.contactId,
+        bookingId: opportunity.bookingId,
+        kind: parsed.data.kind,
+        dueAt: parsed.data.dueAt,
+      });
+      if (!result.ok) {
+        res.status(400).json({ ok: false, error: result.error.message });
+        return;
+      }
+
+      await opportunities.update(opportunity.id, {
+        status: "follow_up",
+        nextActionKind: parsed.data.kind,
+        nextActionDueAt: parsed.data.dueAt,
+      });
+
+      res.status(201).json({ ok: true, followUp: result.value });
+    } catch (error) {
+      req.log.error({ error }, "Failed to create Opportunity follow-up");
+      res.status(500).json({ ok: false, error: "Could not create follow-up." });
+    }
+  });
 
   router.post("/:id/complete", async (req, res): Promise<void> => {
     const parsed = completionSchema.safeParse({
