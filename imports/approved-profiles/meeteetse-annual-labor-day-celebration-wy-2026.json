@@ -1,5 +1,5 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -12,13 +12,13 @@
     "website": "https://www.meeteetsewy.com/events",
     "address1": "1906 State Street",
     "postalCode": "82433",
-    "description": "Discover Meeteetse / Meeteetse Visitor Center coordinates the annual Meeteetse Labor Day Celebration and other community events."
+    "description": "Discover Meeteetse / Meeteetse Visitor Center coordinates the annual Meeteetse Labor Day Celebration and other community events. Route planning: probable Kristy leg stop for Labor Day 2026, pending final event decision and logistics."
   },
   "contacts": [],
   "booking": {
     "enabled": true,
     "name": "Meeteetse Annual Labor Day Celebration 2026",
-    "status": "new_lead",
+    "status": "possible",
     "startsAt": "2026-09-05",
     "endsAt": "2026-09-07",
     "nextActionKind": "call",
@@ -29,14 +29,14 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2026 active pay-for-play opportunity — research + Dave call update",
-      "body": "Desiree emailed office@meeteetsewy.com on Aug. 26, 2026. On Aug. 27 Dave reported that Meeteetse called and wants pay-for-play; they expect to know within about an hour whether they can proceed. Dave is gathering logistics to decide whether Kristy's leg can make money. Official 2026 information confirms the 116th Meeteetse Labor Day Celebration Sept. 5-7, coordinated through Discover Meeteetse / Meeteetse Visitor Center (office@meeteetsewy.com, 307-868-2454, 1906 State Street, Meeteetse WY 82433). The celebration is town-wide and family-oriented, with a three-day craft fair plus car show, cornhole/horseshoes, roping, live music, Monday parade, street games, Labor Day Rodeo / Big Horn Rodeo Circuit finale, and duck races. This is a strong conceptual fit for pay-for-play, but no reliable published attendance figure was found, so attendance and traffic by day must be confirmed directly before committing. Exact Adventure Zone placement is also not published and must be confirmed because activities are spread across downtown, Discover Meeteetse, and the rodeo grounds. Logistics Dave should confirm: estimated attendance by day and peak traffic; exact setup location and usable footprint; dates/hours they want attractions open; whether customers can be charged directly and any agreed event percentage/minimum/guarantee; power available at the exact site (Adventure Zone normal requirement is three 50A/220V outlets, eighteen 110V outlets, or suitable generator); staking/ballast conditions; setup/teardown access and street closures; overnight security/camping/RV permission; restrooms; COI/additional insured details; whether any other carnival/inflatable vendor is present; and whether the setup can stay in one place for all operating days. Local overnight logistics are workable: Meeteetse has RV/camping options and full-hookup sites, including Oasis Motel & RV Park and Meeteetse RV Park, but Labor Day demand may be high so space should be secured quickly if needed. Treat this as an ACTIVE HOT LEAD, not routine follow-up. Sources: Adventure Zone Gmail Aug. 26; Dave text Aug. 27; official Discover Meeteetse event/contact pages and current local lodging information reviewed Aug. 27, 2026."
+      "subject": "2026 active pay-for-play opportunity — research + route status",
+      "body": "Desiree emailed office@meeteetsewy.com on Aug. 26, 2026. On Aug. 27 Dave reported that Meeteetse called and wants pay-for-play; they expect to know within about an hour whether they can proceed. Dave is gathering logistics to decide whether Kristy's leg can make money. Route status: assign operationally to KRISTY'S LEG as PROBABLE / NOT YET CONFIRMED. Meeteetse sits southwest of Miles City and keeps the leg moving in the general direction of the later Blanding, Utah stop, so it is a sensible Labor Day candidate geographically. Do not treat as confirmed until Dave has attendance, placement, commercial terms, and site logistics. Official 2026 information confirms the 116th Meeteetse Labor Day Celebration Sept. 5-7, coordinated through Discover Meeteetse / Meeteetse Visitor Center (office@meeteetsewy.com, 307-868-2454, 1906 State Street, Meeteetse WY 82433). The celebration is town-wide and family-oriented, with a three-day craft fair plus car show, cornhole/horseshoes, roping, live music, Monday parade, street games, Labor Day Rodeo / Big Horn Rodeo Circuit finale, and duck races. No reliable published attendance figure was found, so attendance and traffic by day must be confirmed directly before committing. Exact Adventure Zone placement is also not published and must be confirmed because activities are spread across downtown, Discover Meeteetse, and the rodeo grounds. Logistics Dave should confirm: estimated attendance by day and peak traffic; exact setup location and usable footprint; dates/hours they want attractions open; whether customers can be charged directly and any agreed event percentage/minimum/guarantee; power available at the exact site; staking/ballast conditions; setup/teardown access and street closures; overnight security/camping/RV permission; restrooms; COI/additional insured details; whether any other carnival/inflatable vendor is present; and whether the setup can stay in one place for all operating days. Local overnight logistics are workable, but Labor Day demand may be high so space should be secured quickly if needed. Treat this as an ACTIVE HOT LEAD."
     }
   ],
   "followUps": [
     {
       "label": "Meeteetse pay-for-play decision / logistics",
-      "reason": "Hot lead: event called Dave on Aug. 27 and wants pay-for-play. Confirm their decision plus attendance, exact site/footprint, operating hours, power, staking/ballast, camping/overnight access, COI entity, and commercial terms before Kristy's leg commits.",
+      "reason": "Hot probable Kristy-leg stop: confirm event decision plus attendance, exact site/footprint, operating hours, power, staking/ballast, camping/overnight access, COI entity, and commercial terms before confirming the route.",
       "dueAt": "2026-08-27T18:15:00.000Z"
     }
   ]
