@@ -258,175 +258,7 @@ const migrationFiles = [
           AND confupdtype = 'a'
           AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY)' in upper(pg_get_constraintdef(oid))) > 0
           AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY, STREAM_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
-      )
-      AND EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conrelid = to_regclass(current_schema() || '.act_archive_profile_import_sources')
-          AND conname = 'act_archive_profile_import_sources_version_owner_fk'
-          AND contype = 'f'
-          AND confdeltype = 'a'
-          AND confupdtype = 'a'
-          AND position('FOREIGN KEY (SOURCE_VERSION_ID, SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
-          AND position('REFERENCES ACT_SOURCE_RECORD_VERSIONS(ID, SOURCE_RECORD_ID)' in upper(pg_get_constraintdef(oid))) > 0
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
-          AND conname = 'act_external_links_contact_primary_sync_valid'
-          AND contype = 'c'
-          AND regexp_replace(
-            lower(pg_get_expr(conbin, conrelid)), '[()[:space:]]', '', 'g'
-          ) = 'entity_type=''contact''::textandsource_entity_type=''contact''::textandis_primary=trueandsync_mode=''two_way''::textoris_primary=falseandsync_mode=''pull_only''::textoris_primary=trueandsync_mode=''pull_only''::textandsource_database_keyisnotnullandsource_record_idisnotnullorentity_type<>''contact''::textandsync_mode=''pull_only''::text'
-      )
-      AND EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conrelid = to_regclass(current_schema() || '.act_external_links')
-          AND conname = 'act_external_links_archive_source_scope_fk'
-          AND contype = 'f'
-          AND confdeltype = 'a'
-          AND confupdtype = 'a'
-          AND position('FOREIGN KEY (SOURCE_RECORD_ID, SOURCE_DATABASE_KEY, SOURCE_ENTITY_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
-          AND position('REFERENCES ACT_SOURCE_RECORDS(ID, SOURCE_DATABASE_KEY, STREAM_TYPE)' in upper(pg_get_constraintdef(oid))) > 0
       ) AS ready`,
-  },
-  {
-    name: "024_act_archive_profile_import_recovery.sql",
-    markerSql: `SELECT
-      EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'act_archive_profile_import_jobs'
-          AND column_name = 'membership_snapshot_version'
-          AND column_default IS NULL
-      )
-      AND EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'act_archive_profile_import_jobs'
-          AND column_name = 'failure_attempt_count'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM act_archive_profile_import_jobs jobs
-        WHERE jobs.phase <> 'complete'
-          AND (to_jsonb(jobs)->>'membership_snapshot_version') IS NULL
-      ) AS ready`,
-  },
-  {
-    name: "027_organization_locations.sql",
-    markerSql:
-      "SELECT to_regclass(current_schema() || '.organization_locations') IS NOT NULL AS ready",
-  },
-  {
-    name: "028_organization_locations_address_fix.sql",
-    markerSql: `SELECT NOT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name   = 'organization_locations'
-        AND column_name  = 'address1'
-    ) AS ready`,
-  },
-  {
-    name: "029_organization_consolidation.sql",
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name   = 'organizations'
-        AND column_name  = 'consolidated_into_id'
-    ) AS ready`,
-  },
-  {
-    name: "030_organization_location_source_org.sql",
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name   = 'organization_locations'
-        AND column_name  = 'consolidation_source_org_id'
-    ) AS ready`,
-  },
-  {
-    name: "031_activities_calendar_kind_idx.sql",
-    // Checks that the partial composite index used by the calendar query exists.
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM pg_indexes
-      WHERE schemaname = current_schema()
-        AND tablename  = 'activities'
-        AND indexname  = 'activities_kind_timeline_sort_at_idx'
-    ) AS ready`,
-  },
-  {
-    name: "032_activity_soft_delete.sql",
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name = 'activities'
-        AND column_name = 'deleted_at'
-    ) AS ready`,
-  },
-  {
-    name: "033_retire_organization_hierarchy.sql",
-    markerSql: `SELECT
-      EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'organization_locations'
-          AND column_name = 'travel_leg_id'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_schema = current_schema()
-          AND table_name = 'organizations'
-          AND column_name = 'parent_organization_id'
-      ) AS ready`,
-  },
-  {
-    name: "034_unlimited_travel_legs.sql",
-    markerSql: `SELECT NOT EXISTS (
-      SELECT 1 FROM pg_constraint
-      WHERE conrelid = to_regclass(current_schema() || '.travel_legs')
-        AND conname = 'travel_legs_sort_order_between_1_and_9'
-    ) AS ready`,
-  },
-  {
-    name: "035_leg_manager_access.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.leg_manager_access') IS NOT NULL AS ready",
-  },
-  {
-    name: "036_leg_schedule_issues.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.leg_schedule_issues') IS NOT NULL AS ready",
-  },
-  {
-    name: "037_leg_manager_finance.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.leg_event_income') IS NOT NULL AND to_regclass(current_schema() || '.leg_expenses') IS NOT NULL AND to_regclass(current_schema() || '.leg_cash_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_mileage_entries') IS NOT NULL AND to_regclass(current_schema() || '.leg_receipts') IS NOT NULL AS ready",
-  },
-  {
-    name: "038_leg_crew.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.crew_workers') IS NOT NULL AND to_regclass(current_schema() || '.crew_work_history') IS NOT NULL AND to_regclass(current_schema() || '.crew_manager_notes') IS NOT NULL AS ready",
-  },
-  {
-    name: "039_event_manager_reviews.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.event_manager_reviews') IS NOT NULL AS ready",
-  },
-  {
-    name: "040_leg_incidents.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.leg_incidents') IS NOT NULL AND to_regclass(current_schema() || '.leg_incident_attachments') IS NOT NULL AS ready",
-  },
-  {
-    name: "042_manual_organization_membership.sql",
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM information_schema.columns
-      WHERE table_schema = current_schema()
-        AND table_name = 'organizations'
-        AND column_name = 'parent_organization_id'
-    ) AS ready`,
-  },
-  {
-    name: "043_act_archive_full_recovery.sql",
-    markerSql: `SELECT
-      to_regclass(current_schema() || '.act_archive_recovery_runs') IS NOT NULL
-      AND to_regclass(current_schema() || '.act_archive_recovery_items') IS NOT NULL
-      AND to_regclass(current_schema() || '.act_archive_recovery_decisions') IS NOT NULL
-      AS ready`,
   },
   {
     name: "044_finance_admin_evidence.sql",
@@ -529,6 +361,15 @@ const migrationFiles = [
       to_regclass(current_schema() || '.booking_opportunities') IS NOT NULL
       AND to_regclass(current_schema() || '.booking_opportunity_queue_overrides') IS NOT NULL
       AND to_regclass(current_schema() || '.booking_opportunities_organization_year_unique') IS NOT NULL
+      AS ready`,
+  },
+  {
+    name: "071_booking_opportunity_email_state.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.booking_opportunity_email_state') IS NOT NULL
+      AND to_regclass(current_schema() || '.booking_opportunity_email_state_current_unique') IS NOT NULL
+      AND to_regclass(current_schema() || '.booking_opportunity_email_state_send_request_unique') IS NOT NULL
+      AND to_regclass(current_schema() || '.booking_opportunity_email_state_schedule_request_unique') IS NOT NULL
       AS ready`,
   },
 ] as const;
