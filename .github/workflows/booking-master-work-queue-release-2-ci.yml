@@ -49,6 +49,7 @@ jobs:
           src/features/opportunity-email/opportunity-email-repository.test.ts
           src/features/opportunity-email/draft-context-resolver.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
+          src/features/opportunity-email/ai-opportunity-email-writer.test.ts
           src/features/opportunity-email/opportunity-email-service.test.ts
           src/features/opportunity-email/opportunity-email-rewrite.test.ts
           src/features/opportunity-email/opportunity-email-delivery.test.ts
