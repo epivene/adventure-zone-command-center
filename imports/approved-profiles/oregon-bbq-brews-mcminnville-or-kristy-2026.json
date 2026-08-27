@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Oregon BBQ & Brews Festival", "city": "McMinnville", "region": "OR"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold / Kristy 2026 call notes", "body": "Kristy's handwritten notes for Oregon BBQ & Brews say she called Richard, 2026 was missed, information was sent for 2027, and Adventure Zone was considered too expensive. The sheet notes the present bounce-house company charges roughly $2,000-$3,000. Preserve as relationship/pricing context only. Oregon territory hold — do not create normal active outreach follow-up. Source: handwritten call notes, page 79."}]
+}

@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Hudson Days", "city": "Hudson", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheets list Hudson Days, Becky, 307-335-8125. One sheet says left message and another says no answer. Source: handwritten call notes, pages 101/108."}]
+}

@@ -1,0 +1,9 @@
+{
+  "importRevision": 3,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Lander Brewfest", "city": "Lander", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "new_lead", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call notes list Lander Brewfest and record the outcome: no room. Source: handwritten call notes, page 101."}]
+}

@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Bravo! Vail Music Festival", "city": "Vail", "region": "CO"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call sheet lists Bravo! Vail Music Festival, 970-827-5700, and a separate note says info@bravovail.org, attn Wes. Adventure Zone also emailed the festival in April 2026. Source: handwritten call notes, pages 112/113; Adventure Zone Gmail."}]
+}

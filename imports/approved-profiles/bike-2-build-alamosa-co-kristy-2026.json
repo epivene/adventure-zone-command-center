@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Bike 2 Build", "city": "Alamosa", "region": "CO"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten sheet lists Bike 2 Build Alamosa County, 719-589-8678, with email/message noted. Adventure Zone also has prior email outreach to Bike 2 Build. Source: handwritten call notes, page 108; Adventure Zone Gmail."}]
+}

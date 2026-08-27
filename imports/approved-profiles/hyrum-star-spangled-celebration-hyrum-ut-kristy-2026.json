@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Hyrum City Star Spangled Celebration", "city": "Hyrum", "region": "UT"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists Hyrum City Star Spangled Celebration and Stephanie Fricke, 435-245-6033. Adventure Zone also sent 2026 email outreach to the event. Source: handwritten call notes, page 112; Adventure Zone Gmail."}]
+}

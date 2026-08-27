@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Sweet Grass Fest", "city": "Big Timber", "region": "MT"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call notes list Sweet Grass Fest, Aaron, 406-930-2885, and say showed interest / no response. Source: handwritten call notes, page 116."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "2026 handwritten notes say the event showed interest but no response followed. Reconnect early for 2027 planning.", "dueAt": "2026-11-16T16:00:00.000Z"}]
+}

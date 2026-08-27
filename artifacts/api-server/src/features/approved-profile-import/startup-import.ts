@@ -9,6 +9,194 @@ type StartupImportResult = {
   files: string[];
 };
 
+type ApprovedProfileNote = {
+  subject: string;
+  body: string;
+};
+
+type ApprovedProfileFollowUp = {
+  label: string;
+  reason: string;
+  dueAt: string;
+};
+
+type ApprovedProfilePayload = Record<string, unknown> & {
+  matchExisting?: unknown;
+  event?: unknown;
+  notes?: unknown;
+  followUps?: unknown;
+};
+
+type ProfileImportResponse = {
+  profileId?: unknown;
+};
+
+type ProfileSearchResult = {
+  id?: unknown;
+  kind?: unknown;
+  label?: unknown;
+  city?: unknown;
+  region?: unknown;
+};
+
+type ProfileSearchResponse = {
+  results?: unknown;
+};
+
+function normalized(value: unknown) {
+  return typeof value === "string"
+    ? value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
+    : "";
+}
+
+function compatibleLocation(
+  result: ProfileSearchResult,
+  event: Record<string, unknown>,
+) {
+  const expectedCity = normalized(event.city);
+  const expectedRegion = normalized(event.region);
+  const resultCity = normalized(result.city);
+  const resultRegion = normalized(result.region);
+  if (expectedCity && resultCity && expectedCity !== resultCity) return false;
+  if (expectedRegion && resultRegion && expectedRegion !== resultRegion) return false;
+  return true;
+}
+
+function selectExistingProfile(
+  results: ProfileSearchResult[],
+  event: Record<string, unknown>,
+  file: string,
+) {
+  const eventName = normalized(event.name);
+  if (!eventName) return null;
+
+  const organizations = results.filter((result) =>
+    result.kind === "organization"
+    && typeof result.id === "string"
+    && compatibleLocation(result, event),
+  );
+  const exact = organizations.filter((result) => normalized(result.label) === eventName);
+  if (exact.length === 1) return String(exact[0]!.id);
+  if (exact.length > 1) {
+    throw new Error(`Approved profile import ${file} matched more than one existing profile.`);
+  }
+
+  const close = organizations.filter((result) => {
+    const label = normalized(result.label);
+    return label.includes(eventName) || eventName.includes(label);
+  });
+  if (close.length === 1) return String(close[0]!.id);
+  if (close.length > 1) {
+    throw new Error(`Approved profile import ${file} matched more than one existing profile.`);
+  }
+  return null;
+}
+
+function readApprovedNotes(payload: ApprovedProfilePayload, file: string): ApprovedProfileNote[] {
+  if (payload.notes == null) return [];
+  if (!Array.isArray(payload.notes)) {
+    throw new Error(`Approved profile import ${file} has invalid notes.`);
+  }
+  return payload.notes.map((value, index) => {
+    if (!value || typeof value !== "object") {
+      throw new Error(`Approved profile import ${file} note ${index + 1} is invalid.`);
+    }
+    const note = value as Record<string, unknown>;
+    const subject = typeof note.subject === "string" ? note.subject.trim() : "";
+    const body = typeof note.body === "string" ? note.body.trim() : "";
+    if (!subject || !body) {
+      throw new Error(`Approved profile import ${file} note ${index + 1} is incomplete.`);
+    }
+    return { subject, body };
+  });
+}
+
+function readApprovedFollowUps(payload: ApprovedProfilePayload, file: string): ApprovedProfileFollowUp[] {
+  if (payload.followUps == null) return [];
+  if (!Array.isArray(payload.followUps)) {
+    throw new Error(`Approved profile import ${file} has invalid followUps.`);
+  }
+  return payload.followUps.map((value, index) => {
+    if (!value || typeof value !== "object") {
+      throw new Error(`Approved profile import ${file} follow-up ${index + 1} is invalid.`);
+    }
+    const followUp = value as Record<string, unknown>;
+    const label = typeof followUp.label === "string" ? followUp.label.trim() : "";
+    const reason = typeof followUp.reason === "string" ? followUp.reason.trim() : "";
+    const dueAt = typeof followUp.dueAt === "string" ? followUp.dueAt.trim() : "";
+    if (!label || !reason || !dueAt || Number.isNaN(new Date(dueAt).getTime())) {
+      throw new Error(`Approved profile import ${file} follow-up ${index + 1} is incomplete.`);
+    }
+    return { label, reason, dueAt };
+  });
+}
+
+async function requestAssistantJson(input: {
+  port: number;
+  token: string;
+  method: "GET" | "POST";
+  path: string;
+  payload?: unknown;
+  failureLabel: string;
+}) {
+  const response = await fetch(
+    `http://127.0.0.1:${input.port}/api/assistant-import/${input.path}`,
+    {
+      method: input.method,
+      headers: {
+        Authorization: `Bearer ${input.token}`,
+        ...(input.method === "POST" ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(input.method === "POST" ? { body: JSON.stringify(input.payload) } : {}),
+    },
+  );
+  const responseBody = await response.text();
+  if (!response.ok) {
+    throw new Error(
+      `${input.failureLabel}: HTTP ${response.status} ${responseBody.slice(0, 500)}`,
+    );
+  }
+  return responseBody;
+}
+
+async function resolveExistingProfile(input: {
+  port: number;
+  token: string;
+  payload: ApprovedProfilePayload;
+  file: string;
+}) {
+  if (input.payload.matchExisting !== true) return input.payload;
+  if (!input.payload.event || typeof input.payload.event !== "object") return input.payload;
+
+  const event = input.payload.event as Record<string, unknown>;
+  if (typeof event.id === "string" && event.id.trim()) return input.payload;
+  const name = typeof event.name === "string" ? event.name.trim() : "";
+  if (!name) return input.payload;
+
+  const responseBody = await requestAssistantJson({
+    port: input.port,
+    token: input.token,
+    method: "GET",
+    path: `profile-search?q=${encodeURIComponent(name)}&limit=20`,
+    failureLabel: `Approved profile match search failed for ${input.file}`,
+  });
+
+  let search: ProfileSearchResponse;
+  try {
+    search = JSON.parse(responseBody) as ProfileSearchResponse;
+  } catch {
+    throw new Error(`Approved profile match search ${input.file} returned invalid JSON.`);
+  }
+  const results = Array.isArray(search.results) ? search.results as ProfileSearchResult[] : [];
+  const profileId = selectExistingProfile(results, event, input.file);
+  if (!profileId) return input.payload;
+
+  return {
+    ...input.payload,
+    event: { ...event, id: profileId },
+  };
+}
+
 export async function importApprovedProfilesAtStartup(
   port: number,
 ): Promise<StartupImportResult> {
@@ -42,25 +230,56 @@ export async function importApprovedProfilesAtStartup(
   for (const file of files) {
     const fullPath = path.join(directory, file);
     const raw = await readFile(fullPath, "utf8");
-    const payload = JSON.parse(raw) as unknown;
+    const originalPayload = JSON.parse(raw) as ApprovedProfilePayload;
+    const notes = readApprovedNotes(originalPayload, file);
+    const followUps = readApprovedFollowUps(originalPayload, file);
+    const payload = await resolveExistingProfile({
+      port,
+      token,
+      payload: originalPayload,
+      file,
+    });
 
-    const response = await fetch(
-      `http://127.0.0.1:${port}/api/assistant-import/event-profiles`,
-      {
+    const responseBody = await requestAssistantJson({
+      port,
+      token,
+      method: "POST",
+      path: "event-profiles",
+      payload,
+      failureLabel: `Approved profile import failed for ${file}`,
+    });
+
+    let result: ProfileImportResponse;
+    try {
+      result = JSON.parse(responseBody) as ProfileImportResponse;
+    } catch {
+      throw new Error(`Approved profile import ${file} returned invalid JSON.`);
+    }
+    const profileId = typeof result.profileId === "string" ? result.profileId.trim() : "";
+    if ((notes.length > 0 || followUps.length > 0) && !profileId) {
+      throw new Error(`Approved profile import ${file} did not return a profileId.`);
+    }
+
+    for (const note of notes) {
+      await requestAssistantJson({
+        port,
+        token,
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      },
-    );
+        path: "profile-notes",
+        payload: { organizationId: profileId, ...note },
+        failureLabel: `Approved profile note import failed for ${file}`,
+      });
+    }
 
-    const responseBody = await response.text();
-    if (!response.ok) {
-      throw new Error(
-        `Approved profile import failed for ${file}: HTTP ${response.status} ${responseBody.slice(0, 500)}`,
-      );
+    for (const followUp of followUps) {
+      await requestAssistantJson({
+        port,
+        token,
+        method: "POST",
+        path: "today-followups",
+        payload: { organizationId: profileId, ...followUp },
+        failureLabel: `Approved profile follow-up import failed for ${file}`,
+      });
     }
 
     imported += 1;

@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Mendon May Day", "city": "Mendon", "region": "UT"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call sheet lists Mendon May Day and Trina Applegate, 435-287-4635. No clearer call outcome is recorded, so preserve this as historical call/contact research only. Source: handwritten call notes, page 108."}]
+}

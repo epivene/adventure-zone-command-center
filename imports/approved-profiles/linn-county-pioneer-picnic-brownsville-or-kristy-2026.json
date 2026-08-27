@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Linn County Pioneer Picnic", "city": "Brownsville", "region": "OR"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold / Kristy 2026 call notes", "body": "Kristy's handwritten sheet lists Linn County Pioneer Association / Pioneer Picnic in Brownsville, Oregon, 541-466-5656 and lcpa1887@gmail.com. The handwritten 'call Monday' is preserved as historical source context only. Oregon territory hold — do not create normal active outreach follow-up. Source: handwritten call notes, page 79."}]
+}

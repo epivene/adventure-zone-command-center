@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Greeley Stampede", "city": "Greeley", "region": "CO"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call notes identify Greeley Stampede contacts. Gmail confirms Kristy spoke with Morgan during 2026 outreach; Amy then emailed Julie and referenced a possible insurance issue that needed to be worked through. Source: handwritten call notes, page 112; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "Revisit the 2026 conversation with Morgan/Julie, including the insurance concern, early enough for 2027 planning.", "dueAt": "2026-11-16T16:00:00.000Z"}]
+}

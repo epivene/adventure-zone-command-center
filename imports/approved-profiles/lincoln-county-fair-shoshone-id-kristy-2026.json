@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Lincoln County Fair", "city": "Shoshone", "region": "ID"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten notes include Lincoln County Fair in Shoshone, Idaho and fair contact research. Gmail provides the clearer outcome: Wendy said in May 2026, 'Maybe hit us up next year. We have already committed to other entertainment this year.' Amy replied that Adventure Zone would love to work with them in 2027. Source: handwritten call notes, pages 79/80; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "Wendy specifically invited Adventure Zone to try again next year after 2026 entertainment was already committed.", "dueAt": "2026-11-16T16:00:00.000Z"}]
+}

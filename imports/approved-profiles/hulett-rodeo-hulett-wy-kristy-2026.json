@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Hulett Rodeo", "city": "Hulett", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call notes list Karen at Hulett Rodeo, 307-467-5929. Outcome written on the sheet: not at this time. Source: handwritten call notes, page 101."}]
+}

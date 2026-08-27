@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Alpine Mountain Days", "city": "Alpine", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten notes list Alpine Mountain Days, Melody, 307-654-7757, and say call back. Adventure Zone has multi-year email history with Melody. The event has already published 2027 dates of June 25-27, 2027. Source: handwritten call notes, page 107; Adventure Zone Gmail/current event information."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "2027 dates are already published (June 25-27). Reconnect early with Melody about entertainment availability and fit.", "dueAt": "2026-11-02T16:00:00.000Z"}]
+}

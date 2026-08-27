@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Greeley Blues Jam", "city": "Greeley", "region": "CO"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 notes list Pam Bricker at Greeley Blues Jam, 970-573-5019, and record that she left a message. Adventure Zone also has prior email outreach to Pam. Source: handwritten call notes, page 102; Adventure Zone Gmail."}]
+}

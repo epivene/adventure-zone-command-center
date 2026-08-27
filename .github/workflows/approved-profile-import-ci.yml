@@ -1,0 +1,44 @@
+name: Approved Profile Import CI
+
+on:
+  push:
+    branches: [assistant-live-profile-notes-followups]
+    paths:
+      - "artifacts/api-server/src/features/approved-profile-import/**"
+      - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
+      - "artifacts/api-server/src/routes/assistant-today-followups.ts"
+      - "imports/approved-profiles/**"
+      - ".github/workflows/approved-profile-import-ci.yml"
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/approved-profile-import/**"
+      - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
+      - "artifacts/api-server/src/routes/assistant-today-followups.ts"
+      - "imports/approved-profiles/**"
+      - ".github/workflows/approved-profile-import-ci.yml"
+
+jobs:
+  approved-profile-import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate approved profile JSON
+        run: >-
+          node -e "const fs=require('fs'); const p='imports/approved-profiles';
+          for (const f of fs.readdirSync(p).filter(x=>x.endsWith('.json'))) {
+            JSON.parse(fs.readFileSync(p+'/'+f,'utf8'));
+          }
+          console.log('validated approved profile JSON');"
+      - name: Approved profile import tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
