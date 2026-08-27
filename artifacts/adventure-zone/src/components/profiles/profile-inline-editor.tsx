@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { apiGet, apiPatch, apiPut } from "@/lib/auth-token";
+import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/auth-token";
 
 type ContactSummary = {
   id: string;
@@ -54,6 +54,7 @@ type ContactDraft = {
 };
 
 type ContactDetail = { contact: ContactDraft; phones: Array<Record<string, unknown> & { number?: string | null; primary?: boolean }> };
+type CreateContactResult = { ok?: boolean; contactId?: string; error?: string };
 
 function profileDraft(profile: InlineProfile): ProfileDraft {
   return {
@@ -69,12 +70,12 @@ function profileDraft(profile: InlineProfile): ProfileDraft {
   };
 }
 
-function fallbackContactDraft(contact: ContactSummary | null): ContactDraft {
+function fallbackContactDraft(contact: ContactSummary | null, organizationName = ""): ContactDraft {
   const parts = String(contact?.name ?? "").trim().split(/\s+/).filter(Boolean);
   return {
     firstName: parts[0] ?? "",
     lastName: parts.slice(1).join(" "),
-    organizationName: "",
+    organizationName,
     jobTitle: contact?.role ?? "",
     email: contact?.email ?? "",
     phone: contact?.phone ?? "",
@@ -97,20 +98,28 @@ function updatePrimaryPhone(phones: ContactDetail["phones"], number: string) {
   });
 }
 
+function initialContactId(profile: InlineProfile, requestedId?: string | null) {
+  const contacts = profile.contacts ?? [];
+  if (requestedId && contacts.some((contact) => contact.id === requestedId)) return requestedId;
+  return contacts.find((contact) => contact.isPrimary)?.id ?? contacts[0]?.id ?? null;
+}
+
 export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
   profile: InlineProfile;
   contactId?: string | null;
   onSaved: () => Promise<void> | void;
   onCancel?: () => void;
 }) {
-  const selectedContact = useMemo(() => {
-    const contacts = profile.contacts ?? [];
-    if (contactId) return contacts.find((contact) => contact.id === contactId) ?? contacts[0] ?? null;
-    return contacts.find((contact) => contact.isPrimary) ?? contacts[0] ?? null;
-  }, [profile.contacts, contactId]);
+  const contacts = profile.contacts ?? [];
+  const [activeContactId, setActiveContactId] = useState<string | null>(() => initialContactId(profile, contactId));
+  const [creatingContact, setCreatingContact] = useState(contacts.length === 0);
+  const selectedContact = useMemo(
+    () => creatingContact ? null : contacts.find((contact) => contact.id === activeContactId) ?? contacts[0] ?? null,
+    [contacts, activeContactId, creatingContact],
+  );
 
   const [profileValues, setProfileValues] = useState<ProfileDraft>(() => profileDraft(profile));
-  const [contactValues, setContactValues] = useState<ContactDraft>(() => fallbackContactDraft(selectedContact));
+  const [contactValues, setContactValues] = useState<ContactDraft>(() => fallbackContactDraft(selectedContact, profile.place.name));
   const [contactPhones, setContactPhones] = useState<ContactDetail["phones"]>([]);
   const [loadingContact, setLoadingContact] = useState(Boolean(selectedContact?.id));
   const [contactLoaded, setContactLoaded] = useState(false);
@@ -122,7 +131,21 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
   }, [profile]);
 
   useEffect(() => {
-    setContactValues(fallbackContactDraft(selectedContact));
+    if (creatingContact) return;
+    setActiveContactId(initialContactId(profile, contactId));
+  }, [contactId, profile.id]);
+
+  useEffect(() => {
+    if (creatingContact) {
+      setContactValues(fallbackContactDraft(null, profileValues.name || profile.place.name));
+      setContactPhones([]);
+      setContactLoaded(true);
+      setLoadingContact(false);
+      setError("");
+      return;
+    }
+
+    setContactValues(fallbackContactDraft(selectedContact, profileValues.name || profile.place.name));
     setContactPhones([]);
     setContactLoaded(false);
     setError("");
@@ -136,7 +159,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
         setContactValues({
           firstName: detail.contact.firstName ?? "",
           lastName: detail.contact.lastName ?? "",
-          organizationName: detail.contact.organizationName ?? "",
+          organizationName: profileValues.name || profile.place.name,
           jobTitle: detail.contact.jobTitle ?? "",
           email: detail.contact.email ?? "",
           phone: detail.contact.phone ?? "",
@@ -151,7 +174,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       })
       .catch(() => setError("The contact details could not be loaded. You can still edit the profile fields."))
       .finally(() => setLoadingContact(false));
-  }, [selectedContact?.id]);
+  }, [selectedContact?.id, creatingContact]);
 
   function setProfileField(name: keyof ProfileDraft, value: string) {
     setProfileValues((current) => ({ ...current, [name]: value }));
@@ -159,6 +182,20 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
 
   function setContactField(name: keyof ContactDraft, value: string) {
     setContactValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function chooseContact(nextId: string) {
+    setCreatingContact(false);
+    setActiveContactId(nextId);
+  }
+
+  function startNewContact() {
+    setCreatingContact(true);
+    setContactValues(fallbackContactDraft(null, profileValues.name || profile.place.name));
+    setContactPhones([]);
+    setContactLoaded(true);
+    setLoadingContact(false);
+    setError("");
   }
 
   async function save() {
@@ -169,10 +206,25 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       const { description, ...legacyProfileValues } = profileValues;
       await apiPatch(`/event-profiles/${profile.id}`, legacyProfileValues);
       await apiPatch(`/event-profiles/${profile.id}/description`, { description });
-      if (selectedContact?.id && contactLoaded) {
+
+      const linkedContact = {
+        ...contactValues,
+        organizationName: profileValues.name,
+      };
+
+      if (creatingContact) {
+        const created = await apiPost<CreateContactResult>("/contacts", linkedContact);
+        if (!created?.contactId) throw new Error(created?.error ?? "The contact could not be created.");
+        const phone = linkedContact.phone.trim();
+        if (phone) {
+          await apiPut(`/contacts/${created.contactId}/phones`, {
+            phones: [{ id: null, number: phone, type: "unknown", extension: null, label: null, primary: true }],
+          });
+        }
+      } else if (selectedContact?.id && contactLoaded) {
         await apiPut(`/contacts/${selectedContact.id}`, {
-          contact: contactValues,
-          phones: updatePrimaryPhone(contactPhones, contactValues.phone),
+          contact: linkedContact,
+          phones: updatePrimaryPhone(contactPhones, linkedContact.phone),
         });
       }
       await onSaved();
@@ -220,30 +272,46 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
         </div>
       </section>
 
-      {selectedContact ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="font-bold">Contact</h2>
-            {loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : !contactLoaded ? <span className="text-xs text-slate-500">Contact editing unavailable</span> : null}
+      <section className="rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-bold">Contacts</h2>
+            <p className="mt-1 text-sm text-slate-500">Create and edit the people for this profile here.</p>
           </div>
-          <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${contactLoaded ? "" : "opacity-60"}`} aria-disabled={!contactLoaded}>
-            <label className="grid gap-1.5 text-sm font-medium">First name<input disabled={!contactLoaded} value={contactValues.firstName} onChange={(event) => setContactField("firstName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Last name<input disabled={!contactLoaded} value={contactValues.lastName} onChange={(event) => setContactField("lastName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Role<input disabled={!contactLoaded} value={contactValues.jobTitle} onChange={(event) => setContactField("jobTitle", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Organization<input disabled={!contactLoaded} value={contactValues.organizationName} onChange={(event) => setContactField("organizationName", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" disabled={!contactLoaded} type="tel" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">Email<input disabled={!contactLoaded} type="email" value={contactValues.email} onChange={(event) => setContactField("email", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 1<input disabled={!contactLoaded} value={contactValues.address1} onChange={(event) => setContactField("address1", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 2<input disabled={!contactLoaded} value={contactValues.address2} onChange={(event) => setContactField("address2", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">City<input disabled={!contactLoaded} value={contactValues.city} onChange={(event) => setContactField("city", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">State<input disabled={!contactLoaded} value={contactValues.region} onChange={(event) => setContactField("region", event.target.value)} /></label>
-            <label className="grid gap-1.5 text-sm font-medium">ZIP code<input disabled={!contactLoaded} value={contactValues.postalCode} onChange={(event) => setContactField("postalCode", event.target.value)} /></label>
-          </div>
-        </section>
-      ) : null}
+          <button className="button-secondary" type="button" onClick={startNewContact}>Add contact</button>
+        </div>
+
+        {contacts.length ? (
+          <label className="mt-4 grid max-w-md gap-1.5 text-sm font-medium">
+            Contact to edit
+            <select aria-label="Contact to edit" disabled={creatingContact} value={creatingContact ? "" : selectedContact?.id ?? ""} onChange={(event) => chooseContact(event.target.value)}>
+              {creatingContact ? <option value="">New contact</option> : null}
+              {contacts.map((contact) => <option key={contact.id} value={contact.id}>{contact.name || "Unnamed contact"}{contact.isPrimary ? " · Primary" : ""}</option>)}
+            </select>
+          </label>
+        ) : null}
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <p className="font-semibold text-slate-800">{creatingContact ? "New contact" : selectedContact?.name || "Contact"}</p>
+          {loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : !contactLoaded ? <span className="text-xs text-slate-500">Contact editing unavailable</span> : null}
+        </div>
+        <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${contactLoaded ? "" : "opacity-60"}`} aria-disabled={!contactLoaded}>
+          <label className="grid gap-1.5 text-sm font-medium">First name<input aria-label="First name" disabled={!contactLoaded} value={contactValues.firstName} onChange={(event) => setContactField("firstName", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">Last name<input aria-label="Last name" disabled={!contactLoaded} value={contactValues.lastName} onChange={(event) => setContactField("lastName", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">Role<input aria-label="Role" disabled={!contactLoaded} value={contactValues.jobTitle} onChange={(event) => setContactField("jobTitle", event.target.value)} /></label>
+          <div className="grid gap-1.5 text-sm font-medium"><span>Profile</span><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-normal text-slate-700">{profileValues.name}</div></div>
+          <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" disabled={!contactLoaded} type="tel" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">Email<input aria-label="Email" disabled={!contactLoaded} type="email" value={contactValues.email} onChange={(event) => setContactField("email", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 1<input aria-label="Contact address line 1" disabled={!contactLoaded} value={contactValues.address1} onChange={(event) => setContactField("address1", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 2<input aria-label="Contact address line 2" disabled={!contactLoaded} value={contactValues.address2} onChange={(event) => setContactField("address2", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">City<input aria-label="Contact city" disabled={!contactLoaded} value={contactValues.city} onChange={(event) => setContactField("city", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">State<input aria-label="Contact state" disabled={!contactLoaded} value={contactValues.region} onChange={(event) => setContactField("region", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">ZIP code<input aria-label="Contact ZIP code" disabled={!contactLoaded} value={contactValues.postalCode} onChange={(event) => setContactField("postalCode", event.target.value)} /></label>
+        </div>
+      </section>
 
       <div className="flex flex-wrap gap-2">
-        <button className="button-primary" disabled={saving || loadingContact} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save"}</button>
+        <button className="button-primary" disabled={saving || loadingContact || !contactLoaded} onClick={() => void save()} type="button">{saving ? "Saving…" : "Save"}</button>
         <button className="button-secondary" disabled={saving} onClick={onCancel} type="button">Cancel</button>
       </div>
     </div>
