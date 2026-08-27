@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { PgDialect } from "drizzle-orm/pg-core";
 
 import { organizationListQuerySchema } from "./last-resort-input";
-import { buildOrganizationListOrderBy } from "./organization-repository";
+import { sortOrganizationRecords, type ProfileSortMetadata } from "./organization-list-sort";
+
+const records = [
+  { id: "a", name: "Bravo Fair" },
+  { id: "b", name: "Alpha Festival" },
+  { id: "c", name: "Charlie Days" },
+];
+
+const metadata = new Map<string, ProfileSortMetadata>([
+  ["a", { createdAt: new Date("2025-01-01T00:00:00Z"), lastChangedAt: new Date("2026-08-10T00:00:00Z") }],
+  ["b", { createdAt: new Date("2026-01-01T00:00:00Z"), lastChangedAt: new Date("2026-08-25T00:00:00Z") }],
+  ["c", { createdAt: new Date("2024-01-01T00:00:00Z"), lastChangedAt: new Date("2026-07-01T00:00:00Z") }],
+]);
 
 describe("organization list sorting", () => {
   it("defaults to recently updated", () => {
@@ -23,26 +34,15 @@ describe("organization list sorting", () => {
     }
   });
 
-  it("orders recently updated profiles by profile activity before name", () => {
-    const query = organizationListQuerySchema.parse({ sort: "recently_updated" });
-    const compiled = buildOrganizationListOrderBy(query)
-      .map((part) => new PgDialect().sqlToQuery(part).sql)
-      .join(" ");
-
-    expect(compiled).toMatch(/activities/i);
-    expect(compiled).toMatch(/updated_at/i);
-    expect(compiled).toMatch(/desc/i);
+  it("orders by the latest meaningful profile change", () => {
+    expect(sortOrganizationRecords(records, metadata, "recently_updated").map((record) => record.id)).toEqual(["b", "a", "c"]);
+    expect(sortOrganizationRecords(records, metadata, "least_recently_updated").map((record) => record.id)).toEqual(["c", "a", "b"]);
   });
 
   it("supports alphabetical and creation-date ordering", () => {
-    const nameDescending = buildOrganizationListOrderBy(
-      organizationListQuerySchema.parse({ sort: "name_desc" }),
-    ).map((part) => new PgDialect().sqlToQuery(part).sql).join(" ");
-    const oldestFirst = buildOrganizationListOrderBy(
-      organizationListQuerySchema.parse({ sort: "created_asc" }),
-    ).map((part) => new PgDialect().sqlToQuery(part).sql).join(" ");
-
-    expect(nameDescending).toMatch(/name.*desc/i);
-    expect(oldestFirst).toMatch(/created_at.*asc/i);
+    expect(sortOrganizationRecords(records, metadata, "name_asc").map((record) => record.id)).toEqual(["b", "a", "c"]);
+    expect(sortOrganizationRecords(records, metadata, "name_desc").map((record) => record.id)).toEqual(["c", "a", "b"]);
+    expect(sortOrganizationRecords(records, metadata, "created_desc").map((record) => record.id)).toEqual(["b", "a", "c"]);
+    expect(sortOrganizationRecords(records, metadata, "created_asc").map((record) => record.id)).toEqual(["c", "a", "b"]);
   });
 });
