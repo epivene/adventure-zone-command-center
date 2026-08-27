@@ -1,0 +1,37 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Meeteetse Annual Labor Day Celebration",
+    "city": "Meeteetse",
+    "region": "WY"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": true,
+    "name": "Meeteetse Annual Labor Day Celebration 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-05",
+    "endsAt": "2026-09-07",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-08-31",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 outreach — Meeteetse Labor Day Celebration",
+      "body": "Desiree emailed office@meeteetsewy.com on Aug. 26, 2026 regarding the Meeteetse Annual Labor Day Celebration, Sept. 5-7, 2026. Outreach described The Adventure Zone as a staffed inflatable family-fun area and offered both prepaid and possible pay-for-play participation because the event was approaching quickly. No reply was found in Adventure Zone Gmail when the profile was corrected on Aug. 27, 2026. This profile was created because the outreach email had been sent but the CRM profile step was missed. Source: Adventure Zone Gmail thread, Aug. 26, 2026."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Meeteetse 2026 outreach follow-up",
+      "reason": "No reply yet to Aug. 26 outreach. Event begins Sept. 5, so check back before Labor Day weekend if no response arrives.",
+      "dueAt": "2026-08-31T16:00:00.000Z"
+    }
+  ]
+}
