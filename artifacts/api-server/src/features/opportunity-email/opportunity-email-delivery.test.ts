@@ -89,13 +89,12 @@ describe("OpportunityEmailService delivery", () => {
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
   });
 
-  it("records scheduled state without pretending the email has been sent", async () => {
+  it("records app-owned scheduled state without pretending the email has been sent", async () => {
     const deps = dependencies();
     const service = new OpportunityEmailService(deps as any);
 
     const result = await service.scheduleDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "schedule-1", scheduledFor: SCHEDULED_FOR });
 
-    expect(deps.gmailDraftProvider.scheduleDraft).toHaveBeenCalledWith({ draftId: "gmail-draft-1", scheduledFor: SCHEDULED_FOR });
     expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
       state: "scheduled",
       scheduledFor: SCHEDULED_FOR,
@@ -105,6 +104,16 @@ describe("OpportunityEmailService delivery", () => {
     expect(deps.workflowSink.recordScheduled).toHaveBeenCalled();
     expect(deps.workflowSink.recordSent).not.toHaveBeenCalled();
     expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
+  });
+
+  it("does not delegate scheduled delivery to Gmail before the dispatcher reaches the due time", async () => {
+    const deps = dependencies();
+    const service = new OpportunityEmailService(deps as any);
+
+    await service.scheduleDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "schedule-app-owned", scheduledFor: SCHEDULED_FOR });
+
+    expect(deps.gmailDraftProvider.scheduleDraft).not.toHaveBeenCalled();
+    expect(deps.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
   });
 
   it("preserves the draft and records failure without advancing workflow", async () => {
@@ -150,7 +159,7 @@ describe("OpportunityEmailService delivery", () => {
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
   });
 
-  it("retries a failed scheduled intent on the same draft instead of generating a new message", async () => {
+  it("retries a failed scheduled intent on the same draft without generating a new message", async () => {
     const failed = record({ state: "failed", scheduledFor: SCHEDULED_FOR, lastFailureCode: "SCHEDULE_FAILED" });
     const deps = dependencies(failed);
     const service = new OpportunityEmailService(deps as any);
@@ -158,7 +167,12 @@ describe("OpportunityEmailService delivery", () => {
     const result = await service.retryDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "retry-1" });
 
     expect(deps.gmailDraftProvider.createDraft).not.toHaveBeenCalled();
-    expect(deps.gmailDraftProvider.scheduleDraft).toHaveBeenCalledWith({ draftId: "gmail-draft-1", scheduledFor: SCHEDULED_FOR });
+    expect(deps.gmailDraftProvider.scheduleDraft).not.toHaveBeenCalled();
+    expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
+      state: "scheduled",
+      scheduledFor: SCHEDULED_FOR,
+      scheduleRequestKey: "retry-1",
+    }));
     expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
   });
 });
