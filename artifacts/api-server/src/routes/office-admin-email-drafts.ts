@@ -40,7 +40,7 @@ router.post("/office-admin/email-drafts/:draftId/return", async (req, res): Prom
     res.json({ draft: await drafts.returnForChanges(draftId, parsed.data.note) });
   } catch (error) {
     if (emailStateError(res, error)) return;
-    req.log.error({ err: error }, "Failed to return Office email draft");
+    req.log?.error?.({ err: error }, "Failed to return Office email draft");
     res.status(500).json({ error: "Could not return the email for changes." });
   }
 });
@@ -73,7 +73,7 @@ router.post("/office-admin/email-drafts/:draftId/send", async (req, res): Promis
       res.status(503).json({ error: message });
       return;
     }
-    req.log.error({ err: error, draftId }, "Owner-reviewed Office email send failed");
+    req.log?.error?.({ err: error, draftId }, "Owner-reviewed Office email send failed");
     res.status(502).json({ error: "The email was not sent. It is still waiting for review so you can retry." });
   }
 });
