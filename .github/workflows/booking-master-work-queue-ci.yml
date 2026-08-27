@@ -45,5 +45,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/opportunities/opportunity-repository.test.ts
+      - name: Build database workspace
+        run: pnpm --filter @workspace/db build
       - name: API typecheck
         run: pnpm --filter @workspace/api-server typecheck
