@@ -1,12 +1,13 @@
 name: Booking Master Task 1 Marker
 
 on:
-  push:
-    branches: [feat/booking-master-work-queue-release-1]
+  pull_request:
+    paths:
+      - ".github/workflows/booking-master-task1-marker.yml"
 
 jobs:
   register-marker:
-    if: contains(github.event.head_commit.message, '[booking-master-task1-marker]')
+    if: github.event.pull_request.head.ref == 'feat/booking-master-work-queue-release-1'
     runs-on: ubuntu-latest
     permissions:
       contents: write
