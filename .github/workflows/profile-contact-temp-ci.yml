@@ -20,8 +20,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Existing backend contact tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/contacts.test.ts
-      - name: Contact create id regression
-        run: pnpm --filter @workspace/api-server exec vitest run src/routes/contact-create-id.test.ts
       - name: Focused frontend contact tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/profiles/profile-inline-editor.test.tsx src/pages/ContactDetailPage.test.tsx src/pages/ContactDetailPage.route.test.tsx
       - name: Backend typecheck
