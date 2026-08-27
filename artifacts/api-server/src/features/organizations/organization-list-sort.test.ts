@@ -2,19 +2,13 @@ import { describe, expect, it } from "vitest";
 import { PgDialect } from "drizzle-orm/pg-core";
 
 import { organizationListQuerySchema } from "./last-resort-input";
-import { buildOrganizationListOrderBy } from "./organization-repository";
+import { loadProfileSortMetadata } from "./organization-list-sort";
 
-function compiledOrder(sort: string) {
-  const query = organizationListQuerySchema.parse({ sort });
-  return buildOrganizationListOrderBy(query)
-    .map((part) => new PgDialect().sqlToQuery(part).sql)
-    .join(" ");
-}
+const profileId = "11111111-1111-4111-8111-111111111111";
 
 describe("organization list sorting", () => {
   it("defaults to recently updated", () => {
-    const query = organizationListQuerySchema.parse({});
-    expect(query.sort).toBe("recently_updated");
+    expect(organizationListQuerySchema.parse({}).sort).toBe("recently_updated");
   });
 
   it("accepts every supported directory sort", () => {
@@ -30,22 +24,18 @@ describe("organization list sorting", () => {
     }
   });
 
-  it("orders the database query by meaningful activity before pagination", () => {
-    const recent = compiledOrder("recently_updated");
-    const oldestActivity = compiledOrder("least_recently_updated");
+  it("counts profile changes reached through contacts, bookings, follow-ups, and activities", async () => {
+    let compiledSql = "";
+    await loadProfileSortMetadata([profileId], async (statement) => {
+      compiledSql = new PgDialect().sqlToQuery(statement as any).sql;
+      return { rows: [] };
+    });
 
-    expect(recent).toMatch(/activities/i);
-    expect(recent).toMatch(/updated_at/i);
-    expect(recent).toMatch(/desc/i);
-    expect(oldestActivity).toMatch(/activities/i);
-    expect(oldestActivity).toMatch(/updated_at/i);
-    expect(oldestActivity).toMatch(/asc/i);
-  });
-
-  it("supports alphabetical and creation-date ordering in the database query", () => {
-    expect(compiledOrder("name_asc")).toMatch(/name.*asc/i);
-    expect(compiledOrder("name_desc")).toMatch(/name.*desc/i);
-    expect(compiledOrder("created_desc")).toMatch(/created_at.*desc/i);
-    expect(compiledOrder("created_asc")).toMatch(/created_at.*asc/i);
+    expect(compiledSql).toMatch(/organization_contacts/i);
+    expect(compiledSql).toMatch(/contacts/i);
+    expect(compiledSql).toMatch(/bookings/i);
+    expect(compiledSql).toMatch(/follow_ups/i);
+    expect(compiledSql).toMatch(/activities/i);
+    expect(compiledSql).toMatch(/updated_at/i);
   });
 });
