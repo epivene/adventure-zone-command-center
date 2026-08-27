@@ -51,6 +51,7 @@ jobs:
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/features/calls/guided-call-scripts.test.ts
           src/features/calls/guided-call-state.test.ts
+          src/components/calls/call-email-request-outcome.test.tsx
           src/components/calls/call-workspace.test.tsx
           src/components/today/call-queue-workspace.test.tsx
           src/components/today/call-queue-guided-call.test.tsx
