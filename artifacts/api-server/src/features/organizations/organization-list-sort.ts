@@ -83,6 +83,19 @@ export async function loadProfileSortMetadata(
   }]));
 }
 
+export async function loadProfileSortMetadataSafely(
+  ids: string[],
+  execute: ExecuteQuery,
+  reportError?: (error: unknown) => void,
+): Promise<Map<string, ProfileSortMetadata>> {
+  try {
+    return await loadProfileSortMetadata(ids, execute);
+  } catch (error) {
+    reportError?.(error);
+    return new Map();
+  }
+}
+
 function dateValue(value: Date | undefined): number {
   return value?.getTime() ?? 0;
 }
