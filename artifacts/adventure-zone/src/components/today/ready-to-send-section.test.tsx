@@ -62,11 +62,17 @@ beforeEach(() => {
   vi.mocked(apiPost).mockResolvedValue({ ok: true, results: [] });
 });
 
+async function openOutbox() {
+  const button = await screen.findByRole("button", { name: /Ready to Send/ });
+  fireEvent.click(button);
+  return button;
+}
+
 describe("ReadyToSendSection", () => {
   it("loads collapsed with total and purpose counts, then expands rows", async () => {
     render(<ReadyToSendSection now={() => new Date("2026-08-27T15:00:00.000Z")} />);
 
-    const summaryButton = await screen.findByText(/Ready to Send/);
+    const summaryButton = await screen.findByRole("button", { name: /Ready to Send/ });
     expect(summaryButton).toHaveTextContent("3");
     expect(screen.getByText(/1 new outreach/i)).toBeInTheDocument();
     expect(screen.getByText(/1 follow-up/i)).toBeInTheDocument();
@@ -89,7 +95,7 @@ describe("ReadyToSendSection", () => {
     });
 
     render(<ReadyToSendSection now={() => new Date("2026-08-27T15:00:00.000Z")} />);
-    fireEvent.click(await screen.findByText(/Ready to Send/));
+    await openOutbox();
     fireEvent.click(screen.getByRole("checkbox", { name: /Select Sample Fair/ }));
     fireEvent.click(screen.getByRole("button", { name: "Send now" }));
 
@@ -101,17 +107,17 @@ describe("ReadyToSendSection", () => {
       }],
     }));
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(2));
-    expect(screen.getByText(/Ready to Send/)).toHaveTextContent("2");
+    expect(screen.getByRole("button", { name: /Ready to Send/ })).toHaveTextContent("2");
   });
 
   it("previews Tomorrow morning before confirming schedule", async () => {
     render(<ReadyToSendSection now={() => new Date("2026-08-27T15:00:00.000Z")} />);
-    fireEvent.click(await screen.findByText(/Ready to Send/));
+    await openOutbox();
     fireEvent.click(screen.getByRole("checkbox", { name: /Select Sample Fair/ }));
     fireEvent.click(screen.getByRole("button", { name: "Tomorrow morning" }));
 
     expect(screen.getByText(/Schedule preview/i)).toBeInTheDocument();
-    expect(screen.getByText(/Sample Fair/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Sample Fair/).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Confirm schedule" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Confirm schedule" }));
@@ -127,7 +133,7 @@ describe("ReadyToSendSection", () => {
 
   it("spreads Morning stagger across selected rows and previews each send time", async () => {
     render(<ReadyToSendSection now={() => new Date("2026-08-27T15:00:00.000Z")} />);
-    fireEvent.click(await screen.findByText(/Ready to Send/));
+    await openOutbox();
     fireEvent.click(screen.getByRole("checkbox", { name: /Select Sample Fair/ }));
     fireEvent.click(screen.getByRole("checkbox", { name: /Select Second Festival/ }));
     fireEvent.click(screen.getByRole("button", { name: "Morning stagger" }));
@@ -147,7 +153,7 @@ describe("ReadyToSendSection", () => {
 
   it("supports Pick date & time with preview before scheduling", async () => {
     render(<ReadyToSendSection now={() => new Date("2026-08-27T15:00:00.000Z")} />);
-    fireEvent.click(await screen.findByText(/Ready to Send/));
+    await openOutbox();
     fireEvent.click(screen.getByRole("checkbox", { name: /Select Reply Event/ }));
     fireEvent.change(screen.getByLabelText("Outbox schedule date and time"), {
       target: { value: "2026-09-03T10:15" },
