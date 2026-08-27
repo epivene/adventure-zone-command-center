@@ -7,28 +7,32 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Week 4 batch 3 profile screen
+      - name: Week 4 batch 4 profile screen
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
           cat > /tmp/events.txt <<'EOF'
-          Harvest Lantern Festival (Pocatello) ID
-          Hops Drops The Evergreen Music & Beer Festival (Evergreen) CO
-          Jackson Wild (Jackson) WY
-          Last Chance Community Powwow (Helena) MT
-          Lattin Farms Fall Festival (Fallon) NV
-          Loveland Stone Age Fair (Loveland) CO
-          Mineral County Rodeo (Hawthorne) NV
-          Morrison Ciderfest (Morrison) CO
-          Oktoberfest - Snow Mountain Brewery (Saratoga) WY
-          Oktoberfest (Colorado Springs) CO
-          Oktoberfest (Pocatello) ID
-          Palisade Art Festival (Palisade) CO
-          Parker Fall Festival (Parker) CO
-          Pikes Peak Regional Airshow (CO Springs) CO
-          Post Cereal Sale (Tremonton) UT
+          Afro Utah Festival (SLC) UT
+          Ak-Chin Native American Recognition Day (Maricopa) AZ
+          American Indian Day
+          Andelin Family Farm - Harvest Festival (Sparks) NV
+          Apple City Festival (Lander) WY
+          Bear 100 Endurance Run (Fish Haven) ID
+          Bear Lake Fall Market Days (Garden) UT
+          County Fair - Arizona State Fair(Phoenix) AZ
+          Pueblo Chile & Frijoles Festival (Pueblo) CO
+          Pyramid Lake Piute Pow Wow (Nixon) NV
+          Renner Farm Corn Maze & Pumpkin Patch (Smith) NV
+          Roam Fest (Fruita) CO
+          Run the Red Desert (S Pass) WY
+          San Luis Valley Intertribal Pow Wow (Monte Vista) CO
+          Snow Valley Garlic A Taste of Garlic (Priest River) ID
+          South Fork Par Fly (South Fork) CO
+          Standin' on the Corner Music Festival (Winslow) AZ
+          Sundown Music Festival (Denver) CO
+          WYO Film Festival (Sheridan) WY
           EOF
           while IFS= read -r Q; do
             echo "=== QUERY: $Q ==="
