@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-gmail-delivery.test.ts"
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
       - "artifacts/api-server/src/routes/index.ts"
@@ -48,6 +51,7 @@ jobs:
           src/features/opportunity-email/ready-to-send-service.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher-loop.test.ts
+          src/features/google-workspace/google-gmail-delivery.test.ts
           src/routes/opportunity-drafts.test.ts
           src/routes/today-ready-to-send.test.ts
       - name: Database build
