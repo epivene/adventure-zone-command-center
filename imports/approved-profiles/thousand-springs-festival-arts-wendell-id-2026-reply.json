@@ -1,0 +1,39 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Thousand Springs Festival of the Arts",
+    "city": "Wendell",
+    "region": "ID"
+  },
+  "profile": {},
+  "contacts": [
+    {
+      "name": "Jude Metzler",
+      "email": "magicvalleyartscouncil@magicvalleyartscouncil.org",
+      "phone": "208-734-2787",
+      "role": "Project Coordinator",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "declined",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 reply — not a fit for Thousand Springs Festival format",
+      "body": "On Aug. 27, 2026, Jude Metzler, Project Coordinator for the Magic Valley Arts Council, declined Adventure Zone for Thousand Springs Festival of the Arts. Reasons: Thousand Springs State Park is small and grounds are prioritized for vendor booths and food trucks; MVAC intentionally wants the festival focused 100% on the arts and does not want a carnival-like theme; they feel inflatable attractions would distract from the festival's core idea. Current contact confirmed: Jude Metzler, Project Coordinator, magicvalleyartscouncil@magicvalleyartscouncil.org, 208-734-2787. Current MVAC programs reviewed include Art & Soul, Arts on Tour, Kids Art in the Park, Jazz on the Canyon, Missoula Children's Theater, gallery/classes, and Thousand Springs. These programs are also strongly arts-focused, so do not routinely pitch another current MVAC arts program. No routine follow-up should be created. Keep the organization eligible only if MVAC later becomes involved in a broader community/family event where a separate staffed attraction area could genuinely fit. Desiree drafted a respectful acknowledgment reply on Aug. 27, 2026."
+    }
+  ],
+  "followUps": []
+}
