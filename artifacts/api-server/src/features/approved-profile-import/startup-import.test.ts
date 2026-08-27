@@ -177,4 +177,38 @@ describe("approved profile startup import", () => {
     const body = JSON.parse(String(request.body));
     expect(body.event.id).toBe(PROFILE_ID);
   });
+
+  it("skips an ambiguous existing-profile match without blocking the rest of the startup import", async () => {
+    vi.mocked(readdir).mockResolvedValue(["ambiguous.json", "safe.json"] as never);
+    vi.mocked(readFile)
+      .mockResolvedValueOnce(JSON.stringify({
+        ...basePayload(),
+        matchExisting: true,
+        event: { id: null, name: "County Fair", city: "Sampleton", region: "WY" },
+        profile: {},
+        notes: [{ subject: "Historical call - Kristy", body: "Ambiguous source note." }],
+      }) as never)
+      .mockResolvedValueOnce(JSON.stringify({
+        ...basePayload(),
+        notes: [{ subject: "Historical call - Kristy", body: "Safe source note." }],
+        followUps: [],
+      }) as never);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        results: [
+          { id: PROFILE_ID, kind: "organization", label: "County Fair East", city: "Sampleton", region: "WY" },
+          { id: "22222222-2222-4222-8222-222222222222", kind: "organization", label: "County Fair West", city: "Sampleton", region: "WY" },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, created: true }, 201));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toMatchObject({ imported: 1, skipped: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });
