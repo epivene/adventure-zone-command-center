@@ -149,48 +149,10 @@ function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined 
 }
 
 export function profileLastChangedAtSql(): SQL {
-  return sql`greatest(
-    coalesce(${organizations.updatedAt}, ${organizations.createdAt}),
-    coalesce((
-      select max(c.updated_at)
-      from organization_contacts oc
-      inner join contacts c on c.id = oc.contact_id
-      where oc.organization_id = ${organizations.id}
-        and oc.active = true
-    ), ${organizations.createdAt}),
-    coalesce((
-      select max(b.updated_at)
-      from bookings b
-      where b.organization_id = ${organizations.id}
-    ), ${organizations.createdAt}),
-    coalesce((
-      select max(f.updated_at)
-      from follow_ups f
-      where f.organization_id = ${organizations.id}
-        or f.contact_id in (
-          select oc2.contact_id
-          from organization_contacts oc2
-          where oc2.organization_id = ${organizations.id}
-            and oc2.active = true
-        )
-    ), ${organizations.createdAt}),
-    coalesce((
-      select max(a.updated_at)
-      from activities a
-      where a.organization_id = ${organizations.id}
-        or a.booking_id in (
-          select b2.id
-          from bookings b2
-          where b2.organization_id = ${organizations.id}
-        )
-        or a.contact_id in (
-          select oc3.contact_id
-          from organization_contacts oc3
-          where oc3.organization_id = ${organizations.id}
-            and oc3.active = true
-        )
-    ), ${organizations.createdAt})
-  )`;
+  // organizations.updated_at is maintained as the profile "touch" timestamp.
+  // Keeping this sort key on the profile row avoids reconstructing CRM history
+  // with several correlated subqueries every time the directory loads.
+  return sql`coalesce(${organizations.updatedAt}, ${organizations.createdAt})`;
 }
 
 export function buildOrganizationDirectoryOrderBy(query: OrganizationListQuery): SQL[] {
