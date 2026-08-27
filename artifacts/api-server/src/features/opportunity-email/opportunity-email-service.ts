@@ -26,6 +26,14 @@ export type OpportunityEmailRepositoryPort = {
   getById(id: string): Promise<OpportunityEmailRecord | null>;
   create(input: CreateOpportunityEmailInput): Promise<OpportunityEmailRecord>;
   update(id: string, patch: UpdateOpportunityEmailInput): Promise<OpportunityEmailRecord>;
+  findBySendRequestKey?(requestKey: string): Promise<OpportunityEmailRecord | null>;
+  findByScheduleRequestKey?(requestKey: string): Promise<OpportunityEmailRecord | null>;
+};
+
+export type ConfirmedSend = {
+  messageId: string;
+  threadId?: string | null;
+  sentAt: Date;
 };
 
 export type GmailDraftProvider = {
@@ -48,6 +56,12 @@ export type GmailDraftProvider = {
     messageId: string;
     threadId?: string | null;
   }>;
+  sendDraft?(input: { draftId: string }): Promise<ConfirmedSend>;
+  scheduleDraft?(input: {
+    draftId: string;
+    scheduledFor: Date;
+  }): Promise<{ scheduledFor: Date }>;
+  reconcileSend?(input: { draftId: string }): Promise<ConfirmedSend | null>;
 };
 
 export type OpportunityDraftBlockerSink = {
@@ -65,6 +79,28 @@ export type DraftRewriteAdapter = {
   }): Promise<{ subject: string; body: string }>;
 };
 
+export type OpportunityEmailWorkflowSink = {
+  recordSent(input: {
+    opportunityId: string;
+    draftId: string;
+    sentAt: Date;
+    messageId: string;
+    threadId: string | null;
+  }): Promise<void>;
+  recordScheduled(input: {
+    opportunityId: string;
+    draftId: string;
+    scheduledFor: Date;
+  }): Promise<void>;
+  recordFailure(input: {
+    opportunityId: string;
+    draftId: string;
+    operation: "send" | "schedule";
+    code: string;
+    message: string;
+  }): Promise<void>;
+};
+
 export type OpportunityEmailServiceDependencies = {
   contextResolver: { resolve(opportunityId: string): Promise<DraftContext> };
   emailRepository: OpportunityEmailRepositoryPort;
@@ -72,10 +108,23 @@ export type OpportunityEmailServiceDependencies = {
   gmailDraftProvider: GmailDraftProvider;
   blockerSink: OpportunityDraftBlockerSink;
   rewriteAdapter?: DraftRewriteAdapter;
+  workflowSink?: OpportunityEmailWorkflowSink;
 };
 
 function serviceError(code: string): Error {
   return Object.assign(new Error(code), { code });
+}
+
+function errorCode(error: unknown): string {
+  if (error && typeof error === "object" && "code" in error && typeof (error as { code?: unknown }).code === "string") {
+    return (error as { code: string }).code;
+  }
+  if (error instanceof Error && error.message) return error.message;
+  return "OPPORTUNITY_EMAIL_DELIVERY_FAILED";
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : errorCode(error);
 }
 
 export class OpportunityEmailService {
@@ -171,6 +220,147 @@ export class OpportunityEmailService {
       undoSubject: input.subject,
       undoBody: input.body,
     };
+  }
+
+  async sendDraft(input: {
+    opportunityId: string;
+    draftId: string;
+    requestKey: string;
+  }): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date }> {
+    const prior = await this.deps.emailRepository.findBySendRequestKey?.(input.requestKey);
+    if (prior?.id === input.draftId && prior.opportunityId === input.opportunityId && prior.state === "sent" && prior.sentAt) {
+      return { draft: prior, followUpReferenceAt: prior.sentAt };
+    }
+
+    const existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
+    if (!this.deps.gmailDraftProvider.sendDraft) {
+      throw serviceError("OPPORTUNITY_EMAIL_SEND_UNAVAILABLE");
+    }
+
+    let confirmation: ConfirmedSend;
+    try {
+      confirmation = await this.deps.gmailDraftProvider.sendDraft({ draftId: existing.gmailDraftId! });
+    } catch (error) {
+      if (errorCode(error) === "GMAIL_SEND_OUTCOME_UNCERTAIN" && this.deps.gmailDraftProvider.reconcileSend) {
+        const reconciled = await this.deps.gmailDraftProvider.reconcileSend({ draftId: existing.gmailDraftId! });
+        if (reconciled) {
+          confirmation = reconciled;
+          return this.confirmSent(existing, input.requestKey, confirmation);
+        }
+      }
+      await this.recordDeliveryFailure(existing, "send", input.requestKey, error);
+      throw error;
+    }
+
+    return this.confirmSent(existing, input.requestKey, confirmation);
+  }
+
+  async scheduleDraft(input: {
+    opportunityId: string;
+    draftId: string;
+    requestKey: string;
+    scheduledFor: Date;
+  }): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date }> {
+    const prior = await this.deps.emailRepository.findByScheduleRequestKey?.(input.requestKey);
+    if (prior?.id === input.draftId && prior.opportunityId === input.opportunityId && prior.state === "scheduled" && prior.scheduledFor) {
+      return { draft: prior, followUpReferenceAt: prior.scheduledFor };
+    }
+
+    const existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
+    if (!this.deps.gmailDraftProvider.scheduleDraft) {
+      throw serviceError("OPPORTUNITY_EMAIL_SCHEDULE_UNAVAILABLE");
+    }
+
+    try {
+      const confirmation = await this.deps.gmailDraftProvider.scheduleDraft({
+        draftId: existing.gmailDraftId!,
+        scheduledFor: input.scheduledFor,
+      });
+      const draft = await this.deps.emailRepository.update(existing.id, {
+        state: "scheduled",
+        scheduledFor: confirmation.scheduledFor,
+        sentAt: null,
+        scheduleRequestKey: input.requestKey,
+        lastFailureCode: null,
+        lastFailureMessage: null,
+      });
+      await this.deps.workflowSink?.recordScheduled({
+        opportunityId: existing.opportunityId,
+        draftId: existing.id,
+        scheduledFor: confirmation.scheduledFor,
+      });
+      return { draft, followUpReferenceAt: confirmation.scheduledFor };
+    } catch (error) {
+      await this.recordDeliveryFailure(existing, "schedule", input.requestKey, error, input.scheduledFor);
+      throw error;
+    }
+  }
+
+  async retryDraft(input: {
+    opportunityId: string;
+    draftId: string;
+    requestKey: string;
+  }): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date | null }> {
+    const existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
+    if (existing.scheduledFor) {
+      return this.scheduleDraft({
+        opportunityId: input.opportunityId,
+        draftId: input.draftId,
+        requestKey: input.requestKey,
+        scheduledFor: existing.scheduledFor,
+      });
+    }
+    return this.sendDraft(input);
+  }
+
+  private async confirmSent(
+    existing: OpportunityEmailRecord,
+    requestKey: string,
+    confirmation: ConfirmedSend,
+  ): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date }> {
+    const draft = await this.deps.emailRepository.update(existing.id, {
+      state: "sent",
+      sentAt: confirmation.sentAt,
+      scheduledFor: null,
+      sendRequestKey: requestKey,
+      gmailMessageId: confirmation.messageId,
+      gmailThreadId: confirmation.threadId ?? existing.gmailThreadId,
+      lastFailureCode: null,
+      lastFailureMessage: null,
+    });
+    await this.deps.workflowSink?.recordSent({
+      opportunityId: existing.opportunityId,
+      draftId: existing.id,
+      sentAt: confirmation.sentAt,
+      messageId: confirmation.messageId,
+      threadId: confirmation.threadId ?? existing.gmailThreadId,
+    });
+    return { draft, followUpReferenceAt: confirmation.sentAt };
+  }
+
+  private async recordDeliveryFailure(
+    existing: OpportunityEmailRecord,
+    operation: "send" | "schedule",
+    requestKey: string,
+    error: unknown,
+    scheduledFor?: Date,
+  ): Promise<void> {
+    const code = errorCode(error);
+    const message = errorMessage(error);
+    await this.deps.emailRepository.update(existing.id, {
+      state: "failed",
+      ...(operation === "send" ? { sendRequestKey: requestKey } : { scheduleRequestKey: requestKey }),
+      ...(scheduledFor ? { scheduledFor } : {}),
+      lastFailureCode: code,
+      lastFailureMessage: message,
+    });
+    await this.deps.workflowSink?.recordFailure({
+      opportunityId: existing.opportunityId,
+      draftId: existing.id,
+      operation,
+      code,
+      message,
+    });
   }
 
   private async requireOwnedDraft(
