@@ -17,6 +17,40 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function basePayload() {
+  return {
+    importRevision: 2,
+    event: {
+      id: null,
+      name: "Sample Fair",
+      city: "Sampleton",
+      region: "WY",
+    },
+    profile: {
+      placeType: "fair",
+      description: "Sample profile",
+      phone: "",
+      website: "",
+      address1: "",
+      address2: "",
+      postalCode: "",
+    },
+    contacts: [],
+    booking: {
+      enabled: false,
+      name: "",
+      status: "new_lead",
+      startsAt: "",
+      endsAt: "",
+      nextActionKind: "call",
+      nextActionDueAt: "",
+      travelLegId: null,
+    },
+    familyId: null,
+    parentOrganizationId: null,
+  };
+}
+
 describe("approved profile startup import", () => {
   const originalToken = process.env["ASSISTANT_IMPORT_TOKEN"];
   const originalFetch = globalThis.fetch;
@@ -25,35 +59,7 @@ describe("approved profile startup import", () => {
     process.env["ASSISTANT_IMPORT_TOKEN"] = "test-token";
     vi.mocked(readdir).mockResolvedValue(["sample.json"] as never);
     vi.mocked(readFile).mockResolvedValue(JSON.stringify({
-      importRevision: 2,
-      event: {
-        id: null,
-        name: "Sample Fair",
-        city: "Sampleton",
-        region: "WY",
-      },
-      profile: {
-        placeType: "fair",
-        description: "Sample profile",
-        phone: "",
-        website: "",
-        address1: "",
-        address2: "",
-        postalCode: "",
-      },
-      contacts: [],
-      booking: {
-        enabled: false,
-        name: "",
-        status: "new_lead",
-        startsAt: "",
-        endsAt: "",
-        nextActionKind: "call",
-        nextActionDueAt: "",
-        travelLegId: null,
-      },
-      familyId: null,
-      parentOrganizationId: null,
+      ...basePayload(),
       notes: [
         {
           subject: "Historical call - Kristy",
@@ -115,5 +121,60 @@ describe("approved profile startup import", () => {
         }),
       }),
     );
+  });
+
+  it("can safely target an existing profile before applying a reviewed update", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({
+      ...basePayload(),
+      matchExisting: true,
+      event: {
+        id: null,
+        name: "MeekerPalooza",
+        city: "Meeker",
+        region: "CO",
+      },
+      profile: {},
+      notes: [
+        {
+          subject: "Historical call - Kristy",
+          body: "Kristy called during 2026 outreach. No answer.",
+        },
+      ],
+    }) as never);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        results: [
+          {
+            id: PROFILE_ID,
+            kind: "organization",
+            label: "MeekerPalooza Series & Market",
+            city: "Meeker",
+            region: "CO",
+            matchedOn: ["name"],
+          },
+        ],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 200))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, created: true }, 201));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    await importApprovedProfilesAtStartup(5000);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://127.0.0.1:5000/api/assistant-import/profile-search?q=MeekerPalooza&limit=20",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({ Authorization: "Bearer test-token" }),
+      }),
+    );
+
+    const secondCall = fetchMock.mock.calls[1];
+    expect(secondCall?.[0]).toBe("http://127.0.0.1:5000/api/assistant-import/event-profiles");
+    const request = secondCall?.[1] as RequestInit;
+    const body = JSON.parse(String(request.body));
+    expect(body.event.id).toBe(PROFILE_ID);
   });
 });
