@@ -5,6 +5,7 @@ import ManagerRoutePage from "./ManagerRoutePage";
 
 const api=vi.fn(async()=>({route:{trip:{id:"t",name:"Dakotas",startLabel:"Home",endLabel:"Fargo"},stops:[],segments:[]},events:[],nextEvent:null}));
 vi.mock("@/lib/manager-auth-context",()=>({useManagerAuth:()=>({managerApi:api})}));
+vi.mock("@/features/manager-assistant/manager-assistant-context",()=>({useManagerAssistant:()=>({activeContext:null,setActiveContext:vi.fn(),open:false,openAssistant:vi.fn(),closeAssistant:vi.fn(),prefill:""})}));
 vi.mock("@/features/manager/use-manager-scoped-map",()=>({useManagerScopedMap:()=>({loading:false,error:null,reload:vi.fn(),data:{leg:{id:"k",name:"Kristy",color:"#f97316"},route:null,events:[{bookingId:"b",bookingName:"Fair",city:"Fargo",region:"ND",latitude:46.8,longitude:-96.8,startsAt:new Date("2026-08-16T12:00:00Z"),endsAt:null,status:"confirmed"}],meetups:[]}})}));
 vi.mock("@/components/manager/manager-scoped-map",()=>({ManagerScopedMap:({variant}:{variant:string})=><div aria-label="Manager events map">{variant}</div>}));
 afterEach(cleanup);
