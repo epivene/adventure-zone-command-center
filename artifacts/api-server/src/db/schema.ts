@@ -9,5 +9,5 @@ export * from "@workspace/db/resource-source-candidate-schema";
 export * from "@workspace/db/event-attendance-history-schema";
 export * from "@workspace/db/office-coordinator-schema";
 export * from "@workspace/db/google-workspace-schema";
-
 export * from "@workspace/db/lead-intake-schema";
+export * from "@workspace/db/booking-opportunity-schema";
