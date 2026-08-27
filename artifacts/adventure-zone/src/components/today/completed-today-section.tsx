@@ -11,7 +11,7 @@ export function CompletedTodaySection({ items }: { items: MasterWorkItem[] }) {
         {items.map((item) => (
           <div key={item.id} className="rounded-xl border border-emerald-200 bg-white p-3">
             <p className="font-bold text-slate-950">{item.eventName}</p>
-            <p className="text-sm text-slate-600">{item.reason}</p>
+            <p className="text-sm text-slate-600">{item.outcome ?? item.reason}</p>
             {item.completedAt ? <p className="mt-1 text-xs font-semibold text-emerald-700">Completed {new Date(item.completedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</p> : null}
           </div>
         ))}
