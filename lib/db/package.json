@@ -19,7 +19,8 @@
     "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
     "./google-workspace-schema": "./src/google-workspace-schema.ts",
     "./lead-intake-schema": "./src/lead-intake-schema.ts",
-    "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts"
+    "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts",
+    "./booking-opportunity-email-schema": "./src/booking-opportunity-email-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
