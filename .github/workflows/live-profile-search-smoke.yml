@@ -20,12 +20,7 @@ jobs:
               --get --data-urlencode "q=${Q}" \
               "${BASE}/api/assistant-import/profile-search")
             echo "$RESP"
-            ID=$(RESP="$RESP" python3 - <<'PY'
-import json, os
-r=json.loads(os.environ['RESP'])
-print((r.get('results') or [{}])[0].get('id',''))
-PY
-)
+            ID=$(printf '%s' "$RESP" | jq -r '.results[0].id // empty')
             if [ -n "$ID" ]; then
               echo "=== HISTORY: ${ID} ==="
               curl --fail-with-body --silent --show-error \
