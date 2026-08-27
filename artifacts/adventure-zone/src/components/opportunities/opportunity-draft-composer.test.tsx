@@ -114,7 +114,7 @@ describe("OpportunityDraftComposer", () => {
     />);
 
     expect(screen.getByText("zone@example.com")).toBeInTheDocument();
-    expect(screen.getByText("booking@example.com")).toBeInTheDocument();
+    expect(screen.getByText(/booking@example\.com/)).toBeInTheDocument();
     expect(screen.getByText(/Gmail temporarily unavailable/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
