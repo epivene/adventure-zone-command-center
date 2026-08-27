@@ -1,10 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { apiPost } from "@/lib/auth-token";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { apiGet, apiPost } from "@/lib/auth-token";
 import type { MasterTodayQueue, MasterWorkItem } from "@/features/today/master-work-types";
 import { MasterWorkQueue } from "./master-work-queue";
 
-vi.mock("@/lib/auth-token", () => ({ apiPost: vi.fn(async () => ({ ok: true })) }));
+vi.mock("@/lib/auth-token", () => ({
+  apiGet: vi.fn(async () => ({
+    ok: true,
+    summary: { total: 0, newOutreach: 0, followUps: 0, replies: 0, items: [] },
+  })),
+  apiPost: vi.fn(async () => ({ ok: true })),
+}));
 
 const base: MasterWorkItem = {
   id: "work-1", sourceId: "source-1", sourceType: "opportunity",
@@ -22,12 +28,23 @@ const queue: MasterTodayQueue = {
   completedToday: [item("done", { completedAt: "2026-08-26T16:00:00.000Z", outcome: "Sent proposal" })],
 };
 
-beforeEach(() => { vi.mocked(apiPost).mockClear(); sessionStorage.clear(); });
+afterEach(() => cleanup());
+beforeEach(() => {
+  vi.mocked(apiGet).mockClear();
+  vi.mocked(apiPost).mockClear();
+  sessionStorage.clear();
+});
 
 describe("MasterWorkQueue", () => {
-  it("renders sections in approved order and preserves server active order", () => {
+  it("renders Needs Attention, Ready to Send, and Active Queue in approved order", async () => {
     const { container } = render(<MasterWorkQueue queue={queue} onChanged={vi.fn(async () => undefined)} />);
-    expect(screen.getAllByRole("heading").slice(0, 2).map((node) => node.textContent)).toEqual(["Needs Attention", "Active Queue"]);
+    await screen.findByRole("button", { name: /Ready to Send/ });
+    const labels = [...container.querySelectorAll('[aria-label="Booking master work queue"] > *')]
+      .map((node) => node.textContent ?? "")
+      .filter(Boolean);
+    expect(labels[0]).toContain("Needs Attention");
+    expect(labels[1]).toContain("Ready to Send");
+    expect(labels[2]).toContain("Active Queue");
     expect([...container.querySelectorAll("article[data-work-item-id]")].map((node) => node.getAttribute("data-work-item-id"))).toEqual(["active-1", "active-2"]);
   });
 
