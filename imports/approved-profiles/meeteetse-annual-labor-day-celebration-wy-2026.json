@@ -1,5 +1,5 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -7,7 +7,13 @@
     "city": "Meeteetse",
     "region": "WY"
   },
-  "profile": {},
+  "profile": {
+    "phone": "307-868-2454",
+    "website": "https://www.meeteetsewy.com/events",
+    "address1": "1906 State Street",
+    "postalCode": "82433",
+    "description": "Discover Meeteetse / Meeteetse Visitor Center coordinates the annual Meeteetse Labor Day Celebration and other community events."
+  },
   "contacts": [],
   "booking": {
     "enabled": true,
@@ -15,23 +21,23 @@
     "status": "new_lead",
     "startsAt": "2026-09-05",
     "endsAt": "2026-09-07",
-    "nextActionKind": "email",
-    "nextActionDueAt": "2026-08-31",
+    "nextActionKind": "call",
+    "nextActionDueAt": "2026-08-27",
     "travelLegId": null
   },
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2026 outreach — Meeteetse Labor Day Celebration",
-      "body": "Desiree emailed office@meeteetsewy.com on Aug. 26, 2026 regarding the Meeteetse Annual Labor Day Celebration, Sept. 5-7, 2026. Outreach described The Adventure Zone as a staffed inflatable family-fun area and offered both prepaid and possible pay-for-play participation because the event was approaching quickly. No reply was found in Adventure Zone Gmail when the profile was corrected on Aug. 27, 2026. This profile was created because the outreach email had been sent but the CRM profile step was missed. Source: Adventure Zone Gmail thread, Aug. 26, 2026."
+      "subject": "2026 active pay-for-play opportunity — research + Dave call update",
+      "body": "Desiree emailed office@meeteetsewy.com on Aug. 26, 2026. On Aug. 27 Dave reported that Meeteetse called and wants pay-for-play; they expect to know within about an hour whether they can proceed. Dave is gathering logistics to decide whether Kristy's leg can make money. Official 2026 information confirms the 116th Meeteetse Labor Day Celebration Sept. 5-7, coordinated through Discover Meeteetse / Meeteetse Visitor Center (office@meeteetsewy.com, 307-868-2454, 1906 State Street, Meeteetse WY 82433). The celebration is town-wide and family-oriented, with a three-day craft fair plus car show, cornhole/horseshoes, roping, live music, Monday parade, street games, Labor Day Rodeo / Big Horn Rodeo Circuit finale, and duck races. This is a strong conceptual fit for pay-for-play, but no reliable published attendance figure was found, so attendance and traffic by day must be confirmed directly before committing. Exact Adventure Zone placement is also not published and must be confirmed because activities are spread across downtown, Discover Meeteetse, and the rodeo grounds. Logistics Dave should confirm: estimated attendance by day and peak traffic; exact setup location and usable footprint; dates/hours they want attractions open; whether customers can be charged directly and any agreed event percentage/minimum/guarantee; power available at the exact site (Adventure Zone normal requirement is three 50A/220V outlets, eighteen 110V outlets, or suitable generator); staking/ballast conditions; setup/teardown access and street closures; overnight security/camping/RV permission; restrooms; COI/additional insured details; whether any other carnival/inflatable vendor is present; and whether the setup can stay in one place for all operating days. Local overnight logistics are workable: Meeteetse has RV/camping options and full-hookup sites, including Oasis Motel & RV Park and Meeteetse RV Park, but Labor Day demand may be high so space should be secured quickly if needed. Treat this as an ACTIVE HOT LEAD, not routine follow-up. Sources: Adventure Zone Gmail Aug. 26; Dave text Aug. 27; official Discover Meeteetse event/contact pages and current local lodging information reviewed Aug. 27, 2026."
     }
   ],
   "followUps": [
     {
-      "label": "Meeteetse 2026 outreach follow-up",
-      "reason": "No reply yet to Aug. 26 outreach. Event begins Sept. 5, so check back before Labor Day weekend if no response arrives.",
-      "dueAt": "2026-08-31T16:00:00.000Z"
+      "label": "Meeteetse pay-for-play decision / logistics",
+      "reason": "Hot lead: event called Dave on Aug. 27 and wants pay-for-play. Confirm their decision plus attendance, exact site/footprint, operating hours, power, staking/ballast, camping/overnight access, COI entity, and commercial terms before Kristy's leg commits.",
+      "dueAt": "2026-08-27T18:15:00.000Z"
     }
   ]
 }
