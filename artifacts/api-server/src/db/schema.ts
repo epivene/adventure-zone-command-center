@@ -11,3 +11,4 @@ export * from "@workspace/db/office-coordinator-schema";
 export * from "@workspace/db/google-workspace-schema";
 export * from "@workspace/db/lead-intake-schema";
 export * from "@workspace/db/booking-opportunity-schema";
+export * from "@workspace/db/booking-opportunity-email-schema";

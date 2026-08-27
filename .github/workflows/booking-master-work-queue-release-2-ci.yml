@@ -1,0 +1,70 @@
+name: Booking Master Work Queue Release 2 CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-connection-repository.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-gmail-delivery*.ts"
+      - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/routes/follow-ups*.ts"
+      - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
+      - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "artifacts/adventure-zone/src/features/opportunity-email/**"
+      - "artifacts/adventure-zone/src/components/opportunities/**"
+      - "artifacts/adventure-zone/src/components/today/**"
+      - "artifacts/adventure-zone/src/pages/EventProfilePage*"
+      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "lib/db/src/booking-opportunity-email-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/src/migrations.ts"
+      - "lib/db/migrations/071_booking_opportunity_email_state.sql"
+      - "lib/db/migrations/072_booking_opportunity_email_dispatch.sql"
+      - ".github/workflows/booking-master-work-queue-release-2-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  release-2:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Opportunity email domain tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/opportunity-email/opportunity-email-repository.test.ts
+          src/features/opportunity-email/draft-context-resolver.test.ts
+          src/features/opportunity-email/draft-guardrails.test.ts
+          src/features/opportunity-email/opportunity-email-service.test.ts
+          src/features/opportunity-email/opportunity-email-rewrite.test.ts
+          src/features/opportunity-email/opportunity-email-delivery.test.ts
+          src/features/opportunity-email/send-window.test.ts
+          src/features/opportunity-email/ready-to-send-service.test.ts
+          src/features/opportunity-email/scheduled-email-dispatcher.test.ts
+          src/features/opportunity-email/scheduled-email-dispatcher-loop.test.ts
+          src/features/google-workspace/google-gmail-delivery.test.ts
+          src/features/google-workspace/google-gmail-delivery-connection.test.ts
+          src/routes/opportunity-drafts.test.ts
+          src/routes/today-ready-to-send.test.ts
+          src/routes/follow-ups.test.ts
+      - name: Opportunity email composer tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/opportunities/opportunity-draft-composer.test.tsx
+          src/components/opportunities/follow-up-after-send.test.tsx
+          src/components/today/ready-to-send-section.test.tsx
+          --environment jsdom
+      - name: Database build
+        run: pnpm --filter @workspace/db build

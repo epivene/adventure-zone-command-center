@@ -1,3 +1,11 @@
+export type CreateFollowUpInput = {
+  organizationId: string;
+  contactId: string | null;
+  bookingId: string | null;
+  kind: string;
+  dueAt: Date;
+};
+
 export type EditFollowUpInput = {
   followUpId: string;
   kind: string;
