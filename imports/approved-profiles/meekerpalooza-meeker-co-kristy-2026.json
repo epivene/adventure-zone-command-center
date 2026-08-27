@@ -1,0 +1,11 @@
+{
+  "importRevision": 3,
+  "matchExisting": true,
+  "event": {"id": null, "name": "MeekerPalooza", "city": "Meeker", "region": "CO"},
+  "profile": {},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "new_lead", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call sheet lists MeekerPalooza in Meeker, Colorado. Call outcome: no answer. Source: handwritten call notes, page 101."}]
+}

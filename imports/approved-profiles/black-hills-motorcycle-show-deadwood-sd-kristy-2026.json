@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Black Hills Motorcycle Show", "city": "Deadwood", "region": "SD"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten notes say Black Hills Motorcycle Show: NO / no funding / nonprofit. Gmail contains a direct pricing conversation with Sianna from Deadwood Custom Cycles, so this is a documented budget/funding objection rather than an untouched lead. Source: handwritten call notes, page 108; Adventure Zone Gmail."}]
+}

@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Colorado Renaissance Festival", "city": "Larkspur", "region": "CO"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 call sheet lists Colorado Renaissance Festival, 303-688-6010, and indicates a message was left. Adventure Zone has prior email outreach on this account. Source: handwritten call notes, page 104; Adventure Zone Gmail."}]
+}

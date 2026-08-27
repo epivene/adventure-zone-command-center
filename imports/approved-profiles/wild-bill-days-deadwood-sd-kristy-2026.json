@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Wild Bill Days", "city": "Deadwood", "region": "SD"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 sheet lists Wild Bill Days and Jesse Allen and notes message + email / showed interest. Gmail history confirms Jesse previously said the event was booked but wanted to stay in touch and asked Adventure Zone to reach out around the first of the year. Source: handwritten call notes, page 116; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "Jesse previously asked Adventure Zone to reconnect around the first of the year. Follow up for 2027 Wild Bill Days and other Deadwood opportunities.", "dueAt": "2027-01-04T16:00:00.000Z"}]
+}

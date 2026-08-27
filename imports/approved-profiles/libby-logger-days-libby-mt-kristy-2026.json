@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Libby Logger Days", "city": "Libby", "region": "MT"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten sheet marks Libby Logger Days DONE. Gmail confirms this relationship progressed to an actual 2026 Adventure Zone booking with contract/payment activity. Treat as a past booked/renewal account, not a cold lead. Source: handwritten call notes, page 113; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 renewal follow-up", "reason": "2026 booked client. Start renewal conversation for 2027 while the relationship and event experience are fresh.", "dueAt": "2026-10-15T15:00:00.000Z"}]
+}

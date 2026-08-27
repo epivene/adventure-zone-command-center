@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Emmett Cherry Festival", "city": "Emmett", "region": "ID"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists Emmett Cherry Festival with Tina and notes call back. Prior Gmail history is important context: the event previously said it could not accommodate an attraction area our size, and in 2024 said vendor space was completely booked. Preserve as relationship/history rather than treating as a new cold lead. Source: handwritten call notes, page 102; Adventure Zone Gmail."}]
+}

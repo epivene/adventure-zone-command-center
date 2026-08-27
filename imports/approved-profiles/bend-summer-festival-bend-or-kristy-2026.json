@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Bend Summer Festival", "city": "Bend", "region": "OR"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold / Kristy 2026 call notes", "body": "Kristy's handwritten notes list Bend Summer Festival / Lay It Out Events, vendors@layitoutevents.com, 541-323-0964. Notes say Kristy called, talked with the secretary, and events coordinator Ty sent information May 7, 2026. Historical/contact information only: Oregon territory hold — do not create normal active outreach follow-up. Source: handwritten call notes, page 78."}]
+}

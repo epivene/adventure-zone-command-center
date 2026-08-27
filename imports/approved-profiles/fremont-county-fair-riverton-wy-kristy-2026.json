@@ -1,0 +1,10 @@
+{
+  "importRevision": 3,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Fremont County Fair", "city": "Riverton", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "renewal_due", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten 2026 notes show Fremont County Fair follow-up/callback work. Adventure Zone Gmail also shows Amy followed up June 18, 2026 after Kristy spoke with the event. This account has prior Adventure Zone booking/contract history. Source: handwritten call notes, pages 101/108; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 renewal follow-up", "reason": "Past Adventure Zone relationship. Check 2027 dates, budget, entertainment needs, and renewal availability early.", "dueAt": "2026-11-02T16:00:00.000Z"}]
+}

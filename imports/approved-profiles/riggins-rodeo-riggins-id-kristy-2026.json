@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Riggins Rodeo", "city": "Riggins", "region": "ID"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists Riggins Rodeo, Susan Hollenbeck, 208-469-9196, with the outcome written as NO. Source: handwritten call notes, page 114."}]
+}

@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Cheyenne Celtic Festival", "city": "Cheyenne", "region": "WY"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists Ryan Seckman at Cheyenne Celtic Festival, 307-256-2106, and says left message. Gmail history shows Ryan previously asked Adventure Zone to reach out in October for the next season. Source: handwritten call notes, page 103; Adventure Zone Gmail."}],
+  "followUps": [{"label": "2027 booking follow-up", "reason": "Ryan previously asked Adventure Zone to reach out in October for the next season. Reconnect about 2027 planning.", "dueAt": "2026-10-01T15:00:00.000Z"}]
+}

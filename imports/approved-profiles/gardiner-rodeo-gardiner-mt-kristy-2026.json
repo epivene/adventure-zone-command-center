@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Gardiner Rodeo", "city": "Gardiner", "region": "MT"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists Gardiner Rodeo, 406-848-7971. Outcome: left message. The handwritten 'call Mon' instruction is preserved only as historical source context, not as a current task. Source: handwritten call notes, page 106."}]
+}

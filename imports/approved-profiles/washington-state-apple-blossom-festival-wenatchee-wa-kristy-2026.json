@@ -1,0 +1,9 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "Washington State Apple Blossom Festival", "city": "Wenatchee", "region": "WA"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Kristy call notes — 2026 outreach", "body": "Kristy's handwritten call sheet lists the Apple Blossom Festival in Wenatchee, Darci, 509-662-3616, and darci@appleblossom.org. Current event information already lists the 2027 festival for April 22-May 2, 2027. The event also has a major carnival, so any Adventure Zone approach should be positioned as a separate staffed family attraction rather than assuming they need a carnival. Source: handwritten call notes, page 78; current event information."}],
+  "followUps": [{"label": "2027 opportunity review", "reason": "2027 dates are already published. Review whether a separate family-attraction placement makes sense alongside the existing carnival before outreach.", "dueAt": "2026-10-19T15:00:00.000Z"}]
+}

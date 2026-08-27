@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "La Pine Rhubarb Festival", "city": "La Pine", "region": "OR"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold / Kristy 2026 call notes", "body": "Kristy's handwritten call sheet lists La Pine Rhubarb Festival, June 20-21, and info@lapineseniorcenter.org. Historical/contact research only: Oregon territory hold — do not create normal active outreach follow-up. Source: handwritten call notes, page 79."}]
+}

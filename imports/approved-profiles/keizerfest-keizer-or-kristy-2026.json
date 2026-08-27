@@ -1,0 +1,8 @@
+{
+  "importRevision": 3, "matchExisting": true,
+  "event": {"id": null, "name": "KeizerFEST", "city": "Keizer", "region": "OR"},
+  "profile": {}, "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null, "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold / Kristy 2026 call notes", "body": "Kristy's handwritten notes say she talked with Jill on May 7, 2026 and sent information for KeizerFEST. Gmail confirms Amy emailed Jill that day after Kristy spoke with her. Historical/contact information only: Oregon territory hold — do not create normal active outreach follow-up. Source: handwritten call notes, page 78; Adventure Zone Gmail."}]
+}
