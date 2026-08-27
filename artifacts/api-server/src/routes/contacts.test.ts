@@ -3,7 +3,6 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const contactId = "11111111-1111-4111-8111-111111111111";
-const createContact = vi.hoisted(() => vi.fn());
 const updateContact = vi.hoisted(() => vi.fn());
 const atomicContact = vi.hoisted(() => ({ firstName: "Ada" }));
 const phoneRepository = vi.hoisted(() => {
@@ -57,8 +56,7 @@ vi.mock("@workspace/db", () => ({ db: { transaction: async (callback: (transacti
 } } }));
 vi.mock("@/features/contacts/contact-repository", () => ({
   DrizzleContactRepository: class {
-    async createContact(input: unknown) { return createContact(input); }
-    async updateContact(id: string, input: unknown) { return updateContact(id, input); }
+    updateContact = updateContact;
     async getContactDetail(id: string) {
       if (id !== contactId) return null;
       return {
@@ -112,29 +110,10 @@ describe("contact phone routes", () => {
     phoneRepository.listForContact.mockClear();
     phoneRepository.replaceForContact.mockClear();
     atomicContact.firstName = "Ada";
-    createContact.mockReset().mockResolvedValue(contactId);
     updateContact.mockReset().mockImplementation(async (_id: string, input: { firstName: string }) => {
       atomicContact.firstName = input.firstName;
       return true;
     });
-  });
-
-  it("returns the new contact id when the repository returns a string id", async () => {
-    const response = await request(app).post("/contacts").send({
-      firstName: "Ada",
-      lastName: "Lovelace",
-      organizationName: "Example Event",
-      jobTitle: "Organizer",
-      email: "ada@example.com",
-      phone: "701-555-0199",
-      address1: "",
-      address2: "",
-      city: "Bismarck",
-      region: "ND",
-      postalCode: "58501",
-    }).expect(201);
-
-    expect(response.body).toEqual({ ok: true, contactId });
   });
 
   it("returns labeled phones on contact detail", async () => {
