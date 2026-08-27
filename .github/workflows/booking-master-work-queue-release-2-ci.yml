@@ -65,6 +65,7 @@ jobs:
           src/components/opportunities/opportunity-draft-composer.test.tsx
           src/components/opportunities/follow-up-after-send.test.tsx
           src/components/today/ready-to-send-section.test.tsx
+          src/components/today/master-work-queue.test.tsx
           --environment jsdom
       - name: Database build
         run: pnpm --filter @workspace/db build
