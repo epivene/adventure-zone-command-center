@@ -84,7 +84,7 @@ describe("EventMap planning interactions", () => {
 
   it("shows a clear zero-result state instead of implying the map is still meaningful", () => {
     render(<EventMap events={events} travelLegs={legs} />);
-    fireEvent.change(screen.getByLabelText("Overlaps after"), { target: { value: "2027-01-01" } });
+    fireEvent.change(screen.getByLabelText("After"), { target: { value: "2027-01-01" } });
     expect(screen.getByText("No matching route events")).toBeInTheDocument();
   });
 
@@ -92,7 +92,7 @@ describe("EventMap planning interactions", () => {
     render(<EventMap events={events} travelLegs={legs} />);
     fireEvent.click(screen.getByRole("button", { name: "Potential" }));
     fireEvent.change(screen.getByLabelText("State"), { target: { value: "MT" } });
-    fireEvent.click(screen.getByRole("button", { name: "Reset map scope" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
     expect(screen.getByText("Showing 2026")).toBeInTheDocument();
     expect(screen.getByLabelText("State")).toHaveValue("");
   });
