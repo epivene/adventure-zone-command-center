@@ -1,5 +1,5 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -32,13 +32,17 @@
   "notes": [
     {
       "subject": "Carol O'Donnell reply — 2026 OktoberFest outreach",
-      "body": "Carol O'Donnell replied Aug. 27, 2026 and passed because the package is not in the event budget. She also explained that CS OktoberFest used to bring in one inflatable, but stopped after an unauthorized birthday-party group overloaded it and it deflated. Desiree prepared a reply explaining the pay-per-play option, full event staffing/supervision, complete setup/teardown, and $2M additional-insured coverage, and included the Adventure Zone website and video. Treat this as a budget/operations objection rather than a permanent event-fit rejection. Source: Adventure Zone Gmail thread, Aug. 27, 2026."
+      "body": "Carol O'Donnell replied Aug. 27, 2026 and passed because the package is not in the event budget. She also explained that CS OktoberFest used to bring in one inflatable, but stopped after an unauthorized birthday-party group overloaded it and it deflated. Desiree replied explaining the pay-per-play option, full event staffing/supervision, complete setup/teardown, and $2M additional-insured coverage, and included the Adventure Zone website and video. Treat this as a budget/operations objection rather than a permanent event-fit rejection. Source: Adventure Zone Gmail thread, Aug. 27, 2026."
+    },
+    {
+      "subject": "Carol follow-up — future interest, kids craft fair, Mini Zone mentioned",
+      "body": "Carol replied again Aug. 27, 2026 that she will keep Adventure Zone in mind for the future. She explained that CS OktoberFest brought in a kids' craft fair last year that filled most of the remaining open space; it is returning again in 2026, with roughly 20 booths each day on Saturday and Sunday, all crafts made and sold by kids. Desiree prepared a short closing reply acknowledging that the craft fair sounds like a good fit and mentioning, only in passing, that Adventure Zone also has a smaller Mini Zone option that takes much less space than the full Adventure Zone if a smaller opening becomes available in a future year. Do not treat this as an active 2026 opportunity, but preserve it as a warm future lead. Source: Adventure Zone Gmail thread, Aug. 27, 2026."
     }
   ],
   "followUps": [
     {
       "label": "2027 OktoberFest follow-up",
-      "reason": "If 2026 does not move forward, reconnect early for 2027. Carol's stated blocker was budget, and pay-per-play plus staffed/supervised operation may address the concerns she raised.",
+      "reason": "Reconnect early for 2027. Carol said she will keep Adventure Zone in mind for the future. 2026 blockers were budget and limited remaining space because a kids' craft fair occupies much of the open area. In future outreach, remember that pay-per-play may address budget concerns and the smaller Mini Zone was already mentioned as a possible fit when space is limited.",
       "dueAt": "2027-01-15T16:00:00.000Z"
     }
   ]
