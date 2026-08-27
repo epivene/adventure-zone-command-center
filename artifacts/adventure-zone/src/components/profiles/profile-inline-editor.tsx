@@ -88,7 +88,12 @@ function fallbackContactDraft(contact: ContactSummary | null, organizationName =
 }
 
 function updatePrimaryPhone(phones: ContactDetail["phones"], number: string) {
-  if (!phones.length) return phones;
+  if (!phones.length) {
+    const trimmed = number.trim();
+    return trimmed
+      ? [{ id: null, number: trimmed, type: "unknown", extension: null, label: null, primary: true }]
+      : [];
+  }
   let updated = false;
   return phones.map((phone, index) => {
     const shouldUpdate = Boolean(phone.primary) || (!updated && index === 0);
