@@ -52,6 +52,7 @@ jobs:
           src/features/opportunity-email/opportunity-email-rewrite.test.ts
           src/features/opportunity-email/opportunity-email-delivery.test.ts
           src/features/opportunity-email/opportunity-email-activity.test.ts
+          src/features/opportunity-email/opportunity-email-workflow.test.ts
           src/features/opportunity-email/send-window.test.ts
           src/features/opportunity-email/ready-to-send-service.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher.test.ts
