@@ -43,6 +43,13 @@ type ProfileSearchResponse = {
   results?: unknown;
 };
 
+class ApprovedProfileMatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApprovedProfileMatchError";
+  }
+}
+
 function normalized(value: unknown) {
   return typeof value === "string"
     ? value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
@@ -78,7 +85,9 @@ function selectExistingProfile(
   const exact = organizations.filter((result) => normalized(result.label) === eventName);
   if (exact.length === 1) return String(exact[0]!.id);
   if (exact.length > 1) {
-    throw new Error(`Approved profile import ${file} matched more than one existing profile.`);
+    throw new ApprovedProfileMatchError(
+      `Approved profile import ${file} matched more than one existing profile.`,
+    );
   }
 
   const close = organizations.filter((result) => {
@@ -87,7 +96,9 @@ function selectExistingProfile(
   });
   if (close.length === 1) return String(close[0]!.id);
   if (close.length > 1) {
-    throw new Error(`Approved profile import ${file} matched more than one existing profile.`);
+    throw new ApprovedProfileMatchError(
+      `Approved profile import ${file} matched more than one existing profile.`,
+    );
   }
   return null;
 }
@@ -226,6 +237,7 @@ export async function importApprovedProfilesAtStartup(
 
   const files = entries.filter((entry) => entry.endsWith(".json")).sort();
   let imported = 0;
+  let skipped = 0;
 
   for (const file of files) {
     const fullPath = path.join(directory, file);
@@ -233,12 +245,23 @@ export async function importApprovedProfilesAtStartup(
     const originalPayload = JSON.parse(raw) as ApprovedProfilePayload;
     const notes = readApprovedNotes(originalPayload, file);
     const followUps = readApprovedFollowUps(originalPayload, file);
-    const payload = await resolveExistingProfile({
-      port,
-      token,
-      payload: originalPayload,
-      file,
-    });
+
+    let payload: ApprovedProfilePayload;
+    try {
+      payload = await resolveExistingProfile({
+        port,
+        token,
+        payload: originalPayload,
+        file,
+      });
+    } catch (error) {
+      if (error instanceof ApprovedProfileMatchError) {
+        skipped += 1;
+        logger.warn({ file }, "Approved profile import skipped because profile match was ambiguous");
+        continue;
+      }
+      throw error;
+    }
 
     const responseBody = await requestAssistantJson({
       port,
@@ -286,5 +309,5 @@ export async function importApprovedProfilesAtStartup(
     logger.info({ file }, "Approved profile imported at startup");
   }
 
-  return { imported, skipped: 0, files };
+  return { imported, skipped, files };
 }
