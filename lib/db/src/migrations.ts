@@ -523,6 +523,14 @@ const migrationFiles = [
          AND conname IN ('package_templates_normal_capacity_nonnegative', 'package_templates_temporary_unavailable_quantity_nonnegative', 'lead_availability_snapshots_package_availability_object'))
       AS ready`,
   },
+  {
+    name: "070_booking_opportunities.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.booking_opportunities') IS NOT NULL
+      AND to_regclass(current_schema() || '.booking_opportunity_queue_overrides') IS NOT NULL
+      AND to_regclass(current_schema() || '.booking_opportunities_organization_year_unique') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
