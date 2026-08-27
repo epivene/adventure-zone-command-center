@@ -7,21 +7,43 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Correct adult-only event handling
+      - name: Week 4 batch 1 profile screen
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-
-          NOTE=$(jq -n '{
-            organizationId:"ba8b0b3c-4265-4d71-9e81-d8144f491cd5",
-            subject:"CORRECTION - adult-only events can be viable",
-            body:"Correction to the earlier Week 3 review: adult-only / 21+ status by itself is NOT a reason to classify an event as a non-fit. The Adventure Zone can make special arrangements for adult-only events by combining the inflatables into one large obstacle-course style experience. Colorado Mountain Winefest should therefore remain eligible for case-by-case consideration. For this specific event, current 2026 materials describe a curated, invitation-only activation model, so organizer fit/approval still needs to be evaluated before outreach. This note supersedes the earlier age-based non-fit reasoning."
-          }')
-          curl --fail-with-body --silent --show-error \
-            -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            -H "Content-Type: application/json" \
-            -X POST "${BASE}/api/assistant-import/profile-notes" \
-            --data-binary "$NOTE"
-          echo
+          cat > /tmp/events.txt <<'EOF'
+          Errl Camp, The [Pot Festival] (Tempe) AZ
+          Broomfield Days (Midway) CO
+          Red River Folk Festival (Red River) NM
+          Oktoberfest (Casper) WY
+          Pahrump Fall Festival (Pahrump) NV
+          Prickly Pear Festival (Albuquerque) NM
+          Sheridan Celebrates (Sheridan) CO
+          Color Country OHV Jamboree (Parowan) UT
+          County Fair - Southern New Mexico State Fair (Las Cruces) NM
+          Oktoberfest (Montrose) CO
+          Ak-Chin Native American Recognition Day (Maricopa) AZ
+          Riverton Fall Harvest Festival (Riverton) WY
+          EOF
+          while IFS= read -r Q; do
+            [ -z "$Q" ] && continue
+            echo "=== QUERY: ${Q} ==="
+            RESP=$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --get --data-urlencode "q=${Q}" \
+              "${BASE}/api/assistant-import/profile-search")
+            echo "$RESP" | jq -c '.results'
+            STATE=$(printf '%s' "$Q" | sed -E 's/.*\) ([A-Z]{2}).*/\1/')
+            if [ "$STATE" != "NM" ]; then
+              ID=$(echo "$RESP" | jq -r '[.results[] | select(.kind=="organization")][0].id // empty')
+              if [ -n "$ID" ]; then
+                echo "=== HISTORY: ${ID} ==="
+                curl --fail-with-body --silent --show-error \
+                  -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                  "${BASE}/api/assistant-import/profile-history/${ID}" | jq -c '{profileId,place,contacts,bookings,followUps,notes,history}'
+              fi
+            fi
+            echo
+          done < /tmp/events.txt
