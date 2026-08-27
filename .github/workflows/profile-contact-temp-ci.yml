@@ -18,7 +18,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Focused contact tests
+      - name: Backend contact tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/contacts.test.ts
+      - name: Focused frontend contact tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/profiles/profile-inline-editor.test.tsx src/pages/ContactDetailPage.test.tsx src/pages/ContactDetailPage.route.test.tsx
+      - name: Backend typecheck
+        run: pnpm --filter @workspace/api-server exec tsc --noEmit
       - name: Frontend typecheck
         run: pnpm --filter @workspace/adventure-zone exec tsc --noEmit
