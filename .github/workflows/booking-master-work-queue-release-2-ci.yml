@@ -45,5 +45,6 @@ jobs:
           src/features/opportunity-email/send-window.test.ts
           src/features/opportunity-email/ready-to-send-service.test.ts
           src/routes/opportunity-drafts.test.ts
+          src/routes/today-ready-to-send.test.ts
       - name: Database build
         run: pnpm --filter @workspace/db build
