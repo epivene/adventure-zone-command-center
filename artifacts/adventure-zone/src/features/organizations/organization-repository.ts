@@ -75,7 +75,6 @@ export function organizationOwnedRecordCondition(
   return sql`(
     (${columns.organizationId} is not null and ${matchesExplicitOrganization})
     or (${columns.organizationId} is null and ${columns.bookingId} is not null and ${matchesBookingOrganization})
-    or (${columns.organizationId} is null and ${columns.bookingId} is not null and ${matchesBookingOrganization})
     or (${columns.organizationId} is null and ${columns.bookingId} is null and ${columns.contactId} is not null and ${matchesContactAssociation})
   )`;
 }
