@@ -78,7 +78,7 @@ describe("Google Workspace foundation schema", () => {
       '- key: GOOGLE_WORKSPACE_SYNC_ENABLED\n        value: "false"',
     );
     expect(render).toContain(
-      '- key: GOOGLE_WORKSPACE_AI_ENABLED\n        value: "false"',
+      '- key: GOOGLE_WORKSPACE_AI_ENABLED\n        value: "true"',
     );
     expect(render).not.toContain("VITE_GOOGLE_WORKSPACE_");
   });

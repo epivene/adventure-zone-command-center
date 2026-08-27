@@ -86,6 +86,12 @@ function mockDashboard(value: ReturnType<typeof dashboard>) {
   });
 }
 
+function summaryWithText(text: string) {
+  return screen.getByText((_content, node) =>
+    node?.tagName === "SUMMARY" && node.textContent?.replace(/\s+/g, " ").trim() === text,
+  );
+}
+
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
@@ -149,7 +155,7 @@ describe("TodayPage renewals", () => {
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
-    expect(screen.getByText("Needs a decision (1)")).toBeInTheDocument();
+    expect(summaryWithText("Needs a decision (1)")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Could not load next-season renewals.",
     );
@@ -168,7 +174,7 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    const decisionsSummary = screen.getByText("Needs a decision (2)");
+    const decisionsSummary = summaryWithText("Needs a decision (2)");
     const decisions = decisionsSummary.closest("details");
     expect(decisions).not.toHaveAttribute("open");
     fireEvent.click(decisionsSummary);
@@ -191,7 +197,7 @@ describe("TodayPage renewals", () => {
       expect(screen.getByRole("heading", { name: "Today" })).toBeInTheDocument();
     });
 
-    const contracts = screen.getByText("Contracts (2)").closest("details");
+    const contracts = summaryWithText("Contracts (2)").closest("details");
     const later = screen.getByText("Later").closest("details");
     expect(contracts).not.toHaveAttribute("open");
     expect(later).not.toHaveAttribute("open");

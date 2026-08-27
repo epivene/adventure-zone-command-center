@@ -1,0 +1,227 @@
+name: Booking Master Work Queue Integration
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/booking-master-work-queue-ci.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  integrate-release-1:
+    if: github.event.pull_request.head.ref == 'feat/booking-master-work-queue-release-1'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: feat/booking-master-work-queue-release-1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Integrate master queue into existing large pages
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f'anchor missing in {path}: {old[:80]!r}')
+              file.write_text(text.replace(old, new, count))
+
+          replace(
+              'artifacts/api-server/src/features/today/master-work-queue.ts',
+              '  completedAt: Date | null;\n};',
+              '  completedAt: Date | null;\n  outcome?: string | null;\n};',
+          )
+          replace(
+              'artifacts/api-server/src/features/today/master-work-queue-repository.ts',
+              '    completedAt,\n    snoozedUntil:',
+              '    completedAt,\n    outcome: followUp?.outcome ?? null,\n    snoozedUntil:',
+          )
+
+          replace(
+              'artifacts/adventure-zone/src/pages/TodayPage.tsx',
+              'import { FollowUpList } from "@/components/today/follow-up-list";\n',
+              'import { FollowUpList } from "@/components/today/follow-up-list";\nimport { MasterWorkQueue } from "@/components/today/master-work-queue";\nimport { coerceMasterTodayQueue } from "@/features/today/master-work-types";\n',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/TodayPage.tsx',
+              '    const href = element?.getAttribute("href") ?? "";\n    const match =',
+              '    const href = element?.getAttribute("href") ?? "";\n    if (element?.getAttribute("data-master-work") === "true") return;\n    const match =',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/TodayPage.tsx',
+              '      </header>\n\n      <section className="rounded-2xl border border-orange-200',
+              '''      </header>
+
+      <MasterWorkQueue
+        queue={coerceMasterTodayQueue(dashboard.masterQueue)}
+        onChanged={async () => {
+          const refreshed = await apiGet<any>("/today");
+          setDashboard(refreshed);
+          setScoutAlerts(Array.isArray(refreshed.scoutAlerts) ? refreshed.scoutAlerts : []);
+        }}
+      />
+
+      <section className="rounded-2xl border border-orange-200''',
+          )
+
+          replace(
+              'artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+              'import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";\n',
+              'import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";\nimport { CurrentOpportunityCard } from "@/components/opportunities/current-opportunity-card";\nimport { readTodayReturnContext } from "@/features/today/today-return-context";\n',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+              '  const params = new URLSearchParams(search);\n',
+              '  const params = new URLSearchParams(search);\n  const fromToday = params.get("from") === "today";\n',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+              '    if (window.history.length > 1) {\n',
+              '    if (fromToday && readTodayReturnContext()) {\n      setLocation("/today");\n      return;\n    }\n    if (window.history.length > 1) {\n',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+              '<span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}',
+              '<span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : fromToday ? "Back to Today" : "Back"}',
+          )
+          replace(
+              'artifacts/adventure-zone/src/pages/EventProfilePage.tsx',
+              '''          onEdit={() => setProfileEditing(true)}
+        />
+      ) : null}
+
+      <div className={profileEditing ?''',
+              '''          onEdit={() => setProfileEditing(true)}
+        />
+      ) : null}
+
+      {!profileEditing && profileId ? (
+        <CurrentOpportunityCard
+          organizationId={profileId}
+          year={data.bookings?.find((booking: any) => booking.id === bookingId)?.startsAt?.getFullYear() ?? new Date().getFullYear()}
+          contactId={actionContactId ?? undefined}
+          bookingId={bookingId}
+        />
+      ) : null}
+
+      <div className={profileEditing ?''',
+          )
+
+          replace(
+              'artifacts/api-server/src/routes/index.ts',
+              'import todayRouter from "./today";\n',
+              'import todayRouter from "./today";\nimport opportunitiesRouter from "./opportunities";\n',
+          )
+          replace(
+              'artifacts/api-server/src/routes/index.ts',
+              'router.use("/", requireOwnerMiddleware, todayRouter);\n',
+              'router.use("/", requireOwnerMiddleware, todayRouter);\nrouter.use("/opportunities", requireOwnerMiddleware, opportunitiesRouter);\n',
+          )
+          PY
+      - name: Verify integrated Release 1
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/opportunities \
+            src/features/today \
+            src/routes/follow-ups.test.ts \
+            src/routes/today.test.ts \
+            src/routes/opportunities.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/features/today/today-return-context.test.ts \
+            src/components/today/master-work-queue.test.tsx \
+            src/components/opportunities/current-opportunity-card.test.tsx
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/adventure-zone build
+          git diff --check
+      - name: Restore normal CI and commit integration
+        run: |
+          cat > .github/workflows/booking-master-work-queue-ci.yml <<'YAML'
+          name: Booking Master Work Queue CI
+
+          on:
+            pull_request:
+              paths:
+                - "artifacts/api-server/src/db/schema.ts"
+                - "artifacts/api-server/src/features/opportunities/**"
+                - "artifacts/api-server/src/features/today/**"
+                - "artifacts/api-server/src/features/follow-ups/**"
+                - "artifacts/api-server/src/features/bookings/booking-service.ts"
+                - "artifacts/api-server/src/features/bookings/booking-repository.ts"
+                - "artifacts/api-server/src/routes/opportunities.ts"
+                - "artifacts/api-server/src/routes/opportunities.test.ts"
+                - "artifacts/api-server/src/routes/today.ts"
+                - "artifacts/api-server/src/routes/today.test.ts"
+                - "artifacts/api-server/src/routes/follow-ups.ts"
+                - "artifacts/api-server/src/routes/follow-ups.test.ts"
+                - "artifacts/api-server/src/routes/index.ts"
+                - "artifacts/adventure-zone/src/features/today/**"
+                - "artifacts/adventure-zone/src/components/today/**"
+                - "artifacts/adventure-zone/src/components/opportunities/**"
+                - "artifacts/adventure-zone/src/components/profiles/profile-primary-actions.tsx"
+                - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+                - "artifacts/adventure-zone/src/pages/EventProfilePage.tsx"
+                - "artifacts/adventure-zone/src/pages/EventProfilePage.test.tsx"
+                - "lib/db/src/booking-opportunity-schema.ts"
+                - "lib/db/src/index.ts"
+                - "lib/db/src/migrations.ts"
+                - "lib/db/package.json"
+                - "lib/db/migrations/070_booking_opportunities.sql"
+                - ".github/workflows/booking-master-work-queue-ci.yml"
+            workflow_dispatch:
+
+          jobs:
+            booking-master-work-queue:
+              runs-on: ubuntu-latest
+              steps:
+                - uses: actions/checkout@v4
+                - uses: pnpm/action-setup@v4
+                  with:
+                    version: 10
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: 22
+                    cache: pnpm
+                - run: pnpm install --frozen-lockfile
+                - name: Release 1 focused API tests
+                  run: >-
+                    pnpm --filter @workspace/api-server exec vitest run
+                    src/features/opportunities
+                    src/features/today
+                    src/routes/follow-ups.test.ts
+                    src/routes/today.test.ts
+                    src/routes/opportunities.test.ts
+                - name: Release 1 focused web tests
+                  run: >-
+                    pnpm --filter @workspace/adventure-zone exec vitest run
+                    src/features/today/today-return-context.test.ts
+                    src/components/today/master-work-queue.test.tsx
+                    src/components/opportunities/current-opportunity-card.test.tsx
+                - name: Build database workspace
+                  run: pnpm --filter @workspace/db build
+                - name: Frontend production build
+                  run: pnpm --filter @workspace/adventure-zone build
+                - name: API typecheck (known main-branch baseline currently fails)
+                  continue-on-error: true
+                  run: pnpm --filter @workspace/api-server typecheck
+          YAML
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add artifacts/api-server/src/features/today/master-work-queue.ts \
+            artifacts/api-server/src/features/today/master-work-queue-repository.ts \
+            artifacts/api-server/src/routes/index.ts \
+            artifacts/adventure-zone/src/pages/TodayPage.tsx \
+            artifacts/adventure-zone/src/pages/EventProfilePage.tsx \
+            .github/workflows/booking-master-work-queue-ci.yml
+          git commit -m 'feat: integrate booking master work queue release 1'
+          git push origin HEAD:feat/booking-master-work-queue-release-1

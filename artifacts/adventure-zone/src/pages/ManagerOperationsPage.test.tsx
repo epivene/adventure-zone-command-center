@@ -54,6 +54,6 @@ describe("ManagerOperationsPage", () => {
     render(<ManagerOperationsPage />);
     expect(await screen.findByRole("heading", { name: "Mileage" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Maintenance" })).toBeInTheDocument();
-    expect(screen.getByText(/No current trip/)).toBeInTheDocument();
+    expect(screen.getByText(/No formal trip has been created yet/)).toBeInTheDocument();
   });
 });

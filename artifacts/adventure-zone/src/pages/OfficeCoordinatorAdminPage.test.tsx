@@ -15,8 +15,8 @@ describe("owner Office Coordinator controls",()=>{
     expect(source).toContain("/event-profiles/${profile.id}");
     expect(source).toContain("task.contactFirstName");
   });
-  it("keeps Office Coordinator navigation with bookings and follow-ups",()=>{
-    const bookingGroup=menu.slice(menu.indexOf('label: "Bookings & Follow-ups"'),menu.indexOf('label: "Legs & Operations"'));
-    expect(bookingGroup).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
+  it("keeps Office Coordinator in the booking workspace",()=>{
+    const bookingItems=menu.slice(menu.indexOf("const bookingItems"),menu.indexOf("const bookingGroups"));
+    expect(bookingItems).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
   });
 });

@@ -11,6 +11,7 @@ import * as eventAttendanceHistorySchema from "./event-attendance-history-schema
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 import * as googleWorkspaceSchema from "./google-workspace-schema";
 import * as leadIntakeSchema from "./lead-intake-schema";
+import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 
 const { Pool } = pg;
 
@@ -48,6 +49,7 @@ const schema = {
   ...officeCoordinatorSchema,
   ...googleWorkspaceSchema,
   ...leadIntakeSchema,
+  ...bookingOpportunitySchema,
 };
 export const db = drizzle(pool, { schema });
 
@@ -62,3 +64,4 @@ export * from "./event-attendance-history-schema";
 export * from "./office-coordinator-schema";
 export * from "./google-workspace-schema";
 export * from "./lead-intake-schema";
+export * from "./booking-opportunity-schema";
