@@ -1,0 +1,31 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Colorado Springs Oktoberfest",
+    "city": "Colorado Springs",
+    "region": "CO"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "call",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Pay-per-play terms — historical guidance",
+      "body": "Important for future conversations with Carol O'Donnell / CS OktoberFest: Adventure Zone has used multiple pay-per-play structures historically, so do not promise one universal guarantee structure without Dave confirming the deal for this event. Examples found in 2026 Gmail history: (1) Mini Zone at no upfront cost with a $5,000 sales guarantee; after Adventure Zone reaches that sales amount, the event receives a percentage of ticket-box sales. (2) Hybrid structure where the event pays half the normal package price upfront, Adventure Zone charges the public, and after total receipts reach the normal package-price goal the event receives 10% of ticket-box sales. (3) In some cases Adventure Zone has offered no-upfront/no-guarantee pay-per-play with a percentage back to the event. Other 2026 emails confirm a 10% ticket-box share in some pay-per-play arrangements. Treat pay-per-play terms as event-specific and confirm any guarantee/minimum and percentage with Dave before quoting them as firm terms. Source: Adventure Zone Gmail history reviewed Aug. 27, 2026."
+    }
+  ],
+  "followUps": []
+}
