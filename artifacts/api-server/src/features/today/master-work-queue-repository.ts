@@ -12,6 +12,7 @@ import {
 import type { db as database } from "@/db/client";
 import {
   bookingOpportunities,
+  bookingOpportunityEmailState,
   bookingOpportunityQueueOverrides,
   bookings,
   followUps,
@@ -23,6 +24,7 @@ import type {
 } from "@/features/opportunities/opportunity-types";
 import { businessDateKey, businessDayBounds } from "@/lib/business-date";
 import {
+  applyEmailFailuresToCandidates,
   buildMasterTodayQueue,
   type MasterTodayQueue,
   type MasterWorkCandidate,
@@ -227,22 +229,43 @@ export async function loadMasterTodayQueue(
     .where(notInArray(bookingOpportunities.status, closedOpportunityStatuses));
 
   const opportunityIds = opportunityRows.map(({ id }) => id);
-  const overrideRows: QueueOverrideProjection[] = opportunityIds.length
-    ? await database
-        .select({
-          opportunityId: bookingOpportunityQueueOverrides.opportunityId,
-          pinned: bookingOpportunityQueueOverrides.pinned,
-          manualOrder: bookingOpportunityQueueOverrides.manualOrder,
-          snoozedUntil: bookingOpportunityQueueOverrides.snoozedUntil,
-        })
-        .from(bookingOpportunityQueueOverrides)
-        .where(
-          and(
-            eq(bookingOpportunityQueueOverrides.businessDate, businessDate),
-            inArray(bookingOpportunityQueueOverrides.opportunityId, opportunityIds),
-          ),
-        )
-    : [];
+  const [overrideRows, failedEmailRows] = await Promise.all([
+    opportunityIds.length
+      ? database
+          .select({
+            opportunityId: bookingOpportunityQueueOverrides.opportunityId,
+            pinned: bookingOpportunityQueueOverrides.pinned,
+            manualOrder: bookingOpportunityQueueOverrides.manualOrder,
+            snoozedUntil: bookingOpportunityQueueOverrides.snoozedUntil,
+          })
+          .from(bookingOpportunityQueueOverrides)
+          .where(
+            and(
+              eq(bookingOpportunityQueueOverrides.businessDate, businessDate),
+              inArray(bookingOpportunityQueueOverrides.opportunityId, opportunityIds),
+            ),
+          )
+      : Promise.resolve([] as QueueOverrideProjection[]),
+    opportunityIds.length
+      ? database
+          .select({
+            opportunityId: bookingOpportunityEmailState.opportunityId,
+            lastFailureMessage: bookingOpportunityEmailState.lastFailureMessage,
+            lastFailureCode: bookingOpportunityEmailState.lastFailureCode,
+          })
+          .from(bookingOpportunityEmailState)
+          .where(
+            and(
+              eq(bookingOpportunityEmailState.state, "failed"),
+              inArray(bookingOpportunityEmailState.opportunityId, opportunityIds),
+            ),
+          )
+      : Promise.resolve([] as Array<{
+          opportunityId: string;
+          lastFailureMessage: string | null;
+          lastFailureCode: string | null;
+        }>),
+  ]);
 
   const followUpRows: FollowUpProjection[] = await database
     .select({
@@ -287,6 +310,12 @@ export async function loadMasterTodayQueue(
   );
   const overrideByOpportunity = new Map(
     overrideRows.map((row) => [row.opportunityId, row]),
+  );
+  const failuresByOpportunity = new Map(
+    failedEmailRows.map((row) => [
+      row.opportunityId,
+      row.lastFailureMessage ?? row.lastFailureCode ?? "Email delivery failed",
+    ]),
   );
   const byBooking = new Map(
     opportunityRows.flatMap((row) => (row.bookingId ? [[row.bookingId, row] as const] : [])),
@@ -361,5 +390,8 @@ export async function loadMasterTodayQueue(
     );
   }
 
-  return buildMasterTodayQueue(candidates, now);
+  return buildMasterTodayQueue(
+    applyEmailFailuresToCandidates(candidates, failuresByOpportunity),
+    now,
+  );
 }
