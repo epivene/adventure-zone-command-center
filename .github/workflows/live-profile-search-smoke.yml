@@ -7,24 +7,28 @@ jobs:
   smoke:
     runs-on: ubuntu-24.04
     steps:
-      - name: Week 4 batch 2 profile screen
+      - name: Week 4 batch 3 profile screen
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
           cat > /tmp/events.txt <<'EOF'
-          County Fair - Lewis (Nezperce) ID
-          Crested Butte ARTumn Festival (Crested Butte) CO
-          Durango Cowboy Poetry Gathering (Durango) CO
-          End of the Trail Kite Festival (Pine Bluffs) WY
-          Estes Park Autumn Gold (Estes Park, CO)
-          Ferrari Farms Fall Festival (Reno) NV
-          Founders Day (S SLC) UT
-          Fruita Fall Festival (Fruita) CO
-          Great Aardvark Embark Balloon Launch (Greeley) CO
-          Handmade in Colorado Expo (Glenwood Springs) CO
-          Handmade in Colorado Expo Cherry Creek (Denver) CO
+          Harvest Lantern Festival (Pocatello) ID
+          Hops Drops The Evergreen Music & Beer Festival (Evergreen) CO
+          Jackson Wild (Jackson) WY
+          Last Chance Community Powwow (Helena) MT
+          Lattin Farms Fall Festival (Fallon) NV
+          Loveland Stone Age Fair (Loveland) CO
+          Mineral County Rodeo (Hawthorne) NV
+          Morrison Ciderfest (Morrison) CO
+          Oktoberfest - Snow Mountain Brewery (Saratoga) WY
+          Oktoberfest (Colorado Springs) CO
+          Oktoberfest (Pocatello) ID
+          Palisade Art Festival (Palisade) CO
+          Parker Fall Festival (Parker) CO
+          Pikes Peak Regional Airshow (CO Springs) CO
+          Post Cereal Sale (Tremonton) UT
           EOF
           while IFS= read -r Q; do
             echo "=== QUERY: $Q ==="
