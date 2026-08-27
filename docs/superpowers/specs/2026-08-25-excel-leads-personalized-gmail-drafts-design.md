@@ -43,7 +43,11 @@ If package use in an overlapping Calendar entry is ambiguous, the app must not c
 
 ### Territory and fit
 
-Territory states are configurable with `Open`, `Ask Amy/Dave`, `Closed`, or `Licensing issue`. New Mexico, Oregon, California, Kansas, Oklahoma, and Texas are not actively pursued now. Restricted-state rows are held for review.
+Territory states are configurable with `Open`, `Ask Amy/Dave`, `Closed`, or `Licensing issue`.
+
+Current hard territory holds are New Mexico, Kansas, Oklahoma, and Texas. California remains a licensing restriction. These states are not actively pursued unless a lead is specifically approved.
+
+Oregon and Washington are **restricted, not on hold**. Because of weather risk, prepaid bookings are preferred in both states. Pay-for-play can still be considered when specifically approved. For Hulk's post-Labor-Day 2026 routing, pay-for-play in Oregon or Washington is allowed when it makes sense because he is already traveling back through the area.
 
 Adult-focused, alcohol, cannabis, generic, or otherwise questionable-fit entries go to review. They are not permanently rejected by hard-coded rules.
 
