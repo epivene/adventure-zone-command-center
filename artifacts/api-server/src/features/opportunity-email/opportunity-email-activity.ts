@@ -21,6 +21,11 @@ type BaseInput = {
   opportunityId: string;
 };
 
+function sentence(value: string): string {
+  const trimmed = value.trim();
+  return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
 export class OpportunityEmailActivityWriter {
   private readonly clock: Clock;
 
@@ -66,7 +71,7 @@ export class OpportunityEmailActivityWriter {
   }): Promise<void> {
     await this.write(
       input.opportunityId,
-      `Email ${input.operation} failed: ${input.message}.`,
+      `Email ${input.operation} failed: ${sentence(input.message)}`,
       input.occurredAt ?? this.clock.now(),
     );
   }
@@ -78,7 +83,7 @@ export class OpportunityEmailActivityWriter {
   }): Promise<void> {
     await this.write(
       input.opportunityId,
-      `Email draft needs review: ${input.message}.`,
+      `Email draft needs review: ${sentence(input.message)}`,
       input.occurredAt ?? this.clock.now(),
     );
   }
