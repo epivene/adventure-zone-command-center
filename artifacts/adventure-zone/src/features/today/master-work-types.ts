@@ -28,6 +28,7 @@ export type MasterWorkItem = {
   pinned: boolean;
   manualOrder: number | null;
   completedAt: string | null;
+  outcome: string | null;
 };
 
 export type MasterTodayQueue = {
