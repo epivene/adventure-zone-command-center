@@ -84,6 +84,13 @@ function deps(existing: OpportunityEmailRecord | null = null, resolvedContext = 
       updateDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-2", threadId: "thread-1" })),
     },
     blockerSink: { record: vi.fn(async () => undefined) },
+    workflowSink: {
+      recordDraftCreated: vi.fn(async () => undefined),
+      recordDraftUpdated: vi.fn(async () => undefined),
+      recordSent: vi.fn(async () => undefined),
+      recordScheduled: vi.fn(async () => undefined),
+      recordFailure: vi.fn(async () => undefined),
+    },
   };
 }
 
@@ -110,9 +117,13 @@ describe("OpportunityEmailService", () => {
       gmailMessageId: "gmail-message-1",
       purpose: "new_outreach",
     }));
+    expect(dependencies.workflowSink.recordDraftCreated).toHaveBeenCalledWith({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+    });
   });
 
-  it("reopens the existing current draft without generating or creating a duplicate Gmail draft", async () => {
+  it("reopens the existing current draft without generating, duplicating, or recording a new creation", async () => {
     const existing = record();
     const dependencies = deps(existing, context({ existingDraftId: existing.id }));
     const service = new OpportunityEmailService(dependencies);
@@ -123,6 +134,7 @@ describe("OpportunityEmailService", () => {
     expect(dependencies.draftGenerator.generate).not.toHaveBeenCalled();
     expect(dependencies.gmailDraftProvider.createDraft).not.toHaveBeenCalled();
     expect(dependencies.emailRepository.create).not.toHaveBeenCalled();
+    expect(dependencies.workflowSink.recordDraftCreated).not.toHaveBeenCalled();
   });
 
   it("records a material guardrail blocker and never creates Gmail content", async () => {
@@ -150,7 +162,7 @@ describe("OpportunityEmailService", () => {
     expect(dependencies.emailRepository.create).toHaveBeenCalledWith(expect.objectContaining({ purpose: "follow_up" }));
   });
 
-  it("saves manual edits to the same Gmail draft and app record without creating a follow-up", async () => {
+  it("saves manual edits to the same Gmail draft and records one meaningful update without creating a follow-up", async () => {
     const existing = record();
     const dependencies = deps(existing);
     const service = new OpportunityEmailService(dependencies);
@@ -175,6 +187,10 @@ describe("OpportunityEmailService", () => {
       gmailThreadId: "thread-1",
       state: "draft",
     }));
+    expect(dependencies.workflowSink.recordDraftUpdated).toHaveBeenCalledWith({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+    });
     expect(saved.subject).toBe("Edited subject");
   });
 
@@ -191,5 +207,6 @@ describe("OpportunityEmailService", () => {
     })).rejects.toThrow("OPPORTUNITY_EMAIL_DRAFT_MISMATCH");
 
     expect(dependencies.gmailDraftProvider.updateDraft).not.toHaveBeenCalled();
+    expect(dependencies.workflowSink.recordDraftUpdated).not.toHaveBeenCalled();
   });
 });
