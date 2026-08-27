@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { apiPatch, apiPost } from "@/lib/auth-token";
 import { OpportunityDraftComposer } from "./opportunity-draft-composer";
@@ -31,6 +31,10 @@ const draft = {
   createdAt: "2026-08-27T14:00:00.000Z",
   updatedAt: "2026-08-27T14:00:00.000Z",
 };
+
+afterEach(() => {
+  cleanup();
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
