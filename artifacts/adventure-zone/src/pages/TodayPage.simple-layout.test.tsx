@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const todaySource = readFileSync("src/pages/TodayPage.tsx", "utf8");
 const summarySource = readFileSync("src/components/today/summary-cards.tsx", "utf8");
+const mainSource = readFileSync("src/main.tsx", "utf8");
 
 describe("simple Today layout", () => {
   it("organizes the daily screen around Start here, My Work, Coming up, and Later", () => {
@@ -23,6 +24,12 @@ describe("simple Today layout", () => {
     expect(todaySource).toContain("laterFollowUps");
     expect(todaySource).toContain("Scheduled follow-ups");
     expect(todaySource.indexOf("Scheduled follow-ups")).toBeGreaterThan(todaySource.indexOf("Later"));
+  });
+
+  it("opens a targeted details panel from same-page shortcuts", () => {
+    expect(mainSource).toContain("target instanceof HTMLDetailsElement");
+    expect(mainSource).toContain("target.open = true");
+    expect(mainSource).toContain("target.scrollIntoView");
   });
 
   it("hides zero-value summary cards in the reusable summary component", () => {
