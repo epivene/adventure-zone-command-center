@@ -55,7 +55,11 @@ describe("POST /contacts", () => {
       postalCode: "58501",
     });
 
-    expect(response.status).toBe(201);
+    if (response.status !== 201) {
+      const logged = logErrorMock.mock.calls[0]?.[0] as { err?: Error } | undefined;
+      throw new Error(`POST /contacts returned ${response.status}: ${logged?.err?.message ?? JSON.stringify(response.body)}`);
+    }
+
     expect(response.body).toEqual({ ok: true, contactId: createdContactId });
     expect(createContactMock).toHaveBeenCalledOnce();
     expect(logErrorMock).not.toHaveBeenCalled();
