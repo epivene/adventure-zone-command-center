@@ -49,6 +49,17 @@ export type MasterTodayQueue = {
   completedToday: MasterWorkItem[];
 };
 
+export function applyEmailFailureAttention(
+  candidate: MasterWorkCandidate,
+  failureMessage: string,
+): MasterWorkCandidate {
+  return {
+    ...candidate,
+    kind: "review",
+    reason: `Email delivery failed: ${failureMessage}`,
+  };
+}
+
 function isDue(item: MasterWorkItem, now: Date): boolean {
   return Boolean(
     item.dueAt && classifyBusinessDueDate(item.dueAt, now) !== "future",
@@ -115,6 +126,7 @@ function compareWorkItems(
 function needsAttention(item: MasterWorkItem, now: Date): boolean {
   return (
     item.kind === "reply" ||
+    item.kind === "review" ||
     (item.kind === "callback" && isDue(item, now)) ||
     item.opportunityStatus === "interested" ||
     item.priority === "urgent"
