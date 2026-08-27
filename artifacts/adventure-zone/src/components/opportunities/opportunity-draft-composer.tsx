@@ -6,6 +6,7 @@ import type {
   OpportunityEmailDraft,
   OutreachCompletion,
 } from "@/features/opportunity-email/opportunity-email-types";
+import { FollowUpAfterSend } from "./follow-up-after-send";
 
 type Props = {
   draft: OpportunityEmailDraft;
@@ -56,6 +57,7 @@ export function OpportunityDraftComposer({
   const [body, setBody] = useState(draft.body);
   const [undoSnapshot, setUndoSnapshot] = useState<{ subject: string; body: string } | null>(null);
   const [scheduledFor, setScheduledFor] = useState("");
+  const [followUpReferenceAt, setFollowUpReferenceAt] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,6 +66,10 @@ export function OpportunityDraftComposer({
     setSubject(draft.subject);
     setBody(draft.body);
   }, [draft.id, draft.updatedAt]);
+
+  useEffect(() => {
+    setFollowUpReferenceAt(null);
+  }, [draft.id]);
 
   const statusText = useMemo(() => {
     if (currentDraft.state === "scheduled" && currentDraft.scheduledFor) {
@@ -131,6 +137,7 @@ export function OpportunityDraftComposer({
         { draftId: currentDraft.id, requestKey: requestKey("send", currentDraft.id) },
       );
       applyDraft(response.draft);
+      setFollowUpReferenceAt(response.followUpReferenceAt);
       onOutreachComplete?.({ kind: "sent", referenceAt: response.followUpReferenceAt });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The email was not sent.");
@@ -161,6 +168,7 @@ export function OpportunityDraftComposer({
         },
       );
       applyDraft(response.draft);
+      setFollowUpReferenceAt(response.followUpReferenceAt);
       onOutreachComplete?.({ kind: "scheduled", referenceAt: response.followUpReferenceAt });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not schedule the email.");
@@ -221,6 +229,14 @@ export function OpportunityDraftComposer({
         <button className="button-secondary" disabled={busy !== null} type="button" onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save Draft"}</button>
         <button className="button-primary" disabled={busy !== null} type="button" onClick={() => void sendNow()}>{busy === "send" ? "Sending…" : "Send"}</button>
       </div>
+
+      {followUpReferenceAt ? (
+        <FollowUpAfterSend
+          opportunityId={currentDraft.opportunityId}
+          referenceAt={followUpReferenceAt}
+          onDone={() => setFollowUpReferenceAt(null)}
+        />
+      ) : null}
     </section>
   );
 }
