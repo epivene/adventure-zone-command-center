@@ -110,6 +110,7 @@ beforeEach(() => {
 
 describe("follow-up owner routes", () => {
   it.each([
+    ["post", "/api/follow-ups"],
     ["patch", `/api/follow-ups/${followUpId}`],
     ["delete", `/api/follow-ups/${followUpId}`],
     ["post", `/api/follow-ups/${followUpId}/complete`],
@@ -122,6 +123,24 @@ describe("follow-up owner routes", () => {
       expect(response.body).toEqual({ error: "Unauthorized" });
     },
   );
+
+  it("creates one normal follow-up linked through the Opportunity", async () => {
+    const response = await request(testApp())
+      .post("/api/follow-ups")
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ opportunityId, kind: "email", dueAt: nextDueAt });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      ok: true,
+      followUp: {
+        kind: "email",
+        dueAt: nextDueAt,
+        completedAt: null,
+        outcome: null,
+      },
+    });
+  });
 
   it("returns the updated follow-up for a valid PATCH", async () => {
     const response = await request(testApp())
