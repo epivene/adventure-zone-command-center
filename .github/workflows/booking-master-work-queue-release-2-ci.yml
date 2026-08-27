@@ -58,6 +58,7 @@ jobs:
           src/features/google-workspace/google-gmail-delivery-connection.test.ts
           src/routes/opportunity-drafts.test.ts
           src/routes/today-ready-to-send.test.ts
+          src/routes/follow-ups.test.ts
       - name: Opportunity email composer tests
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
