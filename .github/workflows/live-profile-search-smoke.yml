@@ -7,36 +7,25 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - name: Audit current Gmail draft profiles
+      - name: Check alternate profile names for unmatched drafts
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE="https://adventure-zone-command-center.onrender.com"
-          cat > /tmp/events.txt <<'EOF'
-          The Springs Home Show
-          Rendezvous Royale
-          Telluride Autumn Classic
-          Rocky Mountain ATV Jamboree
-          Thousand Springs Festival of the Arts
-          Sandy Heritage Festival
-          Bear Lake Brawl Triathlon
-          A Blast on the Grass
-          International Arts & Crafts Festival
-          Colorfest Balloon Rally
-          Breck Film Fest
-          Durango Autumn Arts Festival
-          Saguache Fall Festival & Quilt Show
-          Holly Gateway Fair
-          Cochise County Fair
-          Santa Cruz County Fair
-          Colorado Highland Games
-          Cruisin' the Canyon Car Show
-          Experience Rexburg
-          Higher Ground Fair
-          Rides & Rods Classic Car Show
-          Fall Family Festival
-          International Camel & Ostrich Races
+          cat > /tmp/queries.txt <<'EOF'
+          Springs Home Show Colorado Springs
+          Colorado Springs Home Show
+          Nationwide Expos Colorado Springs
+          Blast on the Grass Hagerman
+          Hagerman Blast Grass
+          Gateway Fair Holly
+          Holly Fair
+          County Fair Cochise
+          Cochise Fair Douglas
+          County Fair Santa Cruz
+          Santa Cruz Fair Sonoita
+          Sonoita Fair
           EOF
           while IFS= read -r Q; do
             [ -z "$Q" ] && continue
@@ -44,7 +33,6 @@ jobs:
               -H "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
               --get --data-urlencode "q=${Q}" \
               "${BASE}/api/assistant-import/profile-search")
-            COUNT=$(printf '%s' "$RESP" | jq '.results | length')
-            echo "=== ${Q} | count=${COUNT} ==="
+            echo "=== ${Q} ==="
             printf '%s' "$RESP" | jq -c '.results'
-          done < /tmp/events.txt
+          done < /tmp/queries.txt
