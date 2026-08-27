@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { apiGet, apiPatch, apiPost, apiPut } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -76,6 +76,10 @@ describe("ProfileInlineEditor", () => {
     apiPatch.mockResolvedValue({ ok: true });
     apiPost.mockResolvedValue({ ok: true, contactId: "contact-new" });
     apiPut.mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   it("saves a clean event description with the profile", async () => {
