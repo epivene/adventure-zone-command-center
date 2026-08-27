@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import { organizationListQuerySchema } from "./last-resort-input";
-import { sortOrganizationRecords, type ProfileSortMetadata } from "./organization-list-sort";
+import { buildOrganizationListOrderBy } from "./organization-repository";
 
-const records = [
-  { id: "a", name: "Bravo Fair" },
-  { id: "b", name: "Alpha Festival" },
-  { id: "c", name: "Charlie Days" },
-];
-
-const metadata = new Map<string, ProfileSortMetadata>([
-  ["a", { createdAt: new Date("2025-01-01T00:00:00Z"), lastChangedAt: new Date("2026-08-10T00:00:00Z") }],
-  ["b", { createdAt: new Date("2026-01-01T00:00:00Z"), lastChangedAt: new Date("2026-08-25T00:00:00Z") }],
-  ["c", { createdAt: new Date("2024-01-01T00:00:00Z"), lastChangedAt: new Date("2026-07-01T00:00:00Z") }],
-]);
+function compiledOrder(sort: string) {
+  const query = organizationListQuerySchema.parse({ sort });
+  return buildOrganizationListOrderBy(query)
+    .map((part) => new PgDialect().sqlToQuery(part).sql)
+    .join(" ");
+}
 
 describe("organization list sorting", () => {
   it("defaults to recently updated", () => {
@@ -34,15 +30,22 @@ describe("organization list sorting", () => {
     }
   });
 
-  it("orders by the latest meaningful profile change", () => {
-    expect(sortOrganizationRecords(records, metadata, "recently_updated").map((record) => record.id)).toEqual(["b", "a", "c"]);
-    expect(sortOrganizationRecords(records, metadata, "least_recently_updated").map((record) => record.id)).toEqual(["c", "a", "b"]);
+  it("orders the database query by meaningful activity before pagination", () => {
+    const recent = compiledOrder("recently_updated");
+    const oldestActivity = compiledOrder("least_recently_updated");
+
+    expect(recent).toMatch(/activities/i);
+    expect(recent).toMatch(/updated_at/i);
+    expect(recent).toMatch(/desc/i);
+    expect(oldestActivity).toMatch(/activities/i);
+    expect(oldestActivity).toMatch(/updated_at/i);
+    expect(oldestActivity).toMatch(/asc/i);
   });
 
-  it("supports alphabetical and creation-date ordering", () => {
-    expect(sortOrganizationRecords(records, metadata, "name_asc").map((record) => record.id)).toEqual(["b", "a", "c"]);
-    expect(sortOrganizationRecords(records, metadata, "name_desc").map((record) => record.id)).toEqual(["c", "a", "b"]);
-    expect(sortOrganizationRecords(records, metadata, "created_desc").map((record) => record.id)).toEqual(["b", "a", "c"]);
-    expect(sortOrganizationRecords(records, metadata, "created_asc").map((record) => record.id)).toEqual(["c", "a", "b"]);
+  it("supports alphabetical and creation-date ordering in the database query", () => {
+    expect(compiledOrder("name_asc")).toMatch(/name.*asc/i);
+    expect(compiledOrder("name_desc")).toMatch(/name.*desc/i);
+    expect(compiledOrder("created_desc")).toMatch(/created_at.*desc/i);
+    expect(compiledOrder("created_asc")).toMatch(/created_at.*asc/i);
   });
 });
