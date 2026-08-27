@@ -2,19 +2,31 @@ import { z } from "zod";
 
 export const followUpIdSchema = z.string().uuid();
 
+const kindSchema = z
+  .string()
+  .transform((value) => value.trim())
+  .pipe(z.string().min(1, "Follow-up kind is required."));
+
+const dueAtSchema = z
+  .date()
+  .refine(
+    (value) => Number.isFinite(value.getTime()),
+    "Follow-up due date is invalid.",
+  );
+
+export const createFollowUpInputSchema = z.object({
+  organizationId: z.string().uuid(),
+  contactId: z.string().uuid().nullable(),
+  bookingId: z.string().uuid().nullable(),
+  kind: kindSchema,
+  dueAt: dueAtSchema,
+});
+
 export const editFollowUpInputSchema = z
   .object({
     followUpId: followUpIdSchema,
-    kind: z
-      .string()
-      .transform((value) => value.trim())
-      .pipe(z.string().min(1, "Follow-up kind is required.")),
-    dueAt: z
-      .date()
-      .refine(
-        (value) => Number.isFinite(value.getTime()),
-        "Follow-up due date is invalid.",
-      ),
+    kind: kindSchema,
+    dueAt: dueAtSchema,
     completed: z.boolean(),
     outcome: z.string().nullable(),
   })
