@@ -215,7 +215,7 @@ export default function TodayPage() {
           <FocusPrimaryAction href={focus.primaryHref} label={focus.primaryLabel} />
         </div>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
-          {followUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : null}
+          {actionableFollowUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : laterFollowUps.length ? <a className="text-orange-700 hover:underline" href="#later-work">Calls & follow-ups</a> : null}
           <Link className="text-orange-700 hover:underline" href="/bookings">Booking work</Link>
           <Link className="text-orange-700 hover:underline" href="/research-sources">Find opportunities</Link>
           <Link className="text-orange-700 hover:underline" href="/schedule">View schedule</Link>
@@ -312,7 +312,7 @@ export default function TodayPage() {
         </div>
       </section>
 
-      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <details id="later-work" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <summary className="cursor-pointer text-lg font-bold">Later{laterCount ? <span className="ml-2 text-sm font-semibold text-slate-500">{laterCount} scheduled follow-up{laterCount === 1 ? "" : "s"}</span> : null}</summary>
         <p className="mt-1 text-sm text-slate-600">Future follow-ups, schedule detail, trips, and renewals are here when you want them.</p>
         <div className="mt-4 grid gap-3">
