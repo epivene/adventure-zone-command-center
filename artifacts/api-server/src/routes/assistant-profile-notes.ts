@@ -18,10 +18,6 @@ const territoryHoldRules = {
     subject: "Territory hold - New Mexico",
     body: "Territory hold — New Mexico is not currently being actively pursued under current booking strategy. Do not send new outreach until this restriction is lifted or the lead is specifically approved.",
   },
-  OR: {
-    subject: "Territory hold - Oregon",
-    body: "Territory hold — Oregon is not currently being actively pursued under current booking strategy. Do not send new outreach until this restriction is lifted or the lead is specifically approved.",
-  },
   CA: {
     subject: "Territory hold - California licensing",
     body: "Territory hold — California is not currently being actively pursued due to licensing requirements. Do not send new outreach until the licensing restriction is resolved or the lead is specifically approved.",
@@ -116,7 +112,6 @@ router.post("/profile-notes/territory-holds", async (req, res): Promise<void> =>
     const now = new Date();
     const summary: Record<TerritoryHoldRegion, { profiles: number; created: number; existing: number }> = {
       NM: { profiles: 0, created: 0, existing: 0 },
-      OR: { profiles: 0, created: 0, existing: 0 },
       CA: { profiles: 0, created: 0, existing: 0 },
       KS: { profiles: 0, created: 0, existing: 0 },
       OK: { profiles: 0, created: 0, existing: 0 },
