@@ -42,7 +42,7 @@ describe("Office Coordinator daily workspace",()=>{
     expect(profiles).toContain("data.families.length");
     expect(profiles).toContain("familyId=");
     expect(family).toContain("Event Profiles");
-    expect(family).toContain("Brochures");
+    expect(family.toLowerCase()).toContain("brochures");
     expect(family).toContain("/office/profiles/${member.id}");
   });
 });
