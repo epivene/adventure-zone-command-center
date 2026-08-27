@@ -1,12 +1,14 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const apiGet = vi.hoisted(() => vi.fn());
+const { apiGet, navigate } = vi.hoisted(() => ({ apiGet: vi.fn(), navigate: vi.fn() }));
 const contactId = "20000000-0000-4000-8000-000000000001";
 
 vi.mock("@/lib/auth-token", () => ({ apiGet }));
 vi.mock("@/components/contacts/sync-state-badge", () => ({ SyncStateBadge: () => null }));
 vi.mock("@/components/activities/activity-timeline", () => ({ ActivityTimeline: () => null }));
+vi.mock("@/components/assistant/assistant-context-registration", () => ({ AssistantContextRegistration: () => null }));
+vi.mock("@/features/assistant/assistant-context", () => ({ useAssistantContext: () => ({ openAssistant: vi.fn() }) }));
 vi.mock("@/actions/activities", () => ({
   createActivityAction: vi.fn(),
   deleteActivityAction: vi.fn(),
@@ -15,13 +17,13 @@ vi.mock("@/actions/activities", () => ({
   loadTimelinePageAction: vi.fn(),
 }));
 vi.mock("wouter", () => ({
-  useParams: () => ({ contactId }),
+  useLocation: () => ["/contacts/test", navigate],
   Link: ({ href, children, ...props }: any) => <a href={href} {...props}>{children}</a>,
 }));
 
 import ContactDetailPage from "./ContactDetailPage";
 
-function detail(doNotCallAt: string | null) {
+function detail(doNotCallAt: string | null, places: any[] = []) {
   return {
     assistedCallingEnabled: true,
     contact: { firstName: "Sarah", lastName: "Miller", syncState: "unlinked" },
@@ -38,6 +40,7 @@ function detail(doNotCallAt: string | null) {
       doNotCallAt,
       doNotCallReason: doNotCallAt ? "Requested" : null,
     }],
+    places,
     relatedBookings: [],
     timeline: [],
   };
@@ -46,28 +49,33 @@ function detail(doNotCallAt: string | null) {
 afterEach(() => {
   cleanup();
   apiGet.mockReset();
+  navigate.mockReset();
 });
 
-describe("ContactDetailPage call actions", () => {
-  it("hides assisted Call and Log call entry points when the flag is off", async () => {
-    apiGet.mockResolvedValue({ ...detail(null), assistedCallingEnabled: false });
-    render(<ContactDetailPage />);
-    expect(await screen.findByText("Assisted calling is not enabled.")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Call" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Log call" })).not.toBeInTheDocument();
+describe("ContactDetailPage", () => {
+  it("routes a linked contact back to its primary profile", async () => {
+    apiGet.mockResolvedValue(detail(null, [{ id: "profile-1", name: "Example Event", isPrimaryPlace: true }]));
+    render(<ContactDetailPage contactId={contactId} />);
+
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith(
+      `/profiles/profile-1?contactId=${contactId}`,
+      { replace: true },
+    ));
   });
 
-  it("uses the contact ID for Call and Log call", async () => {
+  it("keeps the standalone fallback for an unlinked contact", async () => {
     apiGet.mockResolvedValue(detail(null));
-    render(<ContactDetailPage />);
+    render(<ContactDetailPage contactId={contactId} />);
 
-    expect(await screen.findByRole("link", { name: "Call" })).toHaveAttribute("href", `/calls/new?contactId=${contactId}`);
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Call" })).toHaveAttribute("href", `/calls/workspace?contactId=${contactId}`);
     expect(screen.getByRole("link", { name: "Log call" })).toHaveAttribute("href", `/calls/log?contactId=${contactId}`);
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("suppresses calling for a Do Not Call number but keeps historical logging", async () => {
     apiGet.mockResolvedValue(detail("2026-08-12T12:00:00.000Z"));
-    render(<ContactDetailPage />);
+    render(<ContactDetailPage contactId={contactId} />);
 
     expect(await screen.findByRole("button", { name: "Call" })).toBeDisabled();
     expect(screen.queryByRole("link", { name: "Call" })).not.toBeInTheDocument();
