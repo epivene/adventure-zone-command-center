@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Castle Rock Artfest", "city": "Castle Rock", "region": "CO"},
+  "profile": {"placeType": "festival_event", "phone": "303-688-4597", "website": "https://castlerock.org/castle-rock-artfest/", "description": "Active two-day downtown arts festival with a kids zone, but its Festival Park/Perry Street footprint is too constrained for Adventure Zone inflatables."},
+  "contacts": [{"id": null, "name": "Kevin McHugh", "phone": "303-688-4597", "email": "info@castlerock.org", "role": "Castle Rock Chamber / Artfest contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Kids zone exists, but event footprint has no room for inflatables", "body": "Kevin McHugh replied Aug. 17, 2026 that Artfest has a kids zone but does not have room for inflatables because the event is confined to Perry Street and Festival Park and most space is occupied by artists and sponsor tents. Current Castle Rock Chamber information confirms Artfest remains active Sept. 12-13, 2026 with 110+ artists. This is a structural footprint issue; do not repeatedly pursue unless the venue/layout materially changes."}],
+  "followUps": []
+}
