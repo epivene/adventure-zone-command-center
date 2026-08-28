@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Augusta Rodeo", "city": "Augusta", "region": "MT"},
+  "profile": {"placeType": "festival_event", "website": "https://augustamontana.com/", "description": "Augusta, Montana community rodeo / Chamber relationship. Adventure Zone completed a 2026 vendor application after the Chamber expressed interest."},
+  "contacts": [{"id": null, "name": "Augusta Area Chamber of Commerce", "phone": "", "email": "chamber@augustamontana.com", "role": "Chamber / event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 Augusta Rodeo application history", "body": "Adventure Zone replied Feb. 19, 2026 to the Augusta Chamber about the June 26-28 Augusta Rodeo and completed a vendor application. On March 9 the Chamber instructed Adventure Zone to mail the application by the due date. No later booking outcome was found in the reviewed Gmail history. The Augusta Chamber remains active and continues to promote local events."}],
+  "followUps": [{"label": "Check Augusta Rodeo for 2027", "reason": "The Chamber showed interest and requested a 2026 application. Verify the 2027 rodeo dates/application window early and continue from the existing relationship.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
