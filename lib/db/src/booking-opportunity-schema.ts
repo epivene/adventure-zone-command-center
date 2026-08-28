@@ -62,6 +62,8 @@ export const bookingOpportunities = pgTable(
     nextActionKind: text("next_action_kind"),
     nextActionDueAt: timestamp("next_action_due_at", { withTimezone: true }),
     holdReason: text("hold_reason"),
+    emailAutomationProtected: boolean("email_automation_protected").default(false).notNull(),
+    territoryExceptionApproved: boolean("territory_exception_approved").default(false).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
