@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Ashland Labor Day Powwow", "city": "Ashland", "region": "MT"},
+  "profile": {"placeType": "tribe", "description": "Active annual Northern Cheyenne Labor Day powwow in Ashland. 2026 event listings confirm the celebration continues, but the 2026 Adventure Zone contact expressed that it was not something they expected to do."},
+  "contacts": [{"id": null, "name": "Kimburley Flagen", "phone": "406-256-8500", "email": "kflagen@soaringeagle.org", "role": "Historical Soaring Eagle contact - verify actual powwow committee before future outreach", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 contact was not receptive; verify organizer before any future approach", "body": "Kimburley Flagen replied Aug. 6, 2026 asking 'Dave who?' and saying she did not think this was something anyone was going to do. Current Montana and Native-event sources confirm the Ashland Labor Day Powwow is an active annual Northern Cheyenne celebration. Because the contacted person may not have been the actual event decision-maker, preserve the history but do not automatically re-pitch. Only reconsider if a verified powwow committee contact and a culturally appropriate family-entertainment role are identified."}],
+  "followUps": []
+}
