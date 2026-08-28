@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Grand Old West Days", "city": "Craig", "region": "CO"},
+  "profile": {"placeType": "festival_event", "phone": "970-326-6368", "website": "https://www.grandoldwestdays.com/", "description": "Established Adventure Zone relationship in Craig. Adventure Zone was confirmed for Grand Old West Days 2026 and had attended previously."},
+  "contacts": [{"id": null, "name": "Dawn Bevel", "phone": "970-714-1414", "email": "gowdfestival@gmail.com", "role": "Vendor Coordinator / event contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Grand Old West Days - 2026", "status": "completed", "startsAt": "2026-05-22", "endsAt": "2026-05-25", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 confirmed and established relationship", "body": "Gmail history confirms this was not merely a lead. Grand Old West Days sent the 2026 contract, Adventure Zone received the signed contract and confirmed the event on the calendar May 4, 2026, and Dawn Bevel provided her cell as the arrival contact. The event's current official site confirms it remains active. Preserve this as a repeat relationship for renewal, not cold outreach."}],
+  "followUps": [{"label": "Renew Grand Old West Days for 2027", "reason": "Repeat booked relationship. Reconnect with Dawn early and continue from the established history.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
