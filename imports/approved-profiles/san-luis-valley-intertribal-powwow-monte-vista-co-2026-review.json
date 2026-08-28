@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "San Luis Valley Intertribal Pow Wow", "city": "Monte Vista", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Adventure Zone emailed this event in January 2024 at Crowwolf69@gmail.com. The event is a culturally focused intertribal pow wow centered on traditional dancing, drums, prayer, regalia and Native community gathering. Reliable current 2026 public confirmation was not found during this review. Do not create another routine commercial inflatable-carnival outreach unless organizers specifically seek a separate amusement or children's attraction component."},
+  "contacts": [{"id": null, "name": "Crowwolf / event organizer", "phone": "", "email": "Crowwolf69@gmail.com", "role": "Historical event contact", "primary": false}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — prior outreach; cultural event; current edition unverified", "body": "Gmail shows Amy contacted the San Luis Valley Intertribal Pow Wow on Jan. 4, 2024 at Crowwolf69@gmail.com. Historical reporting describes a three-day intertribal gathering at the Ski Hi Complex with hundreds attending and strong cultural/religious significance around dance and drums. No reliable current 2026 edition/date was verified. Do not cold-pitch again unless a current organizer explicitly seeks an amusement or children's attraction component."}],
+  "followUps": []
+}
