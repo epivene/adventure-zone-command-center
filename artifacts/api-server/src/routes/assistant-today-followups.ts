@@ -1,8 +1,14 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
-import { activities, followUps, organizations } from "@/db/schema";
+import {
+  activities,
+  bookings,
+  contacts,
+  followUps,
+  organizations,
+} from "@/db/schema";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
 const router: IRouter = Router();
@@ -15,6 +21,67 @@ const createSchema = z.object({
 }).strict();
 
 router.use(requireAssistantImportToken);
+
+router.get("/today-followups", async (req, res): Promise<void> => {
+  const requestedLimit = typeof req.query.limit === "string"
+    ? Number.parseInt(req.query.limit, 10)
+    : 200;
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.max(1, Math.min(requestedLimit, 500))
+    : 200;
+
+  try {
+    const [rows, totalRows] = await Promise.all([
+      db
+        .select({
+          id: followUps.id,
+          organizationId: followUps.organizationId,
+          organizationName: organizations.name,
+          contactId: followUps.contactId,
+          contactFirstName: contacts.firstName,
+          contactLastName: contacts.lastName,
+          bookingId: followUps.bookingId,
+          bookingName: bookings.name,
+          bookingStatus: bookings.status,
+          bookingProbability: bookings.probability,
+          bookingStartsAt: bookings.startsAt,
+          bookingEndsAt: bookings.endsAt,
+          label: followUps.kind,
+          reason: followUps.outcome,
+          dueAt: followUps.dueAt,
+          createdAt: followUps.createdAt,
+          updatedAt: followUps.updatedAt,
+        })
+        .from(followUps)
+        .leftJoin(organizations, eq(organizations.id, followUps.organizationId))
+        .leftJoin(contacts, eq(contacts.id, followUps.contactId))
+        .leftJoin(bookings, eq(bookings.id, followUps.bookingId))
+        .where(isNull(followUps.completedAt))
+        .orderBy(asc(followUps.dueAt), asc(followUps.createdAt), asc(followUps.id))
+        .limit(limit),
+      db
+        .select({ total: count() })
+        .from(followUps)
+        .where(isNull(followUps.completedAt)),
+    ]);
+
+    res.json({
+      ok: true,
+      openOnly: true,
+      total: totalRows[0]?.total ?? 0,
+      returned: rows.length,
+      followUps: rows.map((row) => ({
+        ...row,
+        contactName: `${row.contactFirstName ?? ""} ${row.contactLastName ?? ""}`.trim() || null,
+        contactFirstName: undefined,
+        contactLastName: undefined,
+      })),
+    });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed assistant Today follow-up listing");
+    res.status(500).json({ ok: false, error: "Today follow-ups could not be listed." });
+  }
+});
 
 router.post("/today-followups", async (req, res): Promise<void> => {
   const parsed = createSchema.safeParse(req.body);
