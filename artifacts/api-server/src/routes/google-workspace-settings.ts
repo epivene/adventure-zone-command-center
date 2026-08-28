@@ -8,6 +8,7 @@ import {
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import {
   PostgresGoogleConnectionRepository,
+  type GoogleConnectionRole,
   type GoogleConnectionView,
 } from "@/features/google-workspace/google-connection-repository";
 import {
@@ -24,6 +25,7 @@ import {
   type GoogleWorkspaceEnvironment,
   type GoogleWorkspaceEnvironmentResult,
 } from "@/features/google-workspace/google-workspace-env";
+import { operationalCalendarAuthorizationUrl } from "@/features/google-workspace/calendar/operational-calendar-oauth";
 
 const emptyBodySchema = z.object({}).strict();
 const oauthStartSchema = z
@@ -38,6 +40,7 @@ const oauthStartSchema = z
         "Return path must be local",
       )
       .optional(),
+    connectionRole: z.enum(["workspace", "operational_calendar"]).optional(),
   })
   .strict();
 const scopeSchema = z
@@ -70,7 +73,8 @@ type GoogleWorkspaceSettingsDependencies = {
   stateRepository: GoogleOAuthStateRepository;
   connectionRepository: {
     getCurrent(): Promise<GoogleConnectionView | null>;
-    disconnect(now: Date): Promise<void>;
+    getByRole?(role: GoogleConnectionRole): Promise<GoogleConnectionView | null>;
+    disconnect(now: Date, role?: GoogleConnectionRole): Promise<void>;
   };
   scopeService: {
     preview(): Promise<GoogleScopePreview>;
@@ -164,12 +168,16 @@ export function createGoogleWorkspaceSettingsRouter(
     try {
       const environment = dependencies.getEnvironment();
       const connection = await dependencies.connectionRepository.getCurrent();
+      const operationalCalendarConnection = dependencies.connectionRepository.getByRole
+        ? await dependencies.connectionRepository.getByRole("operational_calendar")
+        : null;
       const scope = connection
         ? await dependencies.scopeService.getSaved()
         : { labels: [], calendars: [] };
       res.json({
         configured: environment.configured,
         connection,
+        operationalCalendarConnection,
         labels: scope.labels,
         calendars: scope.calendars,
       });
@@ -197,6 +205,7 @@ export function createGoogleWorkspaceSettingsRouter(
           res.status(503).json({ error: "GOOGLE_WORKSPACE_NOT_CONFIGURED" });
           return;
         }
+        const connectionRole = parsed.data.connectionRole ?? "workspace";
         const state = dependencies.randomState();
         if (!state.trim()) {
           throw new Error("GOOGLE_WORKSPACE_OAUTH_STATE_INVALID");
@@ -207,11 +216,17 @@ export function createGoogleWorkspaceSettingsRouter(
           returnPath:
             parsed.data.returnPath ?? "/settings/google-workspace",
           expiresAt: new Date(now.getTime() + 10 * 60 * 1000),
+          connectionRole,
         });
-        const client = dependencies.createClient({
-          environment: environment.value,
-        });
-        res.json({ authorizationUrl: client.authorizationUrl({ state }) });
+        const authorizationUrl = connectionRole === "operational_calendar"
+          ? operationalCalendarAuthorizationUrl({
+              environment: environment.value,
+              state,
+            })
+          : dependencies.createClient({
+              environment: environment.value,
+            }).authorizationUrl({ state });
+        res.json({ authorizationUrl });
       } catch (error) {
         const code = safeErrorCode(
           error,
@@ -266,12 +281,16 @@ export function createGoogleWorkspaceSettingsRouter(
   router.post(
     "/google-workspace/disconnect",
     async (req, res): Promise<void> => {
-      if (!emptyBodySchema.safeParse(req.body ?? {}).success) {
+      const parsed = z.object({ connectionRole: z.enum(["workspace", "operational_calendar"]).optional() }).strict().safeParse(req.body ?? {});
+      if (!parsed.success) {
         res.status(400).json({ error: "GOOGLE_WORKSPACE_DISCONNECT_INVALID" });
         return;
       }
       try {
-        await dependencies.connectionRepository.disconnect(dependencies.now());
+        await dependencies.connectionRepository.disconnect(
+          dependencies.now(),
+          parsed.data.connectionRole ?? "workspace",
+        );
         res.json({ ok: true });
       } catch (error) {
         const code = safeErrorCode(
