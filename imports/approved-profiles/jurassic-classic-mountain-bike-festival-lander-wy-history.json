@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Jurassic Classic Mountain Bike Festival", "city": "Lander", "region": "WY"},
+  "profile": {"placeType": "festival_event", "website": "https://www.jurassicclassicfest.com/", "description": "Active annual Lander Cycling Club mountain-bike festival with all-ages clinics, rides, music, games and kid/adult Strider races."},
+  "contacts": [{"id": null, "name": "Stacy Wells", "phone": "", "email": "jurassicclassic@landercycling.org", "role": "Festival Director", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Current contact corrected; old unread item was forwarding notice", "body": "The Aug. 3, 2026 automated response said the Jurassic Classic had moved to jurassicclassic@landercycling.org and that Adventure Zone's email had been forwarded. Stacy Wells was identified as Festival Director. Current official sources confirm the festival remains active; 2026 ran Aug. 14-16 with all-ages clinics, rides, live music and games. The automated forwarding notice was not a decline. Verify whether there was a later human response before future outreach."}],
+  "followUps": [{"label": "Review 2027 Jurassic Classic family-area fit", "reason": "The festival is active and all-ages, but it is cycling-centered. Check whether a separate family/kids attraction area would genuinely add value before contacting Stacy.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
