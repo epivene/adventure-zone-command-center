@@ -7,6 +7,7 @@ import {
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import {
   PostgresGoogleConnectionRepository,
+  type GoogleConnectionRole,
   type GoogleConnectionView,
 } from "@/features/google-workspace/google-connection-repository";
 import {
@@ -18,6 +19,7 @@ import {
   type GoogleWorkspaceEnvironment,
   type GoogleWorkspaceEnvironmentResult,
 } from "@/features/google-workspace/google-workspace-env";
+import { validateOperationalCalendarScopes } from "@/features/google-workspace/calendar/operational-calendar-oauth";
 
 export type GoogleWorkspaceOAuthCallbackDependencies = {
   getEnvironment(): GoogleWorkspaceEnvironmentResult;
@@ -29,6 +31,8 @@ export type GoogleWorkspaceOAuthCallbackDependencies = {
       refreshToken: string;
       scopes: string[];
       now: Date;
+      role?: GoogleConnectionRole;
+      operationalCalendarId?: string | null;
     }): Promise<GoogleConnectionView | { id: string }>;
   };
   createClient(input: {
@@ -51,13 +55,15 @@ function safeErrorCode(error: unknown, fallback: string): string {
     typeof error === "object" &&
     "code" in error &&
     typeof (error as { code?: unknown }).code === "string" &&
-    (error as { code: string }).code.startsWith("GOOGLE_WORKSPACE_")
+    ((error as { code: string }).code.startsWith("GOOGLE_WORKSPACE_") ||
+      (error as { code: string }).code.startsWith("GOOGLE_OPERATIONAL_CALENDAR_"))
   ) {
     return (error as { code: string }).code;
   }
   if (
     error instanceof Error &&
-    error.message.startsWith("GOOGLE_WORKSPACE_")
+    (error.message.startsWith("GOOGLE_WORKSPACE_") ||
+      error.message.startsWith("GOOGLE_OPERATIONAL_CALENDAR_"))
   ) {
     return error.message;
   }
@@ -68,7 +74,7 @@ function safeReturnUrl(
   appOrigin: string,
   returnPath: string,
   result:
-    | { connected: true }
+    | { connected: true; role?: GoogleConnectionRole }
     | { error: "GOOGLE_WORKSPACE_OAUTH_ACCESS_DENIED" | "GOOGLE_WORKSPACE_OAUTH_PROVIDER_REJECTED" },
 ): string {
   const fallbackPath = "/settings/google-workspace";
@@ -91,6 +97,9 @@ function safeReturnUrl(
   if ("connected" in result) {
     url.searchParams.delete("googleError");
     url.searchParams.set("connected", "1");
+    if (result.role === "operational_calendar") {
+      url.searchParams.set("operationalCalendarConnected", "1");
+    }
   } else {
     url.searchParams.delete("connected");
     url.searchParams.set("googleError", result.error);
@@ -174,6 +183,7 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           res.status(400).json({ error: "GOOGLE_WORKSPACE_OAUTH_STATE_INVALID" });
           return;
         }
+        const connectionRole: GoogleConnectionRole = consumed.connectionRole ?? "workspace";
 
         if (providerError) {
           const safeProviderError =
@@ -200,7 +210,9 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           environment: environmentResult.value,
         });
         const authorization = await client.exchangeCode(code);
-        const validatedScopes = validateWorkspaceScopes(authorization.scopes);
+        const validatedScopes = connectionRole === "operational_calendar"
+          ? validateOperationalCalendarScopes(authorization.scopes)
+          : validateWorkspaceScopes(authorization.scopes);
         if (!validatedScopes.ok) {
           res.status(403).json({ error: validatedScopes.error });
           return;
@@ -212,13 +224,15 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
           refreshToken: authorization.refreshToken,
           scopes: validatedScopes.scopes,
           now,
+          role: connectionRole,
+          operationalCalendarId: connectionRole === "operational_calendar" ? identity.email : null,
         });
         res.redirect(
           303,
           safeReturnUrl(
             environmentResult.value.appOrigin,
             consumed.returnPath,
-            { connected: true },
+            { connected: true, role: connectionRole },
           ),
         );
       } catch (error) {
@@ -228,7 +242,9 @@ export function createGoogleWorkspaceOAuthCallbackRouter(
         );
         const status =
           errorCode === "GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING" ||
-          errorCode === "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED"
+          errorCode === "GOOGLE_WORKSPACE_UNEXPECTED_SCOPE_GRANTED" ||
+          errorCode === "GOOGLE_OPERATIONAL_CALENDAR_REQUIRED_SCOPES_MISSING" ||
+          errorCode === "GOOGLE_OPERATIONAL_CALENDAR_UNEXPECTED_SCOPE_GRANTED"
             ? 403
             : errorCode === "GOOGLE_WORKSPACE_ACCOUNT_CHANGE_REQUIRES_DISCONNECT"
               ? 409
