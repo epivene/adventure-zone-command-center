@@ -1,7 +1,8 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "event": {"id": null, "name": "Father's Day Car Show", "city": "Boise", "region": "ID"},
+  "aliases": ["Father's Day Car Show", "Downtown Boise Fathers Day Car Show", "Father's Day Car Show Boise", "Downtown Boise Car Show"],
+  "event": {"id": null, "name": "Downtown Boise Father's Day Car Show", "city": "Boise", "region": "ID"},
   "profile": {"placeType": "festival_event", "phone": "208-385-7300", "website": "https://downtownboise.org/events/our-downtown-events/fathers-day-car-show", "description": "Annual Downtown Boise Father's Day Car Show. The 2026 show drew a large downtown audience and the 2027 show is already announced for June 20."},
   "contacts": [{"id": null, "name": "Downtown Boise Association", "phone": "208-385-7300", "email": "", "role": "Event organizer", "primary": true}],
   "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
