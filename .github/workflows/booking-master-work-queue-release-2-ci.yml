@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/features/opportunities/opportunity-repository*.ts"
+      - "artifacts/api-server/src/features/opportunities/opportunity-types.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
       - "artifacts/api-server/src/features/google-workspace/google-connection-repository.ts"
@@ -48,6 +50,7 @@ jobs:
       - name: Opportunity email domain tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
+          src/features/opportunities/opportunity-repository.test.ts
           src/features/opportunity-email/opportunity-email-repository.test.ts
           src/features/opportunity-email/draft-context-resolver.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
