@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Stamp & Scrapbook Expo", "city": "Mesa", "region": "AZ"},
+  "profile": {"placeType": "festival_event", "description": "2026 Mesa Stamp & Scrapbook Expo runs Sept. 18-19 at Mesa Convention Center. Current official programming centers on indoor shopping, workshops, classes and make-and-take crafting activities. This is not a practical fit for a full staffed inflatable carnival."},
+  "contacts": [{"id": null, "name": "Stamp & Scrapbook Expo Exhibitor Team", "phone": "", "email": "exhibitors@scrapbookexpo.com", "role": "Exhibitor Contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — not an Adventure Zone fit", "body": "Official 2026 Mesa Expo information confirms Sept. 18-19 at Mesa Convention Center with a program built around crafting vendors, workshops, classes, shopping and make-and-take projects. Adventure Zone Gmail shows outreach to exhibitors@scrapbookexpo.com in 2023 and 2024 with no reply found. Do not create another routine outreach draft; the event format is not a reasonable fit for a full staffed inflatable carnival."}],
+  "followUps": []
+}
