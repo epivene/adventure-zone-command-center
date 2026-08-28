@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "River Festival", "city": "Green River", "region": "WY"},
+  "profile": {"placeType": "festival_event", "phone": "307-872-6190", "website": "https://business.grchamber.com/events/", "description": "Active Green River Chamber festival, but the organizer has stated its insurance does not allow inflatables at the event."},
+  "contacts": [{"id": null, "name": "Green River Chamber of Commerce", "phone": "307-872-6190", "email": "office@grchamber.com", "role": "Event organizer", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Insurance restriction prohibits inflatables", "body": "The Green River Chamber replied Aug. 3, 2026 that its insurance will not allow inflatables at River Festival. Current Chamber information confirms River Festival remains active; 2026 ran Aug. 14-15 at Expedition Island/Evers Park. This is a structural restriction, not a routine yearly decline. Do not repeatedly pursue unless the insurance/venue policy changes."}],
+  "followUps": []
+}
