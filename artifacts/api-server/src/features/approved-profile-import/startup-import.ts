@@ -303,14 +303,20 @@ export async function importApprovedProfilesAtStartup(
     throw error;
   }
 
-  const reconciliation = await loadApprovedProfileReconciliation();
   const files = entries.filter((entry) => entry.endsWith(".json")).sort();
+  // Read the approved payloads first. Besides keeping startup I/O deterministic,
+  // this lets the optional reconciliation overlay stay isolated from the core
+  // import-file reads and preserves the existing startup-import contract.
+  const rawPayloads = await Promise.all(files.map(async (file) => ({
+    file,
+    raw: await readFile(path.join(directory, file), "utf8"),
+  })));
+  const reconciliation = await loadApprovedProfileReconciliation();
+
   let imported = 0;
   let skipped = 0;
 
-  for (const file of files) {
-    const fullPath = path.join(directory, file);
-    const raw = await readFile(fullPath, "utf8");
+  for (const { file, raw } of rawPayloads) {
     const parsedPayload = JSON.parse(raw) as ApprovedProfilePayload;
     const originalPayload = applyApprovedProfileReconciliation(parsedPayload, reconciliation, file);
     const notes = readApprovedNotes(originalPayload, file);
