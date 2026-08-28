@@ -1,0 +1,36 @@
+name: Booking Duplicate Consolidation CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/bookings/booking-duplicate-migration.pglite.test.ts"
+      - "artifacts/adventure-zone/src/features/bookings/booking-list-dedupe.ts"
+      - "artifacts/adventure-zone/src/features/bookings/booking-list-dedupe.test.ts"
+      - "artifacts/adventure-zone/src/features/calendar/calendar-dedupe.ts"
+      - "artifacts/adventure-zone/src/features/calendar/calendar-dedupe.test.ts"
+      - "lib/db/src/migrations.ts"
+      - "lib/db/migrations/20260828_booking_duplicate_consolidation.sql"
+      - ".github/workflows/booking-duplicate-consolidation-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  duplicate-consolidation:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Booking consolidation migration regression
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/bookings/booking-duplicate-migration.pglite.test.ts
+      - name: Booking and calendar dedupe regression
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/bookings/booking-list-dedupe.test.ts src/features/calendar/calendar-dedupe.test.ts
+      - name: Startup migration registry regression
+        run: pnpm --filter @workspace/db exec vitest run src/act-archive-recovery-schema.test.ts
+      - name: Database build
+        run: pnpm --filter @workspace/db build
