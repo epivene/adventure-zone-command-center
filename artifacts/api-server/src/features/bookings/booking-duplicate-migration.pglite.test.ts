@@ -3,7 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 const migrationUrl = new URL(
-  "../../../../../lib/db/migrations/034_booking_duplicate_consolidation.sql",
+  "../../../../../lib/db/migrations/20260828_booking_duplicate_consolidation.sql",
   import.meta.url,
 );
 
@@ -69,7 +69,7 @@ async function seedDuplicates(client: PGlite) {
   `);
 }
 
-describe("034 booking duplicate consolidation migration", () => {
+describe("20260828 booking duplicate consolidation migration", () => {
   const clients: PGlite[] = [];
 
   afterEach(async () => {
