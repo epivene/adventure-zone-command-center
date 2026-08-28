@@ -32,10 +32,13 @@ describe("2026-08-28 approved-profile reconciliation", () => {
       return { file, eventName: normalized(payload.event?.name) };
     }));
 
+    const mappingProblems: string[] = [];
     for (const record of records) {
       const names = [record.canonicalName, ...(record.aliases ?? [])].map(normalized);
       const matches = approved.filter((item) => item.eventName && names.includes(item.eventName));
-      expect(matches, `${record.canonicalName} should map to exactly one approved-profile file`).toHaveLength(1);
+      if (matches.length !== 1) {
+        mappingProblems.push(`${record.canonicalName}: ${matches.length} approved-profile matches${matches.length ? ` (${matches.map((match) => match.file).join(", ")})` : ""}`);
+      }
 
       const followUps = record.followUps ?? [];
       if (record.clearFollowUps) expect(followUps).toHaveLength(0);
@@ -45,6 +48,8 @@ describe("2026-08-28 approved-profile reconciliation", () => {
         expect(Number.isNaN(new Date(followUp.dueAt).getTime())).toBe(false);
       }
     }
+
+    expect(mappingProblems, `Reconciliation mapping problems:\n${mappingProblems.join("\n")}`).toEqual([]);
   });
 
   it("does not reuse one approved profile file for multiple reconciliation records", async () => {
@@ -68,8 +73,9 @@ describe("2026-08-28 approved-profile reconciliation", () => {
       }
     }
 
-    for (const [file, names] of usage) {
-      expect(names, `${file} should not be claimed by multiple reconciliation records`).toHaveLength(1);
-    }
+    const duplicateUsage = [...usage.entries()]
+      .filter(([, names]) => names.length !== 1)
+      .map(([file, names]) => `${file}: ${names.join(", ")}`);
+    expect(duplicateUsage, `Approved-profile files claimed by multiple records:\n${duplicateUsage.join("\n")}`).toEqual([]);
   });
 });
