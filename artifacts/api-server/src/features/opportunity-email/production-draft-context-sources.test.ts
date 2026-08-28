@@ -96,4 +96,18 @@ describe("ProductionDraftContextSources", () => {
     await expect(source.getCalendarEvidence(opportunityId)).resolves.toEqual([{ eventId: "calendar-1" }]);
     await expect(source.getPackageAvailability(opportunityId)).resolves.toEqual({ status: "resolved", packages: [] });
   });
+
+  it("resolves one shared availability snapshot for concurrent calendar and package reads", async () => {
+    const dependencies = deps();
+    const source = new ProductionDraftContextSources(dependencies);
+
+    const [calendarEvidence, packageAvailability] = await Promise.all([
+      source.getCalendarEvidence(opportunityId),
+      source.getPackageAvailability(opportunityId),
+    ]);
+
+    expect(calendarEvidence).toEqual([{ eventId: "calendar-1" }]);
+    expect(packageAvailability).toEqual({ status: "resolved", packages: [] });
+    expect(dependencies.availability.resolve).toHaveBeenCalledTimes(1);
+  });
 });
