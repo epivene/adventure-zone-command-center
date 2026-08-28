@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Lewiston's Hot August Nights", "city": "Lewiston", "region": "ID"},
+  "profile": {"placeType": "festival_event", "website": "https://lewistonhan.com/", "description": "Active downtown Lewiston classic-car event with 300+ cars and community activities. Current downtown footprint does not have room for Adventure Zone."},
+  "contacts": [{"id": null, "name": "Ben Bonfield", "phone": "208-305-1007", "email": "benb@dailyfly.com", "role": "Event contact / Dailyfly Media General Manager", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Downtown footprint too small; later thread was equipment discussion", "body": "Ben Bonfield replied Aug. 5, 2026 that the car show is held in downtown Lewiston and he does not have space for an Adventure Zone setup. The later Aug. 5-6 messages were not renewed booking interest; Ben separately asked Amy about a jumping castle he had purchased secondhand for $1,500 and sent photos after Amy asked about it. Current event listings confirm Hot August Nights remains active. Do not misread the equipment discussion as event interest; only revisit if the event footprint changes."}],
+  "followUps": []
+}
