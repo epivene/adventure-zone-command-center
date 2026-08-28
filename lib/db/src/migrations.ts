@@ -261,6 +261,14 @@ const migrationFiles = [
       ) AS ready`,
   },
   {
+    name: "043_act_archive_full_recovery.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.act_archive_recovery_runs') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_items') IS NOT NULL
+      AND to_regclass(current_schema() || '.act_archive_recovery_decisions') IS NOT NULL
+      AS ready`,
+  },
+  {
     name: "044_finance_admin_evidence.sql",
     markerSql: `SELECT
       EXISTS (
@@ -353,6 +361,13 @@ const migrationFiles = [
       AND (SELECT count(*) = 3 FROM pg_constraint
        WHERE conrelid IN (to_regclass(current_schema() || '.package_templates'), to_regclass(current_schema() || '.lead_availability_snapshots'))
          AND conname IN ('package_templates_normal_capacity_nonnegative', 'package_templates_temporary_unavailable_quantity_nonnegative', 'lead_availability_snapshots_package_availability_object'))
+      AS ready`,
+  },
+  {
+    name: "20260828_booking_duplicate_consolidation.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.booking_consolidations') IS NOT NULL
+      AND to_regclass(current_schema() || '.bookings_exact_event_identity_unique') IS NOT NULL
       AS ready`,
   },
   {
