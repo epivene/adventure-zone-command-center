@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Harrison Old Time Picnic", "city": "Harrison", "region": "ID"},
+  "profile": {"placeType": "festival_event", "website": "https://www.harrisonidaho.org/events", "description": "Long-running family community picnic and parade in Harrison City Park. The old Adventure Zone recipient was invalid, but the event remains active."},
+  "contacts": [{"id": null, "name": "City of Harrison / Old Time Picnic", "phone": "", "email": "harrison.id.info@gmail.com", "role": "Historical alternate event contact - verify before outreach", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Event remains active; one 2024 recipient was invalid", "body": "Adventure Zone's Dec. 2023 outreach included idfinn@sm-email.com and harrison.id.info@gmail.com; the idfinn address failed with a 550 unknown-user error. Current Kootenai County and North Idaho event listings confirm Harrison Old Time Picnic remains active and family-focused, with the 2026 picnic in Harrison City Park and traditional games/parade activities. Verify the current city/event organizer before any future outreach rather than reusing the failed address."}],
+  "followUps": [{"label": "Verify 2027 Harrison Old Time Picnic contact", "reason": "The event is still active but the old primary recipient failed. Confirm the current organizer/contact and whether a larger staffed attraction would fit the traditional community picnic before outreach.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
