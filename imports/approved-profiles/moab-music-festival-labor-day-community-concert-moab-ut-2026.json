@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Moab Music Festival and the Labor Day Community Concert", "city": "Moab", "region": "UT"},
+  "profile": {"placeType": "festival_event", "description": "2026 Kristy-leg prospect centered on the Rocky Mountain Power Labor Day Community Concert. Official event is Sept. 7, 2026 at 2 PM in Old City Park: free, all ages, family-friendly, outdoors on 21 acres of lawn. The setting has space, but this is primarily a music concert rather than a fair/carnival, so treat it as a possible rather than ideal inflatable-carnival fit.", "phone": "435-259-7003", "website": "https://moabmusicfest.org/events/rmp-community-concert-2026/", "address1": "Old City Park", "address2": "", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Moab Music Festival", "phone": "435-259-7003", "email": "info@moabmusicfest.org", "role": "Festival Office", "primary": true}],
+  "booking": {"enabled": true, "name": "Moab Music Festival and the Labor Day Community Concert", "status": "contacted", "startsAt": "2026-09-07", "endsAt": "2026-09-07", "nextActionKind": "call", "nextActionDueAt": "2026-08-28", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Aug. 26 phone conversation and email", "body": "Desiree spoke with Moab Music Festival on Aug. 26 and sent the promised Adventure Zone information to info@moabmusicfest.org the same day. The email explained prepaid and pay-for-play and noted Kristy's nearby traveling equipment. No reply is currently in Gmail. Do not leave the old Aug. 25 email action as overdue. Current official research confirms the Sept. 7 Community Concert is free, family-friendly, all ages, and held on 21 acres of lawn at Old City Park, but the event is primarily a music concert, so avoid overselling the carnival fit."}],
+  "followUps": [{"label": "Call Moab after Aug. 26 conversation", "reason": "Desiree already spoke with the festival and sent the promised info Aug. 26. If there is still no reply, call the festival office Aug. 28 to ask whether the Sept. 7 Community Concert has room or interest. If not, close the 2026 opportunity cleanly rather than sending another generic email.", "dueAt": "2026-08-28T18:00:00.000Z"}]
+}
