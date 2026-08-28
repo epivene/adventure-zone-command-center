@@ -1,0 +1,16 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Crestone Energy Fair", "city": "Crestone", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "2026 history-aware prospect. Crestone Energy Fair runs Sept. 11-13, 2026 and is a free, family-friendly community event with a dedicated Family Village. Adventure Zone previously emailed the Energy Fair in Jan. 2024 at vendenergyfair@gmail.com with no reply found. Main fit question is whether one of the downtown park areas can provide enough dedicated footprint and electrical access for a full staffed inflatable carnival.", "phone": "", "website": "https://www.crestoneenergyfair.org/", "address1": "Downtown Crestone", "address2": "", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Crestone Energy Fair Vendor Team", "phone": "", "email": "vendenergyfair@gmail.com", "role": "Vendor / Event Contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "contact_due", "startsAt": "2026-09-11", "endsAt": "2026-09-13", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {"subject": "2026 review — Crestone Energy Fair", "body": "Official 2026 information confirms Sept. 11-13 in downtown Crestone across Town Hall Park, Little Pearl Park and Creekside Park. The fair is free and family-friendly and includes a Family Village. Site FAQ says general event power is limited, with power available for vendors/presenters/musicians, so footprint and electrical access must be confirmed before treating this as a strong operational fit. Official vendor contact is vendenergyfair@gmail.com. Adventure Zone Gmail history shows Amy emailed this exact event in Jan. 2024 with no reply found, so current outreach should be a natural check-back rather than a cold introduction. Current long-range regional outlook for Sept. 6-14 is generally sunny with isolated thunderstorms possible in southern areas and cooling temperatures; weather is not currently a reason to rule out pay-for-play. Sources reviewed Aug. 27, 2026: official Crestone Energy Fair site/FAQ/vendor page, Old Farmer's Almanac, Adventure Zone Gmail."}
+  ],
+  "followUps": [
+    {"label": "Crestone 2026 space/power follow-up", "reason": "After the history-aware 2026 email is sent, follow up only if the organizers indicate they can accommodate a full staffed inflatable carnival. Main questions are dedicated footprint and sufficient electrical access. Keep both prepaid and pay-for-play available; do not push sponsorship wording.", "dueAt": "2026-09-01T16:00:00.000Z"}
+  ]
+}
