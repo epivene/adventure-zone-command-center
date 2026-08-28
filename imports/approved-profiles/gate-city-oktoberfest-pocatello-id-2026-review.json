@@ -1,0 +1,35 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Gate City Oktoberfest",
+    "city": "Pocatello",
+    "region": "ID"
+  },
+  "profile": {
+    "description": "2026 review completed. Gate City Oktoberfest is Sept. 26, 2026 at Lookout Point in Historic Downtown Pocatello. The current official listing centers on German/craft beer tasting, food and live music, requires valid government-issued photo ID, and states attendees must be 21+ to purchase tickets. This is not an appropriate routine Adventure Zone inflatable-carnival prospect.",
+    "phone": "208-233-1525",
+    "website": "https://gatecityoktoberfest.com/"
+  },
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "declined",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — non-fit: beer-tasting Oktoberfest",
+      "body": "Current official 2026 information confirms Gate City Oktoberfest is Sept. 26, 2026, 4-8 PM at Lookout Point and is built around beer/cider tasting, food and live music. The event requires ID and is effectively an adult beer-tasting event, so do not create routine Adventure Zone inflatable-carnival outreach or follow-up."
+    }
+  ],
+  "followUps": []
+}
