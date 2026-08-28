@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "ThirstyFest", "city": "Denver", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "ThirstyFest is a volunteer-led craft beer fundraiser benefiting Water For People. Current public material still centers on the 2025 event and does not show a current 2026 festival date. The event format is not a strong Adventure Zone inflatable-carnival fit."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — stale / non-fit", "body": "Adventure Zone emailed ThirstyFest in 2023 and 2024 with no reply found. Current public material still presents the Sept. 6, 2025 event, not a confirmed 2026 festival date. ThirstyFest is primarily a craft beer fundraiser with brewery tastings, music and food trucks; 2025 general admission was 21+ for unlimited tastings, with a separate designated-driver/under-21 ticket. Do not create routine inflatable-carnival outreach or follow-up unless the event materially changes format."}],
+  "followUps": []
+}
