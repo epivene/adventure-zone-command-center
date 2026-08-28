@@ -2,6 +2,10 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { logger } from "../../lib/logger";
+import {
+  applyApprovedProfileReconciliation,
+  loadApprovedProfileReconciliation,
+} from "./reconciliation";
 
 type StartupImportResult = {
   imported: number;
@@ -26,6 +30,7 @@ type ApprovedProfilePayload = Record<string, unknown> & {
   event?: unknown;
   notes?: unknown;
   followUps?: unknown;
+  clearFollowUps?: unknown;
 };
 
 type ProfileImportResponse = {
@@ -298,6 +303,7 @@ export async function importApprovedProfilesAtStartup(
     throw error;
   }
 
+  const reconciliation = await loadApprovedProfileReconciliation();
   const files = entries.filter((entry) => entry.endsWith(".json")).sort();
   let imported = 0;
   let skipped = 0;
@@ -305,9 +311,11 @@ export async function importApprovedProfilesAtStartup(
   for (const file of files) {
     const fullPath = path.join(directory, file);
     const raw = await readFile(fullPath, "utf8");
-    const originalPayload = JSON.parse(raw) as ApprovedProfilePayload;
+    const parsedPayload = JSON.parse(raw) as ApprovedProfilePayload;
+    const originalPayload = applyApprovedProfileReconciliation(parsedPayload, reconciliation, file);
     const notes = readApprovedNotes(originalPayload, file);
     const followUps = readApprovedFollowUps(originalPayload, file);
+    const clearFollowUps = originalPayload.clearFollowUps === true;
 
     let payload: ApprovedProfilePayload;
     try {
@@ -342,7 +350,7 @@ export async function importApprovedProfilesAtStartup(
       throw new Error(`Approved profile import ${file} returned invalid JSON.`);
     }
     const profileId = typeof result.profileId === "string" ? result.profileId.trim() : "";
-    if ((notes.length > 0 || followUps.length > 0) && !profileId) {
+    if ((notes.length > 0 || followUps.length > 0 || clearFollowUps) && !profileId) {
       throw new Error(`Approved profile import ${file} did not return a profileId.`);
     }
 
@@ -354,6 +362,20 @@ export async function importApprovedProfilesAtStartup(
         path: "profile-notes",
         payload: { organizationId: profileId, ...note },
         failureLabel: `Approved profile note import failed for ${file}`,
+      });
+    }
+
+    if (clearFollowUps && followUps.length === 0) {
+      await requestAssistantJson({
+        port,
+        token,
+        method: "POST",
+        path: "today-followups/clear",
+        payload: {
+          organizationId: profileId,
+          reason: "Cleared by 2026-08-28 deep-research reconciliation: no future action is currently justified.",
+        },
+        failureLabel: `Approved profile follow-up clear failed for ${file}`,
       });
     }
 
