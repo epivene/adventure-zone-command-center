@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Labor Day Rodeo", "city": "White Sulphur Springs", "region": "MT"},
+  "profile": {"placeType": "festival_event", "website": "https://www.labordayrodeo.com/", "description": "Active Meagher County Labor Day Rodeo with vendors, mutton bustin', rodeo action, parade and street dance."},
+  "contacts": [{"id": null, "name": "Meagher County Rodeo Club", "phone": "", "email": "", "role": "Event organizer", "primary": true}],
+  "booking": {"enabled": true, "name": "Labor Day Rodeo - 2026", "status": "declined", "startsAt": "2026-09-06", "endsAt": "2026-09-07", "nextActionKind": "renewal", "nextActionDueAt": "2026-11-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Explicit request for quote before next year's event", "body": "The Meagher County Rodeo Club replied Aug. 13, 2026 that it was already booked with inflatables for 2026 but would love to get a quote prior to next year's event. Current official event information confirms the Labor Day Rodeo is active Sept. 6-7, 2026 with vendors, mutton bustin', rodeo action, parade and a street dance. Treat this as a strong 2027 invitation rather than a rejection."}],
+  "followUps": [{"label": "Quote 2027 White Sulphur Springs Labor Day Rodeo early", "reason": "The organizer explicitly requested a quote before next year's event after already booking 2026 inflatables.", "dueAt": "2026-11-15T16:00:00.000Z"}]
+}
