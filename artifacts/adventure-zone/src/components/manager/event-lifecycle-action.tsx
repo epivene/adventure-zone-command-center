@@ -111,8 +111,8 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
   }
 
   if (loading) return compact ? null : <p className="text-sm text-slate-500">Loading event status…</p>;
-  if (lifecycle?.wrapUpStatus === "finished") return <p className="text-sm font-semibold text-emerald-700">Event wrap-up finished</p>;
-  if (lifecycle?.checkedOutAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-amber-700">Checked out {time(lifecycle.checkedOutAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/wrap-up`}>Finish event wrap-up</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+  if (lifecycle?.wrapUpStatus === "finished") return <p className="text-sm font-semibold text-emerald-700">Manager event report complete</p>;
+  if (lifecycle?.checkedOutAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-amber-700">Checked out {time(lifecycle.checkedOutAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/wrap-up`}>Finish manager event report</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
 
   if (lifecycle?.checkedInAt) {
     const preState = lifecycle.preEventChecklistState ?? "not_started";

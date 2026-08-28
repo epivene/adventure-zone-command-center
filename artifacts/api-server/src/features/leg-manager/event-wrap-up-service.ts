@@ -115,13 +115,27 @@ export class EventWrapUpService {
     validateDraft(input.input);
     const context = await this.ownContext(input.bookingId, input.managerLegId);
     const existing = await this.store.get(input.bookingId);
-    if (existing && existing.status !== "draft") throw new Error("Submitted wrap-ups must be reopened by admin before editing");
-    return this.store.saveDraft({
+
+    // A manager can add useful event information later. If admin had already
+    // reviewed the record, move it back into the submitted queue so the office
+    // sees that the shared event profile changed and can review it again.
+    const requeueForAdmin = existing?.status === "reviewed";
+    if (requeueForAdmin) {
+      const reopened = await this.store.reopen(input.bookingId, input.managerId);
+      if (!reopened) throw new Error("Event report could not be reopened for the manager update");
+    }
+
+    const saved = await this.store.saveDraft({
       bookingId: context.bookingId,
       legId: context.legId!,
       tripId: context.tripId,
       ...input.input,
     });
+
+    if (requeueForAdmin) {
+      return await this.store.markSubmitted(input.bookingId, input.managerId) ?? saved;
+    }
+    return saved;
   }
 
   async saveAdminDraft(bookingId: string, input: EventWrapUpDraftInput) {
@@ -142,7 +156,6 @@ export class EventWrapUpService {
     const row = await this.store.get(input.bookingId);
     if (!row) throw new Error("Save the wrap-up draft before submitting");
     if (row.status !== "draft") throw new Error("Wrap-up is not a draft");
-    if (row.actualCashOnHandCents === null) throw new Error("Enter actual cash on hand before submitting");
     const submitted = await this.store.markSubmitted(input.bookingId, input.managerId);
     if (!submitted) throw new Error("Wrap-up could not be submitted");
     return submitted;
