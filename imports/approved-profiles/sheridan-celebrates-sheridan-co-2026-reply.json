@@ -1,0 +1,49 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Sheridan Celebrates",
+    "city": "Sheridan",
+    "region": "CO"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Sheridan Celebrates community event. 2026 outreach was declined because the entertainment budget had already been allocated. Keep as a future-year prospect and reach out earlier in the planning cycle."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Jean Flynn Ray",
+      "phone": "720-401-3417",
+      "email": "jeanfray@gmail.com",
+      "role": "Event Planner, Live Joi Communications LLC",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "declined",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Aug. 27, 2026 reply — entertainment budget already allocated",
+      "body": "Adventure Zone followed up Aug. 27, 2026 regarding Sheridan Celebrates on Sept. 26, 2026. Jean Flynn Ray replied the same day: 'Our entertainment budget has been allocated for 2026.' Treat this as a 2026 decline, not a do-not-contact request. Current reply signature confirms Jean Flynn Ray, Event Planner, Live Joi Communications LLC, www.livejoicom.com, 720-401-3417, replying from jeanfray@gmail.com. Earlier outreach used jray@ci.sheridan.co.us; preserve that as historical contact data but use Jean's current reply address for future communication unless a newer official contact is verified. Do not push pay-for-play again in this thread because the Aug. 27 email already explained the no-upfront/pay-for-play option before Jean declined."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "2027 early outreach — Sheridan Celebrates",
+      "reason": "Jean Flynn Ray said the 2026 entertainment budget was already allocated. Reach out earlier for 2027 before entertainment funds/plans are committed, using the latest verified contact information.",
+      "dueAt": "2027-01-04T16:00:00.000Z"
+    }
+  ]
+}
