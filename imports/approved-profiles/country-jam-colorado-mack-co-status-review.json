@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Country Jam Colorado", "city": "Mack", "region": "CO"},
+  "profile": {"placeType": "festival_event", "website": "https://countryjam.com/", "description": "Country Jam Colorado is a major music festival in Mack, CO, but organizers announced it would pause in 2026 while reevaluating and planning for the future."},
+  "contacts": [{"id": null, "name": "Country Jam Colorado", "phone": "", "email": "info@countryjamco.com", "role": "Festival contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 event paused - old outreach was based on stale assumption", "body": "Adventure Zone sent outreach April 17, 2026 assuming a June 25-27, 2026 Country Jam Colorado event. Current reporting based on the festival's own announcement says Country Jam Colorado paused in 2026 to reevaluate and plan for the future. Do not treat the old 2024 auto-response or the 2026 outbound email as evidence of a current event. Verify that the festival is returning before any new outreach."}],
+  "followUps": [{"label": "Check whether Country Jam Colorado is returning", "reason": "The festival paused in 2026. Verify an official future date before deciding whether it belongs back in active outreach.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
