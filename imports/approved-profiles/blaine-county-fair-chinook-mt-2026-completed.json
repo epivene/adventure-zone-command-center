@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Blaine County Fair", "city": "Chinook", "region": "MT"},
+  "profile": {"placeType": "fair", "website": "https://blainecountyfair.com/", "description": "Confirmed and completed 2026 Adventure Zone booking in Chinook. Blaine County Fair booked both Adventure Zone and Pirate's Rebellion after its carnival backed out."},
+  "contacts": [{"id": null, "name": "Shandel Fouts", "phone": "406-390-1310", "email": "fouts.shandel@gmail.com", "role": "2026 primary point of contact", "primary": true}, {"id": null, "name": "Loren Skoyen", "phone": "406-781-8033", "email": "", "role": "2026 backup point of contact", "primary": false}, {"id": null, "name": "Debbie Ramberg", "phone": "406-945-3841", "email": "blainecountyfair@gmail.com", "role": "Fair Manager", "primary": false}],
+  "booking": {"enabled": true, "name": "Blaine County Fair - 2026", "status": "completed", "startsAt": "2026-08-06", "endsAt": "2026-08-08", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 booked - signed contract, deposit, COI and event logistics confirmed", "body": "Blaine County Fair contacted Adventure Zone July 20, 2026 after its carnival backed out. After a phone call, Shandel Fouts booked both Adventure Zone and Pirate's Rebellion. Gmail confirms a signed contract and card deposit were received, Adventure Zone told Shandel the fair was officially on the calendar, COI was issued, and operational details were worked through. Shandel was the primary on-site contact at 406-390-1310; Loren Skoyen was backup at 406-781-8033. Rooms were reserved Tuesday through Monday. Treat this as a successful repeat/renewal account, not an unread lead."}],
+  "followUps": [{"label": "Renew Blaine County Fair for 2027", "reason": "Successful 2026 emergency booking with strong relationship. Reconnect early for 2027 before the fair secures its normal carnival or other inflatable providers.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
