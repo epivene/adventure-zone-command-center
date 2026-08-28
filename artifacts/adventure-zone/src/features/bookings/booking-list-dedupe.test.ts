@@ -34,6 +34,17 @@ describe("dedupeBookingList", () => {
     expect(result[0]).toMatchObject({ id: "booking-2", status: "contacted" });
   });
 
+  it("prefers the live confirmed record over a stale terminal duplicate", () => {
+    const result = dedupeBookingList([
+      booking({ id: "confirmed", status: "confirmed" }),
+      booking({ id: "retired", status: "completed" }),
+      booking({ id: "declined", status: "declined" }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: "confirmed", status: "confirmed" });
+  });
+
   it("keeps different event dates separate", () => {
     const result = dedupeBookingList([
       booking(),
