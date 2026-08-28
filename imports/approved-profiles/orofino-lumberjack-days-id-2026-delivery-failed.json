@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Orofino Lumberjack Days", "city": "Orofino", "region": "ID"},
+  "profile": {"placeType": "festival_event", "phone": "208-476-3412", "website": "https://orofinolumberjackdays.com/", "description": "Active Sept. 17-20, 2026 logging-heritage celebration alongside the Clearwater County Fair, with carnival rides, parade, vendors, entertainment and family activities. Adventure Zone's current published email route failed at the recipient server."},
+  "contacts": [{"id": null, "name": "Orofino Celebrations / Lumberjack Days", "phone": "208-476-3412", "email": "info@orofinolumberjackdays.org", "role": "Historical event contact - email currently failing; verify by phone", "primary": true}],
+  "booking": {"enabled": true, "name": "Orofino Lumberjack Days - 2026", "status": "contact_due", "startsAt": "2026-09-17", "endsAt": "2026-09-20", "nextActionKind": "call", "nextActionDueAt": "2026-08-31", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 outreach failed delivery - verify current contact", "body": "Adventure Zone emailed info@orofinolumberjackdays.org Aug. 17, 2026. Gmail produced two delayed-delivery notices and a final failure Aug. 20 because the recipient server timed out; this is not a decline. Current regional tourism and University of Idaho sources confirm Lumberjack Days is active Sept. 17-20, 2026 with carnival rides and family activities. The event is worth a quick contact verification, although the existing carnival means Adventure Zone must determine whether there is room for a separate attraction area rather than assuming a fit."}],
+  "followUps": [{"label": "Verify Orofino Lumberjack Days contact by phone", "reason": "The 2026 email never delivered and the event is still upcoming. Confirm a working event contact and whether there is any separate family-entertainment opportunity beyond the carnival before sending anything else.", "dueAt": "2026-08-31T16:00:00.000Z"}]
+}
