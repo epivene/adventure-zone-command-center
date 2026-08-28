@@ -1,5 +1,5 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -8,28 +8,34 @@
     "region": "ID"
   },
   "profile": {
-    "description": "2026 review completed. Gate City Oktoberfest is Sept. 26, 2026 at Lookout Point in Historic Downtown Pocatello. The current official listing centers on German/craft beer tasting, food and live music, requires valid government-issued photo ID, and states attendees must be 21+ to purchase tickets. This is not an appropriate routine Adventure Zone inflatable-carnival prospect.",
+    "description": "2026 review corrected: adult/21+ events are valid Adventure Zone prospects and must not be rejected solely because of age restriction or alcohol service. Gate City Oktoberfest is Sept. 26, 2026 at Lookout Point in Historic Downtown Pocatello, with beer/cider tasting, food and live music. Warrior's Playground may be a natural adult-oriented angle. Verify space, hours, route economics and package availability before deciding outreach.",
     "phone": "208-233-1525",
     "website": "https://gatecityoktoberfest.com/"
   },
   "contacts": [],
   "booking": {
-    "enabled": false,
-    "name": "",
-    "status": "declined",
-    "startsAt": "",
-    "endsAt": "",
-    "nextActionKind": "",
-    "nextActionDueAt": "",
+    "enabled": true,
+    "name": "Gate City Oktoberfest 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-26",
+    "endsAt": "2026-09-26",
+    "nextActionKind": "review",
+    "nextActionDueAt": "2026-09-01",
     "travelLegId": null
   },
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2026 review — non-fit: beer-tasting Oktoberfest",
-      "body": "Current official 2026 information confirms Gate City Oktoberfest is Sept. 26, 2026, 4-8 PM at Lookout Point and is built around beer/cider tasting, food and live music. The event requires ID and is effectively an adult beer-tasting event, so do not create routine Adventure Zone inflatable-carnival outreach or follow-up."
+      "subject": "Correction — adult/21+ is not a non-fit reason",
+      "body": "Do not reject this event because it is adult/beer-focused. Adventure Zone can work adult events. Consider Warrior's Playground and competitive/adrenaline attractions as the primary angle, then evaluate footprint, operating hours, route economics, organizer interest and availability."
     }
   ],
-  "followUps": []
+  "followUps": [
+    {
+      "label": "Review adult-event fit — Gate City Oktoberfest",
+      "reason": "Adult/21+ events are eligible. Check Warrior's Playground fit, space, route economics and package availability before outreach.",
+      "dueAt": "2026-09-01T15:00:00.000Z"
+    }
+  ]
 }
