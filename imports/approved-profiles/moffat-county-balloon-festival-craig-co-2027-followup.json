@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Moffat County Hot Air Balloon Festival", "city": "Craig", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Established Adventure Zone history: Adventure Zone attended this festival in prior years and the organizer specifically invited a 2027 discussion after the 2026 festival."},
+  "contacts": [{"id": null, "name": "Randy Looper", "phone": "", "email": "elkruninn@yahoo.com", "role": "Festival contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Explicit 2027 invitation after prior Adventure Zone attendance", "body": "Gmail history shows Adventure Zone attended the Moffat County Balloon Festival from 2015-2019. In February 2026 Randy Looper discussed the prior pay-for-play arrangement, and on Feb. 20 he said they would talk about getting Adventure Zone on the 2027 schedule after the 2026 festival. This should be treated as a warm renewal opportunity."}],
+  "followUps": [{"label": "Follow up with Randy for 2027 Moffat County Balloon Festival", "reason": "Randy explicitly said they would discuss getting Adventure Zone on the 2027 schedule after the 2026 festival.", "dueAt": "2026-09-15T16:00:00.000Z"}]
+}
