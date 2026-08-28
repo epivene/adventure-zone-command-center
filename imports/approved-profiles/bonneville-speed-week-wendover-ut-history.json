@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Bonneville Speed Week", "city": "Wendover", "region": "UT"},
+  "profile": {"placeType": "festival_event", "website": "https://scta-bni.org/bonneville-general-info", "description": "Active SCTA/BNI Bonneville land-speed event. The correct organization for Speed Week is SCTA/BNI, not the Utah Salt Flats Racing Association."},
+  "contacts": [{"id": null, "name": "SCTA/BNI", "phone": "", "email": "", "role": "Speed Week organizer - verify current event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Correct organizer is SCTA/BNI", "body": "In Dec. 2023 Ellen Wilkinson of the Utah Salt Flats Racing Association told Adventure Zone it had contacted the wrong group for Speed Week and copied the SCTA office, noting Speed Week is much larger and might be interested. Current SCTA/BNI information confirms Speed Week remains active; 2026 ran July 31-Aug. 6 and 2027 information is already being prepared. Do not attribute USFRA's lack of interest to SCTA/BNI. Because the event is motorsports-focused rather than a normal family fair, keep it as a lower-priority fit review rather than automatic outreach."}],
+  "followUps": [{"label": "Review 2027 Bonneville Speed Week fit", "reason": "The old outreach went to the wrong organization. Verify whether SCTA/BNI has a spectator/family activation area where Adventure Zone would genuinely fit before contacting them.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
