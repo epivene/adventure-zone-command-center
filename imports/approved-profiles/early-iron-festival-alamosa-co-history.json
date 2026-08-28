@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Early Iron Festival", "city": "Alamosa", "region": "CO"},
+  "profile": {"placeType": "festival_event", "website": "https://www.alamosa.org/event/early-iron-festival/", "description": "Large active three-day classic-car festival drawing 600+ rodders and enthusiasts, but the organizer said it does not have vendors at the show."},
+  "contacts": [{"id": null, "name": "Roni Wisdom", "phone": "", "email": "", "role": "Historical event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Organizer says no vendors; clarify only if entertainment partnership is materially different", "body": "Roni Wisdom replied Aug. 9, 2026 that Early Iron Festival does not have vendors at its show. Current Visit Alamosa information confirms the festival is active Sept. 4-6, 2026 and draws 600+ rodders and car enthusiasts. This may have been a vendor-category mismatch, but do not keep re-pitching unless a verified organizer confirms a separate staffed entertainment attraction would be considered outside normal vendor participation."}],
+  "followUps": []
+}
