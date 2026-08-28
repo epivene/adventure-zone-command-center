@@ -169,3 +169,17 @@ export async function createProductionOpportunityEmailRuntime() {
     readySource,
   });
 }
+
+type ProductionOpportunityEmailRuntime = Awaited<
+  ReturnType<typeof createProductionOpportunityEmailRuntime>
+>;
+
+let productionRuntimePromise: Promise<ProductionOpportunityEmailRuntime> | null = null;
+
+export function getProductionOpportunityEmailRuntime(): Promise<ProductionOpportunityEmailRuntime> {
+  productionRuntimePromise ??= createProductionOpportunityEmailRuntime().catch((error) => {
+    productionRuntimePromise = null;
+    throw error;
+  });
+  return productionRuntimePromise;
+}
