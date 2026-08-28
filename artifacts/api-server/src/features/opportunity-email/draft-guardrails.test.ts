@@ -70,6 +70,12 @@ describe("evaluateDraftGuardrails", () => {
     expect(evaluateDraftGuardrails(makeContext({ packageAvailability: null, calendarEvidence: [] }), "new_outreach").blocker?.code)
       .toBe("availability_unknown");
   });
+
+  it("blocks unresolved package availability instead of treating ambiguous Calendar evidence as safe", () => {
+    expect(evaluateDraftGuardrails(makeContext({
+      packageAvailability: { status: "unresolved", blockers: ["ambiguous Calendar package usage"] },
+    }), "new_outreach").blocker?.code).toBe("availability_unknown");
+  });
 });
 
 describe("Adventure Zone email generation rule contract", () => {
