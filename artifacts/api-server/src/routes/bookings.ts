@@ -18,6 +18,10 @@ import { PackageService } from "@/features/packages/package-service";
 import { DrizzleResourceRepository } from "@/features/resources/resource-repository";
 import { ResourceService } from "@/features/resources/resource-service";
 import { createTripTransferTimeLookup } from "@/features/trips/transfer-time-lookup";
+import { LegAssignmentRepository } from "@/features/leg-assignment/leg-assignment-repository";
+import { LegAssignmentService } from "@/features/leg-assignment/leg-assignment-service";
+import { RouteDriveTimeEstimator } from "@/features/leg-assignment/drive-time-estimator";
+import { isQualifiedPotentialStatus } from "@/features/leg-assignment/qualification";
 
 const router: IRouter = Router();
 
@@ -37,6 +41,17 @@ const acknowledgeConflictSchema = z.object({
 }).strict();
 
 function bookingRepo() { return new DrizzleBookingRepository(db); }
+function legAssignmentService() {
+  return new LegAssignmentService(
+    new LegAssignmentRepository(db),
+    new RouteDriveTimeEstimator(db),
+  );
+}
+
+async function evaluateQualifiedBooking(bookingId: string, status: string) {
+  if (!isQualifiedPotentialStatus(status)) return;
+  await legAssignmentService().evaluate(bookingId);
+}
 
 const packageErrorMessages: Record<string, string> = {
   INVALID_PACKAGE_INPUT: "Review the package configuration.",
@@ -88,6 +103,9 @@ router.post("/bookings/complete-follow-up", async (req, res): Promise<void> => {
   try {
     const service = new BookingService(bookingRepo() as any);
     const result = await service.completeFollowUp(req.body);
+    if (result.ok && typeof req.body?.status === "string") {
+      await evaluateQualifiedBooking(result.value.bookingId, req.body.status);
+    }
     res.json(result ?? { ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to complete follow-up");
@@ -210,10 +228,11 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
         req.log.warn({ err, bookingId: id }, "Package history comparison unavailable");
         return null;
       });
-    const [allTravelLegs, timelinePage, packageHistoryComparison] = await Promise.all([
+    const [allTravelLegs, timelinePage, packageHistoryComparison, legAssignment] = await Promise.all([
       new DrizzleTravelLegRepository(db).listTravelLegs({ includeArchived: true }),
       activitySvc.listTimeline({ bookingId: id }),
       packageHistoryPromise,
+      new LegAssignmentRepository(db).loadPersistedDecision(id),
     ]);
     res.json({
       ...detail,
@@ -221,6 +240,7 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
       timeline: timelinePage.items,
       timelineNextPage: timelinePage.nextPage,
       packageHistoryComparison,
+      legAssignment,
     });
   } catch (err) {
     req.log.error({ err }, "Failed to get booking");
@@ -236,7 +256,27 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     return;
   }
   try {
-    await bookingRepo().updateBookingDetails(id, parsed.data as any);
+    const repo = bookingRepo();
+    const before = await repo.getBookingDetail(id);
+    if (!before) { res.status(404).json({ ok: false, error: "Not found" }); return; }
+    await repo.updateBookingDetails(id, parsed.data as any);
+
+    const previousLegId = before.booking.travelLegId;
+    const nextLegId = parsed.data.travelLegId ?? null;
+    if (previousLegId !== nextLegId && nextLegId) {
+      await legAssignmentService().recordManualAssignment(id, nextLegId);
+    } else if (
+      previousLegId !== nextLegId &&
+      nextLegId === null &&
+      isQualifiedPotentialStatus(parsed.data.status)
+    ) {
+      await legAssignmentService().evaluate(id);
+    } else if (
+      before.booking.status !== parsed.data.status &&
+      isQualifiedPotentialStatus(parsed.data.status)
+    ) {
+      await evaluateQualifiedBooking(id, parsed.data.status);
+    }
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to update booking");
