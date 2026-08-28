@@ -1,0 +1,35 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Snowy Mountain Brewery Oktoberfest",
+    "city": "Saratoga",
+    "region": "WY"
+  },
+  "profile": {
+    "description": "2026 review completed. Adventure Zone previously emailed this event in 2023 and 2024. The current official Saratoga Hot Springs Resort listing confirms Oktoberfest on Sept. 26, 2026 from noon-3 PM in the Biergarten and states the event is 21 and over. This is not an appropriate routine Adventure Zone inflatable-carnival prospect.",
+    "phone": "307-326-5261",
+    "website": "https://saratogahotspringsresort.com/2026/08/golf-in-the-morning-bavaria-in-the-afternoon-oktoberfest-2026-at-saratoga-hot-springs-resort/"
+  },
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "declined",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — non-fit: 21+ Oktoberfest",
+      "body": "Current official 2026 event information confirms Snowy Mountain Brewery Oktoberfest at Saratoga Hot Springs Resort is Sept. 26, 2026, noon-3 PM, and explicitly 21+. Adventure Zone previously emailed the resort about this event in 2023 and 2024 without a meaningful reply. Do not create routine inflatable-carnival outreach or follow-up for this event."
+    }
+  ],
+  "followUps": []
+}
