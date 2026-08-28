@@ -1,0 +1,51 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Bear Lake Harvest Festival",
+    "city": "Montpelier",
+    "region": "ID"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Current 2026 event verified from the Bear Lake County Chamber. Bear Lake Harvest Festival is Sept. 19, 2026 from 12:00 PM-6:00 PM at the Bear Lake County Fairgrounds in Montpelier, Idaho. The Chamber describes it as an annual fall tradition featuring local growers, makers and food artisans. Standard vendor applications are open through Aug. 31, 2026, but the published form is designed around 10x10 booth spaces, so Adventure Zone should contact the Chamber directly before applying to discuss a substantially larger staffed attraction footprint. This is a separate event/profile from the historical Bear Lake Fall Market Days lead in Garden City, Utah unless an organizer later confirms a relationship.",
+    "phone": "208-220-4742",
+    "website": "https://bearlakecountychamber.com/events"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Bear Lake County Chamber of Commerce",
+      "phone": "208-220-4742",
+      "email": "info@bearlakecountychamber.com",
+      "role": "Current event organizer / Chamber contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Bear Lake Harvest Festival 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-19",
+    "endsAt": "2026-09-19",
+    "nextActionKind": "contact",
+    "nextActionDueAt": "2026-08-28",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 verified — separate from Fall Market Days",
+      "body": "User supplied the current Bear Lake County Chamber events page. Verified Bear Lake Harvest Festival on Sept. 19, 2026, 12-6 PM, Bear Lake County Fairgrounds, Montpelier ID. Vendor application deadline is Aug. 31. Published booth options are 10x10, including powered booths, so do not assume the standard vendor form can accommodate Adventure Zone. Contact the Chamber directly to ask about a larger staffed attraction footprint, power/site placement, and whether entertainment/amusement vendors are being considered. Gmail duplicate check found no prior Adventure Zone emails to the Chamber, the Harvest Festival, info@bearlakecountychamber.com, or bearlakecountychamber.com. Keep this separate from historical Bear Lake Fall Market Days in Garden City UT unless the organizer confirms continuity."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Contact Bear Lake Harvest Festival about attraction space",
+      "reason": "Current 2026 event is verified and vendor deadline is Aug. 31. Standard application is only 10x10 booth space, so ask the Chamber directly whether they can accommodate a larger staffed Adventure Zone attraction footprint, power/site needs and entertainment-vendor terms before applying.",
+      "dueAt": "2026-08-28T16:00:00.000Z"
+    }
+  ]
+}
