@@ -29,11 +29,13 @@ type SelectedCalendar = {
   primary: boolean;
 };
 
+type CalendarReadClient = Pick<GoogleWorkspaceReadClient, "listCalendarEvents">;
+
 type Dependencies = {
   bookings: { get(id: string): Promise<BookingWindow | null> };
   calendars: { selected(): Promise<SelectedCalendar[]> };
   packages: { active(): Promise<PackageAvailabilityTemplate[]> };
-  google: { readClient(): Promise<GoogleWorkspaceReadClient | null> };
+  google: { readClient(): Promise<CalendarReadClient | null> };
 };
 
 type AvailabilityResult = {
