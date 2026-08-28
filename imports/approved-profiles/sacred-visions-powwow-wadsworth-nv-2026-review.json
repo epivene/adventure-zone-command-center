@@ -1,0 +1,43 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Sacred Visions Powwow",
+    "city": "Wadsworth",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "2026 Sacred Visions Powwow is scheduled Sept. 11-13, 2026 at Big Bend Ranch in Wadsworth, Nevada, hosted by the Pyramid Lake Paiute Tribe. Current official/trusted sources describe a cultural gathering centered on dance, song, drum and buckskin contests, regalia, traditional food, hand games, arts/crafts vendors, and community traditions. Adventure Zone Gmail shows no prior direct outreach to this event. Do not create routine commercial inflatable-carnival outreach unless the Pow Wow committee specifically seeks a separate amusement or children's attraction component."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Brian Wadsworth",
+      "phone": "775-815-7588",
+      "email": "",
+      "role": "Sacred Visions Pow Wow Chairman",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "researching",
+    "startsAt": "2026-09-11",
+    "endsAt": "2026-09-13",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — cultural event; no routine pitch",
+      "body": "Current 2026 sources confirm Sacred Visions Powwow Sept. 11-13 at Big Bend Ranch. The Pyramid Lake Paiute Tribe newsletter says vendor applications are available through Pow Wow Chairman Brian Wadsworth. Gmail shows no prior Adventure Zone outreach. Because the event is primarily a tribal cultural gathering, do not cold-pitch a commercial inflatable carnival merely because families attend. Reconsider only if the committee specifically requests or advertises a separate amusement/children's attraction component."
+    }
+  ],
+  "followUps": []
+}
