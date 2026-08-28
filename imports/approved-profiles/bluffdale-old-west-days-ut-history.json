@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Bluffdale Old West Days", "city": "Bluffdale", "region": "UT"},
+  "profile": {"placeType": "festival_event", "phone": "801-254-2200", "website": "https://www.bluffdale.gov/oldwestdays", "description": "Active City of Bluffdale community celebration. The 2026 finale included a large family festival with inflatables, games, entertainment, vendors and activity wristbands."},
+  "contacts": [{"id": null, "name": "City of Bluffdale Events", "phone": "801-254-2200", "email": "", "role": "Current city event organizer path", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Historical contact left; event now clearly uses inflatables", "body": "Melissa replied in Dec. 2023 that she no longer helped with Bluffdale Days and that the mayor/city had taken over. Do not use Melissa as the current contact. Current City of Bluffdale information confirms Old West Days remains active and the 2026 family festival included inflatables and activity wristbands, so this is a legitimate future provider/partnership lead if contacted through the current city events team."}],
+  "followUps": [{"label": "Check 2027 Bluffdale Old West Days inflatable provider", "reason": "The event actively uses inflatables, but the old contact is stale. Identify the current city event coordinator and provider arrangement early for 2027.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
