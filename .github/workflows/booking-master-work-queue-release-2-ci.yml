@@ -62,6 +62,7 @@ jobs:
           src/features/opportunity-email/production-ready-to-send-source.test.ts
           src/features/opportunity-email/production-opportunity-email-runtime.test.ts
           src/features/opportunity-email/opportunity-email-worker-runtime.test.ts
+          src/features/opportunity-email/opportunity-email-server-lifecycle.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
           src/features/opportunity-email/ai-opportunity-email-writer.test.ts
           src/features/opportunity-email/google-opportunity-email-provider.test.ts
