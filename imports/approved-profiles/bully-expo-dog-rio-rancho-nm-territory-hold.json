@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Bully EXPO DOG", "city": "Rio Rancho", "region": "NM"},
+  "profile": {"placeType": "festival_event", "description": "Current review is on hold because New Mexico is a hard territory hold for new Adventure Zone outreach. This is not a permanent decline and existing history should remain intact."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Territory hold — New Mexico", "body": "Do not create new outreach, drafts, or routine follow-ups while New Mexico remains on hard territory hold. Preserve any prior relationship/history. Revisit only if the restriction is lifted or Dave/Amy specifically approve this opportunity."}],
+  "followUps": []
+}
