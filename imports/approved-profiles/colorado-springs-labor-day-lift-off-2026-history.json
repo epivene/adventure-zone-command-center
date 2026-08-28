@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Colorado Springs Labor Day Lift Off", "city": "Colorado Springs", "region": "CO"},
+  "profile": {"placeType": "festival_event", "phone": "719-219-3333", "website": "https://coloradospringslabordayliftoff.com/", "description": "Large free family-friendly hot-air-balloon festival at Memorial Park with interactive attractions and a current kids/activity provider."},
+  "contacts": [{"id": null, "name": "Labor Day Lift Off / Hot Apple Productions", "phone": "719-219-3333", "email": "Info@hotappleproductions.com", "role": "Event organizer", "primary": true}],
+  "booking": {"enabled": true, "name": "Colorado Springs Labor Day Lift Off - 2026", "status": "declined", "startsAt": "2026-09-05", "endsAt": "2026-09-07", "nextActionKind": "renewal", "nextActionDueAt": "2026-11-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 kid-zone provider filled; organizer explicitly invited next-year application", "body": "Heather replied Aug. 6, 2026 that Labor Day Lift Off already had a kid-zone provider and explicitly said 'Please apply for next year.' Current official information confirms the Sept. 5-7, 2026 event is active, large, free and family-oriented, with interactive attractions including a Ninja Nation obstacle course. This is a strong 2027 lead; do not send another 2026 pitch."}],
+  "followUps": [{"label": "Apply early for 2027 Labor Day Lift Off", "reason": "The organizer explicitly invited Adventure Zone to apply for next year after the 2026 kids-zone provider was already selected.", "dueAt": "2026-11-15T16:00:00.000Z"}]
+}
