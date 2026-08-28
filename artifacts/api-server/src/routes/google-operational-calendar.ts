@@ -1,0 +1,112 @@
+import { Router, type IRouter } from "express";
+import { eq } from "drizzle-orm";
+import { z } from "zod";
+
+import { db } from "@workspace/db";
+import {
+  googleOperationalCalendarReviews,
+} from "@/db/schema";
+import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
+import { OperationalCalendarImportService } from "@/features/google-workspace/calendar/operational-calendar-import-service";
+import { OperationalCalendarLinkRepository } from "@/features/google-workspace/calendar/operational-calendar-link-repository";
+import { OperationalCalendarProjectionRepository } from "@/features/google-workspace/calendar/operational-calendar-projection-repository";
+import { OperationalCalendarSyncService } from "@/features/google-workspace/calendar/operational-calendar-sync-service";
+
+const router: IRouter = Router();
+const connectionRepository = new PostgresGoogleConnectionRepository();
+
+function syncService() {
+  return new OperationalCalendarSyncService(
+    connectionRepository,
+    new OperationalCalendarProjectionRepository(db),
+    new OperationalCalendarLinkRepository(db),
+  );
+}
+
+const importSchema = z.object({
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+}).strict();
+
+const decisionSchema = z.object({
+  decision: z.enum(["accepted", "rejected"]),
+}).strict();
+
+router.get("/google-workspace/operational-calendar", async (_req, res): Promise<void> => {
+  try {
+    const connection = await connectionRepository.getByRole("operational_calendar");
+    const reviews = connection
+      ? await new OperationalCalendarLinkRepository(db).listPendingReviews(connection.id)
+      : [];
+    res.json({ connection, pendingReviewCount: reviews.length, reviews });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_STATUS_FAILED" });
+  }
+});
+
+router.post("/google-workspace/operational-calendar/import", async (req, res): Promise<void> => {
+  const parsed = importSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_IMPORT_INPUT_INVALID" });
+    return;
+  }
+  const now = new Date();
+  const from = parsed.data.from ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const to = parsed.data.to ?? new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31, 23, 59, 59));
+  try {
+    const service = new OperationalCalendarImportService(
+      db,
+      () => connectionRepository.createOperationalCalendarClient(),
+    );
+    res.json(await service.importWindow({ from, to }));
+  } catch (error) {
+    req.log.error({ err: error }, "Operational calendar import failed");
+    res.status(500).json({ error: error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_IMPORT_FAILED" });
+  }
+});
+
+router.post("/google-workspace/operational-calendar/bookings/:bookingId/sync", async (req, res): Promise<void> => {
+  try {
+    const result = await syncService().syncConfirmedBooking(req.params.bookingId);
+    res.json(result);
+  } catch (error) {
+    req.log.error({ err: error, bookingId: req.params.bookingId }, "Operational calendar sync failed");
+    res.status(500).json({ error: error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_SYNC_FAILED" });
+  }
+});
+
+router.post("/google-workspace/operational-calendar/reviews/:reviewId/decision", async (req, res): Promise<void> => {
+  const parsed = decisionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_INPUT_INVALID" });
+    return;
+  }
+  try {
+    const [review] = await db
+      .select()
+      .from(googleOperationalCalendarReviews)
+      .where(eq(googleOperationalCalendarReviews.id, req.params.reviewId))
+      .limit(1);
+    if (!review || review.state !== "pending") {
+      res.status(404).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_NOT_FOUND" });
+      return;
+    }
+    await db.update(googleOperationalCalendarReviews).set({
+      state: parsed.data.decision,
+      reviewedBy: (req as any).userId ?? "owner",
+      reviewedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(googleOperationalCalendarReviews.id, review.id));
+
+    // Rejecting a calendar change means "keep the app as source of truth".
+    // The next explicit/automatic sync will retry the app projection. Accepting
+    // records the owner's acknowledgement; imported unmatched/ambiguous rows stay
+    // non-destructive until manually linked through their event profile.
+    res.json({ ok: true, state: parsed.data.decision, bookingId: review.bookingId });
+  } catch (error) {
+    req.log.error({ err: error }, "Operational calendar review decision failed");
+    res.status(500).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_FAILED" });
+  }
+});
+
+export default router;
