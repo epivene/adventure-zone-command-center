@@ -93,7 +93,8 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
 
     return records.map(({ booking, travelLeg }) => {
       const assignment = assignmentByBooking.get(booking.id) ?? null;
-      const suggestedLeg = assignment?.suggestedLegId
+      const canProjectSuggestion = booking.status !== "confirmed" && booking.status !== "completed";
+      const suggestedLeg = canProjectSuggestion && assignment?.suggestedLegId
         ? legById.get(assignment.suggestedLegId) ?? null
         : null;
       const planningLeg = travelLeg ?? suggestedLeg;
