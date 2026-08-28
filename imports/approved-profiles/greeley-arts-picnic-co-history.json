@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Greeley Arts Picnic", "city": "Greeley", "region": "CO"},
+  "profile": {"placeType": "festival_event", "phone": "970-381-3278", "website": "https://greeleyco.gov/events/arts-picnic/", "description": "Active City of Greeley two-day arts festival with 150+ artists/crafters, food, kids activities and live entertainment. 2026 has passed; 2027 information is pending."},
+  "contacts": [{"id": null, "name": "Aaron Mitchell", "phone": "970-381-3278", "email": "Aaron.Mitchell@greeleygov.com", "role": "Special Event Manager", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Active event - 2024 reply left door open for future summer events", "body": "Andrea Haring replied in February 2024 that Greeley would keep Adventure Zone's information if they had a need for inflatables at summer events. Current official information confirms Arts Picnic remains active; 2026 was a free two-day event with 150+ artists/crafters, food trucks, kids activities and performances. Current event contact is Aaron Mitchell, Special Event Manager. Continue from the prior relationship rather than treating this as a cold lead."}],
+  "followUps": [{"label": "Check 2027 Greeley Arts Picnic family-entertainment needs", "reason": "The city previously said it would keep Adventure Zone in mind for summer events and the event remains active with kids programming. Check early for 2027 before plans are set.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
