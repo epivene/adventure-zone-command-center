@@ -43,16 +43,19 @@ vi.mock("@/lib/manager-auth-context", () => ({ useManagerAuth: () => ({ managerA
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("ManagerEventWrapUpPage", () => {
-  it("shows event-day site notes alongside the existing wrap-up sections", async () => {
+  it("shows the shared event profile filtered to leg-manager information", async () => {
     render(<ManagerEventWrapUpPage bookingId="booking-a" />);
-    expect(await screen.findByRole("heading", { name: "Event Wrap-Up" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Event notes / site check" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Dickinson Fair" })).toBeInTheDocument();
+    expect(screen.getByText("Your leg · event profile")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Leg manager event report" })).toBeInTheDocument();
     expect(screen.getByLabelText("Location/address was accurate")).toBeInTheDocument();
     expect(screen.getByLabelText("Showers available")).toBeInTheDocument();
     expect(screen.getByLabelText("Forklift/loader available")).toBeInTheDocument();
     expect(screen.getByLabelText("Would we want to come back?")).toBeInTheDocument();
-    expect(screen.getByText("Money check")).toBeInTheDocument();
-    expect(screen.getByText("Profitability")).toBeInTheDocument();
+    expect(screen.queryByText("Money check")).not.toBeInTheDocument();
+    expect(screen.queryByText("Profitability")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Actual cash on hand")).not.toBeInTheDocument();
+    expect(screen.getByText(/Office closeout is separate/i)).toBeInTheDocument();
   });
 
   it("saves site observations before the event is fully wrapped up", async () => {
@@ -78,13 +81,12 @@ describe("ManagerEventWrapUpPage", () => {
     expect(await screen.findByText("Event notes saved.")).toBeInTheDocument();
   });
 
-  it("keeps the checklist in the final review feedback when finishing the event", async () => {
+  it("keeps the checklist in manager feedback and finishes without office cash closeout", async () => {
     render(<ManagerEventWrapUpPage bookingId="booking-a" />);
     await screen.findByText("Dickinson Fair");
     fireEvent.click(screen.getByRole("button", { name: "5 stars" }));
     fireEvent.click(screen.getByLabelText("Contact communication was good"));
-    fireEvent.change(screen.getByLabelText("Actual cash on hand"), { target: { value: "1720.00" } });
-    fireEvent.click(screen.getByRole("button", { name: "Finish wrap-up" }));
+    fireEvent.click(screen.getByRole("button", { name: "Finish manager report" }));
 
     await waitFor(() => expect(api).toHaveBeenCalledWith("/manager/events/booking-a/wrap-up/review", expect.objectContaining({ method: "POST" })));
     const reviewCall = api.mock.calls.find((entry) => entry[0] === "/manager/events/booking-a/wrap-up/review");
