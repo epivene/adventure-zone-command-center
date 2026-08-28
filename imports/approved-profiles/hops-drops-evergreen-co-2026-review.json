@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Hops Drops The Evergreen Music & Beer Festival", "city": "Evergreen", "region": "CO"},
-  "profile": {"placeType": "festival_event", "description": "Adventure Zone has emailed Hops Drops multiple times historically. Current official Hops Drops material still primarily displays the 2025 festival; a separate 2026 community performance page references Hops Drops on Oct. 17, 2026. The event is primarily a live-music and craft-beverage fundraiser with some free children's games/crafts, not a natural full inflatable-carnival fit."},
+  "profile": {"placeType": "festival_event", "description": "Adventure Zone has emailed Hops Drops multiple times historically. Current 2026 information references the festival on Oct. 17, 2026. The event may have compatible adult and family audiences, but its short operating window and music/craft-beverage fundraiser format do not justify the setup, staffing and travel economics of a full Adventure Zone package under the current format."},
   "contacts": [{"id": null, "name": "Hops Drops Team", "phone": "", "email": "hopsdrops32@gmail.com", "role": "Historical event contact", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "2026 review — weak fit / current details incomplete", "body": "Gmail shows Adventure Zone outreach to Hops Drops in 2022, 2023 and 2024 with no reply found. The current official Hops Drops website still primarily presents the 2025 festival, while a 2026 community talent-program page references Hops Drops on Oct. 17. The festival's core is live music and craft beverages benefiting a community stage project; kids under 21 have historically been free with smaller games, trick-or-treating and crafts. Do not create routine full inflatable-carnival outreach unless the 2026 organizers specifically seek a substantially larger children's attraction component."}],
+  "notes": [{"subject": "2026 review — not worth pursuing at current event length", "body": "Gmail shows Adventure Zone outreach to Hops Drops in 2022, 2023 and 2024 with no reply found. Adult/beer events are eligible, but Hops Drops is too short a festival window to justify hauling, setup, teardown and staffing for a full package at the current format. Do not pursue routine 2026 outreach unless the event expands to a materially longer operating window or the organizer proposes economics strong enough to justify the setup."}],
   "followUps": []
 }
