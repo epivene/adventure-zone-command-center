@@ -1,5 +1,6 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
+  "matchExisting": true,
   "event": {
     "id": null,
     "name": "Twin Falls County Fair",
@@ -8,7 +9,7 @@
   },
   "profile": {
     "placeType": "fair",
-    "description": "2026 county fair prospect. General fair office email: fair@tfcfair.com.",
+    "description": "2026 county fair prospect. Official 2026 fair runs Sept. 2-7 in Filer. Fair office: 208-326-4396. General Manager Jerre Christophersen remains the verified current manager on the official site.",
     "phone": "208-326-4396",
     "website": "https://www.tfcfair.com",
     "address1": "215 Fair Avenue",
@@ -28,13 +29,30 @@
   "booking": {
     "enabled": true,
     "name": "Twin Falls County Fair - 2026",
-    "status": "new_lead",
+    "status": "contacted",
     "startsAt": "2026-09-02",
     "endsAt": "2026-09-07",
-    "nextActionKind": "email",
-    "nextActionDueAt": "2026-08-25",
+    "nextActionKind": "call",
+    "nextActionDueAt": "2026-08-28",
     "travelLegId": null
   },
   "familyId": null,
-  "parentOrganizationId": null
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Latest contact — Melody callback and Aug. 26 email",
+      "body": "Adventure Zone sent outreach Aug. 25, 2026. A fair contact identifying herself as Melody called Desiree back. Desiree attempted to return the call but did not reach her, then sent a detailed follow-up Aug. 26 to fair@tfcfair.com explaining the current-year/future-year opportunity and both prepaid and pay-for-play models. Do not treat the old Aug. 25 email action as still due. Melody's full identity/role has not been verified, so do not merge her with Melanie Lunney or replace Jerre Christophersen as primary contact without confirmation."
+    },
+    {
+      "subject": "Current 2026 research",
+      "body": "Official Twin Falls County Fair sources confirm the 2026 fair runs Sept. 2-7 at 215 Fair Avenue, Filer ID. Official About page lists Jerre Christophersen as General Manager and the fair office at 208-326-4396. Fair-season office hours are 12 PM-8 PM through Sept. 7. Because the fair begins within days, the next useful action is a phone check-back rather than another email tonight."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "PRIORITY — Call Twin Falls after Melody callback",
+      "reason": "Melody called back and Desiree sent the detailed Aug. 26 follow-up after missing her return call. Call the fair office on Aug. 28 if there is still no response; ask for Melody or the person handling entertainment/attractions. Fair starts Sept. 2, so do not let the stale Aug. 25 email follow-up remain as the next action.",
+      "dueAt": "2026-08-28T18:00:00.000Z"
+    }
+  ]
 }
