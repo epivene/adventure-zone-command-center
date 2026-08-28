@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { callSessions, followUps } from "@/db/schema";
@@ -45,27 +45,47 @@ export class DrizzleFollowUpRepository implements FollowUpRepository {
   async create(
     input: CreateFollowUpInput,
   ): Promise<Result<FollowUpRecord, FollowUpError>> {
-    const [created] = await this.database
-      .insert(followUps)
-      .values({
-        organizationId: input.organizationId,
-        contactId: input.contactId,
-        bookingId: input.bookingId,
-        kind: input.kind,
-        dueAt: input.dueAt,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .returning();
+    return this.database.transaction(async (transaction) => {
+      const now = new Date();
 
-    if (!created) {
-      return err({
-        code: "INVALID_FOLLOW_UP_INPUT",
-        message: "Could not create follow-up.",
-      });
-    }
+      if (input.bookingId) {
+        await transaction
+          .update(followUps)
+          .set({
+            completedAt: now,
+            outcome: "Replaced by newer follow-up",
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(followUps.bookingId, input.bookingId),
+              isNull(followUps.completedAt),
+            ),
+          );
+      }
 
-    return ok(toFollowUpRecord(created));
+      const [created] = await transaction
+        .insert(followUps)
+        .values({
+          organizationId: input.organizationId,
+          contactId: input.contactId,
+          bookingId: input.bookingId,
+          kind: input.kind,
+          dueAt: input.dueAt,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      if (!created) {
+        return err({
+          code: "INVALID_FOLLOW_UP_INPUT",
+          message: "Could not create follow-up.",
+        });
+      }
+
+      return ok(toFollowUpRecord(created));
+    });
   }
 
   async edit(
