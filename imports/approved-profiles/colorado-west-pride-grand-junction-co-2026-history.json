@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Colorado West Pride", "city": "Grand Junction", "region": "CO"},
+  "profile": {"placeType": "festival_event", "website": "https://www.coloradowestpride.org/", "description": "Active Western Slope Pride week and festival in Grand Junction. Organizer passed on Adventure Zone for 2026 but left the door open for the future."},
+  "contacts": [{"id": null, "name": "Colorado West Pride", "phone": "", "email": "info@coloradowestpride.org", "role": "Organization contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Colorado West Pride - 2026", "status": "declined", "startsAt": "2026-09-01", "endsAt": "2026-09-06", "nextActionKind": "review", "nextActionDueAt": "2027-02-01", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 soft decline - future door left open", "body": "Colorado West Pride replied Aug. 17, 2026 that it would pass on Adventure Zone 'at this time' but would keep the company in mind for the future. Current official information confirms Pride Week is active Sept. 1-6, 2026 with a parade and festival days featuring vendors, food and entertainment. Do not contact again for 2026. If revisited, verify the next festival's family-programming plan and whether a staffed attraction area fits before outreach."}],
+  "followUps": [{"label": "Review 2027 Colorado West Pride family-programming fit", "reason": "2026 was a soft decline with the future left open. Check whether the next Pride festival has a legitimate family/kids entertainment need before deciding to contact again.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
