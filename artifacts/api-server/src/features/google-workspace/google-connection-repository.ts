@@ -15,6 +15,11 @@ import {
   getGoogleWorkspaceEnvironment,
   type GoogleWorkspaceEnvironment,
 } from "./google-workspace-env";
+import {
+  createOperationalCalendarClient as createCalendarClient,
+  type OperationalCalendarClient,
+} from "./calendar/operational-calendar-client";
+import { GOOGLE_OPERATIONAL_CALENDAR_SCOPE } from "./calendar/operational-calendar-oauth";
 
 export type GoogleConnectionRole = "workspace" | "operational_calendar";
 
@@ -48,6 +53,11 @@ type CreateDeliveryClient = (input: {
   environment: GoogleWorkspaceEnvironment;
   refreshToken: string;
 }) => GoogleGmailDeliveryClient;
+
+type CreateOperationalCalendarClient = (input: {
+  environment: GoogleWorkspaceEnvironment;
+  refreshToken: string;
+}) => OperationalCalendarClient;
 
 type ConnectionRow = {
   id: string;
@@ -108,17 +118,24 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
 }
 
 function toView(row: ConnectionRow): GoogleConnectionView {
-  const missingCompose = row.role === "workspace" && !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
+  const granted = scopes(row.granted_scopes);
+  const missingCompose = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
+  const missingCalendarWrite = row.role === "operational_calendar" && !granted.includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE);
+  const missingRequiredScope = missingCompose || missingCalendarWrite;
   return {
     id: row.id,
     email: row.account_email,
     role: row.role,
     operationalCalendarId: row.operational_calendar_id,
-    status: row.status === "connected" && missingCompose ? "reauthorization_required" : row.status,
-    grantedScopes: scopes(row.granted_scopes),
+    status: row.status === "connected" && missingRequiredScope ? "reauthorization_required" : row.status,
+    grantedScopes: granted,
     connectedAt: dateIso(row.connected_at) as string,
     lastVerifiedAt: dateIso(row.last_verified_at),
-    lastErrorCode: missingCompose ? "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED" : row.last_error_code,
+    lastErrorCode: missingCompose
+      ? "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED"
+      : missingCalendarWrite
+        ? "GOOGLE_OPERATIONAL_CALENDAR_WRITE_SCOPE_REQUIRED"
+        : row.last_error_code,
   };
 }
 
@@ -127,17 +144,20 @@ export class PostgresGoogleConnectionRepository {
   private readonly providedEnvironment: GoogleWorkspaceEnvironment | undefined;
   private readonly createClient: CreateClient;
   private readonly createDeliveryClient: CreateDeliveryClient;
+  private readonly createCalendarClient: CreateOperationalCalendarClient;
 
   constructor(options?: {
     pool?: GoogleConnectionSqlPool;
     environment?: GoogleWorkspaceEnvironment;
     createClient?: CreateClient;
     createDeliveryClient?: CreateDeliveryClient;
+    createOperationalCalendarClient?: CreateOperationalCalendarClient;
   }) {
     this.pool = options?.pool ?? (defaultPool as unknown as GoogleConnectionSqlPool);
     this.providedEnvironment = options?.environment;
     this.createClient = options?.createClient ?? createGoogleWorkspaceReadClient;
     this.createDeliveryClient = options?.createDeliveryClient ?? createGoogleGmailDeliveryClient;
+    this.createCalendarClient = options?.createOperationalCalendarClient ?? createCalendarClient;
   }
 
   async upsertConnected(input: {
@@ -241,6 +261,31 @@ export class PostgresGoogleConnectionRepository {
     const environment = this.requireEnvironment();
     const refreshToken = decryptGoogleSecret(row.encrypted_refresh_token, environment.tokenEncryptionKey);
     return this.createClient({ environment, refreshToken });
+  }
+
+  async createOperationalCalendarClient(): Promise<{
+    connectionId: string;
+    calendarId: string;
+    client: OperationalCalendarClient;
+  } | null> {
+    const row = await this.currentRow("operational_calendar");
+    if (!row) return null;
+    const granted = scopes(row.granted_scopes);
+    if (
+      row.status === "reauthorization_required" ||
+      !granted.includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE)
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    const calendarId = row.operational_calendar_id?.trim() || row.account_email.trim();
+    if (!calendarId) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_ID_REQUIRED");
+    const environment = this.requireEnvironment();
+    const refreshToken = decryptGoogleSecret(row.encrypted_refresh_token, environment.tokenEncryptionKey);
+    return {
+      connectionId: row.id,
+      calendarId,
+      client: this.createCalendarClient({ environment, refreshToken }),
+    };
   }
 
   async createGmailDraftClient(): Promise<{ connectionId: string; client: GoogleGmailDraftClient } | null> {
