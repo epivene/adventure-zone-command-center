@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Apache County Fair", "city": "St. Johns", "region": "AZ"},
+  "profile": {"placeType": "fair", "phone": "928-551-4037", "website": "https://apachecountyfair.com/", "description": "Active county fair, but the fair managers have stated the City-owned grounds prohibit inflatables. The fair also began a five-year carnival contract in 2026."},
+  "contacts": [{"id": null, "name": "Jennifer Frieden", "phone": "928-551-4037", "email": "apachecountyfair@gmail.com", "role": "Fair Manager", "primary": true}, {"id": null, "name": "Tiffany Willis", "phone": "928-551-4037", "email": "apachecountyfair@gmail.com", "role": "Fair Manager", "primary": false}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "City property rule prohibits inflatables; five-year carnival contract", "body": "Jennifer Frieden and Tiffany Willis replied Aug. 4, 2026 that they loved the idea but had already told Dave the City owns the grounds and has a hard rule against inflatables on city property even when insured. Current official fair information confirms the 2026 fair is active Aug. 26-29 and states 2026 is the first year of a five-year carnival contract. This is a structural no for Adventure Zone under the current venue policy. Do not routinely re-contact unless the city rule or venue changes."}],
+  "followUps": []
+}
