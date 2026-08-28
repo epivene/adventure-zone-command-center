@@ -51,6 +51,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/opportunities/opportunity-repository.test.ts
+          src/features/opportunity-email/opportunity-email-migrations.test.ts
           src/features/opportunity-email/opportunity-email-repository.test.ts
           src/features/opportunity-email/draft-context-resolver.test.ts
           src/features/opportunity-email/production-draft-context-sources.test.ts
