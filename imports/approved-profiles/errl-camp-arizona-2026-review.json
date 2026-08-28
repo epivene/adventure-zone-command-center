@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Errl Camp", "city": "Tempe", "region": "AZ"},
+  "profile": {"placeType": "festival_event", "description": "Established Adventure Zone relationship: Gmail shows prior Errl Camp contracts in 2023 and 2024. Current 2026 event details are not verified. The app currently labels this as Tempe, but the official Errl Camp page points to Camp Verde and a current Arizona cannabis-events listing shows the 2026 date as TBD. Do not treat Tempe or any 2026 dates as confirmed."},
+  "contacts": [{"id": null, "name": "Jay", "phone": "", "email": "jay@theerrlcup.com", "role": "Historical Errl Camp contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — verify Errl Camp date/location before outreach", "body": "Adventure Zone has real prior history with Errl Camp, including contracts in 2023 and 2024, so this is not a cold prospect. Current public information does not verify a Tempe 2026 event: the official Errl Camp page currently points to Camp Verde, Arizona, while a current Arizona cannabis event listing shows Errl Camp 2026 date as TBD. Before drafting or adding calendar holds, contact Jay/the Errl Cup team to verify whether Errl Camp is happening in 2026, the exact dates, location, and whether they want Adventure Zone back."}],
+  "followUps": [{"label": "Verify 2026 Errl Camp with Jay", "reason": "Prior booked relationship. Confirm whether Errl Camp is happening in 2026 and verify exact dates/location before any outreach or calendar hold. App's current Tempe label may be stale.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+}
