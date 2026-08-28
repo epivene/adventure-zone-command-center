@@ -142,7 +142,6 @@ export class EventWrapUpService {
     const row = await this.store.get(input.bookingId);
     if (!row) throw new Error("Save the wrap-up draft before submitting");
     if (row.status !== "draft") throw new Error("Wrap-up is not a draft");
-    if (row.actualCashOnHandCents === null) throw new Error("Enter actual cash on hand before submitting");
     const submitted = await this.store.markSubmitted(input.bookingId, input.managerId);
     if (!submitted) throw new Error("Wrap-up could not be submitted");
     return submitted;
