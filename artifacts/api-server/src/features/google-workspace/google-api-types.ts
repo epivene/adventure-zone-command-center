@@ -93,7 +93,7 @@ export type GoogleCalendarEvent = {
 };
 
 export interface GoogleWorkspaceReadClient {
-  authorizationUrl(input: { state: string }): string;
+  authorizationUrl(input: { state: string; scopes?: readonly string[] }): string;
   exchangeCode(code: string): Promise<{
     refreshToken: string;
     scopes: string[];
