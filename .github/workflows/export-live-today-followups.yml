@@ -1,0 +1,29 @@
+name: Export live Today follow-ups
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch live follow-ups
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${API_URL}/api/assistant-import/today-followups?limit=500" \
+            --output today-followups.json
+
+      - name: Upload follow-up list
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-today-followups
+          path: today-followups.json
+          retention-days: 1
