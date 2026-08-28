@@ -37,6 +37,17 @@ describe("dedupeCalendarBookings", () => {
     expect(result[0]).toMatchObject({ id: "booking-2", travelLegId: "leg-kristy" });
   });
 
+  it("prefers a live confirmed booking over a stale terminal duplicate", () => {
+    const result = dedupeCalendarBookings([
+      booking({ id: "confirmed", status: "confirmed" }),
+      booking({ id: "completed", status: "completed" }),
+      booking({ id: "declined", status: "declined" }),
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: "confirmed", status: "confirmed" });
+  });
+
   it("does not merge same-name events on different dates", () => {
     const result = dedupeCalendarBookings([
       booking(),
