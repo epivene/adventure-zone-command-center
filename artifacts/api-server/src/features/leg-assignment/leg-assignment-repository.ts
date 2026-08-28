@@ -42,6 +42,14 @@ export type AssignmentCandidateContext = {
   nextStop: RouteStop | null;
 };
 
+export interface LegAssignmentStore {
+  loadTarget(bookingId: string): Promise<AssignmentTarget | null>;
+  loadCandidateContexts(bookingId: string): Promise<AssignmentCandidateContext[]>;
+  loadPersistedDecision(bookingId: string): Promise<LegAssignmentDecision | null>;
+  saveDecision(decision: LegAssignmentDecision): Promise<void>;
+  assignLeg(bookingId: string, travelLegId: string): Promise<void>;
+}
+
 function year(value: Date) {
   return value.getUTCFullYear();
 }
@@ -57,7 +65,7 @@ function toWindow(input: {
   return startsAt && endsAt ? { startsAt, endsAt } : null;
 }
 
-export class LegAssignmentRepository {
+export class LegAssignmentRepository implements LegAssignmentStore {
   constructor(private readonly db: DrizzleDatabase) {}
 
   async loadTarget(bookingId: string): Promise<AssignmentTarget | null> {
