@@ -1,5 +1,6 @@
 import { pool as defaultPool } from "@workspace/db";
 
+import { ensureOperationalCalendarConnectionUpgrade } from "./google-workspace-operational-calendar-upgrade";
 import { ensureGoogleWorkspaceSchema } from "./google-workspace-startup-migration";
 
 const advisoryTryLockSql =
@@ -21,9 +22,12 @@ type EnsureSchema = (client: StartupClient) => Promise<boolean>;
 export async function ensureGoogleWorkspaceSchemaBeforeListen(options?: {
   pool?: StartupPool;
   ensureSchema?: EnsureSchema;
+  ensureOperationalCalendarUpgrade?: EnsureSchema;
 }): Promise<boolean> {
   const pool = options?.pool ?? (defaultPool as unknown as StartupPool);
   const ensureSchema = options?.ensureSchema ?? ensureGoogleWorkspaceSchema;
+  const ensureOperationalCalendarUpgrade =
+    options?.ensureOperationalCalendarUpgrade ?? ensureOperationalCalendarConnectionUpgrade;
   const client = await pool.connect();
   let locked = false;
 
@@ -33,7 +37,9 @@ export async function ensureGoogleWorkspaceSchemaBeforeListen(options?: {
     if (!locked) {
       throw new Error("GOOGLE_WORKSPACE_SCHEMA_LOCK_BUSY");
     }
-    return await ensureSchema(client);
+    await ensureSchema(client);
+    await ensureOperationalCalendarUpgrade(client);
+    return true;
   } finally {
     if (locked) {
       await client.query(advisoryUnlockSql).catch(() => undefined);

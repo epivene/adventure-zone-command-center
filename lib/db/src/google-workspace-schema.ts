@@ -20,6 +20,13 @@ export const googleWorkspaceConnectionStatusValues = [
 export type GoogleWorkspaceConnectionStatus =
   (typeof googleWorkspaceConnectionStatusValues)[number];
 
+export const googleWorkspaceConnectionRoleValues = [
+  "workspace",
+  "operational_calendar",
+] as const;
+export type GoogleWorkspaceConnectionRole =
+  (typeof googleWorkspaceConnectionRoleValues)[number];
+
 export const googleWorkspaceAuditActorValues = [
   "owner",
   "office",
@@ -41,6 +48,11 @@ export const googleWorkspaceConnections = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     accountEmail: text("account_email").notNull(),
+    role: text("role")
+      .$type<GoogleWorkspaceConnectionRole>()
+      .default("workspace")
+      .notNull(),
+    operationalCalendarId: text("operational_calendar_id"),
     status: text("status")
       .$type<GoogleWorkspaceConnectionStatus>()
       .default("connected")
@@ -70,14 +82,22 @@ export const googleWorkspaceConnections = pgTable(
     unique("google_workspace_connections_account_email_unique").on(
       table.accountEmail,
     ),
-    uniqueIndex("google_workspace_connections_single_active_unique")
-      .on(sql`(1)`)
+    uniqueIndex("google_workspace_connections_active_role_unique")
+      .on(table.role)
       .where(
         sql`${table.status} in ('connected', 'reauthorization_required')`,
       ),
     index("google_workspace_connections_status_idx").on(
       table.status,
       table.updatedAt,
+    ),
+    check(
+      "google_workspace_connections_role_valid",
+      sql`${table.role} in ('workspace', 'operational_calendar')`,
+    ),
+    check(
+      "google_workspace_connections_operational_calendar_role_valid",
+      sql`${table.role} = 'operational_calendar' or ${table.operationalCalendarId} is null`,
     ),
     check(
       "google_workspace_connections_status_valid",
@@ -99,6 +119,10 @@ export const googleWorkspaceOauthStates = pgTable(
   {
     stateHash: text("state_hash").primaryKey(),
     returnPath: text("return_path").notNull(),
+    connectionRole: text("connection_role")
+      .$type<GoogleWorkspaceConnectionRole>()
+      .default("workspace")
+      .notNull(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     consumedAt: timestamp("consumed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -109,6 +133,10 @@ export const googleWorkspaceOauthStates = pgTable(
     index("google_workspace_oauth_states_unconsumed_expiry_idx")
       .on(table.expiresAt)
       .where(sql`${table.consumedAt} is null`),
+    check(
+      "google_workspace_oauth_states_connection_role_valid",
+      sql`${table.connectionRole} in ('workspace', 'operational_calendar')`,
+    ),
     check(
       "google_workspace_oauth_states_return_path_nonblank",
       sql`btrim(${table.returnPath}) <> ''`,
