@@ -58,6 +58,13 @@ function blocker(code: DraftBlockerCode, message: string): DraftBlocker {
   return { code, message, requiresHumanReview: true };
 }
 
+function availabilityResolved(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value !== "object") return true;
+  const status = (value as { status?: unknown }).status;
+  return status !== "unresolved";
+}
+
 export function evaluateDraftGuardrails(
   context: DraftContext,
   purpose: OpportunityDraftPurpose,
@@ -99,7 +106,7 @@ export function evaluateDraftGuardrails(
     };
   }
 
-  if (context.packageAvailability == null || context.calendarEvidence.length === 0) {
+  if (!availabilityResolved(context.packageAvailability) || context.calendarEvidence.length === 0) {
     return {
       blocker: blocker("availability_unknown", "Current package/calendar availability has not been established."),
       effectivePurpose: purpose,
