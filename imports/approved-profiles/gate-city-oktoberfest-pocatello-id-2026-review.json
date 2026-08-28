@@ -1,5 +1,5 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -8,34 +8,37 @@
     "region": "ID"
   },
   "profile": {
-    "description": "2026 review corrected: adult/21+ events are valid Adventure Zone prospects and must not be rejected solely because of age restriction or alcohol service. Gate City Oktoberfest is Sept. 26, 2026 at Lookout Point in Historic Downtown Pocatello, with beer/cider tasting, food and live music. Warrior's Playground may be a natural adult-oriented angle. Verify space, hours, route economics and package availability before deciding outreach.",
+    "description": "2026 review corrected and completed. Adult/21+ events are valid Adventure Zone prospects and are not disqualified by alcohol service. Gate City Oktoberfest is confirmed for Sept. 26, 2026 at Lookout Point in Historic Downtown Pocatello, with check-in at 3 PM and tasting/event hours from 4-8 PM. The organizer is the Pocatello-Chubbuck Chamber of Commerce; current event contact is Carin Tatom, Event Specialist, events@pocatelloidaho.com, 208-233-1525. Adventure Zone Gmail shows no prior direct outreach to Gate City Oktoberfest, Carin Tatom, or the Chamber under this event. Although Warrior's Playground could fit the adult crowd, this is only a four-hour operating event and would be a brand-new cold relationship, making full staffed package setup/travel economics weak at the current format.",
     "phone": "208-233-1525",
     "website": "https://gatecityoktoberfest.com/"
   },
-  "contacts": [],
+  "contacts": [
+    {
+      "id": null,
+      "name": "Carin Tatom",
+      "phone": "208-233-1525",
+      "email": "events@pocatelloidaho.com",
+      "role": "Event Specialist — Pocatello-Chubbuck Chamber of Commerce",
+      "primary": true
+    }
+  ],
   "booking": {
-    "enabled": true,
-    "name": "Gate City Oktoberfest 2026",
-    "status": "new_lead",
+    "enabled": false,
+    "name": "",
+    "status": "declined",
     "startsAt": "2026-09-26",
     "endsAt": "2026-09-26",
-    "nextActionKind": "review",
-    "nextActionDueAt": "2026-09-01",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
     "travelLegId": null
   },
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "Correction — adult/21+ is not a non-fit reason",
-      "body": "Do not reject this event because it is adult/beer-focused. Adventure Zone can work adult events. Consider Warrior's Playground and competitive/adrenaline attractions as the primary angle, then evaluate footprint, operating hours, route economics, organizer interest and availability."
+      "subject": "2026 fit review — adult eligible, but four-hour cold lead is weak economics",
+      "body": "Gate City Oktoberfest is confirmed Sept. 26, 2026 at Lookout Point, with the main event/tasting window from 4-8 PM. Adult/21+ is NOT the reason to pass; Warrior's Playground could match the crowd. The issue is economics and format: only four operating hours, no prior Adventure Zone relationship found in Gmail, and this would require cold outreach plus full staffed package transport/setup for a very short window. Do not prioritize routine 2026 outreach unless the organizer seeks a larger multi-hour/multi-day attraction component or is willing to structure economics that justify the setup. Current contact: Carin Tatom, events@pocatelloidaho.com, 208-233-1525."
     }
   ],
-  "followUps": [
-    {
-      "label": "Review adult-event fit — Gate City Oktoberfest",
-      "reason": "Adult/21+ events are eligible. Check Warrior's Playground fit, space, route economics and package availability before outreach.",
-      "dueAt": "2026-09-01T15:00:00.000Z"
-    }
-  ]
+  "followUps": []
 }
