@@ -6,6 +6,8 @@ import type { RouteBucket } from "@/features/routes/route-view";
 import { businessDateKey, parseBusinessDate } from "@/lib/business-date";
 
 export type LocationQuality = "coordinates" | "address" | "city" | "missing";
+export type TravelLegAssignmentKind = "assigned" | "suggested" | null;
+export type LegAssignmentWarning = "long_travel" | "major_travel_concern" | null;
 
 export type RouteMappingState =
   | "mapped_coordinates"
@@ -27,6 +29,9 @@ export type MapEvent = {
   travelLegId: string | null;
   travelLegName: string | null;
   travelLegColor: string | null;
+  travelLegAssignmentKind?: TravelLegAssignmentKind;
+  legAssignmentWarning?: LegAssignmentWarning;
+  legAssignmentExplanation?: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
   routeBucket?: RouteBucket;
@@ -51,6 +56,9 @@ export type MapFeatureProperties = {
   probability: MapEvent["probability"];
   travelLegId: string | null;
   travelLegColor: string | null;
+  travelLegAssignmentKind?: TravelLegAssignmentKind;
+  legAssignmentWarning?: LegAssignmentWarning;
+  legAssignmentExplanation?: string | null;
   startsAt: string | null;
   endsAt: string | null;
   routeBucket?: RouteBucket;
@@ -172,6 +180,9 @@ export function toMapDataset(events: MapEvent[]): MapDataset {
           probability: event.probability,
           travelLegId: event.travelLegId,
           travelLegColor: event.travelLegColor,
+          travelLegAssignmentKind: event.travelLegAssignmentKind,
+          legAssignmentWarning: event.legAssignmentWarning,
+          legAssignmentExplanation: event.legAssignmentExplanation,
           startsAt: event.startsAt?.toISOString() ?? null,
           endsAt: event.endsAt?.toISOString() ?? null,
           routeBucket: event.routeBucket,
