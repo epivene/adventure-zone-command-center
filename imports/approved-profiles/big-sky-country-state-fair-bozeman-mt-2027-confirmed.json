@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Big Sky Country State Fair", "city": "Bozeman", "region": "MT"},
+  "profile": {"placeType": "fair", "website": "https://gallatincountyfairgrounds.com/state-fair", "description": "Confirmed Adventure Zone booking for the 2027 Big Sky Country State Fair in Bozeman. This is an established relationship from the 2025 RMAF convention, not an outreach lead."},
+  "contacts": [{"id": null, "name": "Kara Urdahl", "phone": "406-548-8438", "email": "Kara.Urdahl@gallatin.mt.gov", "role": "Fair Acts Coordinator / 2027 point of contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Big Sky Country State Fair - 2027", "status": "confirmed", "startsAt": "2027-07-21", "endsAt": "2027-07-25", "nextActionKind": "review", "nextActionDueAt": "2027-06-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2027 confirmed booking - signed contract received", "body": "Gmail history shows Kara Urdahl continued the relationship after the 2025 RMAF convention and selected Pirate's Rebellion for the 2027 fair. The signed contract was returned March 25, 2026; Adventure Zone acknowledged receipt and confirmed the event on the calendar March 26. On March 31 Kara said she will be the point of contact and provided cell 406-548-8438. Do not treat the old Gallatin auto-reply as the latest relationship event."}],
+  "followUps": [{"label": "Review 2027 Big Sky Country State Fair logistics", "reason": "Confirmed booking. Reconfirm operational details, point of contact and remaining pre-event needs with Kara before the July 21-25, 2027 fair.", "dueAt": "2027-06-15T16:00:00.000Z"}]
+}
