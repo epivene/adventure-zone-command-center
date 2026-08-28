@@ -68,7 +68,10 @@ describe("createLazyOpportunityEmailRuntimeRouter", () => {
       .expect(201);
     await request(app)
       .get("/api/today/ready-to-send")
-      .expect(200, { total: 0, newOutreach: 0, followUps: 0, replies: 0, items: [] });
+      .expect(200, {
+        ok: true,
+        summary: { total: 0, newOutreach: 0, followUps: 0, replies: 0, items: [] },
+      });
 
     expect(loadRuntime).toHaveBeenCalledTimes(1);
   });
