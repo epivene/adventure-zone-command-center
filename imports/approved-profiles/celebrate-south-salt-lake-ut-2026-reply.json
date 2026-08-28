@@ -1,0 +1,49 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Celebrate South Salt Lake",
+    "city": "South Salt Lake",
+    "region": "UT"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "2026 Celebrate South Salt Lake prospect. South Salt Lake said vendor needs are full for both Celebrate South Salt Lake and Craftober Fest for 2026, but invited Adventure Zone to complete the city's vendor form for future event opportunities."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Jenny Diersen",
+      "phone": "",
+      "email": "jdiersen@sslc.gov",
+      "role": "RDA Senior Program Manager, South Salt Lake",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "declined",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Aug. 27, 2026 reply — 2026 vendor needs full; invited for future opportunities",
+      "body": "Jenny Diersen, South Salt Lake RDA Senior Program Manager, replied Aug. 27, 2026 that vendor needs are full for both Celebrate South Salt Lake and Craftober Fest for 2026. She invited Adventure Zone to complete the city's vendor form so we can be added to their email list for future event opportunities. Desiree already replied thanking Jenny and saying we would complete the vendor form for future South Salt Lake opportunities next year. Treat 2026 as closed, preserve Jenny as the current city contact, and do not send another reply now. Vendor form supplied by Jenny: https://forms.gle/vfmR4b2GFodJ899KA."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Complete South Salt Lake vendor form for 2027",
+      "reason": "Jenny Diersen invited Adventure Zone to complete the South Salt Lake vendor form to join the city's email list for future event opportunities. Complete it early rather than waiting until 2027 planning is already full.",
+      "dueAt": "2026-09-01T16:00:00.000Z"
+    }
+  ]
+}
