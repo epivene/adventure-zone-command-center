@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Oktoberfest", "city": "Montrose", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Adventure Zone already emailed All Points Transit on March 17, 2026 specifically about Montrose Oktoberfest 2026, so any further outreach must be a follow-up rather than a new introduction. Current official event page still shows the 2025 edition; a 2026 date has not yet been independently verified in current public material."},
+  "contacts": [{"id": null, "name": "All Points Transit", "phone": "970-249-0128", "email": "info@allpointstransit.org", "role": "Oktoberfest organizer / beneficiary", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "web", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — already contacted; verify current date before follow-up", "body": "Gmail confirms Amy sent a full Adventure Zone introduction to info@allpointstransit.org on March 17, 2026 with subject 'Montrose Oktoberfest (Montrose, CO) - Sept 26, 2026.' No reply is present in that thread. Current official All Points Transit Oktoberfest page still displays the 2025 event rather than a 2026 announcement. The prior event format used the Montrose Rotary Amphitheater at Cerise Park, offered kids 12 and under free admission and kids activities, so this is not automatically a non-fit despite the craft-beer focus. Before any new message, verify the official 2026 date/status. If confirmed, write a short history-aware follow-up, not another introduction."}],
+  "followUps": [{"label": "Verify Montrose Oktoberfest 2026 then follow up", "reason": "Already contacted March 17, 2026. Verify the official 2026 event date/status first; if confirmed, send a brief history-aware follow-up rather than reintroducing Adventure Zone.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+}
