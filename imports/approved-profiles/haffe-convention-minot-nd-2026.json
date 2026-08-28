@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Heartland Association of Fairs, Festivals and Events Convention", "city": "Minot", "region": "ND"},
+  "profile": {"placeType": "association", "website": "https://www.heartlandassociationffe.com/", "description": "HAFFE industry convention. The Adventure Zone attended in 2025 and used it for fair/festival lead generation. The 2026 convention is Nov. 19-21 at The Clarion in Minot, ND."},
+  "contacts": [{"id": null, "name": "HAFFE Secretary", "phone": "", "email": "secretary@heartlandassociationffe.com", "role": "Association / convention contact", "primary": true}],
+  "booking": {"enabled": true, "name": "HAFFE Convention - 2026", "status": "contact_due", "startsAt": "2026-11-19", "endsAt": "2026-11-21", "nextActionKind": "review", "nextActionDueAt": "2026-08-29", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 convention active - showcase deadline Sept. 1", "body": "HAFFE emailed Adventure Zone June 27, 2026 inviting applications to showcase at its November convention with a Sept. 1 deadline. Current official HAFFE information confirms the 2026 convention is Nov. 19-21, 2026 at The Clarion in Minot, ND, with showcases built into the convention schedule. Adventure Zone has real 2025 HAFFE convention history, so this is an active industry relationship, not a cold lead."}],
+  "followUps": [{"label": "Review HAFFE showcase application before Sept. 1", "reason": "The 2026 HAFFE showcase invitation has a Sept. 1 deadline and the convention remains active Nov. 19-21 in Minot.", "dueAt": "2026-08-29T16:00:00.000Z"}]
+}
