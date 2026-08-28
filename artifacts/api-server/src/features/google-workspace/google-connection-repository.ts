@@ -16,9 +16,13 @@ import {
   type GoogleWorkspaceEnvironment,
 } from "./google-workspace-env";
 
+export type GoogleConnectionRole = "workspace" | "operational_calendar";
+
 export type GoogleConnectionView = {
   id: string;
   email: string;
+  role: GoogleConnectionRole;
+  operationalCalendarId: string | null;
   status: "connected" | "reauthorization_required" | "disconnected";
   grantedScopes: string[];
   connectedAt: string;
@@ -48,6 +52,8 @@ type CreateDeliveryClient = (input: {
 type ConnectionRow = {
   id: string;
   account_email: string;
+  role: GoogleConnectionRole;
+  operational_calendar_id: string | null;
   status: GoogleConnectionView["status"];
   encrypted_refresh_token: EncryptedGoogleSecretV1;
   granted_scopes: unknown;
@@ -74,6 +80,10 @@ function scopes(value: unknown): string[] {
   return value.filter((scope): scope is string => typeof scope === "string");
 }
 
+function role(value: unknown): GoogleConnectionRole {
+  return value === "operational_calendar" ? "operational_calendar" : "workspace";
+}
+
 function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null {
   if (!value) return null;
   if (
@@ -87,14 +97,23 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
   ) {
     throw new Error("GOOGLE_WORKSPACE_CONNECTION_ROW_INVALID");
   }
-  return value as unknown as ConnectionRow;
+  return {
+    ...(value as unknown as ConnectionRow),
+    role: role(value.role),
+    operational_calendar_id:
+      typeof value.operational_calendar_id === "string" && value.operational_calendar_id.trim()
+        ? value.operational_calendar_id.trim()
+        : null,
+  };
 }
 
 function toView(row: ConnectionRow): GoogleConnectionView {
-  const missingCompose = !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
+  const missingCompose = row.role === "workspace" && !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
   return {
     id: row.id,
     email: row.account_email,
+    role: row.role,
+    operationalCalendarId: row.operational_calendar_id,
     status: row.status === "connected" && missingCompose ? "reauthorization_required" : row.status,
     grantedScopes: scopes(row.granted_scopes),
     connectedAt: dateIso(row.connected_at) as string,
@@ -127,16 +146,22 @@ export class PostgresGoogleConnectionRepository {
     refreshToken: string;
     scopes: string[];
     now: Date;
+    role?: GoogleConnectionRole;
+    operationalCalendarId?: string | null;
   }): Promise<GoogleConnectionView> {
     const environment = this.requireEnvironment();
     const email = input.accountEmail.trim().toLowerCase();
     const refreshToken = input.refreshToken.trim();
     const googleSubject = input.googleSubject?.trim() || null;
+    const connectionRole = role(input.role);
+    const operationalCalendarId = connectionRole === "operational_calendar"
+      ? input.operationalCalendarId?.trim() || email
+      : null;
     if (!email || !refreshToken || !Number.isFinite(input.now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_INPUT_INVALID");
     }
 
-    const current = await this.currentRow();
+    const current = await this.currentRow(connectionRole);
     const currentSubject = current?.google_subject?.trim() || null;
     if (
       current &&
@@ -152,19 +177,14 @@ export class PostgresGoogleConnectionRepository {
     const result = await this.pool.query(
       `WITH upserted AS (
          INSERT INTO google_workspace_connections (
-           account_email,
-           encrypted_refresh_token,
-           granted_scopes,
-           google_subject,
-           connected_at,
-           last_verified_at,
-           status,
-           disconnected_at,
-           last_error_code,
-           created_at,
-           updated_at
-         ) VALUES ($1, $2, $3, $4, $5, $5, 'connected', NULL, NULL, $5, $5)
+           account_email, role, operational_calendar_id,
+           encrypted_refresh_token, granted_scopes, google_subject,
+           connected_at, last_verified_at, status, disconnected_at,
+           last_error_code, created_at, updated_at
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'connected', NULL, NULL, $7, $7)
          ON CONFLICT (account_email) DO UPDATE SET
+           role = EXCLUDED.role,
+           operational_calendar_id = EXCLUDED.operational_calendar_id,
            encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
            granted_scopes = EXCLUDED.granted_scopes,
            google_subject = EXCLUDED.google_subject,
@@ -177,24 +197,22 @@ export class PostgresGoogleConnectionRepository {
          RETURNING *
        ), audited AS (
          INSERT INTO google_workspace_audit_events (
-           actor_kind,
-           action,
-           target_type,
-           target_id,
-           metadata,
-           created_at
+           actor_kind, action, target_type, target_id, metadata, created_at
          )
-         SELECT
-           'system',
-           'connection_connected',
-           'connection',
-           id::text,
-           jsonb_build_object('accountEmail', account_email),
-           $5
+         SELECT 'system', 'connection_connected', 'connection', id::text,
+           jsonb_build_object('accountEmail', account_email, 'role', role), $7
          FROM upserted
        )
        SELECT * FROM upserted`,
-      [email, encryptedRefreshToken, JSON.stringify(grantedScopes), googleSubject, input.now],
+      [
+        email,
+        connectionRole,
+        operationalCalendarId,
+        encryptedRefreshToken,
+        JSON.stringify(grantedScopes),
+        googleSubject,
+        input.now,
+      ],
     );
     const row = asRow(result.rows[0]);
     if (!row) throw new Error("GOOGLE_WORKSPACE_CONNECTION_SAVE_FAILED");
@@ -202,12 +220,20 @@ export class PostgresGoogleConnectionRepository {
   }
 
   async getCurrent(): Promise<GoogleConnectionView | null> {
-    const row = await this.currentRow();
+    return this.getByRole("workspace");
+  }
+
+  async getByRole(connectionRole: GoogleConnectionRole): Promise<GoogleConnectionView | null> {
+    const row = await this.currentRow(connectionRole);
     return row ? toView(row) : null;
   }
 
   async createReadClient(): Promise<GoogleWorkspaceReadClient | null> {
-    const row = await this.currentRow();
+    return this.createReadClientForRole("workspace");
+  }
+
+  async createReadClientForRole(connectionRole: GoogleConnectionRole): Promise<GoogleWorkspaceReadClient | null> {
+    const row = await this.currentRow(connectionRole);
     if (!row) return null;
     if (row.status === "reauthorization_required") {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
@@ -218,7 +244,7 @@ export class PostgresGoogleConnectionRepository {
   }
 
   async createGmailDraftClient(): Promise<{ connectionId: string; client: GoogleGmailDraftClient } | null> {
-    const row = await this.currentRow();
+    const row = await this.currentRow("workspace");
     if (!row) return null;
     if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
@@ -231,7 +257,7 @@ export class PostgresGoogleConnectionRepository {
   }
 
   async createGmailDeliveryClient(): Promise<{ connectionId: string; client: GoogleGmailDeliveryClient } | null> {
-    const row = await this.currentRow();
+    const row = await this.currentRow("workspace");
     if (!row) return null;
     if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
@@ -244,64 +270,43 @@ export class PostgresGoogleConnectionRepository {
     };
   }
 
-  async markReauthorizationRequired(errorCode: string): Promise<void> {
+  async markReauthorizationRequired(errorCode: string, connectionRole: GoogleConnectionRole = "workspace"): Promise<void> {
     await this.pool.query(
       `WITH changed AS (
          UPDATE google_workspace_connections
             SET status = 'reauthorization_required',
                 last_error_code = $1,
                 updated_at = now()
-          WHERE status <> 'disconnected'
+          WHERE role = $2 AND status <> 'disconnected'
           RETURNING id
        )
        INSERT INTO google_workspace_audit_events (
-         actor_kind,
-         action,
-         target_type,
-         target_id,
-         metadata
+         actor_kind, action, target_type, target_id, metadata
        )
-       SELECT
-         'system',
-         'connection_reauthorization_required',
-         'connection',
-         id::text,
+       SELECT 'system', 'connection_reauthorization_required', 'connection', id::text,
          jsonb_build_object('errorCode', $1::text)
        FROM changed`,
-      [errorCode.trim() || "invalid_grant"],
+      [errorCode.trim() || "invalid_grant", connectionRole],
     );
   }
 
-  async disconnect(now: Date): Promise<void> {
+  async disconnect(now: Date, connectionRole: GoogleConnectionRole = "workspace"): Promise<void> {
     if (!Number.isFinite(now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_DATE_INVALID");
     }
     await this.pool.query(
       `WITH changed AS (
          UPDATE google_workspace_connections
-            SET status = 'disconnected',
-                disconnected_at = $1,
-                updated_at = $1
-          WHERE status <> 'disconnected'
+            SET status = 'disconnected', disconnected_at = $1, updated_at = $1
+          WHERE role = $2 AND status <> 'disconnected'
           RETURNING id
        )
        INSERT INTO google_workspace_audit_events (
-         actor_kind,
-         action,
-         target_type,
-         target_id,
-         metadata,
-         created_at
+         actor_kind, action, target_type, target_id, metadata, created_at
        )
-       SELECT
-         'system',
-         'connection_disconnected',
-         'connection',
-         id::text,
-         '{}'::jsonb,
-         $1
+       SELECT 'system', 'connection_disconnected', 'connection', id::text, '{}'::jsonb, $1
        FROM changed`,
-      [now],
+      [now, connectionRole],
     );
   }
 
@@ -314,13 +319,15 @@ export class PostgresGoogleConnectionRepository {
     return result.value;
   }
 
-  private async currentRow(): Promise<ConnectionRow | null> {
+  private async currentRow(connectionRole: GoogleConnectionRole): Promise<ConnectionRow | null> {
     const result = await this.pool.query(
       `SELECT *
          FROM google_workspace_connections
-        WHERE status IN ('connected', 'reauthorization_required')
+        WHERE role = $1
+          AND status IN ('connected', 'reauthorization_required')
         ORDER BY updated_at DESC, id DESC
         LIMIT 1`,
+      [connectionRole],
     );
     return asRow(result.rows[0]);
   }
