@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Cascades Futurity & Aged Event", "city": "Redmond", "region": "OR"},
+  "profile": {"placeType": "festival_event", "description": "2026 post-Labor-Day route lead for the leg manager. Oregon is weather-restricted, not on hold; push prepaid first. Long-range Pacific Northwest outlook for Sept. 1-10 is sunny/very warm, so pay-for-play may remain a secondary option if the organizer prefers it.", "phone": "503-799-1355", "website": "https://www.cascadesfuturity.com/", "address1": "3800 SE Airport Way", "address2": "", "postalCode": "97756"},
+  "contacts": [{"id": null, "name": "Julie Clarke", "phone": "503-799-1355", "email": "", "role": "Show Producer / Show Manager", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 route lead - Cascades Futurity", "body": "Current official information places Cascades Futurity & Aged Event at Deschutes County Fairgrounds, 3800 SE Airport Way, Redmond OR. The event is active through the leg manager's open post-Labor-Day window and is a strong route fit after Lakeview. Official contact page lists Julie Clarke as Show Producer / Show Manager at 503-799-1355, but the website masks the email address in the available source, so do not guess an email. No Adventure Zone Gmail history was found. Commercial angle: prepaid first because Oregon is weather-restricted; Old Farmer's Almanac currently shows Sept. 1-10 sunny and very warm in the Pacific Northwest, so pay-for-play can remain a secondary option if requested. Sources verified Aug. 27, 2026: cascadesfuturity.com and Old Farmer's Almanac."}],
+  "followUps": [{"label": "Contact Cascades Futurity", "reason": "Strong 2026 route lead. Call Julie Clarke or use the official contact form because the current public source masks the email address. Push prepaid first; pay-for-play can remain a secondary option if the organizer asks.", "dueAt": "2026-08-28T16:00:00.000Z"}]
+}
