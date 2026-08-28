@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Upper Yellowstone Roundup / Gardiner Rodeo", "city": "Gardiner", "region": "MT"},
+  "profile": {"placeType": "festival_event", "website": "https://www.visitgardinermt.com/", "description": "Gardiner rodeo/horse-drive organizer relationship. The Gardiner Chamber is not the event organizer; Adventure Zone was redirected to Hell's A-Roarin' / Upper Yellowstone Roundup Association."},
+  "contacts": [{"id": null, "name": "Upper Yellowstone Roundup Association", "phone": "406-223-1222", "email": "gardinermtrodeo@yahoo.com", "role": "Rodeo / horse-drive organizer", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Correct organizer identified - Chamber is not the rodeo contact", "body": "The Gardiner Chamber replied Dec. 18, 2023 that it does not run the Gardiner rodeo and directed Adventure Zone to Hell's A-Roarin' Outfitters. Current Gardiner tourism information confirms the associated Hell's A-Roarin' Horse Drive remains active and identifies the Upper Yellowstone Roundup Association as organizer, phone 406-223-1222 and email gardinermtrodeo@yahoo.com. Preserve the Chamber reply as a redirect, not a decline. Before future outreach, verify which Gardiner rodeo/horse-drive event is the target and whether a family-attraction area genuinely fits."}],
+  "followUps": [{"label": "Review 2027 Gardiner rodeo/horse-drive fit", "reason": "The old outreach went to the wrong organization. Verify the specific 2027 event, organizer and available family-entertainment footprint before contacting the Upper Yellowstone Roundup team.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
