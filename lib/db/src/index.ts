@@ -13,6 +13,7 @@ import * as googleWorkspaceSchema from "./google-workspace-schema";
 import * as leadIntakeSchema from "./lead-intake-schema";
 import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
+import * as legAssignmentSchema from "./leg-assignment-schema";
 
 const { Pool } = pg;
 
@@ -52,6 +53,7 @@ const schema = {
   ...leadIntakeSchema,
   ...bookingOpportunitySchema,
   ...bookingOpportunityEmailSchema,
+  ...legAssignmentSchema,
 };
 export const db = drizzle(pool, { schema });
 
@@ -68,3 +70,4 @@ export * from "./google-workspace-schema";
 export * from "./lead-intake-schema";
 export * from "./booking-opportunity-schema";
 export * from "./booking-opportunity-email-schema";
+export * from "./leg-assignment-schema";
