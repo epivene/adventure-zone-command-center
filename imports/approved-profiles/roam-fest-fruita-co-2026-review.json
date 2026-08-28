@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Roam Fest", "city": "Fruita", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Adventure Zone emailed Roam Fest in January 2024. Official Roam Fest material states the 2025 Fruita event was the final Roam Fest operated by Roam Events LLC. Although at least one third-party listing shows a 2026 date, that conflicts with the organizer's own final-event notice. Do not treat a 2026 Roam Fest as active unless the organizer itself announces a revival or successor event."},
+  "contacts": [{"id": null, "name": "Roam Events", "phone": "", "email": "hello@thisisroam.com", "role": "Historical organizer contact", "primary": false}],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — organizer says event ended after 2025", "body": "Gmail shows Amy emailed Roam Fest on Jan. 4, 2024 at hello@thisisroam.com. Official Roam Fest ticket/refund material says 2025 was the last Roam Fest operated by Roam Events LLC, and contemporary coverage described the 2025 Fruita gathering as the final event. A third-party 2026 listing is not sufficient to override the organizer's own notice. No 2026 outreach unless Roam itself confirms a new edition."}],
+  "followUps": []
+}
