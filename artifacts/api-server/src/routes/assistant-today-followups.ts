@@ -20,6 +20,11 @@ const createSchema = z.object({
   dueAt: z.coerce.date(),
 }).strict();
 
+const clearSchema = z.object({
+  organizationId: z.string().uuid(),
+  reason: z.string().trim().min(1).max(4000),
+}).strict();
+
 router.use(requireAssistantImportToken);
 
 router.get("/today-followups", async (req, res): Promise<void> => {
@@ -188,6 +193,51 @@ router.post("/today-followups", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ err: error, organizationId }, "Failed assistant Today follow-up creation");
     res.status(500).json({ ok: false, error: "Today follow-up could not be created." });
+  }
+});
+
+router.post("/today-followups/clear", async (req, res): Promise<void> => {
+  const parsed = clearSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Review the clear-follow-up request." });
+    return;
+  }
+
+  const { organizationId, reason } = parsed.data;
+  const [organization] = await db
+    .select({ id: organizations.id, name: organizations.name })
+    .from(organizations)
+    .where(and(eq(organizations.id, organizationId), isNull(organizations.consolidatedIntoId)))
+    .limit(1);
+  if (!organization) {
+    res.status(404).json({ ok: false, error: "Profile not found." });
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const open = await db
+      .select({ id: followUps.id })
+      .from(followUps)
+      .where(and(eq(followUps.organizationId, organizationId), isNull(followUps.completedAt)));
+
+    if (open.length > 0) {
+      await db
+        .update(followUps)
+        .set({ completedAt: now, outcome: reason, updatedAt: now })
+        .where(and(eq(followUps.organizationId, organizationId), isNull(followUps.completedAt)));
+    }
+
+    res.json({
+      ok: true,
+      organizationId,
+      organizationName: organization.name,
+      cleared: open.length,
+      reason,
+    });
+  } catch (error) {
+    req.log.error({ err: error, organizationId }, "Failed assistant Today follow-up clear");
+    res.status(500).json({ ok: false, error: "Today follow-ups could not be cleared." });
   }
 });
 
