@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Joe Mama's Car Show", "city": "Jerome", "region": "ID"},
+  "profile": {"placeType": "festival_event", "website": "https://joemamascarshow.com/", "description": "Active two-day community car show with live music, contests, vendors and family activities."},
+  "contacts": [{"id": null, "name": "Joe Mama's Car Show Committee", "phone": "208-867-5110", "email": "joemamascarshowjerome@gmail.com", "role": "Event committee", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 budget and footprint objection", "body": "The committee replied Aug. 4, 2026 that it did not know whether it had enough space for Adventure Zone and could not afford the stated fees. Current official information confirms Joe Mama's remains an active community car show; 2026 ran Aug. 14-15 at Founders Park and accepted vendors. This was a budget/space objection, not a permanent rejection. If revisited, do not simply repeat a prepaid-price pitch; first verify available footprint and whether a pay-for-play entertainment partnership is feasible."}],
+  "followUps": [{"label": "Review 2027 Joe Mama's Car Show fit", "reason": "2026 objection was budget plus space. Check the 2027 layout and whether a pay-for-play setup could work before deciding to contact them again.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
