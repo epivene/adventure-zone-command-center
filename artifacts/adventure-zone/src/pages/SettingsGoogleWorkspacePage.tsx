@@ -4,6 +4,7 @@ import { CheckCircle2, Cloud, LockKeyhole, Unplug } from "lucide-react";
 import { GoogleHistoricalBackfill } from "@/components/google-workspace/google-historical-backfill";
 import { GoogleRecentValidation } from "@/components/google-workspace/google-recent-validation";
 import { GoogleScopePreview } from "@/components/google-workspace/google-scope-preview";
+import { OperationalCalendarSettingsCard } from "@/components/google-workspace/operational-calendar-settings-card";
 import {
   disconnectGoogleWorkspace,
   getGoogleWorkspaceSettings,
@@ -39,7 +40,7 @@ export function readGoogleWorkspaceOAuthReturn(
   if (params.get("connected") === "1") {
     return {
       error: null,
-      notice: "Google account connected in read-only mode.",
+      notice: "Google account connected.",
     };
   }
 
@@ -312,17 +313,16 @@ export function SettingsGoogleWorkspacePage({
         </p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Google Workspace</h1>
         <p className="mt-2 max-w-3xl text-slate-600">
-          Read access for approved company Gmail labels, files, and calendars, plus Gmail draft creation.
-          Existing connections must reconnect once to authorize the narrow Gmail compose scope.
+          Keep the company Gmail/files connection separate from David's operational calendar. Confirmed app bookings can mirror to David's calendar without giving that connection access to Gmail or Drive.
         </p>
       </header>
 
       <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
         <LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
-          <p className="font-semibold">Draft-only Gmail compose</p>
+          <p className="font-semibold">Separate, narrow Google permissions</p>
           <p className="mt-1 text-sm text-blue-800 dark:text-blue-300">
-            This release can create a reviewed Gmail draft only. It cannot send email, move messages, change Gmail labels, or edit Google Calendar events.
+            The company Workspace connection keeps its business Gmail/files access and draft-only Gmail compose. David's operational connection receives Calendar access only, for importing and synchronizing confirmed event rows.
           </p>
         </div>
       </div>
@@ -396,6 +396,8 @@ export function SettingsGoogleWorkspacePage({
               ) : null}
             </div>
           </section>
+
+          {settings.configured ? <OperationalCalendarSettingsCard openAuthorizationUrl={openAuthorizationUrl} /> : null}
 
           {settings.connection ? (
             <section className="grid gap-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
