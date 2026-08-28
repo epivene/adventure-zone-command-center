@@ -55,6 +55,26 @@ function validDate(value: string) {
   return Number.isFinite(date.valueOf()) && date.toISOString().slice(0, 10) === value;
 }
 
+function addUtcDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function timedEventDateRange(startDateTime: string, endDateTime: string) {
+  const startDate = startDateTime.slice(0, 10);
+  const endDate = endDateTime.slice(0, 10);
+  if (!validDate(startDate) || !validDate(endDate)) return null;
+
+  const endLocalTime = endDateTime.slice(11, 19);
+  const endsExactlyAtMidnight = endLocalTime === "00:00:00";
+  const endDateExclusive = endsExactlyAtMidnight && endDate > startDate
+    ? endDate
+    : addUtcDays(endDate, 1);
+
+  return endDateExclusive > startDate ? { startDate, endDateExclusive } : null;
+}
+
 function validateEventInput(input: OperationalCalendarEventInput) {
   if (!input.summary.trim()) throw clientError("GOOGLE_OPERATIONAL_CALENDAR_SUMMARY_REQUIRED");
   if (!validDate(input.startDate) || !validDate(input.endDateExclusive)) {
@@ -77,11 +97,21 @@ async function json(response: Response): Promise<Record<string, unknown>> {
 function parseEvent(value: Record<string, unknown>): OperationalCalendarEvent {
   const start = value.start && typeof value.start === "object" ? value.start as Record<string, unknown> : {};
   const end = value.end && typeof value.end === "object" ? value.end as Record<string, unknown> : {};
+  const allDayRange = typeof start.date === "string" && typeof end.date === "string"
+    ? { startDate: start.date, endDateExclusive: end.date }
+    : null;
+  const timedRange = typeof start.dateTime === "string" && typeof end.dateTime === "string"
+    ? timedEventDateRange(start.dateTime, end.dateTime)
+    : null;
+  const dateRange = allDayRange ?? timedRange;
+
   if (
     typeof value.id !== "string" || !value.id.trim() ||
     typeof value.summary !== "string" ||
-    typeof start.date !== "string" ||
-    typeof end.date !== "string"
+    !dateRange ||
+    !validDate(dateRange.startDate) ||
+    !validDate(dateRange.endDateExclusive) ||
+    dateRange.endDateExclusive <= dateRange.startDate
   ) {
     throw clientError("GOOGLE_OPERATIONAL_CALENDAR_EVENT_RESPONSE_INVALID");
   }
@@ -90,8 +120,8 @@ function parseEvent(value: Record<string, unknown>): OperationalCalendarEvent {
     etag: typeof value.etag === "string" ? value.etag : null,
     summary: value.summary,
     description: typeof value.description === "string" ? value.description : "",
-    startDate: start.date,
-    endDateExclusive: end.date,
+    startDate: dateRange.startDate,
+    endDateExclusive: dateRange.endDateExclusive,
     updated: typeof value.updated === "string" ? value.updated : null,
     status: typeof value.status === "string" ? value.status : null,
   };
