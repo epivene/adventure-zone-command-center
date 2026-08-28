@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Gooding County Fair", "city": "Gooding", "region": "ID"},
+  "profile": {"placeType": "fair", "phone": "208-934-4529", "website": "https://www.goodingcounty.org/179/Fair", "description": "Active county fair and rodeo. The 2026 fair ran Aug. 17-22 and had a carnival."},
+  "contacts": [{"id": null, "name": "Don Gill", "phone": "208-934-4529", "email": "", "role": "Fair Manager", "primary": true}],
+  "booking": {"enabled": true, "name": "Gooding County Fair - 2026", "status": "declined", "startsAt": "2026-08-17", "endsAt": "2026-08-22", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 decline - incumbent carnival", "body": "Don Gill replied July 23, 2026 that Adventure Zone sounded great but Gooding County Fair already had Browns Amusement as its carnival. Current official fair information confirms the event remains active and the 2026 fair had a carnival. Treat this as an incumbent-provider decline, not a do-not-contact."}],
+  "followUps": [{"label": "Check 2027 Gooding County Fair provider plans", "reason": "2026 was declined because Browns Amusement was already contracted. Check early for 2027 only if there is room for a separate family-entertainment area or provider needs change.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
