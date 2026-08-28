@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "King County Fair", "city": "Enumclaw", "region": "WA"},
+  "profile": {"placeType": "fair", "phone": "360-505-4673", "website": "https://www.kingcofair.com/", "description": "Long-running family fair at the Enumclaw Expo Center. The 2026 fair ran July 16-19 and included carnival rides, 4-H/FFA, pig races, kid tractor pulls, music and vendors."},
+  "contacts": [{"id": null, "name": "Rene Popke", "phone": "360-505-4673", "email": "", "role": "General Manager, Enumclaw Expo & Event Association", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Current King County Fair / Enumclaw Expo relationship review", "body": "The old unread RMAF response was only an automatic reply and should not be treated as a decline. Current public information confirms the King County Fair remains active and family-focused at the Enumclaw Expo Center. The 2026 fair ran July 16-19 and already included carnival rides and numerous family attractions. Rene Popke is publicly identified as General Manager of the Enumclaw Expo & Event Association. Treat this as a future-year opportunity only if there is a distinct entertainment-area fit beyond the existing carnival."}],
+  "followUps": [{"label": "Review 2027 King County Fair opportunity", "reason": "The fair is active and family-focused, but already has carnival rides. Check the 2027 entertainment plan early before deciding whether Adventure Zone adds something distinct.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
