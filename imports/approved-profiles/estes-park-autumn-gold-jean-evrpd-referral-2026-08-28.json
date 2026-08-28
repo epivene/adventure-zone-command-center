@@ -1,0 +1,38 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Estes Park Autumn Gold",
+    "city": "Estes Park",
+    "region": "CO"
+  },
+  "profile": {},
+  "contacts": [
+    {
+      "id": null,
+      "name": "Jean",
+      "email": "evsr@evsr.org",
+      "role": "Autumn Gold contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "contacted",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Jean reply — EVRPD referral / limited fit",
+      "body": "Aug. 28, 2026: Jean replied from evsr@evsr.org regarding Estes Park Autumn Gold. She said the event is primarily a music festival rather than a kids event and they do not have space for many kids activities. Their Rec Center already hosts a few games, and she is doubtful they could accommodate much more. Jean referred Adventure Zone to Estes Valley Recreation and Park District (EVRPD) at https://evrpd.com/ as a better contact/opportunity. Do not continue pushing Autumn Gold as a normal 2026 kids-entertainment lead; use the EVRPD referral for separate outreach/research instead."
+    }
+  ]
+}
