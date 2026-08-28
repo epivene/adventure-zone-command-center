@@ -1,0 +1,18 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Pirate Fest", "city": "Northglenn", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "High-priority warm 2026 opportunity. Northglenn originally contacted Adventure Zone after losing its bounce-house company. Michael Ringling later confirmed interest in having Adventure Zone at Pirate Fest Sept. 18-19, 2026 and asked about dimensions, water requirements, and revenue sharing. Amy spoke with him July 17 and told him Dave would follow up about payment/shared revenue. No contract or final confirmation is documented, and Amy's Aug. 6 follow-up received no reply. Keep the calendar placeholder until Michael confirms the status.", "phone": "303-450-8935", "website": "https://thepiratefest.com/", "address1": "11701 Community Center Dr.", "address2": "", "postalCode": "80233"},
+  "contacts": [
+    {"id": null, "name": "Michael Ringling", "phone": "720-955-3603", "email": "mringling@northglenn.org", "role": "Events Specialist", "primary": true}
+  ],
+  "booking": {"enabled": true, "name": "Pirate Fest - 2026", "status": "pending_decision", "startsAt": "2026-09-18", "endsAt": "2026-09-19", "nextActionKind": "call", "nextActionDueAt": "2026-08-28", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {"subject": "PRIORITY #1 — Call Michael about Pirate Fest", "body": "Call Michael Ringling before other booking follow-ups on Aug. 28, 2026. Ask where the Pirate Fest opportunity landed. Adventure Zone was actively discussing the Sept. 18-19 event, Michael said he was excited to work together and asked about revenue sharing, and Amy told him Dave would discuss the payment/shared-revenue arrangement. The deal appears to have stalled rather than been declined. Do not remove the calendar placeholder until Michael confirms whether Adventure Zone is still needed. Current public event information mentions bounce houses, but do not assume another provider replaced us; ask Michael directly what happened."}
+  ],
+  "followUps": [
+    {"label": "PRIORITY #1 — Call Michael Ringling about Pirate Fest", "reason": "Warm Sept. 18-19 opportunity that stalled after active discussions about setup and revenue sharing. Call Michael first tomorrow to determine whether Adventure Zone is still needed, whether another inflatable provider was secured, or whether the event was waiting on Dave/us. Keep the calendar placeholder until status is confirmed.", "dueAt": "2026-08-28T15:00:00.000Z"}
+  ]
+}
