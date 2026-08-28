@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Bear Lake Caribbean Cruze Motorcycle Rally", "city": "Garden City", "region": "UT"},
+  "profile": {"placeType": "festival_event", "description": "Current 2026 review appears stale. The most recent verifiable Caribbean Cruze Motorcycle Rally listing found is a past Sept. 15-16, 2023 event at Heritage Park in Garden City, hosted by the Bear Lake Chamber of Commerce. No current 2026 event listing was verified."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — event not currently verified", "body": "Current research did not verify a 2026 Bear Lake Caribbean Cruze Motorcycle Rally. The most recent verifiable listing is a past Sept. 15-16, 2023 rally at Heritage Park in Garden City, hosted by the Bear Lake Chamber of Commerce. Adventure Zone Gmail search found no history for this event. Close the current review and do not create outreach unless a current event is independently confirmed."}],
+  "followUps": []
+}
