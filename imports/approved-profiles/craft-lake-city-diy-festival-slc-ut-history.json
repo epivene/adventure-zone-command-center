@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Craft Lake City DIY Festival", "city": "Salt Lake City", "region": "UT"},
+  "profile": {"placeType": "festival_event", "phone": "801-906-8521", "website": "https://craftlakecity.com/diy-festival-2026/", "description": "Large active Utah art/music/STEM festival. The 2026 festival had its own Kids' Area with inflatables, pirate ship playground, face painting and paid kids activity tickets."},
+  "contacts": [{"id": null, "name": "Craft Lake City", "phone": "801-906-8521", "email": "info@craftlakecity.com", "role": "General festival contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Contact changed; current festival already uses inflatables", "body": "The old December 2023 reply from Liz Amato said she had left Craft Lake City, so she should not remain the working contact. Current official contact is info@craftlakecity.com / 801-906-8521. The 2026 DIY Festival remained very active and already had a Kids' Area with bounce inflatables, a pirate ship playground, face painting and activity tickets. This may still be worth an early future partnership conversation, but not as a generic vendor pitch and not by contacting Liz."}],
+  "followUps": [{"label": "Review 2027 Craft Lake City kids-area opportunity", "reason": "The festival is active and already uses inflatables in its Kids' Area. Check early whether they use an outside entertainment provider or have room for a larger staffed attraction area.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
