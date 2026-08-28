@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, index, pgTable, text, timestamp, uniqueIndex, uuid, integer } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 import { bookings, travelLegs } from "./schema/index";
 
@@ -44,5 +44,26 @@ export const bookingLegAssignments = pgTable(
       "booking_leg_assignments_drive_minutes_nonnegative",
       sql`(${table.previousStopDriveMinutes} is null or ${table.previousStopDriveMinutes} >= 0) and (${table.nextStopDriveMinutes} is null or ${table.nextStopDriveMinutes} >= 0)`,
     ),
+  ],
+);
+
+export const bookingOperationalWindows = pgTable(
+  "booking_operational_windows",
+  {
+    bookingId: uuid("booking_id")
+      .primaryKey()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    endsAt: timestamp("ends_at", { withTimezone: true }).notNull(),
+    source: text("source").default("app").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("booking_operational_windows_order_valid", sql`${table.endsAt} >= ${table.startsAt}`),
+    check(
+      "booking_operational_windows_source_valid",
+      sql`${table.source} in ('app','google_calendar','manual')`,
+    ),
+    index("booking_operational_windows_starts_ends_idx").on(table.startsAt, table.endsAt),
   ],
 );
