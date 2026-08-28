@@ -1,40 +1,12 @@
 {
-  "importRevision": 1,
-  "event": {
-    "id": null,
-    "name": "Rides & Rods Classic Car Show",
-    "city": "Elko",
-    "region": "NV"
-  },
-  "profile": {
-    "placeType": "festival_event",
-    "description": "2026 outreach prospect for Hulk's late-season route. Rides & Rods Classic Car Show runs September 11-13, 2026 at Elko City Park. Official event contact: Stormy Remington, ridesandrods@yahoo.com, 775-385-6569. Pay-for-play inflatable family area is the intended outreach angle.",
-    "phone": "775-385-6569",
-    "website": "https://www.ridesandrodselko.com",
-    "address1": "",
-    "address2": "",
-    "postalCode": ""
-  },
-  "contacts": [
-    {
-      "id": null,
-      "name": "Stormy Remington",
-      "phone": "775-385-6569",
-      "email": "ridesandrods@yahoo.com",
-      "role": "Event Contact",
-      "primary": true
-    }
-  ],
-  "booking": {
-    "enabled": true,
-    "name": "Rides & Rods Classic Car Show - 2026",
-    "status": "new_lead",
-    "startsAt": "2026-09-11",
-    "endsAt": "2026-09-13",
-    "nextActionKind": "email",
-    "nextActionDueAt": "2026-08-26",
-    "travelLegId": null
-  },
+  "importRevision": 2,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Rides & Rods Classic Car Show", "city": "Elko", "region": "NV"},
+  "profile": {"placeType": "festival_event", "description": "2026 route prospect for the leg manager. Rides & Rods Classic Car Show runs Sept. 11-13, 2026 at Elko City Park. Official contact remains Stormy Remington, ridesandrods@yahoo.com, 775-385-6569. Current official material promotes cars, live music, food/drink, games, dancing, vendors and entertainment; no current inflatable provider has been verified. Adventure Zone can remain a 2026 possibility if the event has room, with prepaid or pay-for-play both workable last-minute models.", "phone": "775-385-6569", "website": "https://www.ridesandrodselko.com", "address1": "", "address2": "", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Stormy Remington", "phone": "775-385-6569", "email": "ridesandrods@yahoo.com", "role": "Event Contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Rides & Rods Classic Car Show - 2026", "status": "contacted", "startsAt": "2026-09-11", "endsAt": "2026-09-13", "nextActionKind": "call", "nextActionDueAt": "2026-08-31", "travelLegId": null},
   "familyId": null,
-  "parentOrganizationId": null
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Aug. 27 outreach sent", "body": "Desiree sent the personalized Rides & Rods outreach to Stormy Remington at ridesandrods@yahoo.com on Aug. 27, 2026. Do not leave the old Aug. 26 email action as overdue. Current official research still confirms Sept. 11-13 at Elko City Park and Stormy at 775-385-6569. Official event material lists games, music, food/drink, dancing and vendors; no current inflatable provider was verified. Give the email a short response window, then call/check back because the event is close."}],
+  "followUps": [{"label": "Call/check Rides & Rods after Aug. 27 email", "reason": "Personalized email was sent Aug. 27. If Stormy has not replied by Monday Aug. 31, call 775-385-6569 and ask whether there is room or a need for a full staffed inflatable carnival this year. Keep both prepaid and pay-for-play available because this is last-minute.", "dueAt": "2026-08-31T18:00:00.000Z"}]
 }
