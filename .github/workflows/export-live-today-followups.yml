@@ -11,15 +11,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          if [ -z "${API_URL}" ]; then
+            echo "ADVENTURE_ZONE_API_URL is missing"
+            exit 1
+          fi
+          if [ -z "${ASSISTANT_IMPORT_TOKEN}" ]; then
+            echo "ASSISTANT_IMPORT_TOKEN is missing"
+            exit 1
+          fi
+          echo "Required secrets are present."
+
       - name: Fetch live follow-ups
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
-          curl --fail --silent --show-error \
+          BASE_URL="${API_URL%/}"
+          HTTP_STATUS=$(curl --silent --show-error \
             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            "${API_URL}/api/assistant-import/today-followups?limit=500" \
-            --output today-followups.json
+            --output today-followups.json \
+            --write-out "%{http_code}" \
+            "${BASE_URL}/api/assistant-import/today-followups?limit=500" || true)
+
+          echo "Follow-up endpoint HTTP status: ${HTTP_STATUS}"
+          if [ "${HTTP_STATUS}" != "200" ]; then
+            rm -f today-followups.json
+            exit 1
+          fi
+
+          node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('today-followups.json','utf8')); if(!x.ok || !Array.isArray(x.followUps)) process.exit(1); console.log('Exported open follow-ups:', x.returned ?? x.followUps.length);"
 
       - name: Upload follow-up list
         uses: actions/upload-artifact@v4
