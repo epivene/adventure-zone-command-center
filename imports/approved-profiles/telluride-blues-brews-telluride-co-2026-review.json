@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Telluride Blues & Brews Festival", "city": "Telluride", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "2026 festival runs Sept. 18-20 at Telluride Town Park. The event already operates a Rainbow Kids Area with inflatable bounce games, climbing wall, trampolines and other children's activities. Adventure Zone should not be pitched as a second inflatable provider beside the incumbent setup. Treat as a future replacement/backup-provider opportunity only."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "2026-09-18", "endsAt": "2026-09-20", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — existing inflatable kids area", "body": "Official 2026 festival information confirms a Rainbow Kids Area with inflatable bounce games and other children's activities. Do not pitch Adventure Zone to operate beside the current inflatable setup. The Sept. 18-20 dates also overlap the current Pirate Fest placeholder, so 2026 should remain open only if the current Telluride kids-area arrangement changes and Pirate Fest is not using the same resources. Otherwise, revisit as a friendly future replacement/backup-provider opportunity. Keep any future wording non-competitive."}],
+  "followUps": []
+}
