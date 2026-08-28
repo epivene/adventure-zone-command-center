@@ -102,11 +102,10 @@ jobs:
         run: pnpm --filter @workspace/api-server build
       - name: API typecheck regression
         if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           MERGED_SHA="$(git rev-parse HEAD)"
+          BASE_SHA="$(git rev-parse HEAD^1)"
           normalize_errors() {
             grep -E 'error TS[0-9]+:' "$1" \
               | sed -E 's/\([0-9]+,[0-9]+\)//g' \
@@ -114,6 +113,7 @@ jobs:
               | sort -u || true
           }
 
+          echo "Comparing API typecheck base $BASE_SHA to merge $MERGED_SHA"
           git checkout --detach "$BASE_SHA"
           pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck-base.log 2>&1 || true
           normalize_errors /tmp/api-typecheck-base.log > /tmp/api-typecheck-base.errors
@@ -128,7 +128,7 @@ jobs:
             cat /tmp/api-typecheck-new.errors
             exit 1
           fi
-          echo "No new API typecheck errors beyond the current main baseline."
+          echo "No new API typecheck errors beyond the current main merge-parent baseline."
       - name: API typecheck
         if: github.event_name != 'pull_request'
         run: pnpm --filter @workspace/api-server typecheck
@@ -136,11 +136,10 @@ jobs:
         run: pnpm --filter @workspace/adventure-zone build
       - name: Web typecheck regression
         if: github.event_name == 'pull_request'
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           MERGED_SHA="$(git rev-parse HEAD)"
+          BASE_SHA="$(git rev-parse HEAD^1)"
           normalize_errors() {
             grep -E 'error TS[0-9]+:' "$1" \
               | sed -E 's/\([0-9]+,[0-9]+\)//g' \
@@ -148,6 +147,7 @@ jobs:
               | sort -u || true
           }
 
+          echo "Comparing web typecheck base $BASE_SHA to merge $MERGED_SHA"
           git checkout --detach "$BASE_SHA"
           pnpm --filter @workspace/adventure-zone typecheck > /tmp/web-typecheck-base.log 2>&1 || true
           normalize_errors /tmp/web-typecheck-base.log > /tmp/web-typecheck-base.errors
@@ -162,7 +162,7 @@ jobs:
             cat /tmp/web-typecheck-new.errors
             exit 1
           fi
-          echo "No new web typecheck errors beyond the current main baseline."
+          echo "No new web typecheck errors beyond the current main merge-parent baseline."
       - name: Web typecheck
         if: github.event_name != 'pull_request'
         run: pnpm --filter @workspace/adventure-zone typecheck
