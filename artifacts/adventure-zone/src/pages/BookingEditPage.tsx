@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { apiGet } from "@/lib/auth-token";
 import { BookingForm } from "@/components/bookings/booking-form";
 import { PackageResourceEditor } from "@/components/bookings/package-resource-editor";
+import { LegAssignmentPanel } from "@/components/bookings/leg-assignment-panel";
 import {
   configureBookingPackagesAction,
   configureBookingResourcesAction,
@@ -61,6 +62,10 @@ export default function BookingEditPage({ bookingId }: { bookingId: string }) {
     <div className="mx-auto grid max-w-7xl gap-8">
       <section className="max-w-2xl">
         <h1 className="mb-8 text-3xl font-bold tracking-tight">Edit booking</h1>
+        <LegAssignmentPanel
+          assignment={data.legAssignment}
+          travelLegs={data.allTravelLegs ?? []}
+        />
         <BookingForm
           draftKey={`booking:edit:${bookingId}`}
           initialValues={{
