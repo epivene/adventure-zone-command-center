@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Ridgway RiverFest", "city": "Ridgway", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Established Adventure Zone outreach history. The limiting issue is the small festival footprint, not lack of interest in family entertainment."},
+  "contacts": [{"id": null, "name": "Tanya Ishikawa", "phone": "303-819-7784", "email": "tanya@uncompahgrewatershed.org", "role": "Historical RiverFest contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Later history confirms footprint is too small", "body": "Tanya Ishikawa declined Adventure Zone for 2024, but later 2025 Gmail history is more specific and controls the profile: RiverFest asked about lower-cost / low-power attractions, then said the festival grounds were simply too small and an Adventure Zone setup would occupy roughly a quarter or more of the event space. Adventure Zone acknowledged that limitation. Treat this as a structural space mismatch rather than continuing annual generic outreach."}],
+  "followUps": []
+}
