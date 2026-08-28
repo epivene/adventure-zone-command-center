@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "War Bonnet Round Up", "city": "Idaho Falls", "region": "ID"},
+  "profile": {"placeType": "festival_event", "phone": "208-612-8580", "website": "https://www.idahofallsidaho.gov/1923/War-Bonnet-Round-Up", "description": "Active PRCA rodeo with 12,000+ spectators, a free family kickoff, nightly kids zone, vendors and entertainment."},
+  "contacts": [{"id": null, "name": "Hollie Pettingill", "phone": "208-612-8479", "email": "hpettingill@idahofalls.gov", "role": "Vendor contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Old response was only out-of-office; event remains a possible fit", "body": "The Dec. 2023 unread message was only an out-of-office auto-reply and should not be treated as a decline. Current City of Idaho Falls information confirms War Bonnet Round Up remains a large family-friendly PRCA rodeo with a free kickoff, nightly kids zone, vendors and 12,000+ spectators. The 2026 vendor deadline has passed. Current vendor contact is Hollie Pettingill, 208-612-8479, hpettingill@idahofalls.gov."}],
+  "followUps": [{"label": "Check 2027 War Bonnet Round Up vendor/attraction plan", "reason": "The event is large and family-friendly and the only historical reply was an auto-response. Contact the current vendor/event team early for 2027 before the application deadline.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
