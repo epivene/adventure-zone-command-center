@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Mohave County Fair", "city": "Kingman", "region": "AZ"},
+  "profile": {"placeType": "fair", "phone": "928-753-8620", "website": "https://parks.mohave.gov/fairgrounds/annual-county-fair/", "description": "Active county fair, but Mohave County Risk Management does not allow inflatables on the property due to safety risks."},
+  "contacts": [{"id": null, "name": "Mohave County Fairgrounds", "phone": "928-753-8620", "email": "fairgrounds@mohave.gov", "role": "Fairgrounds office", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Risk Management prohibits inflatables on property", "body": "Shana Westbrook replied Aug. 13, 2026 that Mohave County Risk Management does not allow inflatables on the property due to safety risks and provided 928-753-0736 for clarification. Current official fair information confirms the Sept. 17-20, 2026 fair is active and has a conventional carnival. This is a structural property restriction; do not repeatedly pursue unless Risk Management policy changes."}],
+  "followUps": []
+}
