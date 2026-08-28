@@ -30,7 +30,7 @@ describe("operational calendar client", () => {
       .mockResolvedValueOnce(response({ access_token: "token", expires_in: 3600 }))
       .mockResolvedValueOnce(response({
         id: "google-1",
-        etag: '"etag-1"',
+        etag: '\"etag-1\"',
         summary: event.summary,
         description: event.description,
         start: { date: event.startDate },
@@ -51,6 +51,38 @@ describe("operational calendar client", () => {
     });
   });
 
+  it("normalizes timed Google events into inclusive calendar-day coverage during import", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(response({ access_token: "token", expires_in: 3600 }))
+      .mockResolvedValueOnce(response({
+        items: [{
+          id: "timed-1",
+          etag: '\"etag-timed\"',
+          summary: "David travel/setup note",
+          description: "Timed event already on the operational calendar",
+          start: { dateTime: "2026-09-12T10:00:00-06:00", timeZone: "America/Denver" },
+          end: { dateTime: "2026-09-12T18:00:00-06:00", timeZone: "America/Denver" },
+          updated: "2026-08-28T00:00:00Z",
+          status: "confirmed",
+        }],
+      }));
+
+    const client = createOperationalCalendarClient({ environment, refreshToken: "refresh", fetcher });
+    const page = await client.listEvents({
+      calendarId: "theadventurezone12@gmail.com",
+      timeMin: "2026-08-28T00:00:00.000Z",
+      timeMax: "2027-01-01T00:00:00.000Z",
+    });
+
+    expect(page.events).toEqual([
+      expect.objectContaining({
+        id: "timed-1",
+        startDate: "2026-09-12",
+        endDateExclusive: "2026-09-13",
+      }),
+    ]);
+  });
+
   it("uses If-Match on updates so manual Google edits cause a conflict", async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(response({ access_token: "token", expires_in: 3600 }))
@@ -60,10 +92,10 @@ describe("operational calendar client", () => {
       calendarId: "theadventurezone12@gmail.com",
       eventId: "google-1",
       event,
-      etag: '"old-etag"',
+      etag: '\"old-etag\"',
     })).rejects.toMatchObject({ code: "GOOGLE_OPERATIONAL_CALENDAR_CONFLICT" });
     const headers = new Headers(fetcher.mock.calls[1]![1]?.headers);
-    expect(headers.get("if-match")).toBe('"old-etag"');
+    expect(headers.get("if-match")).toBe('\"old-etag\"');
   });
 
   it("returns null when a linked Google event was deleted", async () => {
