@@ -43,10 +43,18 @@ function displayKey(event: CalendarBookingLike) {
     normalize(event.name),
     normalize(event.city),
     normalize(event.region),
-    event.travelLegId ?? "",
     dateKey(event.startsAt),
     dateKey(event.endsAt ?? event.startsAt),
   ].join("|");
+}
+
+function isPreferred<T extends CalendarBookingLike>(candidate: T, current: T) {
+  const statusDifference = statusPriority[candidate.status] - statusPriority[current.status];
+  if (statusDifference !== 0) return statusDifference > 0;
+  if (Boolean(candidate.travelLegId) !== Boolean(current.travelLegId)) {
+    return Boolean(candidate.travelLegId);
+  }
+  return candidate.id.localeCompare(current.id) > 0;
 }
 
 export function dedupeCalendarBookings<T extends CalendarBookingLike>(events: T[]): T[] {
@@ -54,7 +62,7 @@ export function dedupeCalendarBookings<T extends CalendarBookingLike>(events: T[
   for (const event of events) {
     const key = displayKey(event);
     const current = byKey.get(key);
-    if (!current || statusPriority[event.status] > statusPriority[current.status]) {
+    if (!current || isPreferred(event, current)) {
       byKey.set(key, event);
     }
   }
