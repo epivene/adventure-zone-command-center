@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Payson Golden Onion Days", "city": "Payson", "region": "UT"},
+  "profile": {"placeType": "city_government", "phone": "801-358-3357", "website": "https://www.paysonutah.gov/386/Golden-Onion-Days", "description": "Active Payson City Labor Day celebration with a carnival, concerts, races, parade, fireworks and vendors. The existing carnival occupies the available inflatable/amusement footprint."},
+  "contacts": [{"id": null, "name": "Janeen Dean", "phone": "801-358-3357", "email": "events@paysonutah.gov", "role": "Community & Cultural Events Coordinator", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Carnival occupies all available space", "body": "Janeen Dean replied Aug. 13, 2026 that Payson was not interested in adding inflatables because Golden Onion Days already has a carnival that takes up all the space. Current city information confirms the Sept. 3-7, 2026 celebration remains active and includes a carnival. This is a structural space/provider conflict, not a lead to re-pitch every year. Only reconsider if the carnival arrangement or event footprint changes."}],
+  "followUps": []
+}
