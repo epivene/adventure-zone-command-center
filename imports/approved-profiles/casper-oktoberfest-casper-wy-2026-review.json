@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Oktoberfest", "city": "Casper", "region": "WY"},
-  "profile": {"placeType": "festival_event", "description": "Current 2026 review is not a strong Adventure Zone prospect. Casper Oktoberfest is historically a one-afternoon downtown charity beer crawl benefiting Make-A-Wish Wyoming, and no official 2026 edition was verified."},
+  "profile": {"placeType": "festival_event", "description": "Casper Oktoberfest is historically a one-afternoon downtown charity beer event benefiting Make-A-Wish Wyoming. Adult/21+ events are valid Adventure Zone prospects and must not be rejected solely because of alcohol service or age restriction. A current 2026 edition has not yet been officially verified. If confirmed, evaluate Warrior's Playground and other adult-oriented competitive attractions, plus footprint, event duration and route economics."},
   "contacts": [],
-  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "booking": {"enabled": true, "name": "Casper Oktoberfest", "status": "new_lead", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "2026-09-01", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "2026 review — unconfirmed / poor inflatable-carnival fit", "body": "Adventure Zone Gmail shows outreach to Casper Oktoberfest contacts in 2023 and 2024 with no reply found. Current official Wyoming tourism material only shows a past Casper Oktoberfest and describes the event as a downtown beer festival/bar crawl benefiting Make-A-Wish Wyoming. A current festival listing estimates Oct. 3, 2026 but explicitly says the 2026 edition is not officially confirmed and describes it as a 21+ downtown charity beer crawl. Do not create routine Adventure Zone outreach or follow-up unless an official future edition materially changes format."}],
-  "followUps": []
+  "notes": [{"subject": "Correction — adult/21+ is not a non-fit reason", "body": "Adventure Zone Gmail shows outreach to Casper Oktoberfest contacts in 2023 and 2024 with no reply found. The prior decision to close this primarily because it is a 21+ beer event was incorrect. First verify a real 2026 edition; if confirmed, evaluate Warrior's Playground/competitive attractions, space, operating window, economics and organizer interest."}],
+  "followUps": [{"label": "Verify 2026 Casper Oktoberfest and adult-event fit", "reason": "Adult/21+ is not a disqualifier. Confirm a 2026 event first, then assess Warrior's Playground/competitive attraction fit before history-aware outreach.", "dueAt": "2026-09-01T15:00:00.000Z"}]
 }
