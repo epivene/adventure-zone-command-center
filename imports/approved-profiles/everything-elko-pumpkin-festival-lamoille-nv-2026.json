@@ -1,0 +1,49 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Everything Elko Pumpkin Festival",
+    "city": "Lamoille",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Referred Elko-area prospect. Susan Goddard of Lamoille Country Fair specifically recommended Everything Elko Pumpkin Festival in her May 17, 2026 reply after advising that Lamoille Country Fair's local bounce-house provider was returning. The Pumpkin Festival is organized by Everything Elko, not by Susan/Lamoille Country Fair, Rides & Rods, Gold Rush Challenge, or Elko County Fair. Current Everything Elko contact trail identifies Katie at katie@everythingelko.com / 208-867-6512. The event is a recurring free, family-focused October festival at Lamoille Grove, but exact 2026 dates have not yet been verified from an official published event announcement; do not put dates in outreach until confirmed."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Katie",
+      "phone": "208-867-6512",
+      "email": "katie@everythingelko.com",
+      "role": "Everything Elko / Pumpkin Festival Contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "new_lead",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "May 2026 local referral / duplicate-contact check",
+      "body": "Susan Goddard at Lamoille Country Fair referred Adventure Zone to Everything Elko Pumpkin Festival, Art in the Park, and the local Renaissance Faire on May 17, 2026. Duplicate-contact audit completed Aug. 27, 2026: Everything Elko Pumpkin Festival is a separate organizer/contact from current Elko prospects Rides & Rods (Stormy Remington), Gold Rush Challenge (Efren Benavides / Benavides Bucking Bulls), Elko County Fair (Kameron Clifford / fair office), and Lamoille Country Fair (Susan Goddard). Adventure Zone Gmail contains no prior direct email to katie@everythingelko.com or erin@everythingelko.com; only Susan's referral mentions the Pumpkin Festival."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Verify Everything Elko Pumpkin Festival 2026",
+      "reason": "Local organizer Susan Goddard referred us. Before drafting, verify the official 2026 Pumpkin Festival dates, current organizer/contact, available footprint, and whether an inflatable carnival or future provider opportunity could fit. Do not assume unofficial estimated October dates.",
+      "dueAt": "2026-09-01T15:00:00.000Z"
+    }
+  ]
+}
