@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Traveling Shamans Camp", "city": "Hotchkiss", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Historical lead from 2024. Adventure Zone's email to Admin@travelingshamans.com bounced as address not found. Current web research did not produce a reliable active 2026 event or verified organizer/contact."},
+  "contacts": [{"id": null, "name": "Traveling Shamans Camp", "phone": "", "email": "", "role": "Historical lead - current contact unverified", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2024 email bounced; current event/contact not verified", "body": "Adventure Zone's Dec. 20, 2023 outreach for a 2024 Traveling Shamans Camp in Hotchkiss was returned because Admin@travelingshamans.com could not be found. A current web search did not verify a reliable active 2026 event listing or official organizer contact. Keep this as stale historical data rather than an active lead. Do not spend normal outreach time on it unless a fresh source shows the event has returned."}],
+  "followUps": []
+}
