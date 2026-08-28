@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 
 import {
   createProductionOpportunityEmailRuntime,
+  getProductionOpportunityEmailRuntime,
 } from "@/features/opportunity-email/production-opportunity-email-runtime";
 import { createOpportunityEmailRuntimeRouter } from "./opportunity-email-runtime";
 
@@ -46,17 +47,6 @@ export function createLazyOpportunityEmailRuntimeRouter(
   });
 
   return router;
-}
-
-let productionRuntimePromise: Promise<ProductionRuntime> | null = null;
-
-export function getProductionOpportunityEmailRuntime(): Promise<ProductionRuntime> {
-  productionRuntimePromise ??= createProductionOpportunityEmailRuntime()
-    .catch((error) => {
-      productionRuntimePromise = null;
-      throw error;
-    });
-  return productionRuntimePromise;
 }
 
 const opportunityEmailLiveRuntimeRouter = createLazyOpportunityEmailRuntimeRouter(
