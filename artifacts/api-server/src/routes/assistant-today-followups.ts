@@ -1,4 +1,4 @@
-import { and, asc, count, eq, isNull } from "drizzle-orm";
+import { and, asc, count, eq, isNull, ne } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -121,8 +121,32 @@ router.post("/today-followups", async (req, res): Promise<void> => {
         .limit(1);
 
       if (existing) {
+        await transaction
+          .update(followUps)
+          .set({
+            completedAt: now,
+            outcome: "Replaced by newer follow-up",
+            updatedAt: now,
+          })
+          .where(and(
+            eq(followUps.organizationId, organizationId),
+            isNull(followUps.completedAt),
+            ne(followUps.id, existing.id),
+          ));
         return { id: existing.id, created: false };
       }
+
+      await transaction
+        .update(followUps)
+        .set({
+          completedAt: now,
+          outcome: "Replaced by newer follow-up",
+          updatedAt: now,
+        })
+        .where(and(
+          eq(followUps.organizationId, organizationId),
+          isNull(followUps.completedAt),
+        ));
 
       const [created] = await transaction
         .insert(followUps)
