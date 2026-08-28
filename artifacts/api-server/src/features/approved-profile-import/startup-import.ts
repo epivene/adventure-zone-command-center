@@ -22,6 +22,7 @@ type ApprovedProfileFollowUp = {
 
 type ApprovedProfilePayload = Record<string, unknown> & {
   matchExisting?: unknown;
+  aliases?: unknown;
   event?: unknown;
   notes?: unknown;
   followUps?: unknown;
@@ -69,38 +70,69 @@ function compatibleLocation(
   return true;
 }
 
+function uniqueProfileIds(results: ProfileSearchResult[]) {
+  return [...new Set(
+    results
+      .map((result) => typeof result.id === "string" ? result.id : "")
+      .filter(Boolean),
+  )];
+}
+
 function selectExistingProfile(
   results: ProfileSearchResult[],
   event: Record<string, unknown>,
+  names: string[],
   file: string,
 ) {
-  const eventName = normalized(event.name);
-  if (!eventName) return null;
+  const normalizedNames = [...new Set(names.map(normalized).filter(Boolean))];
+  if (normalizedNames.length === 0) return null;
 
   const organizations = results.filter((result) =>
     result.kind === "organization"
     && typeof result.id === "string"
     && compatibleLocation(result, event),
   );
-  const exact = organizations.filter((result) => normalized(result.label) === eventName);
-  if (exact.length === 1) return String(exact[0]!.id);
-  if (exact.length > 1) {
+
+  const exact = organizations.filter((result) => {
+    const label = normalized(result.label);
+    return normalizedNames.includes(label);
+  });
+  const exactIds = uniqueProfileIds(exact);
+  if (exactIds.length === 1) return exactIds[0]!;
+  if (exactIds.length > 1) {
     throw new ApprovedProfileMatchError(
-      `Approved profile import ${file} matched more than one existing profile.`,
+      `Approved profile import ${file} matched more than one existing profile across canonical name or aliases.`,
     );
   }
 
   const close = organizations.filter((result) => {
     const label = normalized(result.label);
-    return label.includes(eventName) || eventName.includes(label);
+    if (!label) return false;
+    return normalizedNames.some((name) => label.includes(name) || name.includes(label));
   });
-  if (close.length === 1) return String(close[0]!.id);
-  if (close.length > 1) {
+  const closeIds = uniqueProfileIds(close);
+  if (closeIds.length === 1) return closeIds[0]!;
+  if (closeIds.length > 1) {
     throw new ApprovedProfileMatchError(
-      `Approved profile import ${file} matched more than one existing profile.`,
+      `Approved profile import ${file} matched more than one existing profile across canonical name or aliases.`,
     );
   }
   return null;
+}
+
+function readAliases(payload: ApprovedProfilePayload, file: string): string[] {
+  if (payload.aliases == null) return [];
+  if (!Array.isArray(payload.aliases)) {
+    throw new Error(`Approved profile import ${file} has invalid aliases.`);
+  }
+  const aliases = payload.aliases.map((value, index) => {
+    const alias = typeof value === "string" ? value.trim() : "";
+    if (!alias) {
+      throw new Error(`Approved profile import ${file} alias ${index + 1} is invalid.`);
+    }
+    return alias;
+  });
+  return [...new Set(aliases)];
 }
 
 function readApprovedNotes(payload: ApprovedProfilePayload, file: string): ApprovedProfileNote[] {
@@ -170,6 +202,29 @@ async function requestAssistantJson(input: {
   return responseBody;
 }
 
+async function searchProfiles(input: {
+  port: number;
+  token: string;
+  query: string;
+  file: string;
+}) {
+  const responseBody = await requestAssistantJson({
+    port: input.port,
+    token: input.token,
+    method: "GET",
+    path: `profile-search?q=${encodeURIComponent(input.query)}&limit=20`,
+    failureLabel: `Approved profile match search failed for ${input.file}`,
+  });
+
+  let search: ProfileSearchResponse;
+  try {
+    search = JSON.parse(responseBody) as ProfileSearchResponse;
+  } catch {
+    throw new Error(`Approved profile match search ${input.file} returned invalid JSON.`);
+  }
+  return Array.isArray(search.results) ? search.results as ProfileSearchResult[] : [];
+}
+
 async function resolveExistingProfile(input: {
   port: number;
   token: string;
@@ -184,22 +239,30 @@ async function resolveExistingProfile(input: {
   const name = typeof event.name === "string" ? event.name.trim() : "";
   if (!name) return input.payload;
 
-  const responseBody = await requestAssistantJson({
-    port: input.port,
-    token: input.token,
-    method: "GET",
-    path: `profile-search?q=${encodeURIComponent(name)}&limit=20`,
-    failureLabel: `Approved profile match search failed for ${input.file}`,
-  });
+  const aliases = readAliases(input.payload, input.file);
+  const names = [...new Set([name, ...aliases])];
+  const byId = new Map<string, ProfileSearchResult>();
+  const withoutId: ProfileSearchResult[] = [];
 
-  let search: ProfileSearchResponse;
-  try {
-    search = JSON.parse(responseBody) as ProfileSearchResponse;
-  } catch {
-    throw new Error(`Approved profile match search ${input.file} returned invalid JSON.`);
+  for (const query of names) {
+    const results = await searchProfiles({
+      port: input.port,
+      token: input.token,
+      query,
+      file: input.file,
+    });
+    for (const result of results) {
+      if (typeof result.id === "string" && result.id) byId.set(result.id, result);
+      else withoutId.push(result);
+    }
   }
-  const results = Array.isArray(search.results) ? search.results as ProfileSearchResult[] : [];
-  const profileId = selectExistingProfile(results, event, input.file);
+
+  const profileId = selectExistingProfile(
+    [...byId.values(), ...withoutId],
+    event,
+    names,
+    input.file,
+  );
   if (!profileId) return input.payload;
 
   return {
