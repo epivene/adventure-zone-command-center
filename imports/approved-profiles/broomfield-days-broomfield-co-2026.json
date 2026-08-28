@@ -1,18 +1,18 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Broomfield Days", "city": "Broomfield", "region": "CO"},
-  "profile": {"placeType": "festival_event"},
+  "profile": {"placeType": "festival_event", "phone": "303-469-3301", "website": "https://www.broomfield.org/361/Broomfield-Days", "description": "Broomfield's large annual community festival. The 2026 weekend is Sept. 18-20 with the main festival Sept. 19, 300+ vendors and existing inflatables/activity providers."},
   "contacts": [
-    {"id": null, "name": "Jenny Morgan", "phone": "", "email": "jbmorgan@broomfield.org", "role": "", "primary": true}
+    {"id": null, "name": "Jenny Morgan", "phone": "", "email": "jbmorgan@broomfield.org", "role": "Broomfield Days activity/vendor contact", "primary": true}
   ],
-  "booking": {"enabled": true, "name": "Broomfield Days - 2026", "status": "declined", "startsAt": "2026-09-18", "endsAt": "2026-09-20", "nextActionKind": null, "nextActionDueAt": null, "travelLegId": null},
+  "booking": {"enabled": true, "name": "Broomfield Days - 2026", "status": "declined", "startsAt": "2026-09-18", "endsAt": "2026-09-20", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [
-    {"subject": "2026 decline - local provider / activity spots filled", "body": "Jenny Morgan replied Aug. 28, 2026 that Broomfield Days is still working with a local provider and has filled its activity spots for 2026. She said she will keep The Adventure Zone's information on hand for future events. Treat 2026 as a clean decline, not a do-not-contact."}
+    {"subject": "2026 decline - local provider / activity spots filled", "body": "Jenny Morgan replied Aug. 28, 2026 that Broomfield Days is still working with a local provider and has filled its activity spots for 2026. She said she will keep The Adventure Zone's information on hand for future events. Current City of Broomfield information confirms the event remains active Sept. 18-20, 2026, with the main festival Sept. 19, 300+ vendors and inflatables. Treat 2026 as a clean incumbent-provider/activity-capacity decline, not a do-not-contact."}
   ],
   "followUps": [
-    {"label": "Follow up with Jenny about 2027 Broomfield Days", "reason": "2026 was filled with a local provider, but Jenny said she would keep The Adventure Zone's information on hand for future events. Check back early for 2027 before activity spots are filled.", "dueAt": "2027-01-15T15:00:00.000Z"}
+    {"label": "Follow up with Jenny about 2027 Broomfield Days", "reason": "2026 was filled with a local provider, but Jenny said she would keep The Adventure Zone's information on hand for future events. Check back early for 2027 before activity spots are filled.", "dueAt": "2027-01-15T16:00:00.000Z"}
   ]
 }
