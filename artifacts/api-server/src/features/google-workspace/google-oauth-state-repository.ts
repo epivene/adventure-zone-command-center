@@ -13,7 +13,7 @@ export interface GoogleOAuthStateRepository {
   consume(input: {
     state: string;
     now: Date;
-  }): Promise<{ returnPath: string; connectionRole: GoogleOAuthConnectionRole } | null>;
+  }): Promise<{ returnPath: string; connectionRole?: GoogleOAuthConnectionRole } | null>;
   deleteExpired(now: Date): Promise<number>;
 }
 
@@ -81,7 +81,7 @@ export class PostgresGoogleOAuthStateRepository
   async consume(input: {
     state: string;
     now: Date;
-  }): Promise<{ returnPath: string; connectionRole: GoogleOAuthConnectionRole } | null> {
+  }): Promise<{ returnPath: string; connectionRole?: GoogleOAuthConnectionRole } | null> {
     if (!Number.isFinite(input.now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_OAUTH_STATE_TIME_INVALID");
     }
