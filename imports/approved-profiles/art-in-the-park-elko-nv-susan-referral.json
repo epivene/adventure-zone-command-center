@@ -1,0 +1,53 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Art in the Park",
+    "city": "Elko",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Elko County Art Club's annual Art in the Park at Elko Main City Park. Susan Goddard of Lamoille Country Fair referred The Adventure Zone to this event in May 2026 as another strong local Elko-area prospect. The 2026 event was July 11-12, so 2026 outreach is no longer timely. Current organizer contact: Elko County Art Club, ecacelko@gmail.com; Monica, 775-544-5198. Event includes food trucks, music, family fun, a Kids Corner, performing arts and art demonstrations. Treat as a separate organizer from Everything Elko Pumpkin Festival, Gold Rush Challenge, Rides & Rods, Elko County Fair, Lamoille Country Fair and Rotary Club of Elko. No prior direct Adventure Zone Gmail history to the current Elko Art in the Park organizer was found as of Aug. 27, 2026.",
+    "phone": "775-544-5198",
+    "website": "https://www.elkocountyarts.org/art-in-the-park",
+    "address1": "1515 Idaho Street",
+    "postalCode": "89801"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Monica",
+      "phone": "775-544-5198",
+      "email": "ecacelko@gmail.com",
+      "role": "Art in the Park Contact / Elko County Art Club",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "new_lead",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Susan Goddard referral / duplicate-contact check",
+      "body": "On May 17, 2026, Susan Goddard at Lamoille Country Fair referred The Adventure Zone to several other Elko-area events, including Art in the Park. Duplicate-contact review on Aug. 27, 2026 found this event is run by Elko County Art Club and is not the same organizer/contact as Susan/Lamoille, Everything Elko, Rides & Rods, Gold Rush Challenge, Elko County Fair, or Rotary Club of Elko. Adventure Zone Gmail contains no prior direct outreach to the current Elko Art in the Park contact. The 2026 event already occurred July 11-12."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Art in the Park — 2027 early outreach",
+      "reason": "Susan Goddard specifically referred this Elko-area event. 2026 already passed; verify 2027 dates and contact, then consider a history-aware outreach mentioning the local referral if the event still has room for a staffed inflatable carnival outside the core art/vendor footprint.",
+      "dueAt": "2027-01-04T16:00:00.000Z"
+    }
+  ]
+}
