@@ -1,0 +1,19 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Bend Fall Festival", "city": "Bend", "region": "OR"},
+  "profile": {"placeType": "festival_event", "description": "Warm 2026 lead under Lay It Out Events. David spoke with the organizer in late August after they may have lost their carnival. Follow-up should continue from that phone conversation, not reintroduce the company cold.", "phone": "541-323-0964", "website": "https://bendfallfestival.com/", "address1": "", "address2": "", "postalCode": ""},
+  "contacts": [
+    {"id": null, "name": "Ty Collins", "phone": "541-323-0964", "email": "vendors@layitoutevents.com", "role": "Vendor Coordinator", "primary": true}
+  ],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "2026-10-02", "endsAt": "2026-10-04", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {"subject": "David phone call — possible 2026 Adventure Zone booking", "body": "Desiree confirmed Aug. 27, 2026 that David spoke with Bend last week after the event may have lost its carnival. They were interested in possibly booking Adventure Zone, but David understood they may have gotten their carnival back. Follow-up should ask where that situation landed and should not invent any additional details from the phone call."},
+    {"subject": "Current event research — Bend Fall Festival 2026", "body": "Official 2026 information confirms Bend Fall Festival runs Oct. 2-4, 2026 in downtown Bend and includes a Family Play Zone with kid-focused vendors and bouncy houses. Lay It Out Events lists Ty Collins as Vendor Coordinator at vendors@layitoutevents.com / 541-323-0964. This is a warm lead because of David's recent call. Oregon is restricted due to weather risk, not on hold: push prepaid first; pay-for-play is secondary when specifically appropriate."}
+  ],
+  "followUps": [
+    {"label": "Follow up after David's Bend call", "reason": "Warm lead. David spoke with Bend about a possible Adventure Zone booking after they may have lost their carnival. A personalized Gmail draft was prepared asking where the carnival situation landed. If Ty does not reply, follow up without reintroducing the company.", "dueAt": "2026-09-01T16:00:00.000Z"}
+  ]
+}
