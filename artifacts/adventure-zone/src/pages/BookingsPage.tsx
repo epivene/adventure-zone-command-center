@@ -4,6 +4,7 @@ import { apiGet } from "@/lib/auth-token";
 import { BookingList } from "@/components/bookings/booking-list";
 import type { BookingListItem } from "@/components/bookings/booking-list";
 import { bookingStatusValues, type BookingStatus } from "@/features/bookings/booking-types";
+import { dedupeBookingList } from "@/features/bookings/booking-list-dedupe";
 
 export default function BookingsPage() {
   const search = useSearch();
@@ -20,16 +21,15 @@ export default function BookingsPage() {
   useEffect(() => {
     apiGet<any>("/bookings")
       .then((data) => {
-        setBookings(
-          (data.bookings ?? data ?? []).map((b: any) => ({
-            ...b,
-            startsAt: b.startsAt ? new Date(b.startsAt) : null,
-            endsAt: b.endsAt ? new Date(b.endsAt) : null,
-            nextAction: b.nextAction
-              ? { ...b.nextAction, dueAt: new Date(b.nextAction.dueAt) }
-              : null,
-          })),
-        );
+        const parsed = (data.bookings ?? data ?? []).map((b: any) => ({
+          ...b,
+          startsAt: b.startsAt ? new Date(b.startsAt) : null,
+          endsAt: b.endsAt ? new Date(b.endsAt) : null,
+          nextAction: b.nextAction
+            ? { ...b.nextAction, dueAt: new Date(b.nextAction.dueAt) }
+            : null,
+        }));
+        setBookings(dedupeBookingList(parsed));
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
