@@ -1,12 +1,12 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "event": {"id": null, "name": "ThirstyFest", "city": "Denver", "region": "CO"},
-  "profile": {"placeType": "festival_event", "description": "ThirstyFest is a volunteer-led craft beer fundraiser benefiting Water For People. Adult/21+ and beer-focused events are valid Adventure Zone prospects and must not be rejected solely for that reason. Current public material still centers on the 2025 event and does not show a confirmed 2026 festival date. If a 2026 edition is verified, evaluate Warrior's Playground and other competitive/adrenaline attractions first, along with space, hours, route economics and organizer interest."},
+  "profile": {"placeType": "festival_event", "description": "ThirstyFest is a volunteer-led craft beer fundraiser benefiting Water For People. Adult/21+ status is not a disqualifier for Adventure Zone. After review, this event is a poor operational/commercial fit because the known format is a short-duration beer-tasting fundraiser centered on beverages, food trucks, music and lawn games, without a natural need for a large staffed attraction package."},
   "contacts": [],
-  "booking": {"enabled": true, "name": "ThirstyFest", "status": "new_lead", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "2026-09-01", "travelLegId": null},
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Correction — adult event remains eligible", "body": "Adventure Zone emailed ThirstyFest in 2023 and 2024 with no reply found. The prior non-fit conclusion based on craft beer/21+ format was incorrect. Adult events are eligible. Before outreach, first verify whether a 2026 event is actually scheduled; if confirmed, assess Warrior's Playground/adult competitive-attraction fit, available footprint, operating window and route economics."}],
-  "followUps": [{"label": "Verify 2026 ThirstyFest and adult-event fit", "reason": "Adult/21+ is not a disqualifier. Confirm whether a 2026 event is scheduled, then assess Warrior's Playground/competitive attraction fit before history-aware outreach.", "dueAt": "2026-09-01T15:00:00.000Z"}]
+  "notes": [{"subject": "2026 review — non-fit based on event format", "body": "Adventure Zone emailed ThirstyFest in 2023 and 2024 with no reply found. Adult/21+ and beer-focused events remain eligible in general, but ThirstyFest itself is not a strong fit: the known event format is a short volunteer-led craft beer fundraiser with tastings, food trucks, music and lawn games. A full staffed Adventure Zone or Warrior's Playground setup would be disproportionate to the event format and operating window. Do not create routine outreach unless the event materially changes format."}],
+  "followUps": []
 }
