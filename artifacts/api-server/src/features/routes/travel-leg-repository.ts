@@ -1,7 +1,7 @@
 import { asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
-import { bookings, resources, travelLegs } from "@/db/schema";
+import { bookingLegAssignments, bookings, resources, travelLegs } from "@/db/schema";
 import type {
   BookingStatus,
   Probability,
@@ -45,6 +45,9 @@ export type MapEventRecord = {
   travelLegId: string | null;
   travelLegName: string | null;
   travelLegColor: string | null;
+  travelLegAssignmentKind: "assigned" | "suggested" | null;
+  legAssignmentWarning: "long_travel" | "major_travel_concern" | null;
+  legAssignmentExplanation: string | null;
   startsAt: Date | null;
   endsAt: Date | null;
   routeBucket: RouteBucket;
@@ -76,13 +79,29 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
   async listMapEvents(): Promise<MapEventRecord[]> {
-    const records = await this.database
-      .select({ booking: bookings, travelLeg: travelLegs })
-      .from(bookings)
-      .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
-      .orderBy(asc(bookings.startsAt), asc(bookings.name), asc(bookings.id));
+    const [records, assignmentRows, allLegs] = await Promise.all([
+      this.database
+        .select({ booking: bookings, travelLeg: travelLegs })
+        .from(bookings)
+        .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+        .orderBy(asc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+      this.database.select().from(bookingLegAssignments),
+      this.database.select(travelLegSelection).from(travelLegs),
+    ]);
+    const assignmentByBooking = new Map(assignmentRows.map((row) => [row.bookingId, row]));
+    const legById = new Map(allLegs.map((leg) => [leg.id, leg]));
 
     return records.map(({ booking, travelLeg }) => {
+      const assignment = assignmentByBooking.get(booking.id) ?? null;
+      const suggestedLeg = assignment?.suggestedLegId
+        ? legById.get(assignment.suggestedLegId) ?? null
+        : null;
+      const planningLeg = travelLeg ?? suggestedLeg;
+      const travelLegAssignmentKind = travelLeg
+        ? "assigned" as const
+        : suggestedLeg
+          ? "suggested" as const
+          : null;
       const cityRegion = [booking.city?.trim(), booking.region?.trim()].filter(Boolean).join(", ");
       const address = booking.address1?.trim();
       const locationLabel = address
@@ -109,9 +128,12 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         longitude: booking.longitude,
         status: booking.status,
         probability: booking.probability,
-        travelLegId: travelLeg?.id ?? null,
-        travelLegName: travelLeg?.name ?? null,
-        travelLegColor: travelLeg?.color ?? null,
+        travelLegId: planningLeg?.id ?? null,
+        travelLegName: planningLeg?.name ?? null,
+        travelLegColor: planningLeg?.color ?? null,
+        travelLegAssignmentKind,
+        legAssignmentWarning: assignment?.warning as MapEventRecord["legAssignmentWarning"] ?? null,
+        legAssignmentExplanation: assignment?.explanation ?? null,
         startsAt: booking.startsAt,
         endsAt: booking.endsAt,
         routeBucket: classifyRouteBucket(booking.status),
