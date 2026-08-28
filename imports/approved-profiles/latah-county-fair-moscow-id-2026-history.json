@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Latah County Fair", "city": "Moscow", "region": "ID"},
+  "profile": {"placeType": "fair", "phone": "208-883-5722", "website": "https://www.latahcountyfair.com/p/fair", "description": "Active four-day admission-free county fair welcoming 20,000+ attendees. 2026 fair is Sept. 17-20 and includes a carnival, food, games, entertainment and family activities."},
+  "contacts": [{"id": null, "name": "Jim Logan", "phone": "208-883-5722", "email": "jlogan@latahcountyid.gov", "role": "Fairgrounds & Events Center Director", "primary": true}],
+  "booking": {"enabled": true, "name": "Latah County Fair - 2026", "status": "contacted", "startsAt": "2026-09-17", "endsAt": "2026-09-20", "nextActionKind": "email", "nextActionDueAt": "2026-08-31", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 outreach pending - correct current contact", "body": "Adventure Zone sent 2026 outreach Aug. 13 to Jim Logan and the fair office. No reply was found in the reviewed Gmail history. Current official contact information lists Jim Logan as Director, jlogan@latahcountyid.gov, with general fair email fair@latahcountyid.gov and phone 208-883-5722. The 2026 fair remains upcoming Sept. 17-20 and already includes a carnival, so any 2026 follow-up should be a concise continuation rather than another introduction."}],
+  "followUps": [{"label": "Decide 2026 Latah County Fair follow-up", "reason": "The fair is still upcoming Sept. 17-20. Amy already sent an introduction Aug. 13 with no reply found. Check current route/package fit and, if worthwhile, send a concise follow-up rather than another introduction.", "dueAt": "2026-08-31T16:00:00.000Z"}]
+}
