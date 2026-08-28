@@ -10,6 +10,7 @@ import * as resourceSourceCandidateSchema from "./resource-source-candidate-sche
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 import * as googleWorkspaceSchema from "./google-workspace-schema";
+import * as operationalCalendarSchema from "./operational-calendar-schema";
 import * as leadIntakeSchema from "./lead-intake-schema";
 import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
@@ -50,6 +51,7 @@ const schema = {
   ...eventAttendanceHistorySchema,
   ...officeCoordinatorSchema,
   ...googleWorkspaceSchema,
+  ...operationalCalendarSchema,
   ...leadIntakeSchema,
   ...bookingOpportunitySchema,
   ...bookingOpportunityEmailSchema,
@@ -67,6 +69,7 @@ export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
 export * from "./office-coordinator-schema";
 export * from "./google-workspace-schema";
+export * from "./operational-calendar-schema";
 export * from "./lead-intake-schema";
 export * from "./booking-opportunity-schema";
 export * from "./booking-opportunity-email-schema";
