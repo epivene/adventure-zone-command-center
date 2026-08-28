@@ -5,9 +5,9 @@ import {
   type DriveTimeEstimator,
   type FeasibilityResult,
 } from "./leg-feasibility";
-import {
-  LegAssignmentRepository,
-  type AssignmentCandidateContext,
+import type {
+  AssignmentCandidateContext,
+  LegAssignmentStore,
 } from "./leg-assignment-repository";
 
 export type EvaluatedCandidate = AssignmentCandidateContext & {
@@ -37,7 +37,7 @@ function routeExplanation(candidate: EvaluatedCandidate) {
 
 export class LegAssignmentService {
   constructor(
-    private readonly repository: LegAssignmentRepository,
+    private readonly repository: LegAssignmentStore,
     private readonly estimator: DriveTimeEstimator,
   ) {}
 
