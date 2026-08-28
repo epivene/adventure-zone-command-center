@@ -1,40 +1,12 @@
 {
-  "importRevision": 1,
-  "event": {
-    "id": null,
-    "name": "Gold Rush Challenge",
-    "city": "Elko",
-    "region": "NV"
-  },
-  "profile": {
-    "placeType": "festival_event",
-    "description": "2026 Gold Rush Bull Riding Challenge prospect. Event is September 12, 2026 at the Elko County Fairgrounds. Family-focused rodeo event with mutton busting, mini bull riding, bull riding, and women's breakaway. Organizer: Benavides Bucking Bulls LLC. Public organizer email: bbbulls804@gmail.com. Adventure Zone outreach is being made through the event contact form for a possible pay-for-play or prepaid inflatable carnival.",
-    "phone": "",
-    "website": "https://elkogoldrushchallenge.com",
-    "address1": "13 Fairgrounds Road",
-    "address2": "",
-    "postalCode": ""
-  },
-  "contacts": [
-    {
-      "id": null,
-      "name": "Efren Benavides",
-      "phone": "",
-      "email": "bbbulls804@gmail.com",
-      "role": "Organizer / Benavides Bucking Bulls",
-      "primary": true
-    }
-  ],
-  "booking": {
-    "enabled": true,
-    "name": "Gold Rush Challenge - 2026",
-    "status": "new_lead",
-    "startsAt": "2026-09-12",
-    "endsAt": "2026-09-12",
-    "nextActionKind": "email",
-    "nextActionDueAt": "2026-08-27",
-    "travelLegId": null
-  },
+  "importRevision": 2,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Gold Rush Challenge", "city": "Elko", "region": "NV"},
+  "profile": {"placeType": "festival_event", "description": "2026 Gold Rush Bull Riding Challenge prospect for the leg manager's Sept. 12 route. Event is Sept. 12 at Elko County Fairgrounds with mutton busting, mini bulls, bull riding and women's breakaway. Fairgrounds footprint is favorable, but the event is primarily a late-afternoon/evening rodeo, so Adventure Zone would be an added daytime/kids draw rather than the main event. This overlaps Rides & Rods in Elko on the same weekend, so treat Gold Rush as an alternative/backup until one opportunity advances. Standard vendor registration closed Aug. 26, but a separately staffed inflatable carnival may still be considered if the organizer has space.", "phone": "", "website": "https://elkogoldrushchallenge.com", "address1": "13 Fairgrounds Road", "address2": "", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Efren Benavides", "phone": "", "email": "bbbulls804@gmail.com", "role": "Organizer / Benavides Bucking Bulls", "primary": true}],
+  "booking": {"enabled": true, "name": "Gold Rush Challenge - 2026", "status": "new_lead", "startsAt": "2026-09-12", "endsAt": "2026-09-12", "nextActionKind": "email", "nextActionDueAt": "2026-08-28", "travelLegId": null},
   "familyId": null,
-  "parentOrganizationId": null
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Current fit / route conflict review", "body": "Official 2026 information confirms Sept. 12 at Elko County Fairgrounds with mutton busting, mini bulls, bull riding, women's breakaway and a vendor lawn. Organizer contact verified through the event site's operator/privacy information as Efren Benavides / Benavides Bucking Bulls LLC at bbbulls804@gmail.com. No Adventure Zone Gmail history was found. This is a decent physical/family fit but overlaps the already-contacted Rides & Rods Sept. 11-13 Elko opportunity, so do not promise availability to both. A Gmail draft should ask whether a last-minute staffed inflatable-carnival opportunity still exists and keep prepaid/pay-for-play both available without overcommitting."}],
+  "followUps": [{"label": "Review/send Gold Rush backup draft", "reason": "Gold Rush is a same-weekend Elko alternative to Rides & Rods. Review the personalized draft and only advance to commitment after checking the other Sept. 11-13 Elko opportunity. Do not promise the leg to both events.", "dueAt": "2026-08-28T18:00:00.000Z"}]
 }
