@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Greenlee County Fair", "city": "Duncan", "region": "AZ"},
+  "profile": {"placeType": "fair", "phone": "928-359-2032", "website": "https://greenlee.az.gov/ova_dep/fair-and-racing/", "description": "Active Greenlee County Fair. Current 2026 coordinator is Justine Holguin; the 2026 fair already has a contracted carnival."},
+  "contacts": [{"id": null, "name": "Justine Holguin", "phone": "928-359-2032", "email": "fairgrounds@greenlee.az.gov", "role": "Events Coordinator / Fair contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Greenlee County Fair - 2026", "status": "declined", "startsAt": "2026-09-17", "endsAt": "2026-09-20", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Contact changed; 2026 carnival already contracted", "body": "Justine replied Aug. 13, 2026 that she is the new Events Coordinator for Greenlee County and the fair had already contracted a carnival, but she would keep Adventure Zone's information for future events. Current official county information confirms the fair is active Sept. 17-20, 2026 and lists the fairgrounds at 928-359-2032 / fairgrounds@greenlee.az.gov. Replace Lindsey as the working contact and do not send another 2026 pitch."}],
+  "followUps": [{"label": "Check 2027 Greenlee County Fair provider plans", "reason": "The new coordinator kept Adventure Zone's information for future events; 2026 was already committed to a carnival. Reconnect early for 2027 if a separate family-entertainment area could fit.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
