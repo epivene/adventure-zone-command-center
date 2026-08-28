@@ -372,6 +372,29 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.booking_opportunity_email_state_schedule_request_unique') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "072_booking_opportunity_email_dispatch.sql",
+    markerSql: `SELECT COUNT(*) = 3 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'booking_opportunity_email_state'
+        AND column_name IN (
+          'dispatch_lease_owner',
+          'dispatch_lease_expires_at',
+          'dispatch_attempt_count'
+        )`,
+  },
+  {
+    name: "073_booking_opportunity_email_controls.sql",
+    markerSql: `SELECT COUNT(*) = 2 AS ready
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = 'booking_opportunities'
+        AND column_name IN (
+          'email_automation_protected',
+          'territory_exception_approved'
+        )`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
