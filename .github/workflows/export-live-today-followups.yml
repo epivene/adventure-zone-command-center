@@ -4,29 +4,42 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   export:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
       - name: Check configuration
+        id: config
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
+          mkdir -p .github/runtime-status
           if [ -z "${API_URL}" ]; then
-            echo "ADVENTURE_ZONE_API_URL is missing"
-            exit 1
+            echo "status=CONFIG_ERROR" > .github/runtime-status/live-today-followups.txt
+            echo "detail=ADVENTURE_ZONE_API_URL missing" >> .github/runtime-status/live-today-followups.txt
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
           if [ -z "${ASSISTANT_IMPORT_TOKEN}" ]; then
-            echo "ASSISTANT_IMPORT_TOKEN is missing"
-            exit 1
+            echo "status=CONFIG_ERROR" > .github/runtime-status/live-today-followups.txt
+            echo "detail=ASSISTANT_IMPORT_TOKEN missing" >> .github/runtime-status/live-today-followups.txt
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "Required secrets are present."
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+          echo "status=CONFIG_OK" > .github/runtime-status/live-today-followups.txt
+          echo "detail=required secrets present" >> .github/runtime-status/live-today-followups.txt
 
       - name: Fetch live follow-ups
+        id: fetch
+        if: steps.config.outputs.configured == 'true'
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -38,15 +51,33 @@ jobs:
             --write-out "%{http_code}" \
             "${BASE_URL}/api/assistant-import/today-followups?limit=500" || true)
 
-          echo "Follow-up endpoint HTTP status: ${HTTP_STATUS}"
-          if [ "${HTTP_STATUS}" != "200" ]; then
+          echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
+          echo "status=HTTP_${HTTP_STATUS}" > .github/runtime-status/live-today-followups.txt
+          echo "detail=follow-up endpoint response" >> .github/runtime-status/live-today-followups.txt
+
+          if [ "${HTTP_STATUS}" = "200" ]; then
+            COUNT=$(node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('today-followups.json','utf8')); if(!x.ok || !Array.isArray(x.followUps)) process.exit(2); process.stdout.write(String(x.returned ?? x.followUps.length));")
+            echo "count=${COUNT}" >> .github/runtime-status/live-today-followups.txt
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
             rm -f today-followups.json
-            exit 1
+            echo "valid=false" >> "$GITHUB_OUTPUT"
           fi
 
-          node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('today-followups.json','utf8')); if(!x.ok || !Array.isArray(x.followUps)) process.exit(1); console.log('Exported open follow-ups:', x.returned ?? x.followUps.length);"
+      - name: Persist sanitized diagnostic
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/runtime-status/live-today-followups.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Update live follow-up export status"
+          git push
 
       - name: Upload follow-up list
+        if: steps.fetch.outputs.valid == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: live-today-followups
