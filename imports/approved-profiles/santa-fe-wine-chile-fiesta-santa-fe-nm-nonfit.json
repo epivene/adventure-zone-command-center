@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Santa Fe Wine & Chile Fiesta", "city": "Santa Fe", "region": "NM"},
+  "profile": {"placeType": "festival_event", "description": "Non-fit for Adventure Zone and also located in New Mexico, which is currently on hard territory hold for new outreach."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Non-fit / New Mexico territory hold", "body": "Today already marks this event as Non-Fit. Do not create new Adventure Zone outreach or routine follow-ups. New Mexico is also currently on hard territory hold."}],
+  "followUps": []
+}
