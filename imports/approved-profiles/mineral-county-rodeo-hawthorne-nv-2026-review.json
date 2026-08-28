@@ -1,0 +1,49 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Mineral County Rodeo",
+    "city": "Hawthorne",
+    "region": "NV"
+  },
+  "profile": {
+    "description": "Active 2026 review. Adventure Zone has already contacted Mineral County Rodeo for 2026: Amy emailed kisom@mineralcountynv.org on Feb. 20, 2026 using Sept. 25-26, 2026 in the subject. No reply was found in Adventure Zone Gmail. Current public 2026 sources confirm the rodeo remains an annual, family-friendly event with mutton busting, vendors and activities, but the official Mineral County rodeo page is still displaying 2025 dates and current public sources do not cleanly confirm the exact 2026 dates. Do not send another date-specific email until the 2026 dates are verified directly with Mineral County or an authoritative current event listing.",
+    "phone": "775-945-5854",
+    "website": "https://www.visitmineralcounty.com/rodeo"
+  },
+  "contacts": [
+    {
+      "name": "Mineral County Recreation & Community Development",
+      "email": "kisom@mineralcountynv.org",
+      "phone": "775-945-5854",
+      "role": "Rodeo / event contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Mineral County Rodeo - 2026",
+    "status": "new_lead",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "call",
+    "nextActionDueAt": "2026-08-31",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — prior outreach already sent; verify dates before follow-up",
+      "body": "Amy emailed Mineral County Rodeo on Feb. 20, 2026 at kisom@mineralcountynv.org with subject Mineral County Rodeo (Hawthorne) NV - Sept 25-26, 2026. No reply is present in Adventure Zone Gmail. Current research confirms the rodeo is family-friendly and potentially a strong Adventure Zone fit, but the official rodeo page still shows Sept. 26-27, 2025 and current 2026 sources do not independently confirm the exact 2026 dates. Verify the event dates and whether they still have room for a staffed inflatable carnival before drafting a follow-up."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Mineral County Rodeo — verify 2026 dates before follow-up",
+      "reason": "Already contacted for 2026. Call or verify with Mineral County first because current public sources do not cleanly confirm the exact 2026 dates. If dates are confirmed and opportunity is still open, continue from Amy's Feb. 20 outreach rather than reintroducing Adventure Zone.",
+      "dueAt": "2026-08-31T16:00:00.000Z"
+    }
+  ]
+}
