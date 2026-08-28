@@ -18,6 +18,7 @@
     "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",
     "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
     "./google-workspace-schema": "./src/google-workspace-schema.ts",
+    "./operational-calendar-schema": "./src/operational-calendar-schema.ts",
     "./lead-intake-schema": "./src/lead-intake-schema.ts",
     "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts",
     "./booking-opportunity-email-schema": "./src/booking-opportunity-email-schema.ts",
