@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Last Chance Community Powwow", "city": "Helena", "region": "MT"},
+  "profile": {"placeType": "festival_event", "description": "27th Annual Last Chance Community Pow Wow is confirmed for Sept. 25-27, 2026 at the Lewis & Clark Fairgrounds Exhibit Hall in Helena. It is a free intertribal cultural event with the 2026 theme 'Honor the Children.' Routine commercial inflatable-carnival outreach is not recommended unless organizers specifically invite a separate amusement/children's attraction component."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "2026-09-25", "endsAt": "2026-09-27", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — culturally focused event / no routine pitch", "body": "Current official event information confirms Sept. 25-27, 2026 at the Lewis & Clark Fairgrounds Exhibit Hall. The event is a free community powwow centered on dancing, culture, music and the theme 'Honor the Children.' Do not create routine Adventure Zone commercial outreach solely because families attend. Revisit only if the organizer explicitly seeks a separate staffed amusement or children's attraction component."}],
+  "followUps": []
+}
