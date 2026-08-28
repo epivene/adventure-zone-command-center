@@ -1,11 +1,17 @@
 {
-  "importRevision": 5, "matchExisting": true,
+  "importRevision": 6,
+  "matchExisting": true,
   "event": {"id": null, "name": "Bend Summer Festival", "city": "Bend", "region": "OR"},
-  "profile": {}, "contacts": [],
+  "profile": {},
+  "contacts": [],
   "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
-  "familyId": null, "parentOrganizationId": null,
+  "familyId": null,
+  "parentOrganizationId": null,
   "notes": [
     {"subject": "Oregon restriction / Kristy 2026 call notes", "body": "Kristy's handwritten notes list Bend Summer Festival / Lay It Out Events, vendors@layitoutevents.com, 541-323-0964. Notes say Kristy called, talked with the secretary, and events coordinator Ty sent information May 7, 2026. Oregon is NOT a territory hold. Oregon and Washington are restricted because of weather: prepaid bookings are preferred. Pay-for-play may still be considered when specifically approved; for Hulk's post-Labor-Day routing, pay-for-play in Oregon or Washington is allowed when it makes sense because he is already traveling back through the area. Source: handwritten call notes, page 78, plus updated booking rule confirmed Aug. 27, 2026."},
     {"subject": "Latest Bend contact - David phone call", "body": "Desiree confirmed Aug. 27, 2026 that the most recent meaningful Bend contact was a phone call between David and Lay It Out Events regarding a possible Adventure Zone booking. Follow-up outreach should continue from David's phone conversation rather than treating Amy's May 7 email as the latest contact. No additional details from the call should be invented unless separately documented."}
+  ],
+  "followUps": [
+    {"label": "Follow up after David's Bend call", "reason": "A Gmail draft now continues from David's most recent phone conversation about a possible Adventure Zone booking. If Ty does not reply, follow up promptly. Oregon is weather-restricted, so push prepaid first; pay-for-play remains a secondary option if appropriate.", "dueAt": "2026-09-01T16:00:00.000Z"}
   ]
 }
