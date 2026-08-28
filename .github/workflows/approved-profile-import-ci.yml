@@ -2,12 +2,13 @@ name: Approved Profile Import CI
 
 on:
   push:
-    branches: [assistant-live-profile-notes-followups]
+    branches: [main, assistant-live-profile-notes-followups]
     paths:
       - "artifacts/api-server/src/features/approved-profile-import/**"
       - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
       - "artifacts/api-server/src/routes/assistant-today-followups.ts"
       - "imports/approved-profiles/**"
+      - "imports/approved-profile-reconciliation-2026-08-28.json"
       - ".github/workflows/approved-profile-import-ci.yml"
   pull_request:
     paths:
@@ -15,6 +16,7 @@ on:
       - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
       - "artifacts/api-server/src/routes/assistant-today-followups.ts"
       - "imports/approved-profiles/**"
+      - "imports/approved-profile-reconciliation-2026-08-28.json"
       - ".github/workflows/approved-profile-import-ci.yml"
 
 jobs:
@@ -37,7 +39,8 @@ jobs:
           for (const f of fs.readdirSync(p).filter(x=>x.endsWith('.json'))) {
             JSON.parse(fs.readFileSync(p+'/'+f,'utf8'));
           }
-          console.log('validated approved profile JSON');"
+          JSON.parse(fs.readFileSync('imports/approved-profile-reconciliation-2026-08-28.json','utf8'));
+          console.log('validated approved profile JSON and reconciliation');"
       - name: Approved profile import tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
       - name: API build
