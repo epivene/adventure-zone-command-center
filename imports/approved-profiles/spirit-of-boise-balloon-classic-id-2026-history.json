@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Spirit of Boise Balloon Classic", "city": "Boise", "region": "ID"},
+  "profile": {"placeType": "festival_event", "phone": "208-344-6363", "website": "https://spiritofboise.com/", "description": "Large annual Boise balloon festival. The 2026 event includes Kids Day, Family Morning Launch and a paid Inflatable Fun Zone at Nite Glow."},
+  "contacts": [{"id": null, "name": "Mike Owens", "phone": "208-891-1132", "email": "", "role": "Townsquare Media Boise Market President / event contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Spirit of Boise Balloon Classic - 2026", "status": "declined", "startsAt": "2026-09-02", "endsAt": "2026-09-06", "nextActionKind": "renewal", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 competitor selected for profit-share inflatable zone", "body": "Mike Owens replied Aug. 4, 2026 that the Spirit of Boise Balloon Classic was already doing this with another company on a profit-share arrangement. Current official event information confirms the 2026 Balloon Classic runs Sept. 2-6 and includes an Inflatable Fun Zone during Nite Glow. This proves the event is a strong conceptual fit; the 2026 loss is an incumbent-provider issue, not lack of interest in inflatables."}],
+  "followUps": [{"label": "Approach Spirit of Boise early for 2027 Inflatable Fun Zone", "reason": "The event already operates a profit-share Inflatable Fun Zone with another provider. Check early whether the 2027 provider agreement is open before it is renewed.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
