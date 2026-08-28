@@ -30,7 +30,7 @@ describe("AiOpportunityEmailWriter", () => {
   it("generates from evidence with the approved commercial guardrails in the prompt", async () => {
     const ai = {
       providerName: "test",
-      complete: vi.fn(async () => JSON.stringify({ subject: "Adventure Zone for Sample Fair", body: "Hi Casey, draft body" })),
+      complete: vi.fn(async (_prompt: string) => JSON.stringify({ subject: "Adventure Zone for Sample Fair", body: "Hi Casey, draft body" })),
     };
     const writer = new AiOpportunityEmailWriter(ai);
 
@@ -49,7 +49,7 @@ describe("AiOpportunityEmailWriter", () => {
   it("rewrites only from the supplied current draft and requested action", async () => {
     const ai = {
       providerName: "test",
-      complete: vi.fn(async () => JSON.stringify({ subject: "Same subject", body: "Shorter body" })),
+      complete: vi.fn(async (_prompt: string) => JSON.stringify({ subject: "Same subject", body: "Shorter body" })),
     };
     const writer = new AiOpportunityEmailWriter(ai);
 
@@ -70,7 +70,7 @@ describe("AiOpportunityEmailWriter", () => {
   });
 
   it("rejects malformed AI output instead of guessing", async () => {
-    const writer = new AiOpportunityEmailWriter({ providerName: "test", complete: vi.fn(async () => "not-json") });
+    const writer = new AiOpportunityEmailWriter({ providerName: "test", complete: vi.fn(async (_prompt: string) => "not-json") });
 
     await expect(writer.generate({ context, purpose: "new_outreach" })).rejects.toThrow("OPPORTUNITY_EMAIL_AI_OUTPUT_INVALID");
   });
