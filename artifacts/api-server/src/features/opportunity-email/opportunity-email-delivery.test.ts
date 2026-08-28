@@ -145,18 +145,31 @@ describe("OpportunityEmailService delivery", () => {
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
   });
 
-  it("reconciles an uncertain send before allowing retry so it does not send twice", async () => {
+  it("reconciles an uncertain send using the stored Gmail message ID before allowing retry", async () => {
     const deps = dependencies();
     deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(Object.assign(new Error("timeout"), { code: "GMAIL_SEND_OUTCOME_UNCERTAIN" }));
-    deps.gmailDraftProvider.reconcileSend.mockResolvedValueOnce({ messageId: "gmail-sent-2", threadId: "thread-2", sentAt: SENT_AT });
+    deps.gmailDraftProvider.reconcileSend.mockResolvedValueOnce({ messageId: "gmail-message-1", threadId: "thread-2", sentAt: SENT_AT });
     const service = new OpportunityEmailService(deps as any);
 
     const result = await service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "uncertain-1" });
 
     expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledTimes(1);
-    expect(deps.gmailDraftProvider.reconcileSend).toHaveBeenCalledWith({ draftId: "gmail-draft-1" });
+    expect(deps.gmailDraftProvider.reconcileSend).toHaveBeenCalledWith({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-1",
+    });
     expect(deps.workflowSink.recordSent).toHaveBeenCalledTimes(1);
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
+  });
+
+  it("does not attempt uncertain-send reconciliation without a stored Gmail message ID", async () => {
+    const deps = dependencies(record({ gmailMessageId: null }));
+    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(Object.assign(new Error("timeout"), { code: "GMAIL_SEND_OUTCOME_UNCERTAIN" }));
+    const service = new OpportunityEmailService(deps as any);
+
+    await expect(service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "uncertain-no-id" }))
+      .rejects.toThrow("GMAIL_SEND_OUTCOME_UNCERTAIN");
+    expect(deps.gmailDraftProvider.reconcileSend).not.toHaveBeenCalled();
   });
 
   it("retries a failed scheduled intent on the same draft without generating a new message", async () => {
