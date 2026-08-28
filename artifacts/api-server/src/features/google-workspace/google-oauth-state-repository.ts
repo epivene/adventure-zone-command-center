@@ -1,16 +1,19 @@
 import { createHash } from "node:crypto";
 import { pool as defaultPool } from "@workspace/db";
 
+export type GoogleOAuthConnectionRole = "workspace" | "operational_calendar";
+
 export interface GoogleOAuthStateRepository {
   create(input: {
     state: string;
     returnPath: string;
     expiresAt: Date;
+    connectionRole?: GoogleOAuthConnectionRole;
   }): Promise<void>;
   consume(input: {
     state: string;
     now: Date;
-  }): Promise<{ returnPath: string } | null>;
+  }): Promise<{ returnPath: string; connectionRole: GoogleOAuthConnectionRole } | null>;
   deleteExpired(now: Date): Promise<number>;
 }
 
@@ -36,6 +39,10 @@ function safeReturnPath(returnPath: string): string {
   return value;
 }
 
+function safeRole(value: unknown): GoogleOAuthConnectionRole {
+  return value === "operational_calendar" ? "operational_calendar" : "workspace";
+}
+
 export class PostgresGoogleOAuthStateRepository
   implements GoogleOAuthStateRepository
 {
@@ -48,6 +55,7 @@ export class PostgresGoogleOAuthStateRepository
     state: string;
     returnPath: string;
     expiresAt: Date;
+    connectionRole?: GoogleOAuthConnectionRole;
   }): Promise<void> {
     if (!Number.isFinite(input.expiresAt.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_OAUTH_STATE_EXPIRY_INVALID");
@@ -57,12 +65,14 @@ export class PostgresGoogleOAuthStateRepository
       `INSERT INTO google_workspace_oauth_states (
          state_hash,
          return_path,
+         connection_role,
          expires_at,
          created_at
-       ) VALUES ($1, $2, $3, now())`,
+       ) VALUES ($1, $2, $3, $4, now())`,
       [
         hashGoogleOAuthState(input.state),
         safeReturnPath(input.returnPath),
+        safeRole(input.connectionRole),
         input.expiresAt,
       ],
     );
@@ -71,7 +81,7 @@ export class PostgresGoogleOAuthStateRepository
   async consume(input: {
     state: string;
     now: Date;
-  }): Promise<{ returnPath: string } | null> {
+  }): Promise<{ returnPath: string; connectionRole: GoogleOAuthConnectionRole } | null> {
     if (!Number.isFinite(input.now.getTime())) {
       throw new Error("GOOGLE_WORKSPACE_OAUTH_STATE_TIME_INVALID");
     }
@@ -82,11 +92,13 @@ export class PostgresGoogleOAuthStateRepository
         WHERE state_hash = $1
           AND consumed_at IS NULL
           AND expires_at > $2
-      RETURNING return_path`,
+      RETURNING return_path, connection_role`,
       [hashGoogleOAuthState(input.state), input.now],
     );
     const returnPath = result.rows[0]?.return_path;
-    return typeof returnPath === "string" ? { returnPath } : null;
+    return typeof returnPath === "string"
+      ? { returnPath, connectionRole: safeRole(result.rows[0]?.connection_role) }
+      : null;
   }
 
   async deleteExpired(now: Date): Promise<number> {
