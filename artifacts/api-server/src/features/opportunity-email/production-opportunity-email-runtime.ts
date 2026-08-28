@@ -1,24 +1,4 @@
-import { and, count, eq } from "drizzle-orm";
-import { db } from "@workspace/db";
-
-import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
-import { createAiClient } from "@/features/ai-suggestions/ai-client";
-import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
-import { LeadRelationshipEvidenceRepository } from "@/features/lead-intake/lead-relationship-evidence-repository";
-import { OpportunityRepository } from "@/features/opportunities/opportunity-repository";
-import { bookingOpportunityEmailState } from "@/db/schema";
-import { AiOpportunityEmailWriter } from "./ai-opportunity-email-writer";
-import { DraftContextResolver } from "./draft-context-resolver";
-import { GoogleOpportunityEmailProvider } from "./google-opportunity-email-provider";
-import { OpportunityEmailActivityWriter } from "./opportunity-email-activity";
-import { OpportunityEmailAvailability } from "./opportunity-email-availability";
-import { OpportunityEmailProfileRepository } from "./opportunity-email-profile-repository";
-import { OpportunityEmailRepository } from "./opportunity-email-repository";
 import { createOpportunityEmailRuntime } from "./opportunity-email-runtime";
-import { OpportunityEmailService } from "./opportunity-email-service";
-import { OpportunityEmailWorkflowCoordinator } from "./opportunity-email-workflow";
-import { ProductionDraftContextSources } from "./production-draft-context-sources";
-import { ProductionReadyToSendSource } from "./production-ready-to-send-source";
 import type { ReadyToSendSource } from "./ready-to-send-service";
 
 type SharedRuntimeDependencies = Parameters<typeof createOpportunityEmailRuntime>[0];
@@ -32,13 +12,75 @@ export function assembleProductionOpportunityEmailRuntime(input: {
 }
 
 export async function createProductionOpportunityEmailRuntime() {
+  const [
+    drizzle,
+    workspaceDb,
+    schema,
+    activitiesModule,
+    aiModule,
+    googleConnectionModule,
+    relationshipModule,
+    opportunitiesModule,
+    aiWriterModule,
+    contextResolverModule,
+    googleProviderModule,
+    activityModule,
+    availabilityModule,
+    profileModule,
+    emailRepositoryModule,
+    emailServiceModule,
+    workflowModule,
+    productionContextModule,
+    readySourceModule,
+  ] = await Promise.all([
+    import("drizzle-orm"),
+    import("@workspace/db"),
+    import("@/db/schema"),
+    import("@/features/activities/activity-repository"),
+    import("@/features/ai-suggestions/ai-client"),
+    import("@/features/google-workspace/google-connection-repository"),
+    import("@/features/lead-intake/lead-relationship-evidence-repository"),
+    import("@/features/opportunities/opportunity-repository"),
+    import("./ai-opportunity-email-writer"),
+    import("./draft-context-resolver"),
+    import("./google-opportunity-email-provider"),
+    import("./opportunity-email-activity"),
+    import("./opportunity-email-availability"),
+    import("./opportunity-email-profile-repository"),
+    import("./opportunity-email-repository"),
+    import("./opportunity-email-service"),
+    import("./opportunity-email-workflow"),
+    import("./production-draft-context-sources"),
+    import("./production-ready-to-send-source"),
+  ]);
+
+  const { and, count, eq } = drizzle;
+  const { db } = workspaceDb;
+  const { bookingOpportunityEmailState } = schema;
+  const { DrizzleActivityRepository } = activitiesModule;
+  const { createAiClient } = aiModule;
+  const { PostgresGoogleConnectionRepository } = googleConnectionModule;
+  const { LeadRelationshipEvidenceRepository } = relationshipModule;
+  const { OpportunityRepository } = opportunitiesModule;
+  const { AiOpportunityEmailWriter } = aiWriterModule;
+  const { DraftContextResolver } = contextResolverModule;
+  const { GoogleOpportunityEmailProvider } = googleProviderModule;
+  const { OpportunityEmailActivityWriter } = activityModule;
+  const { OpportunityEmailAvailability } = availabilityModule;
+  const { OpportunityEmailProfileRepository } = profileModule;
+  const { OpportunityEmailRepository } = emailRepositoryModule;
+  const { OpportunityEmailService } = emailServiceModule;
+  const { OpportunityEmailWorkflowCoordinator } = workflowModule;
+  const { ProductionDraftContextSources } = productionContextModule;
+  const { ProductionReadyToSendSource } = readySourceModule;
+
   const opportunities = new OpportunityRepository(db);
   const emails = new OpportunityEmailRepository(db);
   const profiles = new OpportunityEmailProfileRepository(db);
   const googleConnection = new PostgresGoogleConnectionRepository();
 
   const availability = new OpportunityEmailAvailability({
-    bookings: { get: (id) => profiles.getBooking(id) },
+    bookings: { get: (id: string) => profiles.getBooking(id) },
     calendars: { selected: () => profiles.selectedCalendars() },
     packages: { active: () => profiles.activePackages() },
     google: {
@@ -55,15 +97,15 @@ export async function createProductionOpportunityEmailRuntime() {
   const contextSources = new ProductionDraftContextSources({
     opportunities,
     profiles: {
-      get: (organizationId, eventYear, bookingId) =>
+      get: (organizationId: string, eventYear: number, bookingId: string | null) =>
         profiles.getProfile(organizationId, eventYear, bookingId),
     },
     recipients: {
-      list: (organizationId, eventYear) =>
+      list: (organizationId: string, eventYear: number) =>
         profiles.listVerifiedRecipients(organizationId, eventYear),
     },
     relationships: {
-      async list(input) {
+      async list(input: { organizationId: string; recipientEmail: string }) {
         let google;
         try {
           google = await googleConnection.createReadClient();
@@ -77,7 +119,7 @@ export async function createProductionOpportunityEmailRuntime() {
       },
     },
     emailState: {
-      async countSent(opportunityId) {
+      async countSent(opportunityId: string) {
         const [row] = await db
           .select({ value: count() })
           .from(bookingOpportunityEmailState)
@@ -87,7 +129,7 @@ export async function createProductionOpportunityEmailRuntime() {
           ));
         return Number(row?.value ?? 0);
       },
-      async currentDraftId(opportunityId) {
+      async currentDraftId(opportunityId: string) {
         return (await emails.getCurrentForOpportunity(opportunityId))?.id ?? null;
       },
     },
