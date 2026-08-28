@@ -1,12 +1,13 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "event": {"id": null, "name": "Silverton Creates! Art & Music Fest", "city": "Silverton", "region": "CO"},
+  "aliases": ["Silverton Creates! Art & Music Fest", "Silverton Creates", "Silverton Arts Festival", "Silverton Creates Arts Festival"],
+  "event": {"id": null, "name": "Silverton Creates!", "city": "Silverton", "region": "CO"},
   "profile": {"placeType": "festival_event", "website": "https://www.silvertoncreativedistrict.org/silverton-creates", "description": "Active Sept. 11-12, 2026 art and music festival with a makers market, live music, food and kids activities. Organizer is all set for 2026 but left the door open for future years."},
   "contacts": [{"id": null, "name": "Silverton Creative District", "phone": "", "email": "info@silvertoncreativedistrict.org", "role": "Festival organizer", "primary": true}],
-  "booking": {"enabled": true, "name": "Silverton Creates! Art & Music Fest - 2026", "status": "declined", "startsAt": "2026-09-11", "endsAt": "2026-09-12", "nextActionKind": "review", "nextActionDueAt": "2027-02-01", "travelLegId": null},
+  "booking": {"enabled": true, "name": "Silverton Creates! Art & Music Fest - 2026", "status": "declined", "startsAt": "2026-09-11", "endsAt": "2026-09-12", "nextActionKind": "review", "nextActionDueAt": "2027-02-15", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "2026 filled; future door left open", "body": "Silverton Creative District replied Aug. 18, 2026 that it was all set for this year's event but would keep Adventure Zone in mind for the future. Current official information confirms Silverton Creates! Art & Music Fest remains active Sept. 11-12, 2026 with artists, makers, live music, food and kids activities. Treat this as a soft current-year decline, not a permanent rejection."}],
-  "followUps": [{"label": "Review 2027 Silverton Creates family-area opportunity", "reason": "The organizer left the future open and the event includes kids activities. Check early whether a staffed family attraction area fits the next event footprint and budget.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  "notes": [{"subject": "2026 filled; future door left open", "body": "Silverton Creative District replied Aug. 18, 2026 that it was all set for this year's event but would keep Adventure Zone in mind for the future. Current official information confirms Silverton Creates! remains active Sept. 11-12, 2026 with artists, makers, live music, food and kids activities. Treat this as a soft current-year decline, not a permanent rejection."}],
+  "followUps": [{"label": "Review 2027 Silverton Creates family-area opportunity", "reason": "The organizer left the future open and the event includes kids activities. Check early whether a staffed family attraction area fits the next event footprint and budget.", "dueAt": "2027-02-15T16:00:00.000Z"}]
 }
