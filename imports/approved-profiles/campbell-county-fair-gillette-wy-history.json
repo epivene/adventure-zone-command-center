@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Campbell County Fair", "city": "Gillette", "region": "WY"},
+  "profile": {"placeType": "fair", "phone": "307-687-0200", "website": "https://campbellcountywy.gov/959/County-Fair", "description": "Active Campbell County Fair in Gillette. Official site lists 2027 fair dates July 23-Aug. 1."},
+  "contacts": [{"id": null, "name": "Liz Slattery", "phone": "307-670-0036", "email": "Liz.Slattery@campbellcountywy.gov", "role": "Fair Coordinator", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "contacted", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 outreach after Kristy contact", "body": "Adventure Zone emailed Liz Slattery June 10, 2026 after noting that Kristy had recently spoken with Campbell County and they wanted more information. No later reply was found in the reviewed Gmail history. The 2026 fair has passed. The official county site confirms the fair remains active and lists 2027 dates as July 23-Aug. 1."}],
+  "followUps": [{"label": "Follow up early for 2027 Campbell County Fair", "reason": "There was a real 2026 contact path through Kristy and Liz, but no later reply was found. Reconnect well before the July 23-Aug. 1, 2027 fair.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
