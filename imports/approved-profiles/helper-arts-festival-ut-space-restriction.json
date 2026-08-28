@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Helper Arts Festival", "city": "Helper", "region": "UT"},
+  "profile": {"placeType": "festival_event", "website": "https://helperartsfestival.com/", "description": "Active arts/music/community festival in Helper, but the organizer says the festival footprint is too small for Adventure Zone's inflatable setup."},
+  "contacts": [{"id": null, "name": "Helper Arts Festival", "phone": "", "email": "helperartsfestival@gmail.com", "role": "Festival contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Venue footprint too small for inflatable setup", "body": "Helper Arts Festival replied Aug. 6, 2026 that its festival area is quite small and cannot accommodate Adventure Zone's space requirements. Current official information confirms the festival remains active and family/community-oriented, including children's programming, but its Main Street footprint is unchanged. Do not repeatedly re-pitch unless the festival expands to an additional area or Adventure Zone has a materially smaller setup that fits."}],
+  "followUps": []
+}
