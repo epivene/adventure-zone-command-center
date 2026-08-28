@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Solitude Summer Fest", "city": "Solitude", "region": "UT"},
+  "profile": {"placeType": "festival_event", "website": "https://www.solitudemountain.com/things-to-do/events-and-activities/solitude-summer-fest", "description": "Active all-ages mountain community festival at Solitude Mountain Resort. The 2026 Summer Fest occurred Aug. 2 and included family activities, food and live music."},
+  "contacts": [{"id": null, "name": "Solitude Marketing", "phone": "", "email": "marketing@solitudemountain.com", "role": "Historical marketing contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Active event; old Gmail response was only an auto-reply", "body": "The December 2023 unread Gmail item was only an automatic acknowledgement and should not be treated as a real response or decline. Current official Solitude information confirms Summer Fest remained active in 2026: Aug. 2, free, all ages, with mountain/community activities, food and live music. The 2026 event is past. Verify the 2027 event and current organizer before any future outreach."}],
+  "followUps": [{"label": "Check 2027 Solitude Summer Fest", "reason": "The event remains active and family-oriented, but we never received a meaningful response to the old outreach. Verify the 2027 date and current entertainment contact before deciding whether to pursue.", "dueAt": "2027-03-01T16:00:00.000Z"}]
+}
