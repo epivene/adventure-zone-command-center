@@ -96,3 +96,11 @@ jobs:
           --environment jsdom
       - name: Database build
         run: pnpm --filter @workspace/db build
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Web build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Web typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
