@@ -181,7 +181,7 @@ export function EventMap({
 }) {
   const currentYear = new Date().getFullYear();
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
-  const [mode, setMode] = useState<RouteViewMode>("full");
+  const [mode, setMode] = useState<RouteViewMode>("confirmed");
   const [seasonYear, setSeasonYear] = useState(currentYear);
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
@@ -289,7 +289,7 @@ export function EventMap({
 
   function resetScope() {
     setFilters(initialFilters);
-    setMode("full");
+    setMode("confirmed");
     setSeasonYear(currentYear);
     setFocusedLegId(null);
     setFocusedEventId(null);
@@ -297,7 +297,7 @@ export function EventMap({
   }
 
   const activeFilterCount = [
-    mode !== "full",
+    mode !== "confirmed",
     seasonYear !== currentYear,
     focusedLegId !== null,
     Boolean(filters.regions.length),
@@ -333,7 +333,7 @@ export function EventMap({
   const routeLines = useMemo<RouteLineCollection>(() => {
     const groups = new Map<string, PlanningEvent[]>();
     for (const event of mappedEvents) {
-      if (!event.travelLegId) continue;
+      if (!event.travelLegId || event.planningEmphasis !== "primary") continue;
       groups.set(event.travelLegId, [...(groups.get(event.travelLegId) ?? []), event]);
     }
     const features: RouteLineCollection["features"] = [];

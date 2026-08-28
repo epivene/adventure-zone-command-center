@@ -5,6 +5,7 @@ import { HistorySuggestions } from "@/components/calendar/history-suggestions";
 import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import { businessDateKey } from "@/lib/business-date";
 import { calendarInitialMonth, normalizeCalendarBookingDates } from "@/features/calendar/calendar-display";
+import { dedupeCalendarBookings } from "@/features/calendar/calendar-dedupe";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 
 function buildDateWindow(monthKey: string): { from: string; to: string } {
@@ -75,15 +76,21 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
     return true;
   }) as CalendarEvent[], [events, legId, status, season]);
 
+  const displayEvents = useMemo(() => {
+    const activities = scopedEvents.filter((event) => isActActivity(event));
+    const bookings = scopedEvents.filter((event) => !isActActivity(event));
+    return [...dedupeCalendarBookings(bookings as any[]), ...activities] as CalendarEvent[];
+  }, [scopedEvents]);
+
   const routeConflicts = useMemo(() => findSameLegDateConflicts(
-    scopedEvents.filter((event) => !isActActivity(event)) as any[],
-  ), [scopedEvents]);
+    displayEvents.filter((event) => !isActActivity(event)) as any[],
+  ), [displayEvents]);
   const hasExplicitStatusFilter = Boolean(status && status !== "all");
-  const potentialBookingCount = useMemo(() => scopedEvents.filter((event) => !isActActivity(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [scopedEvents]);
+  const potentialBookingCount = useMemo(() => displayEvents.filter((event) => !isActActivity(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [displayEvents]);
   const filteredEvents = useMemo(() => {
-    if (hasExplicitStatusFilter || showPotential) return scopedEvents;
-    return scopedEvents.filter((event) => isActActivity(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
-  }, [scopedEvents, hasExplicitStatusFilter, showPotential]);
+    if (hasExplicitStatusFilter || showPotential) return displayEvents;
+    return displayEvents.filter((event) => isActActivity(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
+  }, [displayEvents, hasExplicitStatusFilter, showPotential]);
 
   const handleMonthChange = useCallback((month: string) => {
     setActiveMonth(month);

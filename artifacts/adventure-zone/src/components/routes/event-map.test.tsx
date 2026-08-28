@@ -7,6 +7,7 @@ import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
 const mocks = vi.hoisted(() => ({
   post: vi.fn(),
+  layers: vi.fn(),
 }));
 
 vi.mock("@/lib/auth-token", () => ({
@@ -16,7 +17,7 @@ vi.mock("./manager-route-map-shell", () => ({
   ManagerRouteMapShell: ({ children }: any) => <div data-testid="route-map-shell">{children}</div>,
 }));
 vi.mock("./manager-route-map-layers", () => ({
-  ManagerRouteMapLayers: () => <div data-testid="route-map-layers" />,
+  ManagerRouteMapLayers: (props: any) => { mocks.layers(props); return <div data-testid="route-map-layers" />; },
   ManagerTripNavigationActions: () => null,
 }));
 
@@ -31,6 +32,14 @@ const leg: TravelLeg = {
   baseAddress: null,
   defaultVehicleName: null,
   defaultMpg: null,
+};
+
+const hulkLeg: TravelLeg = {
+  ...leg,
+  id: "leg-hulk",
+  name: "Hulk",
+  color: "#22c55e",
+  sortOrder: 2,
 };
 
 const unresolved: MapEvent = {
@@ -52,6 +61,26 @@ const unresolved: MapEvent = {
   locationLabel: "Miles City, MT",
   mappingState: "needs_mapping_provider_unavailable",
   seasonYear: 2026,
+};
+
+const confirmedMapped: MapEvent = {
+  ...unresolved,
+  id: "confirmed-mapped",
+  name: "Confirmed Stop",
+  latitude: 46.4,
+  longitude: -105.8,
+  mappingState: "mapped_coordinates",
+  locationQuality: "coordinates",
+};
+
+const potentialMapped: MapEvent = {
+  ...confirmedMapped,
+  id: "potential-mapped",
+  name: "Potential Stop",
+  latitude: 44.0,
+  longitude: -104.0,
+  status: "contacted",
+  routeBucket: "potential",
 };
 
 afterEach(() => {
@@ -95,5 +124,15 @@ describe("EventMap unresolved locations", () => {
       expect(screen.queryByText(/Map lookup is temporarily unavailable/)).not.toBeInTheDocument();
       expect(screen.getByText("1 primary event · 1 mapped · 0 needing map location · 0 equipment meetup markers")).toBeInTheDocument();
     });
+  });
+
+  it("defaults to confirmed route planning and does not connect potential context into the route line", () => {
+    render(<EventMap events={[confirmedMapped, potentialMapped]} travelLegs={[leg, hulkLeg]} />);
+
+    expect(screen.getByRole("button", { name: "Confirmed" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("option", { name: "Hulk" })).toBeInTheDocument();
+
+    const lastLayerProps = mocks.layers.mock.calls.at(-1)?.[0];
+    expect(lastLayerProps.routeLines).toEqual([]);
   });
 });
