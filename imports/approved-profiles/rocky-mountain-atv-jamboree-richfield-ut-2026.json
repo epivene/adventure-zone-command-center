@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Rocky Mountain ATV Jamboree", "city": "Richfield", "region": "UT"},
+  "profile": {"placeType": "festival_event", "description": "2026 prospect with prior Adventure Zone outreach history from 2024. Event runs Sept. 14-18, 2026 in Richfield. Physical space at Richfield City Park is workable, but audience/flow fit is weaker for a full inflatable carnival because registered ATV/UTV participants leave for guided rides most mornings and return later; the strongest public gathering is Monday evening's farmers market/food truck/light parade. Treat as a secondary opportunity unless the organizer specifically sees a family/community attraction need.", "phone": "435-893-0491", "website": "https://richfieldutah.com/rocky-mountain-jamboree/", "address1": "300 N Main", "address2": "Richfield City Park", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Amy Myers / Sevier Events", "phone": "435-893-0491", "email": "sevierevents@sevier.utah.gov", "role": "Event Contact", "primary": true}],
+  "booking": {"enabled": true, "name": "Rocky Mountain ATV Jamboree - 2026", "status": "contacted", "startsAt": "2026-09-14", "endsAt": "2026-09-18", "nextActionKind": "email", "nextActionDueAt": "2026-09-01", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Aug. 27 history-aware outreach / fit review", "body": "Adventure Zone previously contacted Sevier Events about the Rocky Mountain ATV Jamboree in 2024 after Chad McWilliams supplied the contact. Desiree sent a new history-aware email Aug. 27, 2026 to Amy Myers / sevierevents@sevier.utah.gov. Official 2026 schedule confirms Sept. 14-18. Most participants leave City Park each morning on guided ATV/UTV rides; the main community-style window is Monday evening with the farmers market, food trucks and light parade. Do not over-prioritize this lead unless the organizer responds with a specific attraction opportunity."}],
+  "followUps": [{"label": "Check Rocky Mountain Jamboree response", "reason": "History-aware email sent Aug. 27. Wait for a response. If none by Sept. 1, one light check-back is enough; this is a secondary fit because participant activity is primarily off-site trail riding rather than a stationary family festival.", "dueAt": "2026-09-01T18:00:00.000Z"}]
+}
