@@ -28,12 +28,6 @@ function startOfUtcDay(value: string) {
   return date;
 }
 
-function addUtcDays(value: Date, days: number) {
-  const result = new Date(value);
-  result.setUTCDate(result.getUTCDate() + days);
-  return result;
-}
-
 function stateStatus(state: ReturnType<typeof parseDavidOperationalCalendarEvent>["calendarState"]) {
   if (state === "confirmed") return "confirmed" as const;
   if (state === "cancelled") return "cancelled" as const;
@@ -138,7 +132,6 @@ export class OperationalCalendarImportService {
       const reservedStart = startOfUtcDay(event.startDate);
       const reservedEnd = startOfUtcDay(event.endDateExclusive);
       const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
-      const candidates = await this.loadCandidates();
       const match = matchOperationalCalendarEvent({
         eventName: parsed.eventName,
         city: parsed.city,
@@ -146,7 +139,7 @@ export class OperationalCalendarImportService {
         actualStartsAt: actualDates?.startsAt ?? null,
         actualEndsAt: actualDates?.endsAt ?? null,
         managerToken: parsed.managerToken,
-        candidates,
+        candidates: await this.loadCandidates(),
       });
 
       if (match.kind === "review") {
@@ -283,7 +276,9 @@ export class OperationalCalendarImportService {
         startsAt: input.actualDates.startsAt,
         endsAt: input.actualDates.endsAt,
         status: stateStatus(input.parsed.calendarState),
-        probability: input.parsed.calendarState === "confirmed" ? "definite" : "possible",
+        // The DB migration supports `definite`; the shared generated Drizzle
+        // type is still narrower, matching the existing booking write boundary.
+        probability: (input.parsed.calendarState === "confirmed" ? "definite" : "possible") as any,
         travelLegId: legId,
         notes: input.parsed.originalDescription?.trim() || null,
         createdAt: this.now(),
@@ -302,10 +297,7 @@ export class OperationalCalendarImportService {
 
   private async saveWindow(bookingId: string, startsAt: Date, endsAt: Date) {
     await this.db.insert(bookingOperationalWindows).values({
-      bookingId,
-      startsAt,
-      endsAt,
-      source: "google_calendar",
+      bookingId, startsAt, endsAt, source: "google_calendar",
     }).onConflictDoUpdate({
       target: bookingOperationalWindows.bookingId,
       set: { startsAt, endsAt, source: "google_calendar", updatedAt: this.now() },
@@ -318,8 +310,7 @@ export class OperationalCalendarImportService {
     const template = templates.find((item) => candidates.includes(item.code));
     if (!template) return;
     await this.db.insert(bookingPackageSelections).values({
-      bookingId,
-      packageTemplateId: template.id,
+      bookingId, packageTemplateId: template.id,
     }).onConflictDoNothing();
   }
 }
