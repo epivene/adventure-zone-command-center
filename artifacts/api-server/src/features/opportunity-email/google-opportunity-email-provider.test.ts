@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { GoogleOpportunityEmailProvider } from "./google-opportunity-email-provider";
 
+const SENT_AT_MS = new Date("2026-08-27T18:30:00.000Z").getTime();
+
 function connection() {
   return {
     createGmailDraftClient: vi.fn(async () => ({
@@ -16,6 +18,17 @@ function connection() {
         updateGmailDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-2", threadId: "thread-1" })),
         sendGmailDraft: vi.fn(async () => ({ messageId: "gmail-sent-1", threadId: "thread-1" })),
       },
+    })),
+    createReadClient: vi.fn(async () => ({
+      getMessageMetadata: vi.fn(async (id: string) => ({
+        id,
+        threadId: "thread-verified",
+        labelIds: ["SENT"],
+        internalDateMs: SENT_AT_MS,
+        snippet: "",
+        headers: { from: "", to: "", cc: "", subject: "", date: "" },
+        hasAttachments: false,
+      })),
     })),
   };
 }
@@ -52,8 +65,41 @@ describe("GoogleOpportunityEmailProvider", () => {
       .rejects.toThrow("GOOGLE_WORKSPACE_NOT_CONNECTED");
   });
 
-  it("does not claim an uncertain send was reconciled without verified evidence", async () => {
-    const provider = new GoogleOpportunityEmailProvider(connection() as any);
-    await expect(provider.reconcileSend({ draftId: "gmail-draft-1" })).resolves.toBeNull();
+  it("reconciles an uncertain send only when Gmail confirms the stored message has the SENT label", async () => {
+    const connected = connection();
+    const provider = new GoogleOpportunityEmailProvider(connected as any);
+
+    await expect(provider.reconcileSend({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-1",
+    })).resolves.toEqual({
+      messageId: "gmail-message-1",
+      threadId: "thread-verified",
+      sentAt: new Date(SENT_AT_MS),
+    });
+
+    const read = await connected.createReadClient.mock.results[0]!.value;
+    expect(read.getMessageMetadata).toHaveBeenCalledWith("gmail-message-1");
+  });
+
+  it("does not claim reconciliation when Gmail does not show SENT", async () => {
+    const connected = connection();
+    const read = await connected.createReadClient();
+    read!.getMessageMetadata.mockResolvedValueOnce({
+      id: "gmail-message-1",
+      threadId: "thread-1",
+      labelIds: ["DRAFT"],
+      internalDateMs: SENT_AT_MS,
+      snippet: "",
+      headers: { from: "", to: "", cc: "", subject: "", date: "" },
+      hasAttachments: false,
+    });
+    connected.createReadClient.mockResolvedValue(read);
+    const provider = new GoogleOpportunityEmailProvider(connected as any);
+
+    await expect(provider.reconcileSend({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-1",
+    })).resolves.toBeNull();
   });
 });
