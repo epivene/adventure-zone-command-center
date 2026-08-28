@@ -1,0 +1,14 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Silver Threads Quilt Show", "city": "Creede", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Silver Threads Quilt Guild hosts its quilt show every two years. There is no 2026 show; the most recent event was Sept. 19-21, 2025 and the next show is announced for 2027 at the Virginia Christensen Multiuse Facility in Creede. The event is primarily an indoor quilt show and is not a strong Adventure Zone inflatable-carnival fit."},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "declined", "startsAt": "", "endsAt": "", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {"subject": "2026 review — no Silver Threads Quilt Show this year", "body": "Current official Creede information confirms the Silver Threads Quilt Guild show is biennial. The last show was Sept. 19-21, 2025 and the next show is announced for 2027. Adventure Zone Gmail shows prior outreach to silverthreads.social@gmail.com in Jan. 2024, but there is no 2026 event to pursue. The show is held at the Virginia Christensen Multiuse Facility and is centered on quilts, vendors, appraisals and the Quilters Cafe; it is not a strong fit for a full staffed inflatable carnival. Close the current 2026 review and do not create routine outreach/follow-up unless a materially different outdoor family event is identified."}
+  ],
+  "followUps": []
+}
