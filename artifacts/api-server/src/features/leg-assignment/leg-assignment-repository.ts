@@ -1,4 +1,4 @@
-import { asc, eq, inArray, isNull } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -58,7 +58,7 @@ function toWindow(input: {
 }
 
 export class LegAssignmentRepository {
-  constructor(private readonly db: DrizzleDatabase = database) {}
+  constructor(private readonly db: DrizzleDatabase) {}
 
   async loadTarget(bookingId: string): Promise<AssignmentTarget | null> {
     const [row] = await this.db
