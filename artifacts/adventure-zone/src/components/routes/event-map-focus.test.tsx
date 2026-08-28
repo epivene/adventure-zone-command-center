@@ -54,11 +54,8 @@ const events = [
 afterEach(cleanup);
 
 describe("EventMap planning interactions", () => {
-  it("shows an explicit scope summary and refines it as filters change", () => {
+  it("shows an explicit confirmed scope summary and refines it as filters change", () => {
     render(<EventMap events={events} travelLegs={legs} />);
-    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Confirmed" }));
     expect(screen.getByText("Showing Confirmed · 2026")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("State"), { target: { value: "MT" } });
@@ -69,7 +66,7 @@ describe("EventMap planning interactions", () => {
   it("keeps other legs visible but makes a selected leg the primary scope", () => {
     render(<EventMap events={events} travelLegs={legs} />);
     fireEvent.change(screen.getByLabelText("Leg focus"), { target: { value: "leg-kristy" } });
-    expect(screen.getByText("Showing Kristy · 2026")).toBeInTheDocument();
+    expect(screen.getByText("Showing Kristy · Confirmed · 2026")).toBeInTheDocument();
     expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
     expect(screen.getByText("Eastern Montana Fair").closest("li")).toHaveAttribute("data-emphasis", "primary");
   });
@@ -79,7 +76,7 @@ describe("EventMap planning interactions", () => {
     const buttons = screen.getAllByRole("button", { name: "Focus on map" });
     fireEvent.click(buttons[0]!);
     expect(screen.getByRole("button", { name: "Clear event focus" })).toBeInTheDocument();
-    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
+    expect(screen.getByText("Showing Confirmed · 2026")).toBeInTheDocument();
   });
 
   it("shows a clear zero-result state instead of implying the map is still meaningful", () => {
@@ -88,12 +85,13 @@ describe("EventMap planning interactions", () => {
     expect(screen.getByText("No matching route events")).toBeInTheDocument();
   });
 
-  it("reset map scope restores full/all-leg scope", () => {
+  it("reset map scope restores confirmed/all-leg scope", () => {
     render(<EventMap events={events} travelLegs={legs} />);
     fireEvent.click(screen.getByRole("button", { name: "Potential" }));
     fireEvent.change(screen.getByLabelText("State"), { target: { value: "MT" } });
     fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
-    expect(screen.getByText("Showing 2026")).toBeInTheDocument();
+    expect(screen.getByText("Showing Confirmed · 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmed" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByLabelText("State")).toHaveValue("");
   });
 });
