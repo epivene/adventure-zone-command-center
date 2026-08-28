@@ -1,0 +1,51 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Sundown Music Festival",
+    "city": "Denver",
+    "region": "CO"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Adventure Zone previously contacted Sundown Colorado / Sundown Music Festival in 2023 and 2024 using info@sundowncolorado.com and info@ignightentertainment.com. Current 2026 review found no verified active 2026 edition. Reliable public sources describe Sundown Colorado as a sober / mindfulness-focused Denver music festival created by Mike and Amber Handby through Ignight Entertainment, but later listings show the event as canceled indefinitely; a 2024 Denver Post piece only expressed hope for a revival rather than announcing a confirmed return. Do not create 2026 outreach unless the organizers officially relaunch the event."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Mike & Amber Handby",
+      "phone": "",
+      "email": "info@ignightentertainment.com",
+      "role": "Historical organizers / Ignight Entertainment",
+      "primary": false
+    },
+    {
+      "id": null,
+      "name": "Sundown Colorado",
+      "phone": "",
+      "email": "info@sundowncolorado.com",
+      "role": "Historical event contact",
+      "primary": false
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "researching",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — dormant / no verified current event",
+      "body": "Gmail shows Adventure Zone outreach to Sundown Music Festival in 2023 and 2024. No reply was found. Current web research does not verify a 2026 edition. Public coverage identifies Sundown Colorado as a sober, all-ages, mindfulness/music festival created by Mike and Amber Handby, while a later event listing says it was canceled indefinitely. A 2024 Denver Post article discussed the possibility of a revival, but did not confirm one. Preserve the relationship history, but do not send new outreach unless the organizers officially relaunch Sundown."
+    }
+  ],
+  "followUps": []
+}
