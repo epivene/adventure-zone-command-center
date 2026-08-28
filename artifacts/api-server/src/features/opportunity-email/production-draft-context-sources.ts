@@ -82,6 +82,8 @@ function sourceLabel(value: string): string {
 }
 
 export class ProductionDraftContextSources implements DraftContextSources {
+  private readonly availabilityByOpportunity = new Map<string, Promise<AvailabilityEvidence>>();
+
   constructor(private readonly deps: Dependencies) {}
 
   getOpportunity(opportunityId: string) {
@@ -142,17 +144,26 @@ export class ProductionDraftContextSources implements DraftContextSources {
   }
 
   async getCalendarEvidence(opportunityId: string): Promise<unknown[]> {
-    const result = await this.deps.availability.resolve(
-      await this.requireOpportunity(opportunityId),
-    );
+    const result = await this.availabilityFor(opportunityId);
     return [...result.calendarEvidence];
   }
 
   async getPackageAvailability(opportunityId: string): Promise<unknown> {
-    const result = await this.deps.availability.resolve(
-      await this.requireOpportunity(opportunityId),
-    );
+    const result = await this.availabilityFor(opportunityId);
     return result.packageAvailability;
+  }
+
+  private availabilityFor(opportunityId: string): Promise<AvailabilityEvidence> {
+    const current = this.availabilityByOpportunity.get(opportunityId);
+    if (current) return current;
+    const pending = this.requireOpportunity(opportunityId)
+      .then((opportunity) => this.deps.availability.resolve(opportunity))
+      .catch((error) => {
+        this.availabilityByOpportunity.delete(opportunityId);
+        throw error;
+      });
+    this.availabilityByOpportunity.set(opportunityId, pending);
+    return pending;
   }
 
   private async requireOpportunity(opportunityId: string): Promise<OpportunityContext> {
