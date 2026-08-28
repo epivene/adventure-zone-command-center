@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Timpanogos Storytelling Festival", "city": "Lehi", "region": "UT"},
+  "profile": {"placeType": "festival_event", "website": "https://timpfest.org/", "description": "Active storytelling festival at Thanksgiving Point, but the organizer explicitly indicated Adventure Zone is not the type of attraction that fits the festival."},
+  "contacts": [{"id": null, "name": "Timpanogos Storytelling Institute", "phone": "", "email": "Story@TimpFest.org", "role": "Festival contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Event says Adventure Zone is not a fit", "body": "The festival replied Aug. 18, 2026 that it 'isn't really that kind of a festival.' Current official information confirms the Sept. 10-12, 2026 event remains focused on live storytelling programs at Ashton Gardens. Treat this as a fit decline; do not repeatedly pursue unless the festival format materially changes."}],
+  "followUps": []
+}
