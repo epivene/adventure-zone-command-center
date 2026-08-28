@@ -12,22 +12,22 @@ export type CalendarBookingLike = {
 };
 
 const statusPriority: Record<BookingStatus, number> = {
-  cancelled: 100,
-  declined: 95,
-  completed: 90,
-  confirmed: 85,
-  contract_received: 80,
-  pending_contract: 75,
-  pending_decision: 70,
-  quote_sent: 65,
-  interested: 60,
-  contacted: 55,
-  contact_due: 50,
-  researching: 45,
-  new_lead: 40,
-  possible: 35,
-  unlikely: 30,
-  renewal_due: 25,
+  confirmed: 100,
+  completed: 95,
+  contract_received: 90,
+  pending_contract: 85,
+  pending_decision: 80,
+  quote_sent: 75,
+  interested: 70,
+  contacted: 65,
+  contact_due: 60,
+  researching: 55,
+  new_lead: 50,
+  possible: 45,
+  renewal_due: 40,
+  unlikely: 35,
+  declined: 20,
+  cancelled: 10,
 };
 
 function normalize(value: string | null | undefined) {
