@@ -52,6 +52,12 @@ function handoffIcon(handoff: EquipmentHandoffView) {
   });
 }
 
+function warningText(event: RenderEvent) {
+  if (event.legAssignmentWarning === "major_travel_concern") return "Major travel concern";
+  if (event.legAssignmentWarning === "long_travel") return "Long travel";
+  return null;
+}
+
 function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
   const destination = event.latitude !== null && event.longitude !== null
     ? ([event.longitude, event.latitude] as [number, number])
@@ -60,11 +66,15 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
   const dates = event.startsAt
     ? `${event.startsAt.toLocaleDateString()}${event.endsAt ? ` – ${event.endsAt.toLocaleDateString()}` : ""}`
     : "Date not set";
+  const assignmentLabel = event.travelLegAssignmentKind === "suggested" ? "Suggested leg" : "Leg";
+  const warning = warningText(event);
   return `<div class="az-route-popup">
     <strong>${escapeHtml(event.name)}</strong>
     <div>${escapeHtml([event.city, event.region].filter(Boolean).join(", "))}</div>
     <div>${escapeHtml(dates)}</div>
-    <div>${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
+    <div>${escapeHtml(assignmentLabel)}: ${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
+    ${warning ? `<div><strong>${escapeHtml(warning)}</strong></div>` : ""}
+    ${event.legAssignmentExplanation ? `<div>${escapeHtml(event.legAssignmentExplanation)}</div>` : ""}
     <div class="az-route-popup__actions">
       <a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>
       <a href="${escapeHtml(directions)}" target="_blank" rel="noreferrer">${managerMode === "on-road" ? "Directions" : "Directions to event"}</a>
