@@ -23,10 +23,6 @@ function normalize(value: string | null | undefined) {
     .replace(/\s+/g, " ");
 }
 
-function dayKey(value: Date | null) {
-  return value ? value.toISOString().slice(0, 10) : null;
-}
-
 function dateOverlapDays(aStart: Date | null, aEnd: Date | null, bStart: Date | null, bEnd: Date | null) {
   if (!aStart || !bStart) return 0;
   const start = Math.max(aStart.getTime(), bStart.getTime());
@@ -63,7 +59,6 @@ function scoreCandidate(input: {
   if (input.managerToken && candidate.travelLegName && normalize(candidate.travelLegName) === normalize(input.managerToken)) {
     score += 8;
   }
-
   return score;
 }
 
@@ -84,7 +79,6 @@ export function matchOperationalCalendarEvent(input: {
   if (!ranked.length) return { kind: "new" };
   const best = ranked[0]!;
   const second = ranked[1] ?? null;
-
   if (second && best.score - second.score < 15) {
     return {
       kind: "review",
@@ -92,7 +86,6 @@ export function matchOperationalCalendarEvent(input: {
       reason: "More than one existing event profile is a plausible calendar match.",
     };
   }
-
   return {
     kind: "matched",
     bookingId: best.candidate.bookingId,
@@ -104,11 +97,15 @@ export function matchOperationalCalendarEvent(input: {
 
 export function parseOperationalEventDateText(text: string | null, fallbackYear: number): { startsAt: Date; endsAt: Date } | null {
   if (!text?.trim()) return null;
-  const normalized = text.trim().replace(/[–—]/g, "-");
+  const normalized = text
+    .trim()
+    .replace(/[–—]/g, "-")
+    .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, "$1")
+    .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+/i, "");
   const explicitYear = /\b(20\d{2})\b/.exec(normalized)?.[1];
   const year = explicitYear ? Number(explicitYear) : fallbackYear;
-
   const pieces = normalized.split(/\s+-\s+|\s+to\s+/i).map((piece) => piece.trim()).filter(Boolean);
+
   const parse = (value: string, inheritedMonth?: string) => {
     let source = value;
     if (inheritedMonth && /^\d{1,2}(?:,?\s*20\d{2})?$/.test(source)) source = `${inheritedMonth} ${source}`;
