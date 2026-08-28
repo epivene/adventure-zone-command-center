@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "North Idaho State Fair", "city": "Coeur d'Alene", "region": "ID"},
+  "profile": {"placeType": "fair", "phone": "208-765-4969", "website": "https://www.nisfair.fun/", "description": "Active North Idaho State Fair. Adventure Zone sent 2026 outreach; the fair already has a full carnival program, so future outreach should happen early rather than during fair week."},
+  "contacts": [{"id": null, "name": "North Idaho State Fair Office", "phone": "208-765-4969", "email": "fair@northidahostatefair.com", "role": "Fair office", "primary": true}],
+  "booking": {"enabled": true, "name": "North Idaho State Fair - 2026", "status": "contacted", "startsAt": "2026-08-21", "endsAt": "2026-08-30", "nextActionKind": "review", "nextActionDueAt": "2027-01-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 outreach - no reply found / fair already has carnival", "body": "Adventure Zone sent 2026 outreach July 31 to Vanessa Brinkley, Alexcia Jordan and Shanda Masterson. No later reply was found in the reviewed Gmail history. Current official fair information confirms the North Idaho State Fair is active Aug. 21-30, 2026 and has a substantial carnival/entertainment program. Do not send another late 2026 introduction; revisit early for a future year if there is a separate family-entertainment opportunity."}],
+  "followUps": [{"label": "Review 2027 North Idaho State Fair opportunity", "reason": "2026 outreach received no reply and the fair was already in progress with a carnival. Check early for 2027 before entertainment/activity commitments are locked.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+}
