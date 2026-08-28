@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Meeker Classic Sheepdog Championship Trials", "city": "Meeker", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "2026 post-Labor-Day route lead for the leg manager. Adventure Zone emailed the Meeker Classic/Jammin' Lamb event in 2023, so outreach must continue from that history rather than act cold.", "phone": "970-878-0111", "website": "https://meekersheepdog.com/", "address1": "", "address2": "", "postalCode": "81641"},
+  "contacts": [{"id": null, "name": "Mary Maym Cunningham", "phone": "970-878-0111", "email": "trials@meekersheepdog.com", "role": "Executive Director", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "contact_due", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 route opportunity - Meeker Classic", "body": "2026 Meeker Classic Sheepdog Championship Trials is Sept. 9-13, a five-day 40th-anniversary event with food/artisan vending and family-oriented educational attractions. Adventure Zone Gmail history shows Amy emailed trials@meekersheepdog.com in May 2023 about Jammin' Lamb Festival & Meeker Classic, so the 2026 message should be a natural check-back. Current official contact lists Executive Director Mary 'Maym' Cunningham at trials@meekersheepdog.com / 970-878-0111. This is a 2026 route opportunity; push prepaid first but do not automatically exclude pay-for-play. Sources verified Aug. 27, 2026: Meeker Classic official site and Adventure Zone Gmail."}],
+  "followUps": [{"label": "2026 Meeker route follow-up", "reason": "After sending the history-aware 2026 email, follow up quickly if Maym has not replied because the Sept. 9-13 event is close and aligns with the leg manager's open post-Labor-Day window.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+}
