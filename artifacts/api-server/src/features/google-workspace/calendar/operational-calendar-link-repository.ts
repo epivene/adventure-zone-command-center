@@ -52,17 +52,26 @@ export class OperationalCalendarLinkRepository {
     bookingId: string;
     packageKey: OperationalCalendarPackageKey;
   }): Promise<OperationalCalendarLink | null> {
-    const [row] = await this.db
-      .select()
-      .from(googleOperationalCalendarLinks)
-      .where(and(
-        eq(googleOperationalCalendarLinks.connectionId, input.connectionId),
-        eq(googleOperationalCalendarLinks.calendarId, input.calendarId),
-        eq(googleOperationalCalendarLinks.bookingId, input.bookingId),
-        eq(googleOperationalCalendarLinks.packageKey, input.packageKey),
-      ))
-      .limit(1);
+    const [row] = await this.db.select().from(googleOperationalCalendarLinks).where(and(
+      eq(googleOperationalCalendarLinks.connectionId, input.connectionId),
+      eq(googleOperationalCalendarLinks.calendarId, input.calendarId),
+      eq(googleOperationalCalendarLinks.bookingId, input.bookingId),
+      eq(googleOperationalCalendarLinks.packageKey, input.packageKey),
+    )).limit(1);
     return row ? toLink(row) : null;
+  }
+
+  async listByBooking(input: {
+    connectionId: string;
+    calendarId: string;
+    bookingId: string;
+  }): Promise<OperationalCalendarLink[]> {
+    const rows = await this.db.select().from(googleOperationalCalendarLinks).where(and(
+      eq(googleOperationalCalendarLinks.connectionId, input.connectionId),
+      eq(googleOperationalCalendarLinks.calendarId, input.calendarId),
+      eq(googleOperationalCalendarLinks.bookingId, input.bookingId),
+    ));
+    return rows.map(toLink);
   }
 
   async findByGoogleEvent(input: {
@@ -70,15 +79,11 @@ export class OperationalCalendarLinkRepository {
     calendarId: string;
     googleEventId: string;
   }): Promise<OperationalCalendarLink | null> {
-    const [row] = await this.db
-      .select()
-      .from(googleOperationalCalendarLinks)
-      .where(and(
-        eq(googleOperationalCalendarLinks.connectionId, input.connectionId),
-        eq(googleOperationalCalendarLinks.calendarId, input.calendarId),
-        eq(googleOperationalCalendarLinks.googleEventId, input.googleEventId),
-      ))
-      .limit(1);
+    const [row] = await this.db.select().from(googleOperationalCalendarLinks).where(and(
+      eq(googleOperationalCalendarLinks.connectionId, input.connectionId),
+      eq(googleOperationalCalendarLinks.calendarId, input.calendarId),
+      eq(googleOperationalCalendarLinks.googleEventId, input.googleEventId),
+    )).limit(1);
     return row ? toLink(row) : null;
   }
 
@@ -95,14 +100,28 @@ export class OperationalCalendarLinkRepository {
     reservedEndsAt: Date;
     syncedAt: Date;
   }): Promise<OperationalCalendarLink> {
-    const [row] = await this.db
-      .insert(googleOperationalCalendarLinks)
-      .values({
-        connectionId: input.connectionId,
-        calendarId: input.calendarId,
+    const [row] = await this.db.insert(googleOperationalCalendarLinks).values({
+      connectionId: input.connectionId,
+      calendarId: input.calendarId,
+      googleEventId: input.googleEventId,
+      bookingId: input.bookingId,
+      packageKey: input.packageKey,
+      etag: input.etag,
+      sourceChecksum: input.sourceChecksum,
+      lastAppSnapshot: input.lastAppSnapshot,
+      reservedStartsAt: input.reservedStartsAt,
+      reservedEndsAt: input.reservedEndsAt,
+      lastSyncedAt: input.syncedAt,
+      lastErrorCode: null,
+    }).onConflictDoUpdate({
+      target: [
+        googleOperationalCalendarLinks.connectionId,
+        googleOperationalCalendarLinks.calendarId,
+        googleOperationalCalendarLinks.bookingId,
+        googleOperationalCalendarLinks.packageKey,
+      ],
+      set: {
         googleEventId: input.googleEventId,
-        bookingId: input.bookingId,
-        packageKey: input.packageKey,
         etag: input.etag,
         sourceChecksum: input.sourceChecksum,
         lastAppSnapshot: input.lastAppSnapshot,
@@ -110,38 +129,15 @@ export class OperationalCalendarLinkRepository {
         reservedEndsAt: input.reservedEndsAt,
         lastSyncedAt: input.syncedAt,
         lastErrorCode: null,
-      })
-      .onConflictDoUpdate({
-        target: [
-          googleOperationalCalendarLinks.connectionId,
-          googleOperationalCalendarLinks.calendarId,
-          googleOperationalCalendarLinks.bookingId,
-          googleOperationalCalendarLinks.packageKey,
-        ],
-        set: {
-          googleEventId: input.googleEventId,
-          etag: input.etag,
-          sourceChecksum: input.sourceChecksum,
-          lastAppSnapshot: input.lastAppSnapshot,
-          reservedStartsAt: input.reservedStartsAt,
-          reservedEndsAt: input.reservedEndsAt,
-          lastSyncedAt: input.syncedAt,
-          lastErrorCode: null,
-          updatedAt: input.syncedAt,
-        },
-      })
-      .returning();
+        updatedAt: input.syncedAt,
+      },
+    }).returning();
     if (!row) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_LINK_SAVE_FAILED");
     return toLink(row);
   }
 
-  async recordSyncError(input: {
-    linkId: string;
-    errorCode: string;
-    now: Date;
-  }): Promise<void> {
-    await this.db
-      .update(googleOperationalCalendarLinks)
+  async recordSyncError(input: { linkId: string; errorCode: string; now: Date }): Promise<void> {
+    await this.db.update(googleOperationalCalendarLinks)
       .set({ lastErrorCode: input.errorCode, updatedAt: input.now })
       .where(eq(googleOperationalCalendarLinks.id, input.linkId));
   }
@@ -155,28 +151,22 @@ export class OperationalCalendarLinkRepository {
     reason: string;
     proposedChanges: Record<string, unknown>;
   }): Promise<void> {
-    await this.db
-      .insert(googleOperationalCalendarReviews)
-      .values({
-        connectionId: input.connectionId,
-        linkId: input.linkId ?? null,
-        bookingId: input.bookingId ?? null,
-        calendarId: input.calendarId,
-        googleEventId: input.googleEventId,
-        reason: input.reason,
-        proposedChanges: input.proposedChanges,
-        state: "pending",
-      })
-      .onConflictDoNothing();
+    await this.db.insert(googleOperationalCalendarReviews).values({
+      connectionId: input.connectionId,
+      linkId: input.linkId ?? null,
+      bookingId: input.bookingId ?? null,
+      calendarId: input.calendarId,
+      googleEventId: input.googleEventId,
+      reason: input.reason,
+      proposedChanges: input.proposedChanges,
+      state: "pending",
+    }).onConflictDoNothing();
   }
 
   async listPendingReviews(connectionId: string) {
-    return this.db
-      .select()
-      .from(googleOperationalCalendarReviews)
-      .where(and(
-        eq(googleOperationalCalendarReviews.connectionId, connectionId),
-        eq(googleOperationalCalendarReviews.state, "pending"),
-      ));
+    return this.db.select().from(googleOperationalCalendarReviews).where(and(
+      eq(googleOperationalCalendarReviews.connectionId, connectionId),
+      eq(googleOperationalCalendarReviews.state, "pending"),
+    ));
   }
 }
