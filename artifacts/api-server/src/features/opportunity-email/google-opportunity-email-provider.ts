@@ -5,7 +5,7 @@ import type { GmailDraftProvider } from "./opportunity-email-service";
 
 type GoogleConnection = Pick<
   PostgresGoogleConnectionRepository,
-  "createGmailDraftClient" | "createGmailDeliveryClient"
+  "createReadClient" | "createGmailDraftClient" | "createGmailDeliveryClient"
 >;
 
 type Clock = { now(): Date };
@@ -68,9 +68,23 @@ export class GoogleOpportunityEmailProvider implements GmailDraftProvider {
     };
   }
 
-  async reconcileSend(_input: { draftId: string }) {
-    // We intentionally do not infer delivery from local state. A future reconciliation
-    // implementation must verify the sent message through Gmail before returning it.
-    return null;
+  async reconcileSend(input: { draftId: string; messageId: string }) {
+    const read = await this.connection.createReadClient();
+    if (!read?.getMessageMetadata) return null;
+    try {
+      const metadata = await read.getMessageMetadata(input.messageId);
+      if (!metadata.labelIds.includes("SENT")) return null;
+      const sentAt = metadata.internalDateMs === null
+        ? this.clock.now()
+        : new Date(metadata.internalDateMs);
+      if (!Number.isFinite(sentAt.getTime())) return null;
+      return {
+        messageId: metadata.id,
+        threadId: metadata.threadId,
+        sentAt,
+      };
+    } catch {
+      return null;
+    }
   }
 }
