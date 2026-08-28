@@ -73,6 +73,16 @@ const confirmedMapped: MapEvent = {
   locationQuality: "coordinates",
 };
 
+const secondConfirmedMapped: MapEvent = {
+  ...confirmedMapped,
+  id: "confirmed-mapped-2",
+  name: "Second Confirmed Stop",
+  latitude: 45.0,
+  longitude: -106.0,
+  startsAt: new Date("2026-08-25T12:00:00Z"),
+  endsAt: new Date("2026-08-25T20:00:00Z"),
+};
+
 const potentialMapped: MapEvent = {
   ...confirmedMapped,
   id: "potential-mapped",
@@ -81,6 +91,8 @@ const potentialMapped: MapEvent = {
   longitude: -104.0,
   status: "contacted",
   routeBucket: "potential",
+  startsAt: new Date("2026-08-22T12:00:00Z"),
+  endsAt: new Date("2026-08-22T20:00:00Z"),
 };
 
 afterEach(() => {
@@ -126,13 +138,23 @@ describe("EventMap unresolved locations", () => {
     });
   });
 
-  it("defaults to confirmed route planning and does not connect potential context into the route line", () => {
-    render(<EventMap events={[confirmedMapped, potentialMapped]} travelLegs={[leg, hulkLeg]} />);
+  it("shows potential events by default while drawing the operating route only through confirmed stops", () => {
+    render(<EventMap events={[confirmedMapped, potentialMapped, secondConfirmedMapped]} travelLegs={[leg, hulkLeg]} />);
 
-    expect(screen.getByRole("button", { name: "Confirmed" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Full" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Potential Stop")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Hulk" })).toBeInTheDocument();
 
     const lastLayerProps = mocks.layers.mock.calls.at(-1)?.[0];
-    expect(lastLayerProps.routeLines).toEqual([]);
+    expect(lastLayerProps.events.map((event: MapEvent) => event.id)).toEqual(expect.arrayContaining([
+      "confirmed-mapped",
+      "potential-mapped",
+      "confirmed-mapped-2",
+    ]));
+    expect(lastLayerProps.routeLines).toHaveLength(1);
+    expect(lastLayerProps.routeLines[0].coordinates).toEqual([
+      [-105.8, 46.4],
+      [-106.0, 45.0],
+    ]);
   });
 });
