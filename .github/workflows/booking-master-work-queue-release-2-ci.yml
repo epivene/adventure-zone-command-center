@@ -16,6 +16,7 @@ on:
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
       - "artifacts/api-server/src/routes/opportunity-email-runtime*.ts"
       - "artifacts/api-server/src/routes/opportunity-email-live-runtime*.ts"
+      - "artifacts/api-server/src/routes/opportunity-email-index-mount*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
       - "artifacts/api-server/src/routes/index.ts"
       - "artifacts/api-server/src/index.ts"
@@ -60,6 +61,7 @@ jobs:
           src/features/opportunity-email/opportunity-email-availability.test.ts
           src/features/opportunity-email/production-ready-to-send-source.test.ts
           src/features/opportunity-email/production-opportunity-email-runtime.test.ts
+          src/features/opportunity-email/opportunity-email-worker-runtime.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
           src/features/opportunity-email/ai-opportunity-email-writer.test.ts
           src/features/opportunity-email/google-opportunity-email-provider.test.ts
@@ -80,6 +82,7 @@ jobs:
           src/routes/opportunity-drafts.test.ts
           src/routes/opportunity-email-runtime.test.ts
           src/routes/opportunity-email-live-runtime.test.ts
+          src/routes/opportunity-email-index-mount.test.ts
           src/routes/today-ready-to-send.test.ts
           src/routes/follow-ups.test.ts
       - name: Opportunity email composer tests
