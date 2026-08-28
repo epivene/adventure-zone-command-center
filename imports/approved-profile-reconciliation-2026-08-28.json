@@ -1,0 +1,374 @@
+[
+  {
+    "canonicalName": "Blaine County Fair",
+    "aliases": ["Blaine County Fair Chinook", "Blaine County Fair Chinook MT"],
+    "notes": [{"subject": "Newest relationship status - 2026 booking completed", "body": "Later Gmail supersedes the old unread-message status: Adventure Zone received the signed contract and deposit for the 2026 Blaine County Fair and confirmed the event on the calendar. Shandel Fouts was the primary operational contact (406-390-1310) with Loren Skoyen as backup (406-781-8033). Treat this as booked/resolved history, not an open sales lead."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "SnowWiesn Oktoberfest",
+    "aliases": ["SnowWiesn", "Snowbasin SnowWiesn Oktoberfest"],
+    "notes": [{"subject": "Newest verified relationship status", "body": "No later SnowWiesn conversation was found after Michael Rueckert's 2022 reply. He was open to future consideration and asked specifically about insurance strength, ticket price, and revenue-share percentage. Current 2026 SnowWiesn remains active, so this is a live relationship to reconnect with rather than a decline."}],
+    "followUps": [{"label": "Reconnect with SnowWiesn", "reason": "Continue from the prior insurance/revenue-share questions and ask whether any late-2026 or 2027 opportunity remains.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Downtown Boise Father's Day Car Show",
+    "aliases": ["Downtown Boise Fathers Day Car Show", "Father's Day Car Show Boise", "Downtown Boise Car Show"],
+    "notes": [{"subject": "Newest relationship status - sponsor model", "body": "The latest meaningful reply was budget/model related, not a rejection: Sierra Padilla Huitt said the event typically uses sponsors for activations and could circle back when sponsorship rates were set. Treat as a future sponsor-supported or revenue-share prospect."}],
+    "followUps": [{"label": "Revisit Boise car show sponsorship", "reason": "Pitch a sponsor-supported or revenue-share family activation before 2027 planning is locked.", "dueAt": "2027-01-20T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Ridgway RiverFest",
+    "aliases": ["RiverFest", "River Fest Ridgway", "Ridgway River Festival"],
+    "contacts": [{"id": null, "name": "RiverFest Team", "phone": "970-325-3010", "email": "ridgwayriverfest@gmail.com", "role": "Current event contact", "primary": true}],
+    "notes": [{"subject": "Newest verified relationship status", "body": "Tanya Ishikawa's 2023 reply was only a 2024-specific decline. Current RiverFest remains active and plans sponsorship well ahead of the event, so the correct status is future-year prospect, not permanent no."}],
+    "followUps": [{"label": "Revisit Ridgway RiverFest", "reason": "Enter the 2027 sponsor/vendor planning cycle early and propose a family-area or sponsor-funded model.", "dueAt": "2027-01-20T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Old Fort Boise Days",
+    "aliases": ["Old Fort Boise Days ID", "Old Fort Boise Days Parma"],
+    "contacts": [{"id": null, "name": "Cathy Bingham", "phone": "208-965-3805", "email": "", "role": "Current event chair - verify before outreach", "primary": true}],
+    "notes": [{"subject": "Contact correction", "body": "Julie is no longer on the committee and should remain historical only. Current event information identifies Cathy Bingham as the event chair. Verify the current email/contact path before 2027 outreach."}],
+    "followUps": [{"label": "Verify Old Fort Boise Days contact", "reason": "Retire Julie as the working contact and confirm the current committee contact before outreach.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Hell's A-Roarin' Horse Drive",
+    "aliases": ["Gardiner Rodeo", "Hell's A Roarin", "Upper Yellowstone Roundup", "Hells A Roarin Horse Drive"],
+    "contacts": [{"id": null, "name": "Upper Yellowstone Roundup Association", "phone": "406-223-1222", "email": "gardinermtrodeo@yahoo.com", "role": "Current organizer path", "primary": true}],
+    "notes": [{"subject": "Organizer correction", "body": "The Gardiner Chamber explicitly said it does not run the rodeo/event. Preserve that redirect and use Hell's A-Roarin'/Upper Yellowstone Roundup Association as the current organizer path."}],
+    "followUps": [{"label": "Verify Gardiner organizer for 2027", "reason": "Confirm the current Roundup Association decision-maker before any future Adventure Zone pitch.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "War Bonnet Round Up",
+    "aliases": ["War Bonnet Roundup", "War Bonnet Round Up Idaho Falls"],
+    "contacts": [{"id": null, "name": "Hollie Pettingill", "phone": "208-612-8479", "email": "hpettingill@idahofalls.gov", "role": "Current city event contact", "primary": true}],
+    "notes": [{"subject": "Auto-reply superseded by current contact", "body": "The unread 2023 out-of-office message was never a substantive decision. Current city event information identifies Hollie Pettingill as the event contact and the event includes a major kids zone, so verify 2027 procurement rather than treating the auto-reply as the last relationship event."}],
+    "followUps": [{"label": "Verify War Bonnet 2027 procurement", "reason": "Ask the current city event contact how 2027 family attractions are selected.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Travelling Shamans Camp",
+    "aliases": ["Traveling Shamans Camp", "Travelling Shamans Camp Hotchkiss"],
+    "notes": [{"subject": "Stale/unverifiable lead", "body": "The old outreach address bounced and current research did not establish a reliable active exact-match event or organizer. Preserve as historical only until new authoritative evidence appears."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Pierce 1860 Days",
+    "aliases": ["Pierce 1860 Days ID"],
+    "notes": [{"subject": "Bad email - event still active", "body": "The 2023 email address was blocked, but current research confirms Pierce 1860 Days remains active. Mark the old address bad and verify a current organizer before future outreach."}],
+    "followUps": [{"label": "Verify Pierce 1860 Days contact", "reason": "Find the current committee/city contact before 2027 outreach; do not reuse the blocked address.", "dueAt": "2027-03-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Harrison's Old Time Picnic",
+    "aliases": ["Harrisons Old Time Picnic", "Harrison Old Time Picnic"],
+    "contacts": [{"id": null, "name": "Harrison Chamber", "phone": "", "email": "harrisonchamber.idaho@gmail.com", "role": "Current event contact path - verify committee", "primary": true}],
+    "notes": [{"subject": "Bad email replaced", "body": "The old recipient returned a 550 unknown-user error. Current Harrison Chamber information confirms the event remains active and provides a current chamber email. Verify the specific event committee before outreach."}],
+    "followUps": [{"label": "Verify Harrison Old Time Picnic contact", "reason": "Confirm the current event committee and use the current chamber path rather than the bounced historical address.", "dueAt": "2027-02-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Bonneville Speed Week",
+    "aliases": ["Speed Week Wendover", "SCTA Speed Week", "Bonneville Speedweek"],
+    "notes": [{"subject": "Organizer correction - SCTA-BNI", "body": "The prior reply correctly identified that Adventure Zone had contacted the wrong racing group. Speed Week belongs to SCTA-BNI, not USFRA/World of Speed. Verify an appropriate SCTA vendor/entertainment decision-maker before deciding whether the event is a fit."}],
+    "followUps": [{"label": "Verify SCTA Speed Week contact", "reason": "Correct the organizer to SCTA-BNI and identify the appropriate 2027 vendor/entertainment contact before outreach.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Bluffdale Old West Days",
+    "aliases": ["Old West Days Bluffdale", "Bluffdale Days", "Old West Days in Bluffdale UT"],
+    "notes": [{"subject": "Contact correction - city now runs event", "body": "Melissa no longer helps with Bluffdale Days. Current research confirms the City of Bluffdale continues Old West Days, so Melissa should remain historical and the city events contact should be verified for 2027."}],
+    "followUps": [{"label": "Verify Bluffdale Old West Days contact", "reason": "Find the current city events decision-maker before 2027 outreach.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Nibley Heritage Days",
+    "aliases": ["Heritage Days Nibley"],
+    "notes": [{"subject": "Structural block - city insurance", "body": "The organizer stated the city insurance policy does not allow bounce houses in city parks in any fashion. Keep the event active in history but suppress recurring inflatable outreach unless the policy itself changes."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Grand Old West Days",
+    "aliases": ["GOWD", "GOWD Festival", "Grand Old West Days Craig CO"],
+    "contacts": [{"id": null, "name": "Dawn Bevel", "phone": "970-714-1414", "email": "gowdfestival@gmail.com", "role": "Current event contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - repeat 2026 booking", "body": "Later Gmail supersedes any lead status: Grand Old West Days became a signed repeat 2026 Adventure Zone booking. Preserve the operational history and do not create a sales follow-up from the old unread message."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Gooding County Fair",
+    "aliases": ["Gooding County Fair Gooding ID"],
+    "contacts": [{"id": null, "name": "Don Gill", "phone": "208-934-4529", "email": "", "role": "Fair Manager", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - incumbent carnival", "body": "Don said Adventure Zone sounded great, but Browns Amusement was already the 2026 carnival. This is an incumbent-provider issue, not a policy rejection."}],
+    "followUps": [{"label": "Revisit Gooding County Fair", "reason": "Ask early whether 2027 allows a supplemental attraction or whether carnival scope/provider has changed.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Sounds of Thunder Mountain Pow Wow",
+    "aliases": ["Sounds of Thunder Mountain Powwow", "Kaibab Paiute Pow Wow", "Sounds of Thunder Pow Wow"],
+    "notes": [{"subject": "Decision-maker correction", "body": "LeAnn Shearer confirmed the event and redirected Adventure Zone to Tara Spute-Dick, Committee Chairperson, and Angelita Bulletts, Committee Vendor Representative. Those committee contacts should be verified and used rather than continuing with the redirecting contact."}],
+    "followUps": [{"label": "Verify Pow Wow committee contacts", "reason": "Confirm Tara Spute-Dick and Angelita Bulletts' current contact information before 2027 outreach.", "dueAt": "2027-03-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Jurassic Classic Mountain Bike Festival",
+    "aliases": ["Jurassic Classic Festival", "Jurassic Classic", "JC Festival"],
+    "contacts": [{"id": null, "name": "Stacy T. Wells", "phone": "", "email": "jurassicclassic@landercycling.org", "role": "Festival Director / current event address", "primary": true}],
+    "notes": [{"subject": "Contact correction", "body": "The Aug. 3 message was a forwarding/contact-change notice, not a decline. Use jurassicclassic@landercycling.org and verify the current sponsorship lead for 2027."}],
+    "followUps": [{"label": "Verify Jurassic Classic 2027 sponsor contact", "reason": "Use the new current address and ask about 2027 custom activation/sponsorship opportunities.", "dueAt": "2027-02-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Green River River Festival",
+    "aliases": ["River Festival Green River WY", "Green River WY River Festival", "River Festival"],
+    "contacts": [{"id": null, "name": "Green River Chamber of Commerce", "phone": "307-872-6190", "email": "office@grchamber.com", "role": "Organizer", "primary": true}],
+    "notes": [{"subject": "Structural block - insurance", "body": "The Green River Chamber stated its insurance does not allow inflatables at the event. Keep the reason prominent and suppress routine annual inflatable outreach unless that restriction changes."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Joe Mama's Car Show",
+    "aliases": ["Joe Mamas Car Show", "Joe Mama's Car Show Jerome"],
+    "contacts": [{"id": null, "name": "Joe Mama's Car Show Committee", "phone": "", "email": "joemamascarshowjerome@gmail.com", "role": "Current event contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - space and budget", "body": "The 2026 reply raised two practical objections: insufficient space and inability to afford the stated fees. It was not a permanent no, so any future approach should use a smaller footprint and/or revenue-share/no-upfront model."}],
+    "followUps": [{"label": "Revisit Joe Mama's Car Show", "reason": "Pitch a smaller-footprint and budget-neutral/revenue-share option for 2027 rather than repeating the same offer.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Apache County Fair",
+    "aliases": ["Apache County Fair St Johns AZ"],
+    "contacts": [{"id": null, "name": "Apache County Fair", "phone": "928-551-4037", "email": "apachecountyfair@gmail.com", "role": "Fair office", "primary": true}],
+    "notes": [{"subject": "Structural block - city property rule", "body": "Fair managers said the City owns the grounds and has a hard no-inflatables rule on city property even with insurance. Do not create recurring sales tasks unless management reports a policy or venue change."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Spirit of Boise Balloon Classic",
+    "aliases": ["Spirit of Boise", "Spirit of Boise Balloon Classic Boise ID"],
+    "contacts": [{"id": null, "name": "Mike Owens", "phone": "208-891-1132", "email": "Mike.Owens@townsquaremedia.com", "role": "Market President / event contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - profit-share incumbent", "body": "Mike said another company already provides the attraction on a profit-share model. Current event programming includes an inflatable fun zone, so this is a genuine competitor-replacement opportunity rather than a fit problem."}],
+    "followUps": [{"label": "Pitch Spirit of Boise 2027", "reason": "Approach early as an alternative profit-share family-entertainment provider before the incumbent is recommitted.", "dueAt": "2027-01-12T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Treasure State Cowboy Mounted Shooting",
+    "aliases": ["Treasure State Cowboy Mounted Shooting Polson", "Cowboy Mounted Shooting Polson"],
+    "notes": [{"subject": "Resolved fit decline", "body": "Rick Farnsworth said the event would not have enough spectator crowd to make Adventure Zone worthwhile. Treat this as a fit decline unless attendance or event format changes materially."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Northwest Montana Fair & Rodeo",
+    "aliases": ["Northwest Montana Fair", "NW Montana Fair", "Flathead County Fair"],
+    "contacts": [{"id": null, "name": "Sam Nunnally", "phone": "406-758-5808", "email": "snunnally@flatheadcounty.gov", "role": "Manager", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - 2027 invited with insurance questions", "body": "Sam said 2026 was too close to the fair but they can certainly look at next year. He specifically flagged large insurance questions. Use the current flatheadcounty.gov address and lead with insurance/COI/safety documentation."}],
+    "followUps": [{"label": "Reopen Northwest Montana Fair discussion", "reason": "Start 2027 with the insurance/COI/safety packet and ask exactly what county requirements must be met.", "dueAt": "2027-01-05T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Lewiston Hot August Nights",
+    "aliases": ["Hot August Nights Lewiston", "Lewiston's Hot August Nights"],
+    "contacts": [{"id": null, "name": "Ben Bonfield", "phone": "208-305-1007", "email": "benb@dailyfly.com", "role": "Current relationship contact", "primary": true}],
+    "notes": [{"subject": "Thread requires full-history resolution", "body": "The 2026 conversation turned into a discussion about existing equipment Ben owns, including secondhand purchase details and photos. Do not classify this as a simple decline. The full Gmail/ACT thread should control the profile status before a new sales task is created."}],
+    "followUps": [{"label": "Finish Lewiston Hot August Nights history audit", "reason": "Read the full Gmail/ACT thread and determine the actual outcome of the equipment discussion before any new outreach.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Ashland Labor Day Powwow",
+    "aliases": ["Ashland Labor Day Pow Wow", "Soaring Eagle Powwow"],
+    "contacts": [{"id": null, "name": "Kimburley Flagen", "phone": "406-256-8500", "email": "kflagen@soaringeagle.org", "role": "Historical contact", "primary": true}],
+    "notes": [{"subject": "Current status unverifiable", "body": "Kim's reply was negative and current research did not find sufficiently authoritative exact-match event/organizer evidence. Preserve the history but do not schedule recurring outreach until a current organizer source is verified."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Helper Arts Festival",
+    "aliases": ["Helper Arts, Music and Film Festival", "Helper Arts Festival Helper UT"],
+    "contacts": [{"id": null, "name": "Helper Arts Festival", "phone": "510-703-3166", "email": "helperartsfestival@gmail.com", "role": "Festival office", "primary": true}],
+    "notes": [{"subject": "Structural block - footprint", "body": "The festival said its area is too small to accommodate Adventure Zone's inflatable footprint. Suppress routine annual outreach unless the event expands to a different/larger site."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Colorado Springs Labor Day Lift Off",
+    "aliases": ["Labor Day Lift Off", "Colorado Springs Labor Day Liftoff"],
+    "contacts": [{"id": null, "name": "Hot Apple Productions", "phone": "719-219-3333", "email": "Info@hotappleproductions.com", "role": "Organizer", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - apply next year", "body": "Heather said the 2026 kid-zone provider was already booked and explicitly told Adventure Zone to apply for next year. This is a clear 2027 application lead."}],
+    "followUps": [{"label": "Apply for 2027 Labor Day Lift Off", "reason": "Verify when 2027 kid-zone/vendor applications open and apply promptly in the correct category.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Early Iron Festival",
+    "aliases": ["Early Iron Club Festival", "Early Iron Festival Alamosa"],
+    "notes": [{"subject": "Resolved present-format fit decline", "body": "Roni Wisdom stated the event does not have vendors at its show. Close ordinary outreach unless the event format changes to accept outside entertainment/providers."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "White Sulphur Springs Labor Day Rodeo",
+    "aliases": ["Labor Day Rodeo White Sulphur Springs", "Meagher County Labor Day Rodeo", "Meagher County Rodeo Club"],
+    "contacts": [{"id": null, "name": "Meagher County Rodeo Club", "phone": "406-547-4749", "email": "labordayrodeo@gmail.com", "role": "Organizer", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - quote requested for next year", "body": "The rodeo was already booked with inflatables for 2026, but the organizer explicitly said they would love to get a quote prior to next year's event. This is a direct 2027 follow-up request."}],
+    "followUps": [{"label": "Quote White Sulphur Springs Rodeo", "reason": "Verify 2027 dates and send the requested quote before the existing provider is recommitted.", "dueAt": "2027-01-12T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Payson Golden Onion Days",
+    "aliases": ["Payson City Golden Onion Days", "Golden Onion Days"],
+    "contacts": [{"id": null, "name": "Janeen Dean", "phone": "801-358-3357", "email": "events@paysonutah.gov", "role": "Community & Cultural Events Coordinator", "primary": true}],
+    "notes": [{"subject": "Structural block - carnival occupies space", "body": "Janeen said the city is not interested in adding inflatables because the existing carnival takes all available space. Suppress recurring sales outreach unless the carnival footprint changes."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Greenlee County Fair",
+    "aliases": ["Greenlee Fair", "Greenlee County Fair Duncan AZ"],
+    "contacts": [{"id": null, "name": "Justine Holguin", "phone": "928-359-2032", "email": "fairgrounds@greenlee.az.gov", "role": "Current fair/event contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - new coordinator / incumbent carnival", "body": "Justine identified herself as the new Events Coordinator. The 2026 carnival was already contracted, but she said she would keep Adventure Zone's information for future events. Update the primary contact and approach earlier for 2027."}],
+    "followUps": [{"label": "Revisit Greenlee County Fair", "reason": "Contact Justine/current fair office before the 2027 carnival commitment is finalized.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Mohave County Fair",
+    "aliases": ["Mohave County Fair Kingman AZ"],
+    "contacts": [{"id": null, "name": "Mohave County Fairgrounds", "phone": "928-753-8620", "email": "fairgrounds@mohave.gov", "role": "Current fair office", "primary": true}],
+    "notes": [{"subject": "Structural block - Risk Management", "body": "Risk Management does not allow inflatables on the property due to safety risks. Preserve the reason and suppress routine future inflatable pitches unless the county changes the policy."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Castle Rock Artfest",
+    "aliases": ["Castle Rock Art Fest", "Artfest Castle Rock"],
+    "contacts": [{"id": null, "name": "Castle Rock Chamber", "phone": "303-688-4597", "email": "info@castlerock.org", "role": "Current event office", "primary": true}],
+    "notes": [{"subject": "Structural block - event footprint", "body": "The event has a kids zone but said Perry Street/Festival Park does not have room for inflatables because artists and sponsor tents consume the footprint. Suppress routine outreach unless the layout changes."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Colorado West Pride",
+    "aliases": ["CWP", "Colorado West Pride Grand Junction"],
+    "contacts": [{"id": null, "name": "Colorado West Pride", "phone": "", "email": "info@coloradowestpride.org", "role": "Current organization contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - soft future decline", "body": "The organization passed 'at this time' but said it would keep Adventure Zone in mind for the future. This is a soft future-year prospect, not a do-not-contact."}],
+    "followUps": [{"label": "Revisit Colorado West Pride", "reason": "Ask what 2027 programming model would fit before repeating the prior offer.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Timpanogos Storytelling Festival",
+    "aliases": ["TimpFest", "Timpanogos Storytelling"],
+    "contacts": [{"id": null, "name": "Timpanogos Storytelling Festival", "phone": "", "email": "Story@TimpFest.org", "role": "Current event contact", "primary": true}],
+    "notes": [{"subject": "Resolved fit decline", "body": "The organizer said this is not really that kind of festival. Treat as a present-format fit decline and do not create annual outreach unless programming changes materially."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "WYO-131 Gravel Grinder",
+    "aliases": ["WYO-131 Biketoberfest", "Biketoberfest Gravel Race", "WYO131 Gravel Grinder", "WYO-131 Biketoberfest Gravel Race"],
+    "notes": [{"subject": "Newest relationship status - budget objection", "body": "Nicki Simon said the idea sounded fun but the budget is tight. Keep as a lower-priority future prospect only if Adventure Zone can propose a budget-neutral sponsor/revenue-share model."}],
+    "followUps": [{"label": "Revisit WYO-131 with budget-neutral model", "reason": "Only pursue with a sponsor/revenue-share concept that does not recreate the prior budget objection.", "dueAt": "2027-02-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Rist Canyon Mountain Festival",
+    "aliases": ["Rist Canyon Festival", "RCMF"],
+    "notes": [{"subject": "Repeat structural decline", "body": "Adventure Zone has asked in prior years. The festival still lacks the footprint and intends its kids area to remain free. Suppress recurring outreach unless those conditions materially change."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Silverton Creates!",
+    "aliases": ["Silverton Creates", "Silverton Arts Festival", "Silverton Creates Arts Festival"],
+    "contacts": [{"id": null, "name": "Silverton Creative District", "phone": "", "email": "info@silvertoncreativedistrict.org", "role": "Current organizer", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - future maybe", "body": "Silverton Creates said it was all set for 2026 but would keep Adventure Zone in mind for the future. Treat as a soft future-year prospect and verify footprint/programming before pitching."}],
+    "followUps": [{"label": "Revisit Silverton Creates", "reason": "Ask about 2027 footprint and family programming before vendor commitments are finalized.", "dueAt": "2027-02-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Northern Gila County Fair",
+    "aliases": ["NGCF", "Northern Gila Fair", "Northern Gila County Fair Payson AZ"],
+    "contacts": [{"id": null, "name": "Lyssa Harder", "phone": "562-533-5485", "email": "lyssaharder88@gmail.com", "role": "Vendor Manager / Adventure Zone contact", "primary": true}, {"id": null, "name": "Steve Harder", "phone": "562-212-8995", "email": "", "role": "Entertainment", "primary": false}],
+    "notes": [{"subject": "Newest relationship status - Town decision pending", "body": "Do not stop at Lyssa's first insurance-liability message. After Adventure Zone provided more information, her latest reply was that she would go to the Town and see what they say. That newest meaningful interaction controls: status is pending municipal decision, not hard decline."}],
+    "followUps": [{"label": "Ask Lyssa what the Town decided", "reason": "The fair is still upcoming and the latest relationship event is Lyssa taking the proposal back to the Town.", "dueAt": "2026-09-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Orofino Lumberjack Days",
+    "aliases": ["Orofino Lumberjack Days ID", "Lumberjack Days Orofino"],
+    "notes": [{"subject": "Contact failure - not a rejection", "body": "The Aug. 17 outreach hit repeated mail-delivery problems. Current research confirms the event remains active; treat this as a failed contact path, not a decline, and verify a current organizer through the live .com event channel."}],
+    "followUps": [{"label": "Repair Orofino contact route", "reason": "Verify the current organizer email/phone and make one current-year contact attempt while the 2026 event remains possible.", "dueAt": "2026-08-31T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Broomfield Days",
+    "aliases": ["Broomfield Days Broomfield CO"],
+    "contacts": [{"id": null, "name": "Jenny Morgan", "phone": "", "email": "jbmorgan@broomfield.org", "role": "Activity-vendor contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - local provider filled 2026", "body": "Jenny said Broomfield Days is still working with a local provider and 2026 activity spots are filled, but she will keep Adventure Zone's information for future events. Treat as an early 2027 competitor/capacity follow-up."}],
+    "followUps": [{"label": "Revisit Broomfield Days", "reason": "Contact Jenny before 2027 activity-vendor applications open and ask whether local-provider exclusivity remains.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "CRIT SDP-REC Program Bounce House Event",
+    "aliases": ["CRIT Bounce House Event", "CRIT Recreation Bounce House Event", "SDP-REC Program Bounce House Event"],
+    "contacts": [{"id": null, "name": "Robin Howard", "phone": "928-669-1276", "email": "Robin.Howard@crit-nsn.gov", "role": "Recreation Coordinator / inbound inquiry", "primary": true}],
+    "notes": [{"subject": "Inbound inquiry requires response", "body": "Robin Howard asked for prices for all units plus setup/breakdown and any other invoice costs. Current CRIT Recreation information still identifies Robin as Coordinator. Check ACT/phone history after June 4; if nobody answered, this is an unanswered inbound buying inquiry, not cold outreach."}],
+    "followUps": [{"label": "Resolve CRIT pricing inquiry", "reason": "Check later phone/ACT history first; if unanswered, respond to Robin with current package pricing and legitimate setup/tear-down costs.", "dueAt": "2026-08-28T23:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "HAFFE Showcase",
+    "aliases": ["Heartland Association of Fairs Festivals & Events Showcase", "HAFFE Convention Showcase", "Heartland Association FFE"],
+    "notes": [{"subject": "Time-sensitive convention opportunity", "body": "The Gmail invitation says the 2026 showcase application deadline is Sept. 1. Current HAFFE information confirms the Nov. 19-21, 2026 Minot convention includes showcases and associate/vendor activity. This is an active business opportunity, not a stale unread message."}],
+    "followUps": [{"label": "Decide HAFFE showcase application", "reason": "Review requirements, cost and space/logistics now; submit before Sept. 1 if Adventure Zone is eligible and the showcase makes business sense.", "dueAt": "2026-08-28T23:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Augusta Chamber / Augusta Rodeo Weekend",
+    "aliases": ["Augusta Montana Area Chamber", "Augusta Rodeo", "Augusta American Legion Rodeo"],
+    "contacts": [{"id": null, "name": "Augusta Montana Area Chamber", "phone": "", "email": "chamber@augustamontana.com", "role": "Current chamber contact", "primary": true}],
+    "notes": [{"subject": "Newsletter was not a decline", "body": "The unread Augusta message was a chamber newsletter, not a response to a sales proposal. Current research confirms the annual rodeo/community weekend remains active. Identify the best-fitting Augusta event before 2027 outreach."}],
+    "followUps": [{"label": "Choose Augusta 2027 event target", "reason": "Review the chamber's recurring events and contact the best-fitting family event early for 2027.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "North Idaho State Fair",
+    "aliases": ["NISF", "Kootenai County Fair", "North Idaho Fair"],
+    "contacts": [{"id": null, "name": "Evan Underwood", "phone": "208-765-4969", "email": "fair@northidahostatefair.com", "role": "Event & Vendor Manager / fair office", "primary": true}, {"id": null, "name": "Alexcia Jordan", "phone": "", "email": "", "role": "Historical/current fair staff", "primary": false}],
+    "notes": [{"subject": "Auto-reply was not a decision", "body": "The 2025 RMAF out-of-office message was not a substantive response. Current fair information shows active vendor management and 2026 capacity sold out, so the useful action is early 2027 planning rather than treating the old auto-reply as a decline."}],
+    "followUps": [{"label": "Contact North Idaho State Fair early", "reason": "Ask the current event/vendor manager about 2027 entertainment/activation before capacity fills.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Campbell County Fair",
+    "aliases": ["Campbell County Fair Gillette WY"],
+    "contacts": [{"id": null, "name": "Liz Slattery", "phone": "307-687-0200", "email": "Liz.Slattery@campbellcountywy.gov", "role": "Fair Coordinator", "primary": true}],
+    "notes": [{"subject": "Auto-reply superseded by current fair information", "body": "The 2025 RMAF message was only an office-closure auto-reply. Liz Slattery remains the current Fair Coordinator and official 2027 dates are already posted, so continue the relationship for the 2027 planning cycle."}],
+    "followUps": [{"label": "Start Campbell County Fair 2027 cycle", "reason": "Contact Liz/current fair office early for the already-posted 2027 fair cycle.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Latah County Fair",
+    "aliases": ["Latah County Fair Moscow ID"],
+    "contacts": [{"id": null, "name": "Jim Logan", "phone": "208-883-5722", "email": "fair@latahcountyid.gov", "role": "Fair Director", "primary": true}],
+    "notes": [{"subject": "Fresh 2026 outreach supersedes old RMAF auto-reply", "body": "The 2025 RMAF out-of-office reply is historical noise. Amy sent fresh 2026 outreach Aug. 13, and no substantive reply was found. Current official contact is Jim Logan/fair@latahcountyid.gov. One current-year call is justified while the fair is still ahead."}],
+    "followUps": [{"label": "Call Latah County Fair once", "reason": "Ask whether the current carnival arrangement leaves room for a supplemental attraction; log the answer and avoid repeated email blasts.", "dueAt": "2026-08-31T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "King County Fair / Enumclaw Expo",
+    "aliases": ["King County Fair", "Enumclaw Expo", "Enumclaw Expo King County Fair"],
+    "contacts": [{"id": null, "name": "Rene Popke", "phone": "253-405-7179", "email": "renep@enumclawexpo.com", "role": "Current Expo/fair leadership contact", "primary": true}],
+    "notes": [{"subject": "Auto-reply was not a decline", "body": "Rene Popke's 2025 message was only an out-of-office/conference reply. Current research confirms Rene remains a current Expo/fair leadership contact. Verify 2027 dates and process early."}],
+    "followUps": [{"label": "Verify King County Fair 2027 process", "reason": "Ask Rene/current Expo leadership for 2027 dates and entertainment/vendor process well before summer.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Big Sky Country State Fair",
+    "aliases": ["Gallatin County Fairgrounds", "Gallatin County Fair", "Big Sky Country Fair", "406 State Fair"],
+    "contacts": [{"id": null, "name": "Kara Urdahl", "phone": "406-548-8438", "email": "Kara.Urdahl@gallatin.mt.gov", "role": "2027 point of contact", "primary": true}],
+    "notes": [{"subject": "Newest relationship status - 2027 contracted", "body": "Later March 2026 Gmail completely supersedes the unread 2025 fairgrounds auto-reply: signed contract returned, Adventure Zone confirmed it was officially on the calendar, and Kara Urdahl said she is the point of contact for the July 21-25, 2027 fair. Do not create a sales follow-up."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Country Jam Colorado",
+    "aliases": ["Country Jam", "Country Jam Grand Junction"],
+    "contacts": [{"id": null, "name": "Country Jam Guest Services", "phone": "", "email": "info@countryjamco.com", "role": "Current public contact", "primary": true}],
+    "notes": [{"subject": "Event paused - no active sales task", "body": "The old 2024 message was only an automatic acknowledgement. Current research indicates Country Jam Colorado paused for 2026 and no authoritative 2027 return date was found. Keep history but do not schedule sales outreach until an official return is announced."}],
+    "followUps": [],
+    "clearFollowUps": true
+  },
+  {
+    "canonicalName": "Greeley Arts Picnic",
+    "aliases": ["Arts Picnic Greeley", "Greeley Arts Picnic Festival"],
+    "contacts": [{"id": null, "name": "Aaron Mitchell", "phone": "970-381-3278", "email": "Aaron.Mitchell@greeleygov.com", "role": "Current event manager", "primary": true}],
+    "notes": [{"subject": "Contact correction - old reply was positive", "body": "Andrea Haring's old reply was future-looking, not a rejection. Current city information identifies Aaron Mitchell as the event manager. Keep Andrea historical and use the current event/sponsorship contacts for 2027 fit review."}],
+    "followUps": [{"label": "Review Greeley Arts Picnic 2027 fit", "reason": "Use the current event contact and determine whether Adventure Zone fits 2027 planning.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Craft Lake City DIY Festival",
+    "aliases": ["DIY Craft Fest", "Craft Lake City", "DIY Festival Craft Lake City"],
+    "contacts": [{"id": null, "name": "Craft Lake City", "phone": "801-906-8521", "email": "info@craftlakecity.com", "role": "Current organization contact", "primary": true}],
+    "notes": [{"subject": "Contact and positioning correction", "body": "Liz Amato left Craft Lake City and moved out of Utah, so she should remain historical. If Adventure Zone pursues this event, use the current partnership/sponsorship channel rather than a standard artisan exhibitor application."}],
+    "followUps": [{"label": "Verify Craft Lake City partnership fit", "reason": "Confirm the 2027 partnership/sponsorship channel and whether Adventure Zone fits before any outreach.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "canonicalName": "Solitude Summer Fest",
+    "aliases": ["Summer Fest Solitude", "Solitude Mountain Summer Fest"],
+    "notes": [{"subject": "Auto-reply was not a decision", "body": "The prior message was only an automatic acknowledgement. Current research confirms Summer Fest operated in 2026; verify whether it returns in 2027 and identify the current event/marketing contact before pitching."}],
+    "followUps": [{"label": "Verify Solitude Summer Fest 2027", "reason": "Confirm the event returns in 2027 and identify the current decision-maker before outreach.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  }
+]
