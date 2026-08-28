@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Rist Canyon Mountain Festival", "city": "Bellvue", "region": "CO"},
+  "profile": {"placeType": "festival_event", "website": "https://festival.rcvfd.org/", "description": "Active family fundraiser festival for Rist Canyon Volunteer Fire Department, but Adventure Zone has been declined repeatedly because of limited footprint and the event's free kids-area model."},
+  "contacts": [{"id": null, "name": "Debbie Benson", "phone": "", "email": "debandlyle007@gmail.com", "role": "Vendor Chairperson", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Repeated decline - insufficient footprint and free kids area", "body": "Adventure Zone has contacted Rist Canyon Mountain Festival in prior years. Debbie Benson replied Aug. 18, 2026 that the festival again needs to pass because it does not have the available footprint for inflatables and its kids area is intended to remain free. Current official information confirms the Sept. 12, 2026 festival remains an active family event. This is a repeated structural mismatch; do not keep re-pitching unless the venue footprint or kids-area model changes."}],
+  "followUps": []
+}
