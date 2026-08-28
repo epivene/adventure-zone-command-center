@@ -1,12 +1,13 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "event": {"id": null, "name": "CRIT SDP-REC Program", "city": "Parker", "region": "AZ"},
-  "profile": {"placeType": "tribe", "website": "https://www.crit-nsn.gov/", "description": "Colorado River Indian Tribes / SDP-REC contact. Warm prior inquiry from Robin Howard. CRIT remains active in Parker, Arizona."},
-  "contacts": [{"id": null, "name": "Robin Howard", "phone": "", "email": "Robin.Howard@crit-nsn.gov", "role": "SDP-REC contact", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "", "travelLegId": null},
+  "aliases": ["CRIT SDP-REC Program", "CRIT Bounce House Event", "CRIT Recreation Bounce House Event", "SDP-REC Program Bounce House Event"],
+  "event": {"id": null, "name": "CRIT SDP-REC Program Bounce House Event", "city": "Parker", "region": "AZ"},
+  "profile": {"placeType": "tribe", "website": "https://www.crit-nsn.gov/critrecreation/", "description": "Colorado River Indian Tribes Recreation / SDP-REC relationship. Robin Howard made an inbound pricing inquiry in June 2026 and remains listed as Recreation Coordinator."},
+  "contacts": [{"id": null, "name": "Robin Howard", "phone": "928-669-1276", "email": "Robin.Howard@crit-nsn.gov", "role": "Recreation Coordinator / inbound inquiry", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "2026-08-28", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "2026 warm inquiry - pricing question went unanswered", "body": "On June 4, 2026 Robin Howard replied to Adventure Zone outreach about a Parker July 4 celebration and asked for pricing for all units plus setup/breakdown and any other invoice costs. Gmail shows no later reply in that thread. The 2026 opportunity is past, but this should be treated as a warm relationship, not a cold lead. Current web research confirms the Colorado River Indian Tribes remains active in Parker, Arizona."}],
-  "followUps": [{"label": "Reconnect with Robin for 2027 CRIT event", "reason": "Robin asked for full pricing in 2026 and the question appears to have gone unanswered. Reconnect early for the next event cycle and verify current event/date before quoting.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  "notes": [{"subject": "Inbound pricing inquiry requires history check", "body": "On June 4, 2026 Robin Howard asked for pricing for all units, setup/breakdown and any other invoice costs. Current CRIT Recreation information still identifies Robin as Coordinator. Before replying, check whether a later ACT/phone interaction already resolved the inquiry; if none exists, treat this as an unanswered inbound buying inquiry rather than cold outreach."}],
+  "followUps": [{"label": "Resolve CRIT pricing inquiry", "reason": "Check later phone/ACT history after June 4 first. If nobody answered Robin, respond with current package pricing and legitimate setup/tear-down costs and verify the event date/logistics.", "dueAt": "2026-08-28T23:00:00.000Z"}]
 }
