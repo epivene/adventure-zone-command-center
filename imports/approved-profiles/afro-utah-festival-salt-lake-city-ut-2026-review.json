@@ -1,0 +1,49 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Afro Utah Festival",
+    "city": "Salt Lake City",
+    "region": "UT"
+  },
+  "profile": {
+    "description": "Returning relationship requiring human approval before new outreach. Current official 2026 event is Saturday, Sept. 5, 2026 at the Salt Lake City Public Library, free and family-friendly. Adventure Zone had a 2024 contract and extensive site-planning relationship with Gloria Mensah/GK Folks Foundation, but Amy's Sept. 25, 2025 email states Adventure Zone was unable to participate in 2024 due to a breach of contract involving safety requirements. Amy invited Gloria to try again for 2026, but no later reply was found in Gmail. Do not send routine outreach until Dave/Amy/Desiree reviews the 2024 breach history and explicitly approves re-engagement.",
+    "phone": "808-237-0543",
+    "website": "https://afroutah.org/"
+  },
+  "contacts": [
+    {
+      "name": "Gloria Mensah",
+      "email": "gloria.mensah@gkfolks.org",
+      "phone": "808-237-0543",
+      "role": "GK Folks Foundation / Afro Utah Festival",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Afro Utah Festival - 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-05",
+    "endsAt": "2026-09-05",
+    "nextActionKind": "review",
+    "nextActionDueAt": "2026-08-28",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Important relationship history — 2024 safety-contract breach; 2026 requires approval",
+      "body": "Adventure Zone had a substantial 2024 relationship with Gloria Mensah: site/layout discussions, contract exchange, calendar placement and day-of-event coordination. However, Amy's Sept. 25, 2025 email to Gloria says Adventure Zone ultimately did not participate in the 2024 Afro Utah Festival due to a breach of contract with the safety requirements, and asked whether they wanted to try again in 2026. No response to that 2025 outreach is present in Gmail. Current official 2026 event is Sept. 5, 2026 at the Salt Lake City Public Library and is family-friendly. Because of the prior safety/contract issue, do not treat this as a routine returning-booking follow-up and do not send outreach without human review/approval."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Afro Utah — review 2024 safety-contract issue before any 2026 contact",
+      "reason": "Current event is Sept. 5, 2026 and we have a strong prior relationship, but Amy documented that the 2024 booking failed because of a safety-requirements contract breach. Review what happened and get explicit approval before contacting Gloria again.",
+      "dueAt": "2026-08-28T16:00:00.000Z"
+    }
+  ]
+}
