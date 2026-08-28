@@ -1,0 +1,51 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Bear Lake Fall Market Days",
+    "city": "Garden City",
+    "region": "UT"
+  },
+  "profile": {
+    "description": "Adventure Zone previously emailed Bear Lake Fall Market Days in January 2024 using bluewaterbistrobakery@gmail.com and teacupsteasandthings@yahoo.com. A current 2026 event edition, organizer, date, and current contact could not be reliably verified from public sources during the 2026 review. Do not send new outreach to the old 2024 addresses without first verifying the event is still active and who currently runs it.",
+    "placeType": "festival_event"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Blue Water Bistro/Bakery",
+      "phone": "",
+      "email": "bluewaterbistrobakery@gmail.com",
+      "role": "Historical 2024 event contact",
+      "primary": false
+    },
+    {
+      "id": null,
+      "name": "Tea Cups Teas & Things",
+      "phone": "",
+      "email": "teacupsteasandthings@yahoo.com",
+      "role": "Historical 2024 event contact",
+      "primary": false
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "researching",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 review — prior outreach found, current event unverified",
+      "body": "Gmail shows Amy emailed Bear Lake Fall Market Days on Jan. 4, 2024 to bluewaterbistrobakery@gmail.com and teacupsteasandthings@yahoo.com. No reliable current 2026 event page, date, or organizer/contact trail was verified in this review. Avoid duplicate or stale outreach. Revisit only if a current event edition or organizer is confirmed."
+    }
+  ],
+  "followUps": []
+}
