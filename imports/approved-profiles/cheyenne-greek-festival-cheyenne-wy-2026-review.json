@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Greek Festival", "city": "Cheyenne", "region": "WY"},
+  "profile": {"placeType": "festival_event", "description": "Cheyenne Greek Festival is confirmed for Sept. 18-19, 2026. Adventure Zone emailed the event in 2023 and 2024 with no reply found. The event is a broad community cultural festival at Frontier Park and can be a reasonable inflatable-carnival prospect, but its 2026 dates overlap the current Pirate Fest placeholder."},
+  "contacts": [{"id": null, "name": "Cheyenne Greek Festival Team", "phone": "", "email": "rachelh@familypromiseofcheyenne.org", "role": "Historical event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "2026-09-18", "endsAt": "2026-09-19", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — backup to Pirate Fest", "body": "Official festival information confirms Sept. 18-19, 2026 at Frontier Park in Cheyenne. Gmail history shows Adventure Zone outreach in 2023 and 2024 with no reply found, so any new message should be a natural check-back rather than a cold introduction. The festival is a reasonable community/family audience, but the dates overlap the current Pirate Fest placeholder. Do not promise 2026 availability while Pirate Fest is unresolved. If Pirate Fest falls through, Cheyenne can be worked quickly as a backup; otherwise consider a future-year follow-up."}],
+  "followUps": []
+}
