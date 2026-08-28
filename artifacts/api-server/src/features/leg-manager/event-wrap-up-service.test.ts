@@ -94,10 +94,33 @@ describe("EventWrapUpService", () => {
     await expect(service.saveManagerDraft({ bookingId: "booking-b", managerLegId: "leg-a", managerId: null, input: draft })).rejects.toThrow(/outside your leg/i);
   });
 
-  it("allows incomplete draft settlement but requires actual cash before submit", async () => {
+  it("allows a manager report to submit while office cash closeout is still incomplete", async () => {
     const service = new EventWrapUpService(fakeStore(), fakeSource());
     await service.saveManagerDraft({ bookingId: "booking-a", managerLegId: "leg-a", managerId: null, input: { ...draft, actualCashOnHandCents: null } });
-    await expect(service.submitManagerWrapUp({ bookingId: "booking-a", managerLegId: "leg-a", managerId: null })).rejects.toThrow(/actual cash/i);
+    await expect(service.submitManagerWrapUp({ bookingId: "booking-a", managerLegId: "leg-a", managerId: null })).resolves.toMatchObject({ status: "submitted", actualCashOnHandCents: null });
+  });
+
+  it("requeues an admin-reviewed event when the manager later adds information", async () => {
+    const store = fakeStore(); const service = new EventWrapUpService(store, fakeSource());
+    await service.saveManagerDraft({ bookingId: "booking-a", managerLegId: "leg-a", managerId: "manager-a", input: draft });
+    await service.submitManagerWrapUp({ bookingId: "booking-a", managerLegId: "leg-a", managerId: "manager-a" });
+    await service.reviewAdminWrapUp("booking-a", "owner");
+
+    const updated = await service.saveManagerDraft({
+      bookingId: "booking-a",
+      managerLegId: "leg-a",
+      managerId: "manager-a",
+      input: { ...draft, ratingNotes: "Use the east gate next year" },
+    });
+
+    expect(updated.status).toBe("submitted");
+    expect(updated.ratingNotes).toBe("Use the east gate next year");
+    expect(store.audit).toEqual([
+      "submitted:booking-a",
+      "reviewed:booking-a",
+      "reopened:booking-a:manager-a",
+      "submitted:booking-a",
+    ]);
   });
 
   it("moves submitted to reviewed and allows admin reopen while preserving audit", async () => {
