@@ -17,3 +17,20 @@ CREATE UNIQUE INDEX IF NOT EXISTS booking_leg_assignments_booking_unique
   ON booking_leg_assignments(booking_id);
 CREATE INDEX IF NOT EXISTS booking_leg_assignments_suggested_leg_idx
   ON booking_leg_assignments(suggested_leg_id);
+
+CREATE TABLE IF NOT EXISTS booking_operational_windows (
+  booking_id uuid PRIMARY KEY REFERENCES bookings(id) ON DELETE CASCADE,
+  starts_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL,
+  source text NOT NULL DEFAULT 'app' CHECK (source IN ('app','google_calendar','manual')),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (ends_at >= starts_at)
+);
+CREATE INDEX IF NOT EXISTS booking_operational_windows_starts_ends_idx
+  ON booking_operational_windows(starts_at, ends_at);
+
+INSERT INTO booking_operational_windows (booking_id, starts_at, ends_at, source)
+SELECT id, starts_at, ends_at, 'app'
+FROM bookings
+WHERE starts_at IS NOT NULL AND ends_at IS NOT NULL
+ON CONFLICT (booking_id) DO NOTHING;
