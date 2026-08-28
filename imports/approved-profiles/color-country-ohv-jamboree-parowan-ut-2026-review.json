@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Color Country OHV Jamboree", "city": "Parowan", "region": "UT"},
+  "profile": {"placeType": "festival_event", "description": "2026 Color Country OHV Jamboree is confirmed for Sept. 25-28 in Parowan/Iron County. Adventure Zone emailed the event in 2024. Operational fit is weak because participants spend much of each day away on organized OHV rides; gathering time is concentrated around meals, parade, raffles and evening activities."},
+  "contacts": [{"id": null, "name": "Iron County Fair", "phone": "435-477-8380", "email": "fair@ironcounty.net", "role": "Historical event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "2026-09-25", "endsAt": "2026-09-28", "nextActionKind": "", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 review — weak audience-flow fit", "body": "Iron County public meeting material confirms the 2026 Color Country OHV Jamboree for Sept. 25-28. Gmail shows Adventure Zone outreach in Jan. 2024. Typical event programming is built around early-morning/day OHV rides, night rides, parade, banquet/BBQ and raffles, meaning attendees are away from the grounds for large portions of the operating day. Do not prioritize a full staffed inflatable carnival unless organizers identify a separate public/family component with sustained foot traffic."}],
+  "followUps": []
+}
