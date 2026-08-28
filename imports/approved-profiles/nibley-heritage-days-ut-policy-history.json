@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Nibley Heritage Days", "city": "Nibley", "region": "UT"},
+  "profile": {"placeType": "city_government", "website": "https://nibleycity.gov/", "description": "Active Nibley City community celebration, but the city has stated its insurance policy does not allow bounce houses at its parks."},
+  "contacts": [{"id": null, "name": "Nibley City Events", "phone": "", "email": "", "role": "City event organizer", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "City insurance policy prohibits bounce houses", "body": "Ali replied June 5, 2024 that Nibley Heritage Days could not host Adventure Zone because the city's insurance policy does not allow bounce houses in any fashion at city parks. Current Nibley City information confirms Heritage Days remains an active annual event. This is a structural restriction, not a routine annual decline. Do not repeatedly pursue unless the city policy changes or the event moves to a venue where inflatables are allowed."}],
+  "followUps": []
+}
