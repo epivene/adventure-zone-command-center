@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "WYO-131 Biketoberfest Gravel Race", "city": "Lander", "region": "WY"},
+  "profile": {"placeType": "festival_event", "website": "https://www.wyo131.com/", "description": "Active Sept. 12, 2026 gravel race plus free community Biketoberfest with family activities and a kids race. Organizer liked the concept but said the event budget is tight."},
+  "contacts": [{"id": null, "name": "Nicki Simon", "phone": "775-901-6917", "email": "wyo131gravel@landercycling.org", "role": "Race Director", "primary": true}],
+  "booking": {"enabled": true, "name": "WYO-131 Biketoberfest - 2026", "status": "declined", "startsAt": "2026-09-12", "endsAt": "2026-09-12", "nextActionKind": "review", "nextActionDueAt": "2027-02-01", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "2026 budget objection - event remains active and family-oriented", "body": "Nicki Simon replied Aug. 18, 2026 that Adventure Zone sounded very fun but the budget was pretty tight. Current official event information confirms WYO-131/Biketoberfest is active Sept. 12, 2026 with a free community celebration, a kids race, music, food, games and activities. Treat this as a budget objection, not a permanent rejection. If revisited, first decide whether pay-for-play or a smaller commercial structure could reasonably fit rather than repeating a prepaid quote."}],
+  "followUps": [{"label": "Review 2027 WYO-131 Biketoberfest fit", "reason": "2026 was a budget decline, while the community festival remains family-friendly. Check the next event's budget/footprint and whether pay-for-play is realistic before contacting Nicki again.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+}
