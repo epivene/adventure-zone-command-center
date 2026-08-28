@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Northwest Montana Fair & Rodeo", "city": "Kalispell", "region": "MT"},
+  "profile": {"placeType": "fair", "phone": "406-758-5810", "website": "https://www.nwmtfair.com/", "description": "Active Flathead County fair and rodeo. Organizer explicitly invited Adventure Zone to look at the following year, with insurance questions to resolve."},
+  "contacts": [{"id": null, "name": "Sam Nunnally", "phone": "406-758-5808", "email": "snunnally@flatheadcounty.gov", "role": "Manager", "primary": true}],
+  "booking": {"enabled": true, "name": "Northwest Montana Fair & Rodeo - 2026", "status": "declined", "startsAt": "2026-08-12", "endsAt": "2026-08-16", "nextActionKind": "renewal", "nextActionDueAt": "2026-11-15", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Explicit invitation to discuss next year", "body": "Sam Nunnally replied Aug. 5, 2026 that Adventure Zone was too late for the 2026 fair but they could certainly look at next year, noting that there would be significant insurance questions to work through for inflatables. Current official fair site confirms Sam remains the manager. This should be treated as a warm 2027 opportunity, not a decline to file away."}],
+  "followUps": [{"label": "Start 2027 Northwest Montana Fair conversation", "reason": "Sam explicitly invited a next-year discussion. Start early enough to address insurance requirements before entertainment plans are finalized.", "dueAt": "2026-11-15T16:00:00.000Z"}]
+}
