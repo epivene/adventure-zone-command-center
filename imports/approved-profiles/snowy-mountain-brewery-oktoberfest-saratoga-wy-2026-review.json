@@ -1,5 +1,5 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -8,28 +8,34 @@
     "region": "WY"
   },
   "profile": {
-    "description": "2026 review completed. Adventure Zone previously emailed this event in 2023 and 2024. The current official Saratoga Hot Springs Resort listing confirms Oktoberfest on Sept. 26, 2026 from noon-3 PM in the Biergarten and states the event is 21 and over. This is not an appropriate routine Adventure Zone inflatable-carnival prospect.",
+    "description": "2026 review corrected: adult/21+ events are valid Adventure Zone prospects and must not be rejected solely because of age restriction or alcohol service. Adventure Zone previously emailed this event in 2023 and 2024. The current official Saratoga Hot Springs Resort listing confirms Oktoberfest on Sept. 26, 2026 from noon-3 PM in the Biergarten. Warrior's Playground may be the strongest adult-oriented angle; evaluate available space, event hours, route economics and package availability before outreach.",
     "phone": "307-326-5261",
     "website": "https://saratogahotspringsresort.com/2026/08/golf-in-the-morning-bavaria-in-the-afternoon-oktoberfest-2026-at-saratoga-hot-springs-resort/"
   },
   "contacts": [],
   "booking": {
-    "enabled": false,
-    "name": "",
-    "status": "declined",
-    "startsAt": "",
-    "endsAt": "",
-    "nextActionKind": "",
-    "nextActionDueAt": "",
+    "enabled": true,
+    "name": "Snowy Mountain Brewery Oktoberfest 2026",
+    "status": "new_lead",
+    "startsAt": "2026-09-26",
+    "endsAt": "2026-09-26",
+    "nextActionKind": "review",
+    "nextActionDueAt": "2026-09-01",
     "travelLegId": null
   },
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2026 review — non-fit: 21+ Oktoberfest",
-      "body": "Current official 2026 event information confirms Snowy Mountain Brewery Oktoberfest at Saratoga Hot Springs Resort is Sept. 26, 2026, noon-3 PM, and explicitly 21+. Adventure Zone previously emailed the resort about this event in 2023 and 2024 without a meaningful reply. Do not create routine inflatable-carnival outreach or follow-up for this event."
+      "subject": "Correction — adult/21+ is not a non-fit reason",
+      "body": "Do not reject this event because it is 21+ or beer-focused. Adventure Zone can work adult events. For this event, assess Warrior's Playground and other competitive/adrenaline attractions first, then check footprint, operating window, route economics and availability. Prior 2023-2024 outreach remains relevant history."
     }
   ],
-  "followUps": []
+  "followUps": [
+    {
+      "label": "Review adult-event fit — Snowy Mountain Oktoberfest",
+      "reason": "Adult/21+ events are eligible. Check Warrior's Playground fit, space, route economics and package availability before deciding on history-aware outreach.",
+      "dueAt": "2026-09-01T15:00:00.000Z"
+    }
+  ]
 }
