@@ -32,6 +32,22 @@ function hasRouteWarning(item: { operations?: { warnings?: Array<{ kind: string;
   return item.operations?.warnings?.find((warning) => warning.kind === "route") ?? null;
 }
 
+export function dedupeFollowUpsByBooking(items: FollowUpSummary[]): FollowUpSummary[] {
+  const seenBookingIds = new Set<string>();
+  const sorted = [...items].sort((left, right) =>
+    left.dueAt.getTime() - right.dueAt.getTime() ||
+    left.createdAt.getTime() - right.createdAt.getTime() ||
+    left.id.localeCompare(right.id),
+  );
+
+  return sorted.filter((item) => {
+    if (!item.bookingId) return true;
+    if (seenBookingIds.has(item.bookingId)) return false;
+    seenBookingIds.add(item.bookingId);
+    return true;
+  });
+}
+
 export function explainFollowUpAction(
   item: FollowUpSummary,
   now: Date,
@@ -134,12 +150,15 @@ export function withBookingCopilotMetadata(
   dashboard: TodayDashboard,
   now: Date,
 ): TodayDashboardWithCopilot {
+  const followUps = dedupeFollowUpsByBooking(dashboard.followUps);
   return {
     ...dashboard,
+    followUpCount: followUps.length,
+    followUpTotal: followUps.length,
     nextCall: dashboard.nextCall
       ? { ...dashboard.nextCall, copilot: explainFollowUpAction(dashboard.nextCall, now) }
       : null,
-    followUps: dashboard.followUps.map((item) => ({
+    followUps: followUps.map((item) => ({
       ...item,
       copilot: explainFollowUpAction(item, now),
     })),
