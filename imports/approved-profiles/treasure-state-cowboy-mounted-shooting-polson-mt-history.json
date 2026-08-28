@@ -1,0 +1,12 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Treasure State Cowboy Mounted Shooting", "city": "Polson", "region": "MT"},
+  "profile": {"placeType": "festival_event", "website": "https://www.polsonfairgroundsinc.com/events/", "description": "Active mounted-shooting competition at Polson Fairgrounds, but the organizer says spectator traffic is too small to make Adventure Zone worthwhile."},
+  "contacts": [{"id": null, "name": "Rick Farnsworth", "phone": "406-539-9718", "email": "", "role": "Event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Low spectator volume makes event a poor fit", "body": "Rick Farnsworth replied Aug. 5, 2026 that they would not have much for spectators or a crowd and he did not think Adventure Zone would be worthwhile. Current Polson Fairgrounds and CMSA listings confirm the event is real and active Sept. 10-13, 2026. The issue is event economics/attendance rather than contact failure. Do not routinely re-pursue unless the event grows or its public-attendance format changes."}],
+  "followUps": []
+}
