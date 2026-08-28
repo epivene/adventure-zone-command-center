@@ -1,31 +1,12 @@
 {
-  "importRevision": 1,
-  "event": {
-    "id": null,
-    "name": "Idaho Falls YMCA Fall Family Festival",
-    "city": "Idaho Falls",
-    "region": "ID"
-  },
-  "profile": {
-    "placeType": "festival_event",
-    "description": "2026 outreach prospect for Hulk's late-season route. Idaho Falls Family YMCA Fall Family Festival is Saturday, September 12, 2026 from 9:00 AM-2:00 PM at Broadway Plaza on Memorial Drive, alongside the Idaho Falls Farmers Market. Official YMCA contact page provides a web contact form and main phone 208-523-0600; no direct event email was verified. Intended outreach angle is a small pay-for-play inflatable family area if the event permits it.",
-    "phone": "208-523-0600",
-    "website": "https://idahofallsymca.org/fall-family-festival-idaho-falls/",
-    "address1": "Broadway Plaza on Memorial Drive",
-    "address2": "",
-    "postalCode": ""
-  },
-  "contacts": [],
-  "booking": {
-    "enabled": true,
-    "name": "Idaho Falls YMCA Fall Family Festival - 2026",
-    "status": "new_lead",
-    "startsAt": "2026-09-12",
-    "endsAt": "2026-09-12",
-    "nextActionKind": "web",
-    "nextActionDueAt": "2026-08-26",
-    "travelLegId": null
-  },
+  "importRevision": 2,
+  "matchExisting": true,
+  "event": {"id": null, "name": "Idaho Falls YMCA Fall Family Festival", "city": "Idaho Falls", "region": "ID"},
+  "profile": {"placeType": "festival_event", "description": "2026 post-Labor-Day prospect. Fall Family Festival is Saturday Sept. 12, 2026, 9 AM-2 PM at Broadway Plaza on Memorial Drive alongside the Idaho Falls Farmers Market. Audience fit is excellent for Adventure Zone, but physical/operating fit is uncertain because it is a five-hour downtown plaza event; verify available footprint before offering a full package. No current inflatable provider is advertised on the official event page.", "phone": "208-523-0600", "website": "https://idahofallsymca.org/fall-family-festival-idaho-falls/", "address1": "Broadway Plaza on Memorial Drive", "address2": "", "postalCode": ""},
+  "contacts": [{"id": null, "name": "Donovan Stokes", "phone": "208-523-0600", "email": "dstokes@idahofallsymca.org", "role": "Program & Fundraising Director", "primary": true}],
+  "booking": {"enabled": true, "name": "Idaho Falls YMCA Fall Family Festival - 2026", "status": "contacted", "startsAt": "2026-09-12", "endsAt": "2026-09-12", "nextActionKind": "call", "nextActionDueAt": "2026-08-31", "travelLegId": null},
   "familyId": null,
-  "parentOrganizationId": null
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Aug. 27 outreach sent / footprint needs verification", "body": "Desiree sent personalized outreach to Donovan Stokes at dstokes@idahofallsymca.org on Aug. 27, 2026. Current official YMCA leadership information verifies Donovan as Program & Fundraising Director. Official event details confirm Sept. 12, 9 AM-2 PM at Broadway Plaza with family activities and community vendors. This is a strong audience fit but a questionable full-carnival footprint because the event is downtown and only five hours; if Donovan is interested, first verify available square footage, setup access and operating expectations before promising a package."}],
+  "followUps": [{"label": "Check Idaho Falls YMCA response / space", "reason": "Email was sent Aug. 27. If Donovan has not replied by Aug. 31, call the YMCA. If interested, verify the actual Broadway Plaza footprint before discussing package commitment. Do not send another generic email now.", "dueAt": "2026-08-31T18:00:00.000Z"}]
 }
