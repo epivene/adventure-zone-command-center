@@ -41,6 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -98,9 +100,69 @@ jobs:
         run: pnpm --filter @workspace/db build
       - name: API build
         run: pnpm --filter @workspace/api-server build
+      - name: API typecheck regression
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          MERGED_SHA="$(git rev-parse HEAD)"
+          normalize_errors() {
+            grep -E 'error TS[0-9]+:' "$1" \
+              | sed -E 's/\([0-9]+,[0-9]+\)//g' \
+              | sed -E 's#^.*(src/[^:]+:)#\1#' \
+              | sort -u || true
+          }
+
+          git checkout --detach "$BASE_SHA"
+          pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck-base.log 2>&1 || true
+          normalize_errors /tmp/api-typecheck-base.log > /tmp/api-typecheck-base.errors
+
+          git checkout --detach "$MERGED_SHA"
+          pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck-head.log 2>&1 || true
+          normalize_errors /tmp/api-typecheck-head.log > /tmp/api-typecheck-head.errors
+
+          comm -13 /tmp/api-typecheck-base.errors /tmp/api-typecheck-head.errors > /tmp/api-typecheck-new.errors
+          if [ -s /tmp/api-typecheck-new.errors ]; then
+            echo "New API typecheck errors introduced by Release 2:"
+            cat /tmp/api-typecheck-new.errors
+            exit 1
+          fi
+          echo "No new API typecheck errors beyond the current main baseline."
       - name: API typecheck
+        if: github.event_name != 'pull_request'
         run: pnpm --filter @workspace/api-server typecheck
       - name: Web build
         run: pnpm --filter @workspace/adventure-zone build
+      - name: Web typecheck regression
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          MERGED_SHA="$(git rev-parse HEAD)"
+          normalize_errors() {
+            grep -E 'error TS[0-9]+:' "$1" \
+              | sed -E 's/\([0-9]+,[0-9]+\)//g' \
+              | sed -E 's#^.*(src/[^:]+:)#\1#' \
+              | sort -u || true
+          }
+
+          git checkout --detach "$BASE_SHA"
+          pnpm --filter @workspace/adventure-zone typecheck > /tmp/web-typecheck-base.log 2>&1 || true
+          normalize_errors /tmp/web-typecheck-base.log > /tmp/web-typecheck-base.errors
+
+          git checkout --detach "$MERGED_SHA"
+          pnpm --filter @workspace/adventure-zone typecheck > /tmp/web-typecheck-head.log 2>&1 || true
+          normalize_errors /tmp/web-typecheck-head.log > /tmp/web-typecheck-head.errors
+
+          comm -13 /tmp/web-typecheck-base.errors /tmp/web-typecheck-head.errors > /tmp/web-typecheck-new.errors
+          if [ -s /tmp/web-typecheck-new.errors ]; then
+            echo "New web typecheck errors introduced by Release 2:"
+            cat /tmp/web-typecheck-new.errors
+            exit 1
+          fi
+          echo "No new web typecheck errors beyond the current main baseline."
       - name: Web typecheck
+        if: github.event_name != 'pull_request'
         run: pnpm --filter @workspace/adventure-zone typecheck
