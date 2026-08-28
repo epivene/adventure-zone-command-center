@@ -1,0 +1,53 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Robin Hood Renaissance Faire",
+    "city": "Elko",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Family-friendly Robin Hood Renaissance Faire hosted by the Rotary Club of Elko at Lamoille Grove Park. Susan Goddard of Lamoille Country Fair referred The Adventure Zone to the local Renaissance Fair in May 2026. The 2026 faire is Aug. 29-30, 2026; marketplace entries are already closed and the event is effectively too late for routine 2026 outreach. Current organizer: Rotary Club of Elko. Public club contact: rylaelko@gmail.com. The faire includes archery, axe throwing, quests/treasure hunt, costume contests, games, live music, food vendors, demonstrations and a medieval marketplace. Treat as a separate organizer from Everything Elko Pumpkin Festival, Elko County Art Club, Rides & Rods, Gold Rush Challenge, Elko County Fair and Lamoille Country Fair. No prior direct Adventure Zone Gmail history to the Rotary Club of Elko / Robin Hood Renaissance Faire was found as of Aug. 27, 2026.",
+    "phone": "",
+    "website": "https://nvrenfaire.com/",
+    "address1": "Lamoille Grove Park",
+    "postalCode": ""
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Rotary Club of Elko",
+      "phone": "",
+      "email": "rylaelko@gmail.com",
+      "role": "Organizer / Robin Hood Renaissance Faire",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "new_lead",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Susan Goddard referral / duplicate-contact check",
+      "body": "On May 17, 2026, Susan Goddard at Lamoille Country Fair referred The Adventure Zone to several other Elko-area events, including the local Renaissance Fair. Duplicate-contact review on Aug. 27, 2026 confirmed Robin Hood Renaissance Faire is hosted by Rotary Club of Elko and is not the same organizer/contact as Susan/Lamoille, Everything Elko, Elko County Art Club, Rides & Rods, Gold Rush Challenge, or Elko County Fair. Adventure Zone Gmail contains no prior direct outreach to the current Rotary/Robin Hood Renaissance Faire contact. The 2026 event is Aug. 29-30 and marketplace entries are already closed, so do not force last-minute 2026 outreach."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Robin Hood Renaissance Faire — 2027 early outreach",
+      "reason": "Susan Goddard specifically referred this family-friendly Elko-area event. Contact Rotary early for 2027 before marketplace/entertainment plans close; position Adventure Zone as an entertainment partnership/full staffed inflatable carnival rather than a marketplace vendor or sponsorship purchase.",
+      "dueAt": "2027-01-04T16:15:00.000Z"
+    }
+  ]
+}
