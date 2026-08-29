@@ -93,7 +93,8 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
 
     return records.map(({ booking, travelLeg }) => {
       const assignment = assignmentByBooking.get(booking.id) ?? null;
-      const canProjectSuggestion = booking.status !== "confirmed" && booking.status !== "completed";
+      const routeBucket = classifyRouteBucket(booking.status, booking.probability);
+      const canProjectSuggestion = routeBucket === "potential";
       const suggestedLeg = canProjectSuggestion && assignment?.suggestedLegId
         ? legById.get(assignment.suggestedLegId) ?? null
         : null;
@@ -137,7 +138,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
         legAssignmentExplanation: assignment?.explanation ?? null,
         startsAt: booking.startsAt,
         endsAt: booking.endsAt,
-        routeBucket: classifyRouteBucket(booking.status),
+        routeBucket,
         locationQuality,
         locationLabel,
         seasonYear: booking.startsAt ? Number(businessDateKey(booking.startsAt).slice(0, 4)) : null,

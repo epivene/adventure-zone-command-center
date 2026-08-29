@@ -13,6 +13,7 @@ import { ManagerRouteReviewQueue } from "@/components/routes/manager-route-revie
 import { updateTravelLegAction, reorderTravelLegsAction, addTravelLegAction, archiveTravelLegAction, restoreTravelLegAction } from "@/actions/routes";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
+import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 
 export type RouteScheduleFilters = { season?: string; legId?: string; status?: string; embedded?: boolean; managementOnly?: boolean };
 
@@ -74,7 +75,12 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
   const activeLegs = data?.travelLegs?.filter((leg: any) => !leg.archivedAt) ?? [];
   const filteredEvents = useMemo(() => (data?.events ?? []).filter((event: any) => {
     if (legId && event.travelLegId !== legId) return false;
-    if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
+    if (status && status !== "all") {
+      const matchesStatus = status.toLowerCase() === "confirmed"
+        ? isBookedForSchedule(event)
+        : String(event.status ?? "").toLowerCase() === status.toLowerCase();
+      if (!matchesStatus) return false;
+    }
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
   }), [data?.events, legId, status, season]);

@@ -1,4 +1,5 @@
 import type { BookingStatus } from "@/features/bookings/booking-types";
+import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 
 export type RouteViewMode = "full" | "confirmed" | "potential" | "history";
 export type RouteBucket = "confirmed" | "potential" | "history" | "excluded";
@@ -11,8 +12,8 @@ const historyStatuses = new Set<BookingStatus>([
   "renewal_due",
 ]);
 
-export function classifyRouteBucket(status: BookingStatus): RouteBucket {
-  if (status === "confirmed") return "confirmed";
+export function classifyRouteBucket(status: BookingStatus, probability?: string | null): RouteBucket {
+  if (isBookedForSchedule({ status, probability })) return "confirmed";
   if (historyStatuses.has(status)) return "history";
   return "potential";
 }

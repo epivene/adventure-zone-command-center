@@ -144,14 +144,14 @@ function EventList({
                 </div>
                 <span
                   className={
-                    event.status === "confirmed"
+                    event.routeBucket === "confirmed"
                       ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800"
                       : event.routeBucket === "history"
                         ? "rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
                         : "rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800"
                   }
                 >
-                  {event.status === "confirmed" ? "Confirmed" : formatLabel(event.status)}
+                  {event.routeBucket === "confirmed" ? "Confirmed" : formatLabel(event.status)}
                 </span>
               </div>
             </li>
@@ -241,7 +241,7 @@ export function EventMap({
     for (const event of filteredEvents) {
       if (!event.travelLegId) continue;
       if (eventSeasonYear(event) !== seasonYear) continue;
-      const bucket = event.routeBucket ?? classifyRouteBucket(event.status);
+      const bucket = event.routeBucket ?? classifyRouteBucket(event.status, event.probability);
       const emphasis = routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId });
       if (emphasis === "hidden") continue;
       result.push({

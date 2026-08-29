@@ -105,6 +105,9 @@ export class OperationalCalendarSyncService {
   async syncConfirmedBooking(bookingId: string): Promise<OperationalCalendarSyncResult> {
     const projection = await this.projections.loadConfirmedBooking(bookingId);
     if (!projection) return this.syncPreviouslyLinkedNonConfirmedBooking(bookingId);
+    await this.projections.saveOperationalWindow({
+      bookingId, startsAt: projection.reservedStart, endsAt: projection.reservedEnd, source: "app",
+    });
     const connection = await this.connections.createOperationalCalendarClient();
     if (!connection) return { state: "not_connected" };
 
@@ -154,9 +157,6 @@ export class OperationalCalendarSyncService {
       }
     }
 
-    await this.projections.saveOperationalWindow({
-      bookingId, startsAt: projection.reservedStart, endsAt: projection.reservedEnd, source: "app",
-    });
     return reviewCount
       ? { state: "review_required", created, updated, reviewCount }
       : { state: "synced", created, updated };

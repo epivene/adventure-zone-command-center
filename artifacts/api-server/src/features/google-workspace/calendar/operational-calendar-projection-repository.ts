@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import type { ConfirmedBookingProjection } from "./operational-calendar-renderer";
 import type { OperationalCalendarPackageKey } from "@workspace/db/operational-calendar-schema";
+import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 
 type DrizzleDatabase = typeof database;
 
@@ -79,7 +80,13 @@ export class OperationalCalendarProjectionRepository {
       .leftJoin(bookingOperationalWindows, eq(bookings.id, bookingOperationalWindows.bookingId))
       .where(eq(bookings.id, bookingId)).limit(1);
 
-    if (!row || row.booking.status !== "confirmed" || !row.booking.startsAt || !row.booking.endsAt || !row.leg) return null;
+    if (
+      !row
+      || !isBookedForSchedule(row.booking)
+      || !row.booking.startsAt
+      || !row.booking.endsAt
+      || !row.leg
+    ) return null;
 
     const packageRows = await this.db.select({ code: packageTemplates.code, name: packageTemplates.name })
       .from(bookingPackageSelections)

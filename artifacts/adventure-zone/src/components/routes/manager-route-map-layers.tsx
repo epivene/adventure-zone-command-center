@@ -28,7 +28,7 @@ function escapeHtml(value: string) {
 
 function eventIcon(event: RenderEvent, focused: boolean) {
   const color = event.travelLegColor || "#64748b";
-  const isPotential = event.status !== "confirmed";
+  const isPotential = event.routeBucket !== "confirmed";
   const isDimmed = isPotential || event.planningEmphasis === "dimmed";
   const classes = ["az-route-pin", focused ? "az-route-pin--focused" : "", event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : ""]
     .filter(Boolean)

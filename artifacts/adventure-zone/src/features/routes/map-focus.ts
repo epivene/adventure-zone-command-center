@@ -17,7 +17,7 @@ export function primaryViewportEvents(
 ) {
   return events.filter((event) => {
     if (!hasCoordinates(event)) return false;
-    const bucket = event.routeBucket ?? classifyRouteBucket(event.status);
+    const bucket = event.routeBucket ?? classifyRouteBucket(event.status, event.probability);
     return routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId }) === "primary";
   });
 }

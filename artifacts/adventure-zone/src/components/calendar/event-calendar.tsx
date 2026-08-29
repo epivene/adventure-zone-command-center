@@ -11,7 +11,7 @@ import {
   DEFAULT_SCHEDULE_DISPLAY_COLORS,
   type ScheduleDisplayColors,
 } from "@/features/calendar/calendar-visual-blocks";
-import { futureCalendarEvents } from "@/features/calendar/upcoming-events";
+import { calendarEventPublicStart, futureCalendarEvents } from "@/features/calendar/upcoming-events";
 import { BUSINESS_TIME_ZONE, businessDateKey } from "@/lib/business-date";
 
 export type ActCalendarActivity = {
@@ -285,7 +285,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   const upcomingGroups = useMemo(() => {
     const groups = new Map<string, typeof upcomingEvents>();
     for (const event of upcomingEvents) {
-      const key = businessDateKey(event.startsAt);
+      const key = businessDateKey(calendarEventPublicStart(event));
       groups.set(key, [...(groups.get(key) ?? []), event]);
     }
     return [...groups.entries()];

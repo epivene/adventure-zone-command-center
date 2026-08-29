@@ -151,7 +151,12 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
 
   const scopedEvents = useMemo(() => (events as any[]).filter((event) => {
     if (legId && event.travelLegId !== legId) return false;
-    if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
+    if (status && status !== "all") {
+      const matchesStatus = status.toLowerCase() === "confirmed"
+        ? isBookedForSchedule(event)
+        : String(event.status ?? "").toLowerCase() === status.toLowerCase();
+      if (!matchesStatus) return false;
+    }
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
   }) as CalendarEvent[], [events, legId, status, season]);
