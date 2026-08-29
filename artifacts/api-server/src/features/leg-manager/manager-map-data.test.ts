@@ -35,6 +35,7 @@ const kristyStop = {
   startsAt: new Date("2026-08-20T12:00:00Z"),
   endsAt: new Date("2026-08-20T20:00:00Z"),
   status: "confirmed",
+  probability: null,
 };
 
 const assignedBookingWithoutTrip = {
@@ -47,6 +48,9 @@ const assignedBookingWithoutTrip = {
   startsAt: new Date("2026-08-23T12:00:00Z"),
   endsAt: new Date("2026-08-23T20:00:00Z"),
   status: "confirmed",
+  probability: null,
+  legName: "Kristy",
+  legColor: "#f97316",
 };
 
 function legParticipant(legId: string, legName: string) {
@@ -132,7 +136,32 @@ describe("loadManagerScopedMapData", () => {
       new Date("2026-08-19T00:00:00Z"),
     );
 
-    expect(result.events).toContainEqual(assignedBookingWithoutTrip);
+    expect(result.events.find((event) => event.bookingId === assignedBookingWithoutTrip.bookingId)).toMatchObject({
+      bookingId: assignedBookingWithoutTrip.bookingId,
+      status: "confirmed",
+      probability: null,
+    });
+  });
+
+  it("preserves definite probability for an assigned upcoming booking that is not yet confirmed", async () => {
+    const definiteBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000203",
+      bookingName: "Definite county fair",
+      status: "pending_contract",
+      probability: "definite",
+    };
+    const result = await loadManagerScopedMapData(
+      deps([], [definiteBooking]),
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.find((event) => event.bookingId === definiteBooking.bookingId)).toMatchObject({
+      bookingId: definiteBooking.bookingId,
+      status: "pending_contract",
+      probability: "definite",
+    });
   });
 
   it("includes a shared meetup but only the counterpart leg identity", async () => {

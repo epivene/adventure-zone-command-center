@@ -153,7 +153,7 @@ const stopSelection = {
   startsAt: bookings.startsAt,
   endsAt: bookings.endsAt,
   status: bookings.status,
-   probability: bookings.probability,
+  probability: bookings.probability,
 } as const;
 
 export class DrizzleTripRepository implements TripRepository {

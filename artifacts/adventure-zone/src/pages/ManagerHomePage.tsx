@@ -5,8 +5,9 @@ import { useManagerAssistant } from "@/features/manager-assistant/manager-assist
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
+import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 
-type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null };
+type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null; probability?: string | null };
 type ManagerMapSummary = { events?: NextEvent[] };
 type CurrentLifecycle = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedInAt?: string | null; checkedOutAt?: string | null };
 type IncompleteWrapUp = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedOutAt?: string | null };
@@ -40,14 +41,14 @@ export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
   const { setActiveContext, openAssistant } = useManagerAssistant();
   const [reviewsDue, setReviewsDue] = useState(0);
-  const [confirmedEvents, setConfirmedEvents] = useState<NextEvent[]>([]);
+  const [bookedEvents, setBookedEvents] = useState<NextEvent[]>([]);
   const [currentLifecycle, setCurrentLifecycle] = useState<CurrentLifecycle | null>(null);
   const [incompleteWrapUps, setIncompleteWrapUps] = useState<IncompleteWrapUp[]>([]);
   const [money, setMoney] = useState<MoneySummary | null>(null);
 
   useEffect(() => {
     managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
-    managerApi<ManagerMapSummary>("/manager/map").then((data) => setConfirmedEvents((data.events ?? []).filter((event) => event.status === "confirmed"))).catch(() => setConfirmedEvents([]));
+    managerApi<ManagerMapSummary>("/manager/map").then((data) => setBookedEvents((data.events ?? []).filter(isBookedForSchedule))).catch(() => setBookedEvents([]));
     managerApi<{ lifecycle?: CurrentLifecycle | null }>("/manager/events/lifecycle/current").then((data) => setCurrentLifecycle(data.lifecycle ?? null)).catch(() => setCurrentLifecycle(null));
     managerApi<{ lifecycles?: IncompleteWrapUp[] }>("/manager/events/lifecycle/incomplete").then((data) => setIncompleteWrapUps(data.lifecycles ?? [])).catch(() => setIncompleteWrapUps([]));
     managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
@@ -55,9 +56,9 @@ export default function ManagerHomePage() {
 
   useEffect(() => () => setActiveContext(null), [setActiveContext]);
 
-  const currentMapEvent = currentLifecycle ? confirmedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
+  const currentMapEvent = currentLifecycle ? bookedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
   const currentEvent = currentLifecycle ? { ...currentMapEvent, ...currentLifecycle } : null;
-  const nextEvent = confirmedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
+  const nextEvent = bookedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
 
@@ -100,7 +101,7 @@ export default function ManagerHomePage() {
         </section> : null}
       </> : <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
-        {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm font-semibold text-slate-800">{formatEventRange(nextEvent.startsAt, nextEvent.endsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No confirmed upcoming event is currently assigned.</p>}
+         {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm font-semibold text-slate-800">{formatEventRange(nextEvent.startsAt, nextEvent.endsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} allowCheckIn={nextEvent.status === "confirmed"} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No upcoming booked event is currently assigned.</p>}
       </section>}
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">

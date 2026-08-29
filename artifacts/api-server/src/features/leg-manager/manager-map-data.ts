@@ -75,6 +75,7 @@ export type ManagerScopedMapData = {
     startsAt: Date | null;
     endsAt: Date | null;
     status: string;
+    probability: string | null;
   }>;
   meetups: Array<{
     id: string;
@@ -110,6 +111,7 @@ function eventFromStop(stop: TripStopRecord): ManagerScopedMapData["events"][num
     startsAt: stop.startsAt,
     endsAt: stop.endsAt,
     status: stop.status,
+    probability: stop.probability,
   };
 }
 
@@ -124,6 +126,7 @@ function eventFromBooking(booking: ManagerMapBookingRecord): ManagerScopedMapDat
     startsAt: booking.startsAt,
     endsAt: booking.endsAt,
     status: booking.status,
+    probability: booking.probability,
   };
 }
 
@@ -214,6 +217,7 @@ export async function loadManagerScopedMapData(
           sortOrder: stop.sortOrder,
           startsAt: stop.startsAt,
           endsAt: stop.endsAt,
+          probability: stop.probability,
         })),
         segments: current.segments.map((segment) => ({
           id: segment.id,

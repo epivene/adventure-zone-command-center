@@ -59,4 +59,28 @@ describe("ManagerHomePage current event state", () => {
     expect(screen.queryByText("Current Event")).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Event notes / site check" })).not.toBeInTheDocument();
   });
+
+  it("shows a definite assigned event as the next stop before its workflow status is confirmed", async () => {
+    managerApi.mockImplementation((path: string) => {
+      if (path === "/manager/reviews/due") return Promise.resolve({ reviewsDue: [] });
+      if (path === "/manager/events/lifecycle/current") return Promise.resolve({ lifecycle: null });
+      if (path === "/manager/map") return Promise.resolve({ events: [{
+        bookingId: "event-definite",
+        bookingName: "Definite County Fair",
+        city: "Glendive",
+        region: "MT",
+        startsAt: "2026-09-12T17:00:00.000Z",
+        status: "pending_contract",
+        probability: "definite",
+      }] });
+      if (path === "/manager/events/lifecycle/incomplete") return Promise.resolve({ lifecycles: [] });
+      if (path === "/manager/money/summary") return Promise.resolve({});
+      return Promise.reject(new Error(`Unexpected ${path}`));
+    });
+
+    render(<ManagerHomePage />);
+
+    expect(await screen.findByText("Definite County Fair")).toBeInTheDocument();
+    expect(screen.getByText("Next Stop")).toBeInTheDocument();
+  });
 });
