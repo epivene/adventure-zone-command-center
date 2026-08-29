@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import L from "leaflet";
 import { useManagerRouteMap } from "@/components/routes/manager-route-map-shell";
-import { googleDirectionsUrl, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
+import { eventDirectionsDestination, googleDirectionsUrl, type ManagerMapMode } from "@/features/routes/manager-map-navigation";
 import type { ManagerScopedMapData } from "@/features/manager/manager-map-types";
 
 function escapeHtml(value: string) {
@@ -68,7 +68,7 @@ export function ManagerScopedMapLayers({ data, focusedBookingId, mode, showRoute
         keyboard: true,
         title: event.bookingName,
       }).addTo(group);
-      const directions = googleDirectionsUrl({ destination: [event.longitude, event.latitude] });
+      const directions = googleDirectionsUrl({ destination: eventDirectionsDestination(event) });
       marker.bindPopup(`<div class="az-route-popup"><strong>${escapeHtml(event.bookingName)}</strong><div>${escapeHtml([event.city, event.region].filter(Boolean).join(", "))}</div><div>${event.startsAt ? escapeHtml(event.startsAt.toLocaleString()) : "Date not set"}</div><div class="az-route-popup__actions"><a href="${escapeHtml(directions)}" target="_blank" rel="noreferrer">${mode === "on-road" ? "Directions" : "Directions to event"}</a></div></div>`);
       marker.on("click", () => onFocusBooking?.(event.bookingId));
     }

@@ -15,6 +15,12 @@ export function writeManagerMapMode(storage: Pick<Storage, "setItem">, mode: Man
   storage.setItem(MANAGER_MAP_MODE_KEY, mode);
 }
 
+export type ManagerMapEventLocation = {
+  city: string;
+  region: string;
+  latitude: number | null;
+  longitude: number | null;
+};
 function destinationValue(destination: [number, number] | string) {
   if (typeof destination === "string") return destination;
   const [lng, lat] = destination;
@@ -54,4 +60,8 @@ export function managerEventDirectionsDestination(input: {
     .filter((value): value is string => Boolean(value))
     .join(", ");
   return place || null;
+}
+
+export function eventDirectionsDestination(event: ManagerMapEventLocation): [number, number] | string {
+  return managerEventDirectionsDestination(event) ?? "Event location";
 }

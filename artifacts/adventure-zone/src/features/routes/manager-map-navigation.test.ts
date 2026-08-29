@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MANAGER_MAP_MODE_KEY,
   UTAH_DEFAULT_VIEW,
+  eventDirectionsDestination,
   googleDirectionsUrl,
   managerEventDirectionsDestination,
   readManagerMapMode,
@@ -31,19 +32,22 @@ describe("manager map navigation helpers", () => {
     expect(url).not.toContain("key=");
   });
 
-  it("prefers event coordinates and falls back to its readable place", () => {
-    expect(managerEventDirectionsDestination({
-      latitude: 46.4083,
-      longitude: -105.8406,
+  it("prefers event coordinates and falls back to a readable city and region", () => {
+    expect(eventDirectionsDestination({
       city: "Miles City",
       region: "MT",
+      latitude: 46.4083,
+      longitude: -105.8406,
     })).toEqual([-105.8406, 46.4083]);
-    expect(managerEventDirectionsDestination({
+    expect(eventDirectionsDestination({
+      city: "Miles City",
+      region: "MT",
       latitude: null,
       longitude: null,
-      city: "Billings",
-      region: "MT",
-    })).toBe("Billings, MT");
+    })).toBe("Miles City, MT");
+  });
+
+  it("returns no destination when an event has neither coordinates nor a place", () => {
     expect(managerEventDirectionsDestination({
       latitude: null,
       longitude: null,

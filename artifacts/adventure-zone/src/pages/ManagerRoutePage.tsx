@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { ManagerScopedMap } from "@/components/manager/manager-scoped-map";
+import { NextEventPlanCard } from "@/components/manager/next-event-plan-card";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
 import { ReportScheduleIssue } from "@/components/manager/report-schedule-issue";
 import { useManagerScopedMap } from "@/features/manager/use-manager-scoped-map";
@@ -8,7 +9,6 @@ import { useManagerAssistant } from "@/features/manager-assistant/manager-assist
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail-sheet";
 import type { ManagerDashboardResponse } from "@workspace/api-zod";
-import { googleDirectionsUrl, managerEventDirectionsDestination } from "@/features/routes/manager-map-navigation";
 
 type Data = Pick<ManagerDashboardResponse, "route" | "events" | "nextEvent">;
 type Incomplete = { bookingId: string };
@@ -60,8 +60,6 @@ export default function ManagerRoutePage() {
 
   const scheduledEvents = map.data?.events ?? data.events;
   const nextEvent = data.nextEvent;
-  const nextEventDestination = nextEvent ? managerEventDirectionsDestination(nextEvent) : null;
-  const nextEventDirections = nextEventDestination ? googleDirectionsUrl({ destination: nextEventDestination }) : null;
   const detailEvent = scheduledEvents.find((event) => event.bookingId === detailBookingId) ?? null;
   const canLoadLifecycle = detailEvent && !["declined", "cancelled"].includes(String(detailEvent.status));
 
@@ -75,18 +73,7 @@ export default function ManagerRoutePage() {
       {map.error ? <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">{map.error}</p> : null}
       {map.data ? <div className="min-h-[44dvh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"><ManagerScopedMap data={map.data} variant="events" focusedBookingId={focusedBookingId} onFocusBooking={(bookingId) => { setFocusedBookingId(bookingId); setDetailBookingId(bookingId); }} /></div> : map.loading ? <p className="text-sm text-slate-500">Loading map…</p> : null}
 
-      {nextEvent ? <section aria-label="Next event route planning" className="rounded-2xl border border-primary/25 bg-primary/5 p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <button type="button" className="min-w-0 text-left" onClick={() => { setFocusedBookingId(nextEvent.bookingId); setDetailBookingId(nextEvent.bookingId); }}>
-            <p className="text-xs font-bold uppercase tracking-wide text-primary">Next event</p>
-            <h2 className="mt-1 font-bold">{nextEvent.bookingName}</h2>
-            <p className="text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-800">{formatEventRange(nextEvent.startsAt, nextEvent.endsAt)}</p>
-          </button>
-          {nextEventDirections ? <a className="button-primary shrink-0" href={nextEventDirections} rel="noreferrer" target="_blank">Plan route to next event</a> : <p className="max-w-xs text-sm font-semibold text-slate-600">Add a city or coordinates to plan directions.</p>}
-        </div>
-        <p className="mt-3 text-xs text-slate-600">Directions open from your current location in Google Maps.</p>
-      </section> : null}
+      {nextEvent ? <NextEventPlanCard event={nextEvent} onSelect={() => { setFocusedBookingId(nextEvent.bookingId); setDetailBookingId(nextEvent.bookingId); }} /> : null}
 
       {data.route ? <details className="rounded-xl border bg-white p-4"><summary className="cursor-pointer font-bold">Route details · {data.route.trip.name}</summary><p className="mt-2 text-sm text-slate-600">{data.route.trip.startLabel} → {data.route.trip.endLabel}</p><div className="mt-3 grid gap-1">{data.route.segments.map((segment: any) => <p key={segment.id} className="text-sm">{segment.fromLabel} → {segment.toLabel}{segment.overrideMiles ?? segment.miles ? ` · ${segment.overrideMiles ?? segment.miles} mi` : ""}</p>)}</div></details> : <p>No current or upcoming route.</p>}
 
