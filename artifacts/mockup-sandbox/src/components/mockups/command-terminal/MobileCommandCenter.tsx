@@ -251,63 +251,31 @@ export function MobileCommandCenter() {
             </div>
           </div>
 
-          <div aria-label="Workspace selection" className="mc-role-list" role="tablist">
-            {workspaces.map(({ id, label, detail, icon: Icon }) => {
-              const active = selectedWorkspace === id;
+          <div aria-label="Workspace selection" className="mc-role-list">
+            {workspaces.map(({ label, detail, href, icon: Icon }) => {
+              const active = label === "Office Coordinator";
               return (
                 <Button
+                  asChild
                   aria-selected={active}
                   className="mc-role-button"
                   data-active={active}
-                  key={id}
-                  onClick={() => chooseWorkspace(id)}
-                  role="tab"
+                  key={label}
                   variant={active ? "default" : "outline"}
                 >
-                  <span className="mc-role-icon">
-                    <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
-                  </span>
-                  <span className="mc-role-copy">
-                    <span className="mc-role-label">{label}</span>
-                    <span className="mc-role-detail">{detail}</span>
-                  </span>
+                  <a href={href}>
+                    <span className="mc-role-icon">
+                      <Icon aria-hidden="true" size={18} strokeWidth={1.8} />
+                    </span>
+                    <span className="mc-role-copy">
+                      <span className="mc-role-label">{label}</span>
+                      <span className="mc-role-detail">{detail}</span>
+                    </span>
+                  </a>
                 </Button>
               );
             })}
           </div>
-
-          <Card className="mc-detail-card">
-            <div className="mc-detail-intro">
-              <span className="mc-detail-icon">
-                <ActiveIcon aria-hidden="true" size={16} strokeWidth={1.8} />
-              </span>
-              <div className="mc-detail-copy-wrap">
-                <div className="mc-eyebrow mc-mono">{activeWorkspace.shortLabel} workspace</div>
-                <h3 className="mc-detail-title">Today’s focus</h3>
-              </div>
-            </div>
-            <div aria-label={`${activeWorkspace.label} ready items`} className="mc-queue">
-              {activeWorkspace.queue.map((item) => (
-                <div className="mc-queue-item" key={item}>
-                  <Check aria-hidden="true" size={13} strokeWidth={2.3} />
-                  {item}
-                </div>
-              ))}
-            </div>
-            <div className="mc-actions">
-              <Button onClick={() => setActionMessage(`Opening ${activeWorkspace.label}.`)} type="button">
-                Continue to {activeWorkspace.shortLabel}
-                <ArrowRight aria-hidden="true" size={15} />
-              </Button>
-            </div>
-          </Card>
-
-          {actionMessage ? (
-            <div className="mc-action-message" role="status">
-              <Sparkles aria-hidden="true" size={14} />
-              {actionMessage}
-            </div>
-          ) : null}
         </section>
 
       </div>
