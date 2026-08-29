@@ -7,7 +7,6 @@ import {
   MapPinned,
   Shield,
   Sparkles,
-  X,
 } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card } from "@workspace/avz-crm/components/ui/card";
@@ -20,7 +19,6 @@ const workspaces: Array<{
   shortLabel: string;
   detail: string;
   icon: typeof BriefcaseBusiness;
-  count: string;
   queue: string[];
 }> = [
   {
@@ -29,7 +27,6 @@ const workspaces: Array<{
     shortLabel: "Office",
     detail: "Bookings, contacts, routes, and calls",
     icon: BriefcaseBusiness,
-    count: "08",
     queue: ["Confirm Summit Week details", "Call Maya Chen", "Review two route changes"],
   },
   {
@@ -38,14 +35,12 @@ const workspaces: Array<{
     shortLabel: "Field",
     detail: "Field-ready operations and trip planning",
     icon: MapPinned,
-    count: "04",
     queue: ["Check in for Summit Week", "Review crew assignments", "Capture event notes"],
   },
 ];
 
 export function MobileCommandCenter() {
   const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceId>("office");
-  const [adminOpen, setAdminOpen] = useState(false);
   const [actionMessage, setActionMessage] = useState("");
 
   const activeWorkspace =
@@ -142,32 +137,6 @@ export function MobileCommandCenter() {
           height: .4rem;
           width: .4rem;
         }
-        .mc-admin {
-          position: relative;
-        }
-        .mc-admin-panel {
-          background: hsl(var(--popover));
-          border: 1px solid hsl(var(--border));
-          border-radius: .75rem;
-          box-shadow: 0 .75rem 2rem hsl(var(--foreground) / .12);
-          color: hsl(var(--popover-foreground));
-          padding: .85rem;
-          position: absolute;
-          right: 0;
-          top: 3rem;
-          width: min(15rem, calc(100vw - 2rem));
-          z-index: 5;
-        }
-        .mc-admin-panel strong {
-          display: block;
-          font-size: .75rem;
-        }
-        .mc-admin-panel p {
-          color: hsl(var(--muted-foreground));
-          font-size: .68rem;
-          line-height: 1.45;
-          margin: .35rem 0 .7rem;
-        }
         .mc-hero {
           border-bottom: 1px solid hsl(var(--border));
           margin-top: 2.5rem;
@@ -216,12 +185,6 @@ export function MobileCommandCenter() {
           letter-spacing: -.035em;
           margin: .3rem 0 0;
         }
-        .mc-count {
-          color: hsl(var(--primary));
-          font-size: .56rem;
-          font-weight: 800;
-          white-space: nowrap;
-        }
         .mc-role-list {
           display: grid;
           gap: .55rem;
@@ -267,14 +230,6 @@ export function MobileCommandCenter() {
         }
         .mc-role-button[data-active="true"] .mc-role-detail {
           color: hsl(var(--primary-foreground) / .75);
-        }
-        .mc-role-count {
-          color: hsl(var(--primary));
-          font-size: .6rem;
-          font-weight: 800;
-        }
-        .mc-role-button[data-active="true"] .mc-role-count {
-          color: hsl(var(--primary-foreground));
         }
         .mc-detail-card {
           margin-top: .75rem;
@@ -387,38 +342,15 @@ export function MobileCommandCenter() {
               <span aria-hidden="true" className="mc-ready-dot" />
               System ready
             </span>
-            <div className="mc-admin">
-              <Button
-                aria-expanded={adminOpen}
-                aria-label="Open administrator access"
-                onClick={() => setAdminOpen((open) => !open)}
-                size="icon"
-                title="Administrator access"
-                variant="outline"
-              >
-                {adminOpen ? (
-                  <X aria-hidden="true" size={16} strokeWidth={1.8} />
-                ) : (
-                  <Shield aria-hidden="true" size={16} strokeWidth={1.8} />
-                )}
-              </Button>
-              {adminOpen ? (
-                <Card className="mc-admin-panel" role="status">
-                  <strong>Administrator access</strong>
-                  <p>Secure maintenance tools are available from the command terminal.</p>
-                  <Button onClick={() => setAdminOpen(false)} size="sm" variant="link">Dismiss</Button>
-                </Card>
-              ) : null}
-            </div>
+            <Button asChild aria-label="Administrator Access" size="icon" title="Administrator Access" variant="outline">
+              <a href="/sign-in"><Shield aria-hidden="true" size={16} strokeWidth={1.8} /></a>
+            </Button>
           </div>
         </header>
 
         <section aria-labelledby="mobile-command-title" className="mc-hero">
           <div className="mc-kicker mc-mono">AdventureZone / Command terminal</div>
           <h1 className="mc-title" id="mobile-command-title">Choose your workspace</h1>
-          <p className="mc-hero-copy">
-            Start with the workspace that matches your day.
-          </p>
         </section>
 
         <section aria-labelledby="mobile-workspace-title" className="mc-workspace">
@@ -427,11 +359,10 @@ export function MobileCommandCenter() {
               <div className="mc-eyebrow mc-mono">Access points</div>
               <h2 className="mc-section-title" id="mobile-workspace-title">Select a workspace</h2>
             </div>
-            <span aria-label="Two workspaces available" className="mc-count mc-mono">02</span>
           </div>
 
           <div aria-label="Workspace selection" className="mc-role-list" role="tablist">
-            {workspaces.map(({ id, label, detail, count, icon: Icon }) => {
+            {workspaces.map(({ id, label, detail, icon: Icon }) => {
               const active = selectedWorkspace === id;
               return (
                 <Button
@@ -450,7 +381,6 @@ export function MobileCommandCenter() {
                     <span className="mc-role-label">{label}</span>
                     <span className="mc-role-detail">{detail}</span>
                   </span>
-                  <span className="mc-role-count mc-mono">{count}</span>
                 </Button>
               );
             })}
@@ -478,10 +408,6 @@ export function MobileCommandCenter() {
               <Button onClick={() => setActionMessage(`Opening ${activeWorkspace.label}.`)} type="button">
                 Continue to {activeWorkspace.shortLabel}
                 <ArrowRight aria-hidden="true" size={15} />
-              </Button>
-              <Button onClick={() => setActionMessage("Workspace brief is ready to review.")} type="button" variant="secondary">
-                <Sparkles aria-hidden="true" size={15} />
-                View workspace brief
               </Button>
             </div>
           </Card>

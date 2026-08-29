@@ -13,7 +13,7 @@ describe("public login landing", () => {
   });
 
   it("uses the focused workspace landing copy", () => {
-    expect(landing).toContain("Start with the workspace that matches your day.");
+    expect(landing).not.toContain("Start with the workspace that matches your day.");
     expect(landing).not.toContain("Bookings, contacts, routes, and calls for your adventure business — all in one place.");
   });
 
@@ -29,9 +29,9 @@ describe("public login landing", () => {
   });
 
   it("moves administrator access out of the main button stack", () => {
-    expect(app).toContain('aria-label="Administrator Access"');
-    expect(app).toContain('title="Administrator Access"');
-    expect(app).toContain('href="/sign-in"');
-    expect(app).not.toContain('href="/sign-in">Admin / Command Center');
+    expect(landing).toContain('aria-label="Administrator Access"');
+    expect(landing).toContain('title="Administrator Access"');
+    expect(landing).toContain('href="/sign-in"');
+    expect(landing).not.toContain('href="/sign-in">Admin / Command Center');
   });
 });
