@@ -117,7 +117,9 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
 }) {
   const contacts = profile.contacts ?? [];
   const [activeContactId, setActiveContactId] = useState<string | null>(() => initialContactId(profile, contactId));
-  const [creatingContact, setCreatingContact] = useState(contacts.length === 0);
+  // A profile with no contacts is still a valid profile. Creating a contact is
+  // an explicit user action via Add contact, never an automatic side effect of Save.
+  const [creatingContact, setCreatingContact] = useState(false);
   const selectedContact = useMemo(
     () => creatingContact ? null : contacts.find((contact) => contact.id === activeContactId) ?? contacts[0] ?? null,
     [contacts, activeContactId, creatingContact],
