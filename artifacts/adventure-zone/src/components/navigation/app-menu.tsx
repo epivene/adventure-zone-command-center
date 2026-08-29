@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import { Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
+import { Bot, Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import {
   DropdownMenu,
@@ -8,11 +8,15 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@workspace/avz-crm/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth-context";
 import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
+import { useAssistantContext } from "@/features/assistant/assistant-context";
 
 type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean };
 type MenuGroup = { label: string; items: MenuItem[] };
@@ -26,8 +30,16 @@ const bookingItems: MenuItem[] = [
   { href: "/needs-answer", label: "Needs Answer" },
 ];
 
-const bookingGroups: MenuGroup[] = [
-  { label: "Booking", items: bookingItems },
+const bookingToolItems: MenuItem[] = [
+  { href: "/profiles", label: "Profiles" },
+  { href: "/calls/workspace", label: "Calls" },
+  { href: "/research-sources", label: "Research Sources" },
+  { href: "/office-coordinator", label: "Office Coordinator" },
+  { href: "/needs-answer", label: "Needs Answer" },
+];
+
+const bookingToolsGroups: MenuGroup[] = [
+  { label: "Booking tools", items: bookingToolItems },
 ];
 
 const operationsGroups: MenuGroup[] = [
@@ -95,7 +107,7 @@ const appearanceOptions = [
 ];
 
 function groupsForWorkspace(workspace: AdminWorkspace): MenuGroup[] {
-  if (workspace === "booking") return bookingGroups;
+  if (workspace === "booking") return bookingToolsGroups;
   if (workspace === "operations") return operationsGroups;
   if (workspace === "marketing") return marketingGroups;
   return [];
@@ -118,6 +130,7 @@ export function AddMenu() {
         <DropdownMenuItem asChild><Link href="/event-profiles/new">Add a New Profile</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/profiles">Find a Profile</Link></DropdownMenuItem>
         <DropdownMenuSeparator />
+         <DropdownMenuItem asChild><Link href="/calls/workspace?mode=add">New caller</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/contacts/new">Add a New Contact</Link></DropdownMenuItem>
         <DropdownMenuItem asChild><Link href="/contacts">Find a Contact</Link></DropdownMenuItem>
       </DropdownMenuContent>
@@ -126,8 +139,9 @@ export function AddMenu() {
 }
 
 function MenuLink({ item, workspace, location }: { item: MenuItem; workspace: AdminWorkspace; location: string }) {
+  const active = location === item.href || location.startsWith(`${item.href}/`);
   return (
-    <DropdownMenuItem asChild>
+    <DropdownMenuItem asChild className={cn(active && "bg-secondary font-semibold text-secondary-foreground")}>
       <Link
         href={item.href}
         onClick={() => {
@@ -137,6 +151,58 @@ function MenuLink({ item, workspace, location }: { item: MenuItem; workspace: Ad
         {item.label}
       </Link>
     </DropdownMenuItem>
+  );
+}
+
+function MenuSubmenu({
+  label,
+  groups,
+  workspace,
+  location,
+  nestedGroups = false,
+}: {
+  label: string;
+  groups: MenuGroup[];
+  workspace: AdminWorkspace;
+  location: string;
+  nestedGroups?: boolean;
+}) {
+  return (
+    <DropdownMenuSub>
+      <DropdownMenuSubTrigger className="rounded-md px-2 py-2 text-sm font-semibold">
+        {label}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent className="w-60">
+        {groups.map((group) =>
+          nestedGroups ? (
+            <DropdownMenuSub key={group.label}>
+              <DropdownMenuSubTrigger className="rounded-md px-2 py-2 text-sm font-semibold">
+                {group.label}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-60">
+                {group.items.map((item) => (
+                  <MenuLink
+                    item={item}
+                    workspace={workspace}
+                    location={location}
+                    key={`${group.label}:${item.href}:${item.label}`}
+                  />
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          ) : (
+            group.items.map((item) => (
+              <MenuLink
+                item={item}
+                workspace={workspace}
+                location={location}
+                key={`${group.label}:${item.href}:${item.label}`}
+              />
+            ))
+          ),
+        )}
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -164,16 +230,23 @@ function AppearanceChoices({ appearance, onChange }: { appearance: Appearance; o
   );
 }
 
-export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspace; mobile?: boolean }) {
+export function AppMenu({
+  workspace,
+  mobile = false,
+  unreadMessages = 0,
+}: {
+  workspace: AdminWorkspace;
+  mobile?: boolean;
+  unreadMessages?: number;
+}) {
   const { signOut } = useAuth();
+  const { openAssistant } = useAssistantContext();
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
   const workspaceGroups = groupsForWorkspace(workspace);
   const groups = workspace === "command" ? [] : [...workspaceGroups, ...adminToolsGroups];
-  const bookingMenuItems = mobile
-    ? bookingItems
-    : bookingItems.filter((item) => item.label === "Office Coordinator" || item.label === "Needs Answer");
+  const bookingMenuItems = bookingItems;
 
   function chooseAppearance(value: Appearance) {
     saveAppearance(value);
@@ -200,35 +273,93 @@ export function AppMenu({ workspace, mobile = false }: { workspace: AdminWorkspa
         side={mobile ? "top" : "bottom"}
         className={mobile ? "max-h-[72dvh] w-[min(92vw,22rem)] overflow-y-auto p-2" : "max-h-[76vh] w-72 overflow-y-auto p-2"}
       >
-        {workspace === "booking" ? (
+        {!mobile ? (
+          <div className="grid gap-0.5 py-1">
+            {workspace === "booking" ? (
+              <MenuSubmenu
+                label="Booking tools"
+                groups={bookingToolsGroups}
+                workspace={workspace}
+                location={location}
+              />
+            ) : null}
+            <DropdownMenuItem asChild className="rounded-md px-2 py-2">
+              <Link
+                aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}
+                href="/manager-communications"
+              >
+                <span className="flex-1">Messages</span>
+                {unreadMessages > 0 ? (
+                  <span
+                    aria-label={`${unreadMessages} unread`}
+                    className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-none text-primary-foreground"
+                  >
+                    {unreadMessages > 9 ? "9+" : unreadMessages}
+                  </span>
+                ) : null}
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              aria-label="Open Booking Assistant"
+              className="rounded-md px-2 py-2"
+              onSelect={() => openAssistant()}
+            >
+              <Bot className="h-4 w-4" />
+              Booking Assistant
+            </DropdownMenuItem>
+          </div>
+        ) : null}
+        {mobile && workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
             {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
           </div>
         ) : null}
-        {workspace === "booking" && groups.length > 1 ? <DropdownMenuSeparator /> : null}
-        {groups.map((group) => {
-          if (workspace === "booking" && group.label === "Booking") return null;
-          const isAdminToolGroup = adminToolsGroups.some((adminGroup) => adminGroup.label === group.label);
-          const expanded = openGroups[group.label] ?? (!isAdminToolGroup && workspace !== "booking");
-          return (
-            <div key={group.label} className="py-0.5">
-              <button
-                aria-expanded={expanded}
-                className="flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm font-bold text-foreground hover:bg-muted"
-                onClick={(event) => { event.preventDefault(); setOpenGroups((current) => ({ ...current, [group.label]: !expanded })); }}
-                type="button"
-              >
-                {group.label}
-                <ChevronDown className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`} />
-              </button>
-              {expanded ? (
-                <div className="grid gap-0.5 pb-1 pl-2">
-                  {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${group.label}:${item.href}:${item.label}`} />)}
+        {mobile
+          ? groups.map((group) => {
+              if (workspace === "booking" && group.label === "Booking tools") return null;
+              const isAdminToolGroup = adminToolsGroups.some((adminGroup) => adminGroup.label === group.label);
+              const expanded = openGroups[group.label] ?? (!isAdminToolGroup && workspace !== "booking");
+              return (
+                <div key={group.label} className="py-0.5">
+                  <button
+                    aria-expanded={expanded}
+                    className="flex w-full items-center justify-between rounded-md px-2 py-2.5 text-left text-sm font-bold text-foreground hover:bg-muted"
+                    onClick={(event) => { event.preventDefault(); setOpenGroups((current) => ({ ...current, [group.label]: !expanded })); }}
+                    type="button"
+                  >
+                    {group.label}
+                    <ChevronDown className={`h-4 w-4 transition ${expanded ? "rotate-180" : ""}`} />
+                  </button>
+                  {expanded ? (
+                    <div className="grid gap-0.5 pb-1 pl-2">
+                      {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${group.label}:${item.href}:${item.label}`} />)}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-          );
-        })}
+              );
+            })
+          : workspaceGroups.map((group) => (
+              <div key={group.label} className="py-0.5">
+                {workspace !== "booking" ? (
+                  <MenuSubmenu
+                    label={group.label}
+                    groups={[group]}
+                    workspace={workspace}
+                    location={location}
+                  />
+                ) : null}
+              </div>
+            ))}
+        {!mobile ? <DropdownMenuSeparator /> : null}
+        {!mobile ? (
+          <MenuSubmenu
+            label="Admin Tools"
+            groups={adminToolsGroups}
+            workspace={workspace}
+            location={location}
+            nestedGroups
+          />
+        ) : null}
         <DropdownMenuSeparator />
         <AppearanceChoices appearance={appearance} onChange={chooseAppearance} />
         <DropdownMenuSeparator />

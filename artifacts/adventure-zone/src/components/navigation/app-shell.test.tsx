@@ -8,7 +8,7 @@ const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8"
 const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
 
 describe("workspace-aware Admin shell", () => {
-  it("keeps the six canonical Booking destinations in the desktop top bar", () => {
+  it("keeps only the three core Booking destinations in the desktop top bar", () => {
     const bookingStart = shellSource.indexOf('if (workspace === "booking")');
     const operationsStart = shellSource.indexOf('if (workspace === "operations")');
     const bookingPrimary = shellSource.slice(bookingStart, operationsStart);
@@ -16,11 +16,11 @@ describe("workspace-aware Admin shell", () => {
     for (const [href, label] of [
       ["/today", "Today"],
       ["/bookings", "Bookings"],
-      ["/profiles", "Profiles"],
-      ["/calls/workspace", "Calls"],
       ["/schedule", "Schedule"],
-      ["/research-sources", "Research"],
     ]) expect(bookingPrimary).toContain(`{ href: "${href}", label: "${label}"`);
+    for (const href of ["/profiles", "/calls/workspace", "/research-sources"]) {
+      expect(bookingPrimary).not.toContain(`href: "${href}"`);
+    }
     expect(bookingPrimary).not.toContain('label: "Marketing"');
   });
 
@@ -41,22 +41,29 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain('{ href: "/operations/legs", label: "Legs"');
   });
 
-  it("keeps desktop Booking More focused on secondary work while mobile keeps overflow access", () => {
-    expect(menuSource).toContain('const bookingMenuItems = mobile');
-    expect(menuSource).toContain('item.label === "Office Coordinator" || item.label === "Needs Answer"');
-    expect(menuSource).toContain('{ href: "/bookings", label: "Bookings" }');
-    expect(menuSource).toContain('{ href: "/calls/workspace", label: "Calls" }');
-    expect(menuSource).toContain('{ href: "/research-sources", label: "Research Sources" }');
-    expect(menuSource).toContain('{ href: "/profiles", label: "Profiles" }');
-    expect(menuSource).not.toContain('label: "Quick add"');
-    expect(menuSource).not.toContain('label: "All contacts"');
+  it("puts secondary Booking work under the desktop Booking tools submenu", () => {
+    expect(menuSource).toContain('label="Booking tools"');
+    expect(menuSource).toContain("DropdownMenuSub");
+    const bookingToolsStart = menuSource.indexOf("const bookingToolItems");
+    const bookingToolsEnd = menuSource.indexOf("const operationsGroups");
+    const bookingTools = menuSource.slice(bookingToolsStart, bookingToolsEnd);
+    for (const [href, label] of [
+      ["/profiles", "Profiles"],
+      ["/calls/workspace", "Calls"],
+      ["/research-sources", "Research Sources"],
+      ["/office-coordinator", "Office Coordinator"],
+      ["/needs-answer", "Needs Answer"],
+    ]) expect(bookingTools).toContain(`{ href: "${href}", label: "${label}"`);
+    expect(bookingTools).not.toContain('{ href: "/bookings", label: "Bookings" }');
   });
 
-  it("keeps Admin Tools grouped and collapsed by default", () => {
+  it("keeps Admin Tools grouped and progressively disclosed", () => {
     for (const label of ["Data & Imports", "Business Setup", "Connections", "System"]) {
       expect(menuSource).toContain(`label: "${label}"`);
     }
-    expect(menuSource).toContain("isAdminToolGroup");
+    expect(menuSource).toContain('label="Admin Tools"');
+    expect(menuSource).toContain("nestedGroups");
+    expect(menuSource).toContain("DropdownMenuSubContent");
     for (const href of [
       "/settings/paper-notes",
       "/settings/act-migration",
@@ -76,24 +83,20 @@ describe("workspace-aware Admin shell", () => {
     expect(mobileSource).toContain('label: "Booking", icon: ArrowLeft');
   });
 
-  it("keeps Messages and Assistant as compact always-available desktop toolbar icons", () => {
-    const toolbarStart = shellSource.indexOf('<div className="ml-auto flex items-center gap-1.5">');
-    const toolbarEnd = shellSource.indexOf("</div>", toolbarStart);
-    const toolbar = shellSource.slice(toolbarStart, toolbarEnd);
-
-    expect(toolbar).toContain("<MessageBubbleLink");
-    expect(toolbar).toContain('href="/manager-communications"');
-    expect(toolbar).toContain('label="Messages"');
-    expect(toolbar).toContain("unreadCount={unreadMessages}");
-    expect(toolbar).toContain('<AssistantLauncher placement="toolbar" />');
-    expect(toolbar.indexOf("<MessageBubbleLink")).toBeLessThan(toolbar.indexOf("<AssistantLauncher"));
-    expect(toolbar).not.toContain('workspace === "operations" ? <MessageBubbleLink');
+  it("keeps Messages and Assistant in the desktop overflow with accessible state", () => {
+    expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} />");
+    expect(menuSource).toContain('href="/manager-communications"');
+    expect(menuSource).toContain("unreadMessages > 0");
+    expect(menuSource).toContain('aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}');
+    expect(menuSource).toContain("openAssistant");
+    expect(menuSource).toContain("Booking Assistant");
+    expect(shellSource).not.toContain('<AssistantLauncher placement="toolbar" />');
     expect(launcherSource).toContain('placement?: "toolbar" | "floating"');
     expect(launcherSource).toContain('aria-label="Open Booking Assistant"');
   });
 
   it("keeps the floating assistant only on mobile and hides it on full profiles", () => {
-    expect(shellSource).toContain("hideFloatingAssistantLauncher");
+    expect(shellSource).toContain("immersiveProfile");
     expect(shellSource).toContain('location.startsWith("/profiles/")');
     expect(shellSource).toContain('location.startsWith("/event-profiles/")');
     expect(shellSource).toContain('<AssistantLauncher placement="floating" />');

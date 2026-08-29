@@ -8,6 +8,10 @@ describe("Admin Tools menu organization", () => {
     for (const label of ["Data & Imports", "Business Setup", "Connections", "System"]) {
       expect(source).toContain(`label: "${label}"`);
     }
+    expect(source).toContain('label="Admin Tools"');
+    expect(source).toContain("nestedGroups");
+    expect(source).toContain("<DropdownMenuSub>");
+    expect(source).toContain("<DropdownMenuSubContent");
   });
 
   it("keeps ACT recovery reachable from Data & Imports", () => {

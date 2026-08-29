@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, ContactRound, House, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CalendarDays, House, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -25,10 +25,7 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
     return [
       { href: "/today", label: "Today", icon: House },
       { href: "/bookings", label: "Bookings", icon: UsersRound },
-      { href: "/profiles", label: "Profiles", icon: ContactRound },
-      { href: "/calls/workspace", label: "Calls", icon: MessageSquare },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
-      { href: "/research-sources", label: "Research", icon: Megaphone },
     ];
   }
   if (workspace === "operations") {
@@ -122,15 +119,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </nav>
             ) : null}
             <div className="ml-auto flex items-center gap-1.5">
-              <MessageBubbleLink
-                className="rounded-lg shadow-none"
-                href="/manager-communications"
-                label="Messages"
-                unreadCount={unreadMessages}
-              />
-              <AssistantLauncher placement="toolbar" />
               {workspace === "booking" ? <AddMenu /> : null}
-              <AppMenu workspace={workspace} />
+              <AppMenu workspace={workspace} unreadMessages={unreadMessages} />
             </div>
           </div>
         </header>

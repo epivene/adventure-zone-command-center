@@ -7,3 +7,4 @@
 - [Empty database bootstrap](empty-database-bootstrap.md) — bootstrap from one aggregate Drizzle schema; exported composite FKs need unique indexes first and canonical startup object names.
 - [Custom migration idempotency](custom-migration-idempotency.md) — forward SQL must tolerate objects already created by the aggregate schema before migration tracking catches up.
 - [Canvas presentation](canvas-presentation.md) — canvas screenshots use the registered artifact directory label; live previews are presented by registered artifact ID.
+- [Navigation progressive disclosure](navigation-progressive-disclosure.md) — desktop and mobile navigation intentionally use different disclosure levels while sharing the same route inventory.
