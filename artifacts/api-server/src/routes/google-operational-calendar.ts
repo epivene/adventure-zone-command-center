@@ -10,6 +10,7 @@ import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/
 import { OperationalCalendarImportService } from "@/features/google-workspace/calendar/operational-calendar-import-service";
 import { OperationalCalendarLinkRepository } from "@/features/google-workspace/calendar/operational-calendar-link-repository";
 import { OperationalCalendarProjectionRepository } from "@/features/google-workspace/calendar/operational-calendar-projection-repository";
+import { projectOperationalCalendarReview } from "@/features/google-workspace/calendar/operational-calendar-review-projection";
 import { OperationalCalendarSyncService } from "@/features/google-workspace/calendar/operational-calendar-sync-service";
 
 const router: IRouter = Router();
@@ -38,7 +39,22 @@ router.get("/google-workspace/operational-calendar", async (_req, res): Promise<
     const reviews = connection
       ? await new OperationalCalendarLinkRepository(db).listPendingReviews(connection.id)
       : [];
-    res.json({ connection, pendingReviewCount: reviews.length, reviews });
+    const reviewEvents = reviews
+      .filter((review) => review.bookingId === null)
+      .flatMap((review) => {
+        try {
+          return [projectOperationalCalendarReview({
+            id: review.id,
+            googleEventId: review.googleEventId,
+            reason: review.reason,
+            bookingId: review.bookingId,
+            proposedChanges: review.proposedChanges,
+          })];
+        } catch {
+          return [];
+        }
+      });
+    res.json({ connection, pendingReviewCount: reviews.length, reviews, reviewEvents });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_STATUS_FAILED" });
   }
