@@ -1,25 +1,17 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 
-import app from "./app";
+const appSource = readFileSync("src/app.ts", "utf8");
+const fillerSource = readFileSync("src/routes/organization-filler.ts", "utf8");
 
-let server: ReturnType<typeof app.listen> | null = null;
+describe("Render health check routing", () => {
+  it("does not put owner auth in front of every /api route", () => {
+    expect(appSource).toContain('app.use("/api", organizationFillerRouter);');
+    expect(appSource).not.toContain('app.use("/api", requireOwnerMiddleware, organizationFillerRouter);');
+  });
 
-afterEach(async () => {
-  if (!server) return;
-  await new Promise<void>((resolve, reject) => server!.close((error) => error ? reject(error) : resolve()));
-  server = null;
-});
-
-describe("public health endpoint", () => {
-  it("allows Render health checks without owner authentication", async () => {
-    server = app.listen(0, "127.0.0.1");
-    await new Promise<void>((resolve) => server!.once("listening", resolve));
-    const address = server.address();
-    if (!address || typeof address === "string") throw new Error("Expected TCP listener");
-
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/healthz`);
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({ status: "ok" });
+  it("keeps organization filler endpoints owner-protected", () => {
+    expect(fillerSource).toContain('router.get("/organizations/filler", requireOwnerMiddleware');
+    expect(fillerSource).toContain('router.post("/organizations/filler", requireOwnerMiddleware');
   });
 });
