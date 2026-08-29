@@ -23,6 +23,7 @@ export default function OrganizationsPage() {
   const query = organizationListQuerySchema.parse({
     q: params.get("q") ?? undefined,
     lastResort: params.get("lastResort") ?? undefined,
+    filler: params.get("filler") ?? undefined,
     leg: params.get("leg") ?? undefined,
     type: params.get("type") ?? undefined,
     region: params.get("region") ?? undefined,
@@ -59,6 +60,7 @@ export default function OrganizationsPage() {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== "all") qs.set("lastResort", query.lastResort);
+    if (query.filler !== "all") qs.set("filler", query.filler);
     if (query.travelLegId) qs.set("leg", query.travelLegId);
     if (query.placeType) qs.set("type", query.placeType);
     if (query.region) qs.set("region", query.region);
@@ -82,7 +84,7 @@ export default function OrganizationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, query.search, query.lastResort, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.sort, query.includeRetired, query.page, query.pageSize]);
+  }, [view, query.search, query.lastResort, query.filler, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.sort, query.includeRetired, query.page, query.pageSize]);
 
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 
