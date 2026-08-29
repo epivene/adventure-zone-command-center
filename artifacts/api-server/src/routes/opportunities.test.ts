@@ -21,6 +21,8 @@ const record: OpportunityRecord = {
   nextActionKind: "email",
   nextActionDueAt: new Date("2026-09-01T15:00:00.000Z"),
   holdReason: null,
+  emailAutomationProtected: false,
+  territoryExceptionApproved: false,
   createdAt: new Date("2026-08-26T15:00:00.000Z"),
   updatedAt: new Date("2026-08-26T15:00:00.000Z"),
 };
