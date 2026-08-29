@@ -30,6 +30,16 @@ export function createLazyOpportunityEmailRuntimeRouter(
   };
 
   router.use(async (req, res, next) => {
+    const isOpportunityEmailRoute =
+      req.path === "/opportunities" ||
+      req.path.startsWith("/opportunities/") ||
+      req.path === "/today/ready-to-send" ||
+      req.path.startsWith("/today/ready-to-send/");
+    if (!isOpportunityEmailRoute) {
+      next();
+      return;
+    }
+
     try {
       const runtimeRouter = await loadRouter();
       runtimeRouter(req, res, next);
