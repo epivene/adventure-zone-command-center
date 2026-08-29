@@ -53,6 +53,7 @@ export type TripStopRecord = {
   startsAt: Date | null;
   endsAt: Date | null;
   status: string;
+  probability: string | null;
 };
 
 export type TripSegmentRecord = {
@@ -152,6 +153,7 @@ const stopSelection = {
   startsAt: bookings.startsAt,
   endsAt: bookings.endsAt,
   status: bookings.status,
+   probability: bookings.probability,
 } as const;
 
 export class DrizzleTripRepository implements TripRepository {

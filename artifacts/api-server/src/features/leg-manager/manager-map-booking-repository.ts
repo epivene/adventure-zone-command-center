@@ -12,6 +12,7 @@ export type ManagerMapBookingRecord = {
   startsAt: Date | null;
   endsAt: Date | null;
   status: string;
+  probability: string | null;
   legName: string;
   legColor: string | null;
 };
@@ -33,6 +34,7 @@ export class DrizzleManagerMapBookingRepository {
         startsAt: bookings.startsAt,
         endsAt: bookings.endsAt,
         status: bookings.status,
+        probability: bookings.probability,
         legName: travelLegs.name,
         legColor: travelLegs.color,
       })

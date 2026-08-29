@@ -26,6 +26,7 @@ export type ManagerScopedMapData = {
       sortOrder: number;
       startsAt: Date | null;
       endsAt: Date | null;
+      probability: string | null;
     }>;
     segments: Array<{ id: string; fromLabel: string; toLabel: string; effectiveMiles: number | null; effectiveMinutes: number | null }>;
   };
@@ -39,6 +40,7 @@ export type ManagerScopedMapData = {
     startsAt: Date | null;
     endsAt: Date | null;
     status: string;
+    probability: string | null;
   }>;
   meetups: Array<{
     id: string;
