@@ -69,8 +69,9 @@ WITH ranked AS (
 ), labeled AS (
   SELECT
     ranked.*,
-    max(id) FILTER (WHERE duplicate_rank = 1) OVER (
+    first_value(id) OVER (
       PARTITION BY name_key, city_key, region_key, start_day, end_day
+      ORDER BY duplicate_rank
     ) AS canonical_booking_id
   FROM ranked
 )

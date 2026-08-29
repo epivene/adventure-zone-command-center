@@ -150,6 +150,25 @@ describe("20260828 booking duplicate consolidation migration", () => {
     ]);
   });
 
+  it("selects the ranked UUID directly without relying on a UUID aggregate", async () => {
+    const client = await createDatabase();
+    clients.push(client);
+    await seedDuplicates(client);
+
+    const migration = await readFile(migrationUrl, "utf8");
+    await client.exec(migration);
+
+    expect(
+      (
+        await client.query(
+          "select canonical_booking_id from booking_consolidations where source_booking_id = $1",
+          [duplicateId],
+        )
+      ).rows,
+    ).toEqual([{ canonical_booking_id: canonicalId }]);
+    expect(migration).not.toMatch(/(?:^|[^a-z])max\s*\(\s*id\s*\)/i);
+  });
+
   it("is idempotent and prevents another exact duplicate from being inserted", async () => {
     const client = await createDatabase();
     clients.push(client);

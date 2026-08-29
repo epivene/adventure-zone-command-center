@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { createProductionReview } from "./features/act-replacement/production-review";
+import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { db } from "@workspace/db";
 import { sql } from "drizzle-orm";
 
@@ -10,10 +11,20 @@ const review = createProductionReview({
 });
 
 const main = async () => {
+  const appliedMigrations = await runActReviewMigrationsAtStartup();
+  if (appliedMigrations.length > 0) {
+    console.log("startup migrations applied:", appliedMigrations.join(", "));
+  }
+
   const rows = await (db as any).execute(
     sql`select summary from act_replacement_runs where id = ${runId}`,
   );
-  const summary = (rows.rows?.[0] ?? rows[0]).summary as { manifestDigest?: string };
+  const row = rows.rows?.[0] ?? rows[0];
+  if (!row) {
+    console.log("no ACT replacement run found; nothing to apply");
+    return;
+  }
+  const summary = row.summary as { manifestDigest?: string };
   const digest = summary?.manifestDigest;
   if (!digest) throw new Error("no manifest digest on run");
   console.log("digest:", digest);
