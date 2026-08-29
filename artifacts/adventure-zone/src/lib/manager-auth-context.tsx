@@ -8,7 +8,7 @@ const base = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 const root = base ? `${base}/api` : `${import.meta.env.BASE_URL?.replace(/\/$/, "") ?? ""}/api`;
 
 export type ManagerIdentity = { legId: string; legName: string; managerName: string | null };
-type Ctx = { manager: ManagerIdentity | null; loading: boolean; signIn: (legId: string, password: string) => Promise<void>; signOut: () => void; managerApi: <T>(path: string, options?: RequestInit) => Promise<T> };
+type Ctx = { manager: ManagerIdentity | null; loading: boolean; signIn: (legId: string, password: string) => Promise<void>; demoSignIn: () => Promise<void>; signOut: () => void; managerApi: <T>(path: string, options?: RequestInit) => Promise<T> };
 const Context = createContext<Ctx | null>(null);
 
 function token() { try { return localStorage.getItem(KEY); } catch { return null; } }
@@ -87,7 +87,19 @@ export function ManagerAuthProvider({ children }: { children: ReactNode }) {
     setLoading(false);
   }, []);
 
-  const value = useMemo(() => ({ manager, loading, signIn, signOut, managerApi }), [manager, loading, signIn, signOut, managerApi]);
+  const demoSignIn = useCallback(async () => {
+    const res = await raw("/manager/auth/demo-login", { method: "POST", body: "{}" }, null);
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({})) as { error?: string };
+      throw Object.assign(new Error(payload.error ?? "Demo sign-in is unavailable"), { status: res.status });
+    }
+    const data = await res.json() as { token: string; manager: ManagerIdentity };
+    save(data.token);
+    setManager(data.manager);
+    setLoading(false);
+  }, []);
+
+  const value = useMemo(() => ({ manager, loading, signIn, demoSignIn, signOut, managerApi }), [manager, loading, signIn, demoSignIn, signOut, managerApi]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

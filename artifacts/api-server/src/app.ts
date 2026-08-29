@@ -49,7 +49,8 @@ app.use("/api/assistant-import", assistantTodayFollowUpsRouter);
 app.use("/api/assistant-import", assistantProfileNotesRouter);
 app.use("/api/assistant-import", assistantImportRouter);
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
-app.use("/api", requireOwnerMiddleware, organizationFillerRouter);
+app.use("/api/organizations/filler", requireOwnerMiddleware);
+app.use("/api", organizationFillerRouter);
 app.use("/api", router);
 
 export default app;

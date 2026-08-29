@@ -46,6 +46,7 @@ type State = {
   office: OfficeIdentity | null;
   loading: boolean;
   signIn(loginName: string, password: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  demoSignIn(): Promise<{ ok: true } | { ok: false; error: string }>;
   signOut(): void;
 };
 const Context = createContext<State | null>(null);
@@ -85,8 +86,23 @@ export function OfficeAuthProvider({ children }: { children: ReactNode }) {
       return { ok: false as const, error: "Could not reach the server. Try again." };
     }
   }, []);
+  const demoSignIn = useCallback(async () => {
+    try {
+      const response = await officeFetch("/office/auth/demo-login", { method: "POST", body: "{}" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        return { ok: false as const, error: payload.error ?? "Demo sign-in is unavailable" };
+      }
+      const data = await response.json() as { token: string; office: { id: string; displayName: string; role: "office_coordinator" } };
+      setToken(data.token);
+      setOffice({ accountId: data.office.id, displayName: data.office.displayName, role: data.office.role });
+      return { ok: true as const };
+    } catch {
+      return { ok: false as const, error: "Could not reach the server. Try again." };
+    }
+  }, []);
   const signOut = useCallback(() => { setToken(null); setOffice(null); }, []);
-  const value = useMemo(() => ({ office, loading, signIn, signOut }), [office, loading, signIn, signOut]);
+  const value = useMemo(() => ({ office, loading, signIn, demoSignIn, signOut }), [office, loading, signIn, demoSignIn, signOut]);
   return <Context.Provider value={value}>{children}</Context.Provider>;
 }
 

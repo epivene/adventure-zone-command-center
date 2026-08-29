@@ -4,7 +4,7 @@ import { useOfficeAuth } from "@/lib/office-auth-context";
 import { DevelopmentLoginHint } from "@/components/auth/development-login-hint";
 
 export default function OfficeSignInPage() {
-  const { office, signIn } = useOfficeAuth();
+  const { office, signIn, demoSignIn } = useOfficeAuth();
   const [, setLocation] = useLocation();
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
@@ -14,6 +14,13 @@ export default function OfficeSignInPage() {
   async function submit(event: FormEvent) {
     event.preventDefault(); if (busy) return; setBusy(true); setError("");
     const result = await signIn(loginName, password); setBusy(false);
+    if (result.ok) setLocation("/office"); else setError(result.error);
+  }
+  async function demoSubmit() {
+    if (busy) return;
+    setBusy(true); setError("");
+    const result = await demoSignIn();
+    setBusy(false);
     if (result.ok) setLocation("/office"); else setError(result.error);
   }
   return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50 px-4">
@@ -26,7 +33,7 @@ export default function OfficeSignInPage() {
         {error?<p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p>:null}
         <button className="button-primary" disabled={busy||!loginName.trim()||!password} type="submit">{busy?"Signing in…":"Sign in"}</button>
       </form>
-      <div className="mt-4"><DevelopmentLoginHint kind="office" /></div>
+      <div className="mt-4"><DevelopmentLoginHint kind="office" onUse={() => void demoSubmit()} /></div>
     </div>
   </div>;
 }

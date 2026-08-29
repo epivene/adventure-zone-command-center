@@ -9,7 +9,7 @@ import { DevelopmentLoginHint } from "@/components/auth/development-login-hint";
 type ManagerLeg = { id: string; name: string };
 
 export default function ManagerSignInPage() {
-  const { manager, signIn } = useManagerAuth();
+  const { manager, signIn, demoSignIn } = useManagerAuth();
   const [, navigate] = useLocation();
   const [legs, setLegs] = useState<ManagerLeg[]>([]);
   const [legId, setLegId] = useState("");
@@ -33,6 +33,19 @@ export default function ManagerSignInPage() {
     setError("");
     try {
       await signIn(selectedLegId, selectedPassword);
+      navigate("/manager");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not sign in");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function authenticateDemo() {
+    setBusy(true);
+    setError("");
+    try {
+      await demoSignIn();
       navigate("/manager");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign in");
@@ -101,11 +114,7 @@ export default function ManagerSignInPage() {
         <div className="mt-4">
           <DevelopmentLoginHint
             kind="manager"
-            onUse={(sample) => {
-              setLegId(sample.manager.legId);
-              setPassword(sample.manager.password);
-              void authenticate(sample.manager.legId, sample.manager.password);
-            }}
+            onUse={() => void authenticateDemo()}
           />
         </div>
       </div>

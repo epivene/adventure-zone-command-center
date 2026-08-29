@@ -4,6 +4,7 @@ import { db } from "@workspace/db";
 import { DrizzleLegManagerRepository } from "@/features/leg-manager/leg-manager-repository";
 import { issueLegManagerToken, verifyLegManagerPassword } from "@/features/leg-manager/leg-manager-auth";
 import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-manager-middleware";
+import { DEVELOPMENT_SAMPLE_LEG_ID } from "@/features/development/development-sample-accounts";
 
 const router: IRouter = Router();
 const repo = new DrizzleLegManagerRepository(db);
@@ -22,6 +23,32 @@ router.post("/manager/auth/login", async (req, res): Promise<void> => {
   const access = await repo.getActiveAccess(parsed.data.legId);
   if (!access || !(await verifyLegManagerPassword(parsed.data.password, access.passwordHash, access.passwordSalt))) {
     res.status(401).json({ error: "Incorrect manager password" });
+    return;
+  }
+  const issued = issueLegManagerToken({ legId: access.legId, sessionVersion: access.sessionVersion });
+  if (!issued) {
+    res.status(503).json({ error: "Manager sign-in is temporarily unavailable" });
+    return;
+  }
+  res.json({
+    token: issued.token,
+    expiresAt: issued.expiresAt,
+    manager: {
+      legId: access.legId,
+      legName: access.legName,
+      managerName: access.legName,
+    },
+  });
+});
+
+router.post("/manager/auth/demo-login", async (req, res): Promise<void> => {
+  if (process.env.NODE_ENV !== "development") {
+    res.status(404).json({ error: "Not found" });
+    return;
+  }
+  const access = await repo.getActiveAccess(DEVELOPMENT_SAMPLE_LEG_ID);
+  if (!access) {
+    res.status(503).json({ error: "Development sample account is unavailable" });
     return;
   }
   const issued = issueLegManagerToken({ legId: access.legId, sessionVersion: access.sessionVersion });
