@@ -149,10 +149,10 @@ function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined 
 }
 
 export function profileLastChangedAtSql(): SQL {
-  // organizations.updated_at is maintained as the profile "touch" timestamp.
-  // Keeping this sort key on the profile row avoids reconstructing CRM history
-  // with several correlated subqueries every time the directory loads.
-  return sql`coalesce(${organizations.updatedAt}, ${organizations.createdAt})`;
+  // last_worked_at is deliberately separate from organizations.updated_at.
+  // Background maintenance can update a profile row without meaning a human
+  // actually worked that account; the directory must not treat that as recency.
+  return sql`coalesce(${sql.raw('"organizations"."last_worked_at"')}, ${organizations.createdAt})`;
 }
 
 export function buildOrganizationDirectoryOrderBy(query: OrganizationListQuery): SQL[] {
