@@ -82,7 +82,7 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
       </div>
     </header>
     <ManagerActionCenter />
-    <main className="mx-auto max-w-3xl p-4">{children}</main>
+     <main className="mx-auto max-w-3xl p-3 md:p-4">{children}</main>
     <ManagerMobileNav unreadMessages={unreadMessages} onSignOut={signOut} />
   </div>;
 }

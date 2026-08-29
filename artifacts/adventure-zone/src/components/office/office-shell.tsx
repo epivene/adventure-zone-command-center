@@ -153,7 +153,7 @@ export function OfficeShell({ children }: { children: ReactNode }) {
           {office ? <p className="mt-1 truncate text-xs text-muted-foreground">Booking Workspace · {office.displayName}</p> : null}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-5 pb-24 md:px-8 md:py-7 xl:pb-8">{children}</main>
+      <main className="mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-7 xl:pb-8">{children}</main>
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden">
         <Nav mobile unread={unread} />
       </div>

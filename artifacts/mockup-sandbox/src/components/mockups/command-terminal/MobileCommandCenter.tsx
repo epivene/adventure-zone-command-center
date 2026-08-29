@@ -42,9 +42,9 @@ export function MobileCommandCenter() {
         }
         .mobile-command button { font: inherit; }
         .mc-shell {
-          width: min(100% - 1.5rem, 30rem);
+          width: min(100% - 1rem, 30rem);
           margin: 0 auto;
-          padding: .75rem 0 1.25rem;
+          padding: .6rem 0 1rem;
         }
         .mc-topbar {
           align-items: center;
@@ -95,8 +95,8 @@ export function MobileCommandCenter() {
         }
         .mc-hero {
           border-bottom: 2px solid hsl(var(--foreground));
-          margin-top: 2.5rem;
-          padding-bottom: 1.5rem;
+          margin-top: 2rem;
+          padding-bottom: 1.2rem;
         }
         .mc-kicker {
           color: hsl(var(--primary));
@@ -107,7 +107,7 @@ export function MobileCommandCenter() {
         .mc-title {
           color: hsl(var(--foreground));
           font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
-          font-size: clamp(2rem, 10vw, 2.65rem);
+          font-size: clamp(1.7rem, 8vw, 2.2rem);
           font-weight: 800;
           letter-spacing: .015em;
           line-height: 1;
@@ -116,7 +116,7 @@ export function MobileCommandCenter() {
           text-transform: uppercase;
         }
         .mc-workspace {
-          margin-top: 1.5rem;
+          margin-top: 1.2rem;
         }
         .mc-section-head {
           align-items: end;
@@ -149,8 +149,8 @@ export function MobileCommandCenter() {
           gap: .7rem;
           grid-template-columns: 2.25rem minmax(0, 1fr);
           justify-content: start;
-          min-height: 4.25rem;
-          padding: .7rem;
+           min-height: 3.8rem;
+           padding: .55rem;
           text-align: left;
           width: 100%;
         }
@@ -160,9 +160,9 @@ export function MobileCommandCenter() {
           border-radius: .6rem;
           color: hsl(var(--primary));
           display: flex;
-          height: 2.25rem;
+           height: 2rem;
           justify-content: center;
-          width: 2.25rem;
+           width: 2rem;
         }
         .mc-role-button[data-active="true"] .mc-role-icon {
           background: hsl(var(--primary-foreground) / .14);
@@ -171,13 +171,13 @@ export function MobileCommandCenter() {
         .mc-role-copy { min-width: 0; }
         .mc-role-label {
           display: block;
-          font-size: .8rem;
+           font-size: .74rem;
           font-weight: 800;
         }
         .mc-role-detail {
           color: hsl(var(--muted-foreground));
           display: block;
-          font-size: .63rem;
+           font-size: .58rem;
           line-height: 1.3;
           margin-top: .2rem;
         }

@@ -142,7 +142,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
 
-      <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
+      <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8">
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}

@@ -43,9 +43,9 @@ export function CommandTerminalLanding() {
         }
         .command-terminal-landing button { font: inherit; }
         .ctl-shell {
-          width: min(100% - 1.5rem, 30rem);
+          width: min(100% - 1rem, 30rem);
           margin: 0 auto;
-          padding: .75rem 0 1.25rem;
+          padding: .6rem 0 1rem;
         }
         .ctl-topbar {
           align-items: center;
@@ -96,8 +96,8 @@ export function CommandTerminalLanding() {
         }
         .ctl-hero {
           border-bottom: 2px solid hsl(var(--foreground));
-          margin-top: 2.5rem;
-          padding-bottom: 1.5rem;
+          margin-top: 2rem;
+          padding-bottom: 1.2rem;
         }
         .ctl-kicker {
           color: hsl(var(--primary));
@@ -108,7 +108,7 @@ export function CommandTerminalLanding() {
         .ctl-title {
           color: hsl(var(--foreground));
           font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
-          font-size: clamp(2rem, 10vw, 2.65rem);
+          font-size: clamp(1.7rem, 8vw, 2.2rem);
           font-weight: 800;
           letter-spacing: .015em;
           line-height: 1;
@@ -116,7 +116,7 @@ export function CommandTerminalLanding() {
           max-width: 14ch;
           text-transform: uppercase;
         }
-        .ctl-workspace { margin-top: 1.5rem; }
+        .ctl-workspace { margin-top: 1.2rem; }
         .ctl-section-head {
           align-items: end;
           display: flex;
@@ -148,8 +148,8 @@ export function CommandTerminalLanding() {
           gap: .7rem;
           grid-template-columns: 2.25rem minmax(0, 1fr);
           justify-content: start;
-          min-height: 4.25rem;
-          padding: .7rem;
+           min-height: 3.8rem;
+           padding: .55rem;
           text-align: left;
           width: 100%;
         }
@@ -159,20 +159,20 @@ export function CommandTerminalLanding() {
           border-radius: .6rem;
           color: hsl(var(--primary-foreground));
           display: flex;
-          height: 2.25rem;
+           height: 2rem;
           justify-content: center;
-          width: 2.25rem;
+           width: 2rem;
         }
         .ctl-role-link[data-active="false"] .ctl-role-icon {
           background: hsl(var(--secondary));
           color: hsl(var(--primary));
         }
         .ctl-role-copy { min-width: 0; }
-        .ctl-role-label { display: block; font-size: .8rem; font-weight: 800; }
+        .ctl-role-label { display: block; font-size: .74rem; font-weight: 800; }
         .ctl-role-detail {
           color: hsl(var(--primary-foreground) / .75);
           display: block;
-          font-size: .63rem;
+           font-size: .58rem;
           line-height: 1.3;
           margin-top: .2rem;
         }
