@@ -83,15 +83,15 @@ function StatCard({
     <button
       aria-expanded={active}
       aria-pressed={active}
-      className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[#8eae9e] ${
+      className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-ring ${
         active
-          ? "border-[#9ab6a9] bg-[#edf4ef]"
-          : "border-[#d8e2dd] bg-[#fbfcf8] hover:border-[#a7beb3] hover:bg-[#f3f7f3]"
+          ? "border-primary/30 bg-secondary"
+          : "border-border bg-card hover:border-primary/30 hover:bg-secondary/60"
       }`}
       onClick={onClick}
       type="button"
     >
-      <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[#e3eee8] text-[#397064]">
+      <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-primary">
         {icon}
       </span>
       <span className="block text-2xl font-bold tracking-tight text-[#173b48]">{value}</span>
@@ -374,7 +374,7 @@ export function SimpleFullProfile({
             <button
               aria-expanded={notificationsOpen}
               aria-label="Open notifications"
-              className={`relative flex h-10 w-10 items-center justify-center rounded-lg border bg-[#fbfcf8] text-[#5d747b] transition hover:border-[#a7beb3] hover:text-[#173b48] ${notificationsOpen ? "border-[#9ab6a9] bg-[#edf4ef]" : "border-[#d8e2dd]"}`}
+              className={`relative flex h-10 w-10 items-center justify-center rounded-lg border bg-card text-muted-foreground transition hover:border-primary/30 hover:text-foreground ${notificationsOpen ? "border-primary/30 bg-secondary text-primary" : "border-border"}`}
               onClick={() => {
                 setNotificationsOpen((current) => !current);
                 setPrimaryContactOpen(false);
@@ -391,7 +391,7 @@ export function SimpleFullProfile({
                     <p className="text-sm font-bold text-[#173b48]">Notifications</p>
                     <p className="mt-0.5 text-xs text-[#839596]">{nextFollowUp ? "One item needs your attention" : "You are all caught up"}</p>
                   </div>
-                  <button aria-label="Close notifications" className="rounded-md p-1 text-[#829696] hover:bg-[#edf4ef]" onClick={() => setNotificationsOpen(false)} type="button">
+                  <button aria-label="Close notifications" className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-primary" onClick={() => setNotificationsOpen(false)} type="button">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
@@ -401,7 +401,7 @@ export function SimpleFullProfile({
                     <div>
                       <p className="text-sm font-bold text-[#315b66]">Follow-up due {followUpOverdue ? "now" : "soon"}</p>
                       <p className="mt-1 text-sm leading-5 text-[#71848a]">Review the next action for {profile.place.name}.</p>
-                      <button className="mt-3 text-xs font-bold text-[#397064]" onClick={() => { setNotificationsOpen(false); setOpenSection(null); }} type="button">Review follow-up <ArrowUpRight className="inline h-3.5 w-3.5" /></button>
+                      <button className="mt-3 text-xs font-bold text-primary hover:text-primary/80" onClick={() => { setNotificationsOpen(false); setOpenSection(null); }} type="button">Review follow-up <ArrowUpRight className="inline h-3.5 w-3.5" /></button>
                     </div>
                   </div>
                 ) : <p className="px-4 py-4 text-sm text-[#71848a]">No open follow-ups.</p>}
@@ -439,7 +439,7 @@ export function SimpleFullProfile({
                     {primaryContact.email ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`mailto:${primaryContact.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primaryContact.email}</a> : null}
                   </div>
                   <div className="border-t border-[#e4ebe5] px-4 py-3">
-                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" href={`/contacts/${primaryContact.id}`}>
+                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2" href={`/contacts/${primaryContact.id}`}>
                       Open contact profile <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -582,7 +582,7 @@ export function SimpleFullProfile({
             ) : null}
             <button aria-label="Edit profile" className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" onClick={() => setEditing(true)} type="button">Edit</button>
             <button
-              className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]"
+              className="button-primary inline-flex items-center gap-2"
               onClick={openNoteComposer}
               type="button"
             >
@@ -753,7 +753,7 @@ export function SimpleFullProfile({
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">People at this organization</p>
               <h2 className="mt-1 text-xl font-bold text-[#173b48]">Contacts</h2>
             </div>
-            <Link className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" href="/contacts/new">
+            <Link className="button-primary inline-flex items-center gap-2" href="/contacts/new">
               <Plus className="h-4 w-4" />
               Add contact
             </Link>
@@ -848,7 +848,7 @@ export function SimpleFullProfile({
               <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship history</p>
               <h2 className="mt-1 text-xl font-bold text-[#173b48]">Activity history</h2>
             </div>
-            <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" onClick={openNoteComposer} type="button">
+            <button className="button-primary inline-flex items-center gap-2" onClick={openNoteComposer} type="button">
               <Plus className="h-4 w-4" />
               Add note
             </button>
@@ -876,7 +876,7 @@ export function SimpleFullProfile({
               </label>
               {noteError ? <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">{noteError}</p> : null}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button className="button-primary !bg-[#397064] hover:!bg-[#2d5d54]" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
+                <button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
                   {noteSaving ? "Saving…" : "Save note"}
                 </button>
                 <button className="button-secondary !bg-transparent" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); }} type="button">
