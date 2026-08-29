@@ -333,9 +333,11 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
   const { primaryId, duplicateIds } = parsed.data;
   if (duplicateIds.includes(primaryId)) { res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" }); return; }
   try {
-    await db.transaction((transaction) => prepareSelectedProfileSubsetMerge(transaction, [primaryId, ...duplicateIds]));
-    await prepareOrganizationMergeReferences(db, primaryId, duplicateIds);
-    await orgRepo().mergeOrganizations(primaryId, duplicateIds);
+    await db.transaction(async (transaction) => {
+      await prepareSelectedProfileSubsetMerge(transaction, [primaryId, ...duplicateIds]);
+      await prepareOrganizationMergeReferences(transaction, primaryId, duplicateIds);
+      await orgRepo().mergeOrganizations(primaryId, duplicateIds, transaction);
+    });
     res.json({ ok: true });
   } catch (err) {
     if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }

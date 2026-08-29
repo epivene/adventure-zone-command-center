@@ -47,6 +47,10 @@ import {
   OrganizationConflictError,
 } from "@/features/organizations/organization-conflict";
 import {
+  reparentAdditionalOrganizationReferences,
+  type OrganizationMergeTransaction,
+} from "@/features/organizations/organization-merge-additional-references";
+import {
   lockOrganizationFamilyMutationSnapshot,
   lockOrganizationFamilyReviewDomain,
 } from "@/features/organizations/organization-family-lock";
@@ -349,7 +353,7 @@ export interface OrganizationRepository {
 }
 
 type DrizzleDatabase = typeof database;
-type OrganizationMergeTransaction = Parameters<
+type RepositoryTransaction = Parameters<
   Parameters<DrizzleDatabase["transaction"]>[0]
 >[0];
 
@@ -357,7 +361,7 @@ const organizationMergeFamilyConflictMessage =
   "These profiles may be locations of the same organization. Review the location group before merging.";
 
 async function revalidateOrganizationsMergeable(
-  transaction: OrganizationMergeTransaction,
+  transaction: RepositoryTransaction,
   ids: string[],
 ): Promise<"mergeable" | "family_conflict"> {
   const selectedIds = [...new Set(ids)].sort((left, right) =>
@@ -1246,10 +1250,14 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       .where(eq(organizationFamilyReviews.groupKey, groupKey));
   }
 
-  async mergeOrganizations(primaryId: string, duplicateIds: string[]): Promise<void> {
+  async mergeOrganizations(
+    primaryId: string,
+    duplicateIds: string[],
+    outerTransaction?: OrganizationMergeTransaction,
+  ): Promise<void> {
     if (!duplicateIds.length) return;
 
-    const outcome = await this.database.transaction(async (tx) => {
+    const merge = async (tx: OrganizationMergeTransaction) => {
       const guard = await revalidateOrganizationsMergeable(
         tx,
         [primaryId, ...duplicateIds],
@@ -1372,11 +1380,17 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
           .set({ consolidatedIntoId: primaryId, updatedAt: now })
           .where(eq(organizations.consolidatedIntoId, dupId));
 
-        // Step 13: Delete the now-empty duplicate
+        // Step 13: Preserve newer CRM, communication, research, and history rows.
+        await reparentAdditionalOrganizationReferences(tx, primaryId, dupId);
+
+        // Step 14: Delete the now-empty duplicate
         await tx.delete(organizations).where(eq(organizations.id, dupId));
       }
       return "merged" as const;
-    });
+    };
+    const outcome = outerTransaction
+      ? await merge(outerTransaction)
+      : await this.database.transaction(merge);
 
     if (outcome === "family_conflict") {
       throw new OrganizationConflictError(organizationMergeFamilyConflictMessage);

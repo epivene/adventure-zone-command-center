@@ -28,9 +28,11 @@ describe("organization merge dependent reference preparation", () => {
   it("runs merge preparation before the repository deletes duplicate organizations", () => {
     const routePath = fileURLToPath(new URL("../../routes/organizations.ts", import.meta.url));
     const source = readFileSync(routePath, "utf8");
-    const prepare = source.indexOf("prepareOrganizationMergeReferences(db, primaryId, duplicateIds)");
-    const merge = source.indexOf("orgRepo().mergeOrganizations(primaryId, duplicateIds)");
+    const transaction = source.indexOf("await db.transaction(async (transaction)");
+    const prepare = source.indexOf("prepareOrganizationMergeReferences(transaction, primaryId, duplicateIds)");
+    const merge = source.indexOf("orgRepo().mergeOrganizations(primaryId, duplicateIds, transaction)");
 
+    expect(transaction).toBeGreaterThanOrEqual(0);
     expect(prepare).toBeGreaterThanOrEqual(0);
     expect(merge).toBeGreaterThan(prepare);
   });

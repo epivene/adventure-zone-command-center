@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 
 type DrizzleDatabase = typeof database;
+type Transaction = Parameters<Parameters<DrizzleDatabase["transaction"]>[0]>[0];
 
 /**
  * Re-parent references that the legacy duplicate-merge transaction does not yet
@@ -10,13 +11,13 @@ type DrizzleDatabase = typeof database;
  * safely without losing ACT history/timeline relationships.
  */
 export async function prepareOrganizationMergeReferences(
-  database: Pick<DrizzleDatabase, "transaction">,
+  database: Pick<DrizzleDatabase, "transaction"> | Transaction,
   primaryId: string,
   duplicateIds: string[],
 ): Promise<void> {
   if (!duplicateIds.length) return;
 
-  await database.transaction(async (transaction) => {
+  const prepare = async (transaction: Transaction) => {
     for (const duplicateId of duplicateIds) {
       // Keep activity/timeline associations. If the survivor already has the
       // same activity association, leave that row in place and remove only the
@@ -78,5 +79,10 @@ export async function prepareOrganizationMergeReferences(
           AND id <> ${primaryId}
       `);
     }
-  });
+  };
+  if ("rollback" in database) {
+    await prepare(database as Transaction);
+  } else {
+    await database.transaction(prepare);
+  }
 }
