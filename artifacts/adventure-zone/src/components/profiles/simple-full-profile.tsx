@@ -1,6 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
-import { Building2, Camera, ChevronDown, Globe2, MapPin, MessageCircle, Search } from "lucide-react";
+import {
+  ArrowUpRight,
+  Building2,
+  Camera,
+  CalendarDays,
+  Check,
+  Clock3,
+  ExternalLink,
+  Globe2,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+  Plus,
+  Search,
+  StickyNote,
+  UsersRound,
+} from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
@@ -38,43 +55,59 @@ function formatDateTime(value: Date | string | null | undefined) {
   }).format(date);
 }
 
-async function resizeProfilePhoto(file: File): Promise<string> {
-  const source = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Could not read that image."));
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.readAsDataURL(file);
-  });
-  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-    const next = new Image();
-    next.onload = () => resolve(next);
-    next.onerror = () => reject(new Error("Could not open that image."));
-    next.src = source;
-  });
-  const side = Math.min(image.naturalWidth, image.naturalHeight);
-  const sx = (image.naturalWidth - side) / 2;
-  const sy = (image.naturalHeight - side) / 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = 320;
-  canvas.height = 320;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Could not prepare that image.");
-  context.drawImage(image, sx, sy, side, side, 0, 0, 320, 320);
-  return canvas.toDataURL("image/jpeg", 0.82);
+function formatShortDate(value: Date | string | null | undefined) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "America/Denver",
+  }).format(date);
 }
 
-function statCard({ value, label, active, onClick }: { value: number; label: string; active: boolean; onClick: () => void }) {
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "AZ";
+}
+
+function StatCard({
+  icon,
+  value,
+  label,
+  active,
+  onClick,
+}: {
+  icon: ReactNode;
+  value: number;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       aria-expanded={active}
-      className={`rounded-xl border px-3 py-3 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:px-4 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"}`}
+      aria-pressed={active}
+      className={`group rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-[#8eae9e] ${
+        active
+          ? "border-[#9ab6a9] bg-[#edf4ef]"
+          : "border-[#d8e2dd] bg-[#fbfcf8] hover:border-[#a7beb3] hover:bg-[#f3f7f3]"
+      }`}
       onClick={onClick}
       type="button"
     >
-      <p className="text-xl font-bold text-slate-950 sm:text-2xl">{value}</p>
-      <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 sm:text-sm">
+      <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-[#e3eee8] text-[#397064]">
+        {icon}
+      </span>
+      <span className="block text-2xl font-bold tracking-tight text-[#173b48]">{value}</span>
+      <span className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#72858a]">
         {label}
-        <ChevronDown className={`h-4 w-4 transition-transform ${active ? "rotate-180" : ""}`} />
+        <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
       </span>
     </button>
   );
@@ -110,6 +143,7 @@ export function SimpleFullProfile({
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
   const [emailCount, setEmailCount] = useState(0);
+  const isEditing = editing ?? internalEditing;
 
   useEffect(() => {
     setOptimisticActivities([]);
@@ -125,28 +159,60 @@ export function SimpleFullProfile({
       .catch(() => {
         if (active) setEmailCount(0);
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [profile.id]);
 
-  const isEditing = editing ?? internalEditing;
-  const primaryContact = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
+  const primaryContact =
+    profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
-  const meaningfulNotes = useMemo(() => profile.notes.filter((note) => historyCategory(note) !== "system"), [profile.notes]);
-  const openFollowUps = useMemo(() => [...profile.followUps]
-    .filter((item) => !item.completedAt && item.dueAt)
-    .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime()), [profile.followUps]);
+  const meaningfulNotes = useMemo(
+    () => profile.notes.filter((note) => historyCategory(note) !== "system"),
+    [profile.notes],
+  );
+  const openFollowUps = useMemo(
+    () =>
+      [...profile.followUps]
+        .filter((item) => !item.completedAt && item.dueAt)
+        .sort((left, right) => left.dueAt.getTime() - right.dueAt.getTime()),
+    [profile.followUps],
+  );
   const nextFollowUp = openFollowUps[0] ?? null;
   const followUpOverdue = Boolean(nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now());
-  const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
-  const phoneText = formatPhoneDisplay(visiblePhone);
-  const callQuery = new URLSearchParams({ organizationId: profile.id });
-  if (primaryContact?.id) callQuery.set("contactId", primaryContact.id);
-  const callHref = visiblePhone ? `/calls/workspace?${callQuery.toString()}` : null;
   const average = ratingSummary?.average ?? 0;
   const ratingCount = ratingSummary?.count ?? 0;
   const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
   const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
+  const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({
+    id: note.id,
+    organizationId: profile.id,
+    contactId: note.contactId,
+    bookingId: note.bookingId,
+    kind: note.kind as any,
+    body: simplifyHistoryText(note.body),
+    occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+    createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
+    updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
+    revisionCount: 0,
+    callOutcome: null,
+    hasLinkedCallSession: false,
+    importedFromAct: Boolean(note.importedFromAct),
+    actSourceType:
+      note.actSourceType === "note" ||
+      note.actSourceType === "history" ||
+      note.actSourceType === "activity"
+        ? note.actSourceType
+        : null,
+    historicalDateUnknown: Boolean(note.historicalDateUnknown),
+    paperNoteSource: note.paperNoteSource ?? null,
+  }));
+  const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
+  const normalizedSearch = noteSearch.trim().toLowerCase();
+  const filteredActivities = normalizedSearch
+    ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
+    : activities;
 
   function setEditing(next: boolean) {
     if (editing === undefined) setInternalEditing(next);
@@ -154,7 +220,7 @@ export function SimpleFullProfile({
   }
 
   function toggleSection(section: Exclude<OpenSection, null>) {
-    setOpenSection((current) => current === section ? null : section);
+    setOpenSection((current) => (current === section ? null : section));
   }
 
   async function loadSimpleNotesPage(page: number) {
@@ -174,18 +240,45 @@ export function SimpleFullProfile({
     window.open(source.url, "_blank", "noopener,noreferrer");
   }
 
-  async function handleSaved() {
-    await onProfileSaved?.();
-    setEditing(false);
-  }
-
   async function changePhoto(file: File | undefined) {
     if (!file || !onProfileImageChange) return;
-    if (!file.type.startsWith("image/")) { setPhotoError("Choose an image file."); return; }
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file.");
+      return;
+    }
     setPhotoBusy(true);
     setPhotoError("");
     try {
-      await onProfileImageChange(await resizeProfilePhoto(file));
+      const source = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read that image."));
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.readAsDataURL(file);
+      });
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const next = new Image();
+        next.onload = () => resolve(next);
+        next.onerror = () => reject(new Error("Could not open that image."));
+        next.src = source;
+      });
+      const side = Math.min(image.naturalWidth, image.naturalHeight);
+      const canvas = document.createElement("canvas");
+      canvas.width = 320;
+      canvas.height = 320;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Could not prepare that image.");
+      context.drawImage(
+        image,
+        (image.naturalWidth - side) / 2,
+        (image.naturalHeight - side) / 2,
+        side,
+        side,
+        0,
+        0,
+        320,
+        320,
+      );
+      await onProfileImageChange(canvas.toDataURL("image/jpeg", 0.82));
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : "Could not save profile photo.");
     } finally {
@@ -197,9 +290,13 @@ export function SimpleFullProfile({
     if (!onProfileImageChange || photoBusy) return;
     setPhotoBusy(true);
     setPhotoError("");
-    try { await onProfileImageChange(null); }
-    catch (error) { setPhotoError(error instanceof Error ? error.message : "Could not remove profile photo."); }
-    finally { setPhotoBusy(false); }
+    try {
+      await onProfileImageChange(null);
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Could not remove profile photo.");
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
   function openNoteComposer() {
@@ -240,196 +337,473 @@ export function SimpleFullProfile({
   }
 
   if (isEditing) {
-    return <ProfileInlineEditor profile={profile as any} contactId={primaryContact?.id ?? null} onSaved={handleSaved} onCancel={() => setEditing(false)} />;
+    return (
+      <ProfileInlineEditor
+        profile={profile as any}
+        contactId={primaryContact?.id ?? null}
+        onSaved={async () => {
+          await onProfileSaved?.();
+          setEditing(false);
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
   }
 
-  const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({
-    id: note.id,
-    organizationId: profile.id,
-    contactId: note.contactId,
-    bookingId: note.bookingId,
-    kind: note.kind as any,
-    body: simplifyHistoryText(note.body),
-    occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
-    createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
-    updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
-    revisionCount: 0,
-    callOutcome: null,
-    hasLinkedCallSession: false,
-    importedFromAct: Boolean(note.importedFromAct),
-    actSourceType: note.actSourceType === "note" || note.actSourceType === "history" || note.actSourceType === "activity" ? note.actSourceType : null,
-    historicalDateUnknown: Boolean(note.historicalDateUnknown),
-    paperNoteSource: note.paperNoteSource ?? null,
-  }));
-  const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
-  const normalizedSearch = noteSearch.trim().toLowerCase();
-  const filteredActivities = normalizedSearch
-    ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
-    : activities;
+  const address = [
+    [profile.place.address1, profile.place.address2].filter(Boolean).join(", "),
+    [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" "),
+  ]
+    .filter(Boolean)
+    .join(", ");
+  const callQuery = new URLSearchParams({ organizationId: profile.id });
+  if (primaryContact?.id) callQuery.set("contactId", primaryContact.id);
+  const visiblePhone = primaryContact?.phone ?? profile.place.phone ?? null;
+  const callHref = visiblePhone ? `/calls/new?${callQuery.toString()}` : null;
 
   return (
-    <div className="grid gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Relationships / Profile record</div>
-        <div className="flex flex-wrap gap-2">
-          <button className="button-secondary inline-flex items-center gap-2" type="button" onClick={onAskAssistant}>
-            <MessageCircle className="h-4 w-4" /> Ask Assistant
+    <div className="profile-modern grid gap-5">
+      <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-2 text-xs font-semibold text-[#789096]">
+          <Link href="/profiles" className="hover:text-[#315b66]">Organizations</Link>
+          <span className="text-[#a8b5b4]">/</span>
+          <span className="text-[#315b66]">{profile.place.name}</span>
+        </div>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <button
+            className="button-secondary inline-flex flex-1 items-center justify-center gap-2 !border-[#cad9d3] !bg-[#fbfcf8] !text-[#315b66] sm:flex-none"
+            onClick={onAskAssistant}
+            type="button"
+          >
+            <MessageCircle className="h-4 w-4 text-[#bf7048]" />
+            Ask Assistant
           </button>
-          <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit profile</button>
-          <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} onAddNote={openNoteComposer} />
+          <ProfileActionsMenu
+            profileId={profile.id}
+            contactId={primaryContact?.id ?? null}
+            onAddNote={openNoteComposer}
+          />
         </div>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_12px_32px_rgba(32,71,77,0.06)]">
+        <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="shrink-0">
               <label className="group relative block w-fit cursor-pointer" title="Change profile photo">
-                <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={(event) => void changePhoto(event.target.files?.[0])} />
+                <input
+                  className="sr-only"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={photoBusy}
+                  onChange={(event) => void changePhoto(event.target.files?.[0])}
+                />
                 {profileImageDataUrl ? (
-                  <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-20 w-20 rounded-xl border border-emerald-200 object-cover shadow-sm sm:h-24 sm:w-24" />
+                  <img
+                    src={profileImageDataUrl}
+                    alt={`${profile.place.name} profile`}
+                    className="h-16 w-16 rounded-xl border border-[#bfd5ca] object-cover sm:h-20 sm:w-20"
+                  />
                 ) : (
-                  <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:h-24 sm:w-24">
-                    <Building2 className="h-9 w-9" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-[#bfd5ca] bg-[#e3eee8] text-lg font-bold text-[#397064] sm:h-20 sm:w-20">
+                    {initials(profile.place.name)}
                   </div>
                 )}
-                <span className="absolute -bottom-2 -right-2 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-700 shadow-sm"><Camera className="h-4 w-4" /></span>
+                <span className="absolute -bottom-2 -right-2 rounded-lg border border-[#d8e2dd] bg-[#fbfcf8] p-1.5 text-[#315b66] shadow-sm">
+                  <Camera className="h-4 w-4" />
+                </span>
               </label>
-              {profileImageDataUrl ? <button className="mt-2 w-20 text-xs font-medium text-slate-500 hover:text-rose-700 sm:w-24" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
+              {profileImageDataUrl ? (
+                <button
+                  className="mt-2 w-16 text-xs font-semibold text-[#71848a] hover:text-[#b8544f] sm:w-20"
+                  disabled={photoBusy}
+                  onClick={() => void removePhoto()}
+                  type="button"
+                >
+                  Remove
+                </button>
+              ) : null}
             </div>
 
-            <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Organization profile</p>
-              <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
-                {location ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-emerald-700" />{location}</span> : null}
-                {profile.place.placeType ? <span className="inline-flex items-center gap-1.5 capitalize"><Building2 className="h-4 w-4 text-emerald-700" />{profile.place.placeType.replaceAll("_", " ")}</span> : null}
-                {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="break-words text-2xl font-bold tracking-[-0.03em] text-[#173b48] sm:text-3xl">
+                  {profile.place.name}
+                </h1>
+                <span className="rounded-full bg-[#e2efe9] px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.1em] text-[#397064]">
+                  Active relationship
+                </span>
               </div>
-              <p className="mt-2 text-sm text-slate-500">{primaryContact ? `Primary contact: ${primaryContact.name}` : "No primary contact added yet"}</p>
-              {photoError ? <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{photoError}</p> : null}
-            </div>
-
-            <div className="border-t border-slate-100 pt-4 md:min-w-40 md:border-l md:border-t-0 md:pl-6 md:pt-0 md:text-right">
-              <p className="text-xl font-bold text-slate-950">{average.toFixed(1)} <span className="text-sm font-medium text-slate-500">/ 5</span></p>
-              <p className="mt-1 text-2xl tracking-wide text-amber-500" aria-label={`${filledStars} of 5 stars`}>{stars}</p>
-              <p className="mt-1 text-sm text-slate-500">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#688087]">
+                {location ? (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="h-4 w-4 text-[#4b8575]" />
+                    {location}
+                  </span>
+                ) : null}
+                <span className="inline-flex items-center gap-1.5 capitalize">
+                  <Building2 className="h-4 w-4 text-[#4b8575]" />
+                  {profile.place.placeType?.replaceAll("_", " ") || "Organization"}
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Check className="h-4 w-4 text-[#4b8575]" />
+                  Verified details
+                </span>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#71848a]">
+                <span
+                  className="inline-flex items-center gap-2"
+                  aria-label={`${average.toFixed(1)} out of 5 stars from ${ratingCount} reviews`}
+                >
+                  <span className="tracking-[0.1em] text-[#d4874f]" aria-hidden="true">
+                    {stars}
+                  </span>
+                  <span className="font-bold text-[#45616a]">{average.toFixed(1)}</span>
+                  <span>({ratingCount} reviews)</span>
+                </span>
+                {websiteHref ? (
+                  <a
+                    className="inline-flex items-center gap-1.5 font-semibold text-[#397064] hover:text-[#244f47]"
+                    href={websiteHref}
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Visit website
+                  </a>
+                ) : null}
+              </div>
+              {photoError ? (
+                <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">
+                  {photoError}
+                </p>
+              ) : null}
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm">
-            {phoneText && callHref ? <Link className="font-medium text-slate-700 hover:text-emerald-700" href={callHref}>{phoneText}</Link> : null}
-            {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-emerald-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
-            {websiteHref ? <a className="inline-flex items-center gap-1 font-medium text-slate-700 hover:text-emerald-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><Globe2 className="h-4 w-4" />{profile.place.website}</a> : null}
-            {!phoneText && !primaryContact?.email && !websiteHref ? <span className="text-slate-500">Contact details are not recorded yet</span> : null}
+          <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+            {callHref ? (
+              <Link className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" href={callHref}>
+                <Phone className="h-4 w-4" />
+                Call
+              </Link>
+            ) : null}
+            <button
+              aria-label="Edit profile"
+              className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]"
+              onClick={() => setEditing(true)}
+              type="button"
+            >
+              Edit
+            </button>
+            <button
+              className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]"
+              onClick={openNoteComposer}
+              type="button"
+            >
+              <Plus className="h-4 w-4" />
+              Add note
+            </button>
           </div>
+        </div>
 
-          <nav className="mt-4 -mx-1 flex flex-wrap gap-1 border-t border-slate-100 pt-3" aria-label="Profile sections" role="tablist">
-            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === null ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection(null)} role="tab" aria-selected={openSection === null} type="button">Overview</button>
-            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "contacts" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("contacts")} role="tab" aria-selected={openSection === "contacts"} type="button">Contacts</button>
-            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "events" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("events")} role="tab" aria-selected={openSection === "events"} type="button">Events</button>
-            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "notes" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("notes")} role="tab" aria-selected={openSection === "notes"} type="button">Activity</button>
-            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "emails" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("emails")} role="tab" aria-selected={openSection === "emails"} type="button">Emails</button>
-          </nav>
+        <div className="flex flex-col gap-3 border-t border-[#e1e8e3] px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-7">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
+              Organization record
+            </p>
+            <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
+              <div>
+                <dt className="font-semibold text-[#829696]">Address</dt>
+                <dd className="mt-0.5 leading-5 text-[#4d666d]">{address || "Not recorded"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-[#829696]">Organization group</dt>
+                <dd className="mt-0.5 text-[#4d666d]">{profile.familyContext?.name || "Not grouped"}</dd>
+              </div>
+              <div>
+                <dt className="font-semibold text-[#829696]">Relationship started</dt>
+                <dd className="mt-0.5 text-[#4d666d]">Not recorded</dd>
+              </div>
+            </dl>
+          </div>
+          <span className="hidden shrink-0 items-center gap-1.5 pt-1 text-xs font-semibold text-[#809295] md:inline-flex">
+            <Clock3 className="h-3.5 w-3.5" />
+            Mountain Time (MT)
+          </span>
         </div>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,0.75fr))_minmax(0,2.2fr)]">
-        {statCard({ value: profile.contacts.length, label: `Contact${profile.contacts.length === 1 ? "" : "s"}`, active: openSection === "contacts", onClick: () => toggleSection("contacts") })}
-        {statCard({ value: profile.bookings.length, label: `Event${profile.bookings.length === 1 ? "" : "s"}`, active: openSection === "events", onClick: () => toggleSection("events") })}
-        {statCard({ value: activities.length, label: `Note${activities.length === 1 ? "" : "s"}`, active: openSection === "notes", onClick: () => toggleSection("notes") })}
-        {statCard({ value: emailCount, label: `Email${emailCount === 1 ? "" : "s"}`, active: openSection === "emails", onClick: () => toggleSection("emails") })}
-        {!nextFollowUp ? (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-            <p className="font-bold text-emerald-900">No open follow-ups</p>
-            <p className="mt-1 text-sm text-emerald-800">You’re all caught up!</p>
-          </div>
-        ) : followUpOverdue ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm">
-            <p className="font-bold text-rose-900">Follow-up overdue</p>
-            <p className="mt-1 text-sm capitalize text-rose-800">{nextFollowUp.kind.replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
-          </div>
-        ) : (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-            <p className="font-bold text-amber-900">Follow-up needed</p>
-            <p className="mt-1 text-sm capitalize text-amber-800">{nextFollowUp.kind.replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}</p>
-          </div>
-        )}
+      <section className="grid gap-3 sm:grid-cols-3">
+        <StatCard
+          icon={<UsersRound className="h-4 w-4" />}
+          label={`Contacts`}
+          value={profile.contacts.length}
+          active={openSection === "contacts"}
+          onClick={() => toggleSection("contacts")}
+        />
+        <StatCard
+          icon={<CalendarDays className="h-4 w-4" />}
+          label="Upcoming events"
+          value={profile.bookings.length}
+          active={openSection === "events"}
+          onClick={() => toggleSection("events")}
+        />
+        <StatCard
+          icon={<Mail className="h-4 w-4" />}
+          label={`${emailCount} Emails`}
+          value={emailCount}
+          active={openSection === "emails"}
+          onClick={() => toggleSection("emails")}
+        />
       </section>
 
-      {openSection === "contacts" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-bold">Contacts</h2>
-          {profile.contacts.length ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              {profile.contacts.map((contact) => (
-                  <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-emerald-300 hover:bg-emerald-50" href={`/contacts/${contact.id}`} key={contact.id}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-slate-900">{contact.name}</span>
-                    {contact.isPrimary ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Primary</span> : null}
+      {openSection === null ? (
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
+          <div className="grid gap-5">
+            <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Next action</p>
+                  <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]">
+                    {nextFollowUp ? "Follow up with this organization" : "All caught up"}
+                  </h2>
+                  <p className="mt-1 text-sm text-[#71848a]">
+                    {nextFollowUp
+                      ? "Keep the relationship moving with the next useful touchpoint."
+                      : "No open follow-ups for this organization."}
+                  </p>
+                </div>
+                {nextFollowUp ? (
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${followUpOverdue ? "bg-[#f5dfdc] text-[#9b4e48]" : "bg-[#faecd9] text-[#9b633e]"}`}>
+                    {followUpOverdue ? "Overdue" : `Due ${formatShortDate(nextFollowUp.dueAt) ?? "soon"}`}
+                  </span>
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2efe9] text-[#397064]">
+                    <Check className="h-5 w-5" />
+                  </span>
+                )}
+              </div>
+              {nextFollowUp && primaryContact ? (
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[#e5ebe5] pt-4">
+                  <div className="flex items-center gap-2 text-sm text-[#526970]">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">
+                      {initials(primaryContact.name)}
+                    </span>
+                    <span>
+                      <span className="block text-xs text-[#87989a]">Primary contact</span>
+                      <span className="font-semibold">{primaryContact.name}</span>
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-600">{[contact.role, contact.phone, contact.email].filter(Boolean).join(" · ") || "Contact details not recorded"}</p>
-                </Link>
+                  <ProfileActionsMenu profileId={profile.id} contactId={primaryContact.id} showAddNote={false} />
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship activity</p>
+                  <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]">Recent history</h2>
+                </div>
+                <button
+                  className="inline-flex items-center gap-1.5 text-sm font-bold text-[#397064] hover:text-[#244f47]"
+                  onClick={() => setOpenSection("notes")}
+                  type="button"
+                >
+                  View all
+                  <ArrowUpRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="mt-5 grid gap-4">
+                {activities.slice(0, 3).length ? (
+                  activities.slice(0, 3).map((activity) => (
+                    <article className="flex gap-3" key={activity.id}>
+                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activity.kind === "call" ? "bg-[#f5e6dc] text-[#a66845]" : "bg-[#e3eee8] text-[#397064]"}`}>
+                        {activity.kind === "call" ? <Phone className="h-4 w-4" /> : <StickyNote className="h-4 w-4" />}
+                      </div>
+                      <div className="min-w-0 flex-1 border-b border-[#edf0eb] pb-4 last:border-0 last:pb-0">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#668078]">{activity.kind}</p>
+                          <time className="text-xs text-[#8b9a9b]">{formatShortDate(activity.occurredAt)}</time>
+                        </div>
+                        <p className="mt-1 text-sm leading-6 text-[#4d666d]">{activity.body}</p>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-[#71848a]">No relationship activity has been recorded yet.</p>
+                )}
+              </div>
+            </section>
+          </div>
+
+          <aside className="grid content-start gap-5">
+            <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)]">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship health</p>
+                <span className="text-xs font-bold text-[#397064]">{ratingCount ? "Good standing" : "Not rated"}</span>
+              </div>
+              <div className="mt-4 flex items-end justify-between">
+                <span className="text-3xl font-bold tracking-tight text-[#173b48]">
+                  {average.toFixed(1)} <span className="text-sm font-semibold text-[#849597]">/ 5</span>
+                </span>
+                <span className="text-xs text-[#849597]">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</span>
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e1e9e4]">
+                <div className="h-full rounded-full bg-[#5d9583]" style={{ width: `${Math.min(100, Math.max(0, average * 20))}%` }} />
+              </div>
+              <p className="mt-3 text-sm leading-5 text-[#71848a]">
+                Use recent history and follow-ups to keep this relationship moving with a steady cadence.
+              </p>
+            </section>
+          </aside>
+        </div>
+      ) : null}
+
+      {openSection === "contacts" ? (
+        <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">People at this organization</p>
+              <h2 className="mt-1 text-xl font-bold text-[#173b48]">Contacts</h2>
+            </div>
+            <Link className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" href="/contacts/new">
+              <Plus className="h-4 w-4" />
+              Add contact
+            </Link>
+          </div>
+          {profile.contacts.length ? (
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {profile.contacts.map((contact) => (
+                <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={contact.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <Link className="flex min-w-0 items-center gap-3" href={`/contacts/${contact.id}`}>
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">
+                        {initials(contact.name)}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-bold text-[#173b48]">{contact.name}</span>
+                        <span className="block truncate text-sm text-[#71848a]">{contact.role || "Contact"}</span>
+                      </span>
+                    </Link>
+                    {contact.isPrimary ? (
+                      <span className="rounded-full bg-[#e2efe9] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#397064]">
+                        Primary
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-4 text-xs font-semibold text-[#839596]">
+                    {contact.phone || contact.email || "Contact details not recorded"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {contact.phone ? (
+                      <a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]" href={`tel:${contact.phone}`}>
+                        <Phone className="h-3.5 w-3.5" />
+                        Call
+                      </a>
+                    ) : null}
+                    {contact.email ? (
+                      <a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]" href={`mailto:${contact.email}`}>
+                        <Mail className="h-3.5 w-3.5" />
+                        Email
+                      </a>
+                    ) : null}
+                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#397064]" href={`/contacts/${contact.id}`}>
+                      Details
+                      <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </div>
+                </article>
               ))}
             </div>
-          ) : <p className="mt-3 text-sm text-slate-600">No contacts have been added yet.</p>}
+          ) : (
+            <p className="mt-4 text-sm text-[#71848a]">No contacts have been added yet.</p>
+          )}
         </section>
       ) : null}
 
       {openSection === "events" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h2 className="text-lg font-bold">Events</h2>
+        <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Bookings and opportunities</p>
+          <h2 className="mt-1 text-xl font-bold text-[#173b48]">Upcoming events</h2>
           {profile.bookings.length ? (
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.bookings.map((booking) => (
-                  <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-emerald-300 hover:bg-emerald-50" href={`/bookings/${booking.id}`} key={booking.id}>
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-semibold text-slate-900">{booking.name}</span>
-                    <span className="text-xs font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span>
+                <Link className="group rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4 transition hover:border-[#9ab6a9] hover:bg-[#f3f8f3]" href={`/bookings/${booking.id}`} key={booking.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span>
+                      <span className="block font-bold text-[#173b48]">{booking.name}</span>
+                      <span className="mt-1 block text-sm text-[#71848a]">{booking.notes || "Booking context"}</span>
+                    </span>
+                    <span className="rounded-full bg-[#e2efe9] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#397064]">
+                      {booking.status.replaceAll("_", " ")}
+                    </span>
                   </div>
-                  <p className="mt-1 text-sm text-slate-600">{[booking.city, booking.region].filter(Boolean).join(", ") || "Location not set"}</p>
-                  <p className="mt-1 text-xs text-slate-500">{formatDateTime(booking.startsAt) ?? "Date not set"}</p>
+                  <div className="mt-5 flex items-center justify-between border-t border-[#e5ebe5] pt-3 text-sm">
+                    <span className="inline-flex items-center gap-1.5 font-semibold text-[#536e75]">
+                      <CalendarDays className="h-4 w-4 text-[#4b8575]" />
+                      {formatShortDate(booking.startsAt) || "Date not set"}
+                    </span>
+                    <ArrowUpRight className="h-4 w-4 text-[#87a19a] opacity-0 transition group-hover:opacity-100" />
+                  </div>
                 </Link>
               ))}
             </div>
-          ) : <p className="mt-3 text-sm text-slate-600">No events have been added yet.</p>}
+          ) : (
+            <p className="mt-4 text-sm text-[#71848a]">No events have been added yet.</p>
+          )}
         </section>
       ) : null}
 
       {openSection === "notes" ? (
-        <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div><h2 className="text-lg font-bold">Activity history</h2><span className="text-xs text-slate-500">America/Denver</span></div>
-            <button className="button-primary" type="button" onClick={openNoteComposer}>Add note</button>
+        <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship history</p>
+              <h2 className="mt-1 text-xl font-bold text-[#173b48]">Activity history</h2>
+            </div>
+            <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" onClick={openNoteComposer} type="button">
+              <Plus className="h-4 w-4" />
+              Add note
+            </button>
           </div>
-
-          <label className="relative mt-4 block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <label className="relative mt-5 block max-w-xl">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8da09d]" />
             <input
               aria-label="Search notes & history"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm"
-              placeholder="Search notes & history"
+              className="w-full rounded-lg border border-[#d3e0d9] bg-[#f8faf6] py-2.5 pl-9 pr-3 text-sm text-[#173b48] outline-none transition focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]"
+              placeholder="Search notes, calls, and outreach"
               value={noteSearch}
               onChange={(event) => setNoteSearch(event.target.value)}
             />
           </label>
-
           {noteComposerOpen ? (
-            <div className="mt-3 grid gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">
+            <div className="mt-4 rounded-xl border border-[#bfd5ca] bg-[#edf5ef] p-4">
+              <label className="grid gap-2 text-sm font-bold text-[#315b66]">
                 New note
-                <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
+                <textarea
+                  autoFocus
+                  className="min-h-24 rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2 font-normal text-[#173b48] outline-none focus:ring-2 focus:ring-[#d3e8da]"
+                  value={noteBody}
+                  onChange={(event) => setNoteBody(event.target.value)}
+                />
               </label>
-              {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
-              <div className="flex flex-wrap gap-2">
-                <button className="button-primary" type="button" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()}>{noteSaving ? "Saving…" : "Save note"}</button>
-                <button className="button-secondary" type="button" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}>Cancel</button>
+              {noteError ? <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">{noteError}</p> : null}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="button-primary !bg-[#397064] hover:!bg-[#2d5d54]" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
+                  {noteSaving ? "Saving…" : "Save note"}
+                </button>
+                <button className="button-secondary !bg-transparent" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); }} type="button">
+                  Cancel
+                </button>
               </div>
             </div>
           ) : null}
-
-          <div className="mt-4">
-            {normalizedSearch && filteredActivities.length === 0 ? <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">No notes or history match “{noteSearch.trim()}”.</p> : (
+          <div className="mt-6">
+            {normalizedSearch && filteredActivities.length === 0 ? (
+              <p className="rounded-xl bg-[#f4f8f4] p-4 text-sm text-[#71848a]">No notes or history match “{noteSearch.trim()}”.</p>
+            ) : (
               <ActivityTimeline
                 activities={filteredActivities}
                 editActivity={editActivityAction}
@@ -444,16 +818,26 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {openSection === "emails" ? (
-        <ProfileGoogleEmailPanel organizationId={profile.id} />
-      ) : null}
+      {openSection === "emails" ? <ProfileGoogleEmailPanel organizationId={profile.id} /> : null}
 
-      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h2 className="text-lg font-bold">About</h2>
-        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <div><dt className="font-semibold text-slate-500">Address</dt><dd className="mt-1 whitespace-pre-line text-slate-800">{[profile.place.address1, profile.place.address2, [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" ")].filter(Boolean).join("\n") || "Not set"}</dd></div>
-          <div><dt className="font-semibold text-slate-500">Category</dt><dd className="mt-1 capitalize text-slate-800">{profile.place.placeType?.replaceAll("_", " ") || "Other"}</dd></div>
-          {profile.familyContext ? <div><dt className="font-semibold text-slate-500">Group</dt><dd className="mt-1 text-slate-800">{profile.familyContext.name}</dd></div> : null}
+      <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
+        <div className="flex items-center gap-2">
+          <Globe2 className="h-4 w-4 text-[#4b8575]" />
+          <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-[#75908b]">About this organization</h2>
+        </div>
+        <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <dt className="font-semibold text-[#829696]">Description</dt>
+            <dd className="mt-1 whitespace-pre-wrap leading-6 text-[#4d666d]">{profile.place.description || "No description recorded."}</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-[#829696]">Office phone</dt>
+            <dd className="mt-1 text-[#4d666d]">{formatPhoneDisplay(profile.place.phone) || "Not recorded"}</dd>
+          </div>
+          <div>
+            <dt className="font-semibold text-[#829696]">Website</dt>
+            <dd className="mt-1 break-all text-[#4d666d]">{profile.place.website || "Not recorded"}</dd>
+          </div>
         </dl>
       </section>
     </div>
