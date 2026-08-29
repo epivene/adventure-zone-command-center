@@ -1,7 +1,8 @@
 import { sql } from "drizzle-orm";
 
-import type { db as database } from "../../db/client";
-import type { SetFillerInput } from "./last-resort-input";
+import type { db as database } from "@/db/client";
+import { recordAuditEntry } from "@/features/audit/audit-service";
+import type { SetFillerInput } from "@/features/organizations/last-resort-input";
 
 type FillerRow = {
   id: string;
@@ -10,8 +11,10 @@ type FillerRow = {
   fillerChangedAt: Date | string | null;
 };
 
+type DrizzleDatabase = typeof database;
+
 export async function getOrganizationFiller(
-  db: typeof database,
+  db: DrizzleDatabase,
   organizationId: string,
 ): Promise<FillerRow | null> {
   const result = await db.execute<FillerRow>(sql`
@@ -28,13 +31,13 @@ export async function getOrganizationFiller(
 }
 
 export async function setOrganizationFiller(
-  db: typeof database,
+  db: Pick<DrizzleDatabase, "transaction">,
   input: SetFillerInput,
-  now: Date,
-): Promise<void> {
+  changedAt: Date,
+): Promise<boolean> {
   const reason = input.enabled ? input.reason.trim() : null;
 
-  await db.transaction(async (transaction) => {
+  return db.transaction(async (transaction) => {
     const currentResult = await transaction.execute<FillerRow>(sql`
       select
         id,
@@ -46,27 +49,34 @@ export async function setOrganizationFiller(
       for update
     `);
     const current = currentResult.rows?.[0];
-    if (!current) throw new Error("Organization not found");
+    if (!current) return false;
 
     await transaction.execute(sql`
       update organizations
       set
         filler = ${input.enabled},
         filler_reason = ${reason},
-        filler_changed_at = ${now},
-        updated_at = ${now}
+        filler_changed_at = ${changedAt},
+        updated_at = ${changedAt}
       where id = ${input.organizationId}::uuid
     `);
 
-    await transaction.execute(sql`
-      insert into audit_entries (entity_type, entity_id, action, before, after)
-      values (
-        'organization',
-        ${input.organizationId}::uuid,
-        'organization_filler_changed',
-        ${JSON.stringify({ filler: current.filler, fillerReason: current.fillerReason })}::jsonb,
-        ${JSON.stringify({ filler: input.enabled, fillerReason: reason })}::jsonb
-      )
-    `);
+    await recordAuditEntry(transaction, {
+      entityType: "organization",
+      entityId: input.organizationId,
+      action: input.enabled ? "filler_enabled" : "filler_cleared",
+      before: {
+        filler: current.filler,
+        fillerReason: current.fillerReason,
+        fillerChangedAt: current.fillerChangedAt,
+      },
+      after: {
+        filler: input.enabled,
+        fillerReason: reason,
+        fillerChangedAt: changedAt,
+      },
+    });
+
+    return true;
   });
 }
