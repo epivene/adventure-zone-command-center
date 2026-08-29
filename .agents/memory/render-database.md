@@ -15,3 +15,10 @@ Render DB schema is fully applied. The `organization_contacts_organization_conta
 Running `drizzle-kit push` in a non-TTY shell (ShellExec) fails when Drizzle detects schema differences requiring a data-destructive confirmation prompt. Workaround: apply the SQL directly via psql first, then push succeeds (or skip push when schema is already in sync).
 
 **How to apply:** Always run schema changes via `RENDER_DATABASE_URL="${RENDER_DATABASE_URL}?sslmode=require" pnpm drizzle-kit push` from `lib/db/`. If it hangs on a TTY prompt, apply the SQL via psql directly.
+
+## Fresh Replit development database
+A fresh Replit database cannot currently be initialized by the core Drizzle push alone. Newer split schema modules have startup helpers with dependency ordering: office-coordinator schema must exist before business-source/template migrations, and templates must exist before lead-intake startup.
+
+**Why:** Core push created the legacy tables, but API startup then failed first on missing organizations and later on communication templates. Running the existing office initializer before the business-drive initializer allowed required startup to complete.
+
+**How to apply:** For a local Replit preview, keep `RENDER_DATABASE_URL` unset so the managed `DATABASE_URL` is selected. Bootstrap split schema dependencies before expecting first API startup to succeed; treat the post-listen Act migration warning separately from health.
