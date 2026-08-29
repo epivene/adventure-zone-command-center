@@ -5,6 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
 import { buildMonthSpanSegments, type MonthSpanSegment } from "@/features/calendar/month-spans";
+import {
+  bookingVisualKindOnDate,
+  colorForBookingDay,
+  DEFAULT_SCHEDULE_DISPLAY_COLORS,
+  type ScheduleDisplayColors,
+} from "@/features/calendar/calendar-visual-blocks";
 import { BUSINESS_TIME_ZONE, businessDateKey } from "@/lib/business-date";
 
 export type ActCalendarActivity = {
@@ -23,7 +29,12 @@ export type ActCalendarActivity = {
   bookingId: string | null;
 };
 
-export type BookingEvent = MapEvent & { source?: "booking" | undefined };
+export type BookingEvent = MapEvent & {
+  source?: "booking" | "google_operational_review" | undefined;
+  actualStartsAt?: Date | null;
+  actualEndsAt?: Date | null;
+  operationalWindowSource?: string | null;
+};
 export type CalendarEvent = BookingEvent | ActCalendarActivity;
 type CalendarView = "month" | "agenda";
 type PositionedSegment = MonthSpanSegment & { lane: number };
@@ -106,11 +117,15 @@ function positionWeekSegments(segments: MonthSpanSegment[]): PositionedSegment[]
   return positioned;
 }
 
+function bookingHref(event: BookingEvent) {
+  return `/bookings/${event.id}`;
+}
+
 function BookingEventLink({ event, compact = false }: { event: BookingEvent; compact?: boolean }) {
   const confirmed = event.status === "confirmed";
   const color = event.travelLegColor ?? "#64748b";
   return (
-    <Link className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"}`} href={`/bookings/${event.id}`} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>
+    <Link className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"}`} href={bookingHref(event)} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>
       <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>{event.name}</span>
       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
         <span className={confirmed ? "rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800" : "rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800"}>{confirmed ? "Confirmed" : "Tentative"}</span>
@@ -157,7 +172,20 @@ function ActActivityPopover({ event, onClose }: { event: ActCalendarActivity; on
   );
 }
 
-function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments, activeMonth, onSelectActivity }: { weekIndex: number; days: Date[]; bookingEvents: BookingEvent[]; actEvents: ActCalendarActivity[]; segments: MonthSpanSegment[]; activeMonth: Date; onSelectActivity: (event: ActCalendarActivity) => void }) {
+function gradientForSegment(event: BookingEvent, segment: MonthSpanSegment, days: Date[], colors: ScheduleDisplayColors) {
+  const segmentDays = days.slice(segment.startColumn, segment.endColumn + 1);
+  if (!segmentDays.length) return colors.eventColor;
+  const stops: string[] = [];
+  segmentDays.forEach((date, index) => {
+    const color = colorForBookingDay(event, utcDateKey(date), colors) ?? colors.eventColor;
+    const start = (index / segmentDays.length) * 100;
+    const end = ((index + 1) / segmentDays.length) * 100;
+    stops.push(`${color} ${start}%`, `${color} ${end}%`);
+  });
+  return `linear-gradient(to right, ${stops.join(", ")})`;
+}
+
+function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments, activeMonth, onSelectActivity, colors }: { weekIndex: number; days: Date[]; bookingEvents: BookingEvent[]; actEvents: ActCalendarActivity[]; segments: MonthSpanSegment[]; activeMonth: Date; onSelectActivity: (event: ActCalendarActivity) => void; colors: ScheduleDisplayColors }) {
   const positioned = useMemo(() => positionWeekSegments(segments), [segments]);
   const laneCount = positioned.length ? Math.max(...positioned.map((segment) => segment.lane)) + 1 : 0;
   const eventById = useMemo(() => new Map(bookingEvents.map((event) => [event.id, event])), [bookingEvents]);
@@ -176,28 +204,46 @@ function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments,
         {positioned.map((segment) => {
           const event = eventById.get(segment.eventId);
           if (!event) return null;
-          const color = event.travelLegColor ?? "#64748b";
           const confirmed = event.status === "confirmed";
-          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border bg-white px-2 py-1 text-xs font-bold shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={`/bookings/${event.id}`} key={`${event.id}-${weekIndex}`} style={{ borderLeftColor: color, borderLeftWidth: segment.startsHere ? "4px" : "1px", gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1 }} title={`${event.name}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? event.name : `↳ ${event.name}`}</Link>;
+          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-orange-300 ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={bookingHref(event)} key={`${event.id}-${weekIndex}`} style={{ background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1 }} title={`${event.name}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? event.name : `↳ ${event.name}`}</Link>;
         })}
       </div>
     </div>
   );
 }
 
-export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void }) {
+function MobileBookingStrip({ event, dateKey, colors }: { event: BookingEvent; dateKey: string; colors: ScheduleDisplayColors }) {
+  if (!event.startsAt) return null;
+  const kind = bookingVisualKindOnDate(event, dateKey);
+  if (!kind) return null;
+  const startsOn = utcDateKey(event.startsAt);
+  const endsOn = utcDateKey(event.endsAt ?? event.startsAt);
+  const startsHere = dateKey === startsOn;
+  const endsHere = dateKey === endsOn;
+  const color = kind === "event" ? colors.eventColor : colors.travelColor;
+  return (
+    <Link
+      aria-label={`${event.name}, ${kind === "event" ? "event" : "travel/setup"}`}
+      className={`block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 text-white shadow-sm ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`}
+      href={bookingHref(event)}
+      style={{ backgroundColor: color }}
+      title={`${event.name} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`}
+    >
+      {startsHere ? <span className="block truncate">{event.name}</span> : <span aria-hidden="true">&nbsp;</span>}
+    </Link>
+  );
+}
+
+export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange, colors = DEFAULT_SCHEDULE_DISPLAY_COLORS }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void; colors?: ScheduleDisplayColors }) {
   const [view, setView] = useState<CalendarView>("month");
-  const [activeMonth, setActiveMonth] = useState(() => parseMonth(initialMonth));
+  const activeMonth = useMemo(() => parseMonth(initialMonth), [initialMonth]);
   const [showActActivities, setShowActActivities] = useState(false);
   const [selectedActivity, setSelectedActivity] = useState<ActCalendarActivity | null>(null);
   const [selectedDayKey, setSelectedDayKey] = useState(() => initialSelectedDay(initialMonth));
   const [agendaLimit, setAgendaLimit] = useState(12);
 
   useEffect(() => {
-    if (monthKey(activeMonth) === initialMonth) return;
-    const next = parseMonth(initialMonth);
-    setActiveMonth(next);
-    setSelectedDayKey(initialSelectedDay(initialMonth));
+    setSelectedDayKey((current) => current.startsWith(`${initialMonth}-`) ? current : initialSelectedDay(initialMonth));
   }, [initialMonth]);
 
   const { bookingEvents, actEvents } = useMemo(() => {
@@ -246,7 +292,6 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   }, [upcomingEvents]);
 
   function selectMonth(next: Date) {
-    setActiveMonth(next);
     const key = monthKey(next);
     setSelectedDayKey(initialSelectedDay(key));
     onMonthChange?.(key);
@@ -259,7 +304,6 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   function goToday() {
     const now = new Date();
     const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-    setActiveMonth(next);
     setSelectedDayKey(businessDateKey(now));
     onMonthChange?.(monthKey(next));
   }
@@ -269,7 +313,6 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
     setSelectedDayKey(key);
     if (date.getUTCMonth() !== activeMonth.getUTCMonth() || date.getUTCFullYear() !== activeMonth.getUTCFullYear()) {
       const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
-      setActiveMonth(next);
       onMonthChange?.(monthKey(next));
     }
   }
@@ -316,16 +359,20 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
               {monthDays.map((date) => {
                 const key = utcDateKey(date);
                 const inMonth = date.getUTCMonth() === activeMonth.getUTCMonth();
-                const bookingCount = datedBookings.filter((event) => bookingOccursOn(event, key)).length;
+                const bookingsOnDay = datedBookings.filter((event) => bookingOccursOn(event, key));
                 const actCount = showActActivities ? datedActEvents.filter((event) => utcDateKey(event.startsAt) === key).length : 0;
-                const count = bookingCount + actCount;
                 const selected = key === selectedDayKey;
                 const today = key === todayKey;
                 return (
-                  <button aria-label={`${formatSelectedDay(date)}${count ? `, ${count} item${count === 1 ? "" : "s"}` : ""}`} className={`relative min-h-14 bg-white p-1.5 text-center ${inMonth ? "text-slate-800" : "text-slate-400"} ${selected ? "ring-2 ring-inset ring-orange-400" : ""}`} key={key} onClick={() => chooseMobileDay(date)} type="button">
-                    <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${today ? "bg-orange-600 text-white" : ""}`}>{date.getUTCDate()}</span>
-                    {count ? <span className="mx-auto mt-0.5 block w-fit rounded-full bg-slate-100 px-1.5 text-[10px] font-bold text-slate-600">{count}</span> : <span className="block h-3" />}
-                  </button>
+                  <div className={`relative min-h-20 bg-white pb-1 text-center ${inMonth ? "text-slate-800" : "text-slate-400"} ${selected ? "ring-2 ring-inset ring-orange-400" : ""}`} key={key}>
+                    <button aria-label={`${formatSelectedDay(date)}${bookingsOnDay.length + actCount ? `, ${bookingsOnDay.length + actCount} item${bookingsOnDay.length + actCount === 1 ? "" : "s"}` : ""}`} className="block w-full p-1.5 pb-0" onClick={() => chooseMobileDay(date)} type="button">
+                      <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${today ? "bg-orange-600 text-white" : ""}`}>{date.getUTCDate()}</span>
+                    </button>
+                    <div className="mt-1 grid gap-0.5 overflow-hidden">
+                      {bookingsOnDay.map((event) => <MobileBookingStrip colors={colors} dateKey={key} event={event} key={event.id} />)}
+                      {actCount ? <button className="mx-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800" onClick={() => chooseMobileDay(date)} type="button">{actCount} ACT</button> : null}
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -342,7 +389,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
           <div className="hidden sm:block">
             {Array.from({ length: 6 }, (_, weekIndex) => {
               const days = monthDays.slice(weekIndex * 7, weekIndex * 7 + 7);
-              return <DesktopMonthWeek activeMonth={activeMonth} actEvents={showActActivities ? datedActEvents : []} bookingEvents={datedBookings} days={days} key={weekIndex} onSelectActivity={setSelectedActivity} segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)} weekIndex={weekIndex} />;
+              return <DesktopMonthWeek activeMonth={activeMonth} actEvents={showActActivities ? datedActEvents : []} bookingEvents={datedBookings} colors={colors} days={days} key={weekIndex} onSelectActivity={setSelectedActivity} segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)} weekIndex={weekIndex} />;
             })}
           </div>
         </div>
