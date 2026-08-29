@@ -1,0 +1,41 @@
+name: Profile Filler CI
+
+on:
+  pull_request:
+    paths:
+      - "lib/db/src/schema/index.ts"
+      - "lib/db/migrations/*filler*"
+      - "artifacts/api-server/src/features/organizations/filler-profile.test.ts"
+      - "artifacts/api-server/src/features/organizations/last-resort-input.ts"
+      - "artifacts/api-server/src/features/organizations/filler-service.ts"
+      - "artifacts/api-server/src/features/organizations/organization-directory-page.ts"
+      - "artifacts/api-server/src/routes/organizations.ts"
+      - "artifacts/adventure-zone/src/features/organizations/last-resort-input.ts"
+      - "artifacts/adventure-zone/src/features/organizations/organization-repository.ts"
+      - "artifacts/adventure-zone/src/actions/organizations.ts"
+      - "artifacts/adventure-zone/src/components/profiles/profile-filler-action.tsx"
+      - "artifacts/adventure-zone/src/components/profiles/profile-actions-menu.tsx"
+      - "artifacts/adventure-zone/src/components/organizations/organization-list.tsx"
+      - "artifacts/adventure-zone/src/components/organizations/organization-list-filler.test.tsx"
+      - "artifacts/adventure-zone/src/pages/OrganizationsPage.tsx"
+      - ".github/workflows/profile-filler-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Filler profile tests
+        run: pnpm exec vitest run artifacts/api-server/src/features/organizations/filler-profile.test.ts artifacts/adventure-zone/src/components/organizations/organization-list-filler.test.tsx
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: App typecheck
+        run: pnpm --filter @workspace/adventure-zone typecheck
