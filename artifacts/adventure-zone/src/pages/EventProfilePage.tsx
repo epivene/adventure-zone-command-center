@@ -3,7 +3,6 @@ import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
-import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
@@ -181,7 +180,6 @@ export default function EventProfilePage() {
           />
         </div>
 
-        {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
