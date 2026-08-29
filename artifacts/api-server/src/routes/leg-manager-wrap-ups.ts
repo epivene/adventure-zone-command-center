@@ -6,6 +6,12 @@ import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-ma
 import { DrizzleEventWrapUpRepository } from "@/features/leg-manager/event-wrap-up-repository";
 import { EventWrapUpService, type EventWrapUpDraftInput } from "@/features/leg-manager/event-wrap-up-service";
 import { DrizzleEventWrapUpSource } from "@/features/leg-manager/event-wrap-up-source";
+import { requireOwnerMiddleware } from "../lib/auth";
+import {
+  organizerFeedbackAdminRouter,
+  organizerFeedbackManagerRouter,
+  organizerFeedbackPublicRouter,
+} from "./organizer-feedback";
 
 const draftSchema = z.object({
   ratingStars: z.number().int().min(0).max(5).nullable(),
@@ -81,6 +87,12 @@ export function createManagerWrapUpRouter(deps: {
       res.status(errorStatus(error)).json({ error: error instanceof Error ? error.message : "Could not submit wrap-up" });
     }
   });
+
+  // Organizer feedback belongs to the same post-event workflow, but remains a
+  // separate record: managers review events above; organizers review managers here.
+  router.use(organizerFeedbackPublicRouter);
+  router.use(organizerFeedbackManagerRouter);
+  router.use(requireOwnerMiddleware, organizerFeedbackAdminRouter);
 
   return router;
 }
