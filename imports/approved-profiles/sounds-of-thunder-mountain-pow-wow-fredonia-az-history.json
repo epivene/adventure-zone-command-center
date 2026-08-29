@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Sounds of Thunder Mountain Pow Wow", "city": "Fredonia", "region": "AZ"},
   "profile": {"placeType": "tribe", "description": "Annual Kaibab Paiute cultural pow wow. The 2026 event was Aug. 15-16. Adventure Zone was redirected to the Pow Wow committee rather than declined."},
-  "contacts": [{"id": null, "name": "Tara Spute-Dick", "phone": "", "email": "", "role": "Pow Wow Committee Chairperson", "primary": true}, {"id": null, "name": "Angelita Bulletts", "phone": "", "email": "", "role": "Committee Vendor Representative", "primary": false}],
+  "contacts": [{"id": null, "name": "Tara Spute-Dick", "phone": "", "email": "", "role": "Pow Wow Committee Chairperson - verify current role/contact", "primary": true}, {"id": null, "name": "Angelita Bulletts", "phone": "", "email": "", "role": "Committee Vendor Representative - verify current role/contact", "primary": false}],
   "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [{"subject": "2026 redirect to Pow Wow committee", "body": "LeAnn Shearer replied July 23, 2026 confirming the Kaibab Paiute Tribe's Aug. 15-16 Sounds of Thunder Mountain Pow Wow and directed Adventure Zone to committee chair Tara Spute-Dick and vendor representative Angelita Bulletts, copying them on the email. This was not a decline. Current event listings confirm the 2026 pow wow occurred Aug. 15-16. Before any future outreach, verify whether Tara/Angelita remain the correct committee contacts and continue from this referral."}],
-  "followUps": [{"label": "Check 2027 Sounds of Thunder Mountain Pow Wow committee", "reason": "Adventure Zone was specifically referred to the Pow Wow committee in 2026. Verify the next event date and current committee contacts before reaching out.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  "followUps": [{"label": "Verify Pow Wow committee contacts", "reason": "Confirm Tara Spute-Dick and Angelita Bulletts' current committee roles/contact information and the 2027 event before outreach.", "dueAt": "2027-03-01T16:00:00.000Z"}]
 }
