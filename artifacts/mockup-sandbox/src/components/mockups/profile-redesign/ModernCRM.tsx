@@ -435,10 +435,9 @@ export function ModernCRM() {
           </div>
         ) : null}
 
-        <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <section className="mt-5 grid gap-3 sm:grid-cols-3">
           <Metric active={section === "contacts"} icon={<UsersRound className="h-4 w-4" />} label="Contacts" onClick={() => toggleSection("contacts")} testId="metric-contacts" value={String(contacts.length)} />
           <Metric active={section === "events"} icon={<CalendarDays className="h-4 w-4" />} label="Upcoming events" onClick={() => toggleSection("events")} testId="metric-events" value={String(bookings.length)} />
-          <Metric active={section === "notes"} icon={<StickyNote className="h-4 w-4" />} label="Activity notes" onClick={() => toggleSection("notes")} testId="metric-notes" value={String(activities.length)} />
           <Metric active={section === "emails"} icon={<Mail className="h-4 w-4" />} label="Email threads" onClick={() => toggleSection("emails")} testId="metric-emails" value="8" />
         </section>
 
