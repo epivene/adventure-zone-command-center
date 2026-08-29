@@ -36,6 +36,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: On-device assistant runtime test
+        run: pnpm exec vitest run artifacts/adventure-zone/src/features/assistant/on-device-ai-runtime.test.ts
       - name: Assistant server tests
         run: >-
           pnpm exec vitest run

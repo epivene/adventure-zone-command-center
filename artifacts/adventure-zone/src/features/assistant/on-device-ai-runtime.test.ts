@@ -74,7 +74,7 @@ describe("on-device AI runtime", () => {
     expect(mocked.pipeline).toHaveBeenCalledWith(
       "feature-extraction",
       "onnx-community/all-MiniLM-L6-v2-ONNX",
-      expect.objectContaining({ dtype: "q8" }),
+      expect.objectContaining({ dtype: "q4" }),
     );
     expect(getOnDeviceAiState().status).toBe("ready");
   });

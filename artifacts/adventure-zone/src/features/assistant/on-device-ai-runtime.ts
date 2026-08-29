@@ -37,7 +37,7 @@ type TransformersModule = {
     task: string,
     model: string,
     options?: {
-      dtype?: "q8";
+      dtype?: "q4";
       progress_callback?: (info: Record<string, unknown>) => void;
     },
   ) => Promise<FeaturePipeline>;
@@ -169,7 +169,7 @@ export async function initializeOnDeviceAi(): Promise<void> {
         "feature-extraction",
         MODEL_ID,
         {
-          dtype: "q8",
+          dtype: "q4",
           progress_callback: (info) => {
             if (state.status !== "loading") return;
             const file = typeof info.file === "string" ? info.file : null;
