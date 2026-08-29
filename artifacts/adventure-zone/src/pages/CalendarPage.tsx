@@ -28,7 +28,7 @@ function isActActivity(event: CalendarEvent) {
 }
 
 function isGoogleOperationalReview(event: CalendarEvent) {
-  return event.source === "google_operational_review";
+  return (event as any).source === "google_operational_review";
 }
 
 type OperationalCalendarStatus = {
@@ -82,7 +82,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   }, [activeMonth]);
 
   const scopedEvents = useMemo(() => (events as any[]).filter((event) => {
-    if (legId && event.travelLegId !== legId && event.travelLegName !== legId) return false;
+    if (legId && event.travelLegId !== legId) return false;
     if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
