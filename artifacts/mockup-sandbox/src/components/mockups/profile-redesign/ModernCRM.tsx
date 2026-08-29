@@ -216,7 +216,7 @@ function Metric({
 
 export function ModernCRM() {
   const [section, setSection] = useState<Section>("overview");
-  const [contacts] = useState(initialContacts);
+  const [contacts, setContacts] = useState(initialContacts);
   const [activities, setActivities] = useState(initialActivities);
   const [noteSearch, setNoteSearch] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -227,6 +227,8 @@ export function ModernCRM() {
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const [contactProfileOpen, setContactProfileOpen] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [contactEditing, setContactEditing] = useState(false);
+  const [contactDraft, setContactDraft] = useState<Contact | null>(null);
   const [editing, setEditing] = useState(false);
   const [organizationName, setOrganizationName] = useState("Pine Ridge Adventure Lodge");
   const [draftName, setDraftName] = useState(organizationName);
@@ -282,6 +284,35 @@ export function ModernCRM() {
     setOrganizationName(nextName);
     setEditing(false);
     showAction("Organization details saved.");
+  };
+
+  const startContactEdit = () => {
+    setContactDraft({ ...activeContact });
+    setContactEditing(true);
+  };
+
+  const saveContactEdit = () => {
+    if (!contactDraft || !contactDraft.name.trim()) return;
+    const nextContact = {
+      ...contactDraft,
+      name: contactDraft.name.trim(),
+      role: contactDraft.role.trim(),
+      phone: contactDraft.phone.trim(),
+      email: contactDraft.email.trim(),
+      availability: contactDraft.availability.trim(),
+    };
+    setContacts((current) => current.map((contact) => (contact.id === nextContact.id ? nextContact : contact)));
+    setSelectedContact(nextContact);
+    setContactDraft(null);
+    setContactEditing(false);
+    showAction(`${nextContact.name}'s contact details saved.`);
+  };
+
+  const closeContactProfile = () => {
+    setContactProfileOpen(false);
+    setSelectedContact(null);
+    setContactDraft(null);
+    setContactEditing(false);
   };
 
   const copyId = () => {
@@ -615,7 +646,7 @@ export function ModernCRM() {
         ) : null}
 
         {contactProfileOpen ? (
-          <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#173b48]/25 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" data-testid="contact-profile-overlay" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); }} role="presentation">
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#173b48]/25 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" data-testid="contact-profile-overlay" onClick={closeContactProfile} role="presentation">
             <section
               aria-labelledby="contact-profile-title"
               aria-modal="true"
@@ -633,31 +664,55 @@ export function ModernCRM() {
                     <p className="mt-0.5 text-sm text-[#71848a]">{activeContact.role}{activeContact.isPrimary ? " · Primary contact" : ""}</p>
                   </div>
                 </div>
-                <button aria-label="Close contact profile" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-contact-profile" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); }} type="button"><X className="h-4 w-4" /></button>
+                <div className="flex items-center gap-1">
+                  {!contactEditing ? (
+                    <button aria-label={`Edit ${activeContact.name}`} className="inline-flex items-center gap-2 rounded-lg border border-[#cad9d3] px-3 py-2 text-sm font-bold text-[#315b66] hover:border-[#9ab6a9] hover:bg-[#edf4ef]" data-testid="button-edit-contact" onClick={startContactEdit} type="button"><Edit3 className="h-4 w-4" />Edit contact</button>
+                  ) : null}
+                  <button aria-label="Close contact profile" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-contact-profile" onClick={closeContactProfile} type="button"><X className="h-4 w-4" /></button>
+                </div>
               </div>
-              <div className="grid gap-5 px-5 py-5 sm:grid-cols-[1fr_0.85fr] sm:px-6">
-                <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact details</p>
-                  <div className="mt-3 grid gap-2">
-                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-phone" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Phone</span><span className="mt-0.5 block">{activeContact.phone}</span></span></a>
-                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Email</span><span className="mt-0.5 block break-all">{activeContact.email}</span></span></a>
+              {contactEditing && contactDraft ? (
+                <div className="grid gap-4 px-5 py-5 sm:grid-cols-2 sm:px-6">
+                  <label className="grid gap-1.5 text-sm font-bold text-[#315b66]" htmlFor="contact-name">Name<input className="rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2.5 font-normal text-[#173b48] outline-none focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]" data-testid="input-contact-name" id="contact-name" onChange={(event) => setContactDraft({ ...contactDraft, name: event.target.value })} value={contactDraft.name} /></label>
+                  <label className="grid gap-1.5 text-sm font-bold text-[#315b66]" htmlFor="contact-role">Role<input className="rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2.5 font-normal text-[#173b48] outline-none focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]" data-testid="input-contact-role" id="contact-role" onChange={(event) => setContactDraft({ ...contactDraft, role: event.target.value })} value={contactDraft.role} /></label>
+                  <label className="grid gap-1.5 text-sm font-bold text-[#315b66]" htmlFor="contact-phone">Phone<input className="rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2.5 font-normal text-[#173b48] outline-none focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]" data-testid="input-contact-phone" id="contact-phone" onChange={(event) => setContactDraft({ ...contactDraft, phone: event.target.value })} value={contactDraft.phone} /></label>
+                  <label className="grid gap-1.5 text-sm font-bold text-[#315b66]" htmlFor="contact-email">Email<input className="rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2.5 font-normal text-[#173b48] outline-none focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]" data-testid="input-contact-email" id="contact-email" onChange={(event) => setContactDraft({ ...contactDraft, email: event.target.value })} value={contactDraft.email} /></label>
+                  <label className="grid gap-1.5 text-sm font-bold text-[#315b66] sm:col-span-2" htmlFor="contact-availability">Availability<input className="rounded-lg border border-[#c8dcd0] bg-[#fbfcf8] px-3 py-2.5 font-normal text-[#173b48] outline-none focus:border-[#8eae9e] focus:ring-2 focus:ring-[#dcebe1]" data-testid="input-contact-availability" id="contact-availability" onChange={(event) => setContactDraft({ ...contactDraft, availability: event.target.value })} value={contactDraft.availability} /></label>
+                </div>
+              ) : (
+                <div className="grid gap-5 px-5 py-5 sm:grid-cols-[1fr_0.85fr] sm:px-6">
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact details</p>
+                    <div className="mt-3 grid gap-2">
+                      <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-phone" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Phone</span><span className="mt-0.5 block">{activeContact.phone}</span></span></a>
+                      <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Email</span><span className="mt-0.5 block break-all">{activeContact.email}</span></span></a>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-[#dce6e0] bg-[#f6f9f5] p-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship context</p>
+                    <dl className="mt-3 grid gap-3 text-sm">
+                      <div><dt className="font-semibold text-[#829696]">Organization</dt><dd className="mt-0.5 font-semibold text-[#315b66]">{organizationName}</dd></div>
+                      <div><dt className="font-semibold text-[#829696]">Availability</dt><dd className="mt-0.5 text-[#4d666d]">{activeContact.availability}</dd></div>
+                      <div><dt className="font-semibold text-[#829696]">Last interaction</dt><dd className="mt-0.5 text-[#4d666d]">Apr 16, 2025</dd></div>
+                    </dl>
                   </div>
                 </div>
-                <div className="rounded-xl border border-[#dce6e0] bg-[#f6f9f5] p-4">
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship context</p>
-                  <dl className="mt-3 grid gap-3 text-sm">
-                    <div><dt className="font-semibold text-[#829696]">Organization</dt><dd className="mt-0.5 font-semibold text-[#315b66]">{organizationName}</dd></div>
-                    <div><dt className="font-semibold text-[#829696]">Availability</dt><dd className="mt-0.5 text-[#4d666d]">{activeContact.availability}</dd></div>
-                    <div><dt className="font-semibold text-[#829696]">Last interaction</dt><dd className="mt-0.5 text-[#4d666d]">Apr 16, 2025</dd></div>
-                  </dl>
-                </div>
-              </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e4ebe5] px-5 py-4 sm:px-6">
-                <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-activity" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); setSection("notes"); }} type="button"><StickyNote className="h-4 w-4" />View activity</button>
-                <div className="flex gap-2">
-                  <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-call" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4" />Call</a>
-                  <a className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-contact-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4" />Email</a>
-                </div>
+                {contactEditing ? (
+                  <div className="ml-auto flex gap-2">
+                    <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-cancel-contact-edit" onClick={() => { setContactDraft(null); setContactEditing(false); }} type="button"><X className="h-4 w-4" />Cancel</button>
+                    <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-save-contact-edit" disabled={!contactDraft?.name.trim()} onClick={saveContactEdit} type="button"><Check className="h-4 w-4" />Save contact</button>
+                  </div>
+                ) : (
+                  <>
+                    <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-activity" onClick={() => { closeContactProfile(); setSection("notes"); }} type="button"><StickyNote className="h-4 w-4" />View activity</button>
+                    <div className="flex gap-2">
+                      <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-call" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4" />Call</a>
+                      <a className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-contact-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4" />Email</a>
+                    </div>
+                  </>
+                )}
               </div>
             </section>
           </div>
