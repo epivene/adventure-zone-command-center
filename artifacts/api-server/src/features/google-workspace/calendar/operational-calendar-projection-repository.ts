@@ -55,6 +55,34 @@ export type OperationalBookingState = {
 export class OperationalCalendarProjectionRepository {
   constructor(private readonly db: DrizzleDatabase) {}
 
+  async ensureAppOperationalWindow(bookingId: string): Promise<void> {
+    const [row] = await this.db.select({
+      status: bookings.status,
+      probability: bookings.probability,
+      startsAt: bookings.startsAt,
+      endsAt: bookings.endsAt,
+      operationalSource: bookingOperationalWindows.source,
+    }).from(bookings)
+      .leftJoin(bookingOperationalWindows, eq(bookings.id, bookingOperationalWindows.bookingId))
+      .where(eq(bookings.id, bookingId)).limit(1);
+
+    if (
+      !row
+      || !isBookedForSchedule(row)
+      || !row.startsAt
+      || !row.endsAt
+      || row.operationalSource === "google_calendar"
+      || row.operationalSource === "manual"
+    ) return;
+
+    await this.saveOperationalWindow({
+      bookingId,
+      startsAt: addUtcDays(row.startsAt, -2),
+      endsAt: addUtcDays(row.endsAt, 2),
+      source: "app",
+    });
+  }
+
   async loadBookingState(bookingId: string): Promise<OperationalBookingState | null> {
     const [booking] = await this.db.select({
       bookingId: bookings.id,

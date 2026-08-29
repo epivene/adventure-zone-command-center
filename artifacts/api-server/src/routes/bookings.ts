@@ -91,6 +91,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
   try {
     const service = new BookingService(bookingRepo() as any);
     const booking = await service.createBooking(parsed.data as any);
+    res.locals.operationalCalendarBookingId = booking.id;
     res.status(201).json({ ok: true, bookingId: booking.id });
   } catch (err) {
     req.log.error({ err }, "Failed to create booking");

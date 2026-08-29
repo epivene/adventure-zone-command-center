@@ -32,6 +32,11 @@ router.patch("/bookings/:bookingId", (req, res, next) => {
   next();
 });
 
+router.post("/bookings", (req, res, next) => {
+  queueAfterSuccess(req, res, () => res.locals.operationalCalendarBookingId ?? null);
+  next();
+});
+
 router.post("/bookings/configure-packages", (req, res, next) => {
   queueAfterSuccess(req, res, () => typeof req.body?.bookingId === "string" ? req.body.bookingId : null);
   next();

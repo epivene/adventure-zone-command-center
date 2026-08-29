@@ -13,6 +13,7 @@ import { renderOperationalCalendarRows } from "./operational-calendar-renderer";
 
 export interface OperationalCalendarProjectionStore {
   loadConfirmedBooking(bookingId: string): Promise<OperationalCalendarProjection | null>;
+  ensureAppOperationalWindow?(bookingId: string): Promise<void>;
   loadBookingState?(bookingId: string): Promise<OperationalBookingState | null>;
   saveOperationalWindow(input: {
     bookingId: string;
@@ -103,6 +104,7 @@ export class OperationalCalendarSyncService {
   ) {}
 
   async syncConfirmedBooking(bookingId: string): Promise<OperationalCalendarSyncResult> {
+    await this.projections.ensureAppOperationalWindow?.(bookingId);
     const projection = await this.projections.loadConfirmedBooking(bookingId);
     if (!projection) return this.syncPreviouslyLinkedNonConfirmedBooking(bookingId);
     await this.projections.saveOperationalWindow({
