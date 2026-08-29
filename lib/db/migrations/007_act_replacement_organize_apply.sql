@@ -9,25 +9,105 @@ ALTER TABLE activities
   ADD COLUMN IF NOT EXISTS source_record_id uuid,
   ADD COLUMN IF NOT EXISTS source_version_id uuid,
   ADD COLUMN IF NOT EXISTS source_type text;
-ALTER TABLE activities ADD CONSTRAINT activities_source_record_fk FOREIGN KEY (source_record_id) REFERENCES act_source_records(id) ON DELETE RESTRICT;
-ALTER TABLE activities ADD CONSTRAINT activities_source_version_fk FOREIGN KEY (source_version_id) REFERENCES act_source_record_versions(id) ON DELETE RESTRICT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'activities_source_record_fk'
+      AND conrelid = 'activities'::regclass
+  ) THEN
+    ALTER TABLE activities ADD CONSTRAINT activities_source_record_fk
+      FOREIGN KEY (source_record_id) REFERENCES act_source_records(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'activities_source_version_fk'
+      AND conrelid = 'activities'::regclass
+  ) THEN
+    ALTER TABLE activities ADD CONSTRAINT activities_source_version_fk
+      FOREIGN KEY (source_version_id) REFERENCES act_source_record_versions(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
 UPDATE activities SET timeline_sort_at = COALESCE(occurred_at, created_at) WHERE timeline_sort_at IS NULL;
 ALTER TABLE activities ALTER COLUMN occurred_at DROP NOT NULL, ALTER COLUMN occurred_at DROP DEFAULT, ALTER COLUMN timeline_sort_at SET NOT NULL;
 ALTER TABLE activities DROP CONSTRAINT IF EXISTS activities_parent_required;
-ALTER TABLE activities ADD CONSTRAINT activities_parent_required CHECK (organization_id IS NOT NULL OR contact_id IS NOT NULL OR booking_id IS NOT NULL OR source_record_id IS NOT NULL);
-ALTER TABLE activities ADD CONSTRAINT activities_occurred_at_required_for_local CHECK (occurred_at IS NOT NULL OR source_record_id IS NOT NULL);
-ALTER TABLE activities ADD CONSTRAINT activities_source_type_valid CHECK (source_type IS NULL OR source_type IN ('note','history','activity'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'activities_parent_required'
+      AND conrelid = 'activities'::regclass
+  ) THEN
+    ALTER TABLE activities ADD CONSTRAINT activities_parent_required
+      CHECK (organization_id IS NOT NULL OR contact_id IS NOT NULL OR booking_id IS NOT NULL OR source_record_id IS NOT NULL);
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'activities_occurred_at_required_for_local'
+      AND conrelid = 'activities'::regclass
+  ) THEN
+    ALTER TABLE activities ADD CONSTRAINT activities_occurred_at_required_for_local
+      CHECK (occurred_at IS NOT NULL OR source_record_id IS NOT NULL);
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'activities_source_type_valid'
+      AND conrelid = 'activities'::regclass
+  ) THEN
+    ALTER TABLE activities ADD CONSTRAINT activities_source_type_valid
+      CHECK (source_type IS NULL OR source_type IN ('note','history','activity'));
+  END IF;
+END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS activities_source_record_id_unique ON activities(source_record_id) WHERE source_record_id IS NOT NULL;
 
 ALTER TABLE act_external_links ADD COLUMN IF NOT EXISTS source_database_key text, ADD COLUMN IF NOT EXISTS source_record_id uuid;
-ALTER TABLE act_external_links ADD CONSTRAINT act_external_links_source_database_key_nonblank CHECK (source_database_key IS NULL OR btrim(source_database_key) <> '');
-ALTER TABLE act_external_links ADD CONSTRAINT act_external_links_source_record_fk FOREIGN KEY (source_record_id) REFERENCES act_source_records(id) ON DELETE RESTRICT;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'act_external_links_source_database_key_nonblank'
+      AND conrelid = 'act_external_links'::regclass
+  ) THEN
+    ALTER TABLE act_external_links ADD CONSTRAINT act_external_links_source_database_key_nonblank
+      CHECK (source_database_key IS NULL OR btrim(source_database_key) <> '');
+  END IF;
+END $$;
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'act_external_links_source_record_fk'
+      AND conrelid = 'act_external_links'::regclass
+  ) THEN
+    ALTER TABLE act_external_links ADD CONSTRAINT act_external_links_source_record_fk
+      FOREIGN KEY (source_record_id) REFERENCES act_source_records(id) ON DELETE RESTRICT;
+  END IF;
+END $$;
 DROP INDEX IF EXISTS act_external_links_source_external_id_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS act_external_links_legacy_source_external_id_unique ON act_external_links(source_entity_type, act_record_id) WHERE source_database_key IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS act_external_links_database_source_record_unique ON act_external_links(source_record_id) WHERE source_record_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS act_external_links_database_source_act_id_unique ON act_external_links(source_database_key,source_entity_type,act_record_id) WHERE source_database_key IS NOT NULL;
 ALTER TABLE calling_list_memberships DROP CONSTRAINT IF EXISTS calling_list_memberships_source_valid;
-ALTER TABLE calling_list_memberships ADD CONSTRAINT calling_list_memberships_source_valid CHECK (source IN ('act_migration','act_import','manual'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'calling_list_memberships_source_valid'
+      AND conrelid = 'calling_list_memberships'::regclass
+  ) THEN
+    ALTER TABLE calling_list_memberships ADD CONSTRAINT calling_list_memberships_source_valid
+      CHECK (source IN ('act_migration','act_import','manual'));
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS act_replacement_outcomes (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), run_id uuid NOT NULL REFERENCES act_replacement_runs(id) ON DELETE CASCADE, source_record_id uuid NOT NULL REFERENCES act_source_records(id), source_version_id uuid NOT NULL REFERENCES act_source_record_versions(id), state text NOT NULL DEFAULT 'pending', normalized jsonb, mapping_warnings jsonb NOT NULL DEFAULT '[]'::jsonb, unsupported_field_paths jsonb NOT NULL DEFAULT '[]'::jsonb, candidates jsonb, issues jsonb, match jsonb, target_entity_type text, target_entity_id uuid, lease_owner text, lease_expires_at timestamptz, retry_after timestamptz, retryable boolean NOT NULL DEFAULT true, attempt_count integer NOT NULL DEFAULT 0, last_error_code text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(run_id, source_record_id), CHECK (state IN ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','applied','failed')), CHECK (target_entity_type IS NULL OR target_entity_type IN ('organization','contact','booking','calling_list','activity'))
