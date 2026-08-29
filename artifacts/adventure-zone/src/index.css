@@ -291,16 +291,27 @@ a {
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius);
+  border: 2px solid hsl(var(--foreground));
+  border-radius: 0.25rem;
   background: hsl(var(--primary));
+  box-shadow: 3px 3px 0 hsl(var(--foreground));
+  font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
   padding: 0.625rem 1rem;
   font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
   color: hsl(var(--primary-foreground));
-  transition: background-color 150ms;
+  transition: background-color 150ms, box-shadow 150ms, transform 150ms;
 }
 
 .button-primary:hover {
   background: hsl(var(--primary) / 0.9);
+}
+
+.button-primary:active,
+.button-secondary:active {
+  box-shadow: none;
+  transform: translate(3px, 3px);
 }
 
 .button-primary:focus-visible,
@@ -320,16 +331,20 @@ a {
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  border: 1px solid hsl(var(--border));
-  border-radius: var(--radius);
-  background: hsl(var(--card));
+  border: 2px solid hsl(var(--foreground));
+  border-radius: 0.25rem;
+  background: hsl(var(--accent));
+  box-shadow: 3px 3px 0 hsl(var(--foreground));
+  font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
   padding: 0.625rem 1rem;
   font-weight: 700;
-  color: hsl(var(--secondary-foreground));
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+  color: hsl(var(--accent-foreground));
 }
 
 .button-secondary:hover {
-  background: hsl(var(--muted));
+  background: hsl(var(--accent) / 0.82);
 }
 
 .button-secondary:disabled {
@@ -356,9 +371,14 @@ a {
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius);
+  border: 2px solid hsl(var(--foreground));
+  border-radius: 0.25rem;
+  box-shadow: 3px 3px 0 hsl(var(--foreground));
+  font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
   padding: 0.625rem 1rem;
   font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
   transition: background-color 150ms, border-color 150ms, color 150ms;
 }
 
@@ -377,9 +397,8 @@ a {
 }
 
 .profile-modern .button-secondary {
-  border: 1px solid hsl(var(--border));
-  background: hsl(var(--card));
-  color: hsl(var(--secondary-foreground));
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
 }
 
 .profile-modern .button-secondary:hover {

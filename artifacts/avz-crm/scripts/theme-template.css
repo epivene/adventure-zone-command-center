@@ -244,6 +244,25 @@
   body {
     @apply font-sans antialiased bg-background text-foreground;
   }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--app-font-display);
+    font-weight: 800;
+    letter-spacing: 0.015em;
+    text-transform: uppercase;
+  }
+
+  button {
+    font-family: var(--app-font-display);
+    font-weight: 700;
+    letter-spacing: 0.035em;
+    text-transform: uppercase;
+  }
 }
 
 @layer utilities {

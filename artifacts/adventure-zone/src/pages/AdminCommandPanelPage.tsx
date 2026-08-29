@@ -33,7 +33,6 @@ export default function AdminCommandPanelPage() {
       <header className="text-center">
         <p className="text-sm font-bold uppercase tracking-[0.18em] text-orange-700">Administrator</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Command Panel</h1>
-        <p className="mx-auto mt-3 max-w-2xl text-slate-600">Choose what kind of work you are doing right now. The same events, contacts, bookings, files, and calendar information stay connected underneath.</p>
       </header>
 
       <section aria-label="Administrator workspaces" className="grid gap-4 md:grid-cols-3">
