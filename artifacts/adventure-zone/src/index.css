@@ -387,6 +387,58 @@ a {
   background: hsl(var(--muted));
 }
 
+/* Existing screens still use a few literal white utility classes. Keep those
+   surfaces in the design-system dark palette instead of rendering bright
+   islands inside a dark workspace. */
+.dark .bg-white,
+.dark .bg-white\/95,
+.dark .bg-white\/90,
+.dark .bg-white\/80,
+.dark .bg-white\/70 {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground));
+}
+
+.dark .bg-slate-50,
+.dark .bg-slate-50\/60,
+.dark .bg-slate-50\/70,
+.dark .bg-gray-50 {
+  background-color: hsl(var(--muted)) !important;
+}
+
+.dark .bg-slate-100,
+.dark .bg-gray-100 {
+  background-color: hsl(var(--secondary)) !important;
+}
+
+.dark .bg-slate-950 {
+  background-color: hsl(var(--sidebar)) !important;
+  color: hsl(var(--sidebar-foreground));
+}
+
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-200\/70,
+.dark .border-slate-200\/80,
+.dark .border-slate-300,
+.dark .border-gray-200,
+.dark .border-gray-300 {
+  border-color: hsl(var(--border)) !important;
+}
+
+.dark .profile-modern {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: hsl(var(--card)) !important;
+  color: hsl(var(--card-foreground)) !important;
+  border-color: hsl(var(--input)) !important;
+}
+
 /* Adventure Zone Leaflet route markers */
 .az-route-marker-wrap,.az-handoff-marker-wrap,.az-trip-stop-wrap{background:transparent;border:0}
 .az-route-pin{--az-pin-color:hsl(var(--muted-foreground));display:block;width:30px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--az-pin-color);border:3px solid hsl(var(--card));box-shadow:0 2px 8px rgba(15,23,42,.35)}
