@@ -48,9 +48,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Calendar unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts src/features/calendar/calendar-visual-blocks.test.ts src/features/calendar/upcoming-events.test.ts src/components/calendar/event-calendar.month-state.test.ts src/components/calendar/event-calendar.simple-mobile.test.ts
-      - name: Schedule settings API tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/calendar/schedule-display-settings.test.ts
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts src/features/calendar/calendar-visual-blocks.test.ts src/features/calendar/upcoming-events.test.ts src/components/calendar/event-calendar.month-state.test.ts src/components/calendar/event-calendar.simple-mobile.test.ts src/pages/CalendarPage.booked-state.test.tsx
+      - name: Schedule projection API tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/calendar/schedule-display-settings.test.ts src/features/google-workspace/calendar/calendar-operational-window-projection.test.ts src/features/google-workspace/calendar/operational-calendar-projection-booked-state.test.ts src/features/google-workspace/calendar/operational-calendar-sync-app-authority.test.ts
       - name: Leaflet route unit tests
         run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/routes/manager-map-navigation.test.ts src/features/routes/map-focus.test.ts src/components/routes/manager-map-mode.test.tsx src/components/routes/manager-route-map-shell.test.tsx src/components/routes/manager-route-map-layers.test.tsx src/components/routes/event-map-focus.test.tsx src/components/routes/event-map.test.tsx src/components/routes/trips-section.test.tsx
       - name: Handoff unit tests

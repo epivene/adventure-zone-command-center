@@ -22,6 +22,39 @@ describe("applyOperationalWindowsToCalendarBookings", () => {
     expect(result?.operationalWindowSource).toBe("google_calendar");
   });
 
+  it("creates the app-owned travel/setup window for a definite Contract Received booking", () => {
+    const actualStart = new Date("2026-09-05T00:00:00.000Z");
+    const actualEnd = new Date("2026-09-07T00:00:00.000Z");
+
+    const [result] = applyOperationalWindowsToCalendarBookings([
+      {
+        id: "meeteetse",
+        name: "Meeteetse Annual Labor Day Celebration 2026",
+        status: "contract_received",
+        probability: "definite",
+        startsAt: actualStart,
+        endsAt: actualEnd,
+      },
+    ], []);
+
+    expect(result?.startsAt).toEqual(new Date("2026-09-03T00:00:00.000Z"));
+    expect(result?.endsAt).toEqual(new Date("2026-09-08T00:00:00.000Z"));
+    expect(result?.actualStartsAt).toEqual(actualStart);
+    expect(result?.actualEndsAt).toEqual(actualEnd);
+    expect(result?.operationalWindowSource).toBe("app");
+  });
+
+  it("does not create an operational block for an ordinary possible booking", () => {
+    const booking = {
+      id: "possible-booking",
+      status: "possible",
+      probability: "possible",
+      startsAt: new Date("2026-10-01T00:00:00.000Z"),
+      endsAt: new Date("2026-10-02T00:00:00.000Z"),
+    };
+    expect(applyOperationalWindowsToCalendarBookings([booking], [])).toEqual([booking]);
+  });
+
   it("leaves ordinary bookings unchanged when no operational window exists", () => {
     const booking = { id: "booking-2", startsAt: new Date("2026-10-01T00:00:00.000Z"), endsAt: null };
     expect(applyOperationalWindowsToCalendarBookings([booking], [])).toEqual([booking]);
