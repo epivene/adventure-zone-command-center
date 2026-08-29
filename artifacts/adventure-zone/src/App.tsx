@@ -104,7 +104,11 @@ function AuthScreen({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">AdventureZone</h1>
+        <img
+          alt="The Adventure Zone"
+          className="mx-auto h-auto w-64 max-w-[75vw]"
+          src={`${basePath}/adventure-zone-logo.png`}
+        />
         <p className="mt-1 text-sm font-medium text-muted-foreground">Command Terminal</p>
       </div>
       {children}

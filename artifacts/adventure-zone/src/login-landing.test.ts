@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const index = readFileSync("index.html", "utf8");
-const app = readFileSync("src/App.tsx", "utf8");
 const landing = readFileSync("src/components/command-terminal/command-terminal-landing.tsx", "utf8");
 
 describe("public login landing", () => {
@@ -26,6 +25,11 @@ describe("public login landing", () => {
     expect(landing).toContain('href="/manager/sign-in"');
     expect(landing).toContain("Leg Managers");
     expect(landing).not.toContain("Manager Portal");
+  });
+
+  it("does not duplicate workspace actions with a focus card", () => {
+    expect(landing).not.toContain("Today’s focus");
+    expect(landing).not.toContain("Continue to Office");
   });
 
   it("moves administrator access out of the main button stack", () => {

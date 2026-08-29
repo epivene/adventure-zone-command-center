@@ -23,6 +23,8 @@ const workspaces: Array<{
   },
 ];
 
+const logoSrc = `${import.meta.env.BASE_URL}adventure-zone-logo.png`;
+
 export function CommandTerminalLanding() {
   return (
     <main className="command-terminal-landing">
@@ -54,29 +56,12 @@ export function CommandTerminalLanding() {
         .ctl-brand {
           align-items: center;
           display: flex;
-          gap: .6rem;
           min-width: 0;
         }
-        .ctl-brand-mark {
-          align-items: center;
-          background: hsl(var(--sidebar));
-          border-radius: .65rem;
-          color: hsl(var(--sidebar-foreground));
-          display: flex;
-          flex: 0 0 auto;
-          font-size: .7rem;
-          font-weight: 800;
-          height: 2.25rem;
-          justify-content: center;
-          letter-spacing: -.04em;
-          width: 2.25rem;
-        }
-        .ctl-brand-name {
-          color: hsl(var(--foreground));
-          font-size: .83rem;
-          font-weight: 800;
-          letter-spacing: -.02em;
-          line-height: 1.1;
+        .ctl-brand-logo {
+          display: block;
+          height: auto;
+          width: clamp(7.5rem, 32vw, 9.25rem);
         }
         .ctl-brand-subtitle, .ctl-mono {
           font-family: var(--app-font-mono, "Geist Mono", ui-monospace, monospace);
@@ -199,9 +184,8 @@ export function CommandTerminalLanding() {
       <div className="ctl-shell">
         <header className="ctl-topbar">
           <div className="ctl-brand">
-            <span aria-hidden="true" className="ctl-brand-mark">AZ</span>
             <div>
-              <div className="ctl-brand-name">AdventureZone</div>
+              <img alt="The Adventure Zone" className="ctl-brand-logo" src={logoSrc} />
               <span className="ctl-brand-subtitle">Command Terminal</span>
             </div>
           </div>
@@ -217,7 +201,7 @@ export function CommandTerminalLanding() {
         </header>
 
         <section aria-labelledby="command-terminal-title" className="ctl-hero">
-          <div className="ctl-kicker ctl-mono">AdventureZone / Command terminal</div>
+          <div className="ctl-kicker ctl-mono">Command terminal / workspace access</div>
           <h1 className="ctl-title" id="command-terminal-title">Choose your workspace</h1>
         </section>
 

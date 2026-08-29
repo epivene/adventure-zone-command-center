@@ -93,12 +93,12 @@ source does not define a standalone reusable component package, so this artifact
 themes the stock component families using the extracted visual language rather
 than claiming to port an application-specific component library.
 
-- Use deep blue-green text and navigation surfaces for trust, orientation, and
-  high-contrast emphasis.
-- Use warm off-white cards and thin cool borders to create a quiet operational
-  workspace.
-- Use raspberry for primary actions and relationship-positive states; reserve
-  the terracotta accent for ratings, deadlines, and small attention cues.
+- Use flyer-derived near-black text and navigation surfaces for high-contrast
+  orientation and a carnival-poster character.
+- Use warm white cards, blush backgrounds, and thin pink-neutral borders to keep
+  dense operational screens readable.
+- Use carnival magenta for primary actions and relationship-positive states;
+  reserve golden yellow for attention, highlights, and energetic accents.
 - Keep the record hierarchy compact: identity first, metadata second, actions at
   the point of context, and one clear home for each repeated data type.
 - Prefer short operational labels and visible next steps over social-profile
