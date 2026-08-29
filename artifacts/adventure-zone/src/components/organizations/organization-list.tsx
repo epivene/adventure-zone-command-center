@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import type { ReactNode } from "react";
+import { useLocation } from "wouter";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import { profileTypeOptions } from "@/features/organizations/last-resort-input";
 import type { OrganizationListQuery, OrganizationListPage } from "@/features/organizations/organization-repository";
@@ -59,6 +60,7 @@ function RatingSummary({ average, count }: { average?: number | null; count?: nu
 }
 
 export function OrganizationList({ organizations, query, travelLegs, afterSearch }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[]; afterSearch?: ReactNode }) {
+  const [, setLocation] = useLocation();
   const profileTypeLabel = profileTypeOptions.find((option) => option.value === query.placeType)?.label;
   const legLabel = travelLegs.find((leg) => leg.id === query.travelLegId)?.name;
   const activeFilters: ActiveFilter[] = [
@@ -153,13 +155,32 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
           {organizations.records.map((organization) => {
             const websiteHref = normalizeExternalWebsite(organization.website ?? null);
             const location = [organization.city, organization.region].filter(Boolean).join(", ");
+            const profileHref = detailHref(organization.id, query);
+            const openProfile = (event: MouseEvent<HTMLLIElement>) => {
+              if ((event.target as Element).closest("a,button,input,select,textarea")) return;
+              setLocation(profileHref);
+            };
+            const openProfileWithKeyboard = (event: KeyboardEvent<HTMLLIElement>) => {
+              if (event.target !== event.currentTarget || (event.key !== "Enter" && event.key !== " ")) return;
+              event.preventDefault();
+              setLocation(profileHref);
+            };
             return (
-              <li className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-orange-200 hover:shadow-md" data-testid="profile-summary-card" key={organization.id}>
+              <li
+                aria-label={`Open ${organization.name} profile`}
+                className="cursor-pointer overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                data-testid="profile-summary-card"
+                key={organization.id}
+                onClick={openProfile}
+                onKeyDown={openProfileWithKeyboard}
+                role="link"
+                tabIndex={0}
+              >
                 <div className="grid grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem]">
-                  <Link className="block size-20 overflow-hidden rounded-full bg-orange-50" data-testid="profile-avatar-link" href={detailHref(organization.id, query)}><ProfileAvatar image={organization.profileImageDataUrl} name={organization.name} /></Link>
+                  <Link className="block size-20 overflow-hidden rounded-full bg-orange-50" data-testid="profile-avatar-link" href={profileHref}><ProfileAvatar image={organization.profileImageDataUrl} name={organization.name} /></Link>
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <Link className="break-words text-xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={detailHref(organization.id, query)}>{organization.name}</Link>
+                      <Link className="break-words text-xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={profileHref}>{organization.name}</Link>
                       {organization.lastResort ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-800">Last Resort</span> : null}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">{location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}</div>

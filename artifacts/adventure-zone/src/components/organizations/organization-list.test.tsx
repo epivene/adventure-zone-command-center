@@ -7,6 +7,7 @@ vi.mock("wouter", () => ({
   Link: ({ children, ...props }: { children: ReactNode; [key: string]: unknown }) => (
     <a {...props}>{children}</a>
   ),
+  useLocation: () => ["/profiles", () => {}],
 }));
 
 const organizations = {
