@@ -1,0 +1,100 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Adventure Zone visual tokens, scoped to the extracted profile mockup. */
+:root {
+  --app-font-sans: "Inter", sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: Menlo, monospace;
+  --radius: 0.5rem;
+  --background: 210 40% 98%;
+  --foreground: 222 47% 11%;
+  --border: 214 32% 91%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 11%;
+  --primary: 24 95% 53%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222 47% 11%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215 16% 47%;
+  --accent: 199 89% 48%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 214 32% 91%;
+  --ring: 24 95% 53%;
+}
+
+.profile-current {
+  font-family: var(--app-font-sans);
+}
+
+.profile-current .button-primary,
+.profile-current .button-secondary {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-weight: 700;
+  transition: background-color 150ms, border-color 150ms;
+}
+
+.profile-current .button-primary {
+  background: #ea580c;
+  color: white;
+}
+
+.profile-current .button-primary:hover { background: #c2410c; }
+.profile-current .button-primary:disabled { cursor: wait; opacity: 0.65; }
+
+.profile-current .button-secondary {
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #334155;
+}
+
+.profile-current .button-secondary:hover { background: #f8fafc; }
+.profile-current input,
+.profile-current textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: white;
+}
+
+/* ModernCRM uses the same extracted group file but has its own quieter control language. */
+.profile-modern {
+  font-family: "DM Sans", "Avenir Next", ui-sans-serif, sans-serif;
+}
+
+.profile-modern .button-primary,
+.profile-modern .button-secondary {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  padding: 0.625rem 1rem;
+  font-weight: 700;
+  transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+
+.profile-modern .button-primary {
+  background: #397064;
+  color: #f8f5ee;
+}
+
+.profile-modern .button-primary:hover { background: #2d5d54; }
+.profile-modern .button-primary:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.profile-modern .button-secondary {
+  border: 1px solid #cad9d3;
+  background: #fbfcf8;
+  color: #315b66;
+}
+
+.profile-modern .button-secondary:hover {
+  border-color: #a7beb3;
+  background: #edf4ef;
+}

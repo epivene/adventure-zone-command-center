@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { ExternalLink, Mail, MapPin, Phone, UserRound } from "lucide-react";
+import { Building2, ExternalLink, Mail, MapPin, Phone } from "lucide-react";
 
 import { createActivityAction } from "@/actions/activities";
 import { apiGet } from "@/lib/auth-token";
@@ -207,31 +207,30 @@ export function ProfileDetailSheet({
                 </section>
               )}
 
-              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                <div className="h-20 bg-gradient-to-r from-blue-900 via-blue-700 to-sky-400" aria-hidden="true" />
-                <div className="-mt-8 flex items-start gap-3 px-4 pb-4">
+              <section className="rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="flex items-start gap-3 border-b border-slate-100 p-4">
                   {profileImageDataUrl ? (
                     <img
                       alt={`${title} profile`}
-                      className="h-20 w-20 shrink-0 rounded-full border-4 border-white object-cover shadow-md"
+                      className="h-16 w-16 shrink-0 rounded-xl border border-emerald-200 object-cover shadow-sm"
                       src={profileImageDataUrl}
                     />
                   ) : (
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-blue-50 text-blue-700 shadow-md">
-                      <UserRound className="h-7 w-7" />
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm">
+                      <Building2 className="h-7 w-7" />
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <p className="inline-flex items-center gap-1 font-bold text-slate-950">
-                          <MapPin className="h-4 w-4 shrink-0" />
+                          <MapPin className="h-4 w-4 shrink-0 text-emerald-700" />
                           {location || "Location not set"}
                         </p>
                         {fullAddress ? <p className="mt-1 text-sm text-slate-600">{fullAddress}</p> : null}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {place.placeType ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold capitalize text-slate-700">
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold capitalize text-emerald-800">
                               {String(place.placeType).replaceAll("_", " ")}
                             </span>
                           ) : null}
@@ -245,11 +244,11 @@ export function ProfileDetailSheet({
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 px-4 pb-4">
+                <div className="flex items-center gap-2 px-4 py-4">
                   {callHref ? (
                     <Link
                       aria-label={phoneText ? `Open call workspace for ${phoneText}` : "Open call workspace"}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={callHref}
                     >
                       <Phone className="h-5 w-5" />
@@ -258,7 +257,7 @@ export function ProfileDetailSheet({
                   {email ? (
                     <a
                       aria-label={`Email ${email}`}
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={`mailto:${email}`}
                     >
                       <Mail className="h-5 w-5" />
@@ -267,7 +266,7 @@ export function ProfileDetailSheet({
                   {websiteHref ? (
                     <a
                       aria-label="Open website"
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 hover:border-orange-300 hover:text-orange-700"
+                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={websiteHref}
                       rel="noreferrer noopener"
                       target="_blank"
@@ -277,7 +276,7 @@ export function ProfileDetailSheet({
                   ) : null}
                 </div>
 
-                <div className="mx-4 mb-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
+                 <div className="mx-4 mb-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
                   <p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p>
                 </div>
@@ -296,7 +295,7 @@ export function ProfileDetailSheet({
                   </p>
                   {simplifyHistoryText(recentNote.body ?? "").length > 220 ? (
                     <button
-                      className="mt-2 text-sm font-semibold text-orange-700"
+                       className="mt-2 text-sm font-semibold text-emerald-700"
                       onClick={() => setRecentNoteExpanded((current) => !current)}
                       type="button"
                     >
@@ -307,7 +306,7 @@ export function ProfileDetailSheet({
               ) : null}
 
               {noteComposerOpen ? (
-                <section className="grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+                <section className="grid gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
                   <label className="grid gap-1 text-sm font-semibold text-slate-700">
                     New note
                     <textarea

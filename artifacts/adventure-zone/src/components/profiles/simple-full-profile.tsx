@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Camera, ChevronDown, Globe2, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
+import { Building2, Camera, ChevronDown, Globe2, MapPin, MessageCircle, Search } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
@@ -67,7 +67,7 @@ function statCard({ value, label, active, onClick }: { value: number; label: str
   return (
     <button
       aria-expanded={active}
-      className={`rounded-xl border px-3 py-3 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 sm:px-4 ${active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"}`}
+      className={`rounded-xl border px-3 py-3 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-500 sm:px-4 ${active ? "border-emerald-300 bg-emerald-50" : "border-slate-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"}`}
       onClick={onClick}
       type="button"
     >
@@ -268,53 +268,49 @@ export function SimpleFullProfile({
     : activities;
 
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap justify-end gap-2">
-        <button className="button-secondary inline-flex items-center gap-2" type="button" onClick={onAskAssistant}>
-          <MessageCircle className="h-4 w-4" /> Ask Assistant
-        </button>
-        <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit</button>
-        <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} onAddNote={openNoteComposer} />
+    <div className="grid gap-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Relationships / Profile record</div>
+        <div className="flex flex-wrap gap-2">
+          <button className="button-secondary inline-flex items-center gap-2" type="button" onClick={onAskAssistant}>
+            <MessageCircle className="h-4 w-4" /> Ask Assistant
+          </button>
+          <button className="button-secondary" onClick={() => setEditing(true)} type="button">Edit profile</button>
+          <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} onAddNote={openNoteComposer} />
+        </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="relative h-28 overflow-hidden bg-gradient-to-r from-blue-900 via-blue-700 to-sky-400 sm:h-40">
-          <div className="absolute -right-10 -top-16 h-56 w-56 rounded-full border-[24px] border-white/10" aria-hidden="true" />
-          <div className="absolute -bottom-24 left-1/3 h-56 w-56 rounded-full border-[28px] border-sky-200/20" aria-hidden="true" />
-          <div className="absolute bottom-3 right-4 rounded-full bg-slate-950/25 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
-            Adventure Zone profile
-          </div>
-        </div>
-
-        <div className="relative px-4 sm:px-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end">
-            <div className="-mt-14 shrink-0 sm:-mt-16">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-col gap-5 p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
+            <div className="shrink-0">
               <label className="group relative block w-fit cursor-pointer" title="Change profile photo">
                 <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={(event) => void changePhoto(event.target.files?.[0])} />
                 {profileImageDataUrl ? (
-                  <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-28 w-28 rounded-full border-4 border-white object-cover shadow-lg sm:h-32 sm:w-32" />
+                  <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-20 w-20 rounded-xl border border-emerald-200 object-cover shadow-sm sm:h-24 sm:w-24" />
                 ) : (
-                  <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-white bg-blue-50 text-blue-700 shadow-lg sm:h-32 sm:w-32">
-                    <UserRound className="h-12 w-12" />
+                  <div className="flex h-20 w-20 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 shadow-sm sm:h-24 sm:w-24">
+                    <Building2 className="h-9 w-9" />
                   </div>
                 )}
-                <span className="absolute bottom-1 right-1 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-md"><Camera className="h-4 w-4" /></span>
+                <span className="absolute -bottom-2 -right-2 rounded-lg border border-slate-200 bg-white p-1.5 text-slate-700 shadow-sm"><Camera className="h-4 w-4" /></span>
               </label>
-              {profileImageDataUrl ? <button className="mt-1 w-28 text-xs font-medium text-slate-500 hover:text-rose-700 sm:w-32" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
+              {profileImageDataUrl ? <button className="mt-2 w-20 text-xs font-medium text-slate-500 hover:text-rose-700 sm:w-24" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
             </div>
 
-            <div className="min-w-0 flex-1 pb-1">
-              <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                {location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4 text-blue-600" />{location}</span> : null}
-                {profile.place.placeType ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold capitalize text-blue-800">{profile.place.placeType.replaceAll("_", " ")}</span> : null}
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-emerald-700">Organization profile</p>
+              <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-600">
+                {location ? <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-emerald-700" />{location}</span> : null}
+                {profile.place.placeType ? <span className="inline-flex items-center gap-1.5 capitalize"><Building2 className="h-4 w-4 text-emerald-700" />{profile.place.placeType.replaceAll("_", " ")}</span> : null}
                 {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
               </div>
               <p className="mt-2 text-sm text-slate-500">{primaryContact ? `Primary contact: ${primaryContact.name}` : "No primary contact added yet"}</p>
               {photoError ? <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{photoError}</p> : null}
             </div>
 
-            <div className="pb-1 md:min-w-40 md:text-right">
+            <div className="border-t border-slate-100 pt-4 md:min-w-40 md:border-l md:border-t-0 md:pl-6 md:pt-0 md:text-right">
               <p className="text-xl font-bold text-slate-950">{average.toFixed(1)} <span className="text-sm font-medium text-slate-500">/ 5</span></p>
               <p className="mt-1 text-2xl tracking-wide text-amber-500" aria-label={`${filledStars} of 5 stars`}>{stars}</p>
               <p className="mt-1 text-sm text-slate-500">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</p>
@@ -322,18 +318,18 @@ export function SimpleFullProfile({
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm">
-            {phoneText && callHref ? <Link className="font-medium text-slate-700 hover:text-blue-700" href={callHref}>{phoneText}</Link> : null}
-            {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-blue-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
-            {websiteHref ? <a className="inline-flex items-center gap-1 font-medium text-slate-700 hover:text-blue-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><Globe2 className="h-4 w-4" />{profile.place.website}</a> : null}
+            {phoneText && callHref ? <Link className="font-medium text-slate-700 hover:text-emerald-700" href={callHref}>{phoneText}</Link> : null}
+            {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-emerald-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
+            {websiteHref ? <a className="inline-flex items-center gap-1 font-medium text-slate-700 hover:text-emerald-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><Globe2 className="h-4 w-4" />{profile.place.website}</a> : null}
             {!phoneText && !primaryContact?.email && !websiteHref ? <span className="text-slate-500">Contact details are not recorded yet</span> : null}
           </div>
 
-          <nav className="mt-4 -mx-1 flex overflow-x-auto" aria-label="Profile sections" role="tablist">
-            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === null ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection(null)} role="tab" aria-selected={openSection === null} type="button">Overview</button>
-            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "contacts" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("contacts")} role="tab" aria-selected={openSection === "contacts"} type="button">Contacts</button>
-            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "events" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("events")} role="tab" aria-selected={openSection === "events"} type="button">Events</button>
-            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "notes" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("notes")} role="tab" aria-selected={openSection === "notes"} type="button">Activity</button>
-            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "emails" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("emails")} role="tab" aria-selected={openSection === "emails"} type="button">Emails</button>
+          <nav className="mt-4 -mx-1 flex flex-wrap gap-1 border-t border-slate-100 pt-3" aria-label="Profile sections" role="tablist">
+            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === null ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection(null)} role="tab" aria-selected={openSection === null} type="button">Overview</button>
+            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "contacts" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("contacts")} role="tab" aria-selected={openSection === "contacts"} type="button">Contacts</button>
+            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "events" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("events")} role="tab" aria-selected={openSection === "events"} type="button">Events</button>
+            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "notes" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("notes")} role="tab" aria-selected={openSection === "notes"} type="button">Activity</button>
+            <button className={`rounded-md px-3 py-2 text-sm font-bold transition ${openSection === "emails" ? "bg-slate-800 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`} onClick={() => setOpenSection("emails")} role="tab" aria-selected={openSection === "emails"} type="button">Emails</button>
           </nav>
         </div>
       </section>
@@ -367,10 +363,10 @@ export function SimpleFullProfile({
           {profile.contacts.length ? (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {profile.contacts.map((contact) => (
-                <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/contacts/${contact.id}`} key={contact.id}>
+                  <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-emerald-300 hover:bg-emerald-50" href={`/contacts/${contact.id}`} key={contact.id}>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900">{contact.name}</span>
-                    {contact.isPrimary ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-800">Primary</span> : null}
+                    {contact.isPrimary ? <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">Primary</span> : null}
                   </div>
                   <p className="mt-1 text-sm text-slate-600">{[contact.role, contact.phone, contact.email].filter(Boolean).join(" · ") || "Contact details not recorded"}</p>
                 </Link>
@@ -386,7 +382,7 @@ export function SimpleFullProfile({
           {profile.bookings.length ? (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {profile.bookings.map((booking) => (
-                <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-orange-300 hover:bg-orange-50" href={`/bookings/${booking.id}`} key={booking.id}>
+                  <Link className="rounded-lg border border-slate-200 p-3 transition hover:border-emerald-300 hover:bg-emerald-50" href={`/bookings/${booking.id}`} key={booking.id}>
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-semibold text-slate-900">{booking.name}</span>
                     <span className="text-xs font-semibold capitalize text-slate-500">{booking.status.replaceAll("_", " ")}</span>
@@ -419,7 +415,7 @@ export function SimpleFullProfile({
           </label>
 
           {noteComposerOpen ? (
-            <div className="mt-3 grid gap-2 rounded-xl border border-orange-200 bg-orange-50 p-3">
+            <div className="mt-3 grid gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
               <label className="grid gap-1 text-sm font-semibold text-slate-700">
                 New note
                 <textarea className="min-h-24 rounded-md border border-slate-300 bg-white px-3 py-2 font-normal" value={noteBody} onChange={(event) => setNoteBody(event.target.value)} autoFocus />
