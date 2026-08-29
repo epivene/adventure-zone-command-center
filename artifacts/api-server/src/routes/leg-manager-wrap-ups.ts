@@ -92,7 +92,8 @@ export function createManagerWrapUpRouter(deps: {
   // separate record: managers review events above; organizers review managers here.
   router.use(organizerFeedbackPublicRouter);
   router.use(organizerFeedbackManagerRouter);
-  router.use(requireOwnerMiddleware, organizerFeedbackAdminRouter);
+  router.use("/organizer-feedback/admin", requireOwnerMiddleware);
+  router.use(organizerFeedbackAdminRouter);
 
   return router;
 }

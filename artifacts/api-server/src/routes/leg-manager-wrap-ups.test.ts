@@ -66,4 +66,9 @@ describe("manager event wrap-up routes", () => {
     expect(service.submitManagerWrapUp).toHaveBeenCalledWith({ bookingId: "booking-a", managerLegId: "leg-a", managerId: null });
     expect(response.body.wrapUp.status).toBe("submitted");
   });
+
+  it("does not intercept unrelated manager routes with owner authentication", async () => {
+    const response = await request(app({})).get("/manager/messages/conversations");
+    expect(response.status).toBe(404);
+  });
 });
