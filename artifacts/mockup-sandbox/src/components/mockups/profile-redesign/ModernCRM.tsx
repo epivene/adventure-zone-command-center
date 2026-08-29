@@ -391,17 +391,6 @@ export function ModernCRM() {
                     Visit website
                   </a>
                 </div>
-                <div className="mt-4 border-t border-[#e3ebe5] pt-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p>
-                    <button aria-label="Configure visible details" className="rounded-lg p-1.5 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-3.5 w-3.5" /></button>
-                  </div>
-                  <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
-                    <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-0.5 leading-5 text-[#4d666d]">1420 Mountain View Drive, Estes Park, CO 80517</dd></div>
-                    <div><dt className="font-semibold text-[#829696]">Organization group</dt><dd className="mt-0.5 text-[#4d666d]">Colorado Mountain Partners</dd></div>
-                    <div><dt className="font-semibold text-[#829696]">Relationship started</dt><dd className="mt-0.5 text-[#4d666d]">September 2022</dd></div>
-                  </dl>
-                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -418,8 +407,19 @@ export function ModernCRM() {
               )}
             </div>
           </div>
-          <div className="flex justify-end border-t border-[#e1e8e3] px-4 py-3 sm:px-7">
-            <span className="hidden items-center gap-1.5 text-xs font-semibold text-[#809295] md:inline-flex"><Clock3 className="h-3.5 w-3.5" />Mountain Time (MT)</span>
+          <div className="flex flex-col gap-3 border-t border-[#e1e8e3] px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-7">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p>
+                <button aria-label="Configure visible details" className="rounded-lg p-1 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-3.5 w-3.5" /></button>
+              </div>
+              <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
+                <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-0.5 leading-5 text-[#4d666d]">1420 Mountain View Drive, Estes Park, CO 80517</dd></div>
+                <div><dt className="font-semibold text-[#829696]">Organization group</dt><dd className="mt-0.5 text-[#4d666d]">Colorado Mountain Partners</dd></div>
+                <div><dt className="font-semibold text-[#829696]">Relationship started</dt><dd className="mt-0.5 text-[#4d666d]">September 2022</dd></div>
+              </dl>
+            </div>
+            <span className="hidden shrink-0 items-center gap-1.5 pt-1 text-xs font-semibold text-[#809295] md:inline-flex"><Clock3 className="h-3.5 w-3.5" />Mountain Time (MT)</span>
           </div>
         </section>
 
