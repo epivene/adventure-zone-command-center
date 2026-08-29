@@ -14,7 +14,6 @@ import {
   Globe2,
   Mail,
   MapPin,
-  MessageCircle,
   Phone,
   Plus,
   Search,
@@ -45,20 +44,6 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
 
 type OpenSection = "contacts" | "events" | "notes" | "emails" | null;
-
-function formatDateTime(value: Date | string | null | undefined) {
-  if (!value) return null;
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/Denver",
-  }).format(date);
-}
 
 function formatShortDate(value: Date | string | null | undefined) {
   if (!value) return null;

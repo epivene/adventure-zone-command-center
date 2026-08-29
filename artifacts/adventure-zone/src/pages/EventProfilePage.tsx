@@ -4,7 +4,6 @@ import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { ProfileDetailsCard } from "@/components/profiles/profile-details-card";
-import { ProfilePrimaryActions } from "@/components/profiles/profile-primary-actions";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
@@ -16,7 +15,6 @@ import { AssistantContextRegistration } from "@/components/assistant/assistant-c
 import { DerivedFactsReview } from "@/components/assistant/derived-facts-review";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { extractHistoricalEventDates } from "@/features/event-profiles/historical-event-dates";
-import { profileResearchGaps } from "@/features/profile-research/profile-research-gaps";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 
@@ -154,10 +152,6 @@ export default function EventProfilePage() {
     ? recoveredActNotes.filter((note) => note.toLowerCase().includes(normalizedActSearch))
     : recoveredActNotes;
   const profileLabel = String(data.name ?? data.organization?.name ?? data.place?.name ?? "Profile");
-  const researchGaps = profileResearchGaps(data);
-  const primaryContact = (data.contacts ?? []).find((contact: any) => contact.isPrimary) ?? data.contacts?.[0] ?? null;
-  const actionContactId = contactId ?? data.selectedContactId ?? primaryContact?.id ?? null;
-  const actionPhone = actionContactId ? callablePhoneByContactId[actionContactId] ?? null : null;
 
   function toggleActNote(note: string) {
     setExpandedActNotes((current) => {
@@ -169,66 +163,40 @@ export default function EventProfilePage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-4">
-      {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <button
-          aria-label="Back"
-          className="w-fit rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-          onClick={goBack}
-          type="button"
-        >
-          <span aria-hidden="true">←</span> {profileEditing ? "Back to profile" : "Back"}
-        </button>
-        {!profileEditing && profileId ? (
-          <button className="button-secondary" type="button" onClick={() => setResearchOpen(true)}>
-            Research profile{researchGaps.length ? ` · ${researchGaps.length} gaps` : ""}
-          </button>
-        ) : null}
-      </div>
+    <div className="profile-modern -mx-4 -my-5 min-h-[100dvh] bg-[#f3f5f0] px-4 py-5 text-[#173b48] md:-mx-8 md:-my-7 md:px-8 md:py-7 lg:px-10">
+      <div className="mx-auto grid w-full max-w-[1420px] gap-5">
+        {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
 
-      {!profileEditing && profileId ? (
-        <ProfilePrimaryActions
-          profileId={profileId}
-          selectedContactId={actionContactId}
-          bookingId={bookingId}
-          followUpId={followUpId}
-          mode={mode}
-          assistedCallingEnabled={data.assistedCallingEnabled === true}
-          callablePhone={actionPhone}
-          onEdit={() => setProfileEditing(true)}
-        />
-      ) : null}
+        <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
+          <SimpleFullProfile
+            profile={data}
+            onProfileSaved={loadProfile}
+            ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
+            onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
+            onBack={goBack}
+            profileImageDataUrl={profileImageDataUrl}
+            onProfileImageChange={saveProfileImage}
+            editing={profileEditing}
+            onEditingChange={setProfileEditing}
+          />
+        </div>
 
-      <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
-        <SimpleFullProfile
-          profile={data}
-          onProfileSaved={loadProfile}
-          ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
-          onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
-          profileImageDataUrl={profileImageDataUrl}
-          onProfileImageChange={saveProfileImage}
-          editing={profileEditing}
-          onEditingChange={setProfileEditing}
-        />
-      </div>
+        {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
+        {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
-      {!profileEditing ? <ProfileDetailsCard profile={data} /> : null}
-      {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
+        {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
+        {!profileEditing && profileId ? <ProfileSourceDocuments mode="owner" profileId={profileId} /> : null}
 
-      {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
-      {!profileEditing && profileId ? <ProfileSourceDocuments mode="owner" profileId={profileId} /> : null}
+        {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 
-      {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
+        {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
 
-      {!profileEditing && profileId ? <DerivedFactsReview organizationId={profileId} /> : null}
+        {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
 
-      {!profileEditing && profileId ? <PaperNoteHistorySources profileId={profileId} /> : null}
+        {!profileEditing ? <HistoricalEventDates dates={historicalEventDates} /> : null}
 
-      {!profileEditing ? <HistoricalEventDates dates={historicalEventDates} /> : null}
-
-      {recoveredActNotes.length ? (
-        <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        {recoveredActNotes.length ? (
+          <details className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <summary className="cursor-pointer font-semibold text-slate-800">Imported ACT history ({recoveredActNotes.length})</summary>
           <p className="mt-2 text-sm text-slate-600">Original imported records are preserved here for reference.</p>
           <input
@@ -255,25 +223,26 @@ export default function EventProfilePage() {
               </ul>
             ) : <p className="rounded-lg bg-white p-3 text-sm text-slate-600">No ACT history matches “{actHistorySearch.trim()}”.</p>}
           </div>
-        </details>
-      ) : null}
+          </details>
+        ) : null}
 
-      <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={action === "follow-up"}>
-        <summary className="cursor-pointer font-semibold text-slate-800">More profile tools</summary>
-        <div className="mt-3 [&>div>header:first-child]:hidden">
-          <EventProfileWorkspace
-            profile={data}
-            assistedCallingEnabled={data.assistedCallingEnabled === true}
-            callablePhoneByContactId={callablePhoneByContactId}
-            context={{ bookingId, followUpId, action, mode }}
-            familyNotes={familyNotes}
-            familyNotesError={familyNotesError}
-            retryFamilyNotes={retryFamilyNotes}
-            organizationContext={data.organizationContext ?? { parent: null, children: [] }}
-            onOrganizationChanged={() => void loadProfile()}
-          />
-        </div>
-      </details>
+        <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" open={action === "follow-up"}>
+          <summary className="cursor-pointer font-semibold text-slate-800">More profile tools</summary>
+          <div className="mt-3 [&>div>header:first-child]:hidden">
+            <EventProfileWorkspace
+              profile={data}
+              assistedCallingEnabled={data.assistedCallingEnabled === true}
+              callablePhoneByContactId={callablePhoneByContactId}
+              context={{ bookingId, followUpId, action, mode }}
+              familyNotes={familyNotes}
+              familyNotesError={familyNotesError}
+              retryFamilyNotes={retryFamilyNotes}
+              organizationContext={data.organizationContext ?? { parent: null, children: [] }}
+              onOrganizationChanged={() => void loadProfile()}
+            />
+          </div>
+        </details>
+      </div>
     </div>
   );
 }

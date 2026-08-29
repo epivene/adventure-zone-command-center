@@ -49,7 +49,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
-  const hideFloatingAssistantLauncher = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
+  const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
   useEffect(() => {
     let active = true;
@@ -78,7 +78,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-950">
       <AssistantNavigationContextSync />
-      <header className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 backdrop-blur md:block">
+      {!immersiveProfile ? <header className="sticky top-0 z-20 hidden border-b border-slate-200 bg-white/95 backdrop-blur md:block">
         <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
           <WorkspaceSwitcher workspace={workspace} />
           {primaryItems.length ? (
@@ -112,7 +112,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <AppMenu workspace={workspace} />
           </div>
         </div>
-      </header>
+      </header> : null}
 
       {workspace === "operations" ? (
         <div className="fixed right-4 top-4 z-30 md:hidden">
@@ -126,9 +126,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         {location.startsWith("/office-coordinator") ? <OfficeUpdateHistory /> : null}
       </main>
 
-      {!hideFloatingAssistantLauncher ? <AssistantLauncher placement="floating" /> : null}
+      {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
       <AssistantDrawer />
-      <MobileBottomNav workspace={workspace} />
+      {!immersiveProfile ? <MobileBottomNav workspace={workspace} /> : null}
     </div>
   );
 }

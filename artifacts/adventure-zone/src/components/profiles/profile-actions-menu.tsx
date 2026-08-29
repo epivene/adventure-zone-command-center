@@ -41,9 +41,15 @@ export function ProfileActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="button-secondary inline-flex items-center gap-2" type="button">
-            {triggerLabel === "More" ? <ChevronDown className="h-4 w-4" /> : <MoreHorizontal className="h-4 w-4" />} {triggerLabel}
-          </button>
+          {triggerLabel === "More" ? (
+            <button className="button-secondary inline-flex items-center gap-2" type="button">
+              More <ChevronDown className="h-4 w-4" />
+            </button>
+          ) : (
+            <button className="button-secondary inline-flex items-center gap-2" type="button">
+              <MoreHorizontal className="h-4 w-4" /> {triggerLabel}
+            </button>
+          )}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
           <DropdownMenuLabel>Profile actions</DropdownMenuLabel>

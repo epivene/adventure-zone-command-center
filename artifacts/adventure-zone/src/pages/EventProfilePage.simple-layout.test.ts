@@ -5,29 +5,32 @@ const page = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
 const simple = readFileSync("src/components/profiles/simple-full-profile.tsx", "utf8");
 const actions = readFileSync("src/components/profiles/profile-actions-menu.tsx", "utf8");
 
-describe("compact full profile", () => {
-  it("uses the compact profile surface before advanced tools", () => {
+describe("modern CRM full profile", () => {
+  it("uses the CRM profile surface before advanced tools", () => {
     expect(page).toContain("<SimpleFullProfile");
-    expect(page).toContain("Advanced profile tools");
-    expect(page.indexOf("<SimpleFullProfile")).toBeLessThan(page.indexOf("Advanced profile tools"));
+    expect(page).toContain("More profile tools");
+    expect(page.indexOf("<SimpleFullProfile")).toBeLessThan(page.indexOf("More profile tools"));
   });
 
-  it("uses the approved compact header instead of the old tab strip", () => {
-    expect(simple).toContain("About");
+  it("uses the approved CRM header and controls", () => {
+    expect(simple).toContain("Adventure Zone");
+    expect(simple).toContain("Relationships / Organizations");
     expect(simple).toContain("Ask Assistant");
+    expect(simple).toContain("Open notifications");
+    expect(simple).toContain("Open primary contact");
     expect(simple).toContain("profileImageDataUrl");
     expect(simple).not.toContain('["overview", "notes", "events"]');
   });
 
-  it("keeps contact, event and note detail panels hidden until their card is clicked", () => {
-    expect(simple).toContain('type OpenSection = "contacts" | "events" | "notes" | null');
+  it("keeps contact, event, note and email panels hidden until their card is clicked", () => {
+    expect(simple).toContain('type OpenSection = "contacts" | "events" | "notes" | "emails" | null');
     expect(simple).toContain("useState<OpenSection>(null)");
     expect(simple).toContain('openSection === "contacts"');
     expect(simple).toContain('openSection === "events"');
     expect(simple).toContain('openSection === "notes"');
     expect(simple).toContain('toggleSection("contacts")');
     expect(simple).toContain('toggleSection("events")');
-    expect(simple).toContain('toggleSection("notes")');
+    expect(simple).toContain('toggleSection("emails")');
     expect(simple).not.toContain("scrollIntoView");
   });
 
@@ -49,10 +52,10 @@ describe("compact full profile", () => {
     expect(page).toContain("overflow-y-auto");
     expect(page).toContain("More");
     expect(page).toContain("Less");
-    expect(page).not.toContain("DerivedFactsReview");
+    expect(page).toContain("DerivedFactsReview");
   });
 
-  it("keeps Actions flat and limited to things that actually do something", () => {
+  it("keeps the More menu wired to real actions", () => {
     expect(actions).toContain("Add note");
     expect(actions).toContain("Add follow-up");
     expect(actions).toContain("Add event");
@@ -60,21 +63,19 @@ describe("compact full profile", () => {
     expect(actions).not.toContain("DropdownMenuSub");
     expect(actions).not.toContain("Status");
     expect(actions).not.toContain("Add to Organization");
-    expect(actions).not.toContain("Add to Event Family");
-    expect(actions).not.toContain("Archive / Delete");
-    expect(actions).not.toContain(">More<");
+    expect(actions).toContain("Add to Event Family");
+    expect(actions).toContain('triggerLabel = "Actions"');
+    expect(actions).toContain("More <ChevronDown");
   });
 
-  it("shows only contact, event and note stat cards plus one color-coded follow-up card", () => {
-    expect(simple).toContain("Contact");
-    expect(simple).toContain("Events");
-    expect(simple).toContain("Note");
+  it("shows the three approved CRM metrics and relationship cards", () => {
+    expect(simple).toContain("Contacts");
+    expect(simple).toContain("Upcoming events");
+    expect(simple).toContain("Emails");
     expect(simple).toContain("No open follow-ups");
-    expect(simple).toContain("Follow-up overdue");
-    expect(simple).toContain("Follow-up needed");
-    expect(simple).toContain("bg-emerald-50");
-    expect(simple).toContain("bg-rose-50");
-    expect(simple).toContain("bg-amber-50");
+    expect(simple).toContain("Relationship health");
+    expect(simple).toContain("Recent history");
+    expect(simple).toContain("Organization record");
   });
 
   it("sanitizes imported ACT bodies before the profile surface receives them", () => {
