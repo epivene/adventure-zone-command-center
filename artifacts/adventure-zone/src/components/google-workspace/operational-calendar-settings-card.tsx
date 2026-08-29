@@ -7,8 +7,110 @@ import {
   getOperationalCalendarStatus,
   importOperationalCalendar,
   startOperationalCalendarOAuth,
+  type OperationalCalendarReview,
   type OperationalCalendarStatus,
 } from "@/features/google-workspace/operational-calendar-client";
+
+type ParsedReviewDetails = {
+  managerToken?: string | null;
+  eventName?: string | null;
+  city?: string | null;
+  region?: string | null;
+  packageKey?: string | null;
+  actualEventDateText?: string | null;
+  contactText?: string | null;
+  addressText?: string | null;
+};
+
+type GoogleReviewDetails = {
+  summary?: string | null;
+  description?: string | null;
+  startDate?: string | null;
+  endDateExclusive?: string | null;
+};
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function readReviewDetails(review: OperationalCalendarReview) {
+  const proposed = asRecord(review.proposedChanges) ?? {};
+  const parsed = (asRecord(proposed.parsed) ?? {}) as ParsedReviewDetails;
+  const google = (asRecord(proposed.google) ?? {}) as GoogleReviewDetails;
+  const candidateBookingIds = Array.isArray(proposed.candidateBookingIds)
+    ? proposed.candidateBookingIds.filter((value): value is string => typeof value === "string")
+    : [];
+  return { parsed, google, candidateBookingIds };
+}
+
+function displayPackage(value: string | null | undefined) {
+  if (value === "zone") return "Adventure Zone";
+  if (value === "pirates") return "Pirates";
+  if (value === "warrior") return "Warrior";
+  return value ? value.replaceAll("_", " ") : null;
+}
+
+function displayReservedWindow(startDate?: string | null, endDateExclusive?: string | null) {
+  if (!startDate) return null;
+  const start = new Date(`${startDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start.getTime())) return null;
+  let end = start;
+  if (endDateExclusive) {
+    const parsedEnd = new Date(`${endDateExclusive}T00:00:00.000Z`);
+    if (Number.isFinite(parsedEnd.getTime())) {
+      end = new Date(parsedEnd.getTime() - 86_400_000);
+    }
+  }
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
+function ReviewDetails({ review }: { review: OperationalCalendarReview }) {
+  const { parsed, google, candidateBookingIds } = readReviewDetails(review);
+  const title = google.summary?.trim() || parsed.eventName?.trim() || "Untitled Google calendar event";
+  const location = [parsed.city, parsed.region].filter(Boolean).join(", ");
+  const reservedWindow = displayReservedWindow(google.startDate, google.endDateExclusive);
+  const packageName = displayPackage(parsed.packageKey);
+
+  return (
+    <div className="mt-3 grid gap-2 rounded-lg border border-amber-200/80 bg-white/70 p-3 text-sm text-slate-800">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Google calendar event</p>
+        <p className="mt-0.5 font-semibold text-slate-950">{title}</p>
+      </div>
+      <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+        {parsed.managerToken ? <p><span className="font-semibold">Leg/manager:</span> {parsed.managerToken}</p> : null}
+        {packageName ? <p><span className="font-semibold">Package:</span> {packageName}</p> : null}
+        {location ? <p><span className="font-semibold">Location:</span> {location}</p> : null}
+        {reservedWindow ? <p><span className="font-semibold">Calendar block:</span> {reservedWindow}</p> : null}
+        {parsed.actualEventDateText ? <p className="sm:col-span-2"><span className="font-semibold">Actual event date:</span> {parsed.actualEventDateText}</p> : null}
+        {parsed.contactText ? <p className="sm:col-span-2"><span className="font-semibold">Contact:</span> {parsed.contactText}</p> : null}
+        {parsed.addressText ? <p className="sm:col-span-2"><span className="font-semibold">Address:</span> {parsed.addressText}</p> : null}
+      </div>
+      {candidateBookingIds.length > 0 ? (
+        <p className="rounded-md bg-amber-100 px-2 py-1.5 text-xs font-semibold text-amber-950">
+          {candidateBookingIds.length} possible app match{candidateBookingIds.length === 1 ? "" : "es"} found. The importer did not guess between them.
+        </p>
+      ) : review.bookingId ? (
+        <p className="text-xs text-slate-600">Linked app booking: {review.bookingId}</p>
+      ) : (
+        <p className="text-xs text-slate-600">No reliable app profile match was found automatically.</p>
+      )}
+      <details>
+        <summary className="cursor-pointer text-xs font-semibold text-slate-600">Show Google description</summary>
+        <p className="mt-2 whitespace-pre-wrap break-words rounded-md bg-slate-50 p-2 text-xs text-slate-700">
+          {google.description?.trim() || "No description on this Google event."}
+        </p>
+      </details>
+    </div>
+  );
+}
 
 export function OperationalCalendarSettingsCard({
   openAuthorizationUrl = (url: string) => window.location.assign(url),
@@ -129,10 +231,14 @@ export function OperationalCalendarSettingsCard({
           {status.reviews.map((review) => (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3" key={review.id}>
               <p className="font-semibold text-amber-950">{review.reason}</p>
-              <p className="mt-1 text-xs text-amber-900">Google event: {review.googleEventId}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <button className="button-secondary" disabled={busy !== null} onClick={() => void decide(review.id, "accepted")} type="button">Acknowledge calendar change</button>
-                <button className="button-secondary" disabled={busy !== null} onClick={() => void decide(review.id, "rejected")} type="button">Keep app version</button>
+              <ReviewDetails review={review} />
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="button-secondary" disabled={busy !== null} onClick={() => void decide(review.id, "accepted")} type="button">Acknowledge calendar row</button>
+                {review.bookingId ? (
+                  <button className="button-secondary" disabled={busy !== null} onClick={() => void decide(review.id, "rejected")} type="button">Keep app version</button>
+                ) : (
+                  <button className="button-secondary" disabled={busy !== null} onClick={() => void decide(review.id, "rejected")} type="button">Leave unmatched for now</button>
+                )}
               </div>
             </div>
           ))}
