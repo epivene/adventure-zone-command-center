@@ -5,7 +5,10 @@ import { db } from "@workspace/db";
 import { attachEventFamiliesToOrganizationPage } from "@/features/event-families/event-family-list";
 import { DrizzleOrganizationRepository, type OrganizationListPage } from "@/features/organizations/organization-repository";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
-import { buildProfileSearchTerms } from "@/features/organizations/profile-search";
+import {
+  buildProfileSearchTerms,
+  profileSearchMatches,
+} from "@/features/organizations/profile-search";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 
 const router: IRouter = Router();
@@ -73,14 +76,72 @@ function termCondition(term: string) {
 async function matchedOrganizationIds(terms: string[]): Promise<Set<string>> {
   const termConditions = terms.map((term) => termCondition(term));
   if (!termConditions.length) return new Set();
-  const result = await db.execute<{ id: string }>(sql`
+  const exactResult = await db.execute<{ id: string }>(sql`
     select distinct o.id
     from organizations o
     where ${sql.join(termConditions, sql.raw(" and "))}
     order by o.id
     limit ${MAX_SEARCH_CANDIDATES}
   `);
-  return new Set(result.rows.map((row) => row.id));
+  const fuzzyResult = await db.execute<{ id: string; searchText: string | null }>(sql`
+    select
+      o.id,
+      concat_ws(
+        ' ',
+        o.name,
+        o.city,
+        o.region,
+        o.postal_code,
+        o.address_1,
+        o.website,
+        o.phone,
+        (
+          select string_agg(
+            concat_ws(' ', person.first_name, person.last_name, person.phone, person.email),
+            ' '
+          )
+          from organization_contacts association
+          inner join contacts person on person.id = association.contact_id
+          where association.organization_id = o.id
+            and association.active
+        ),
+        (
+          select string_agg(
+            concat_ws(
+              ' ',
+              loc.label,
+              loc.venue_name,
+              loc.city,
+              loc.region,
+              loc.postal_code,
+              loc.address_1,
+              loc.website,
+              loc.phone,
+              loc.email,
+              (
+                select string_agg(
+                  concat_ws(' ', loc_contact.first_name, loc_contact.last_name, loc_contact.phone, loc_contact.email),
+                  ' '
+                )
+                from contacts loc_contact
+                where loc_contact.organization_location_id = loc.id
+              )
+            ),
+            ' '
+          )
+          from organization_locations loc
+          where loc.organization_id = o.id
+        )
+      ) as "searchText"
+    from organizations o
+    order by o.id
+    limit ${MAX_SEARCH_CANDIDATES}
+  `);
+  const matchedIds = new Set(exactResult.rows.map((row) => row.id));
+  for (const row of fuzzyResult.rows) {
+    if (profileSearchMatches(terms, [row.searchText ?? ""])) matchedIds.add(row.id);
+  }
+  return matchedIds;
 }
 
 type ProfileCardDetails = {

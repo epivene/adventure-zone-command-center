@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-import { buildProfileSearchTerms } from "./profile-search";
+import {
+  buildProfileSearchTerms,
+  profileSearchMatches,
+  profileSearchTermMatches,
+} from "./profile-search";
 
 const routeSource = readFileSync("src/routes/organization-forgiving-search.ts", "utf8");
 const indexSource = readFileSync("src/routes/index.ts", "utf8");
@@ -16,6 +20,14 @@ describe("forgiving profile search", () => {
     expect(buildProfileSearchTerms("amy@gm")).toEqual(["amy", "gm"]);
     expect(buildProfileSearchTerms("(720) 272-7467")).toEqual(["720", "272", "7467"]);
     expect(buildProfileSearchTerms("720272")).toEqual(["720272"]);
+  });
+
+  it("matches close misspellings without making short searches fuzzy", () => {
+    expect(profileSearchTermMatches("denvr", "Denver")).toBe(true);
+    expect(profileSearchTermMatches("adventure", "Adventur")).toBe(true);
+    expect(profileSearchTermMatches("co", "Colorado")).toBe(true);
+    expect(profileSearchTermMatches("ca", "co")).toBe(false);
+    expect(profileSearchMatches(["denvr", "festval"], ["Denver", "Mountain Festival"])).toBe(true);
   });
 
   it("matches every normalized term across profile, contact, and location fields", () => {
