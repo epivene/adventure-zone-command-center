@@ -387,6 +387,74 @@ a {
   background: hsl(var(--muted));
 }
 
+/* The immersive profile was authored from the original mockup and still
+   carries a few literal utility classes. Keep those classes structurally
+   intact while routing their old green palette through the current semantic
+   raspberry tokens. */
+.profile-modern [class*="text-[#397064]"],
+.profile-modern [class*="text-[#2d5d54]"],
+.profile-modern [class*="text-[#244f47]"] {
+  color: hsl(var(--primary)) !important;
+}
+
+.profile-modern [class*="bg-[#397064]"] {
+  background-color: hsl(var(--primary)) !important;
+}
+
+.profile-modern [class*="hover:text-[#2d5d54]"]:hover,
+.profile-modern [class*="hover:text-[#244f47]"]:hover {
+  color: hsl(var(--primary) / 0.82) !important;
+}
+
+.profile-modern [class*="hover:!bg-[#2d5d54]"]:hover,
+.profile-modern [class*="hover:bg-[#2d5d54]"]:hover {
+  background-color: hsl(var(--primary) / 0.82) !important;
+}
+
+.profile-modern [class*="text-[#4b8575]"],
+.profile-modern [class*="text-[#8eae9e]"],
+.profile-modern [class*="border-[#9ab6a9]"],
+.profile-modern [class*="border-[#a7beb3]"],
+.profile-modern [class*="border-[#bfd5ca]"],
+.profile-modern [class*="border-[#c8dcd0]"] {
+  color: hsl(var(--ring)) !important;
+  border-color: hsl(var(--ring)) !important;
+}
+
+.profile-modern [class*="border-[#9ab6a9]"],
+.profile-modern [class*="border-[#a7beb3]"],
+.profile-modern [class*="border-[#bfd5ca]"],
+.profile-modern [class*="border-[#c8dcd0]"] {
+  border-color: hsl(var(--border)) !important;
+}
+
+.profile-modern [class*="bg-[#e3eee8]"],
+.profile-modern [class*="bg-[#e2efe9]"],
+.profile-modern [class*="bg-[#dbe9e4]"],
+.profile-modern [class*="bg-[#edf4ef]"],
+.profile-modern [class*="bg-[#edf5ef]"],
+.profile-modern [class*="bg-[#f3f7f3]"],
+.profile-modern [class*="bg-[#f3f8f3]"],
+.profile-modern [class*="bg-[#f4f8f4]"] {
+  background-color: hsl(var(--secondary)) !important;
+}
+
+.profile-modern [class*="border-[#d8e2dd]"],
+.profile-modern [class*="border-[#dce6e0]"],
+.profile-modern [class*="border-[#dcebe1]"],
+.profile-modern [class*="border-[#e4ebe5]"],
+.profile-modern [class*="border-[#e5ebe5]"] {
+  border-color: hsl(var(--border)) !important;
+}
+
+.profile-modern [class*="focus:ring-[#8eae9e]"]:focus,
+.profile-modern [class*="focus:border-[#8eae9e]"]:focus,
+.profile-modern [class*="focus:ring-[#dcebe1]"]:focus,
+.profile-modern [class*="focus:ring-[#d3e8da]"]:focus {
+  --tw-ring-color: hsl(var(--ring)) !important;
+  border-color: hsl(var(--ring)) !important;
+}
+
 /* Existing screens still use a few literal white utility classes. Keep those
    surfaces in the design-system dark palette instead of rendering bright
    islands inside a dark workspace. */
