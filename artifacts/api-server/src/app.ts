@@ -10,6 +10,7 @@ import assistantProfileHistoryRouter from "./routes/assistant-profile-history";
 import assistantOfficeTasksRouter from "./routes/assistant-office-tasks";
 import assistantTodayFollowUpsRouter from "./routes/assistant-today-followups";
 import assistantProfileNotesRouter from "./routes/assistant-profile-notes";
+import organizationFillerRouter from "./routes/organization-filler";
 
 const app: Express = express();
 
@@ -48,6 +49,7 @@ app.use("/api/assistant-import", assistantTodayFollowUpsRouter);
 app.use("/api/assistant-import", assistantProfileNotesRouter);
 app.use("/api/assistant-import", assistantImportRouter);
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
+app.use("/api", organizationFillerRouter);
 app.use("/api", router);
 
 export default app;
