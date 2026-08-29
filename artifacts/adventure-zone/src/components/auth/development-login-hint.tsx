@@ -6,7 +6,13 @@ import {
 
 type LoginKind = "office" | "manager";
 
-export function DevelopmentLoginHint({ kind }: { kind: LoginKind }) {
+export function DevelopmentLoginHint({
+  kind,
+  onUse,
+}: {
+  kind: LoginKind;
+  onUse?: (sample: DevelopmentSampleLogins) => void;
+}) {
   const [sample, setSample] = useState<DevelopmentSampleLogins | null>(null);
 
   useEffect(() => {
@@ -48,6 +54,15 @@ export function DevelopmentLoginHint({ kind }: { kind: LoginKind }) {
           </div>
         </dl>
       )}
+      {onUse ? (
+        <button
+          className="button-secondary mt-3 w-full"
+          type="button"
+          onClick={() => onUse(sample)}
+        >
+          {isOffice ? "Sign in with demo account" : "Sign in with demo"}
+        </button>
+      ) : null}
       <p className="mt-2 text-xs text-orange-800 dark:text-orange-200">
         This panel is visible only in the development app.
       </p>
