@@ -8,7 +8,7 @@ import {
   mergeDuplicateGroups,
 } from "@/features/organizations/bulk-duplicate-merge";
 import { apiGet, apiPost } from "@/lib/auth-token";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/avz-crm/hooks/use-toast";
 import { ConsolidationDialog } from "./consolidation-dialog";
 
 type FamilyEvidence = {

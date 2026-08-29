@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/auth-token";
-import { useToast } from "@/hooks/use-toast";
+import { useToast } from "@workspace/avz-crm/hooks/use-toast";
 import type { OrganizationListRecord } from "@/features/organizations/organization-repository";
 
 //  Types

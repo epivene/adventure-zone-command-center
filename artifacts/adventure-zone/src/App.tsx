@@ -30,7 +30,8 @@ import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, use
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@workspace/avz-crm/components/ui/toaster";
+import { Button } from "@workspace/avz-crm/components/ui/button";
 import { AssistantContextProvider } from "@/features/assistant/assistant-context";
 import {
   canonicalActMigrationPath,
@@ -99,10 +100,10 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 function AuthScreen({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold tracking-tight">AdventureZone</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">Command Terminal</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">AdventureZone</h1>
+        <p className="mt-1 text-sm font-medium text-muted-foreground">Command Terminal</p>
       </div>
       {children}
     </div>
@@ -131,11 +132,11 @@ function SignInPage() {
 
   return (
     <AuthScreen>
-      <form className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-6 shadow-sm" onSubmit={handleSubmit}>
-        <label className="block text-sm font-semibold text-slate-700" htmlFor="owner-password">Password</label>
-        <input autoFocus autoComplete="current-password" className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200" id="owner-password" onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" type="password" value={password} />
-        {error ? <p className="mt-3 text-sm font-medium text-red-600" role="alert">{error}</p> : null}
-        <button className="mt-4 w-full rounded-lg bg-orange-600 px-4 py-2.5 font-semibold text-white shadow-sm transition hover:bg-orange-700 disabled:opacity-60" disabled={submitting || password.length === 0} type="submit">{submitting ? "Signing in…" : "Sign in"}</button>
+      <form className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-sm" onSubmit={handleSubmit}>
+        <label className="block text-sm font-semibold text-foreground" htmlFor="owner-password">Password</label>
+        <input autoFocus autoComplete="current-password" className="mt-2" id="owner-password" onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" type="password" value={password} />
+        {error ? <p className="mt-3 text-sm font-medium text-destructive" role="alert">{error}</p> : null}
+        <Button className="mt-4 w-full" disabled={submitting || password.length === 0} type="submit">{submitting ? "Signing in…" : "Sign in"}</Button>
       </form>
     </AuthScreen>
   );
@@ -143,12 +144,17 @@ function SignInPage() {
 
 function Landing() {
   return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-slate-50 px-4">
-      <Link aria-label="Administrator Access" className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-100 hover:text-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-300" href="/sign-in" title="Administrator Access">
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
+      <Link
+        aria-label="Administrator Access"
+        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
+        href="/sign-in"
+        title="Administrator Access"
+      >
         <Shield aria-hidden="true" className="h-5 w-5" />
       </Link>
-      <h1 className="text-3xl font-bold tracking-tight">AdventureZone Command Terminal</h1>
-      <p className="mt-2 max-w-md text-center text-slate-600">Bookings, contacts, routes, and calls all in one place!</p>
+      <h1 className="text-3xl font-bold tracking-tight text-foreground">AdventureZone Command Terminal</h1>
+      <p className="mt-2 max-w-md text-center text-muted-foreground">Bookings, contacts, routes, and calls all in one place.</p>
       <div className="mt-8 grid w-full max-w-sm gap-3">
         <Link className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
         <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Leg Managers</Link>
@@ -158,7 +164,7 @@ function Landing() {
 }
 
 function LoadingScreen() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-slate-50"><p className="text-sm font-medium text-slate-500">Loading…</p></div>;
+  return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><p className="text-sm font-medium text-muted-foreground">Loading…</p></div>;
 }
 
 function HomeRoute() {
@@ -214,12 +220,32 @@ function SettingsStub() {
     ["Call scripts", "/settings/call-scripts", "Manage guided calling copy and branches."],
     ["Packages & resources", "/settings/packages-resources", "Maintain shared package and resource defaults."],
   ] as const;
-  return <div className="mx-auto grid max-w-5xl gap-5"><header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Administrator maintenance</p><h1 className="mt-1 text-3xl font-bold">Admin Tools</h1><p className="mt-2 text-slate-600">Imports, recovery, shared setup, and system-level tools stay here instead of cluttering Booking, Marketing, or Operations.</p></header><div className="grid gap-3 sm:grid-cols-2">{tools.map(([label, href, description]) => <Link className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm hover:border-orange-300" href={href} key={href}><h2 className="font-bold">{label}</h2><p className="mt-1 text-sm text-slate-600">{description}</p></Link>)}</div><section className="rounded-xl border border-dashed border-slate-300 bg-white p-4"><h2 className="font-bold">Google Workspace</h2><p className="mt-1 text-sm text-slate-600">The approved Gmail/Calendar connection, sync, backfill, and review controls plug into Admin Tools as that implementation lands. Booking and Marketing consume the same shared synced data.</p></section></div>;
+  return (
+    <div className="mx-auto grid max-w-5xl gap-5">
+      <header>
+        <p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Administrator maintenance</p>
+        <h1 className="mt-1 text-3xl font-bold text-foreground">Admin Tools</h1>
+        <p className="mt-2 text-muted-foreground">Imports, recovery, shared setup, and system-level tools stay here instead of cluttering Booking, Marketing, or Operations.</p>
+      </header>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {tools.map(([label, href, description]) => (
+          <Link className="rounded-xl border border-border bg-card p-4 shadow-sm hover:border-primary/40 transition-colors" href={href} key={href}>
+            <h2 className="font-bold text-foreground">{label}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+          </Link>
+        ))}
+      </div>
+      <section className="rounded-xl border border-dashed border-border bg-card p-4">
+        <h2 className="font-bold text-foreground">Google Workspace</h2>
+        <p className="mt-1 text-sm text-muted-foreground">The approved Gmail/Calendar connection, sync, backfill, and review controls plug into Admin Tools as that implementation lands. Booking and Marketing consume the same shared synced data.</p>
+      </section>
+    </div>
+  );
 }
 
 function ManagerProtectedApp() {
   const { manager, loading } = useManagerAuth();
-  if (loading) return <div className="p-6">Loading manager portal…</div>;
+  if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><p className="text-sm font-medium text-muted-foreground">Loading manager portal…</p></div>;
   if (!manager) return <Redirect to="/manager/sign-in" />;
   return (
     <ManagerShell>
@@ -244,7 +270,7 @@ function ManagerProtectedApp() {
 
 function OfficeProtectedApp() {
   const { office, loading } = useOfficeAuth();
-  if (loading) return <div className="p-6">Loading Booking Workspace…</div>;
+  if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><p className="text-sm font-medium text-muted-foreground">Loading Booking Workspace…</p></div>;
   if (!office) return <Redirect to="/office/sign-in" />;
   return (
     <OfficeShell>

@@ -4,7 +4,7 @@ import { Plus } from "lucide-react";
 import { useManagerAssistant } from "@/features/manager-assistant/manager-assistant-context";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
 
 type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null };
 type ManagerMapSummary = { events?: NextEvent[] };

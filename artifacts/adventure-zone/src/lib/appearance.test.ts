@@ -34,7 +34,7 @@ function root() {
 describe("per-device appearance", () => {
   it("defaults to light and reads only supported local values", () => {
     expect(readAppearance(storage())).toBe("light");
-    expect(readAppearance(storage({ [APPEARANCE_STORAGE_KEY]: "warm-light" }))).toBe("warm-light");
+    expect(readAppearance(storage({ [APPEARANCE_STORAGE_KEY]: "warm-light" }))).toBe("light");
     expect(readAppearance(storage({ [APPEARANCE_STORAGE_KEY]: "dark" }))).toBe("dark");
     expect(readAppearance(storage({ [APPEARANCE_STORAGE_KEY]: "something-else" }))).toBe("light");
   });
@@ -47,16 +47,11 @@ describe("per-device appearance", () => {
     expect(readAppearance(secondDevice)).toBe("light");
   });
 
-  it("applies mutually exclusive light, warm-light, and dark root classes", () => {
+  it("applies mutually exclusive light and dark root classes", () => {
     const element = root();
-    applyAppearance("warm-light", element);
-    expect(element.classList.contains("warm-light")).toBe(true);
-    expect(element.classList.contains("dark")).toBe(false);
     applyAppearance("dark", element);
     expect(element.classList.contains("dark")).toBe(true);
-    expect(element.classList.contains("warm-light")).toBe(false);
     applyAppearance("light", element);
     expect(element.classList.contains("dark")).toBe(false);
-    expect(element.classList.contains("warm-light")).toBe(false);
   });
 });

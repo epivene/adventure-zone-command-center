@@ -7,7 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@workspace/avz-crm/components/ui/dialog";
 import { apiGet } from "@/lib/auth-token";
 
 export type ProfileLastResortState = {

@@ -1,5 +1,5 @@
 import { apiDelete, apiGet, apiPost } from "@/lib/auth-token";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "@workspace/avz-crm/hooks/use-toast";
 import type {
   ActivityParent,
   CreateActivityInput,

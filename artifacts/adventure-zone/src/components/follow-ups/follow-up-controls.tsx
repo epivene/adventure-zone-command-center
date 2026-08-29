@@ -7,7 +7,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@workspace/avz-crm/components/ui/dropdown-menu";
 
 const FOLLOW_UP_KINDS = [
   { value: "call", label: "Call" },

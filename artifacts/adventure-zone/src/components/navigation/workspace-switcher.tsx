@@ -1,5 +1,6 @@
 import { Check, ChevronDown, House, LayoutGrid, Megaphone, MapPinned, Settings2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { cn } from "@workspace/avz-crm/lib/utils";
 
 import {
   DropdownMenu,
@@ -7,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@workspace/avz-crm/components/ui/dropdown-menu";
 import {
   clearBookingReturnPath,
   saveBookingReturnPath,
@@ -37,24 +38,27 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
       <DropdownMenuTrigger asChild>
         <button
           aria-label={`Current workspace: ${workspaceLabel[workspace]}`}
-          className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-slate-100 dark:hover:bg-slate-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500"
+          className="mr-2 inline-flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-2 text-left hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           type="button"
         >
           <img alt="" aria-hidden="true" className="h-5 w-5 shrink-0" src="/favicon.svg" />
-          <span className="truncate font-bold tracking-tight">Adventure Zone</span>
-          <span aria-hidden="true" className="text-slate-300 dark:text-slate-600">·</span>
-          <span className="truncate text-sm font-semibold text-slate-500 dark:text-slate-400">{workspaceLabel[workspace]}</span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-slate-500" />
+          <span className="truncate font-bold tracking-tight text-foreground">Adventure Zone</span>
+          <span aria-hidden="true" className="text-border">·</span>
+          <span className="truncate text-sm font-semibold text-muted-foreground">{workspaceLabel[workspace]}</span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-56 rounded-xl border-slate-200 p-1.5 shadow-xl dark:border-slate-700">
+      <DropdownMenuContent align="start" className="w-56 rounded-xl border-border p-1.5 shadow-xl">
         {workspaceItems.map((item) => {
           const Icon = item.icon;
           const active = workspace === item.workspace;
           return (
             <DropdownMenuItem
               asChild
-              className={`mb-0.5 rounded-lg px-2.5 py-2.5 text-sm ${active ? "bg-orange-50 font-semibold text-orange-800 dark:bg-orange-950/40 dark:text-orange-300" : ""}`}
+              className={cn(
+                "mb-0.5 rounded-lg px-2.5 py-2.5 text-sm",
+                active && "bg-secondary font-semibold text-secondary-foreground",
+              )}
               key={item.workspace}
             >
               <Link
@@ -67,7 +71,7 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
               >
                 <Icon className="mr-2 h-4 w-4 shrink-0" />
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                {active ? <Check aria-label="Current workspace" className="ml-2 h-4 w-4 shrink-0" /> : null}
+                {active ? <Check aria-label="Current workspace" className="ml-2 h-4 w-4 shrink-0 text-primary" /> : null}
               </Link>
             </DropdownMenuItem>
           );
@@ -75,12 +79,15 @@ export function WorkspaceSwitcher({ workspace }: { workspace: AdminWorkspace }) 
         <DropdownMenuSeparator className="my-1.5" />
         <DropdownMenuItem
           asChild
-          className={`rounded-lg px-2.5 py-2.5 text-sm ${workspace === "admin" ? "bg-orange-50 font-semibold text-orange-800 dark:bg-orange-950/40 dark:text-orange-300" : "text-slate-600 dark:text-slate-300"}`}
+          className={cn(
+            "rounded-lg px-2.5 py-2.5 text-sm",
+            workspace === "admin" ? "bg-secondary font-semibold text-secondary-foreground" : "text-muted-foreground",
+          )}
         >
           <Link href="/settings">
             <Settings2 className="mr-2 h-4 w-4 shrink-0" />
             <span className="min-w-0 flex-1 truncate">Admin Tools</span>
-            {workspace === "admin" ? <Check aria-label="Current workspace" className="ml-2 h-4 w-4 shrink-0" /> : null}
+            {workspace === "admin" ? <Check aria-label="Current workspace" className="ml-2 h-4 w-4 shrink-0 text-primary" /> : null}
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

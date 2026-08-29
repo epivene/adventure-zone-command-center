@@ -13,7 +13,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@workspace/avz-crm/components/ui/dropdown-menu";
 
 export function ProfileActionsMenu({
   profileId,

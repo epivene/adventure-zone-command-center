@@ -1,8 +1,8 @@
-export type Appearance = "light" | "warm-light" | "dark";
+export type Appearance = "light" | "dark";
 
 export const APPEARANCE_STORAGE_KEY = "adventure-zone:appearance";
 
-const supported = new Set<Appearance>(["light", "warm-light", "dark"]);
+const supported = new Set<Appearance>(["light", "dark"]);
 
 function browserStorage(): Storage | undefined {
   try {
@@ -32,9 +32,8 @@ export function readAppearance(storage = browserStorage()): Appearance {
 
 export function applyAppearance(appearance: Appearance, root = browserRoot()): void {
   if (!root) return;
-  root.classList.remove("dark", "warm-light");
+  root.classList.remove("dark");
   if (appearance === "dark") root.classList.add("dark");
-  if (appearance === "warm-light") root.classList.add("warm-light");
   root.dataset.appearance = appearance;
 }
 
