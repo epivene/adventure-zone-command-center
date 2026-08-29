@@ -10,3 +10,4 @@
 - [Navigation progressive disclosure](navigation-progressive-disclosure.md) — desktop and mobile navigation intentionally use different disclosure levels while sharing the same route inventory.
 - [Plain organization merge safety](plain-organization-merge-safety.md) — plain duplicate merges must reparent every org reference and delete only inside one outer transaction.
 - [Design Studio ownership boundary](design-studio-boundaries.md) — Marketing owner sessions map to an enabled Office account so Studio records remain scoped and auditable across workspaces.
+- [Design Studio autosave safety](design-studio-autosave.md) — autosave acknowledgements must not mark newer in-flight edits as saved.

@@ -78,7 +78,10 @@ export const designStudioApi = {
   create(input: Pick<DesignProject, "name" | "type">) {
     return apiPost<DesignProject>("/office/design-studio/projects", input);
   },
-  update(id: string, input: Partial<Pick<DesignProject, "name" | "type" | "content" | "notes" | "status">>) {
+  update(
+    id: string,
+    input: Partial<Pick<DesignProject, "name" | "type" | "content" | "notes" | "status" | "canvas" | "syncState">>,
+  ) {
     return apiPatch<DesignProject>(`/office/design-studio/projects/${encodeURIComponent(id)}`, input);
   },
   remove(id: string) {
