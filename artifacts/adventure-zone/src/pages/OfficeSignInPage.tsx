@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Redirect, useLocation } from "wouter";
 import { useOfficeAuth } from "@/lib/office-auth-context";
+import { DevelopmentLoginHint } from "@/components/auth/development-login-hint";
 
 export default function OfficeSignInPage() {
   const { office, signIn } = useOfficeAuth();
@@ -25,6 +26,7 @@ export default function OfficeSignInPage() {
         {error?<p className="rounded-lg bg-rose-50 p-3 text-sm font-semibold text-rose-700" role="alert">{error}</p>:null}
         <button className="button-primary" disabled={busy||!loginName.trim()||!password} type="submit">{busy?"Signing in…":"Sign in"}</button>
       </form>
+      <div className="mt-4"><DevelopmentLoginHint kind="office" /></div>
     </div>
   </div>;
 }

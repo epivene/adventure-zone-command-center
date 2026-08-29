@@ -38,6 +38,7 @@ import { ensureCrewWorkerLegMembershipSchema } from "./features/leg-manager/crew
 import { ensureEventLegLifecycleSchema } from "./features/leg-manager/event-lifecycle-schema";
 import { PostgresBusinessKnowledgeRepository } from "./features/assistant/business-knowledge-repository";
 import { ensureManagerAssistantSchema } from "./features/manager-assistant/manager-assistant-schema";
+import { ensureDevelopmentSampleAccounts } from "./features/development/development-sample-accounts";
 import { PaperNoteExtractionRepository } from "./features/paper-notes/paper-note-extraction-repository";
 import { createPaperNoteExtractionWorker } from "./features/paper-notes/paper-note-extraction-worker";
 import { createPaperNoteObjectStorage } from "./features/paper-notes/paper-note-object-storage";
@@ -99,6 +100,10 @@ let opportunityEmailLoop:
 let shutdownRequested = false;
 
 await runRequiredSchemaStartup();
+await runStartupStep(
+  "development sample account seed",
+  ensureDevelopmentSampleAccounts,
+);
 
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");

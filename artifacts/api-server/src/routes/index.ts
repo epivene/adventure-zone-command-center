@@ -50,6 +50,7 @@ import leadIntakeRouter from "./lead-intake";
 import followUpsRouter from "./follow-ups";
 import opportunityEmailLiveRuntimeRouter from "./opportunity-email-live-runtime";
 import authRouter from "./auth";
+import developmentSampleLoginsRouter from "./development-sample-logins";
 import officeAuthRouter from "./office-auth";
 import officeTasksRouter from "./office-tasks";
 import officeProfilesRouter from "./office-profiles";
@@ -96,6 +97,7 @@ let leakedFixtureCleanup: Promise<void> | null = null;
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(developmentSampleLoginsRouter);
 router.use(googleWorkspaceOAuthCallbackRouter);
 router.use(officeAuthRouter);
 router.use(officeTasksRouter);
