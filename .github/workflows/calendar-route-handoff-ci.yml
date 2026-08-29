@@ -48,7 +48,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Calendar unit tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts src/features/calendar/calendar-visual-blocks.test.ts src/components/calendar/event-calendar.month-state.test.ts src/components/calendar/event-calendar.simple-mobile.test.ts
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/calendar/month-spans.test.ts src/features/calendar/calendar-visual-blocks.test.ts src/features/calendar/upcoming-events.test.ts src/components/calendar/event-calendar.month-state.test.ts src/components/calendar/event-calendar.simple-mobile.test.ts
       - name: Schedule settings API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/calendar/schedule-display-settings.test.ts
       - name: Leaflet route unit tests

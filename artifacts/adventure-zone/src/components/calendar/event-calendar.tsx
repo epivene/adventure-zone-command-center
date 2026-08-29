@@ -11,6 +11,7 @@ import {
   DEFAULT_SCHEDULE_DISPLAY_COLORS,
   type ScheduleDisplayColors,
 } from "@/features/calendar/calendar-visual-blocks";
+import { futureCalendarEvents } from "@/features/calendar/upcoming-events";
 import { BUSINESS_TIME_ZONE, businessDateKey } from "@/lib/business-date";
 
 export type ActCalendarActivity = {
@@ -279,9 +280,8 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
   const selectedBookings = datedBookings.filter((event) => bookingOccursOn(event, selectedDayKey));
   const selectedActivities = showActActivities ? datedActEvents.filter((event) => utcDateKey(event.startsAt) === selectedDayKey) : [];
   const todayKey = utcDateKey(new Date());
-  const startOfToday = new Date(`${businessDateKey(new Date())}T00:00:00`);
-  const futureEvents = allDatedEvents.filter((event) => event.startsAt.getTime() >= startOfToday.getTime());
-  const upcomingEvents = (futureEvents.length ? futureEvents : allDatedEvents).slice(0, agendaLimit);
+  const futureEvents = useMemo(() => futureCalendarEvents(allDatedEvents), [allDatedEvents]);
+  const upcomingEvents = futureEvents.slice(0, agendaLimit);
   const upcomingGroups = useMemo(() => {
     const groups = new Map<string, typeof upcomingEvents>();
     for (const event of upcomingEvents) {
@@ -401,10 +401,10 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
               <ol className="mt-2 grid gap-2">{groupEvents.map((event) => <li key={event.id}>{isActActivity(event) ? <ActActivityCard event={event} onClick={setSelectedActivity} /> : <BookingEventLink event={event} />}</li>)}</ol>
             </section>
           ))}
-          {(futureEvents.length ? futureEvents : allDatedEvents).length > agendaLimit ? <button className="button-secondary justify-self-center" onClick={() => setAgendaLimit((value) => value + 12)} type="button">Show more</button> : null}
+          {futureEvents.length > agendaLimit ? <button className="button-secondary justify-self-center" onClick={() => setAgendaLimit((value) => value + 12)} type="button">Show more</button> : null}
         </div>
       ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No dated events yet.</p><p className="mt-1 text-sm text-slate-600">Add dates to a booking to place it on the calendar.</p></div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center"><p className="font-semibold">No upcoming events.</p><p className="mt-1 text-sm text-slate-600">Past events stay available in Month view.</p></div>
       )}
 
       {selectedActivity ? <ActActivityPopover event={selectedActivity} onClose={() => setSelectedActivity(null)} /> : null}

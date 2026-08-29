@@ -12,7 +12,7 @@ import {
   type OperationalCalendarPackageKey,
 } from "@/db/schema";
 import type { OperationalCalendarClient, OperationalCalendarEvent } from "./operational-calendar-client";
-import { OperationalCalendarLinkRepository } from "./operational-calendar-link-repository";
+import { OperationalCalendarLinkRepository, type OperationalCalendarLink } from "./operational-calendar-link-repository";
 import { parseDavidOperationalCalendarEvent } from "./david-calendar-parser";
 import {
   matchOperationalCalendarEvent,
@@ -127,6 +127,21 @@ export class OperationalCalendarImportService {
         googleEventId: event.id,
       });
       if (existingLink) {
+        const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
+        const reservedStart = startOfUtcDay(event.startDate);
+        const reservedEnd = startOfUtcDay(event.endDateExclusive);
+        const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
+        await this.refreshExistingLink({
+          connectionId: connection.connectionId,
+          calendarId: connection.calendarId,
+          existingLink,
+          event,
+          parsed,
+          actualDates,
+          reservedStart,
+          reservedEnd,
+        });
+        updated += 1;
         results.push({
           googleEventId: event.id,
           title,
@@ -242,6 +257,45 @@ export class OperationalCalendarImportService {
   private async bookingName(bookingId: string) {
     const [booking] = await this.db.select({ name: bookings.name }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
     return booking?.name ?? null;
+  }
+
+  private async refreshExistingLink(input: {
+    connectionId: string;
+    calendarId: string;
+    existingLink: OperationalCalendarLink;
+    event: OperationalCalendarEvent;
+    parsed: ReturnType<typeof parseDavidOperationalCalendarEvent>;
+    actualDates: { startsAt: Date; endsAt: Date } | null;
+    reservedStart: Date;
+    reservedEnd: Date;
+  }) {
+    await this.updateMatchedBooking({
+      bookingId: input.existingLink.bookingId,
+      parsed: input.parsed,
+      actualDates: input.actualDates,
+      reservedStart: input.reservedStart,
+      reservedEnd: input.reservedEnd,
+    });
+    await this.ensurePackage(input.existingLink.bookingId, input.existingLink.packageKey);
+    await this.links.saveSuccessfulSync({
+      connectionId: input.connectionId,
+      calendarId: input.calendarId,
+      googleEventId: input.event.id,
+      bookingId: input.existingLink.bookingId,
+      packageKey: input.existingLink.packageKey,
+      etag: input.event.etag,
+      sourceChecksum: checksum(input.event),
+      lastAppSnapshot: {
+        imported: true,
+        summary: input.event.summary,
+        description: input.event.description,
+        startDate: input.event.startDate,
+        endDateExclusive: input.event.endDateExclusive,
+      },
+      reservedStartsAt: input.reservedStart,
+      reservedEndsAt: input.reservedEnd,
+      syncedAt: this.now(),
+    });
   }
 
   private async loadCandidates(): Promise<OperationalCalendarMatchCandidate[]> {
