@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Old Fort Boise Days", "city": "Parma", "region": "ID"},
   "profile": {"placeType": "festival_event", "website": "https://oldfortboisedays.com/", "description": "Active Parma community celebration. 2026 ran June 8-13 with parade, car show, park activities, vendors, kids events and rodeo-style activities."},
-  "contacts": [{"id": null, "name": "City of Parma / Old Fort Boise Days", "phone": "", "email": "", "role": "Current organizer path - verify before outreach", "primary": true}],
+  "contacts": [{"id": null, "name": "Cathy Bingham", "phone": "208-965-3805", "email": "", "role": "Current event chair - verify email before outreach", "primary": true}],
   "booking": {"enabled": false, "name": "", "status": "researching", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Old contact left committee; current event remains active", "body": "Julie Blaylock replied in Dec. 2023 that she was no longer on the Old Fort Boise Days committee and instructed Adventure Zone to contact City Hall. Do not use Julie as the current event contact. Current official sources confirm Old Fort Boise Days remained active in Parma in 2026 with a week of community events culminating in a large Saturday celebration. Verify the current city/event coordinator before future outreach."}],
-  "followUps": [{"label": "Find 2027 Old Fort Boise Days coordinator", "reason": "The event remains active, but the historical contact left the committee. Identify the current organizer early and evaluate the family-entertainment fit for 2027.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  "notes": [{"subject": "Contact correction", "body": "Julie Blaylock replied in Dec. 2023 that she was no longer on the Old Fort Boise Days committee and should remain historical only. Current event information identifies Cathy Bingham as the event chair at 208-965-3805. Verify Cathy's current email/contact path before 2027 outreach; do not reuse Julie as the working contact."}],
+  "followUps": [{"label": "Verify Old Fort Boise Days contact", "reason": "Confirm Cathy Bingham remains the current chair and verify the current email/contact path before 2027 outreach.", "dueAt": "2027-01-15T16:00:00.000Z"}]
 }
