@@ -1,5 +1,5 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "aliases": ["Father's Day Car Show", "Downtown Boise Fathers Day Car Show", "Father's Day Car Show Boise", "Downtown Boise Car Show"],
   "event": {"id": null, "name": "Downtown Boise Father's Day Car Show", "city": "Boise", "region": "ID"},
@@ -9,5 +9,5 @@
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [{"subject": "2023 budget/sponsorship reply; 2027 event already announced", "body": "Sierra Padilla Huitt replied in Dec. 2023 that the Father's Day Car Show had a tight budget and typically used sponsors to bring activations, offering to circle back later. Do not frame Adventure Zone as volunteering to buy sponsorship. Current Downtown Boise information confirms the event remains active; the 2026 show included a kids play area and the 2027 show is announced for June 20. If pursued, position Adventure Zone as an entertainment partnership/attraction area and discuss commercial structure only after organizer interest."}],
-  "followUps": [{"label": "Check 2027 Boise Father's Day Car Show entertainment plan", "reason": "The event remains active and already has a 2027 date. Revisit early with an entertainment-partnership angle rather than a sponsorship offer.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  "followUps": [{"label": "Check 2027 Boise Father's Day Car Show entertainment plan", "reason": "Revisit the active 2027 event with an entertainment-partnership or revenue-share family activation angle before planning is locked; do not pitch Adventure Zone as buying sponsorship.", "dueAt": "2027-01-20T16:00:00.000Z"}]
 }
