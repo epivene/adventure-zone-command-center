@@ -10,6 +10,7 @@ import {
   DEFAULT_SCHEDULE_DISPLAY_COLORS,
   type ScheduleDisplayColors,
 } from "@/features/calendar/calendar-visual-blocks";
+import { asScheduleCalendarEvent, isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 
 function buildDateWindow(monthKey: string): { from: string; to: string } {
@@ -166,10 +167,25 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
     displayEvents.filter((event) => !isActActivity(event)) as any[],
   ), [displayEvents]);
   const hasExplicitStatusFilter = Boolean(status && status !== "all");
-  const potentialBookingCount = useMemo(() => displayEvents.filter((event) => !isActActivity(event) && !isGoogleOperationalReview(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [displayEvents]);
+  const potentialBookingCount = useMemo(() => displayEvents.filter((event) =>
+    !isActActivity(event) &&
+    !isGoogleOperationalReview(event) &&
+    !isBookedForSchedule(event as any)
+  ).length, [displayEvents]);
   const filteredEvents = useMemo(() => {
-    if (hasExplicitStatusFilter || showPotential) return displayEvents;
-    return displayEvents.filter((event) => isActActivity(event) || isGoogleOperationalReview(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
+    const visibleEvents = hasExplicitStatusFilter || showPotential
+      ? displayEvents
+      : displayEvents.filter((event) =>
+          isActActivity(event) ||
+          isGoogleOperationalReview(event) ||
+          isBookedForSchedule(event as any)
+        );
+
+    return visibleEvents.map((event) =>
+      isActActivity(event) || isGoogleOperationalReview(event)
+        ? event
+        : asScheduleCalendarEvent(event as any)
+    ) as CalendarEvent[];
   }, [displayEvents, hasExplicitStatusFilter, showPotential]);
 
   const handleMonthChange = useCallback((month: string) => {
