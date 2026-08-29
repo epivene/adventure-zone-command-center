@@ -2,6 +2,7 @@
 
 import { Link } from "wouter";
 import { useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { StatusBadge } from "@/components/bookings/status-badge";
 import type { BookingListRecord } from "@/features/bookings/booking-repository";
@@ -39,6 +40,15 @@ function formatLabel(value: string) {
     .join(" ");
 }
 
+function latestBooking(bookings: BookingListItem[]) {
+  return bookings.reduce<BookingListItem | null>((latest, booking) => {
+    if (!latest) return booking;
+    const latestTime = latest.startsAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    const bookingTime = booking.startsAt?.getTime() ?? Number.NEGATIVE_INFINITY;
+    return bookingTime >= latestTime ? booking : latest;
+  }, null);
+}
+
 export function BookingList({
   bookings,
   now = new Date(),
@@ -57,6 +67,7 @@ export function BookingList({
   const [startsAfter, setStartsAfter] = useState("");
   const [startsBefore, setStartsBefore] = useState("");
   const [showPast, setShowPast] = useState(initialShowPast);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
 
   const regions = [...new Set(bookings.map((booking) => booking.region))].sort();
   const travelLegs = [
@@ -198,27 +209,88 @@ export function BookingList({
       {filteredBookings.length ? (
         <ul className="grid gap-3">
           {groupedBookings.map((group) => (
-            <li className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" key={group.key}>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
-                <div className="min-w-0">
-                  {group.profile ? (
-                    <Link className="text-lg font-bold text-card-foreground hover:text-primary" href={`/profiles/${group.profile.id}`}>
-                      {group.profile.name}
-                    </Link>
-                  ) : (
-                    <p className="text-lg font-bold text-card-foreground">{group.bookings[0]?.name}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    {group.bookings.length} booking {group.bookings.length === 1 ? "record" : "records"} under this profile
-                  </p>
-                </div>
-                {group.profile ? (
-                  <Link className="button-secondary text-center" href={`/profiles/${group.profile.id}`}>
-                    Open event profile
-                  </Link>
-                ) : null}
-              </div>
-              <ul className="divide-y divide-border">
+            <BookingProfileGroupCard
+              group={group}
+              expanded={expandedGroups.has(group.key)}
+              onToggle={() => setExpandedGroups((current) => {
+                const next = new Set(current);
+                if (next.has(group.key)) next.delete(group.key);
+                else next.add(group.key);
+                return next;
+              })}
+              key={group.key}
+            />
+          ))}
+        </ul>
+      ) : (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+          <p className="font-semibold">No bookings match these filters.</p>
+          <button className="button-secondary mt-3" onClick={resetFilters} type="button">
+            Reset filters
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BookingProfileGroupCard({
+  group,
+  expanded,
+  onToggle,
+}: {
+  group: ReturnType<typeof groupBookingsByProfile>[number];
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const latest = latestBooking(group.bookings);
+  if (!latest) return null;
+  const displayEnd = normalizedBookingEnd(latest.endsAt);
+
+  return (
+    <li className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <button
+        aria-controls={`booking-history-${group.key}`}
+        aria-expanded={expanded}
+        className="flex w-full items-start justify-between gap-4 bg-muted/40 px-4 py-4 text-left transition-colors hover:bg-muted/70 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-inset"
+        onClick={onToggle}
+        type="button"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-lg font-bold text-card-foreground">
+            {group.profile?.name ?? latest.name}
+          </span>
+          <span className="mt-1 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {group.bookings.length} booking {group.bookings.length === 1 ? "record" : "records"} · latest booking
+          </span>
+          <span className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <span className="font-bold text-card-foreground">{latest.name}</span>
+            <StatusBadge status={latest.status} />
+            <span className="text-muted-foreground">{latest.city}, {latest.region}</span>
+          </span>
+          <span className="mt-1 block text-sm text-muted-foreground">
+            {latest.startsAt ? formatShortDate(latest.startsAt) : "Date not set"}
+            {displayEnd ? `–${formatShortDate(displayEnd)}` : ""}
+            {latest.travelLeg ? ` · ${latest.travelLeg.name}` : ""}
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2 text-muted-foreground">
+          <span className="hidden text-xs font-semibold sm:inline">{expanded ? "Hide history" : "View history"}</span>
+          <ChevronDown className={`h-5 w-5 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </span>
+      </button>
+
+      {expanded ? (
+        <div id={`booking-history-${group.key}`} className="border-t border-border">
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-card px-4 py-3">
+            <p className="text-sm font-semibold text-muted-foreground">All bookings under this profile</p>
+            {group.profile ? (
+              <Link className="button-secondary text-center" href={`/profiles/${group.profile.id}`}>
+                Open event profile
+              </Link>
+            ) : null}
+          </div>
+          <ul className="divide-y divide-border">
                 {group.bookings.map((booking) => {
                   const isOverdue =
                     booking.nextAction !== null &&
@@ -277,17 +349,8 @@ export function BookingList({
                   );
                 })}
               </ul>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="font-semibold">No bookings match these filters.</p>
-          <button className="button-secondary mt-3" onClick={resetFilters} type="button">
-            Reset filters
-          </button>
         </div>
-      )}
-    </div>
+      ) : null}
+    </li>
   );
 }
