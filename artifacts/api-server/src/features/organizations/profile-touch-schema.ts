@@ -7,9 +7,9 @@ const advisoryUnlockSql =
   "SELECT pg_advisory_unlock(hashtext('adventure-zone:profile-touch-schema'))";
 
 /**
- * Keep organizations.updated_at as the cheap source of truth for the Profiles
- * directory "Recently updated" sort. Local CRM work touches the owning profile,
- * while imported ACT history does not make an old profile look newly worked.
+ * Maintain a dedicated CRM recency clock for the Profiles directory.
+ * Generic organizations.updated_at is intentionally NOT used because background
+ * and maintenance writes can make untouched profiles appear recently worked.
  */
 export async function ensureProfileTouchSchema(
   pool: Pool = defaultPool,
@@ -22,8 +22,15 @@ export async function ensureProfileTouchSchema(
     locked = true;
 
     await client.query(`
-      CREATE INDEX IF NOT EXISTS organizations_updated_at_idx
-        ON organizations (updated_at DESC, name ASC, id ASC);
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS last_worked_at timestamptz;
+
+      UPDATE organizations
+      SET last_worked_at = created_at
+      WHERE last_worked_at IS NULL;
+
+      CREATE INDEX IF NOT EXISTS organizations_last_worked_at_idx
+        ON organizations (last_worked_at DESC, name ASC, id ASC);
 
       CREATE OR REPLACE FUNCTION touch_profile(profile_id uuid, touched_at timestamptz DEFAULT clock_timestamp())
       RETURNS void
@@ -32,9 +39,34 @@ export async function ensureProfileTouchSchema(
       BEGIN
         IF profile_id IS NOT NULL THEN
           UPDATE organizations
-          SET updated_at = GREATEST(updated_at, touched_at)
+          SET last_worked_at = GREATEST(COALESCE(last_worked_at, created_at), touched_at)
           WHERE id = profile_id;
         END IF;
+      END;
+      $$;
+
+      CREATE OR REPLACE FUNCTION touch_profile_from_organization_edit()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF ROW(
+          OLD.name, OLD.place_type, OLD.phone, OLD.address_1, OLD.address_2,
+          OLD.city, OLD.region, OLD.postal_code, OLD.website,
+          OLD.last_resort, OLD.last_resort_reason,
+          OLD.parent_organization_id, OLD.consolidated_into_id
+        ) IS DISTINCT FROM ROW(
+          NEW.name, NEW.place_type, NEW.phone, NEW.address_1, NEW.address_2,
+          NEW.city, NEW.region, NEW.postal_code, NEW.website,
+          NEW.last_resort, NEW.last_resort_reason,
+          NEW.parent_organization_id, NEW.consolidated_into_id
+        ) THEN
+          NEW.last_worked_at := GREATEST(
+            COALESCE(OLD.last_worked_at, OLD.created_at),
+            clock_timestamp()
+          );
+        END IF;
+        RETURN NEW;
       END;
       $$;
 
@@ -111,6 +143,95 @@ export async function ensureProfileTouchSchema(
       END;
       $$;
 
+      CREATE OR REPLACE FUNCTION touch_profile_from_contact()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      DECLARE
+        row_contact contacts%ROWTYPE;
+        changed_at timestamptz;
+      BEGIN
+        row_contact := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+        changed_at := COALESCE(row_contact.updated_at, row_contact.created_at, clock_timestamp());
+        PERFORM touch_profile(row_contact.organization_id, changed_at);
+        PERFORM touch_profile(oc.organization_id, changed_at)
+        FROM organization_contacts oc
+        WHERE oc.contact_id = row_contact.id AND oc.active = true;
+        IF row_contact.organization_location_id IS NOT NULL THEN
+          PERFORM touch_profile((SELECT organization_id FROM organization_locations WHERE id = row_contact.organization_location_id), changed_at);
+        END IF;
+        RETURN COALESCE(NEW, OLD);
+      END;
+      $$;
+
+      CREATE OR REPLACE FUNCTION touch_profile_from_organization_contact()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF TG_OP = 'DELETE' THEN
+          PERFORM touch_profile(OLD.organization_id);
+          RETURN OLD;
+        END IF;
+        PERFORM touch_profile(NEW.organization_id);
+        IF TG_OP = 'UPDATE' AND OLD.organization_id IS DISTINCT FROM NEW.organization_id THEN
+          PERFORM touch_profile(OLD.organization_id);
+        END IF;
+        RETURN NEW;
+      END;
+      $$;
+
+      CREATE OR REPLACE FUNCTION touch_profile_from_booking()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      DECLARE
+        changed_at timestamptz;
+      BEGIN
+        changed_at := COALESCE(
+          CASE WHEN TG_OP = 'DELETE' THEN OLD.updated_at ELSE NEW.updated_at END,
+          clock_timestamp()
+        );
+        IF TG_OP = 'DELETE' THEN
+          PERFORM touch_profile(OLD.organization_id, changed_at);
+          RETURN OLD;
+        END IF;
+        PERFORM touch_profile(NEW.organization_id, changed_at);
+        IF TG_OP = 'UPDATE' AND OLD.organization_id IS DISTINCT FROM NEW.organization_id THEN
+          PERFORM touch_profile(OLD.organization_id, changed_at);
+        END IF;
+        RETURN NEW;
+      END;
+      $$;
+
+      CREATE OR REPLACE FUNCTION touch_profile_from_follow_up()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      DECLARE
+        row_follow_up follow_ups%ROWTYPE;
+        changed_at timestamptz;
+      BEGIN
+        row_follow_up := CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+        changed_at := COALESCE(row_follow_up.updated_at, row_follow_up.created_at, clock_timestamp());
+        PERFORM touch_profile(row_follow_up.organization_id, changed_at);
+        IF row_follow_up.booking_id IS NOT NULL THEN
+          PERFORM touch_profile((SELECT organization_id FROM bookings WHERE id = row_follow_up.booking_id), changed_at);
+        END IF;
+        IF row_follow_up.contact_id IS NOT NULL THEN
+          PERFORM touch_profile(oc.organization_id, changed_at)
+          FROM organization_contacts oc
+          WHERE oc.contact_id = row_follow_up.contact_id AND oc.active = true;
+        END IF;
+        RETURN COALESCE(NEW, OLD);
+      END;
+      $$;
+
+      DROP TRIGGER IF EXISTS organizations_touch_profile_work ON organizations;
+      CREATE TRIGGER organizations_touch_profile_work
+        BEFORE UPDATE ON organizations
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_organization_edit();
+
       DROP TRIGGER IF EXISTS activities_touch_profile ON activities;
       CREATE TRIGGER activities_touch_profile
         AFTER INSERT OR UPDATE OR DELETE ON activities
@@ -121,6 +242,26 @@ export async function ensureProfileTouchSchema(
         AFTER INSERT OR UPDATE OR DELETE ON activity_associations
         FOR EACH ROW EXECUTE FUNCTION touch_profile_from_activity_association();
 
+      DROP TRIGGER IF EXISTS contacts_touch_profile_work ON contacts;
+      CREATE TRIGGER contacts_touch_profile_work
+        AFTER INSERT OR UPDATE OR DELETE ON contacts
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_contact();
+
+      DROP TRIGGER IF EXISTS organization_contacts_touch_profile_work ON organization_contacts;
+      CREATE TRIGGER organization_contacts_touch_profile_work
+        AFTER INSERT OR UPDATE OR DELETE ON organization_contacts
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_organization_contact();
+
+      DROP TRIGGER IF EXISTS bookings_touch_profile_work ON bookings;
+      CREATE TRIGGER bookings_touch_profile_work
+        AFTER INSERT OR UPDATE OR DELETE ON bookings
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_booking();
+
+      DROP TRIGGER IF EXISTS follow_ups_touch_profile_work ON follow_ups;
+      CREATE TRIGGER follow_ups_touch_profile_work
+        AFTER INSERT OR UPDATE OR DELETE ON follow_ups
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_follow_up();
+
       WITH local_activity_profiles AS (
         SELECT profile_id, max(changed_at) AS changed_at
         FROM (
@@ -129,50 +270,62 @@ export async function ensureProfileTouchSchema(
           WHERE a.source_record_id IS NULL AND a.organization_id IS NOT NULL
 
           UNION ALL
-
-          SELECT b.organization_id AS profile_id, a.updated_at AS changed_at
+          SELECT b.organization_id, a.updated_at
           FROM activities a
           JOIN bookings b ON b.id = a.booking_id
           WHERE a.source_record_id IS NULL AND b.organization_id IS NOT NULL
 
           UNION ALL
-
-          SELECT oc.organization_id AS profile_id, a.updated_at AS changed_at
+          SELECT oc.organization_id, a.updated_at
           FROM activities a
           JOIN organization_contacts oc ON oc.contact_id = a.contact_id AND oc.active = true
           WHERE a.source_record_id IS NULL
 
           UNION ALL
-
-          SELECT aa.organization_id AS profile_id, a.updated_at AS changed_at
+          SELECT aa.organization_id, a.updated_at
           FROM activity_associations aa
           JOIN activities a ON a.id = aa.activity_id
           WHERE a.source_record_id IS NULL AND aa.organization_id IS NOT NULL
 
           UNION ALL
-
-          SELECT b.organization_id AS profile_id, a.updated_at AS changed_at
+          SELECT b.organization_id, a.updated_at
           FROM activity_associations aa
           JOIN activities a ON a.id = aa.activity_id
           JOIN bookings b ON b.id = aa.booking_id
           WHERE a.source_record_id IS NULL AND aa.booking_id IS NOT NULL
 
           UNION ALL
-
-          SELECT oc.organization_id AS profile_id, a.updated_at AS changed_at
+          SELECT oc.organization_id, a.updated_at
           FROM activity_associations aa
           JOIN activities a ON a.id = aa.activity_id
           JOIN organization_contacts oc ON oc.contact_id = aa.contact_id AND oc.active = true
           WHERE a.source_record_id IS NULL AND aa.contact_id IS NOT NULL
+
+          UNION ALL
+          SELECT f.organization_id, f.updated_at
+          FROM follow_ups f
+          WHERE f.organization_id IS NOT NULL
+
+          UNION ALL
+          SELECT b.organization_id, f.updated_at
+          FROM follow_ups f
+          JOIN bookings b ON b.id = f.booking_id
+          WHERE f.booking_id IS NOT NULL AND b.organization_id IS NOT NULL
+
+          UNION ALL
+          SELECT oc.organization_id, f.updated_at
+          FROM follow_ups f
+          JOIN organization_contacts oc ON oc.contact_id = f.contact_id AND oc.active = true
+          WHERE f.contact_id IS NOT NULL
         ) local_changes
         WHERE profile_id IS NOT NULL
         GROUP BY profile_id
       )
       UPDATE organizations o
-      SET updated_at = GREATEST(o.updated_at, p.changed_at)
+      SET last_worked_at = GREATEST(COALESCE(o.last_worked_at, o.created_at), p.changed_at)
       FROM local_activity_profiles p
       WHERE o.id = p.profile_id
-        AND p.changed_at > o.updated_at;
+        AND p.changed_at > COALESCE(o.last_worked_at, o.created_at);
     `);
   } finally {
     if (locked) {
