@@ -44,6 +44,34 @@ describe("applyOperationalWindowsToCalendarBookings", () => {
     expect(result?.operationalWindowSource).toBe("app");
   });
 
+  it("replaces a same-date startup app window with the definite-event buffer", () => {
+    const actualStart = new Date("2026-09-12T00:00:00.000Z");
+    const actualEnd = new Date("2026-09-12T00:00:00.000Z");
+
+    const [result] = applyOperationalWindowsToCalendarBookings([
+      {
+        id: "definite-booking",
+        status: "pending_contract",
+        probability: "definite",
+        startsAt: actualStart,
+        endsAt: actualEnd,
+      },
+    ], [
+      {
+        bookingId: "definite-booking",
+        startsAt: actualStart,
+        endsAt: actualEnd,
+        source: "app",
+      },
+    ]);
+
+    expect(result?.startsAt).toEqual(new Date("2026-09-10T00:00:00.000Z"));
+    expect(result?.endsAt).toEqual(new Date("2026-09-13T00:00:00.000Z"));
+    expect(result?.actualStartsAt).toEqual(actualStart);
+    expect(result?.actualEndsAt).toEqual(actualEnd);
+    expect(result?.operationalWindowSource).toBe("app");
+  });
+
   it("does not create an operational block for an ordinary possible booking", () => {
     const booking = {
       id: "possible-booking",

@@ -2,6 +2,8 @@ export type CalendarBookingLike = {
   id: string;
   startsAt: Date | null;
   endsAt: Date | null;
+  status?: string | null;
+  probability?: string | null;
   [key: string]: unknown;
 };
 
@@ -26,6 +28,50 @@ function inclusiveOperationalEnd(window: OperationalWindowLike) {
   return end;
 }
 
+function dateKey(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function addUtcDays(value: Date, days: number) {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+}
+
+function normalized(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function isDefiniteBooking(booking: CalendarBookingLike) {
+  const status = normalized(booking.status);
+  return normalized(booking.probability) === "definite"
+    || status === "contract_received"
+    || status === "confirmed"
+    || status === "completed";
+}
+
+function isSameDateAppPlaceholder(booking: CalendarBookingLike, window: OperationalWindowLike) {
+  if (window.source !== "app" || !booking.startsAt) return false;
+  const actualEnd = booking.endsAt ?? booking.startsAt;
+  return dateKey(window.startsAt) === dateKey(booking.startsAt)
+    && dateKey(window.endsAt) === dateKey(actualEnd);
+}
+
+function applyDefaultDefiniteWindow<T extends CalendarBookingLike>(
+  booking: T,
+): CalendarBookingWithOperationalWindow<T> {
+  const actualStart = booking.startsAt!;
+  const actualEnd = booking.endsAt ?? actualStart;
+  return {
+    ...booking,
+    actualStartsAt: actualStart,
+    actualEndsAt: booking.endsAt,
+    startsAt: addUtcDays(actualStart, -2),
+    endsAt: addUtcDays(actualEnd, 1),
+    operationalWindowSource: "app",
+  };
+}
+
 export function applyOperationalWindowsToCalendarBookings<T extends CalendarBookingLike>(
   bookings: T[],
   windows: OperationalWindowLike[],
@@ -34,6 +80,13 @@ export function applyOperationalWindowsToCalendarBookings<T extends CalendarBook
 
   return bookings.map((booking) => {
     const window = byBookingId.get(booking.id);
+    if (
+      booking.startsAt
+      && isDefiniteBooking(booking)
+      && (!window || isSameDateAppPlaceholder(booking, window))
+    ) {
+      return applyDefaultDefiniteWindow(booking);
+    }
     if (!window) return booking;
 
     return {
