@@ -41,7 +41,7 @@ it("stores an organization inbox without synthetic person fields", async () => {
       '["gmail:old"]', '2026-08-25T18:00:00Z', 'Desiree', now()
     );
   `);
-  const service = new LeadReviewService(drizzle(client, { schema }));
+  const service = new LeadReviewService(drizzle(client, { schema }) as never);
 
   await service.confirm({
     rowId: "30000000-0000-4000-8000-000000000001",

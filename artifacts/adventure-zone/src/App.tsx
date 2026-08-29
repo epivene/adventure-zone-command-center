@@ -48,6 +48,8 @@ const AppShell = lazy(() => import("@/components/navigation/app-shell").then(({ 
 
 const AdminCommandPanelPage = lazy(() => import("@/pages/AdminCommandPanelPage"));
 const MarketingHomePage = lazy(() => import("@/pages/MarketingHomePage"));
+const DesignStudioPage = lazy(() => import("@/pages/DesignStudioPage"));
+const DesignStudioEditorPage = lazy(() => import("@/pages/DesignStudioEditorPage"));
 const TodayPage = lazy(() => import("@/pages/TodayPage"));
 const BookingsPage = lazy(() => import("@/pages/BookingsPage"));
 const BookingDetailPage = lazy(() => import("@/pages/BookingDetailPage"));
@@ -283,6 +285,8 @@ function AdminProtectedApp() {
         <Switch>
           <Route path="/command" component={AdminCommandPanelPage} />
           <Route path="/marketing" component={MarketingHomePage} />
+          <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
+          <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>

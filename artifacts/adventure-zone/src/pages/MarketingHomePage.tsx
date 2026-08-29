@@ -33,6 +33,7 @@ export default function MarketingHomePage() {
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/profiles"><h3 className="font-bold">Profiles</h3><p className="mt-1 text-sm text-muted-foreground">Event families, contacts, and cities.</p></Link>
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/office-coordinator"><h3 className="font-bold">Office Coordinator</h3><p className="mt-1 text-sm text-muted-foreground">Brochures, mail, and submitted outreach.</p></Link>
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/research-sources"><h3 className="font-bold">Research</h3><p className="mt-1 text-sm text-muted-foreground">Lead and event research.</p></Link>
+          <Link className="rounded-xl border border-primary/40 bg-primary/5 p-4 text-card-foreground shadow-sm hover:border-primary" data-testid="link-design-studio" href="/design-studio"><h3 className="font-bold">Design Studio</h3><p className="mt-1 text-sm text-muted-foreground">Create flyers, emails, contracts, and more.</p></Link>
         </div>
       </section>
 

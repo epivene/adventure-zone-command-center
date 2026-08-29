@@ -5,6 +5,7 @@ import { ensureLegAssignmentSchemaBeforeListen } from "./leg-assignment-required
 import { ensureOfficeCoordinatorSchemaBeforeListen } from "./office-coordinator-required-startup";
 import { ensurePaperNotesSchemaBeforeListen } from "./paper-notes-required-startup";
 import { ensureProfileTouchSchema } from "../features/organizations/profile-touch-schema";
+import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
 
 type RequiredStep = () => Promise<unknown>;
 type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>;
@@ -17,6 +18,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureLegAssignment?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
+  ensureDesignStudio?: RequiredStep;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
   await run(
@@ -42,5 +44,9 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required profile touch schema",
     dependencies?.ensureProfileTouch ?? ensureProfileTouchSchema,
+  );
+  await run(
+    "required Design Studio schema",
+    dependencies?.ensureDesignStudio ?? ensureDesignStudioSchemaBeforeListen,
   );
 }

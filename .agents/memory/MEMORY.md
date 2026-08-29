@@ -9,3 +9,4 @@
 - [Canvas presentation](canvas-presentation.md) — canvas screenshots use the registered artifact directory label; live previews are presented by registered artifact ID.
 - [Navigation progressive disclosure](navigation-progressive-disclosure.md) — desktop and mobile navigation intentionally use different disclosure levels while sharing the same route inventory.
 - [Plain organization merge safety](plain-organization-merge-safety.md) — plain duplicate merges must reparent every org reference and delete only inside one outer transaction.
+- [Design Studio ownership boundary](design-studio-boundaries.md) — Marketing owner sessions map to an enabled Office account so Studio records remain scoped and auditable across workspaces.

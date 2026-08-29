@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, House, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CalendarDays, House, MapPinned, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -38,6 +38,7 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
   if (workspace === "marketing") {
     return [
       { href: "/marketing", label: "Marketing Home", icon: Megaphone },
+      { href: "/design-studio", label: "Design Studio", icon: Palette },
       ...(bookingReturnPath ? [{ href: bookingReturnPath, label: "Back to Booking", icon: ArrowLeft }] : []),
     ];
   }

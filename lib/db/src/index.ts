@@ -15,6 +15,15 @@ import * as leadIntakeSchema from "./lead-intake-schema";
 import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
 import * as legAssignmentSchema from "./leg-assignment-schema";
+import {
+  designAssets,
+  designOutputs,
+  designProjectVersions,
+  designProjects,
+  designSmartFields,
+  designTemplateFavorites,
+  designTemplates,
+} from "./design-studio-schema";
 
 const { Pool } = pg;
 
@@ -56,6 +65,13 @@ const schema = {
   ...bookingOpportunitySchema,
   ...bookingOpportunityEmailSchema,
   ...legAssignmentSchema,
+  designAssets,
+  designOutputs,
+  designProjectVersions,
+  designProjects,
+  designSmartFields,
+  designTemplateFavorites,
+  designTemplates,
 };
 export const db = drizzle(pool, { schema });
 
@@ -74,3 +90,4 @@ export * from "./lead-intake-schema";
 export * from "./booking-opportunity-schema";
 export * from "./booking-opportunity-email-schema";
 export * from "./leg-assignment-schema";
+export * from "./design-studio-schema";

@@ -14,3 +14,12 @@ export * from "@workspace/db/lead-intake-schema";
 export * from "@workspace/db/booking-opportunity-schema";
 export * from "@workspace/db/booking-opportunity-email-schema";
 export * from "@workspace/db/leg-assignment-schema";
+export {
+  designAssets,
+  designOutputs,
+  designProjectVersions,
+  designProjects,
+  designSmartFields,
+  designTemplateFavorites,
+  designTemplates,
+} from "@workspace/db/design-studio-schema";

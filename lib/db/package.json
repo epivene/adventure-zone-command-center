@@ -22,7 +22,8 @@
     "./lead-intake-schema": "./src/lead-intake-schema.ts",
     "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts",
     "./booking-opportunity-email-schema": "./src/booking-opportunity-email-schema.ts",
-    "./leg-assignment-schema": "./src/leg-assignment-schema.ts"
+    "./leg-assignment-schema": "./src/leg-assignment-schema.ts",
+    "./design-studio-schema": "./src/design-studio-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -22,14 +22,20 @@ describe("runRequiredSchemaStartup", () => {
         expect(googleReady).toBe(true);
         return true;
       },
+      ensureLegAssignment: async () => false,
       ensureOfficeCoordinator: async () => false,
+      ensureProfileTouch: async () => false,
+      ensureDesignStudio: async () => false,
     });
 
     expect(calls).toEqual([
       "required paper notes schema",
       "required Google Workspace schema",
       "required lead intake schema",
+      "required leg assignment schema",
       "required office coordinator schema",
+      "required profile touch schema",
+      "required Design Studio schema",
     ]);
   });
 });

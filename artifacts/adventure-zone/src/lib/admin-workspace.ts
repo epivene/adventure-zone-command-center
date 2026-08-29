@@ -41,7 +41,7 @@ function matchesPrefix(path: string, prefix: string): boolean {
 export function adminWorkspaceForPath(value: string): AdminWorkspace {
   const path = pathnameOnly(value);
   if (matchesPrefix(path, "/command")) return "command";
-  if (matchesPrefix(path, "/marketing")) return "marketing";
+  if (matchesPrefix(path, "/marketing") || matchesPrefix(path, "/design-studio")) return "marketing";
   if (operationsPrefixes.some((prefix) => matchesPrefix(path, prefix))) return "operations";
   if (bookingPrefixes.some((prefix) => matchesPrefix(path, prefix))) return "booking";
   return "admin";
