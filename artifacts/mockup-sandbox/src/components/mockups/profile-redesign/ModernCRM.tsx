@@ -201,6 +201,7 @@ function Metric({
           ? "border-[#9ab6a9] bg-[#edf4ef]"
           : "border-[#d8e2dd] bg-[#fbfcf8] hover:border-[#a7beb3] hover:bg-[#f3f7f3]"
       }`}
+      aria-pressed={active}
       data-testid={testId}
       onClick={onClick}
       type="button"
@@ -245,6 +246,11 @@ export function ModernCRM() {
 
   const selectSection = (next: Section) => {
     setSection(next);
+    setMoreOpen(false);
+  };
+
+  const toggleSection = (next: Section) => {
+    setSection((current) => (current === next ? "overview" : next));
     setMoreOpen(false);
   };
 
@@ -430,10 +436,10 @@ export function ModernCRM() {
         ) : null}
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Metric active={section === "contacts"} icon={<UsersRound className="h-4 w-4" />} label="Contacts" onClick={() => selectSection("contacts")} testId="metric-contacts" value={String(contacts.length)} />
-          <Metric active={section === "events"} icon={<CalendarDays className="h-4 w-4" />} label="Upcoming events" onClick={() => selectSection("events")} testId="metric-events" value={String(bookings.length)} />
-          <Metric active={section === "notes"} icon={<StickyNote className="h-4 w-4" />} label="Activity notes" onClick={() => selectSection("notes")} testId="metric-notes" value={String(activities.length)} />
-          <Metric active={section === "emails"} icon={<Mail className="h-4 w-4" />} label="Email threads" onClick={() => selectSection("emails")} testId="metric-emails" value="8" />
+          <Metric active={section === "contacts"} icon={<UsersRound className="h-4 w-4" />} label="Contacts" onClick={() => toggleSection("contacts")} testId="metric-contacts" value={String(contacts.length)} />
+          <Metric active={section === "events"} icon={<CalendarDays className="h-4 w-4" />} label="Upcoming events" onClick={() => toggleSection("events")} testId="metric-events" value={String(bookings.length)} />
+          <Metric active={section === "notes"} icon={<StickyNote className="h-4 w-4" />} label="Activity notes" onClick={() => toggleSection("notes")} testId="metric-notes" value={String(activities.length)} />
+          <Metric active={section === "emails"} icon={<Mail className="h-4 w-4" />} label="Email threads" onClick={() => toggleSection("emails")} testId="metric-emails" value="8" />
         </section>
 
         {section === "overview" ? (
