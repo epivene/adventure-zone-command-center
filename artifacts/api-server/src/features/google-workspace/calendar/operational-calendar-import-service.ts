@@ -22,6 +22,15 @@ import {
 
 type DrizzleDatabase = typeof database;
 
+export type OperationalCalendarImportRowResult = {
+  googleEventId: string;
+  title: string;
+  outcome: "matched" | "created" | "review" | "already_linked";
+  bookingId: string | null;
+  bookingName: string | null;
+  reason: string | null;
+};
+
 function startOfUtcDay(value: string) {
   const date = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime())) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_DATE_INVALID");
@@ -83,6 +92,7 @@ export class OperationalCalendarImportService {
     created: number;
     review: number;
     rows: number;
+    results: OperationalCalendarImportRowResult[];
   }> {
     const connection = await this.clientProvider();
     if (!connection) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_NOT_CONNECTED");
@@ -107,25 +117,39 @@ export class OperationalCalendarImportService {
     let updated = 0;
     let created = 0;
     let review = 0;
+    const results: OperationalCalendarImportRowResult[] = [];
 
     for (const event of events) {
+      const title = event.summary?.trim() || "Untitled Google calendar event";
       const existingLink = await this.links.findByGoogleEvent({
         connectionId: connection.connectionId,
         calendarId: connection.calendarId,
         googleEventId: event.id,
       });
-      if (existingLink) continue;
+      if (existingLink) {
+        results.push({
+          googleEventId: event.id,
+          title,
+          outcome: "already_linked",
+          bookingId: existingLink.bookingId,
+          bookingName: await this.bookingName(existingLink.bookingId),
+          reason: null,
+        });
+        continue;
+      }
 
       const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
       if (!parsed.eventName.trim() || parsed.packageKey === "unknown") {
+        const reason = "Calendar row needs manual matching";
         await this.links.createReview({
           connectionId: connection.connectionId,
           calendarId: connection.calendarId,
           googleEventId: event.id,
-          reason: "Calendar row needs manual matching",
+          reason,
           proposedChanges: { parsed, google: event },
         });
         review += 1;
+        results.push({ googleEventId: event.id, title, outcome: "review", bookingId: null, bookingName: null, reason });
         continue;
       }
 
@@ -151,28 +175,34 @@ export class OperationalCalendarImportService {
           proposedChanges: { parsed, candidateBookingIds: match.candidateBookingIds, google: event },
         });
         review += 1;
+        results.push({ googleEventId: event.id, title, outcome: "review", bookingId: null, bookingName: null, reason: match.reason });
         continue;
       }
 
       let bookingId: string;
+      let outcome: OperationalCalendarImportRowResult["outcome"];
       if (match.kind === "matched") {
         bookingId = match.bookingId;
+        outcome = "matched";
         matched += 1;
         await this.updateMatchedBooking({ bookingId, parsed, actualDates, reservedStart, reservedEnd });
         updated += 1;
       } else {
         if (!actualDates || !parsed.city || !parsed.region) {
+          const reason = "New calendar event is missing reliable public dates or location";
           await this.links.createReview({
             connectionId: connection.connectionId,
             calendarId: connection.calendarId,
             googleEventId: event.id,
-            reason: "New calendar event is missing reliable public dates or location",
+            reason,
             proposedChanges: { parsed, google: event },
           });
           review += 1;
+          results.push({ googleEventId: event.id, title, outcome: "review", bookingId: null, bookingName: null, reason });
           continue;
         }
         bookingId = await this.createProfileAndBooking({ parsed, actualDates, reservedStart, reservedEnd });
+        outcome = "created";
         created += 1;
       }
 
@@ -196,9 +226,22 @@ export class OperationalCalendarImportService {
         reservedEndsAt: reservedEnd,
         syncedAt: this.now(),
       });
+      results.push({
+        googleEventId: event.id,
+        title,
+        outcome,
+        bookingId,
+        bookingName: await this.bookingName(bookingId),
+        reason: null,
+      });
     }
 
-    return { matched, updated, created, review, rows: events.length };
+    return { matched, updated, created, review, rows: events.length, results };
+  }
+
+  private async bookingName(bookingId: string) {
+    const [booking] = await this.db.select({ name: bookings.name }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+    return booking?.name ?? null;
   }
 
   private async loadCandidates(): Promise<OperationalCalendarMatchCandidate[]> {
@@ -276,8 +319,6 @@ export class OperationalCalendarImportService {
         startsAt: input.actualDates.startsAt,
         endsAt: input.actualDates.endsAt,
         status: stateStatus(input.parsed.calendarState),
-        // The DB migration supports `definite`; the shared generated Drizzle
-        // type is still narrower, matching the existing booking write boundary.
         probability: (input.parsed.calendarState === "confirmed" ? "definite" : "possible") as any,
         travelLegId: legId,
         notes: input.parsed.originalDescription?.trim() || null,
