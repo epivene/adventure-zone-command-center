@@ -60,7 +60,10 @@ export function projectOperationalCalendarReview(review: PendingOperationalCalen
 
   return {
     source: "google_operational_review" as const,
-    id: `google-review:${review.id}`,
+    // Calendar-only identity. EventCalendar's existing booking link resolves this
+    // to /bookings/?googleReview=<id>, which safely lands on the booking list
+    // instead of pretending there is a booking/profile record for this row.
+    id: `?googleReview=${encodeURIComponent(review.id)}`,
     googleEventId: review.googleEventId,
     reviewId: review.id,
     reviewReason: review.reason,
