@@ -205,8 +205,8 @@ export function SimpleFullProfile({
       note.actSourceType === "activity"
         ? note.actSourceType
         : null,
-    historicalDateUnknown: Boolean(note.historicalDateUnknown),
-    paperNoteSource: note.paperNoteSource ?? null,
+    historicalDateUnknown: Boolean((note as any).historicalDateUnknown),
+    paperNoteSource: (note as any).paperNoteSource ?? null,
   }));
   const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
   const normalizedSearch = noteSearch.trim().toLowerCase();
@@ -488,14 +488,7 @@ export function SimpleFullProfile({
                 Call
               </Link>
             ) : null}
-            <button
-              aria-label="Edit profile"
-              className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]"
-              onClick={() => setEditing(true)}
-              type="button"
-            >
-              Edit
-            </button>
+            <button aria-label="Edit profile" className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" onClick={() => setEditing(true)} type="button">Edit</button>
             <button
               className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]"
               onClick={openNoteComposer}
@@ -551,7 +544,7 @@ export function SimpleFullProfile({
         />
         <StatCard
           icon={<Mail className="h-4 w-4" />}
-          label={`${emailCount} Emails`}
+          label="Emails"
           value={emailCount}
           active={openSection === "emails"}
           onClick={() => toggleSection("emails")}
@@ -828,7 +821,7 @@ export function SimpleFullProfile({
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="font-semibold text-[#829696]">Description</dt>
-            <dd className="mt-1 whitespace-pre-wrap leading-6 text-[#4d666d]">{profile.place.description || "No description recorded."}</dd>
+            <dd className="mt-1 whitespace-pre-wrap leading-6 text-[#4d666d]">{(profile.place as any).description || "No description recorded."}</dd>
           </div>
           <div>
             <dt className="font-semibold text-[#829696]">Office phone</dt>
