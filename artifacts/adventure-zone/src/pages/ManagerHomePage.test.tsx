@@ -5,8 +5,7 @@ import { memoryLocation } from "wouter/memory-location";
 import { describe, expect, it, vi } from "vitest";
 
 const managerApi = vi.fn(async (path: string) => {
-  if (path === "/manager/reviews/due") return { reviewsDue: [] };
-  if (path === "/manager/map") {
+  if (path === "/manager/dashboard") {
     return {
       events: [{
         bookingId: "booking-1",
@@ -16,11 +15,13 @@ const managerApi = vi.fn(async (path: string) => {
         startsAt: "2026-08-18T12:00:00.000Z",
         status: "confirmed",
       }],
+      currentLifecycle: null,
+      incompleteWrapUps: [],
+      reviewsDue: [],
+      money: { expenseTotalCents: 12500, cashPosition: { cashOnHandCents: 30000 } },
+      summary: { reviewsDueCount: 0 },
     };
   }
-  if (path === "/manager/events/booking-1/lifecycle") return { lifecycle: null };
-  if (path === "/manager/events/lifecycle/incomplete") return { lifecycles: [] };
-  if (path === "/manager/money/summary") return { expenseTotalCents: 12500, cashPosition: { cashOnHandCents: 30000 } };
   return {};
 });
 
@@ -61,5 +62,7 @@ describe("ManagerHomePage", () => {
     expect(screen.getByRole("link", { name: /Mileage/i })).toHaveAttribute("href", "/manager/operations");
     expect(screen.getByText("$300.00")).toBeInTheDocument();
     expect(screen.getByText("$125.00")).toBeInTheDocument();
+    expect(managerApi).toHaveBeenCalledTimes(1);
+    expect(managerApi).toHaveBeenCalledWith("/manager/dashboard");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadManagerScopedMapData } from "./manager-map-data";
+import { loadManagerScopedMapData, managerScheduleState } from "./manager-map-data";
 
 const kristyLegId = "00000000-0000-4000-8000-000000000010";
 const hulkLegId = "00000000-0000-4000-8000-000000000020";
@@ -162,6 +162,29 @@ describe("loadManagerScopedMapData", () => {
       status: "pending_contract",
       probability: "definite",
     });
+  });
+
+  it("uses the same booked visibility rules and deterministic ordering for direct assignments and trip stops", async () => {
+    const earlyDirect = { ...assignedBookingWithoutTrip, bookingId: "direct-early", startsAt: new Date("2026-08-19T12:00:00Z"), endsAt: new Date("2026-08-19T20:00:00Z") };
+    const lateDirect = { ...assignedBookingWithoutTrip, bookingId: "direct-late", startsAt: new Date("2026-08-24T12:00:00Z"), endsAt: new Date("2026-08-24T20:00:00Z") };
+    const excluded = [
+      { ...assignedBookingWithoutTrip, bookingId: "declined", status: "declined" },
+      { ...assignedBookingWithoutTrip, bookingId: "completed", status: "completed" },
+      { ...assignedBookingWithoutTrip, bookingId: "potential", status: "pending_contract", probability: "likely" },
+    ];
+
+    const result = await loadManagerScopedMapData(
+      deps([], [earlyDirect, lateDirect, ...excluded]),
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).toEqual([earlyDirect.bookingId, kristyStop.bookingId, lateDirect.bookingId]);
+    expect(result.events.every((event) => event.scheduleState === "booked")).toBe(true);
+    expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([kristyStop.bookingId]);
+    expect(managerScheduleState("pending_contract", "definite")).toBe("booked");
+    expect(managerScheduleState("pending_contract", "likely")).toBe("potential");
+    expect(managerScheduleState("declined", "definite")).toBe("excluded");
   });
 
   it("includes a shared meetup but only the counterpart leg identity", async () => {

@@ -5,10 +5,17 @@ import { useManagerAssistant } from "@/features/manager-assistant/manager-assist
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
-import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 
-type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null; probability?: string | null };
-type ManagerMapSummary = { events?: NextEvent[] };
+type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null; probability?: string | null; scheduleState?: "booked" | "potential" | "excluded" };
+type ManagerDashboard = {
+  events?: NextEvent[];
+  currentLifecycle?: CurrentLifecycle | null;
+  incompleteWrapUps?: IncompleteWrapUp[];
+  reviewsDue?: unknown[];
+  money?: MoneySummary | null;
+  summary?: { reviewsDueCount?: number; upcomingBookedEventsCount?: number; incompleteWrapUpsCount?: number };
+  partialErrors?: Array<{ section: string; message: string }>;
+};
 type CurrentLifecycle = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedInAt?: string | null; checkedOutAt?: string | null };
 type IncompleteWrapUp = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedOutAt?: string | null };
 type MoneySummary = { expenseTotalCents?: number; cashPosition?: { cashOnHandCents?: number } };
@@ -40,22 +47,26 @@ function QuickAddMenu() {
 export default function ManagerHomePage() {
   const { manager, managerApi } = useManagerAuth();
   const { setActiveContext, openAssistant } = useManagerAssistant();
-  const [reviewsDue, setReviewsDue] = useState(0);
-  const [bookedEvents, setBookedEvents] = useState<NextEvent[]>([]);
-  const [currentLifecycle, setCurrentLifecycle] = useState<CurrentLifecycle | null>(null);
-  const [incompleteWrapUps, setIncompleteWrapUps] = useState<IncompleteWrapUp[]>([]);
-  const [money, setMoney] = useState<MoneySummary | null>(null);
+  const [dashboard, setDashboard] = useState<ManagerDashboard | null>(null);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
-    managerApi<{ reviewsDue?: unknown[] }>("/manager/reviews/due").then((data) => setReviewsDue(data.reviewsDue?.length ?? 0)).catch(() => setReviewsDue(0));
-    managerApi<ManagerMapSummary>("/manager/map").then((data) => setBookedEvents((data.events ?? []).filter(isBookedForSchedule))).catch(() => setBookedEvents([]));
-    managerApi<{ lifecycle?: CurrentLifecycle | null }>("/manager/events/lifecycle/current").then((data) => setCurrentLifecycle(data.lifecycle ?? null)).catch(() => setCurrentLifecycle(null));
-    managerApi<{ lifecycles?: IncompleteWrapUp[] }>("/manager/events/lifecycle/incomplete").then((data) => setIncompleteWrapUps(data.lifecycles ?? [])).catch(() => setIncompleteWrapUps([]));
-    managerApi<MoneySummary>("/manager/money/summary").then(setMoney).catch(() => setMoney(null));
+    let active = true;
+    setDashboard(null);
+    setLoadError("");
+    managerApi<ManagerDashboard>("/manager/dashboard")
+      .then((data) => { if (active) setDashboard(data); })
+      .catch((error) => { if (active) setLoadError(error instanceof Error ? error.message : "Could not load your manager dashboard"); });
+    return () => { active = false; };
   }, [managerApi]);
 
   useEffect(() => () => setActiveContext(null), [setActiveContext]);
 
+  const bookedEvents = dashboard?.events ?? [];
+  const currentLifecycle = dashboard?.currentLifecycle ?? null;
+  const incompleteWrapUps = dashboard?.incompleteWrapUps ?? [];
+  const money = dashboard?.money ?? null;
+  const reviewsDue = dashboard?.summary?.reviewsDueCount ?? dashboard?.reviewsDue?.length ?? 0;
   const currentMapEvent = currentLifecycle ? bookedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
   const currentEvent = currentLifecycle ? { ...currentMapEvent, ...currentLifecycle } : null;
   const nextEvent = bookedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
@@ -68,12 +79,17 @@ export default function ManagerHomePage() {
     openAssistant("What do I need to know for this event?");
   }
 
+  if (!dashboard && !loadError) return <p>Loading your manager dashboard…</p>;
+
   return (
     <div className="grid gap-4">
       <header className="flex items-end justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Home</p><h1 className="text-2xl font-bold">{manager?.legName}</h1><p className="mt-1 text-sm text-slate-600">What you need right now for this leg.</p></div>
         <QuickAddMenu />
       </header>
+
+      {loadError ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-700">Could not load your manager dashboard: {loadError}</p> : null}
+      {dashboard?.partialErrors?.length ? <section role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-bold">Some dashboard details are unavailable.</p><ul className="mt-1 list-disc pl-5">{dashboard.partialErrors.map((item) => <li key={item.section}>{item.message}</li>)}</ul></section> : null}
 
       {incompleteWrapUps.length ? <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wide text-amber-800">Finish event wrap-up</p>
