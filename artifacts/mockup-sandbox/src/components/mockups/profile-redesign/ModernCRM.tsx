@@ -496,19 +496,6 @@ export function ModernCRM() {
 
             <aside className="grid content-start gap-5">
               <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)]">
-                <div className="flex items-center justify-between gap-2"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Primary contact</p><h2 className="mt-1 text-lg font-bold text-[#173b48]">{primary.name}</h2></div><span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{primary.initials}</span></div>
-                <p className="mt-1 text-sm text-[#71848a]">{primary.role}</p>
-                <div className="mt-4 grid gap-2">
-                  <a className="flex items-center gap-2 rounded-lg bg-[#f1f5f1] px-3 py-2.5 text-sm font-semibold text-[#4b6870] hover:bg-[#e6f0e9]" data-testid="link-primary-phone" href={`tel:${primary.phone}`}><Phone className="h-4 w-4 text-[#4b8575]" />{primary.phone}</a>
-                  <a className="flex items-center gap-2 rounded-lg bg-[#f1f5f1] px-3 py-2.5 text-sm font-semibold text-[#4b6870] hover:bg-[#e6f0e9]" data-testid="link-primary-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#4b8575]" />{primary.email}</a>
-                </div>
-                <div className="mt-4 flex gap-2">
-                  <button className="button-secondary inline-flex flex-1 items-center justify-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-call-primary" onClick={() => showAction(`Opening call workspace for ${primary.name}.`)} type="button"><Phone className="h-4 w-4" />Call</button>
-                  <button className="button-secondary inline-flex flex-1 items-center justify-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-message-primary" onClick={() => showAction(`Drafting an email to ${primary.name}.`)} type="button"><Send className="h-4 w-4" />Message</button>
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)]">
                 <div className="flex items-center justify-between"><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship health</p><span className="text-xs font-bold text-[#397064]">Good standing</span></div>
                 <div className="mt-4 flex items-end justify-between"><span className="text-3xl font-bold tracking-tight text-[#173b48]">4.7 <span className="text-sm font-semibold text-[#849597]">/ 5</span></span><span className="text-xs text-[#849597]">12 rated occurrences</span></div>
                 <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e1e9e4]"><div className="h-full w-[94%] rounded-full bg-[#5d9583]" /></div>
