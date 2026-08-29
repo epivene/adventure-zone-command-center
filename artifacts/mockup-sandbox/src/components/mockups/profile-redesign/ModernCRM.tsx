@@ -15,7 +15,6 @@ import {
   Mail,
   MapPin,
   MessageCircle,
-  MoreHorizontal,
   Phone,
   Plus,
   Search,
@@ -225,6 +224,8 @@ export function ModernCRM() {
   const [noteBody, setNoteBody] = useState("");
   const [actionMessage, setActionMessage] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [organizationName, setOrganizationName] = useState("Pine Ridge Adventure Lodge");
   const [draftName, setDraftName] = useState(organizationName);
@@ -299,20 +300,78 @@ export function ModernCRM() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              aria-label="Open notifications"
-              className="relative flex h-10 w-10 items-center justify-center rounded-lg border border-[#d8e2dd] bg-[#fbfcf8] text-[#5d747b] transition hover:border-[#a7beb3] hover:text-[#173b48]"
-              data-testid="button-notifications"
-              onClick={() => showAction("You have one follow-up due today.")}
-              type="button"
-            >
-              <Bell className="h-4 w-4" />
-              <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d47e4d]" />
-            </button>
-            <div className="hidden h-10 items-center gap-2 rounded-lg border border-[#d8e2dd] bg-[#fbfcf8] px-3 text-sm sm:flex">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#dbe9e4] text-[10px] font-bold text-[#397064]">AM</span>
-              <span className="font-semibold text-[#526970]">Alex Morgan</span>
-              <ChevronDown className="h-3.5 w-3.5 text-[#8ca0a2]" />
+            <div className="relative">
+              <button
+                aria-expanded={notificationsOpen}
+                aria-label="Open notifications"
+                className={`relative flex h-10 w-10 items-center justify-center rounded-lg border bg-[#fbfcf8] text-[#5d747b] transition hover:border-[#a7beb3] hover:text-[#173b48] ${notificationsOpen ? "border-[#9ab6a9] bg-[#edf4ef]" : "border-[#d8e2dd]"}`}
+                data-testid="button-notifications"
+                onClick={() => {
+                  setNotificationsOpen((current) => !current);
+                  setPrimaryContactOpen(false);
+                  setMoreOpen(false);
+                }}
+                type="button"
+              >
+                <Bell className="h-4 w-4" />
+                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d47e4d]" />
+              </button>
+              {notificationsOpen ? (
+                <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" data-testid="popover-notifications" role="dialog" aria-label="Notifications">
+                  <div className="flex items-start justify-between gap-4 border-b border-[#e4ebe5] px-4 py-3">
+                    <div>
+                      <p className="text-sm font-bold text-[#173b48]">Notifications</p>
+                      <p className="mt-0.5 text-xs text-[#839596]">One item needs your attention</p>
+                    </div>
+                    <button aria-label="Close notifications" className="rounded-md p-1 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-notifications" onClick={() => setNotificationsOpen(false)} type="button"><X className="h-4 w-4" /></button>
+                  </div>
+                  <div className="flex items-start gap-3 px-4 py-4">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#faecd9] text-[#a66845]"><Bell className="h-4 w-4" /></span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold text-[#315b66]">Follow-up due today</p>
+                      <p className="mt-1 text-sm leading-5 text-[#71848a]">Send the fall retreat proposal to keep this relationship moving.</p>
+                      <button className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold text-[#397064] hover:text-[#244f47]" data-testid="button-open-notification" onClick={() => { setNotificationsOpen(false); setSection("overview"); showAction("Follow-up is ready for review."); }} type="button">Review follow-up <ArrowUpRight className="h-3.5 w-3.5" /></button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="relative">
+              <button
+                aria-expanded={primaryContactOpen}
+                aria-label={`Open primary contact ${primary.name}`}
+                className={`inline-flex h-10 items-center gap-2 rounded-lg border bg-[#fbfcf8] px-2.5 text-sm transition hover:border-[#a7beb3] sm:px-3 ${primaryContactOpen ? "border-[#9ab6a9] bg-[#edf4ef]" : "border-[#d8e2dd]"}`}
+                data-testid="button-primary-contact"
+                onClick={() => {
+                  setPrimaryContactOpen((current) => !current);
+                  setNotificationsOpen(false);
+                  setMoreOpen(false);
+                }}
+                type="button"
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-[10px] font-bold text-[#397064]">{primary.initials}</span>
+                <span className="hidden font-semibold text-[#526970] sm:inline">{primary.name}</span>
+                <ChevronDown className={`h-3.5 w-3.5 text-[#8ca0a2] transition-transform ${primaryContactOpen ? "rotate-180" : ""}`} />
+              </button>
+              {primaryContactOpen ? (
+                <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" data-testid="popover-primary-contact" role="dialog" aria-label={`Primary contact ${primary.name}`}>
+                  <div className="flex items-start gap-3 border-b border-[#e4ebe5] px-4 py-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{primary.initials}</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#75908b]">Primary contact</p>
+                      <h2 className="mt-1 font-bold text-[#173b48]">{primary.name}</h2>
+                      <p className="mt-0.5 text-sm text-[#71848a]">{primary.role}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 px-4 py-3">
+                    <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66] hover:bg-[#e5f0e8]" data-testid="link-primary-contact-phone" href={`tel:${primary.phone}`}><Phone className="h-4 w-4 text-[#397064]" />{primary.phone}</a>
+                    <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66] hover:bg-[#e5f0e8]" data-testid="link-primary-contact-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primary.email}</a>
+                  </div>
+                  <div className="border-t border-[#e4ebe5] px-4 py-3">
+                    <button className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-open-contact-profile" onClick={() => { setPrimaryContactOpen(false); setSection("contacts"); showAction(`${primary.name}'s contact profile is open below.`); }} type="button">Open contact profile <ArrowUpRight className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </header>
