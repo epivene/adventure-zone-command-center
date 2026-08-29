@@ -53,14 +53,12 @@ afterEach(() => {
 });
 
 describe("ContactDetailPage", () => {
-  it("routes a linked contact back to its primary profile", async () => {
+  it("opens a linked contact on its own profile", async () => {
     apiGet.mockResolvedValue(detail(null, [{ id: "profile-1", name: "Example Event", isPrimaryPlace: true }]));
     render(<ContactDetailPage contactId={contactId} />);
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith(
-      `/profiles/profile-1?contactId=${contactId}`,
-      { replace: true },
-    ));
+    expect(await screen.findByRole("heading", { name: "Sarah Miller" })).toBeVisible();
+    expect(navigate).not.toHaveBeenCalled();
   });
 
   it("keeps the standalone fallback for an unlinked contact", async () => {
