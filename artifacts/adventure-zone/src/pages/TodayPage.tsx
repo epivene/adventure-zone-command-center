@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { apiGet, apiPost } from "@/lib/auth-token";
 import { FollowUpList } from "@/components/today/follow-up-list";
@@ -7,8 +7,6 @@ import { NextCallCard, eventProfileHref } from "@/components/today/next-call-car
 import { BookingOperations } from "@/components/today/booking-operations";
 import { RenewalsSection } from "@/components/today/renewals-section";
 import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scout-alerts-section";
-import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
-import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
 import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
 import { deriveTodayFocus } from "@/features/today/today-focus";
@@ -37,7 +35,6 @@ function statusLabel(value: string | null | undefined) {
 }
 
 type CallingConfig = { assistedCallingEnabled: boolean; voicemailLauncherUrl: string | null };
-type LabeledProfileSheetTarget = ProfileSheetTarget & { label?: string };
 const disabledCallingConfig: CallingConfig = { assistedCallingEnabled: false, voicemailLauncherUrl: null };
 
 function coerceFollowUps(items: any[]) {
@@ -60,7 +57,6 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
-  const [profileTarget, setProfileTarget] = useState<LabeledProfileSheetTarget | null>(null);
   const [scoutAlerts, setScoutAlerts] = useState<ScoutAlertView[]>([]);
   const [manageNextSteps, setManageNextSteps] = useState(false);
   const [selectedNextSteps, setSelectedNextSteps] = useState<Set<string>>(new Set());
@@ -82,23 +78,6 @@ export default function TodayPage() {
       })
       .catch((e) => { setError(e.message); setLoading(false); });
   }, []);
-
-  function handleProfileLink(event: MouseEvent<HTMLDivElement>) {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const element = event.target instanceof Element ? event.target.closest("a[href]") : null;
-    const href = element?.getAttribute("href") ?? "";
-    const match = href.match(/^\/(?:event-profiles|profiles)\/([^/?#]+)/);
-    if (!match?.[1]) return;
-    event.preventDefault();
-    const queryString = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
-    const linkParams = new URLSearchParams(queryString);
-    setProfileTarget({
-      profileId: decodeURIComponent(match[1]),
-      contactId: linkParams.get("contactId") ?? undefined,
-      bookingId: linkParams.get("bookingId") ?? undefined,
-      label: element?.textContent?.trim() || "Side profile",
-    });
-  }
 
   async function snoozeScoutAlert(alertId: string) {
     const until = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -198,7 +177,7 @@ export default function TodayPage() {
   const nextEvent = upcomingEvents[0] ?? null;
 
   return (
-    <div className="mx-auto grid max-w-5xl gap-6 pb-8" onClickCapture={handleProfileLink}>
+    <div className="mx-auto grid max-w-5xl gap-6 pb-8">
       <header className="border-b border-slate-200 pb-5">
         <p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700">Command Center</p>
         <h1 className="mt-1 text-3xl font-bold tracking-tight">Today</h1>
@@ -329,8 +308,6 @@ export default function TodayPage() {
         </div>
       </details>
 
-      {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
-      <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
     </div>
   );
 }

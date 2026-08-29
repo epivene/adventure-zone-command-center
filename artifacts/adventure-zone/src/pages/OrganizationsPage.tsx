@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { OrganizationList } from "@/components/organizations/organization-list";
@@ -8,11 +8,8 @@ import { hideRetiredProfileResults } from "@/features/organizations/hide-retired
 import { EventFamilySuggestions } from "@/components/event-families/event-family-suggestions";
 import { EventFamilyCard } from "@/components/event-families/event-family-card";
 import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
-import { ProfileDetailSheet, type ProfileSheetTarget } from "@/components/profiles/profile-detail-sheet";
 import { ContactDirectoryView } from "@/components/profiles/contact-directory-view";
-import { AssistantTransientContext } from "@/components/assistant/assistant-transient-context";
 
-type LabeledProfileSheetTarget = ProfileSheetTarget & { label?: string };
 type ProfileDirectoryView = "profiles" | "contacts";
 
 function directoryView(value: string | null): ProfileDirectoryView {
@@ -46,7 +43,6 @@ export default function OrganizationsPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(view !== "contacts");
   const [error, setError] = useState<string | null>(null);
-  const [profileTarget, setProfileTarget] = useState<LabeledProfileSheetTarget | null>(null);
   const [showDuplicates, setShowDuplicates] = useState(false);
   const [dupLoading, setDupLoading] = useState(false);
   const [dupError, setDupError] = useState<string | null>(null);
@@ -102,22 +98,6 @@ export default function OrganizationsPage() {
       return null;
     } finally { setDupLoading(false); }
   }, []);
-
-  function handleProfileLink(event: MouseEvent<HTMLDivElement>) {
-    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    const element = event.target instanceof Element ? event.target.closest("a[href]") : null;
-    const href = element?.getAttribute("href") ?? "";
-    const match = href.match(/^\/profiles\/([^/?#]+)/);
-    if (!match?.[1]) return;
-    event.preventDefault();
-    const queryString = href.includes("?") ? href.slice(href.indexOf("?") + 1) : "";
-    const linkParams = new URLSearchParams(queryString);
-    setProfileTarget({
-      profileId: decodeURIComponent(match[1]),
-      contactId: linkParams.get("contactId") ?? undefined,
-      label: element?.textContent?.trim() || "Side profile",
-    });
-  }
 
   function openDuplicates() {
     setShowDuplicates(true);
@@ -181,7 +161,7 @@ export default function OrganizationsPage() {
       ) : view === "contacts" ? (
         <ContactDirectoryView search={search} basePath="/profiles" fixedParams={{ view: "contacts" }} />
       ) : (
-        <div onClickCapture={handleProfileLink}>
+        <div>
           {loading ? <p className="text-slate-500">Loading profiles…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
@@ -193,8 +173,6 @@ export default function OrganizationsPage() {
       )}
 
       <ManualEventFamilyDialog onChanged={loadProfiles} onOpenChange={setEventFamilyOpen} open={eventFamilyOpen} />
-      {profileTarget?.profileId ? <AssistantTransientContext open kind="organization" recordId={profileTarget.profileId} label={profileTarget.label ?? "Side profile"} /> : null}
-      <ProfileDetailSheet open={Boolean(profileTarget)} onOpenChange={(open) => { if (!open) setProfileTarget(null); }} target={profileTarget} />
     </div>
   );
 }
