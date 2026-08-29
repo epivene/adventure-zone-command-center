@@ -1,0 +1,19 @@
+kind = "design-system"
+previewPath = "/avz-crm/"
+title = "Avz CRM Design System"
+description = "A calm, operational visual system for Adventure Zone CRM teams managing organization relationships, contacts, follow-ups, activity, and outreach."
+version = "1.0.0"
+id = "artifacts/avz-crm"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/avz-crm/" ]
+localPort = 20669
+
+[services.development]
+run = "pnpm --filter @workspace/avz-crm run dev"
+
+[services.env]
+PORT = "20669"
+BASE_PATH = "/avz-crm/"
