@@ -337,7 +337,6 @@ export function ModernCRM() {
             </button>
             {moreOpen ? (
               <div className="absolute right-0 top-12 z-20 w-56 rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] p-1.5 shadow-[0_18px_40px_rgba(23,59,72,0.14)]">
-                <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[#4b6269] hover:bg-[#edf4ef]" data-testid="button-edit-profile-menu" onClick={() => { setDraftName(organizationName); setEditing(true); setMoreOpen(false); }} type="button"><Edit3 className="h-4 w-4" /> Edit organization</button>
                 <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[#4b6269] hover:bg-[#edf4ef]" data-testid="button-copy-id" onClick={copyId} type="button"><Copy className="h-4 w-4" /> Copy organization ID</button>
                 <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[#4b6269] hover:bg-[#edf4ef]" data-testid="button-priority" onClick={() => { setPriority((current) => !current); setMoreOpen(false); showAction(priority ? "Removed priority flag." : "Marked as priority."); }} type="button"><Tag className="h-4 w-4" /> {priority ? "Remove priority flag" : "Mark as priority"}</button>
                 <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-semibold text-[#4b6269] hover:bg-[#edf4ef]" data-testid="button-archive" onClick={() => { setMoreOpen(false); showAction("Archive is available from the live organization workspace."); }} type="button"><Archive className="h-4 w-4" /> Archive relationship</button>
@@ -394,21 +393,21 @@ export function ModernCRM() {
                 </div>
               </div>
             </div>
-            {editing ? (
-              <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-save-edit" onClick={saveEdit} type="button"><Check className="h-4 w-4" />Save changes</button>
-                <button className="button-secondary inline-flex items-center gap-2 !bg-transparent" data-testid="button-cancel-edit" onClick={() => { setDraftName(organizationName); setEditing(false); }} type="button"><X className="h-4 w-4" />Cancel</button>
-              </div>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              {editing ? (
+                <>
+                  <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-save-edit" onClick={saveEdit} type="button"><Check className="h-4 w-4" />Save changes</button>
+                  <button className="button-secondary inline-flex items-center gap-2 !bg-transparent" data-testid="button-cancel-edit" onClick={() => { setDraftName(organizationName); setEditing(false); }} type="button"><X className="h-4 w-4" />Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-edit-profile" onClick={() => { setDraftName(organizationName); setEditing(true); }} type="button"><Edit3 className="h-4 w-4" />Edit profile</button>
+                  <button className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-add-note-header" onClick={() => { setSection("notes"); setComposerOpen(true); }} type="button"><Plus className="h-4 w-4" />Add note</button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e1e8e3] px-4 py-3 sm:px-7">
-            <nav aria-label="Organization sections" className="flex flex-wrap items-center gap-1" data-testid="nav-profile-sections">
-              <SectionButton active={section === "overview"} label="Overview" onClick={() => selectSection("overview")} testId="tab-overview" />
-              <SectionButton active={section === "contacts"} count={contacts.length} label="Contacts" onClick={() => selectSection("contacts")} testId="tab-contacts" />
-              <SectionButton active={section === "events"} count={bookings.length} label="Events" onClick={() => selectSection("events")} testId="tab-events" />
-              <SectionButton active={section === "notes"} count={activities.length} label="Activity" onClick={() => selectSection("notes")} testId="tab-activity" />
-              <SectionButton active={section === "emails"} count={8} label="Emails" onClick={() => selectSection("emails")} testId="tab-emails" />
-            </nav>
+          <div className="flex justify-end border-t border-[#e1e8e3] px-4 py-3 sm:px-7">
             <span className="hidden items-center gap-1.5 text-xs font-semibold text-[#809295] md:inline-flex"><Clock3 className="h-3.5 w-3.5" />Mountain Time (MT)</span>
           </div>
         </section>
