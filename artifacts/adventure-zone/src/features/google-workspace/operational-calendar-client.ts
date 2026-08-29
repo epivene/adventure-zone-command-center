@@ -37,6 +37,24 @@ export type OperationalCalendarStatus = {
   reviews: OperationalCalendarReview[];
 };
 
+export type OperationalCalendarImportRow = {
+  googleEventId: string;
+  title: string;
+  outcome: "matched" | "created" | "review" | "already_linked";
+  bookingId: string | null;
+  bookingName: string | null;
+  reason: string | null;
+};
+
+export type OperationalCalendarImportResult = {
+  matched: number;
+  updated: number;
+  created: number;
+  review: number;
+  rows: number;
+  results: OperationalCalendarImportRow[];
+};
+
 export async function startOperationalCalendarOAuth() {
   return json<{ authorizationUrl: string }>(await apiFetch("/google-workspace/oauth/start", {
     method: "POST",
@@ -56,7 +74,7 @@ export async function getOperationalCalendarStatus() {
 }
 
 export async function importOperationalCalendar(input?: { from?: string; to?: string }) {
-  return json<{ matched: number; updated: number; created: number; review: number; rows: number }>(
+  return json<OperationalCalendarImportResult>(
     await apiFetch("/google-workspace/operational-calendar/import", {
       method: "POST",
       body: JSON.stringify(input ?? {}),

@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import { getMapEvents, type MapFilters } from "@/features/routes/map-query";
+import { applyOperationalWindowsToCalendarBookings } from "@/features/google-workspace/calendar/calendar-operational-window-projection";
 
 const router: IRouter = Router();
 
@@ -49,12 +50,9 @@ export type ActivityQueryRow = {
 
 /**
  * Returns true for rows that belong on the calendar:
- *  - kind = "calendar"   scheduled activities from the reviewed replacement import
- *  - kind = "act_history" with actRecordId "act_activity:&"  activity-stream records
+ *  - kind = "calendar" — scheduled activities from the reviewed replacement import
+ *  - kind = "act_history" with actRecordId "act_activity:" — activity-stream records
  *    from the older activity-import-service (not notes or history text entries)
- *
- * This mirrors the SQL WHERE clause and acts as a JS-level safety net /
- * unit-testable statement of intent.
  */
 export function isCalendarEligibleRow(
   row: Pick<ActivityQueryRow, "kind" | "actRecordId">,
@@ -109,20 +107,6 @@ export function mapActivityRow(row: ActivityQueryRow): ActCalendarActivity {
 /** Minimal structural type accepted by getActCalendarActivities for test injection. */
 export type ActivityDb = { select: (...args: unknown[]) => unknown };
 
-/**
- * Query Act! activities that belong on the calendar.
- *
- * Criteria (applied in both SQL and JS):
- *  - kind = "calendar"  (replacement-flow reviewed imports)
- *  - kind = "act_history" AND actRecordId LIKE "act_activity:%" (legacy import, activity stream only)
- *
- * Notes and history text entries are intentionally excluded  they have dates but are
- * not scheduled events.
- *
- * @param db   - optional injected database (defaults to production client; used in tests)
- * @param from - optional start of the date window (inclusive); filters on timelineSortAt
- * @param to   - optional end of the date window (inclusive); filters on timelineSortAt
- */
 export async function getActCalendarActivities(
   db?: ActivityDb,
   from?: Date,
@@ -137,7 +121,6 @@ export async function getActCalendarActivities(
   const { activities, contacts, organizations } = schema;
   const { eq, or, and, like, gte, lte, isNull } = orm;
 
-  // Build kind + record-id filter
   const kindFilter = or(
     eq(activities.kind, "calendar"),
     and(
@@ -146,8 +129,6 @@ export async function getActCalendarActivities(
     ),
   );
 
-  // Optionally narrow by date window.  Rows with null timelineSortAt are kept
-  // when a window is provided so they don't silently disappear.
   const dateFilter =
     from && to
       ? or(
@@ -190,18 +171,30 @@ export async function getActCalendarActivities(
     .leftJoin(organizations, eq(activities.organizationId, organizations.id))
     .where(whereClause);
 
-  // JS-level guard mirrors the SQL WHERE  provides defence-in-depth and
-  // makes the intent unit-testable independent of the DB.
   return rows.filter(isCalendarEligibleRow).map(mapActivityRow);
 }
 
-/**
- * Debug endpoint  owner-only. Returns a summary of what is stored in the
- * activities table so you can confirm whether Act! calendar records exist
- * before chasing a display bug.
- *
- * GET /api/calendar/debug
- */
+async function getOperationalWindowsForCalendar(bookingIds: string[]) {
+  if (!bookingIds.length) return [];
+  const [{ db }, { bookingOperationalWindows }, { inArray }] = await Promise.all([
+    import("@/db/client"),
+    import("@/db/schema"),
+    import("drizzle-orm"),
+  ]);
+  const rows = await db.select({
+    bookingId: bookingOperationalWindows.bookingId,
+    startsAt: bookingOperationalWindows.startsAt,
+    endsAt: bookingOperationalWindows.endsAt,
+    source: bookingOperationalWindows.source,
+  }).from(bookingOperationalWindows).where(inArray(bookingOperationalWindows.bookingId, bookingIds));
+
+  return rows.filter((row) =>
+    typeof row.bookingId === "string" &&
+    row.startsAt instanceof Date &&
+    row.endsAt instanceof Date,
+  );
+}
+
 router.get("/calendar/debug", async (req, res): Promise<void> => {
   try {
     const { db } = await import("@/db/client");
@@ -247,22 +240,17 @@ router.get("/calendar/debug", async (req, res): Promise<void> => {
 
 router.get("/calendar", async (req, res): Promise<void> => {
   try {
-    // Parse optional date-window query params: ?from=YYYY-MM-DD&to=YYYY-MM-DD
     const fromParam = typeof req.query.from === "string" ? req.query.from : undefined;
     const toParam = typeof req.query.to === "string" ? req.query.to : undefined;
 
     const fromDate = fromParam ? new Date(fromParam) : undefined;
     const toDate = toParam ? new Date(toParam) : undefined;
 
-    // Only use params that parse as valid dates; reject malformed strings.
     const validFrom = fromDate && !isNaN(fromDate.getTime()) ? fromDate : undefined;
     const validTo = toDate && !isNaN(toDate.getTime()) ? toDate : undefined;
 
-    // Advance to end-of-day so events occurring later in the boundary day are included.
     if (validTo) validTo.setUTCHours(23, 59, 59, 999);
 
-    // Build booking filter. MapFilters uses business-date string comparison, so pass
-    // the raw date strings only when they are valid ISO dates.
     const calendarFilters: MapFilters = {
       ...allEvents,
       dateFrom: validFrom ? (fromParam as string) : null,
@@ -274,8 +262,11 @@ router.get("/calendar", async (req, res): Promise<void> => {
       getActCalendarActivities(undefined, validFrom, validTo),
     ]);
 
-    const bookingsWithSource = bookingEvents.map((e) => ({
-      ...e,
+    const operationalWindows = await getOperationalWindowsForCalendar(bookingEvents.map((event) => event.id));
+    const calendarBookings = applyOperationalWindowsToCalendarBookings(bookingEvents, operationalWindows);
+
+    const bookingsWithSource = calendarBookings.map((event) => ({
+      ...event,
       source: "booking" as const,
     }));
 

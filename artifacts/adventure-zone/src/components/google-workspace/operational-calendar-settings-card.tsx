@@ -7,6 +7,7 @@ import {
   getOperationalCalendarStatus,
   importOperationalCalendar,
   startOperationalCalendarOAuth,
+  type OperationalCalendarImportRow,
   type OperationalCalendarReview,
   type OperationalCalendarStatus,
 } from "@/features/google-workspace/operational-calendar-client";
@@ -112,6 +113,27 @@ function ReviewDetails({ review }: { review: OperationalCalendarReview }) {
   );
 }
 
+function ImportAudit({ rows }: { rows: OperationalCalendarImportRow[] }) {
+  if (!rows.length) return null;
+  return (
+    <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <h3 className="font-bold text-slate-900">Last import results</h3>
+      <p className="text-xs text-slate-600">This shows where each David calendar row landed in the app.</p>
+      <div className="grid gap-2">
+        {rows.map((row) => (
+          <div className="rounded-md border border-slate-200 bg-white p-2 text-sm" key={row.googleEventId}>
+            <p className="font-semibold text-slate-950">{row.title}</p>
+            {row.outcome === "matched" ? <p className="text-emerald-700">Matched existing profile: {row.bookingName ?? row.bookingId}</p> : null}
+            {row.outcome === "created" ? <p className="text-blue-700">Created new profile: {row.bookingName ?? row.bookingId}</p> : null}
+            {row.outcome === "already_linked" ? <p className="text-slate-600">Already linked to: {row.bookingName ?? row.bookingId}</p> : null}
+            {row.outcome === "review" ? <p className="text-amber-800">Needs review: {row.reason ?? "No reliable automatic match"}</p> : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function OperationalCalendarSettingsCard({
   openAuthorizationUrl = (url: string) => window.location.assign(url),
 }: {
@@ -121,6 +143,7 @@ export function OperationalCalendarSettingsCard({
   const [busy, setBusy] = useState<"connect" | "import" | "disconnect" | "review" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [importResults, setImportResults] = useState<OperationalCalendarImportRow[]>([]);
 
   async function reload() {
     setStatus(await getOperationalCalendarStatus());
@@ -148,6 +171,7 @@ export function OperationalCalendarSettingsCard({
     setNotice(null);
     try {
       const result = await importOperationalCalendar();
+      setImportResults(result.results ?? []);
       setNotice(`Checked ${result.rows} calendar rows: ${result.updated} updated, ${result.created} created, ${result.review} need review.`);
       await reload();
     } catch (caught) {
@@ -164,6 +188,7 @@ export function OperationalCalendarSettingsCard({
     try {
       await disconnectOperationalCalendar();
       await reload();
+      setImportResults([]);
       setNotice("David's calendar disconnected. CRM data was kept.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not disconnect David calendar.");
@@ -224,6 +249,7 @@ export function OperationalCalendarSettingsCard({
 
       {notice ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-800">{notice}</p> : null}
       {error ? <p className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm font-semibold text-rose-800" role="alert">{error}</p> : null}
+      <ImportAudit rows={importResults} />
 
       {status?.reviews.length ? (
         <div className="grid gap-2">
