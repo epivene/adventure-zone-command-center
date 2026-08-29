@@ -24,28 +24,31 @@ export const profileSortValues = [
 ] as const;
 export type ProfileSort = (typeof profileSortValues)[number];
 
-export const setLastResortInputSchema = z
-  .object({
-    organizationId: organizationIdSchema,
-    enabled: z.boolean(),
-    reason: z.string().trim().max(2_000),
-  })
-  .superRefine((value, context) => {
-    if (value.enabled && !value.reason) {
-      context.addIssue({
-        code: "custom",
-        path: ["reason"],
-        message: "Add a Last Resort reason",
-      });
-    }
-  });
+function strategyInputSchema(label: string) {
+  return z
+    .object({
+      organizationId: organizationIdSchema,
+      enabled: z.boolean(),
+      reason: z.string().trim().max(2_000),
+    })
+    .superRefine((value, context) => {
+      if (value.enabled && !value.reason) {
+        context.addIssue({ code: "custom", path: ["reason"], message: `Add a ${label} reason` });
+      }
+    });
+}
 
+export const setLastResortInputSchema = strategyInputSchema("Last Resort");
 export type SetLastResortInput = z.output<typeof setLastResortInputSchema>;
+
+export const setFillerInputSchema = strategyInputSchema("Filler");
+export type SetFillerInput = z.output<typeof setFillerInputSchema>;
 
 export const organizationListQuerySchema = z
   .object({
     q: z.string().catch("").default(""),
     lastResort: z.enum(["all", "only"]).catch("all").default("all"),
+    filler: z.enum(["all", "only"]).catch("all").default("all"),
     leg: z.string().catch("").default(""),
     type: z.enum(["", ...profileTypeValues]).catch("").default(""),
     region: z.string().catch("").default(""),
@@ -58,17 +61,14 @@ export const organizationListQuerySchema = z
     contact: z.enum(["", "phone", "email"]).catch("").default(""),
     activity: z.enum(["", "followup", "booking"]).catch("").default(""),
     sort: z.enum(profileSortValues).catch("recently_updated").default("recently_updated"),
-    includeRetired: z
-      .union([z.literal("true"), z.literal("1")])
-      .transform(() => true)
-      .catch(false)
-      .default(false),
+    includeRetired: z.union([z.literal("true"), z.literal("1")]).transform(() => true).catch(false).default(false),
     page: z.coerce.number().int().min(1).max(10_000).catch(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(50).catch(50).default(50),
   })
-  .transform(({ q, lastResort, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, sort, includeRetired, page, pageSize }) => ({
+  .transform(({ q, lastResort, filler, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, sort, includeRetired, page, pageSize }) => ({
     search: q.trim().replace(/\s+/g, " "),
     lastResort,
+    filler,
     travelLegId: z.string().uuid().safeParse(leg).success ? leg : null,
     placeType: type || null,
     region: region.trim() || null,
