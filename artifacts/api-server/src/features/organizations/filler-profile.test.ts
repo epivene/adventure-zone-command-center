@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { organizationListQuerySchema, setFillerInputSchema } from "./last-resort-input";
 
+// RED: the Filler strategy does not exist yet.
 const routeSource = readFileSync(new URL("../../routes/organizations.ts", import.meta.url), "utf8");
 const schemaSource = readFileSync(new URL("../../../../../lib/db/src/schema/index.ts", import.meta.url), "utf8");
 const directorySource = readFileSync(new URL("./organization-directory-page.ts", import.meta.url), "utf8");
