@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Ridgway RiverFest", "city": "Ridgway", "region": "CO"},
-  "profile": {"placeType": "festival_event", "description": "Established Adventure Zone outreach history. The limiting issue is the small festival footprint, not lack of interest in family entertainment."},
-  "contacts": [{"id": null, "name": "Tanya Ishikawa", "phone": "303-819-7784", "email": "tanya@uncompahgrewatershed.org", "role": "Historical RiverFest contact", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "profile": {"placeType": "festival_event", "phone": "970-325-3010", "website": "https://ridgwayriverfest.org/", "description": "Active family-friendly RiverFest at Rollans Park. Prior Adventure Zone discussions identified footprint/space as the blocker, but current event materials show the main festival primarily occupies the Rollans Park parking lot and space constraints depend on the approved festival footprint rather than proving the entire park is unsuitable."},
+  "contacts": [{"id": null, "name": "RiverFest Team", "phone": "970-325-3010", "email": "ridgwayriverfest@gmail.com", "role": "Current event contact", "primary": true}],
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "2027-01-20", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Later history confirms footprint is too small", "body": "Tanya Ishikawa declined Adventure Zone for 2024, but later 2025 Gmail history is more specific and controls the profile: RiverFest asked about lower-cost / low-power attractions, then said the festival grounds were simply too small and an Adventure Zone setup would occupy roughly a quarter or more of the event space. Adventure Zone acknowledged that limitation. Treat this as a structural space mismatch rather than continuing annual generic outreach."}],
-  "followUps": []
+  "notes": [{"subject": "Reassess footprint for future RiverFest", "body": "Tanya Ishikawa previously said an Adventure Zone setup would take roughly a quarter or more of the festival grounds, so the 2025 layout did not work. Current 2026 RiverFest materials clarify that the main festival grounds are primarily the Rollans Park parking lot and that booth acceptance is limited by the event's configured footprint. Do not treat the entire park as permanently too small. Revisit only if the organizer can approve a larger portion of Rollans Park, adjacent space, or a separate family-entertainment area."}],
+  "followUps": [{"label": "Reassess Ridgway RiverFest footprint for 2027", "reason": "Ask whether 2027 can use a larger portion of Rollans Park, adjacent space, or a separate attraction area before assuming the prior parking-lot footprint is still the only option.", "dueAt": "2027-01-20T16:00:00.000Z"}]
 }
