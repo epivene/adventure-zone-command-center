@@ -390,7 +390,6 @@ export function ModernCRM() {
                     <ExternalLink className="h-3.5 w-3.5" />
                     Visit website
                   </a>
-                  <span>Relationship owner <span className="font-semibold text-[#45616a]">Alex Morgan</span> · Last touched Apr 16, 2025</span>
                 </div>
               </div>
             </div>
