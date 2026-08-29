@@ -5,6 +5,7 @@ import { MileageForm } from "@/components/manager/mileage-form";
 import { MaintenanceForm } from "@/components/manager/maintenance-form";
 import { useManagerScopedMap } from "@/features/manager/use-manager-scoped-map";
 import { useManagerAuth } from "@/lib/manager-auth-context";
+import type { ManagerDashboardResponse } from "@workspace/api-zod";
 
 export default function ManagerOperationsPage() {
   const { managerApi } = useManagerAuth();
@@ -13,7 +14,7 @@ export default function ManagerOperationsPage() {
   const map = useManagerScopedMap();
 
   useEffect(() => {
-    managerApi<any>("/manager/dashboard").then(async (data) => {
+    managerApi<ManagerDashboardResponse>("/manager/dashboard").then(async (data) => {
       setDashboard(data);
       const tripId = data.route?.trip?.id ?? data.trips?.[0]?.id;
       if (tripId) setRollup(await managerApi(`/manager/operations/segments?tripId=${tripId}`));

@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
+import { managerScopedMapResponseSchema, type ManagerScopedMapResponse } from "@workspace/api-zod";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import type { ManagerScopedMapData } from "./manager-map-types";
 
-type WireData = Omit<ManagerScopedMapData, "route" | "events" | "meetups"> & {
-  route: null | (Omit<NonNullable<ManagerScopedMapData["route"]>, "stops"> & {
-    stops: Array<Omit<NonNullable<ManagerScopedMapData["route"]>["stops"][number], "startsAt" | "endsAt"> & { startsAt: string | null; endsAt: string | null }>;
-  });
-  events: Array<Omit<ManagerScopedMapData["events"][number], "startsAt" | "endsAt"> & { startsAt: string | null; endsAt: string | null }>;
-  meetups: Array<Omit<ManagerScopedMapData["meetups"][number], "windowStartsAt" | "windowEndsAt"> & { windowStartsAt: string; windowEndsAt: string }>;
-};
+type WireData = ManagerScopedMapResponse;
 
 function normalize(data: WireData): ManagerScopedMapData {
   return {
@@ -32,7 +27,8 @@ export function useManagerScopedMap() {
     setLoading(true);
     setError(null);
     try {
-      setData(normalize(await managerApi<WireData>("/manager/map")));
+      const payload = managerScopedMapResponseSchema.parse(await managerApi<unknown>("/manager/map"));
+      setData(normalize(payload));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load manager map");
     } finally {

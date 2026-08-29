@@ -5,27 +5,18 @@ import { useManagerAssistant } from "@/features/manager-assistant/manager-assist
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
+import type { ManagerDashboardResponse } from "@workspace/api-zod";
 
-type NextEvent = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; startsAt?: string | null; endsAt?: string | null; status?: string | null; probability?: string | null; scheduleState?: "booked" | "potential" | "excluded" };
-type ManagerDashboard = {
-  events?: NextEvent[];
-  currentLifecycle?: CurrentLifecycle | null;
-  incompleteWrapUps?: IncompleteWrapUp[];
-  reviewsDue?: unknown[];
-  money?: MoneySummary | null;
-  summary?: { reviewsDueCount?: number; upcomingBookedEventsCount?: number; incompleteWrapUpsCount?: number };
-  partialErrors?: Array<{ section: string; message: string }>;
-};
-type CurrentLifecycle = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedInAt?: string | null; checkedOutAt?: string | null };
-type IncompleteWrapUp = { bookingId: string; bookingName?: string | null; city?: string | null; region?: string | null; checkedOutAt?: string | null };
-type MoneySummary = { expenseTotalCents?: number; cashPosition?: { cashOnHandCents?: number } };
+type ManagerDashboard = ManagerDashboardResponse;
+type NextEvent = ManagerDashboardResponse["events"][number];
+type CurrentLifecycle = NonNullable<ManagerDashboardResponse["currentLifecycle"]>;
 
-function formatEventDate(value?: string | null) {
+function formatEventDate(value?: string | Date | null) {
   if (!value) return "Date not set";
   return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function formatEventRange(startsAt?: string | null, endsAt?: string | null) {
+function formatEventRange(startsAt?: string | Date | null, endsAt?: string | Date | null) {
   if (!startsAt) return "Date not set";
   if (!endsAt || endsAt === startsAt) return formatEventDate(startsAt);
   return `${formatEventDate(startsAt)} → ${formatEventDate(endsAt)}`;

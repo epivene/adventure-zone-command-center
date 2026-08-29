@@ -1,6 +1,7 @@
 import type { ManagerMapBookingRecord } from "@/features/leg-manager/manager-map-booking-repository";
 import type { TripSegmentRecord, TripStopRecord } from "@/features/trips/trip-repository";
 import type { EquipmentHandoff, HandoffRepository, HandoffStatus, MeetupParticipant } from "@/features/routes/handoff-repository";
+import type { ManagerScheduleState as SharedManagerScheduleState } from "@workspace/api-zod";
 
 export type ManagerMapTrip = {
   id: string;
@@ -32,7 +33,7 @@ export interface ManagerMapHandoffRepository {
   listForLeg(legId: string, options?: { approvedOnly?: boolean }): Promise<EquipmentHandoff[]>;
 }
 
-export type ManagerScheduleState = "booked" | "potential" | "excluded";
+export type ManagerScheduleState = SharedManagerScheduleState;
 
 export type ManagerScheduleEvent = {
   bookingId: string;
@@ -200,6 +201,24 @@ function eventFromBooking(booking: ManagerMapBookingRecord): ManagerScheduleEven
   };
 }
 
+function scheduleTripFromTrip(trip: ManagerMapTrip) {
+  return {
+    id: trip.id,
+    travelLegId: trip.travelLegId,
+    name: trip.name,
+    startDate: trip.startDate,
+    endDate: trip.endDate,
+    startLabel: trip.startLabel,
+    startLatitude: trip.startLatitude,
+    startLongitude: trip.startLongitude,
+    endLabel: trip.endLabel,
+    endLatitude: trip.endLatitude,
+    endLongitude: trip.endLongitude,
+    ...(trip.legName === undefined ? {} : { legName: trip.legName }),
+    ...(trip.legColor === undefined ? {} : { legColor: trip.legColor }),
+  };
+}
+
 export async function loadManagerScopedScheduleData(
   dependencies: {
     tripRepository: ManagerScheduleTripRepository;
@@ -289,7 +308,7 @@ export async function loadManagerScopedScheduleData(
       name: firstTrip?.legName ?? firstAssignedBooking?.legName ?? "Your leg",
       color: firstTrip?.legColor ?? firstAssignedBooking?.legColor ?? null,
     },
-    trips: allTrips,
+    trips: allTrips.map(scheduleTripFromTrip),
     route,
     events,
   };

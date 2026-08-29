@@ -1,6 +1,7 @@
 export type ManagerMeetupParticipant =
   | { kind: "leg"; legId: string; legName: string }
   | { kind: "external_contact"; externalContactId: string | null; displayName: string; phone: string | null; email: string | null };
+import type { ManagerScheduleState } from "@workspace/api-zod";
 
 export type ManagerScopedMapData = {
   leg: { id: string; name: string; color: string | null };
@@ -28,7 +29,7 @@ export type ManagerScopedMapData = {
       endsAt: Date | null;
       status: string;
       probability: string | null;
-      scheduleState: "booked" | "potential" | "excluded";
+      scheduleState: ManagerScheduleState;
     }>;
     segments: Array<{ id: string; fromLabel: string; toLabel: string; effectiveMiles: number | null; effectiveMinutes: number | null }>;
   };
@@ -43,7 +44,7 @@ export type ManagerScopedMapData = {
     endsAt: Date | null;
     status: string;
     probability: string | null;
-    scheduleState: "booked" | "potential" | "excluded";
+    scheduleState: ManagerScheduleState;
   }>;
   meetups: Array<{
     id: string;

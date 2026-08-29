@@ -8,6 +8,7 @@ import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-ma
 import { HandoffRepository } from "@/features/routes/handoff-repository";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
 import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
+import { managerScopedMapResponseSchema } from "@workspace/api-zod";
 
 const router: IRouter = Router();
 const requireManager = createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));
@@ -23,7 +24,7 @@ router.get("/manager/map", requireManager, async (req, res) => {
     req.legManager!.legId,
   );
   const events = await resolveManagerMapEventLocations(payload.events, managerMapGeocoder);
-  res.json({ ...payload, events });
+  res.json(managerScopedMapResponseSchema.parse({ ...payload, events }));
 });
 
 export default router;

@@ -19,6 +19,7 @@ import { crewRehireStatuses } from "@/features/leg-manager/crew-types";
 import { createReviewForManager, DrizzleEventReviewRepository, listDueReviewsForManager } from "@/features/leg-manager/event-review-repository";
 import { createIncidentForManager, DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";
 import { attachIncidentPhotoUrls } from "@/features/leg-manager/incident-photo-service";
+import { managerDashboardResponseSchema } from "@workspace/api-zod";
 const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);const crew=new DrizzleCrewRepository(db);const reviews=new DrizzleEventReviewRepository(db);const incidents=new DrizzleIncidentRepository(db);
 async function data(req:any,res:any){
   const result=await loadLegManagerDashboard({
@@ -28,7 +29,7 @@ async function data(req:any,res:any){
     reviewRepository:reviews,
     financeRepository:finance,
   },req.legManager.legId);
-  res.json(result);
+  res.json(managerDashboardResponseSchema.parse(result));
 }
 router.get("/manager/dashboard",requireManager,data);router.get("/manager/route",requireManager,data);
 
