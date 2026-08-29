@@ -81,6 +81,7 @@ export type UpdateBookingStatusInput = {
 export type BookingListRecord = {
   id: string;
   name: string;
+  organization: { id: string; name: string } | null;
   city: string;
   region: string;
   startsAt: Date | null;
@@ -359,8 +360,9 @@ export class DrizzleBookingRepository implements BookingRepository {
   async listBookings(): Promise<BookingListRecord[]> {
     const [records, openFollowUps] = await Promise.all([
       this.database
-        .select({ booking: bookings, travelLeg: travelLegs })
+        .select({ booking: bookings, organization: organizations, travelLeg: travelLegs })
         .from(bookings)
+        .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
         .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
         .orderBy(desc(bookings.updatedAt)),
       this.database
@@ -385,9 +387,12 @@ export class DrizzleBookingRepository implements BookingRepository {
       }
     }
 
-    return records.map(({ booking, travelLeg }) => ({
+    return records.map(({ booking, organization, travelLeg }) => ({
       id: booking.id,
       name: booking.name,
+      organization: organization
+        ? { id: organization.id, name: organization.name }
+        : null,
       city: booking.city,
       region: booking.region,
       startsAt: booking.startsAt,

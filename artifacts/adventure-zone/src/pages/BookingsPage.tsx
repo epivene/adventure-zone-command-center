@@ -4,7 +4,6 @@ import { apiGet } from "@/lib/auth-token";
 import { BookingList } from "@/components/bookings/booking-list";
 import type { BookingListItem } from "@/components/bookings/booking-list";
 import { bookingStatusValues, type BookingStatus } from "@/features/bookings/booking-types";
-import { dedupeBookingList } from "@/features/bookings/booking-list-dedupe";
 
 export default function BookingsPage() {
   const search = useSearch();
@@ -29,7 +28,7 @@ export default function BookingsPage() {
             ? { ...b.nextAction, dueAt: new Date(b.nextAction.dueAt) }
             : null,
         }));
-        setBookings(dedupeBookingList(parsed));
+        setBookings(parsed);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });

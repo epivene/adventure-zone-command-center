@@ -67,6 +67,7 @@ export type UpdateBookingStatusInput = {
 export type BookingListRecord = {
   id: string;
   name: string;
+  organization: { id: string; name: string } | null;
   city: string;
   region: string;
   startsAt: Date | null;

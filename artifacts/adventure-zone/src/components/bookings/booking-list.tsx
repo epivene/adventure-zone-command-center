@@ -19,6 +19,7 @@ import {
   businessDateKey,
   classifyBusinessDueDate,
 } from "@/lib/business-date";
+import { groupBookingsByProfile } from "@/features/bookings/booking-list-grouping";
 
 export type BookingListItem = BookingListRecord;
 
@@ -90,6 +91,7 @@ export function BookingList({
     }
     return true;
   });
+  const groupedBookings = groupBookingsByProfile(filteredBookings);
 
   function resetFilters() {
     setStatus("");
@@ -189,82 +191,94 @@ export function BookingList({
       </section>
 
       <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {filteredBookings.length} of {visibleBase.length} {showPast ? "bookings" : "current/upcoming bookings"}
+        Showing {groupedBookings.length} event {groupedBookings.length === 1 ? "profile" : "profiles"} with{" "}
+        {filteredBookings.length} of {visibleBase.length} {showPast ? "booking records" : "current/upcoming booking records"}
       </p>
 
       {filteredBookings.length ? (
         <ul className="grid gap-3">
-          {filteredBookings.map((booking) => {
-            const isOverdue =
-              booking.nextAction !== null &&
-              classifyBusinessDueDate(booking.nextAction.dueAt, now) ===
-                "overdue";
-            const displayEnd = normalizedBookingEnd(booking.endsAt);
-            return (
-              <li
-                className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                key={booking.id}
-              >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        className="text-lg font-bold text-slate-950 hover:text-orange-700"
-                        href={`/bookings/${booking.id}`}
-                      >
-                        {booking.name}
-                      </Link>
-                      <StatusBadge status={booking.status} />
-                      {isOverdue ? (
-                        <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">
-                          Overdue
-                        </span>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-sm text-slate-600">
-                      <span>
-                        {booking.city}, {booking.region}
-                      </span>
-                      {booking.travelLeg ? (
-                        <>
-                          {" · "}
-                          <span
-                            className="inline-block size-2 rounded-full"
-                            style={{ backgroundColor: booking.travelLeg.color }}
-                          />{" "}
-                          {booking.travelLeg.name}
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
-
-                  <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:min-w-[34rem]">
-                    <div>
-                      <dt className="font-semibold text-slate-500">Dates</dt>
-                      <dd>
-                        {booking.startsAt ? formatShortDate(booking.startsAt) : "Not set"}
-                        {displayEnd ? `–${formatShortDate(displayEnd)}` : ""}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="font-semibold text-slate-500">Probability</dt>
-                      <dd>{formatLabel(booking.probability)}</dd>
-                    </div>
-                    <div className="col-span-2 sm:col-span-1">
-                      <dt className="font-semibold text-slate-500">Next action</dt>
-                      <dd className={isOverdue ? "font-semibold text-rose-700" : ""}>
-                        {booking.nextAction
-                          ? `${formatLabel(booking.nextAction.kind)} · ${formatShortDate(
-                              booking.nextAction.dueAt,
-                            )}`
-                          : "Needs follow-up plan"}
-                      </dd>
-                    </div>
-                  </dl>
+          {groupedBookings.map((group) => (
+            <li className="overflow-hidden rounded-xl border border-border bg-card shadow-sm" key={group.key}>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-muted/40 px-4 py-3">
+                <div className="min-w-0">
+                  {group.profile ? (
+                    <Link className="text-lg font-bold text-card-foreground hover:text-primary" href={`/profiles/${group.profile.id}`}>
+                      {group.profile.name}
+                    </Link>
+                  ) : (
+                    <p className="text-lg font-bold text-card-foreground">{group.bookings[0]?.name}</p>
+                  )}
+                  <p className="text-sm text-muted-foreground">
+                    {group.bookings.length} booking {group.bookings.length === 1 ? "record" : "records"} under this profile
+                  </p>
                 </div>
-              </li>
-            );
-          })}
+                {group.profile ? (
+                  <Link className="button-secondary text-center" href={`/profiles/${group.profile.id}`}>
+                    Open event profile
+                  </Link>
+                ) : null}
+              </div>
+              <ul className="divide-y divide-border">
+                {group.bookings.map((booking) => {
+                  const isOverdue =
+                    booking.nextAction !== null &&
+                    classifyBusinessDueDate(booking.nextAction.dueAt, now) === "overdue";
+                  const displayEnd = normalizedBookingEnd(booking.endsAt);
+                  return (
+                    <li className="p-4" key={booking.id}>
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link className="font-bold text-card-foreground hover:text-primary" href={`/bookings/${booking.id}`}>
+                              {booking.name}
+                            </Link>
+                            <StatusBadge status={booking.status} />
+                            {isOverdue ? (
+                              <span className="rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-bold text-destructive">
+                                Overdue
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            <span>{booking.city}, {booking.region}</span>
+                            {booking.travelLeg ? (
+                              <>
+                                {" · "}
+                                <span className="inline-block size-2 rounded-full" style={{ backgroundColor: booking.travelLeg.color }} />{" "}
+                                {booking.travelLeg.name}
+                              </>
+                            ) : null}
+                          </p>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3 lg:min-w-[34rem]">
+                          <div>
+                            <dt className="font-semibold text-muted-foreground">Dates</dt>
+                            <dd>
+                              {booking.startsAt ? formatShortDate(booking.startsAt) : "Not set"}
+                              {displayEnd ? `–${formatShortDate(displayEnd)}` : ""}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="font-semibold text-muted-foreground">Probability</dt>
+                            <dd>{formatLabel(booking.probability)}</dd>
+                          </div>
+                          <div className="col-span-2 sm:col-span-1">
+                            <dt className="font-semibold text-muted-foreground">Next action</dt>
+                            <dd className={isOverdue ? "font-semibold text-destructive" : ""}>
+                              {booking.nextAction
+                                ? `${formatLabel(booking.nextAction.kind)} · ${formatShortDate(booking.nextAction.dueAt)}`
+                                : "Needs follow-up plan"}
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
         </ul>
       ) : (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
