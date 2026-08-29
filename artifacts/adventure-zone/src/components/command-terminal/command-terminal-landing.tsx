@@ -1,41 +1,29 @@
-import { BriefcaseBusiness, Check, MapPinned, Shield } from "lucide-react";
+import { BriefcaseBusiness, MapPinned, Shield } from "lucide-react";
 import { Link } from "wouter";
 
-import { Card } from "@workspace/avz-crm/components/ui/card";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 
-type WorkspaceId = "office" | "manager";
-
 const workspaces: Array<{
-  id: WorkspaceId;
   label: string;
   detail: string;
   href: string;
   icon: typeof BriefcaseBusiness;
-  tasks: string[];
 }> = [
   {
-    id: "office",
     label: "Office Coordinator",
     detail: "Bookings, contacts, routes, and calls",
     href: "/office/sign-in",
     icon: BriefcaseBusiness,
-    tasks: ["Confirm Summit Week details", "Call Maya Chen", "Review two route changes"],
   },
   {
-    id: "manager",
     label: "Leg Managers",
     detail: "Field-ready operations and trip planning",
     href: "/manager/sign-in",
     icon: MapPinned,
-    tasks: ["Check in for Summit Week", "Review crew assignments", "Capture event notes"],
   },
 ];
 
 export function CommandTerminalLanding() {
-  const activeWorkspace = workspaces[0];
-  const ActiveIcon = activeWorkspace.icon;
-
   return (
     <main className="command-terminal-landing">
       <style>{`
@@ -169,7 +157,7 @@ export function CommandTerminalLanding() {
           align-items: center;
           display: grid;
           gap: .7rem;
-          grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+          grid-template-columns: 2.25rem minmax(0, 1fr);
           justify-content: start;
           min-height: 4.25rem;
           padding: .7rem;
@@ -202,53 +190,6 @@ export function CommandTerminalLanding() {
         .ctl-role-link[data-active="false"] .ctl-role-detail { color: hsl(var(--muted-foreground)); }
         .ctl-role-count { color: hsl(var(--primary-foreground)); font-size: .6rem; font-weight: 800; }
         .ctl-role-link[data-active="false"] .ctl-role-count { color: hsl(var(--primary)); }
-        .ctl-detail-card { margin-top: .75rem; padding: .9rem; }
-        .ctl-detail-intro {
-          align-items: start;
-          display: flex;
-          gap: .65rem;
-        }
-        .ctl-detail-icon {
-          align-items: center;
-          background: hsl(var(--secondary));
-          border-radius: .55rem;
-          color: hsl(var(--primary));
-          display: flex;
-          flex: 0 0 auto;
-          height: 2rem;
-          justify-content: center;
-          width: 2rem;
-        }
-        .ctl-detail-title {
-          color: hsl(var(--foreground));
-          font-size: .82rem;
-          font-weight: 800;
-          margin-top: .38rem;
-        }
-        .ctl-queue {
-          border-top: 1px solid hsl(var(--border));
-          display: grid;
-          gap: .4rem;
-          margin-top: .8rem;
-          padding-top: .7rem;
-        }
-        .ctl-queue-item {
-          align-items: center;
-          color: hsl(var(--muted-foreground));
-          display: flex;
-          font-size: .64rem;
-          gap: .45rem;
-          line-height: 1.25;
-        }
-        .ctl-queue-item svg { color: hsl(var(--primary)); flex: 0 0 auto; }
-        .ctl-actions {
-          border-top: 1px solid hsl(var(--border));
-          display: grid;
-          gap: .5rem;
-          margin-top: .8rem;
-          padding-top: .8rem;
-        }
-        .ctl-actions a, .ctl-actions button { width: 100%; }
         @media (max-width: 22rem) {
           .ctl-shell { width: min(100% - 1rem, 30rem); }
           .ctl-ready { display: none; }
@@ -289,10 +230,9 @@ export function CommandTerminalLanding() {
           </div>
 
           <div aria-label="Workspace selection" className="ctl-role-list">
-            {workspaces.map(({ id, label, detail, href, icon: Icon }) => {
-              const active = id === activeWorkspace.id;
+            {workspaces.map(({ label, detail, href, icon: Icon }) => {
               return (
-                <Button asChild className="ctl-role-link" data-active={active} key={id} variant={active ? "default" : "outline"}>
+                <Button asChild className="ctl-role-link" data-active={label === "Office Coordinator"} key={label} variant={label === "Office Coordinator" ? "default" : "outline"}>
                   <Link href={href}>
                     <span className="ctl-role-icon"><Icon aria-hidden="true" size={18} strokeWidth={1.8} /></span>
                     <span className="ctl-role-copy">
@@ -304,26 +244,6 @@ export function CommandTerminalLanding() {
               );
             })}
           </div>
-
-          <Card className="ctl-detail-card">
-            <div className="ctl-detail-intro">
-              <span className="ctl-detail-icon"><ActiveIcon aria-hidden="true" size={16} strokeWidth={1.8} /></span>
-              <div>
-                <div className="ctl-eyebrow ctl-mono">Office workspace</div>
-                <h3 className="ctl-detail-title">Today’s focus</h3>
-              </div>
-            </div>
-            <div aria-label={`${activeWorkspace.label} ready items`} className="ctl-queue">
-              {activeWorkspace.tasks.map((task) => (
-                <div className="ctl-queue-item" key={task}><Check aria-hidden="true" size={13} strokeWidth={2.3} />{task}</div>
-              ))}
-            </div>
-            <div className="ctl-actions">
-              <Button asChild>
-                <Link href={activeWorkspace.href}>Continue to Office <span aria-hidden="true">→</span></Link>
-              </Button>
-            </div>
-          </Card>
         </section>
       </div>
     </main>

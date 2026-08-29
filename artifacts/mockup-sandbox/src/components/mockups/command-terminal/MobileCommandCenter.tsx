@@ -1,57 +1,28 @@
 import "@workspace/avz-crm/styles.css";
-import { useState } from "react";
-import {
-  ArrowRight,
-  BriefcaseBusiness,
-  Check,
-  MapPinned,
-  Shield,
-  Sparkles,
-} from "lucide-react";
+import { BriefcaseBusiness, MapPinned, Shield } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import { Card } from "@workspace/avz-crm/components/ui/card";
-
-type WorkspaceId = "office" | "manager";
 
 const workspaces: Array<{
-  id: WorkspaceId;
   label: string;
-  shortLabel: string;
   detail: string;
   icon: typeof BriefcaseBusiness;
-  queue: string[];
+  href: string;
 }> = [
   {
-    id: "office",
     label: "Office Coordinator",
-    shortLabel: "Office",
     detail: "Bookings, contacts, routes, and calls",
     icon: BriefcaseBusiness,
-    queue: ["Confirm Summit Week details", "Call Maya Chen", "Review two route changes"],
+    href: "/office/sign-in",
   },
   {
-    id: "manager",
     label: "Leg Managers",
-    shortLabel: "Field",
     detail: "Field-ready operations and trip planning",
     icon: MapPinned,
-    queue: ["Check in for Summit Week", "Review crew assignments", "Capture event notes"],
+    href: "/manager/sign-in",
   },
 ];
 
 export function MobileCommandCenter() {
-  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceId>("office");
-  const [actionMessage, setActionMessage] = useState("");
-
-  const activeWorkspace =
-    workspaces.find((workspace) => workspace.id === selectedWorkspace) ?? workspaces[0];
-  const ActiveIcon = activeWorkspace.icon;
-
-  const chooseWorkspace = (id: WorkspaceId) => {
-    setSelectedWorkspace(id);
-    setActionMessage("");
-  };
-
   return (
     <main className="mobile-command">
       <style>{`
@@ -157,13 +128,6 @@ export function MobileCommandCenter() {
           margin: .55rem 0 0;
           max-width: 14ch;
         }
-        .mc-hero-copy {
-          color: hsl(var(--muted-foreground));
-          font-size: .76rem;
-          line-height: 1.5;
-          margin: .65rem 0 0;
-          max-width: 28rem;
-        }
         .mc-workspace {
           margin-top: 1.5rem;
         }
@@ -194,7 +158,7 @@ export function MobileCommandCenter() {
           align-items: center;
           display: grid;
           gap: .7rem;
-          grid-template-columns: 2.25rem minmax(0, 1fr) auto;
+          grid-template-columns: 2.25rem minmax(0, 1fr);
           justify-content: start;
           min-height: 4.25rem;
           padding: .7rem;
@@ -230,80 +194,6 @@ export function MobileCommandCenter() {
         }
         .mc-role-button[data-active="true"] .mc-role-detail {
           color: hsl(var(--primary-foreground) / .75);
-        }
-        .mc-detail-card {
-          margin-top: .75rem;
-          padding: .9rem;
-        }
-        .mc-detail-intro {
-          align-items: start;
-          display: flex;
-          gap: .65rem;
-        }
-        .mc-detail-icon {
-          align-items: center;
-          background: hsl(var(--secondary));
-          border-radius: .55rem;
-          color: hsl(var(--primary));
-          display: flex;
-          flex: 0 0 auto;
-          height: 2rem;
-          justify-content: center;
-          width: 2rem;
-        }
-        .mc-detail-copy-wrap { min-width: 0; }
-        .mc-detail-title {
-          color: hsl(var(--foreground));
-          font-size: .82rem;
-          font-weight: 800;
-          margin-top: .38rem;
-        }
-        .mc-detail-copy {
-          color: hsl(var(--muted-foreground));
-          font-size: .64rem;
-          line-height: 1.4;
-          margin-top: .2rem;
-        }
-        .mc-queue {
-          border-top: 1px solid hsl(var(--border));
-          display: grid;
-          gap: .4rem;
-          margin-top: .8rem;
-          padding-top: .7rem;
-        }
-        .mc-queue-item {
-          align-items: center;
-          color: hsl(var(--muted-foreground));
-          display: flex;
-          font-size: .64rem;
-          gap: .45rem;
-          line-height: 1.25;
-        }
-        .mc-queue-item svg {
-          color: hsl(var(--primary));
-          flex: 0 0 auto;
-        }
-        .mc-actions {
-          border-top: 1px solid hsl(var(--border));
-          display: grid;
-          gap: .5rem;
-          margin-top: .8rem;
-          padding-top: .8rem;
-        }
-        .mc-actions button { width: 100%; }
-        .mc-action-message {
-          align-items: flex-start;
-          background: hsl(var(--secondary));
-          border: 1px solid hsl(var(--border));
-          border-radius: .6rem;
-          color: hsl(var(--secondary-foreground));
-          display: flex;
-          font-size: .64rem;
-          font-weight: 700;
-          gap: .4rem;
-          line-height: 1.35;
-          margin-top: .6rem;
-          padding: .62rem .7rem;
         }
         .mc-footer {
           align-items: center;
