@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { getMapEvents, type MapFilters } from "@/features/routes/map-query";
 import { applyOperationalWindowsToCalendarBookings } from "@/features/google-workspace/calendar/calendar-operational-window-projection";
+import { DrizzleScheduleDisplaySettingsRepository } from "@/features/calendar/schedule-display-settings";
 
 const router: IRouter = Router();
 
@@ -194,6 +195,17 @@ async function getOperationalWindowsForCalendar(bookingIds: string[]) {
     row.endsAt instanceof Date,
   );
 }
+
+router.get("/calendar/display-settings", async (req, res): Promise<void> => {
+  try {
+    const { db } = await import("@/db/client");
+    const settings = await new DrizzleScheduleDisplaySettingsRepository(db).get();
+    res.json(settings);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load schedule display settings");
+    res.status(500).json({ error: "Failed to load schedule display settings" });
+  }
+});
 
 router.get("/calendar/debug", async (req, res): Promise<void> => {
   try {
