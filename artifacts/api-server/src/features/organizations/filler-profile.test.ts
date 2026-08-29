@@ -8,7 +8,7 @@ function readSource(relativePath: string) {
   return readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
 }
 
-const routeSource = readSource("artifacts/api-server/src/routes/organizations.ts");
+const routeSource = readSource("artifacts/api-server/src/routes/organization-filler.ts");
 const migrationSource = readSource("lib/db/migrations/20260829_profile_filler.sql");
 const directorySource = readSource("artifacts/api-server/src/features/organizations/organization-directory-page.ts");
 
