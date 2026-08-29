@@ -22,4 +22,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Profile inline editor tests
-        run: pnpm exec vitest run artifacts/adventure-zone/src/components/profiles/profile-inline-editor.test.tsx artifacts/adventure-zone/src/components/profiles/profile-inline-editor.empty-contact.test.tsx
+        working-directory: artifacts/adventure-zone
+        run: pnpm exec vitest run --config vite.config.ts src/components/profiles/profile-inline-editor.test.tsx src/components/profiles/profile-inline-editor.empty-contact.test.tsx
