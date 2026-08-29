@@ -391,6 +391,17 @@ export function ModernCRM() {
                     Visit website
                   </a>
                 </div>
+                <div className="mt-4 border-t border-[#e3ebe5] pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p>
+                    <button aria-label="Configure visible details" className="rounded-lg p-1.5 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-3.5 w-3.5" /></button>
+                  </div>
+                  <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
+                    <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-0.5 leading-5 text-[#4d666d]">1420 Mountain View Drive, Estes Park, CO 80517</dd></div>
+                    <div><dt className="font-semibold text-[#829696]">Organization group</dt><dd className="mt-0.5 text-[#4d666d]">Colorado Mountain Partners</dd></div>
+                    <div><dt className="font-semibold text-[#829696]">Relationship started</dt><dd className="mt-0.5 text-[#4d666d]">September 2022</dd></div>
+                  </dl>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -550,16 +561,6 @@ export function ModernCRM() {
             <div className="mt-5 flex items-center gap-2 rounded-lg bg-[#f1f5f1] px-3 py-3 text-sm text-[#71848a]"><MessageCircle className="h-4 w-4 text-[#4b8575]" />8 conversations with {organizationName} synced from outreach.</div>
           </section>
         ) : null}
-
-        <section className="mt-5 rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
-          <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p><h2 className="mt-1 text-xl font-bold text-[#173b48]">Details</h2></div><button aria-label="Configure visible details" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-4 w-4" /></button></div>
-          <dl className="mt-5 grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
-            <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-1 leading-6 text-[#4d666d]" data-testid="text-address">1420 Mountain View Drive<br />Estes Park, CO 80517</dd></div>
-             <div><dt className="font-semibold text-[#829696]">Website</dt><dd className="mt-1"><a className="inline-flex items-center gap-1.5 font-semibold text-[#397064] hover:text-[#244f47]" data-testid="link-website" href={organizationWebsite} rel="noreferrer noopener" target="_blank">pineridgeadventure.com <ExternalLink className="h-3.5 w-3.5" /></a></dd></div>
-            <div><dt className="font-semibold text-[#829696]">Organization group</dt><dd className="mt-1 text-[#4d666d]" data-testid="text-organization-group">Colorado Mountain Partners</dd></div>
-            <div><dt className="font-semibold text-[#829696]">Relationship started</dt><dd className="mt-1 text-[#4d666d]" data-testid="text-relationship-started">September 2022</dd></div>
-          </dl>
-        </section>
 
         {followUpOpen ? null : <button className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#397064]" data-testid="button-restore-follow-up" onClick={() => setFollowUpOpen(true)} type="button"><Bell className="h-4 w-4" />Restore open follow-up</button>}
       </div>
