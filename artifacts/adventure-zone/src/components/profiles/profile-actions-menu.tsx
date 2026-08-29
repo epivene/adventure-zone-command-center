@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal } from "lucide-react";
 import { ManualEventFamilyDialog } from "@/components/event-families/manual-event-family-dialog";
 import {
   ProfileLastResortDialog,
@@ -20,11 +20,13 @@ export function ProfileActionsMenu({
   contactId,
   onAddNote,
   showAddNote = true,
+  triggerLabel = "Actions",
 }: {
   profileId: string;
   contactId?: string | null;
   onAddNote?: () => void;
   showAddNote?: boolean;
+  triggerLabel?: string;
 }) {
   const [lastResortOpen, setLastResortOpen] = useState(false);
   const [eventFamilyOpen, setEventFamilyOpen] = useState(false);
@@ -40,7 +42,7 @@ export function ProfileActionsMenu({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="button-secondary inline-flex items-center gap-2" type="button">
-            <MoreHorizontal className="h-4 w-4" /> Actions
+            {triggerLabel === "More" ? <ChevronDown className="h-4 w-4" /> : <MoreHorizontal className="h-4 w-4" />} {triggerLabel}
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">

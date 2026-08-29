@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
+  ArrowLeft,
   ArrowUpRight,
+  Bell,
   Building2,
   Camera,
   CalendarDays,
   Check,
+  ChevronDown,
   Clock3,
   ExternalLink,
   Globe2,
@@ -15,7 +18,9 @@ import {
   Phone,
   Plus,
   Search,
+  Sparkles,
   StickyNote,
+  X,
   UsersRound,
 } from "lucide-react";
 
@@ -118,6 +123,7 @@ export function SimpleFullProfile({
   onProfileSaved,
   ratingSummary,
   onAskAssistant,
+  onBack,
   profileImageDataUrl,
   onProfileImageChange,
   editing,
@@ -127,6 +133,7 @@ export function SimpleFullProfile({
   onProfileSaved?: () => Promise<void> | void;
   ratingSummary?: { average: number | null; count: number };
   onAskAssistant?: () => void;
+  onBack?: () => void;
   profileImageDataUrl?: string | null;
   onProfileImageChange?: (dataUrl: string | null) => Promise<void>;
   editing?: boolean;
@@ -143,6 +150,8 @@ export function SimpleFullProfile({
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
   const [emailCount, setEmailCount] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const isEditing = editing ?? internalEditing;
 
   useEffect(() => {
@@ -363,9 +372,104 @@ export function SimpleFullProfile({
 
   return (
     <div className="profile-modern grid gap-5">
+      <header className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#173b48] text-sm font-bold tracking-tight text-[#f8f5ee]">
+            AZ
+          </div>
+          <div>
+            <p className="font-bold tracking-tight text-[#173b48]">Adventure Zone</p>
+            <p className="text-xs text-[#71848a]">Relationships / Organizations</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <button
+              aria-expanded={notificationsOpen}
+              aria-label="Open notifications"
+              className={`relative flex h-10 w-10 items-center justify-center rounded-lg border bg-[#fbfcf8] text-[#5d747b] transition hover:border-[#a7beb3] hover:text-[#173b48] ${notificationsOpen ? "border-[#9ab6a9] bg-[#edf4ef]" : "border-[#d8e2dd]"}`}
+              onClick={() => {
+                setNotificationsOpen((current) => !current);
+                setPrimaryContactOpen(false);
+              }}
+              type="button"
+            >
+              <Bell className="h-4 w-4" />
+              {nextFollowUp ? <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d47e4d]" /> : null}
+            </button>
+            {notificationsOpen ? (
+              <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" role="dialog" aria-label="Notifications">
+                <div className="flex items-start justify-between gap-4 border-b border-[#e4ebe5] px-4 py-3">
+                  <div>
+                    <p className="text-sm font-bold text-[#173b48]">Notifications</p>
+                    <p className="mt-0.5 text-xs text-[#839596]">{nextFollowUp ? "One item needs your attention" : "You are all caught up"}</p>
+                  </div>
+                  <button aria-label="Close notifications" className="rounded-md p-1 text-[#829696] hover:bg-[#edf4ef]" onClick={() => setNotificationsOpen(false)} type="button">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                {nextFollowUp ? (
+                  <div className="flex items-start gap-3 px-4 py-4">
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#faecd9] text-[#a66845]"><Bell className="h-4 w-4" /></span>
+                    <div>
+                      <p className="text-sm font-bold text-[#315b66]">Follow-up due {followUpOverdue ? "now" : "soon"}</p>
+                      <p className="mt-1 text-sm leading-5 text-[#71848a]">Review the next action for {profile.place.name}.</p>
+                      <button className="mt-3 text-xs font-bold text-[#397064]" onClick={() => { setNotificationsOpen(false); setOpenSection(null); }} type="button">Review follow-up <ArrowUpRight className="inline h-3.5 w-3.5" /></button>
+                    </div>
+                  </div>
+                ) : <p className="px-4 py-4 text-sm text-[#71848a]">No open follow-ups.</p>}
+              </div>
+            ) : null}
+          </div>
+          {primaryContact ? (
+            <div className="relative">
+              <button
+                aria-expanded={primaryContactOpen}
+                aria-label={`Open primary contact ${primaryContact.name}`}
+                className={`inline-flex h-10 items-center gap-2 rounded-lg border bg-[#fbfcf8] px-2.5 text-sm transition hover:border-[#a7beb3] sm:px-3 ${primaryContactOpen ? "border-[#9ab6a9] bg-[#edf4ef]" : "border-[#d8e2dd]"}`}
+                onClick={() => {
+                  setPrimaryContactOpen((current) => !current);
+                  setNotificationsOpen(false);
+                }}
+                type="button"
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-[10px] font-bold text-[#397064]">{initials(primaryContact.name)}</span>
+                <span className="hidden font-semibold text-[#526970] sm:inline">{primaryContact.name}</span>
+                <ChevronDown className={`h-3.5 w-3.5 text-[#8ca0a2] transition-transform ${primaryContactOpen ? "rotate-180" : ""}`} />
+              </button>
+              {primaryContactOpen ? (
+                <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" role="dialog" aria-label={`Primary contact ${primaryContact.name}`}>
+                  <div className="flex items-start gap-3 border-b border-[#e4ebe5] px-4 py-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{initials(primaryContact.name)}</span>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#75908b]">Primary contact</p>
+                      <p className="mt-1 font-bold text-[#173b48]">{primaryContact.name}</p>
+                      <p className="mt-0.5 text-sm text-[#71848a]">{primaryContact.role || "Contact"}</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 px-4 py-3">
+                    {primaryContact.phone ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`tel:${primaryContact.phone}`}><Phone className="h-4 w-4 text-[#397064]" />{formatPhoneDisplay(primaryContact.phone)}</a> : null}
+                    {primaryContact.email ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`mailto:${primaryContact.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primaryContact.email}</a> : null}
+                  </div>
+                  <div className="border-t border-[#e4ebe5] px-4 py-3">
+                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" href={`/contacts/${primaryContact.id}`}>
+                      Open contact profile <ArrowUpRight className="h-4 w-4" />
+                    </Link>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      </header>
+
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2 text-xs font-semibold text-[#789096]">
-          <Link href="/profiles" className="hover:text-[#315b66]">Organizations</Link>
+          {onBack ? (
+            <button className="inline-flex items-center gap-1.5 text-[#60747a] hover:text-[#173b48]" onClick={onBack} type="button">
+              <ArrowLeft className="h-3.5 w-3.5" /> Organizations
+            </button>
+          ) : <Link href="/profiles" className="hover:text-[#315b66]">Organizations</Link>}
           <span className="text-[#a8b5b4]">/</span>
           <span className="text-[#315b66]">{profile.place.name}</span>
         </div>
@@ -375,13 +479,14 @@ export function SimpleFullProfile({
             onClick={onAskAssistant}
             type="button"
           >
-            <MessageCircle className="h-4 w-4 text-[#bf7048]" />
+            <Sparkles className="h-4 w-4 text-[#bf7048]" />
             Ask Assistant
           </button>
           <ProfileActionsMenu
             profileId={profile.id}
             contactId={primaryContact?.id ?? null}
             onAddNote={openNoteComposer}
+            triggerLabel="More"
           />
         </div>
       </div>
