@@ -64,6 +64,7 @@ export type ManagerScopedScheduleData = {
 
 export type ManagerScopedMapData = {
   leg: { id: string; name: string; color: string | null };
+  trips: ManagerMapTrip[];
   route: null | {
     trip: {
       id: string;
@@ -343,6 +344,7 @@ export async function loadManagerScopedMapData(
 
   return {
     leg: schedule.leg,
+    trips: schedule.trips,
     route: schedule.route,
     events: schedule.events,
     meetups,
