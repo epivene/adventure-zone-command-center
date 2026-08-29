@@ -794,7 +794,7 @@ export function SimpleFullProfile({
                         Email
                       </a>
                     ) : null}
-                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#397064]" href={`/contacts/${contact.id}`}>
+                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80" href={`/contacts/${contact.id}`}>
                       Details
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
