@@ -14,6 +14,10 @@ import {
   DrizzleCallScriptSettingsRepository,
   callScriptOverrideInputSchema,
 } from "@/features/calls/call-script-settings";
+import {
+  DrizzleScheduleDisplaySettingsRepository,
+  scheduleDisplaySettingsInputSchema,
+} from "@/features/calendar/schedule-display-settings";
 import businessSourcesRouter from "./business-sources";
 import communicationTemplatesRouter from "./communication-templates";
 import commercialOffersRouter from "./commercial-offers";
@@ -25,6 +29,32 @@ router.use(businessSourcesRouter);
 router.use(communicationTemplatesRouter);
 router.use(commercialOffersRouter);
 router.use(resourceSourceCandidatesRouter);
+
+router.get("/settings/schedule-display", async (req, res): Promise<void> => {
+  try {
+    const settings = await new DrizzleScheduleDisplaySettingsRepository(db).get();
+    res.json(settings);
+  } catch (err) {
+    req.log.error({ err }, "Failed to load schedule display settings");
+    res.status(500).json({ error: "Failed to load schedule display settings" });
+  }
+});
+
+router.put("/settings/schedule-display", async (req, res): Promise<void> => {
+  const parsed = scheduleDisplaySettingsInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Choose valid calendar colors." });
+    return;
+  }
+  try {
+    const actorId = String((req as any).userId ?? "owner");
+    const settings = await new DrizzleScheduleDisplaySettingsRepository(db).save(parsed.data, actorId);
+    res.json({ ok: true, settings });
+  } catch (err) {
+    req.log.error({ err }, "Failed to save schedule display settings");
+    res.status(500).json({ ok: false, error: "Could not save schedule display settings" });
+  }
+});
 
 router.get("/settings/packages-resources", async (req, res): Promise<void> => {
   try {
