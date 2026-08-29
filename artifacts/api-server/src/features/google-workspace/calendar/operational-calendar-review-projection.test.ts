@@ -28,7 +28,7 @@ describe("projectOperationalCalendarReview", () => {
 
     expect(event).toMatchObject({
       source: "google_operational_review",
-      id: "google-review:review-1",
+      id: "?googleReview=review-1",
       googleEventId: "google-1",
       name: "Eastern Montana Fair · Needs profile match",
       city: "Miles City",
