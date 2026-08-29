@@ -20,7 +20,6 @@ import {
   Search,
   Send,
   ShieldCheck,
-  SlidersHorizontal,
   Sparkles,
   Star,
   StickyNote,
@@ -477,7 +476,6 @@ export function ModernCRM() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p>
-                <button aria-label="Configure visible details" className="rounded-lg p-1 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-3.5 w-3.5" /></button>
               </div>
               <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
                 <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-0.5 leading-5 text-[#4d666d]">1420 Mountain View Drive, Estes Park, CO 80517</dd></div>
