@@ -70,6 +70,29 @@ export async function ensureProfileTouchSchema(
       END;
       $$;
 
+      CREATE OR REPLACE FUNCTION touch_profile_from_organization_location()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      DECLARE
+        changed_at timestamptz;
+      BEGIN
+        changed_at := COALESCE(
+          CASE WHEN TG_OP = 'DELETE' THEN OLD.updated_at ELSE NEW.updated_at END,
+          clock_timestamp()
+        );
+        IF TG_OP = 'DELETE' THEN
+          PERFORM touch_profile(OLD.organization_id, changed_at);
+          RETURN OLD;
+        END IF;
+        PERFORM touch_profile(NEW.organization_id, changed_at);
+        IF TG_OP = 'UPDATE' AND OLD.organization_id IS DISTINCT FROM NEW.organization_id THEN
+          PERFORM touch_profile(OLD.organization_id, changed_at);
+        END IF;
+        RETURN NEW;
+      END;
+      $$;
+
       CREATE OR REPLACE FUNCTION touch_profile_from_activity()
       RETURNS trigger
       LANGUAGE plpgsql
@@ -231,6 +254,11 @@ export async function ensureProfileTouchSchema(
       CREATE TRIGGER organizations_touch_profile_work
         BEFORE UPDATE ON organizations
         FOR EACH ROW EXECUTE FUNCTION touch_profile_from_organization_edit();
+
+      DROP TRIGGER IF EXISTS organization_locations_touch_profile_work ON organization_locations;
+      CREATE TRIGGER organization_locations_touch_profile_work
+        AFTER INSERT OR UPDATE OR DELETE ON organization_locations
+        FOR EACH ROW EXECUTE FUNCTION touch_profile_from_organization_location();
 
       DROP TRIGGER IF EXISTS activities_touch_profile ON activities;
       CREATE TRIGGER activities_touch_profile
