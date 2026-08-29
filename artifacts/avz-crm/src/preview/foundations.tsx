@@ -200,7 +200,7 @@ export function ColorsPage() {
             items={[
               {
                 kind: 'do',
-                text: 'Use emerald for primary actions and positive relationship states.',
+                text: 'Use raspberry for primary actions and positive relationship states.',
               },
               {
                 kind: 'do',

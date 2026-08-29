@@ -97,8 +97,8 @@ than claiming to port an application-specific component library.
   high-contrast emphasis.
 - Use warm off-white cards and thin cool borders to create a quiet operational
   workspace.
-- Use emerald for primary actions and relationship-positive states; reserve the
-  terracotta accent for ratings, deadlines, and small attention cues.
+- Use raspberry for primary actions and relationship-positive states; reserve
+  the terracotta accent for ratings, deadlines, and small attention cues.
 - Keep the record hierarchy compact: identity first, metadata second, actions at
   the point of context, and one clear home for each repeated data type.
 - Prefer short operational labels and visible next steps over social-profile
