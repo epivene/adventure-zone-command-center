@@ -27,6 +27,14 @@ function isActActivity(event: CalendarEvent) {
   return event.source === "act_activity";
 }
 
+function isGoogleOperationalReview(event: CalendarEvent) {
+  return event.source === "google_operational_review";
+}
+
+type OperationalCalendarStatus = {
+  reviewEvents?: Array<Record<string, unknown>>;
+};
+
 export function CalendarContent({ season, legId, status, embedded = false, onVisibleMonthChange }: ScheduleFilterProps) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,9 +58,13 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   useEffect(() => {
     const { from, to } = buildDateWindow(activeMonth);
     setLoading(true);
-    apiGet<CalendarEvent[]>(`/calendar?from=${from}&to=${to}`)
-      .then((data) => {
-        const parsed = (data ?? []).map((event) => {
+    Promise.all([
+      apiGet<CalendarEvent[]>(`/calendar?from=${from}&to=${to}`),
+      apiGet<OperationalCalendarStatus>("/google-workspace/operational-calendar").catch(() => ({ reviewEvents: [] })),
+    ])
+      .then(([calendarData, operationalStatus]) => {
+        const combined = [...(calendarData ?? []), ...((operationalStatus.reviewEvents ?? []) as unknown as CalendarEvent[])];
+        const parsed = combined.map((event) => {
           const converted = {
             ...event,
             startsAt: event.startsAt ? new Date(event.startsAt) : null,
@@ -70,7 +82,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   }, [activeMonth]);
 
   const scopedEvents = useMemo(() => (events as any[]).filter((event) => {
-    if (legId && event.travelLegId !== legId) return false;
+    if (legId && event.travelLegId !== legId && event.travelLegName !== legId) return false;
     if (status && status !== "all" && String(event.status ?? "").toLowerCase() !== status.toLowerCase()) return false;
     if (season && event.startsAt && new Date(event.startsAt).getFullYear().toString() !== season) return false;
     return true;
@@ -78,18 +90,19 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
 
   const displayEvents = useMemo(() => {
     const activities = scopedEvents.filter((event) => isActActivity(event));
-    const bookings = scopedEvents.filter((event) => !isActActivity(event));
-    return [...dedupeCalendarBookings(bookings as any[]), ...activities] as CalendarEvent[];
+    const reviewEvents = scopedEvents.filter((event) => isGoogleOperationalReview(event));
+    const bookings = scopedEvents.filter((event) => !isActActivity(event) && !isGoogleOperationalReview(event));
+    return [...dedupeCalendarBookings(bookings as any[]), ...reviewEvents, ...activities] as CalendarEvent[];
   }, [scopedEvents]);
 
   const routeConflicts = useMemo(() => findSameLegDateConflicts(
     displayEvents.filter((event) => !isActActivity(event)) as any[],
   ), [displayEvents]);
   const hasExplicitStatusFilter = Boolean(status && status !== "all");
-  const potentialBookingCount = useMemo(() => displayEvents.filter((event) => !isActActivity(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [displayEvents]);
+  const potentialBookingCount = useMemo(() => displayEvents.filter((event) => !isActActivity(event) && !isGoogleOperationalReview(event) && String((event as any).status ?? "").toLowerCase() !== "confirmed").length, [displayEvents]);
   const filteredEvents = useMemo(() => {
     if (hasExplicitStatusFilter || showPotential) return displayEvents;
-    return displayEvents.filter((event) => isActActivity(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
+    return displayEvents.filter((event) => isActActivity(event) || isGoogleOperationalReview(event) || String((event as any).status ?? "").toLowerCase() === "confirmed");
   }, [displayEvents, hasExplicitStatusFilter, showPotential]);
 
   const handleMonthChange = useCallback((month: string) => {
