@@ -6,3 +6,4 @@
 - [Organization consolidation](org-consolidation.md)  retired profiles stamped with consolidated_into_id; contact FK order, trigger constraint, repeat-safe logic, and redirect detection pattern.
 - [Empty database bootstrap](empty-database-bootstrap.md) — bootstrap from one aggregate Drizzle schema; exported composite FKs need unique indexes first and canonical startup object names.
 - [Custom migration idempotency](custom-migration-idempotency.md) — forward SQL must tolerate objects already created by the aggregate schema before migration tracking catches up.
+- [Canvas presentation](canvas-presentation.md) — canvas screenshots use the registered artifact directory label; live previews are presented by registered artifact ID.
