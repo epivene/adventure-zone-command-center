@@ -1,13 +1,13 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "aliases": ["CRIT SDP-REC Program", "CRIT Bounce House Event", "CRIT Recreation Bounce House Event", "SDP-REC Program Bounce House Event"],
   "event": {"id": null, "name": "CRIT SDP-REC Program Bounce House Event", "city": "Parker", "region": "AZ"},
-  "profile": {"placeType": "tribe", "website": "https://www.crit-nsn.gov/critrecreation/", "description": "Colorado River Indian Tribes Recreation / SDP-REC relationship. Robin Howard made an inbound pricing inquiry in June 2026 and remains listed as Recreation Coordinator."},
+  "profile": {"placeType": "tribe", "website": "https://www.crit-nsn.gov/critrecreation/", "description": "Colorado River Indian Tribes Recreation / SDP-REC relationship. Robin Howard made an inbound pricing inquiry June 4, 2026. A Gmail audit on Aug. 29 found no later Adventure Zone response, so this is an unanswered inbound buying inquiry rather than cold outreach."},
   "contacts": [{"id": null, "name": "Robin Howard", "phone": "928-669-1276", "email": "Robin.Howard@crit-nsn.gov", "role": "Recreation Coordinator / inbound inquiry", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "2026-08-28", "travelLegId": null},
+  "booking": {"enabled": false, "name": "", "status": "interested", "startsAt": "", "endsAt": "", "nextActionKind": "email", "nextActionDueAt": "2026-08-29", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Inbound pricing inquiry requires history check", "body": "On June 4, 2026 Robin Howard asked for pricing for all units, setup/breakdown and any other invoice costs. Current CRIT Recreation information still identifies Robin as Coordinator. Before replying, check whether a later ACT/phone interaction already resolved the inquiry; if none exists, treat this as an unanswered inbound buying inquiry rather than cold outreach."}],
-  "followUps": [{"label": "Resolve CRIT pricing inquiry", "reason": "Check later phone/ACT history after June 4 first. If nobody answered Robin, respond with current package pricing and legitimate setup/tear-down costs and verify the event date/logistics.", "dueAt": "2026-08-28T23:00:00.000Z"}]
+  "notes": [{"subject": "Aug. 29 Gmail audit — pricing inquiry was unanswered", "body": "Robin Howard asked June 4 for prices, setup/breakdown charges and any other invoice costs. Gmail search through Aug. 29 found no later reply from Adventure Zone. A reply draft was prepared in the existing Gmail thread with current package pricing ($9,000 Adventure Zone; $7,500 Pirate's Rebellion; $7,500 Warrior's Playground, 1-4 days), clarification that normal setup/tear-down/staffing/COI are included, and a request for event date, site and operating hours before availability/logistics are confirmed."}],
+  "followUps": [{"label": "CRIT — review/send pricing reply draft", "reason": "A current reply draft now exists in Robin Howard's original Gmail thread. Review/send it, then obtain the event date/site/hours and move the opportunity into availability/logistics review.", "dueAt": "2026-08-29T20:00:00.000Z"}]
 }
