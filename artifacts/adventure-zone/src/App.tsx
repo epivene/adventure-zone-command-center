@@ -3,7 +3,6 @@ import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
 import { lazy, Suspense, useState, type ComponentType, type FormEvent, type LazyExoticComponent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Shield } from "lucide-react";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, useSearch } from "wouter";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
@@ -22,6 +21,7 @@ import {
 
 import { OfficeAuthProvider, useOfficeAuth } from "@/lib/office-auth-context";
 import { OFFICE_PROTECTED_PATH } from "@/lib/office-route-pattern";
+import { CommandTerminalLanding } from "@/components/command-terminal/command-terminal-landing";
 
 const ManagerIssuesAdminPage = lazy(() => import("@/pages/ManagerIssuesAdminPage"));
 const ManagerRoutePage = lazy(() => import("@/pages/ManagerRoutePage"));
@@ -145,24 +145,7 @@ function SignInPage() {
 }
 
 function Landing() {
-  return (
-    <div className="relative flex min-h-[100dvh] flex-col items-center justify-center bg-background px-4">
-      <Link
-        aria-label="Administrator Access"
-        className="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition hover:bg-muted hover:text-primary focus:outline-none focus:ring-2 focus:ring-ring"
-        href="/sign-in"
-        title="Administrator Access"
-      >
-        <Shield aria-hidden="true" className="h-5 w-5" />
-      </Link>
-      <h1 className="text-3xl font-bold tracking-tight text-foreground">AdventureZone Command Terminal</h1>
-      <p className="mt-2 max-w-md text-center text-muted-foreground">Bookings, contacts, routes, and calls all in one place.</p>
-      <div className="mt-8 grid w-full max-w-sm gap-3">
-        <Link className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator</Link>
-        <Link className="button-secondary px-6 py-3 text-center" href="/manager/sign-in">Leg Managers</Link>
-      </div>
-    </div>
-  );
+  return <CommandTerminalLanding />;
 }
 
 function LoadingScreen() {

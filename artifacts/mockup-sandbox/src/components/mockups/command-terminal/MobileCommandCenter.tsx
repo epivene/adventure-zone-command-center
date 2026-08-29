@@ -4,13 +4,11 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   Check,
-  CircleHelp,
   MapPinned,
   Shield,
   Sparkles,
   X,
 } from "lucide-react";
-import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card } from "@workspace/avz-crm/components/ui/card";
 
@@ -172,8 +170,8 @@ export function MobileCommandCenter() {
         }
         .mc-hero {
           border-bottom: 1px solid hsl(var(--border));
-          margin-top: 2rem;
-          padding-bottom: 1.25rem;
+          margin-top: 2.5rem;
+          padding-bottom: 1.5rem;
         }
         .mc-kicker {
           color: hsl(var(--primary));
@@ -183,53 +181,22 @@ export function MobileCommandCenter() {
         }
         .mc-title {
           color: hsl(var(--foreground));
-          font-size: clamp(2.25rem, 12vw, 3.2rem);
+          font-size: clamp(2rem, 10vw, 2.65rem);
           font-weight: 800;
-          letter-spacing: -.075em;
-          line-height: .93;
+          letter-spacing: -.06em;
+          line-height: 1;
           margin: .55rem 0 0;
-          max-width: 9ch;
-        }
-        .mc-title em {
-          color: hsl(var(--primary));
-          font-style: normal;
+          max-width: 14ch;
         }
         .mc-hero-copy {
           color: hsl(var(--muted-foreground));
           font-size: .76rem;
           line-height: 1.5;
-          margin: .85rem 0 0;
+          margin: .65rem 0 0;
           max-width: 28rem;
         }
-        .mc-surface-row {
-          display: grid;
-          gap: .5rem;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          margin-top: 1rem;
-        }
-        .mc-surface {
-          background: hsl(var(--card) / .74);
-          border: 1px solid hsl(var(--border));
-          border-radius: .6rem;
-          min-width: 0;
-          padding: .55rem .6rem;
-        }
-        .mc-surface-index {
-          color: hsl(var(--accent));
-          display: block;
-          font-size: .52rem;
-          font-weight: 800;
-        }
-        .mc-surface-label {
-          color: hsl(var(--foreground));
-          display: block;
-          font-size: .62rem;
-          font-weight: 800;
-          line-height: 1.2;
-          margin-top: .25rem;
-        }
         .mc-workspace {
-          margin-top: 1.25rem;
+          margin-top: 1.5rem;
         }
         .mc-section-head {
           align-items: end;
@@ -403,9 +370,6 @@ export function MobileCommandCenter() {
         @media (max-width: 22rem) {
           .mc-shell { width: min(100% - 1rem, 30rem); }
           .mc-ready { display: none; }
-          .mc-surface-row { gap: .35rem; }
-          .mc-surface { padding-inline: .45rem; }
-          .mc-surface-label { font-size: .57rem; }
         }
       `}</style>
 
@@ -450,36 +414,20 @@ export function MobileCommandCenter() {
         </header>
 
         <section aria-labelledby="mobile-command-title" className="mc-hero">
-          <div className="mc-kicker mc-mono">Choose your workspace</div>
-          <h1 className="mc-title" id="mobile-command-title">
-            AdventureZone <em>Command Terminal</em>
-          </h1>
+          <div className="mc-kicker mc-mono">AdventureZone / Command terminal</div>
+          <h1 className="mc-title" id="mobile-command-title">Choose your workspace</h1>
           <p className="mc-hero-copy">
-            Move bookings, contacts, routes, and calls forward from the right workspace.
+            Start with the workspace that matches your day.
           </p>
-          <div aria-label="Command surface areas" className="mc-surface-row">
-            <div className="mc-surface">
-              <span className="mc-surface-index mc-mono">01</span>
-              <span className="mc-surface-label">Bookings</span>
-            </div>
-            <div className="mc-surface">
-              <span className="mc-surface-index mc-mono">02</span>
-              <span className="mc-surface-label">Contacts</span>
-            </div>
-            <div className="mc-surface">
-              <span className="mc-surface-index mc-mono">03</span>
-              <span className="mc-surface-label">Routes & calls</span>
-            </div>
-          </div>
         </section>
 
         <section aria-labelledby="mobile-workspace-title" className="mc-workspace">
           <div className="mc-section-head">
             <div>
               <div className="mc-eyebrow mc-mono">Access points</div>
-              <h2 className="mc-section-title" id="mobile-workspace-title">Enter your workspace</h2>
+              <h2 className="mc-section-title" id="mobile-workspace-title">Select a workspace</h2>
             </div>
-            <span aria-label="Two workspaces available" className="mc-count mc-mono">02 available</span>
+            <span aria-label="Two workspaces available" className="mc-count mc-mono">02</span>
           </div>
 
           <div aria-label="Workspace selection" className="mc-role-list" role="tablist">
@@ -514,11 +462,8 @@ export function MobileCommandCenter() {
                 <ActiveIcon aria-hidden="true" size={16} strokeWidth={1.8} />
               </span>
               <div className="mc-detail-copy-wrap">
-                <Badge variant="secondary">{activeWorkspace.shortLabel} workspace selected</Badge>
-                <h3 className="mc-detail-title">{activeWorkspace.label}</h3>
-                <p className="mc-detail-copy">
-                  Your next useful actions are grouped here so the day can move forward without extra searching.
-                </p>
+                <div className="mc-eyebrow mc-mono">{activeWorkspace.shortLabel} workspace</div>
+                <h3 className="mc-detail-title">Today’s focus</h3>
               </div>
             </div>
             <div aria-label={`${activeWorkspace.label} ready items`} className="mc-queue">
@@ -549,10 +494,6 @@ export function MobileCommandCenter() {
           ) : null}
         </section>
 
-        <footer className="mc-footer">
-          <span>AdventureZone · Operational workspace</span>
-          <strong><CircleHelp aria-hidden="true" size={12} /> Help nearby</strong>
-        </footer>
       </div>
     </main>
   );

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const index = readFileSync("index.html", "utf8");
 const app = readFileSync("src/App.tsx", "utf8");
+const landing = readFileSync("src/components/command-terminal/command-terminal-landing.tsx", "utf8");
 
 describe("public login landing", () => {
   it("uses the app's normal styling instead of a special login stylesheet", () => {
@@ -11,18 +12,20 @@ describe("public login landing", () => {
     expect(existsSync("public/adventure-zone-login-background.webp")).toBe(false);
   });
 
-  it("uses the updated landing subtitle", () => {
-    expect(app).toContain("Bookings, contacts, routes, and calls all in one place!");
-    expect(app).not.toContain("Bookings, contacts, routes, and calls for your adventure business — all in one place.");
+  it("uses the focused workspace landing copy", () => {
+    expect(landing).toContain("Start with the workspace that matches your day.");
+    expect(landing).not.toContain("Bookings, contacts, routes, and calls for your adventure business — all in one place.");
   });
 
   it("makes Office Coordinator the primary landing action", () => {
-    expect(app).toContain('className="button-primary px-6 py-3 text-center" href="/office/sign-in">Office Coordinator');
+    expect(landing).toContain('href="/office/sign-in"');
+    expect(landing).toContain("Office Coordinator");
   });
 
   it("renames the manager entrance to Leg Managers", () => {
-    expect(app).toContain('href="/manager/sign-in">Leg Managers');
-    expect(app).not.toContain('href="/manager/sign-in">Manager Portal');
+    expect(landing).toContain('href="/manager/sign-in"');
+    expect(landing).toContain("Leg Managers");
+    expect(landing).not.toContain("Manager Portal");
   });
 
   it("moves administrator access out of the main button stack", () => {
