@@ -16,6 +16,9 @@ export type OrganizationListRecord = {
   lastResort: boolean;
   lastResortReason: string | null;
   lastResortChangedAt: Date | null;
+  filler: boolean;
+  fillerReason: string | null;
+  fillerChangedAt: Date | null;
   contactCount: number;
   bookingCount: number;
   primaryContactName: string | null;
@@ -44,6 +47,7 @@ export type OrganizationListQuery = {
   search: string;
   directoryView?: "all" | "events" | "organizations";
   lastResort: "all" | "only";
+  filler: "all" | "only";
   travelLegId: string | null;
   placeType: string | null;
   region: string | null;
