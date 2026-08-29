@@ -226,6 +226,7 @@ export function ModernCRM() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
+  const [contactProfileOpen, setContactProfileOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [organizationName, setOrganizationName] = useState("Pine Ridge Adventure Lodge");
   const [draftName, setDraftName] = useState(organizationName);
@@ -368,7 +369,7 @@ export function ModernCRM() {
                     <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66] hover:bg-[#e5f0e8]" data-testid="link-primary-contact-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primary.email}</a>
                   </div>
                   <div className="border-t border-[#e4ebe5] px-4 py-3">
-                    <button className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-open-contact-profile" onClick={() => { setPrimaryContactOpen(false); setSection("contacts"); showAction(`${primary.name}'s contact profile is open below.`); }} type="button">Open contact profile <ArrowUpRight className="h-4 w-4" /></button>
+                     <button className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-open-contact-profile" onClick={() => { setPrimaryContactOpen(false); setSection("contacts"); setContactProfileOpen(true); }} type="button">Open contact profile <ArrowUpRight className="h-4 w-4" /></button>
                   </div>
                 </div>
               ) : null}
@@ -611,6 +612,55 @@ export function ModernCRM() {
             </div>
             <div className="mt-5 flex items-center gap-2 rounded-lg bg-[#f1f5f1] px-3 py-3 text-sm text-[#71848a]"><MessageCircle className="h-4 w-4 text-[#4b8575]" />8 conversations with {organizationName} synced from outreach.</div>
           </section>
+        ) : null}
+
+        {contactProfileOpen ? (
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#173b48]/25 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" data-testid="contact-profile-overlay" onClick={() => setContactProfileOpen(false)} role="presentation">
+            <section
+              aria-labelledby="contact-profile-title"
+              aria-modal="true"
+              className="w-full max-w-2xl overflow-hidden rounded-t-2xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_24px_60px_rgba(23,59,72,0.22)] sm:rounded-2xl"
+              data-testid="contact-profile-dialog"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-[#e4ebe5] px-5 py-5 sm:px-6">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#dbe9e4] text-sm font-bold text-[#397064]">{primary.initials}</span>
+                  <div>
+                    <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact profile</p>
+                    <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]" id="contact-profile-title">{primary.name}</h2>
+                    <p className="mt-0.5 text-sm text-[#71848a]">{primary.role} · Primary contact</p>
+                  </div>
+                </div>
+                <button aria-label="Close contact profile" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-contact-profile" onClick={() => setContactProfileOpen(false)} type="button"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="grid gap-5 px-5 py-5 sm:grid-cols-[1fr_0.85fr] sm:px-6">
+                <div>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact details</p>
+                  <div className="mt-3 grid gap-2">
+                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-phone" href={`tel:${primary.phone}`}><Phone className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Phone</span><span className="mt-0.5 block">{primary.phone}</span></span></a>
+                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Email</span><span className="mt-0.5 block break-all">{primary.email}</span></span></a>
+                  </div>
+                </div>
+                <div className="rounded-xl border border-[#dce6e0] bg-[#f6f9f5] p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship context</p>
+                  <dl className="mt-3 grid gap-3 text-sm">
+                    <div><dt className="font-semibold text-[#829696]">Organization</dt><dd className="mt-0.5 font-semibold text-[#315b66]">{organizationName}</dd></div>
+                    <div><dt className="font-semibold text-[#829696]">Availability</dt><dd className="mt-0.5 text-[#4d666d]">{primary.availability}</dd></div>
+                    <div><dt className="font-semibold text-[#829696]">Last interaction</dt><dd className="mt-0.5 text-[#4d666d]">Apr 16, 2025</dd></div>
+                  </dl>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e4ebe5] px-5 py-4 sm:px-6">
+                <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-activity" onClick={() => { setContactProfileOpen(false); setSection("notes"); }} type="button"><StickyNote className="h-4 w-4" />View activity</button>
+                <div className="flex gap-2">
+                  <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-call" href={`tel:${primary.phone}`}><Phone className="h-4 w-4" />Call</a>
+                  <a className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-contact-profile-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4" />Email</a>
+                </div>
+              </div>
+            </section>
+          </div>
         ) : null}
 
         {followUpOpen ? null : <button className="mt-4 inline-flex items-center gap-2 text-sm font-bold text-[#397064]" data-testid="button-restore-follow-up" onClick={() => setFollowUpOpen(true)} type="button"><Bell className="h-4 w-4" />Restore open follow-up</button>}
