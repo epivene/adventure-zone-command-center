@@ -60,7 +60,7 @@ export default function OrganizationsPage() {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
     if (query.lastResort !== "all") qs.set("lastResort", query.lastResort);
-    if (query.filler !== "all") qs.set("filler", query.filler);
+    if (query.filler === "only") qs.set("activity", "filler");
     if (query.travelLegId) qs.set("leg", query.travelLegId);
     if (query.placeType) qs.set("type", query.placeType);
     if (query.region) qs.set("region", query.region);
