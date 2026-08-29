@@ -1,13 +1,13 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "aliases": ["Heartland Association of Fairs, Festivals and Events Convention", "Heartland Association of Fairs Festivals & Events Showcase", "HAFFE Convention Showcase", "Heartland Association FFE"],
   "event": {"id": null, "name": "HAFFE Showcase", "city": "Minot", "region": "ND"},
-  "profile": {"placeType": "association", "website": "https://www.heartlandassociationffe.com/", "description": "Heartland Association of Fairs, Festivals & Events industry convention/showcase opportunity. Adventure Zone has prior HAFFE convention history. The 2026 convention is Nov. 19-21 in Minot, ND."},
-  "contacts": [{"id": null, "name": "HAFFE Secretary", "phone": "", "email": "secretary@heartlandassociationffe.com", "role": "Association / convention contact", "primary": true}],
-  "booking": {"enabled": true, "name": "HAFFE Convention / Showcase - 2026", "status": "contact_due", "startsAt": "2026-11-19", "endsAt": "2026-11-21", "nextActionKind": "review", "nextActionDueAt": "2026-08-28", "travelLegId": null},
+  "profile": {"placeType": "association", "website": "https://www.heartlandassociationffe.com/", "description": "Heartland Association of Fairs, Festivals & Events industry convention relationship. Adventure Zone attended the 2025 HAFFE convention and followed up with multiple fair/event contacts afterward. The 2026 convention is Nov. 19-21 in Minot, ND. The Sept. 1 showcase application is designed for live/video/strolling performance acts; Adventure Zone is a better fit for HAFFE's associate/vendor trade-show side."},
+  "contacts": [{"id": null, "name": "HAFFE Secretary", "phone": "701-866-4907", "email": "secretary@heartlandassociationffe.com", "role": "Association / convention contact", "primary": true}],
+  "booking": {"enabled": true, "name": "HAFFE Convention - 2026", "status": "contact_due", "startsAt": "2026-11-19", "endsAt": "2026-11-21", "nextActionKind": "review", "nextActionDueAt": "2026-08-31", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Time-sensitive 2026 showcase invitation", "body": "HAFFE emailed Adventure Zone June 27, 2026 inviting applications to showcase at its November convention, with a Sept. 1 deadline. Current official HAFFE information confirms the Nov. 19-21, 2026 Minot convention includes showcases and associate/vendor activity. This is an active industry opportunity, not a stale unread message."}],
-  "followUps": [{"label": "Decide HAFFE showcase application", "reason": "Review eligibility, cost, footprint and logistics now; submit before Sept. 1 if the showcase makes business sense.", "dueAt": "2026-08-28T23:00:00.000Z"}]
+  "notes": [{"subject": "Aug. 29 showcase decision — do not submit performance application", "body": "Reviewed the June 27 HAFFE showcase invitation and current official convention information. The $100 showcase application is for a 15-minute live performance, 5-minute video performance, or 15-minute strolling act. Adventure Zone does not fit that performance-showcase format well. HAFFE explicitly accepts appropriate support businesses as associate members, and the 2026 convention schedule includes associate visits and vendor setup. Decision: do not spend $100 on the performance showcase application. Preserve HAFFE as a valuable convention relationship and use the associate/vendor trade-show route instead."}],
+  "followUps": [{"label": "HAFFE — review associate/vendor registration", "reason": "Skip the performance showcase. Review the 2026 associate registration/trade-show options and secure an appropriate convention presence if the booth/registration terms make sense.", "dueAt": "2026-08-31T16:00:00.000Z"}]
 }
