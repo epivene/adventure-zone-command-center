@@ -28,6 +28,8 @@ function toOpportunityRecord(row: OpportunityRow): OpportunityRecord {
     nextActionKind: row.nextActionKind,
     nextActionDueAt: row.nextActionDueAt,
     holdReason: row.holdReason,
+    emailAutomationProtected: row.emailAutomationProtected,
+    territoryExceptionApproved: row.territoryExceptionApproved,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -87,6 +89,8 @@ export class OpportunityRepository {
         nextActionKind: input.nextActionKind ?? null,
         nextActionDueAt: input.nextActionDueAt ?? null,
         holdReason: input.holdReason ?? null,
+        emailAutomationProtected: input.emailAutomationProtected ?? false,
+        territoryExceptionApproved: input.territoryExceptionApproved ?? false,
       })
       .returning();
 
@@ -114,6 +118,12 @@ export class OpportunityRepository {
       values.nextActionDueAt = patch.nextActionDueAt;
     }
     if (patch.holdReason !== undefined) values.holdReason = patch.holdReason;
+    if (patch.emailAutomationProtected !== undefined) {
+      values.emailAutomationProtected = patch.emailAutomationProtected;
+    }
+    if (patch.territoryExceptionApproved !== undefined) {
+      values.territoryExceptionApproved = patch.territoryExceptionApproved;
+    }
 
     const [row] = await this.database
       .update(bookingOpportunities)

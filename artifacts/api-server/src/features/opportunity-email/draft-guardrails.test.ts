@@ -62,9 +62,19 @@ describe("evaluateDraftGuardrails", () => {
       .toBe("protected_record");
   });
 
-  it("blocks when package availability has not been established", () => {
+  it("requires both current package availability and calendar evidence", () => {
+    expect(evaluateDraftGuardrails(makeContext({ packageAvailability: null }), "new_outreach").blocker?.code)
+      .toBe("availability_unknown");
+    expect(evaluateDraftGuardrails(makeContext({ calendarEvidence: [] }), "new_outreach").blocker?.code)
+      .toBe("availability_unknown");
     expect(evaluateDraftGuardrails(makeContext({ packageAvailability: null, calendarEvidence: [] }), "new_outreach").blocker?.code)
       .toBe("availability_unknown");
+  });
+
+  it("blocks unresolved package availability instead of treating ambiguous Calendar evidence as safe", () => {
+    expect(evaluateDraftGuardrails(makeContext({
+      packageAvailability: { status: "unresolved", blockers: ["ambiguous Calendar package usage"] },
+    }), "new_outreach").blocker?.code).toBe("availability_unknown");
   });
 });
 

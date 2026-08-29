@@ -45,6 +45,7 @@ import {
   PaperNoteWorkerLoop,
   systemPaperNoteWorkerLoopScheduler,
 } from "./features/paper-notes/paper-note-worker-loop";
+import { createOpportunityEmailWorkerLoop } from "./features/opportunity-email/opportunity-email-worker-runtime";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -93,6 +94,8 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
+let opportunityEmailLoop:
+  Awaited<ReturnType<typeof createOpportunityEmailWorkerLoop>> | null = null;
 let shutdownRequested = false;
 
 await runRequiredSchemaStartup();
@@ -120,6 +123,7 @@ const shutdown = createActServerShutdown({
       extractionRuntime ?? (await extractionRuntimePromise?.catch(() => null));
     await Promise.all([
       runtime?.close(),
+      opportunityEmailLoop?.close(),
       leadScoutLoop.close(),
       scoutAlertLoop.close(),
       assistantJobLoop.close(),
@@ -260,6 +264,27 @@ async function startBackgroundWorkers() {
   scoutAlertLoop.start();
   assistantJobLoop.start();
   paperNoteLoop.start();
+
+  try {
+    opportunityEmailLoop = await createOpportunityEmailWorkerLoop();
+    if (!shutdownRequested) {
+      opportunityEmailLoop.start();
+    } else {
+      await opportunityEmailLoop.close();
+      opportunityEmailLoop = null;
+    }
+  } catch (err) {
+    opportunityEmailLoop = null;
+    logger.error(
+      {
+        errorCode:
+          err && typeof err === "object" && "code" in err
+            ? String((err as { code?: unknown }).code)
+            : "unknown",
+      },
+      "Opportunity email scheduled-send worker could not be started",
+    );
+  }
 
   const liveActBackgroundWorkersEnabled = shouldStartActBackgroundWorkers();
 

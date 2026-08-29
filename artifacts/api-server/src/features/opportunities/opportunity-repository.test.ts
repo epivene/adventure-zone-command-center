@@ -47,6 +47,8 @@ beforeEach(async () => {
       next_action_kind text,
       next_action_due_at timestamptz,
       hold_reason text,
+      email_automation_protected boolean not null default false,
+      territory_exception_approved boolean not null default false,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now(),
       constraint booking_opportunities_event_year_valid check (event_year between 2000 and 2200),
@@ -160,6 +162,30 @@ describe("OpportunityRepository", () => {
       }),
     );
     expect(await repository.get(created.id)).toEqual(updated);
+  });
+
+  it("round-trips explicit email automation review controls", async () => {
+    const created = await repository.create({
+      organizationId: ORGANIZATION_ID,
+      eventYear: 2026,
+      emailAutomationProtected: true,
+      territoryExceptionApproved: true,
+    });
+
+    expect(created).toEqual(expect.objectContaining({
+      emailAutomationProtected: true,
+      territoryExceptionApproved: true,
+    }));
+
+    const updated = await repository.update(created.id, {
+      emailAutomationProtected: false,
+      territoryExceptionApproved: false,
+    });
+
+    expect(updated).toEqual(expect.objectContaining({
+      emailAutomationProtected: false,
+      territoryExceptionApproved: false,
+    }));
   });
 
   it("upserts one queue override per opportunity and business date", async () => {

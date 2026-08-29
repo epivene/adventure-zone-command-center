@@ -2,11 +2,13 @@ import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { z } from "zod";
 
+import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
 import { BookingService } from "@/features/bookings/booking-service";
 import { DrizzleFollowUpRepository } from "@/features/follow-ups/follow-up-repository";
 import { FollowUpService } from "@/features/follow-ups/follow-up-service";
 import type { EditFollowUpInput } from "@/features/follow-ups/follow-up-types";
+import { OpportunityEmailActivityWriter } from "@/features/opportunity-email/opportunity-email-activity";
 import { OpportunityRepository } from "@/features/opportunities/opportunity-repository";
 import { OpportunityService } from "@/features/opportunities/opportunity-service";
 import type { OpportunityRecord, UpdateOpportunityInput } from "@/features/opportunities/opportunity-types";
@@ -17,6 +19,7 @@ type OpportunityFollowUpRepository = {
   get(id: string): Promise<OpportunityRecord | null>;
   update(id: string, patch: UpdateOpportunityInput): Promise<OpportunityRecord>;
 };
+type FollowUpActivityWriter = Pick<OpportunityEmailActivityWriter, "recordFollowUpCreated">;
 
 const createSchema = z.object({
   opportunityId: z.string().uuid(),
@@ -51,6 +54,13 @@ function defaultOpportunityRepository(): OpportunityFollowUpRepository {
   return new OpportunityRepository(db);
 }
 
+function defaultActivityWriter(): FollowUpActivityWriter {
+  return new OpportunityEmailActivityWriter({
+    opportunities: new OpportunityRepository(db),
+    activities: new DrizzleActivityRepository(db),
+  });
+}
+
 function toFollowUpId(value: string | string[]): string {
   return Array.isArray(value) ? value[0] ?? "" : value;
 }
@@ -83,6 +93,7 @@ export function createFollowUpsRouter(
   completionService: OpportunityCompletionService =
     defaultOpportunityCompletionService(),
   opportunities: OpportunityFollowUpRepository = defaultOpportunityRepository(),
+  activity: FollowUpActivityWriter = defaultActivityWriter(),
 ): IRouter {
   const router: IRouter = Router();
 
@@ -116,6 +127,11 @@ export function createFollowUpsRouter(
         status: "follow_up",
         nextActionKind: parsed.data.kind,
         nextActionDueAt: parsed.data.dueAt,
+      });
+      await activity.recordFollowUpCreated({
+        opportunityId: opportunity.id,
+        followUpId: result.value.id,
+        dueAt: parsed.data.dueAt,
       });
 
       res.status(201).json({ ok: true, followUp: result.value });

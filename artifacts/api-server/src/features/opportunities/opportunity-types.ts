@@ -22,6 +22,8 @@ export type OpportunityRecord = {
   nextActionKind: string | null;
   nextActionDueAt: Date | null;
   holdReason: string | null;
+  emailAutomationProtected: boolean;
+  territoryExceptionApproved: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -36,6 +38,8 @@ export type CreateOpportunityInput = {
   nextActionKind?: string | null;
   nextActionDueAt?: Date | null;
   holdReason?: string | null;
+  emailAutomationProtected?: boolean;
+  territoryExceptionApproved?: boolean;
 };
 
 export type UpdateOpportunityInput = {
@@ -46,6 +50,8 @@ export type UpdateOpportunityInput = {
   nextActionKind?: string | null;
   nextActionDueAt?: Date | null;
   holdReason?: string | null;
+  emailAutomationProtected?: boolean;
+  territoryExceptionApproved?: boolean;
 };
 
 export type QueueOverride = {

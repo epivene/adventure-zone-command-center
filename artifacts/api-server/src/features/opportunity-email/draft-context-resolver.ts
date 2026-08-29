@@ -54,7 +54,7 @@ export type DraftContextSources = {
   getOpportunity(opportunityId: string): Promise<OpportunityContextRecord | null>;
   getProfileContext(organizationId: string, eventYear: number): Promise<ProfileDraftContext>;
   listRecipientCandidates(organizationId: string, eventYear: number): Promise<DraftRecipientCandidate[]>;
-  listRelationshipSummary(organizationId: string, eventYear: number): Promise<string[]>;
+  listRelationshipSummary(organizationId: string, eventYear: number, recipientEmail: string): Promise<string[]>;
   countSameYearSent(opportunityId: string): Promise<number>;
   hasSameYearDecline(opportunityId: string): Promise<boolean>;
   getCurrentDraftId(opportunityId: string): Promise<string | null>;
@@ -101,7 +101,6 @@ export class DraftContextResolver {
     const [
       profile,
       recipients,
-      priorRelationshipSummary,
       sameYearSentCount,
       sameYearDeclined,
       existingDraftId,
@@ -110,7 +109,6 @@ export class DraftContextResolver {
     ] = await Promise.all([
       this.sources.getProfileContext(opportunity.organizationId, opportunity.eventYear),
       this.sources.listRecipientCandidates(opportunity.organizationId, opportunity.eventYear),
-      this.sources.listRelationshipSummary(opportunity.organizationId, opportunity.eventYear),
       this.sources.countSameYearSent(opportunity.id),
       this.sources.hasSameYearDecline(opportunity.id),
       this.sources.getCurrentDraftId(opportunity.id),
@@ -119,6 +117,13 @@ export class DraftContextResolver {
     ]);
 
     const recipient = chooseRecipient(recipients);
+    const priorRelationshipSummary = recipient.candidate?.email && !recipient.ambiguous
+      ? await this.sources.listRelationshipSummary(
+          opportunity.organizationId,
+          opportunity.eventYear,
+          recipient.candidate.email,
+        )
+      : [];
 
     return {
       opportunityId: opportunity.id,

@@ -55,13 +55,19 @@ function sources() {
 
 describe("DraftContextResolver", () => {
   it("uses the newest verified recipient instead of stale ACT contact data", async () => {
-    const resolver = new DraftContextResolver(sources());
+    const deps = sources();
+    const resolver = new DraftContextResolver(deps);
     const context = await resolver.resolve(OPPORTUNITY_ID);
 
     expect(context.contactId).toBe("new-contact");
     expect(context.recipientEmail).toBe("current@example.com");
     expect(context.recipientName).toBe("Current Organizer");
     expect(context.recipientAmbiguous).toBe(false);
+    expect(deps.listRelationshipSummary).toHaveBeenCalledWith(
+      ORGANIZATION_ID,
+      2026,
+      "current@example.com",
+    );
   });
 
   it("passes through relationship, current-year, draft, and calendar evidence without inventing facts", async () => {
@@ -80,7 +86,7 @@ describe("DraftContextResolver", () => {
     expect(context.packageAvailability).toEqual({ adventureZone: "available" });
   });
 
-  it("marks equally current conflicting verified recipients as ambiguous", async () => {
+  it("marks equally current conflicting verified recipients as ambiguous and does not guess relationship history", async () => {
     const deps = sources();
     deps.listRecipientCandidates.mockResolvedValue([
       { contactId: "a", email: "a@example.com", name: "A", verifiedAt: new Date("2026-08-25T12:00:00.000Z"), source: "profile" },
@@ -90,5 +96,7 @@ describe("DraftContextResolver", () => {
 
     expect(context.recipientEmail).toBeNull();
     expect(context.recipientAmbiguous).toBe(true);
+    expect(deps.listRelationshipSummary).not.toHaveBeenCalled();
+    expect(context.priorRelationshipSummary).toEqual([]);
   });
 });

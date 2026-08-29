@@ -4,13 +4,19 @@ on:
   pull_request:
     paths:
       - "artifacts/api-server/src/features/opportunity-email/**"
+      - "artifacts/api-server/src/features/opportunities/opportunity-repository*.ts"
+      - "artifacts/api-server/src/features/opportunities/opportunity-types.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
       - "artifacts/api-server/src/features/google-workspace/google-connection-repository.ts"
       - "artifacts/api-server/src/features/google-workspace/google-gmail-delivery*.ts"
       - "artifacts/api-server/src/features/follow-ups/**"
+      - "artifacts/api-server/src/features/today/master-work-queue*.ts"
       - "artifacts/api-server/src/routes/follow-ups*.ts"
       - "artifacts/api-server/src/routes/opportunity-drafts*.ts"
+      - "artifacts/api-server/src/routes/opportunity-email-runtime*.ts"
+      - "artifacts/api-server/src/routes/opportunity-email-live-runtime*.ts"
+      - "artifacts/api-server/src/routes/opportunity-email-index-mount*.ts"
       - "artifacts/api-server/src/routes/today-ready-to-send*.ts"
       - "artifacts/api-server/src/routes/index.ts"
       - "artifacts/api-server/src/index.ts"
@@ -19,12 +25,14 @@ on:
       - "artifacts/adventure-zone/src/components/today/**"
       - "artifacts/adventure-zone/src/pages/EventProfilePage*"
       - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
+      - "lib/db/src/booking-opportunity-schema.ts"
       - "lib/db/src/booking-opportunity-email-schema.ts"
       - "lib/db/src/index.ts"
       - "lib/db/src/schema/index.ts"
       - "lib/db/src/migrations.ts"
       - "lib/db/migrations/071_booking_opportunity_email_state.sql"
       - "lib/db/migrations/072_booking_opportunity_email_dispatch.sql"
+      - "lib/db/migrations/073_booking_opportunity_email_controls.sql"
       - ".github/workflows/booking-master-work-queue-release-2-ci.yml"
   workflow_dispatch:
 
@@ -33,6 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -44,19 +54,38 @@ jobs:
       - name: Opportunity email domain tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
+          src/features/opportunities/opportunity-repository.test.ts
+          src/features/opportunity-email/opportunity-email-migrations.test.ts
           src/features/opportunity-email/opportunity-email-repository.test.ts
+          src/features/opportunity-email/opportunity-email-profile-repository.test.ts
           src/features/opportunity-email/draft-context-resolver.test.ts
+          src/features/opportunity-email/production-draft-context-sources.test.ts
+          src/features/opportunity-email/opportunity-email-availability.test.ts
+          src/features/opportunity-email/production-ready-to-send-source.test.ts
+          src/features/opportunity-email/production-opportunity-email-runtime.test.ts
+          src/features/opportunity-email/opportunity-email-worker-runtime.test.ts
+          src/features/opportunity-email/opportunity-email-server-lifecycle.test.ts
           src/features/opportunity-email/draft-guardrails.test.ts
+          src/features/opportunity-email/ai-opportunity-email-writer.test.ts
+          src/features/opportunity-email/google-opportunity-email-provider.test.ts
+          src/features/opportunity-email/opportunity-email-controls.test.ts
           src/features/opportunity-email/opportunity-email-service.test.ts
           src/features/opportunity-email/opportunity-email-rewrite.test.ts
           src/features/opportunity-email/opportunity-email-delivery.test.ts
+          src/features/opportunity-email/opportunity-email-activity.test.ts
+          src/features/opportunity-email/opportunity-email-workflow.test.ts
+          src/features/opportunity-email/opportunity-email-runtime.test.ts
           src/features/opportunity-email/send-window.test.ts
           src/features/opportunity-email/ready-to-send-service.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher.test.ts
           src/features/opportunity-email/scheduled-email-dispatcher-loop.test.ts
           src/features/google-workspace/google-gmail-delivery.test.ts
           src/features/google-workspace/google-gmail-delivery-connection.test.ts
+          src/features/today/master-work-queue.test.ts
           src/routes/opportunity-drafts.test.ts
+          src/routes/opportunity-email-runtime.test.ts
+          src/routes/opportunity-email-live-runtime.test.ts
+          src/routes/opportunity-email-index-mount.test.ts
           src/routes/today-ready-to-send.test.ts
           src/routes/follow-ups.test.ts
       - name: Opportunity email composer tests
@@ -65,6 +94,75 @@ jobs:
           src/components/opportunities/opportunity-draft-composer.test.tsx
           src/components/opportunities/follow-up-after-send.test.tsx
           src/components/today/ready-to-send-section.test.tsx
+          src/components/today/master-work-queue.test.tsx
           --environment jsdom
       - name: Database build
         run: pnpm --filter @workspace/db build
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: API typecheck regression
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          MERGED_SHA="$(git rev-parse HEAD)"
+          BASE_SHA="$(git rev-parse HEAD^1)"
+          normalize_errors() {
+            grep -E 'error TS[0-9]+:' "$1" \
+              | sed -E 's/\([0-9]+,[0-9]+\)//g' \
+              | sed -E 's#^.*(src/[^:]+:)#\1#' \
+              | sort -u || true
+          }
+
+          echo "Comparing API typecheck base $BASE_SHA to merge $MERGED_SHA"
+          git checkout --detach "$BASE_SHA"
+          pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck-base.log 2>&1 || true
+          normalize_errors /tmp/api-typecheck-base.log > /tmp/api-typecheck-base.errors
+
+          git checkout --detach "$MERGED_SHA"
+          pnpm --filter @workspace/api-server typecheck > /tmp/api-typecheck-head.log 2>&1 || true
+          normalize_errors /tmp/api-typecheck-head.log > /tmp/api-typecheck-head.errors
+
+          comm -13 /tmp/api-typecheck-base.errors /tmp/api-typecheck-head.errors > /tmp/api-typecheck-new.errors
+          if [ -s /tmp/api-typecheck-new.errors ]; then
+            echo "New API typecheck errors introduced by Release 2:"
+            cat /tmp/api-typecheck-new.errors
+            exit 1
+          fi
+          echo "No new API typecheck errors beyond the current main merge-parent baseline."
+      - name: API typecheck
+        if: github.event_name != 'pull_request'
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Web build
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Web typecheck regression
+        if: github.event_name == 'pull_request'
+        run: |
+          set -euo pipefail
+          MERGED_SHA="$(git rev-parse HEAD)"
+          BASE_SHA="$(git rev-parse HEAD^1)"
+          normalize_errors() {
+            grep -E 'error TS[0-9]+:' "$1" \
+              | sed -E 's/\([0-9]+,[0-9]+\)//g' \
+              | sed -E 's#^.*(src/[^:]+:)#\1#' \
+              | sort -u || true
+          }
+
+          echo "Comparing web typecheck base $BASE_SHA to merge $MERGED_SHA"
+          git checkout --detach "$BASE_SHA"
+          pnpm --filter @workspace/adventure-zone typecheck > /tmp/web-typecheck-base.log 2>&1 || true
+          normalize_errors /tmp/web-typecheck-base.log > /tmp/web-typecheck-base.errors
+
+          git checkout --detach "$MERGED_SHA"
+          pnpm --filter @workspace/adventure-zone typecheck > /tmp/web-typecheck-head.log 2>&1 || true
+          normalize_errors /tmp/web-typecheck-head.log > /tmp/web-typecheck-head.errors
+
+          comm -13 /tmp/web-typecheck-base.errors /tmp/web-typecheck-head.errors > /tmp/web-typecheck-new.errors
+          if [ -s /tmp/web-typecheck-new.errors ]; then
+            echo "New web typecheck errors introduced by Release 2:"
+            cat /tmp/web-typecheck-new.errors
+            exit 1
+          fi
+          echo "No new web typecheck errors beyond the current main merge-parent baseline."
+      - name: Web typecheck
+        if: github.event_name != 'pull_request'
+        run: pnpm --filter @workspace/adventure-zone typecheck

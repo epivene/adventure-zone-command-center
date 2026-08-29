@@ -14,6 +14,7 @@ import {
 import { ActiveWorkQueue } from "./active-work-queue";
 import { CompletedTodaySection } from "./completed-today-section";
 import { NeedsAttentionSection } from "./needs-attention-section";
+import { ReadyToSendSection } from "./ready-to-send-section";
 
 function businessDate(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -67,6 +68,7 @@ export function MasterWorkQueue({
   return (
     <div className="grid gap-4" aria-label="Booking master work queue">
       <NeedsAttentionSection items={queue.needsAttention} onOpen={onOpen} />
+      <ReadyToSendSection />
       <ActiveWorkQueue
         items={queue.active}
         busy={busy}

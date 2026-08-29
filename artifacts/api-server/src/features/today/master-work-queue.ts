@@ -49,6 +49,30 @@ export type MasterTodayQueue = {
   completedToday: MasterWorkItem[];
 };
 
+export function applyEmailFailureAttention(
+  candidate: MasterWorkCandidate,
+  failureMessage: string,
+): MasterWorkCandidate {
+  return {
+    ...candidate,
+    kind: "review",
+    reason: `Email delivery failed: ${failureMessage}`,
+  };
+}
+
+export function applyEmailFailuresToCandidates(
+  candidates: MasterWorkCandidate[],
+  failuresByOpportunity: ReadonlyMap<string, string>,
+): MasterWorkCandidate[] {
+  return candidates.map((candidate) => {
+    if (!candidate.opportunityId) return candidate;
+    const failureMessage = failuresByOpportunity.get(candidate.opportunityId);
+    return failureMessage
+      ? applyEmailFailureAttention(candidate, failureMessage)
+      : candidate;
+  });
+}
+
 function isDue(item: MasterWorkItem, now: Date): boolean {
   return Boolean(
     item.dueAt && classifyBusinessDueDate(item.dueAt, now) !== "future",
@@ -115,6 +139,7 @@ function compareWorkItems(
 function needsAttention(item: MasterWorkItem, now: Date): boolean {
   return (
     item.kind === "reply" ||
+    item.kind === "review" ||
     (item.kind === "callback" && isDue(item, now)) ||
     item.opportunityStatus === "interested" ||
     item.priority === "urgent"
