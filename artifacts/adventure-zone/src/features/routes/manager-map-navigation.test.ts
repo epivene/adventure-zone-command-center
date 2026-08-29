@@ -4,6 +4,7 @@ import {
   MANAGER_MAP_MODE_KEY,
   UTAH_DEFAULT_VIEW,
   googleDirectionsUrl,
+  managerEventDirectionsDestination,
   readManagerMapMode,
   writeManagerMapMode,
 } from "./manager-map-navigation";
@@ -28,6 +29,27 @@ describe("manager map navigation helpers", () => {
     expect(url).toContain("https://www.google.com/maps/dir/?api=1");
     expect(url).toContain("destination=46.4083%2C-105.8406");
     expect(url).not.toContain("key=");
+  });
+
+  it("prefers event coordinates and falls back to its readable place", () => {
+    expect(managerEventDirectionsDestination({
+      latitude: 46.4083,
+      longitude: -105.8406,
+      city: "Miles City",
+      region: "MT",
+    })).toEqual([-105.8406, 46.4083]);
+    expect(managerEventDirectionsDestination({
+      latitude: null,
+      longitude: null,
+      city: "Billings",
+      region: "MT",
+    })).toBe("Billings, MT");
+    expect(managerEventDirectionsDestination({
+      latitude: null,
+      longitude: null,
+      city: null,
+      region: null,
+    })).toBeNull();
   });
 
   it("supports ordered waypoints without adding a paid API key", () => {

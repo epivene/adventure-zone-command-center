@@ -33,3 +33,25 @@ export function googleDirectionsUrl(input: {
   }
   return url.toString();
 }
+
+export function managerEventDirectionsDestination(input: {
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
+  region?: string | null;
+}): [number, number] | string | null {
+  if (
+    input.latitude != null &&
+    input.longitude != null &&
+    Number.isFinite(input.latitude) &&
+    Number.isFinite(input.longitude)
+  ) {
+    return [input.longitude, input.latitude];
+  }
+
+  const place = [input.city, input.region]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join(", ");
+  return place || null;
+}
