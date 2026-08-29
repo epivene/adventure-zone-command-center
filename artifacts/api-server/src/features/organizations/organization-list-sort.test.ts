@@ -51,6 +51,12 @@ describe("organization list sorting", () => {
     expect(profileTouchSource).not.toMatch(/SET updated_at = GREATEST\(updated_at, touched_at\)/i);
   });
 
+  it("touches the owning profile when an organization location is created, edited, or deleted", () => {
+    expect(profileTouchSource).toMatch(/touch_profile_from_organization_location/i);
+    expect(profileTouchSource).toMatch(/organization_locations_touch_profile_work/i);
+    expect(profileTouchSource).toMatch(/AFTER INSERT OR UPDATE OR DELETE ON organization_locations/i);
+  });
+
   it("keeps every supported ordering in the repository query", () => {
     expect(compiledOrder({ sort: "least_recently_updated" })).toMatch(/last_worked_at.*asc/i);
     expect(compiledOrder({ sort: "name_asc" })).toMatch(/name.*asc/i);
