@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { NextEventPlanCard } from "./next-event-plan-card";
 
 const event = {
@@ -18,6 +18,10 @@ const event = {
 } as const;
 
 describe("NextEventPlanCard", () => {
+  afterEach(() => {
+    delete window.umami;
+  });
+
   it("shows the destination and opens coordinate directions while selecting the event", () => {
     const onSelect = vi.fn();
     render(<NextEventPlanCard event={event} onSelect={onSelect} />);
@@ -31,7 +35,24 @@ describe("NextEventPlanCard", () => {
     expect(onSelect).toHaveBeenCalledOnce();
   });
 
+  it("tracks coordinate directions clicks without blocking the directions link", () => {
+    const track = vi.fn();
+    window.umami = { track };
+    render(<NextEventPlanCard event={event} onSelect={vi.fn()} />);
+
+    const link = screen.getByRole("link", { name: "Get directions" });
+    fireEvent.click(link);
+
+    expect(track).toHaveBeenCalledWith("next_event_directions_clicked", {
+      surface: "manager_schedule",
+      destination_type: "coordinates",
+    });
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("uses the city and region when the event has no coordinates", () => {
+    const track = vi.fn();
+    window.umami = { track };
     render(
       <NextEventPlanCard
         event={{ ...event, latitude: null, longitude: null }}
@@ -43,5 +64,19 @@ describe("NextEventPlanCard", () => {
       "href",
       expect.stringContaining("destination=Miles+City%2C+MT"),
     );
+    fireEvent.click(screen.getByRole("link", { name: "Get directions" }));
+    expect(track).toHaveBeenCalledWith("next_event_directions_clicked", {
+      surface: "manager_schedule",
+      destination_type: "city_region",
+    });
+  });
+
+  it("keeps directions usable when analytics throws", () => {
+    window.umami = { track: vi.fn(() => { throw new Error("analytics unavailable"); }) };
+    render(<NextEventPlanCard event={event} onSelect={vi.fn()} />);
+
+    const link = screen.getByRole("link", { name: "Get directions" });
+    expect(() => fireEvent.click(link)).not.toThrow();
+    expect(link).toHaveAttribute("href", expect.stringContaining("destination=46.4083%2C-105.8406"));
   });
 });

@@ -1,5 +1,6 @@
 import type { ManagerScheduleEvent } from "@workspace/api-zod";
 import { googleDirectionsUrl, managerEventDirectionsDestination } from "@/features/routes/manager-map-navigation";
+import { trackEvent } from "@/lib/analytics";
 
 function formatEventDate(value?: string | Date | null) {
   if (!value) return "Date not set";
@@ -34,7 +35,16 @@ export function NextEventPlanCard({ event, onSelect }: {
           <p className="text-sm text-slate-700">{location}</p>
           <p className="mt-1 text-sm font-semibold text-slate-800">{formatEventRange(event.startsAt, event.endsAt)}</p>
         </button>
-        {directionsUrl ? <a className="button-primary inline-flex w-full shrink-0 items-center justify-center sm:w-auto" href={directionsUrl} target="_blank" rel="noreferrer">
+        {directionsUrl ? <a
+          className="button-primary inline-flex w-full shrink-0 items-center justify-center sm:w-auto"
+          href={directionsUrl}
+          target="_blank"
+          rel="noreferrer"
+          onClick={() => trackEvent("next_event_directions_clicked", {
+            surface: "manager_schedule",
+            destination_type: Array.isArray(destination) ? "coordinates" : "city_region",
+          })}
+        >
           Get directions
         </a> : <p className="max-w-xs text-sm font-semibold text-slate-600">Add a city or coordinates to plan directions.</p>}
       </div>
