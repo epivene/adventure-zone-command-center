@@ -226,6 +226,7 @@ export function ModernCRM() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const [contactProfileOpen, setContactProfileOpen] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [editing, setEditing] = useState(false);
   const [organizationName, setOrganizationName] = useState("Pine Ridge Adventure Lodge");
   const [draftName, setDraftName] = useState(organizationName);
@@ -233,6 +234,7 @@ export function ModernCRM() {
   const [followUpOpen, setFollowUpOpen] = useState(true);
 
   const primary = contacts[0];
+  const activeContact = selectedContact ?? primary;
   const filteredActivities = useMemo(() => {
     const query = noteSearch.trim().toLowerCase();
     return query
@@ -368,7 +370,7 @@ export function ModernCRM() {
                     <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66] hover:bg-[#e5f0e8]" data-testid="link-primary-contact-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primary.email}</a>
                   </div>
                   <div className="border-t border-[#e4ebe5] px-4 py-3">
-                     <button className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-open-contact-profile" onClick={() => { setPrimaryContactOpen(false); setSection("contacts"); setContactProfileOpen(true); }} type="button">Open contact profile <ArrowUpRight className="h-4 w-4" /></button>
+                     <button className="button-primary inline-flex w-full items-center justify-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-open-contact-profile" onClick={() => { setSelectedContact(primary); setPrimaryContactOpen(false); setSection("contacts"); setContactProfileOpen(true); }} type="button">Open contact profile <ArrowUpRight className="h-4 w-4" /></button>
                   </div>
                 </div>
               ) : null}
@@ -570,7 +572,7 @@ export function ModernCRM() {
                 <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" data-testid={`card-contact-${contact.id}`} key={contact.id}>
                   <div className="flex items-start justify-between gap-3"><div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{contact.initials}</span><div><h3 className="font-bold text-[#173b48]">{contact.name}</h3><p className="text-sm text-[#71848a]">{contact.role}</p></div></div>{contact.isPrimary ? <span className="rounded-full bg-[#e2efe9] px-2 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#397064]">Primary</span> : null}</div>
                   <p className="mt-4 text-xs font-semibold text-[#839596]">{contact.availability}</p>
-                  <div className="mt-3 flex flex-wrap gap-2"><a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9] hover:text-[#315b66]" data-testid={`link-contact-phone-${contact.id}`} href={`tel:${contact.phone}`}><Phone className="h-3.5 w-3.5" />Call</a><a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9] hover:text-[#315b66]" data-testid={`link-contact-email-${contact.id}`} href={`mailto:${contact.email}`}><Mail className="h-3.5 w-3.5" />Email</a><button className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#397064]" data-testid={`button-contact-details-${contact.id}`} onClick={() => showAction(`${contact.name}'s contact details are selected.`)} type="button">Details <ArrowUpRight className="h-3.5 w-3.5" /></button></div>
+                   <div className="mt-3 flex flex-wrap gap-2"><a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9] hover:text-[#315b66]" data-testid={`link-contact-phone-${contact.id}`} href={`tel:${contact.phone}`}><Phone className="h-3.5 w-3.5" />Call</a><a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9] hover:text-[#315b66]" data-testid={`link-contact-email-${contact.id}`} href={`mailto:${contact.email}`}><Mail className="h-3.5 w-3.5" />Email</a><button className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-[#397064]" data-testid={`button-contact-details-${contact.id}`} onClick={() => { setSelectedContact(contact); setContactProfileOpen(true); }} type="button">Details <ArrowUpRight className="h-3.5 w-3.5" /></button></div>
                 </article>
               ))}
             </div>
@@ -613,7 +615,7 @@ export function ModernCRM() {
         ) : null}
 
         {contactProfileOpen ? (
-          <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#173b48]/25 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" data-testid="contact-profile-overlay" onClick={() => setContactProfileOpen(false)} role="presentation">
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-[#173b48]/25 p-0 backdrop-blur-[2px] sm:items-center sm:p-6" data-testid="contact-profile-overlay" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); }} role="presentation">
             <section
               aria-labelledby="contact-profile-title"
               aria-modal="true"
@@ -624,37 +626,37 @@ export function ModernCRM() {
             >
               <div className="flex items-start justify-between gap-4 border-b border-[#e4ebe5] px-5 py-5 sm:px-6">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#dbe9e4] text-sm font-bold text-[#397064]">{primary.initials}</span>
+                  <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#dbe9e4] text-sm font-bold text-[#397064]">{activeContact.initials}</span>
                   <div>
                     <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact profile</p>
-                    <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]" id="contact-profile-title">{primary.name}</h2>
-                    <p className="mt-0.5 text-sm text-[#71848a]">{primary.role} · Primary contact</p>
+                    <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]" id="contact-profile-title">{activeContact.name}</h2>
+                    <p className="mt-0.5 text-sm text-[#71848a]">{activeContact.role}{activeContact.isPrimary ? " · Primary contact" : ""}</p>
                   </div>
                 </div>
-                <button aria-label="Close contact profile" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-contact-profile" onClick={() => setContactProfileOpen(false)} type="button"><X className="h-4 w-4" /></button>
+                <button aria-label="Close contact profile" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-close-contact-profile" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); }} type="button"><X className="h-4 w-4" /></button>
               </div>
               <div className="grid gap-5 px-5 py-5 sm:grid-cols-[1fr_0.85fr] sm:px-6">
                 <div>
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Contact details</p>
                   <div className="mt-3 grid gap-2">
-                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-phone" href={`tel:${primary.phone}`}><Phone className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Phone</span><span className="mt-0.5 block">{primary.phone}</span></span></a>
-                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Email</span><span className="mt-0.5 block break-all">{primary.email}</span></span></a>
+                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-phone" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Phone</span><span className="mt-0.5 block">{activeContact.phone}</span></span></a>
+                    <a className="flex items-center gap-3 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] px-3.5 py-3 text-sm font-semibold text-[#315b66] hover:border-[#9ab6a9]" data-testid="link-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4 text-[#397064]" /><span><span className="block text-[11px] font-bold uppercase tracking-[0.1em] text-[#829696]">Email</span><span className="mt-0.5 block break-all">{activeContact.email}</span></span></a>
                   </div>
                 </div>
                 <div className="rounded-xl border border-[#dce6e0] bg-[#f6f9f5] p-4">
                   <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship context</p>
                   <dl className="mt-3 grid gap-3 text-sm">
                     <div><dt className="font-semibold text-[#829696]">Organization</dt><dd className="mt-0.5 font-semibold text-[#315b66]">{organizationName}</dd></div>
-                    <div><dt className="font-semibold text-[#829696]">Availability</dt><dd className="mt-0.5 text-[#4d666d]">{primary.availability}</dd></div>
+                    <div><dt className="font-semibold text-[#829696]">Availability</dt><dd className="mt-0.5 text-[#4d666d]">{activeContact.availability}</dd></div>
                     <div><dt className="font-semibold text-[#829696]">Last interaction</dt><dd className="mt-0.5 text-[#4d666d]">Apr 16, 2025</dd></div>
                   </dl>
                 </div>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e4ebe5] px-5 py-4 sm:px-6">
-                <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-activity" onClick={() => { setContactProfileOpen(false); setSection("notes"); }} type="button"><StickyNote className="h-4 w-4" />View activity</button>
+                <button className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-activity" onClick={() => { setContactProfileOpen(false); setSelectedContact(null); setSection("notes"); }} type="button"><StickyNote className="h-4 w-4" />View activity</button>
                 <div className="flex gap-2">
-                  <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-call" href={`tel:${primary.phone}`}><Phone className="h-4 w-4" />Call</a>
-                  <a className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-contact-profile-email" href={`mailto:${primary.email}`}><Mail className="h-4 w-4" />Email</a>
+                  <a className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" data-testid="button-contact-profile-call" href={`tel:${activeContact.phone}`}><Phone className="h-4 w-4" />Call</a>
+                  <a className="button-primary inline-flex items-center gap-2 !bg-[#397064] hover:!bg-[#2d5d54]" data-testid="button-contact-profile-email" href={`mailto:${activeContact.email}`}><Mail className="h-4 w-4" />Email</a>
                 </div>
               </div>
             </section>
