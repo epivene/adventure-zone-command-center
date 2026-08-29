@@ -1,21 +1,24 @@
 import { Link, useLocation } from "wouter";
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { ArrowLeft, CalendarDays, ContactRound, House, MapPinned, Megaphone, MessageSquare, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
 import { MessageBubbleLink } from "./message-bubble-link";
 import { WorkspaceSwitcher } from "./workspace-switcher";
-import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
+import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { rememberProfileOrigin } from "@/lib/profile-navigation";
-import { OfficeCoordinatorAttention, type OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
-import { OfficeUpdateHistory } from "@/components/office-admin/office-update-history";
+import type { OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { apiGet } from "@/lib/auth-token";
 import { adminWorkspaceForPath, readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 
 type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon };
+
+const AssistantDrawer = lazy(() => import("@/components/assistant/assistant-drawer").then(({ AssistantDrawer }) => ({ default: AssistantDrawer })));
+const OfficeCoordinatorAttention = lazy(() => import("@/components/today/office-coordinator-attention").then(({ OfficeCoordinatorAttention }) => ({ default: OfficeCoordinatorAttention })));
+const OfficeUpdateHistory = lazy(() => import("@/components/office-admin/office-update-history").then(({ OfficeUpdateHistory }) => ({ default: OfficeUpdateHistory })));
 
 function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string | null): PrimaryNavigationItem[] {
   if (workspace === "booking") {
@@ -45,10 +48,12 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  const { isOpen } = useAssistantContext();
   const [location] = useLocation();
   const workspace = adminWorkspaceForPath(location);
   const bookingReturnPath = workspace === "marketing" ? readBookingReturnPath() : null;
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
+  const [assistantRequested, setAssistantRequested] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
@@ -71,6 +76,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!immersiveProfile) rememberProfileOrigin(location);
   }, [immersiveProfile, location]);
+
+  useEffect(() => {
+    if (isOpen) setAssistantRequested(true);
+  }, [isOpen]);
 
   useEffect(() => {
     let active = true;
@@ -134,13 +143,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main className="min-h-screen px-4 py-5 pb-28 md:px-8 md:py-7 md:pb-8">
-        {location === "/today" ? <div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div> : null}
+        {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
-        {location.startsWith("/office-coordinator") ? <OfficeUpdateHistory /> : null}
+        {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
       {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
-      <AssistantDrawer />
+      {assistantRequested ? <Suspense fallback={null}><AssistantDrawer /></Suspense> : null}
       {!immersiveProfile ? <MobileBottomNav workspace={workspace} /> : null}
     </div>
   );

@@ -1,34 +1,12 @@
-import ManagerIssuesAdminPage from "@/pages/ManagerIssuesAdminPage";
-import ManagerRoutePage from "@/pages/ManagerRoutePage";
-import ManagerMoneyPage from "@/pages/ManagerMoneyPage";
-import ManagerReceiptsPage from "@/pages/ManagerReceiptsPage";
-import ManagerOperationsPage from "@/pages/ManagerOperationsPage";
-import ManagerFinanceAdminPage from "@/pages/ManagerFinanceAdminPage";
-import ManagerCommunicationsAdminPage from "@/pages/ManagerCommunicationsAdminPage";
-import ManagerCrewAdminPage from "@/pages/ManagerCrewAdminPage";
-import ManagerAftermathAdminPage from "@/pages/ManagerAftermathAdminPage";
-import EventWrapUpAdminPage from "@/pages/EventWrapUpAdminPage";
-import ManagerIncidentPage from "@/pages/ManagerIncidentPage";
-import ManagerIncidentsPage from "@/pages/ManagerIncidentsPage";
-import ManagerCrewPage from "@/pages/ManagerCrewPage";
-import ManagerWorkerPage from "@/pages/ManagerWorkerPage";
-import ManagerEventReviewPage from "@/pages/ManagerEventReviewPage";
-import ManagerEventWrapUpPage from "@/pages/ManagerEventWrapUpPage";
-import ManagerEventChecklistPage from "@/pages/ManagerEventChecklistPage";
-import ManagerHomePage from "@/pages/ManagerHomePage";
-import ManagerMessagesPage from "@/pages/ManagerMessagesPage";
-import ManagerSignInPage from "@/pages/ManagerSignInPage";
-import { ManagerShell } from "@/components/manager/manager-shell";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
-import { useState, type FormEvent } from "react";
+import { lazy, Suspense, useState, type ComponentType, type FormEvent, type LazyExoticComponent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Shield } from "lucide-react";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, useSearch } from "wouter";
 
 import { AuthProvider, useAuth } from "@/lib/auth-context";
-import { AppShell } from "@/components/navigation/app-shell";
 import { OfflineBanner } from "@/components/connectivity/offline-banner";
 import { Toaster } from "@workspace/avz-crm/components/ui/toaster";
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -42,53 +20,77 @@ import {
   canonicalSchedulePath,
 } from "@/lib/canonical-routes";
 
-import AdminCommandPanelPage from "@/pages/AdminCommandPanelPage";
-import MarketingHomePage from "@/pages/MarketingHomePage";
-import TodayPage from "@/pages/TodayPage";
-import BookingsPage from "@/pages/BookingsPage";
-import BookingDetailPage from "@/pages/BookingDetailPage";
-import BookingEditPage from "@/pages/BookingEditPage";
-import ContactsPage from "@/pages/ContactsPage";
-import ContactDetailPage from "@/pages/ContactDetailPage";
-import ContactEditPage from "@/pages/ContactEditPage";
-import ContactNewPage from "@/pages/ContactNewPage";
-import OrganizationsPage from "@/pages/OrganizationsPage";
-import EventFamilyPage from "@/pages/EventFamilyPage";
-import SchedulePage from "@/pages/SchedulePage";
-import { LegManagementPage } from "@/pages/RoutesPage";
-import TripDetailPage from "@/pages/TripDetailPage";
-import CallWorkspacePage from "@/pages/CallWorkspacePage";
-import MobileCallLogPage from "@/pages/MobileCallLogPage";
-import NeedsAnswerPage from "@/pages/NeedsAnswerPage";
-import EventProfilePage from "@/pages/EventProfilePage";
-import EventProfileNewPage from "@/pages/EventProfileNewPage";
-import EventProfileEditPage from "@/pages/EventProfileEditPage";
-import ResearchSourcesPage from "@/pages/ResearchSourcesPage";
-import AttendanceHistoryImportPage from "@/pages/AttendanceHistoryImportPage";
-import LeadIntakePage from "@/pages/LeadIntakePage";
-import PaperNotesInboxPage from "@/pages/PaperNotesInboxPage";
-import PaperNoteBatchReviewPage from "@/pages/PaperNoteBatchReviewPage";
-import SettingsBusinessSourcesPage from "@/pages/SettingsBusinessSourcesPage";
-import SettingsCommunicationTemplatesPage from "@/pages/SettingsCommunicationTemplatesPage";
-import SettingsCallScriptsPage from "@/pages/SettingsCallScriptsPage";
-import SettingsPackagesResourcesPage from "@/pages/SettingsPackagesResourcesPage";
-import SettingsGoogleWorkspacePage from "@/pages/SettingsGoogleWorkspacePage";
-import ActMigrationPage from "@/pages/ActMigrationPage";
-import ActRecoveryPage from "@/pages/ActRecoveryPage";
-import NotFound from "@/pages/not-found";
-
-import OfficeSignInPage from "@/pages/OfficeSignInPage";
-import OfficeTodayPage from "@/pages/OfficeTodayPage";
-import OfficeTasksPage from "@/pages/OfficeTasksPage";
-import OfficeProfilesPage from "@/pages/OfficeProfilesPage";
-import OfficeProfilePage from "@/pages/OfficeProfilePage";
-import OfficeMailPage from "@/pages/OfficeMailPage";
-import OfficeEmailDraftsPage from "@/pages/OfficeEmailDraftsPage";
-import OfficeMessagesPage from "@/pages/OfficeMessagesPage";
-import OfficeCoordinatorAdminPage from "@/pages/OfficeCoordinatorAdminPage";
 import { OfficeAuthProvider, useOfficeAuth } from "@/lib/office-auth-context";
 import { OFFICE_PROTECTED_PATH } from "@/lib/office-route-pattern";
-import { OfficeShell } from "@/components/office/office-shell";
+
+const ManagerIssuesAdminPage = lazy(() => import("@/pages/ManagerIssuesAdminPage"));
+const ManagerRoutePage = lazy(() => import("@/pages/ManagerRoutePage"));
+const ManagerMoneyPage = lazy(() => import("@/pages/ManagerMoneyPage"));
+const ManagerReceiptsPage = lazy(() => import("@/pages/ManagerReceiptsPage"));
+const ManagerOperationsPage = lazy(() => import("@/pages/ManagerOperationsPage"));
+const ManagerFinanceAdminPage = lazy(() => import("@/pages/ManagerFinanceAdminPage"));
+const ManagerCommunicationsAdminPage = lazy(() => import("@/pages/ManagerCommunicationsAdminPage"));
+const ManagerCrewAdminPage = lazy(() => import("@/pages/ManagerCrewAdminPage"));
+const ManagerAftermathAdminPage = lazy(() => import("@/pages/ManagerAftermathAdminPage"));
+const EventWrapUpAdminPage = lazy(() => import("@/pages/EventWrapUpAdminPage"));
+const ManagerIncidentPage = lazy(() => import("@/pages/ManagerIncidentPage"));
+const ManagerIncidentsPage = lazy(() => import("@/pages/ManagerIncidentsPage"));
+const ManagerCrewPage = lazy(() => import("@/pages/ManagerCrewPage"));
+const ManagerWorkerPage = lazy(() => import("@/pages/ManagerWorkerPage"));
+const ManagerEventReviewPage = lazy(() => import("@/pages/ManagerEventReviewPage"));
+const ManagerEventWrapUpPage = lazy(() => import("@/pages/ManagerEventWrapUpPage"));
+const ManagerEventChecklistPage = lazy(() => import("@/pages/ManagerEventChecklistPage"));
+const ManagerHomePage = lazy(() => import("@/pages/ManagerHomePage"));
+const ManagerMessagesPage = lazy(() => import("@/pages/ManagerMessagesPage"));
+const ManagerSignInPage = lazy(() => import("@/pages/ManagerSignInPage"));
+const ManagerShell = lazy(() => import("@/components/manager/manager-shell").then(({ ManagerShell }) => ({ default: ManagerShell })));
+const AppShell = lazy(() => import("@/components/navigation/app-shell").then(({ AppShell }) => ({ default: AppShell })));
+
+const AdminCommandPanelPage = lazy(() => import("@/pages/AdminCommandPanelPage"));
+const MarketingHomePage = lazy(() => import("@/pages/MarketingHomePage"));
+const TodayPage = lazy(() => import("@/pages/TodayPage"));
+const BookingsPage = lazy(() => import("@/pages/BookingsPage"));
+const BookingDetailPage = lazy(() => import("@/pages/BookingDetailPage"));
+const BookingEditPage = lazy(() => import("@/pages/BookingEditPage"));
+const ContactsPage = lazy(() => import("@/pages/ContactsPage"));
+const ContactDetailPage = lazy(() => import("@/pages/ContactDetailPage"));
+const ContactEditPage = lazy(() => import("@/pages/ContactEditPage"));
+const ContactNewPage = lazy(() => import("@/pages/ContactNewPage"));
+const OrganizationsPage = lazy(() => import("@/pages/OrganizationsPage"));
+const EventFamilyPage = lazy(() => import("@/pages/EventFamilyPage"));
+const SchedulePage = lazy(() => import("@/pages/SchedulePage"));
+const LegManagementPage = lazy(() => import("@/pages/RoutesPage").then(({ LegManagementPage }) => ({ default: LegManagementPage })));
+const TripDetailPage = lazy(() => import("@/pages/TripDetailPage"));
+const CallWorkspacePage = lazy(() => import("@/pages/CallWorkspacePage"));
+const MobileCallLogPage = lazy(() => import("@/pages/MobileCallLogPage")) as LazyExoticComponent<ComponentType<any>>;
+const NeedsAnswerPage = lazy(() => import("@/pages/NeedsAnswerPage"));
+const EventProfilePage = lazy(() => import("@/pages/EventProfilePage"));
+const EventProfileNewPage = lazy(() => import("@/pages/EventProfileNewPage"));
+const EventProfileEditPage = lazy(() => import("@/pages/EventProfileEditPage"));
+const ResearchSourcesPage = lazy(() => import("@/pages/ResearchSourcesPage"));
+const AttendanceHistoryImportPage = lazy(() => import("@/pages/AttendanceHistoryImportPage"));
+const LeadIntakePage = lazy(() => import("@/pages/LeadIntakePage"));
+const PaperNotesInboxPage = lazy(() => import("@/pages/PaperNotesInboxPage"));
+const PaperNoteBatchReviewPage = lazy(() => import("@/pages/PaperNoteBatchReviewPage"));
+const SettingsBusinessSourcesPage = lazy(() => import("@/pages/SettingsBusinessSourcesPage"));
+const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCommunicationTemplatesPage"));
+const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
+const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
+const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
+const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
+const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
+const NotFound = lazy(() => import("@/pages/not-found"));
+
+const OfficeSignInPage = lazy(() => import("@/pages/OfficeSignInPage"));
+const OfficeTodayPage = lazy(() => import("@/pages/OfficeTodayPage"));
+const OfficeTasksPage = lazy(() => import("@/pages/OfficeTasksPage"));
+const OfficeProfilesPage = lazy(() => import("@/pages/OfficeProfilesPage"));
+const OfficeProfilePage = lazy(() => import("@/pages/OfficeProfilePage"));
+const OfficeMailPage = lazy(() => import("@/pages/OfficeMailPage"));
+const OfficeEmailDraftsPage = lazy(() => import("@/pages/OfficeEmailDraftsPage"));
+const OfficeMessagesPage = lazy(() => import("@/pages/OfficeMessagesPage"));
+const OfficeCoordinatorAdminPage = lazy(() => import("@/pages/OfficeCoordinatorAdminPage"));
+const OfficeShell = lazy(() => import("@/components/office/office-shell").then(({ OfficeShell }) => ({ default: OfficeShell })));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -299,13 +301,13 @@ function AdminProtectedApp() {
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
           <Route path="/contacts/new" component={ContactNewPage} />
-          <Route path="/contacts/:id/edit">{(params)=><ContactEditPage contactId={params.id}/>}</Route>
+          <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
           <Route path="/contacts" component={ContactsPage} />
           <Route path="/profiles/:profileId" component={EventProfilePage} />
           <Route path="/profiles" component={OrganizationsPage} />
           <Route path="/organizations"><ProfilesRedirect /></Route>
-          <Route path="/event-families/:id">{(params)=><EventFamilyPage familyId={params.id}/>}</Route>
+          <Route path="/event-families/:id"><EventFamilyPage /></Route>
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar"><ScheduleRedirect /></Route>
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>
@@ -313,14 +315,14 @@ function AdminProtectedApp() {
           <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/imports/leads" component={LeadIntakePage} />
           <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
-          <Route path="/trips/:id">{(params)=><TripDetailPage tripId={params.id}/>}</Route>
+          <Route path="/trips/:id"><TripDetailPage /></Route>
           <Route path="/calls/new"><CallsRedirect /></Route>
           <Route path="/calls/log" component={MobileCallLogPage} />
           <Route path="/calls/workspace" component={CallWorkspacePage} />
           <Route path="/calls/mobile"><CallLogRedirect /></Route>
           <Route path="/needs-answer" component={NeedsAnswerPage} />
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
-          <Route path="/event-profiles/:id/edit">{(params)=><EventProfileEditPage profileId={params.id}/>}</Route>
+          <Route path="/event-profiles/:id/edit"><EventProfileEditPage /></Route>
           <Route path="/event-profiles/:id">{(params)=><Redirect to={canonicalProfilePath(params.id)} />}</Route>
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
@@ -328,7 +330,7 @@ function AdminProtectedApp() {
           <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
-          <Route path="/settings/google-workspace" component={SettingsGoogleWorkspacePage} />
+          <Route path="/settings/google-workspace"><SettingsGoogleWorkspacePage /></Route>
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
           <Route path="/settings" component={SettingsStub} />
@@ -350,17 +352,19 @@ function AdminProtectedApp() {
 
 function AppRoutes() {
   return (
-    <Switch>
-      <Route path="/" component={HomeRoute} />
-      <Route path="/sign-in" component={SignInPage} />
-      <Route path="/office/sign-in"><OfficeAuthProvider><OfficeSignInPage /></OfficeAuthProvider></Route>
-      <Route path={OFFICE_PROTECTED_PATH}><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
-      <Route path="/office"><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
-      <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
-      <Route path={MANAGER_PROTECTED_PATH}><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
-      <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
-      <Route><Protected><AdminProtectedApp /></Protected></Route>
-    </Switch>
+    <Suspense fallback={<LoadingScreen />}>
+      <Switch>
+        <Route path="/" component={HomeRoute} />
+        <Route path="/sign-in" component={SignInPage} />
+        <Route path="/office/sign-in"><OfficeAuthProvider><OfficeSignInPage /></OfficeAuthProvider></Route>
+        <Route path={OFFICE_PROTECTED_PATH}><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
+        <Route path="/office"><OfficeAuthProvider><OfficeProtectedApp /></OfficeAuthProvider></Route>
+        <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
+        <Route path={MANAGER_PROTECTED_PATH}><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+        <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+        <Route><Protected><AdminProtectedApp /></Protected></Route>
+      </Switch>
+    </Suspense>
   );
 }
 

@@ -55,6 +55,16 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, 'dist/public'),
     emptyOutDir: true,
+    sourcemap: false,
+    rollupOptions: {
+      // Rollup cannot map a few generated Tailwind/TSX transforms back to their
+      // source locations. No source maps are emitted for this production build,
+      // so suppress only that non-actionable reporting warning.
+      onwarn(warning, warn) {
+        if (warning.code === 'SOURCEMAP_ERROR') return;
+        warn(warning);
+      },
+    },
   },
   server: {
     port,

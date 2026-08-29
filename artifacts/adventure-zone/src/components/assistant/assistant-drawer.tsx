@@ -10,14 +10,6 @@ import {
 import { askBookingAssistantLocalFirst } from "@/features/assistant/on-device-ai-assistant";
 import type { ClientAssistantAnswer } from "@/features/assistant/on-device-ai-client-types";
 import {
-  continueLeadScout,
-  deepenLeadScoutCandidate,
-  dismissLeadScoutCandidate,
-  getLatestLeadScoutRun,
-  getLeadScoutRun,
-  saveLeadScoutCandidate,
-  startLeadScout,
-  stopLeadScout,
   type LeadScoutSaveResult,
   type LeadScoutSaveSubmission,
   type RadiusScoutRequest,
@@ -39,6 +31,13 @@ import { LeadDiscoveryResults } from "./lead-discovery-results";
 import { OnDeviceAiControl } from "./on-device-ai-control";
 import { ProfileSearchResults } from "./profile-search-results";
 import { ScoutLaunchForm, type RadiusScoutSubmission } from "./scout-launch-form";
+
+type LeadScoutApi = typeof import("@/features/assistant/lead-scout-api");
+let leadScoutApiPromise: Promise<LeadScoutApi> | undefined;
+
+function loadLeadScoutApi() {
+  return leadScoutApiPromise ??= import("@/features/assistant/lead-scout-api");
+}
 
 const generalPrompts = ["Find a profile", "Who needs follow-up?", "Find profiles in Minnesota", "Find Christmas events"];
 type AssistantDrawerMode = "assistant" | "scout";
@@ -161,7 +160,7 @@ export function AssistantDrawer() {
     if (!activeContext) {
       if (!navigator.onLine) return;
       const generation = generalGeneration.current;
-      void getLatestLeadScoutRun().then((run) => {
+      void loadLeadScoutApi().then(({ getLatestLeadScoutRun }) => getLatestLeadScoutRun()).then((run) => {
         if (!cancelled && generation === generalGeneration.current) setLeadScoutRun(run);
       }).catch(() => undefined);
       return () => { cancelled = true; };
@@ -190,7 +189,7 @@ export function AssistantDrawer() {
     let cancelled = false;
     const runId = leadScoutRun.id;
     const interval = window.setInterval(() => {
-      void getLeadScoutRun(runId)
+      void loadLeadScoutApi().then(({ getLeadScoutRun }) => getLeadScoutRun(runId))
         .then((run) => {
           if (cancelled) return;
           setLeadScoutRun(run);
@@ -244,17 +243,17 @@ export function AssistantDrawer() {
     } finally { setAsking(false); }
   }
 
-  async function runScoutAction(action: () => Promise<LeadScoutRunView>, fallback: string) {
+  async function runScoutAction(action: (api: LeadScoutApi) => Promise<LeadScoutRunView>, fallback: string) {
     if (scoutActionBusy) return;
     setScoutActionBusy(true); setError(null);
-    try { setLeadScoutRun(await action()); }
+    try { setLeadScoutRun(await action(await loadLeadScoutApi())); }
     catch (cause) { setError(cause instanceof Error ? cause.message : fallback); }
     finally { setScoutActionBusy(false); }
   }
 
   function findNewLeads() {
     if (!leadScoutRun) return;
-    void runScoutAction(() => startLeadScout(leadScoutRun.id), "Could not start Lead Scout.");
+    void runScoutAction((api) => api.startLeadScout(leadScoutRun.id), "Could not start Lead Scout.");
   }
 
   async function stopSearch() {
@@ -262,20 +261,20 @@ export function AssistantDrawer() {
     const previous = leadScoutRun;
     setLeadScoutRun({ ...leadScoutRun, status: "stopping", progress: { ...leadScoutRun.progress, label: "Stopping…" } });
     setScoutActionBusy(true); setError(null);
-    try { setLeadScoutRun(await stopLeadScout(previous.id)); }
+    try { setLeadScoutRun(await (await loadLeadScoutApi()).stopLeadScout(previous.id)); }
     catch (cause) { setLeadScoutRun(previous); setError(cause instanceof Error ? cause.message : "Could not stop Lead Scout."); }
     finally { setScoutActionBusy(false); }
   }
 
   function continueSearch() {
     if (!leadScoutRun) return;
-    void runScoutAction(() => continueLeadScout(leadScoutRun.id), "Could not continue Lead Scout.");
+    void runScoutAction((api) => api.continueLeadScout(leadScoutRun.id), "Could not continue Lead Scout.");
   }
 
   function researchDeeper(candidateId: string) {
     if (!leadScoutRun) return;
     void runScoutAction(
-      () => deepenLeadScoutCandidate(leadScoutRun.id, candidateId),
+      (api) => api.deepenLeadScoutCandidate(leadScoutRun.id, candidateId),
       "Could not research this prospect deeper.",
     );
   }
@@ -283,7 +282,7 @@ export function AssistantDrawer() {
   function markNotFit(candidateId: string) {
     if (!leadScoutRun) return;
     void runScoutAction(
-      () => dismissLeadScoutCandidate(leadScoutRun.id, candidateId),
+      (api) => api.dismissLeadScoutCandidate(leadScoutRun.id, candidateId),
       "Could not mark this prospect Not a fit.",
     );
   }
@@ -297,7 +296,7 @@ export function AssistantDrawer() {
     setScoutActionBusy(true);
     setError(null);
     try {
-      const result = await saveLeadScoutCandidate(leadScoutRun.id, candidateId, submission);
+      const result = await (await loadLeadScoutApi()).saveLeadScoutCandidate(leadScoutRun.id, candidateId, submission);
       setLeadScoutRun(result.run);
       return result;
     } catch (cause) {
@@ -324,7 +323,7 @@ export function AssistantDrawer() {
             region: scoutPrefill.region,
           }
         : { kind: "manual", label: submission.anchorLabel.trim() };
-      const { startRadiusLeadScout } = await import("@/features/assistant/lead-scout-api");
+      const { startRadiusLeadScout } = await loadLeadScoutApi();
       const run = await startRadiusLeadScout({
         anchor,
         radiusMiles: submission.radiusMiles,
