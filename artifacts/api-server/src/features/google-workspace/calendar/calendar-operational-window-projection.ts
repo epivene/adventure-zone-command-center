@@ -8,6 +8,7 @@ export type CalendarBookingLike = {
 export type OperationalWindowLike = {
   bookingId: string;
   startsAt: Date;
+  /** Stored using Google all-day semantics: exclusive end. */
   endsAt: Date;
   source: "app" | "google_calendar" | "manual" | string;
 };
@@ -17,6 +18,13 @@ export type CalendarBookingWithOperationalWindow<T extends CalendarBookingLike> 
   actualEndsAt?: Date | null;
   operationalWindowSource?: string;
 };
+
+function inclusiveOperationalEnd(window: OperationalWindowLike) {
+  const end = new Date(window.endsAt);
+  if (end.getTime() <= window.startsAt.getTime()) return new Date(window.startsAt);
+  end.setUTCDate(end.getUTCDate() - 1);
+  return end;
+}
 
 export function applyOperationalWindowsToCalendarBookings<T extends CalendarBookingLike>(
   bookings: T[],
@@ -33,7 +41,7 @@ export function applyOperationalWindowsToCalendarBookings<T extends CalendarBook
       actualStartsAt: booking.startsAt,
       actualEndsAt: booking.endsAt,
       startsAt: window.startsAt,
-      endsAt: window.endsAt,
+      endsAt: inclusiveOperationalEnd(window),
       operationalWindowSource: window.source,
     };
   });
