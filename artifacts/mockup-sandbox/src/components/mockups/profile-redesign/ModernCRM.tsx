@@ -23,6 +23,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Star,
   StickyNote,
   Tag,
   UsersRound,
@@ -121,6 +122,10 @@ const emailThreads = [
   { id: "email-2", subject: "Fall retreat proposal and pricing", from: "Jon Bell", date: "Apr 8", unread: false },
   { id: "email-3", subject: "Transportation options for July", from: "Maya Chen", date: "Mar 31", unread: false },
 ];
+
+const reviewRating = 4.7;
+const reviewCount = 12;
+const organizationWebsite = "https://pineridgeadventure.com";
 
 const formatDateTime = (value: string) =>
   new Intl.DateTimeFormat("en-US", {
@@ -365,7 +370,28 @@ export function ModernCRM() {
                   <span className="inline-flex items-center gap-1.5"><Building2 className="h-4 w-4 text-[#4b8575]" />Outdoor adventure</span>
                   <span className="inline-flex items-center gap-1.5"><ShieldCheck className="h-4 w-4 text-[#4b8575]" />Verified details</span>
                 </div>
-                <p className="mt-3 text-sm text-[#71848a]">Relationship owner <span className="font-semibold text-[#45616a]">Alex Morgan</span> · Last touched Apr 16, 2025</p>
+                <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[#71848a]">
+                  <span className="inline-flex items-center gap-2" aria-label={`${reviewRating} out of 5 stars from ${reviewCount} reviews`}>
+                    <span className="inline-flex items-center gap-0.5 text-[#d4874f]" aria-hidden="true">
+                      {Array.from({ length: 5 }, (_, index) => (
+                        <Star className="h-3.5 w-3.5" fill={index < 4 ? "currentColor" : "none"} key={index} strokeWidth={1.8} />
+                      ))}
+                    </span>
+                    <span className="font-bold text-[#45616a]">{reviewRating}</span>
+                    <span>({reviewCount} reviews)</span>
+                  </span>
+                  <a
+                    className="inline-flex items-center gap-1.5 font-semibold text-[#397064] hover:text-[#244f47]"
+                    data-testid="link-header-website"
+                    href={organizationWebsite}
+                    rel="noreferrer noopener"
+                    target="_blank"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Visit website
+                  </a>
+                  <span>Relationship owner <span className="font-semibold text-[#45616a]">Alex Morgan</span> · Last touched Apr 16, 2025</span>
+                </div>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
@@ -537,7 +563,7 @@ export function ModernCRM() {
           <div className="flex items-center justify-between gap-3"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Organization record</p><h2 className="mt-1 text-xl font-bold text-[#173b48]">Details</h2></div><button aria-label="Configure visible details" className="rounded-lg p-2 text-[#829696] hover:bg-[#edf4ef] hover:text-[#315b66]" data-testid="button-configure-details" onClick={() => showAction("Details configuration opened.")} type="button"><SlidersHorizontal className="h-4 w-4" /></button></div>
           <dl className="mt-5 grid gap-x-8 gap-y-5 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div><dt className="font-semibold text-[#829696]">Address</dt><dd className="mt-1 leading-6 text-[#4d666d]" data-testid="text-address">1420 Mountain View Drive<br />Estes Park, CO 80517</dd></div>
-            <div><dt className="font-semibold text-[#829696]">Website</dt><dd className="mt-1"><a className="inline-flex items-center gap-1.5 font-semibold text-[#397064] hover:text-[#244f47]" data-testid="link-website" href="https://pineridgeadventure.com" rel="noreferrer noopener" target="_blank">pineridgeadventure.com <ExternalLink className="h-3.5 w-3.5" /></a></dd></div>
+             <div><dt className="font-semibold text-[#829696]">Website</dt><dd className="mt-1"><a className="inline-flex items-center gap-1.5 font-semibold text-[#397064] hover:text-[#244f47]" data-testid="link-website" href={organizationWebsite} rel="noreferrer noopener" target="_blank">pineridgeadventure.com <ExternalLink className="h-3.5 w-3.5" /></a></dd></div>
             <div><dt className="font-semibold text-[#829696]">Organization group</dt><dd className="mt-1 text-[#4d666d]" data-testid="text-organization-group">Colorado Mountain Partners</dd></div>
             <div><dt className="font-semibold text-[#829696]">Relationship started</dt><dd className="mt-1 text-[#4d666d]" data-testid="text-relationship-started">September 2022</dd></div>
           </dl>
