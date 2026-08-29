@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "wouter";
-import { Camera, ChevronDown, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
+import { Camera, ChevronDown, Globe2, MapPin, MessageCircle, Search, UserRound } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
@@ -67,12 +67,12 @@ function statCard({ value, label, active, onClick }: { value: number; label: str
   return (
     <button
       aria-expanded={active}
-      className={`rounded-xl border px-4 py-4 text-center shadow-sm transition focus:outline-none focus:ring-2 focus:ring-orange-400 ${active ? "border-orange-300 bg-orange-50" : "border-slate-200 bg-white hover:border-orange-300 hover:bg-orange-50"}`}
+      className={`rounded-xl border px-3 py-3 text-left shadow-sm transition focus:outline-none focus:ring-2 focus:ring-blue-500 sm:px-4 ${active ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50"}`}
       onClick={onClick}
       type="button"
     >
-      <p className="text-2xl font-bold text-slate-950">{value}</p>
-      <span className="mt-1 inline-flex items-center gap-1 text-sm text-slate-600">
+      <p className="text-xl font-bold text-slate-950 sm:text-2xl">{value}</p>
+      <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-slate-600 sm:text-sm">
         {label}
         <ChevronDown className={`h-4 w-4 transition-transform ${active ? "rotate-180" : ""}`} />
       </span>
@@ -277,44 +277,64 @@ export function SimpleFullProfile({
         <ProfileActionsMenu profileId={profile.id} contactId={primaryContact?.id ?? null} onAddNote={openNoteComposer} />
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="grid gap-4 md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center">
-          <div className="flex flex-col items-center gap-1">
-            <label className="group relative block cursor-pointer" title="Change profile photo">
-              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={(event) => void changePhoto(event.target.files?.[0])} />
-              {profileImageDataUrl ? (
-                <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-24 w-24 rounded-full border-2 border-white object-cover shadow-md sm:h-28 sm:w-28" />
-              ) : (
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-orange-50 text-orange-700 shadow-inner sm:h-28 sm:w-28">
-                  <UserRound className="h-10 w-10" />
-                </div>
-              )}
-              <span className="absolute bottom-0 right-0 rounded-full border border-slate-200 bg-white p-1.5 shadow-sm"><Camera className="h-4 w-4" /></span>
-            </label>
-            {profileImageDataUrl ? <button className="text-xs font-medium text-slate-500 hover:text-rose-700" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative h-28 overflow-hidden bg-gradient-to-r from-blue-900 via-blue-700 to-sky-400 sm:h-40">
+          <div className="absolute -right-10 -top-16 h-56 w-56 rounded-full border-[24px] border-white/10" aria-hidden="true" />
+          <div className="absolute -bottom-24 left-1/3 h-56 w-56 rounded-full border-[28px] border-sky-200/20" aria-hidden="true" />
+          <div className="absolute bottom-3 right-4 rounded-full bg-slate-950/25 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
+            Adventure Zone profile
+          </div>
+        </div>
+
+        <div className="relative px-4 sm:px-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end">
+            <div className="-mt-14 shrink-0 sm:-mt-16">
+              <label className="group relative block w-fit cursor-pointer" title="Change profile photo">
+                <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={photoBusy} onChange={(event) => void changePhoto(event.target.files?.[0])} />
+                {profileImageDataUrl ? (
+                  <img src={profileImageDataUrl} alt={`${profile.place.name} profile`} className="h-28 w-28 rounded-full border-4 border-white object-cover shadow-lg sm:h-32 sm:w-32" />
+                ) : (
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full border-4 border-white bg-blue-50 text-blue-700 shadow-lg sm:h-32 sm:w-32">
+                    <UserRound className="h-12 w-12" />
+                  </div>
+                )}
+                <span className="absolute bottom-1 right-1 rounded-full border border-slate-200 bg-white p-2 text-slate-700 shadow-md"><Camera className="h-4 w-4" /></span>
+              </label>
+              {profileImageDataUrl ? <button className="mt-1 w-28 text-xs font-medium text-slate-500 hover:text-rose-700 sm:w-32" type="button" disabled={photoBusy} onClick={() => void removePhoto()}>Remove photo</button> : null}
+            </div>
+
+            <div className="min-w-0 flex-1 pb-1">
+              <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+                {location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4 text-blue-600" />{location}</span> : null}
+                {profile.place.placeType ? <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold capitalize text-blue-800">{profile.place.placeType.replaceAll("_", " ")}</span> : null}
+                {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
+              </div>
+              <p className="mt-2 text-sm text-slate-500">{primaryContact ? `Primary contact: ${primaryContact.name}` : "No primary contact added yet"}</p>
+              {photoError ? <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{photoError}</p> : null}
+            </div>
+
+            <div className="pb-1 md:min-w-40 md:text-right">
+              <p className="text-xl font-bold text-slate-950">{average.toFixed(1)} <span className="text-sm font-medium text-slate-500">/ 5</span></p>
+              <p className="mt-1 text-2xl tracking-wide text-amber-500" aria-label={`${filledStars} of 5 stars`}>{stars}</p>
+              <p className="mt-1 text-sm text-slate-500">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</p>
+            </div>
           </div>
 
-          <div className="min-w-0">
-            <h1 className="break-words text-2xl font-bold tracking-tight text-slate-950 sm:text-3xl">{profile.place.name}</h1>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-600">
-              {location ? <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{location}</span> : null}
-              {profile.place.placeType ? <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">{profile.place.placeType.replaceAll("_", " ")}</span> : null}
-              {profile.place.lastResort ? <span className="rounded-full bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-800">Last Resort</span> : null}
-            </div>
-            <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              {primaryContact ? <span className="font-semibold text-slate-800">{primaryContact.name}</span> : null}
-              {phoneText && callHref ? <Link className="font-medium text-slate-700 hover:text-orange-700" href={callHref}>{phoneText}</Link> : null}
-              {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-orange-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
-              {websiteHref ? <a className="font-medium text-slate-700 hover:text-orange-700" href={websiteHref} rel="noreferrer noopener" target="_blank">{profile.place.website}</a> : null}
-            </div>
-            {photoError ? <p className="mt-2 text-sm font-semibold text-rose-700" role="alert">{photoError}</p> : null}
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-slate-100 pt-4 text-sm">
+            {phoneText && callHref ? <Link className="font-medium text-slate-700 hover:text-blue-700" href={callHref}>{phoneText}</Link> : null}
+            {primaryContact?.email ? <a className="font-medium text-slate-700 hover:text-blue-700" href={`mailto:${primaryContact.email}`}>{primaryContact.email}</a> : null}
+            {websiteHref ? <a className="inline-flex items-center gap-1 font-medium text-slate-700 hover:text-blue-700" href={websiteHref} rel="noreferrer noopener" target="_blank"><Globe2 className="h-4 w-4" />{profile.place.website}</a> : null}
+            {!phoneText && !primaryContact?.email && !websiteHref ? <span className="text-slate-500">Contact details are not recorded yet</span> : null}
           </div>
 
-          <div className="min-w-40 md:text-right">
-            <p className="text-xl font-bold text-slate-950">{average.toFixed(1)} <span className="text-sm font-medium text-slate-500">/ 5</span></p>
-            <p className="mt-1 text-2xl tracking-wide text-orange-600" aria-label={`${filledStars} of 5 stars`}>{stars}</p>
-            <p className="mt-1 text-sm text-slate-500">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</p>
-          </div>
+          <nav className="mt-4 -mx-1 flex overflow-x-auto" aria-label="Profile sections" role="tablist">
+            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === null ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection(null)} role="tab" aria-selected={openSection === null} type="button">Overview</button>
+            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "contacts" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("contacts")} role="tab" aria-selected={openSection === "contacts"} type="button">Contacts</button>
+            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "events" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("events")} role="tab" aria-selected={openSection === "events"} type="button">Events</button>
+            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "notes" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("notes")} role="tab" aria-selected={openSection === "notes"} type="button">Activity</button>
+            <button className={`border-b-2 px-4 py-3 text-sm font-bold transition ${openSection === "emails" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800"}`} onClick={() => setOpenSection("emails")} role="tab" aria-selected={openSection === "emails"} type="button">Emails</button>
+          </nav>
         </div>
       </section>
 

@@ -207,16 +207,17 @@ export function ProfileDetailSheet({
                 </section>
               )}
 
-              <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-start gap-3">
+              <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                <div className="h-20 bg-gradient-to-r from-blue-900 via-blue-700 to-sky-400" aria-hidden="true" />
+                <div className="-mt-8 flex items-start gap-3 px-4 pb-4">
                   {profileImageDataUrl ? (
                     <img
                       alt={`${title} profile`}
-                      className="h-16 w-16 shrink-0 rounded-full object-cover shadow-sm"
+                      className="h-20 w-20 shrink-0 rounded-full border-4 border-white object-cover shadow-md"
                       src={profileImageDataUrl}
                     />
                   ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-orange-50 text-orange-700">
+                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border-4 border-white bg-blue-50 text-blue-700 shadow-md">
                       <UserRound className="h-7 w-7" />
                     </div>
                   )}
@@ -244,7 +245,7 @@ export function ProfileDetailSheet({
                   </div>
                 </div>
 
-                <div className="mt-4 flex items-center gap-2">
+                <div className="flex items-center gap-2 px-4 pb-4">
                   {callHref ? (
                     <Link
                       aria-label={phoneText ? `Open call workspace for ${phoneText}` : "Open call workspace"}
@@ -276,7 +277,7 @@ export function ProfileDetailSheet({
                   ) : null}
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
+                <div className="mx-4 mb-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
                   <p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p>
                   <p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p>
                 </div>
