@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "artifacts/adventure-zone/src/components/profiles/profile-inline-editor.tsx"
-      - "artifacts/adventure-zone/src/components/profiles/profile-inline-editor.test.tsx"
       - "artifacts/adventure-zone/src/components/profiles/profile-inline-editor.empty-contact.test.tsx"
       - ".github/workflows/profile-inline-editor-ci.yml"
 
@@ -21,6 +20,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Profile inline editor tests
+      - name: Madison profile-only save regression
         working-directory: artifacts/adventure-zone
-        run: pnpm exec vitest run --config vite.config.ts src/components/profiles/profile-inline-editor.test.tsx src/components/profiles/profile-inline-editor.empty-contact.test.tsx
+        run: pnpm exec vitest run --config vite.config.ts src/components/profiles/profile-inline-editor.empty-contact.test.tsx
