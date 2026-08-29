@@ -14,7 +14,8 @@ describe("modern CRM full profile", () => {
 
   it("uses the approved CRM header and controls", () => {
     expect(simple).toContain("Adventure Zone");
-    expect(simple).toContain("Relationships / Organizations");
+    expect(simple).toContain("Relationships / {originLabel}");
+    expect(page).toContain("originLabel={profileOrigin}");
     expect(simple).toContain("Ask Assistant");
     expect(simple).toContain("Open notifications");
     expect(simple).toContain("Open primary contact");

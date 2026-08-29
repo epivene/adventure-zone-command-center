@@ -16,6 +16,7 @@ import { useAssistantContext } from "@/features/assistant/assistant-context";
 import { extractHistoricalEventDates } from "@/features/event-profiles/historical-event-dates";
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
+import { readProfileOriginLabel } from "@/lib/profile-navigation";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -35,6 +36,7 @@ export default function EventProfilePage() {
   const [callablePhoneByContactId, setCallablePhoneByContactId] = useState<Record<string, string | null>>({});
   const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
   const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
+  const [profileOrigin, setProfileOrigin] = useState("Profiles");
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -109,6 +111,9 @@ export default function EventProfilePage() {
 
   useEffect(() => { void loadProfile(); }, [profileId, contactId]);
   useEffect(() => {
+    setProfileOrigin(readProfileOriginLabel());
+  }, [profileId]);
+  useEffect(() => {
     if (researchRequested && data && !profileEditing) setResearchOpen(true);
   }, [researchRequested, Boolean(data), profileEditing]);
 
@@ -173,6 +178,7 @@ export default function EventProfilePage() {
             ratingSummary={data.wrapUpRatingSummary ?? { average: null, count: 0 }}
             onAskAssistant={() => openAssistant("What do I need to know before I contact them?")}
             onBack={goBack}
+            originLabel={profileOrigin}
             profileImageDataUrl={profileImageDataUrl}
             onProfileImageChange={saveProfileImage}
             editing={profileEditing}

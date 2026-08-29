@@ -8,6 +8,7 @@ import { WorkspaceSwitcher } from "./workspace-switcher";
 import { AssistantDrawer } from "@/components/assistant/assistant-drawer";
 import { AssistantLauncher } from "@/components/assistant/assistant-launcher";
 import { AssistantNavigationContextSync } from "@/components/assistant/assistant-navigation-context-sync";
+import { rememberProfileOrigin } from "@/lib/profile-navigation";
 import { OfficeCoordinatorAttention, type OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { OfficeUpdateHistory } from "@/components/office-admin/office-update-history";
 import { apiGet } from "@/lib/auth-token";
@@ -65,6 +66,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     const id = window.setInterval(refresh, 15000);
     return () => { active = false; window.clearInterval(id); };
   }, [location]);
+
+  useEffect(() => {
+    if (!immersiveProfile) rememberProfileOrigin(location);
+  }, [immersiveProfile, location]);
 
   useEffect(() => {
     let active = true;

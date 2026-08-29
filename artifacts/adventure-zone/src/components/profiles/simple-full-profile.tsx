@@ -109,6 +109,7 @@ export function SimpleFullProfile({
   ratingSummary,
   onAskAssistant,
   onBack,
+  originLabel = "Profiles",
   profileImageDataUrl,
   onProfileImageChange,
   editing,
@@ -119,6 +120,7 @@ export function SimpleFullProfile({
   ratingSummary?: { average: number | null; count: number };
   onAskAssistant?: () => void;
   onBack?: () => void;
+  originLabel?: string;
   profileImageDataUrl?: string | null;
   onProfileImageChange?: (dataUrl: string | null) => Promise<void>;
   editing?: boolean;
@@ -364,7 +366,7 @@ export function SimpleFullProfile({
           </div>
           <div>
             <p className="font-bold tracking-tight text-[#173b48]">Adventure Zone</p>
-            <p className="text-xs text-[#71848a]">Relationships / Organizations</p>
+            <p className="text-xs text-[#71848a]">Relationships / {originLabel}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -452,9 +454,9 @@ export function SimpleFullProfile({
         <div className="flex items-center gap-2 text-xs font-semibold text-[#789096]">
           {onBack ? (
             <button className="inline-flex items-center gap-1.5 text-[#60747a] hover:text-[#173b48]" onClick={onBack} type="button">
-              <ArrowLeft className="h-3.5 w-3.5" /> Organizations
+              <ArrowLeft className="h-3.5 w-3.5" /> {originLabel}
             </button>
-          ) : <Link href="/profiles" className="hover:text-[#315b66]">Organizations</Link>}
+          ) : <Link href="/profiles" className="hover:text-[#315b66]">{originLabel}</Link>}
           <span className="text-[#a8b5b4]">/</span>
           <span className="text-[#315b66]">{profile.place.name}</span>
         </div>
