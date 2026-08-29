@@ -1,0 +1,13 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": ["Traveling Shamans Camp", "Travelling Shamans Camp Hotchkiss"],
+  "event": {"id": null, "name": "Travelling Shamans Camp", "city": "Hotchkiss", "region": "CO"},
+  "profile": {"placeType": "festival_event", "description": "Historical Adventure Zone lead. The old outreach address bounced and current reconciliation did not establish a reliable active exact-match event or organizer."},
+  "booking": {"enabled": false, "name": "", "status": "unlikely", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [{"subject": "Stale/unverifiable lead", "body": "The historical outreach address bounced, and the 2026 reconciliation did not establish a reliable active exact-match event or organizer. Preserve this as historical only until new authoritative evidence appears; do not create routine sales follow-ups from the old record."}],
+  "followUps": [],
+  "clearFollowUps": true
+}
