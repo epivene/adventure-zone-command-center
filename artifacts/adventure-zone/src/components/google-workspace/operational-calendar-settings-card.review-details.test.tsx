@@ -68,7 +68,7 @@ describe("OperationalCalendarSettingsCard review details", () => {
     expect(await screen.findByText("MIKEY Blanding City Fall Festival Blanding UT (Zone)")).toBeInTheDocument();
     expect(screen.getByText(/Blanding, UT/)).toBeInTheDocument();
     expect(screen.getByText(/Sep 10.*Sep 13/i)).toBeInTheDocument();
-    expect(screen.getByText(/Saturday, September 12th/)).toBeInTheDocument();
+    expect(screen.getByText("Actual event date:").parentElement).toHaveTextContent("Saturday, September 12th");
     expect(screen.getByText(/Shauna/)).toBeInTheDocument();
     expect(screen.getByText(/2 possible app matches/i)).toBeInTheDocument();
     expect(screen.queryByText("Google event: opaque-google-id")).not.toBeInTheDocument();
