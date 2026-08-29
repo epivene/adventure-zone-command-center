@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const listSource = readFileSync(new URL("./organization-list.tsx", import.meta.url), "utf8");
-const pageSource = readFileSync(new URL("../../pages/OrganizationsPage.tsx", import.meta.url), "utf8");
-const menuSource = readFileSync(new URL("../profiles/profile-actions-menu.tsx", import.meta.url), "utf8");
-const fillerActionSource = readFileSync(new URL("../profiles/profile-filler-action.tsx", import.meta.url), "utf8");
+function readSource(relativePath: string) {
+  return readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
+}
+
+const listSource = readSource("artifacts/adventure-zone/src/components/organizations/organization-list.tsx");
+const pageSource = readSource("artifacts/adventure-zone/src/pages/OrganizationsPage.tsx");
+const menuSource = readSource("artifacts/adventure-zone/src/components/profiles/profile-actions-menu.tsx");
+const fillerActionSource = readSource("artifacts/adventure-zone/src/components/profiles/profile-filler-action.tsx");
 
 describe("Filler profile UI", () => {
   it("shows Filler as a secondary profile badge and directory filter", () => {
