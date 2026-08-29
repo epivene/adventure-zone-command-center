@@ -1,12 +1,12 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
   "event": {"id": null, "name": "Pierce 1860 Days", "city": "Pierce", "region": "ID"},
   "profile": {"placeType": "festival_event", "website": "https://www.facebook.com/Pierce1860Days/", "description": "Active annual Pierce community celebration with live music, vendors, parade, car show, logging events and family/community activities. The old Adventure Zone email address was blocked and should not be treated as a decline."},
   "contacts": [{"id": null, "name": "Pierce 1860 Days", "phone": "208-827-4653", "email": "edenbowie88@gmail.com", "role": "Current/recent community event contact from regional directory - verify before outreach", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "2027-03-01", "travelLegId": null},
   "familyId": null,
   "parentOrganizationId": null,
   "notes": [{"subject": "Event active; old email was blocked", "body": "Adventure Zone's Dec. 2023 outreach to 1bearatranch@qroidaho.net was blocked, so no actual event decision was received. Current regional tourism sources confirm Pierce 1860 Days ran July 31-Aug. 2, 2026 with live music, vendors, parade, car show, logging events and community activities. A regional civic directory lists 208-827-4653 / edenbowie88@gmail.com for Pierce 1860 Days, but verify that contact before future outreach."}],
-  "followUps": [{"label": "Verify 2027 Pierce 1860 Days organizer", "reason": "The old contact failed and the event remains active. Verify the current organizer/contact and assess the 2027 family-entertainment footprint before outreach.", "dueAt": "2027-02-01T16:00:00.000Z"}]
+  "followUps": [{"label": "Verify 2027 Pierce 1860 Days organizer", "reason": "The old contact failed and the event remains active. Verify the current committee/city contact before 2027 outreach; do not reuse the blocked historical address.", "dueAt": "2027-03-01T16:00:00.000Z"}]
 }
