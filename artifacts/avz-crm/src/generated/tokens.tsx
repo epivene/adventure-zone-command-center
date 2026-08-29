@@ -78,6 +78,12 @@ export const tokens = {
       "DM Sans",
       "sans-serif"
     ],
+    "display": [
+      "Impact",
+      "Haettenschweiler",
+      "Arial Narrow Bold",
+      "sans-serif"
+    ],
     "serif": [
       "Georgia",
       "serif"

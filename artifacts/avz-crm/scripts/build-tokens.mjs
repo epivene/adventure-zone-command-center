@@ -153,6 +153,9 @@ function buildCss(tokens) {
   replacements.__DS_FONT_SANS__ = toFontStack(
     resolveValue(tokens.typography.fontFamily.sans, tokens),
   );
+  replacements.__DS_FONT_DISPLAY__ = toFontStack(
+    resolveValue(tokens.typography.fontFamily.display, tokens),
+  );
   replacements.__DS_FONT_SERIF__ = toFontStack(
     resolveValue(tokens.typography.fontFamily.serif, tokens),
   );
@@ -183,6 +186,7 @@ function buildTs(tokens) {
     },
     fontFamily: {
       sans: resolveValue(tokens.typography.fontFamily.sans, tokens),
+      display: resolveValue(tokens.typography.fontFamily.display, tokens),
       serif: resolveValue(tokens.typography.fontFamily.serif, tokens),
       mono: resolveValue(tokens.typography.fontFamily.mono, tokens),
     },

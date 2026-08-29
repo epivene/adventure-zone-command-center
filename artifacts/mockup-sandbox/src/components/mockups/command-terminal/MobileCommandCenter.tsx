@@ -94,7 +94,7 @@ export function MobileCommandCenter() {
           width: .4rem;
         }
         .mc-hero {
-          border-bottom: 1px solid hsl(var(--border));
+          border-bottom: 2px solid hsl(var(--foreground));
           margin-top: 2.5rem;
           padding-bottom: 1.5rem;
         }
@@ -106,12 +106,14 @@ export function MobileCommandCenter() {
         }
         .mc-title {
           color: hsl(var(--foreground));
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
           font-size: clamp(2rem, 10vw, 2.65rem);
           font-weight: 800;
-          letter-spacing: -.06em;
+          letter-spacing: .015em;
           line-height: 1;
           margin: .55rem 0 0;
           max-width: 14ch;
+          text-transform: uppercase;
         }
         .mc-workspace {
           margin-top: 1.5rem;
@@ -129,10 +131,12 @@ export function MobileCommandCenter() {
         }
         .mc-section-title {
           color: hsl(var(--foreground));
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
           font-size: 1.02rem;
           font-weight: 800;
-          letter-spacing: -.035em;
+          letter-spacing: .02em;
           margin: .3rem 0 0;
+          text-transform: uppercase;
         }
         .mc-role-list {
           display: grid;
@@ -179,6 +183,12 @@ export function MobileCommandCenter() {
         }
         .mc-role-button[data-active="true"] .mc-role-detail {
           color: hsl(var(--primary-foreground) / .75);
+        }
+        .mc-role-button[data-active="false"] { box-shadow: 3px 3px 0 hsl(var(--accent)); }
+        .mc-role-label {
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
+          letter-spacing: .02em;
+          text-transform: uppercase;
         }
         .mc-footer {
           align-items: center;

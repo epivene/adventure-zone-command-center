@@ -95,7 +95,7 @@ export function CommandTerminalLanding() {
           width: .4rem;
         }
         .ctl-hero {
-          border-bottom: 1px solid hsl(var(--border));
+          border-bottom: 2px solid hsl(var(--foreground));
           margin-top: 2.5rem;
           padding-bottom: 1.5rem;
         }
@@ -107,12 +107,14 @@ export function CommandTerminalLanding() {
         }
         .ctl-title {
           color: hsl(var(--foreground));
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
           font-size: clamp(2rem, 10vw, 2.65rem);
           font-weight: 800;
-          letter-spacing: -.06em;
+          letter-spacing: .015em;
           line-height: 1;
           margin: .55rem 0 0;
           max-width: 14ch;
+          text-transform: uppercase;
         }
         .ctl-workspace { margin-top: 1.5rem; }
         .ctl-section-head {
@@ -128,10 +130,12 @@ export function CommandTerminalLanding() {
         }
         .ctl-section-title {
           color: hsl(var(--foreground));
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
           font-size: 1.02rem;
           font-weight: 800;
-          letter-spacing: -.035em;
+          letter-spacing: .02em;
           margin: .3rem 0 0;
+          text-transform: uppercase;
         }
         .ctl-role-list {
           display: grid;
@@ -173,8 +177,12 @@ export function CommandTerminalLanding() {
           margin-top: .2rem;
         }
         .ctl-role-link[data-active="false"] .ctl-role-detail { color: hsl(var(--muted-foreground)); }
-        .ctl-role-count { color: hsl(var(--primary-foreground)); font-size: .6rem; font-weight: 800; }
-        .ctl-role-link[data-active="false"] .ctl-role-count { color: hsl(var(--primary)); }
+        .ctl-role-link[data-active="false"] { box-shadow: 3px 3px 0 hsl(var(--accent)); }
+        .ctl-role-label {
+          font-family: var(--app-font-display, Impact, "Arial Narrow Bold", sans-serif);
+          letter-spacing: .02em;
+          text-transform: uppercase;
+        }
         @media (max-width: 22rem) {
           .ctl-shell { width: min(100% - 1rem, 30rem); }
           .ctl-ready { display: none; }
