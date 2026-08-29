@@ -11,6 +11,7 @@ import {
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Switch } from '../components/ui/switch';
+import { Guidelines } from './parts';
 
 const CORE_SWATCHES = [
   { name: 'Primary', className: 'bg-primary' },
@@ -40,6 +41,25 @@ const SPACING_SCALE = [
   { label: '12', className: 'w-12' },
   { label: '16', className: 'w-16' },
   { label: '24', className: 'w-24' },
+] as const;
+
+const COMPOSITION_GUIDELINES = [
+  {
+    kind: 'do' as const,
+    text: 'Lead with record identity, relationship status, and the next useful action.',
+  },
+  {
+    kind: 'do' as const,
+    text: 'Keep metadata compact and close to the surface it describes.',
+  },
+  {
+    kind: 'do' as const,
+    text: 'Give each contact, activity, and record action one clear home.',
+  },
+  {
+    kind: 'dont' as const,
+    text: 'Repeat the same data or controls across multiple cards.',
+  },
 ] as const;
 
 function Swatch({
@@ -129,6 +149,15 @@ export function OverviewPage() {
           <Badge variant="outline">Outline</Badge>
         </div>
       </section>
+
+      <section className="rounded-xl border bg-card p-5 text-card-foreground">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Composition principles
+        </h2>
+        <div className="mt-4">
+          <Guidelines items={[...COMPOSITION_GUIDELINES]} />
+        </div>
+      </section>
     </div>
   );
 }
@@ -161,6 +190,28 @@ export function ColorsPage() {
           {SUPPORTING_SWATCHES.map((swatch) => (
             <Swatch key={swatch.name} {...swatch} />
           ))}
+        </div>
+      </section>
+
+      <section className="border-t pt-6">
+        <h2 className="font-semibold">Color usage</h2>
+        <div className="mt-3">
+          <Guidelines
+            items={[
+              {
+                kind: 'do',
+                text: 'Use emerald for primary actions and positive relationship states.',
+              },
+              {
+                kind: 'do',
+                text: 'Reserve terracotta for ratings, deadlines, and small attention cues.',
+              },
+              {
+                kind: 'dont',
+                text: 'Use the accent color as a large decorative background.',
+              },
+            ]}
+          />
         </div>
       </section>
     </div>
@@ -237,6 +288,14 @@ export function LayoutPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="rounded-xl border bg-card p-6 text-card-foreground lg:col-span-2">
+        <h2 className="font-semibold">Surface and density</h2>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          Quiet off-white surfaces, thin cool borders, and a four-point rhythm
+          keep CRM records information-dense without feeling busy.
+        </p>
       </section>
     </div>
   );
