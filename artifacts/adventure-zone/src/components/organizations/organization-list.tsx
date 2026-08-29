@@ -11,6 +11,7 @@ function listHref(query: OrganizationListQuery) {
   if (query.directoryView && query.directoryView !== "all") params.set("view", query.directoryView);
   if (query.search) params.set("q", query.search);
   if (query.lastResort === "only") params.set("lastResort", "only");
+  if (query.filler === "only") params.set("filler", "only");
   if (query.travelLegId) params.set("leg", query.travelLegId);
   if (query.placeType) params.set("type", query.placeType);
   if (query.region) params.set("region", query.region);
@@ -67,6 +68,7 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
     query.placeType ? { label: profileTypeLabel ?? query.placeType, href: listHref({ ...query, placeType: null, page: 1 }) } : null,
     query.region ? { label: `Region: ${query.region}`, href: listHref({ ...query, region: null, page: 1 }) } : null,
     query.lastResort === "only" ? { label: "Last Resort", href: listHref({ ...query, lastResort: "all", page: 1 }) } : null,
+    query.filler === "only" ? { label: "Filler", href: listHref({ ...query, filler: "all", page: 1 }) } : null,
     query.travelLegId ? { label: `Leg: ${legLabel ?? "selected"}`, href: listHref({ ...query, travelLegId: null, page: 1 }) } : null,
     query.hasPhone ? { label: "Has phone", href: listHref({ ...query, hasPhone: false, page: 1 }) } : null,
     query.hasEmail ? { label: "Has email", href: listHref({ ...query, hasEmail: false, page: 1 }) } : null,
@@ -75,7 +77,7 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
     query.hasLocations ? { label: "Has locations", href: listHref({ ...query, hasLocations: false, page: 1 }) } : null,
     query.showMembers ? { label: "Showing family members", href: listHref({ ...query, showMembers: false, page: 1 }) } : null,
   ].filter((value): value is ActiveFilter => Boolean(value));
-  const directoryReset = listHref({ ...query, search: "", lastResort: "all", travelLegId: null, placeType: null, region: null, hasPhone: false, hasEmail: false, hasFollowUp: false, hasBooking: false, hasLocations: false, showMembers: false, page: 1 });
+  const directoryReset = listHref({ ...query, search: "", lastResort: "all", filler: "all", travelLegId: null, placeType: null, region: null, hasPhone: false, hasEmail: false, hasFollowUp: false, hasBooking: false, hasLocations: false, showMembers: false, page: 1 });
 
   return (
     <div className="grid gap-4">
@@ -120,6 +122,9 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
             </label>
             <label className="grid gap-1 text-sm font-semibold">Profile status
               <select defaultValue={query.lastResort} name="lastResort"><option value="all">All profiles</option><option value="only">Last Resort only</option></select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">Strategy
+              <select defaultValue={query.filler} name="filler"><option value="all">All strategies</option><option value="only">Filler only</option></select>
             </label>
             <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-2">
               {[
@@ -181,6 +186,7 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Link className="break-words text-xl font-bold tracking-tight text-slate-950 hover:text-orange-700" href={profileHref}>{organization.name}</Link>
+                      {organization.filler ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800" title={organization.fillerReason ?? undefined}>Filler</span> : null}
                       {organization.lastResort ? <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-rose-800">Last Resort</span> : null}
                     </div>
                     <div className="mt-1 flex flex-wrap items-center gap-1.5 text-sm text-slate-600">{location ? <span className="inline-flex items-center gap-1"><span aria-hidden>⌖</span>{location}</span> : null}</div>
