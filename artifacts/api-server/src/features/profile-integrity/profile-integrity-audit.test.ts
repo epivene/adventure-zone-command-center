@@ -121,6 +121,8 @@ describe("ProfileIntegrityAuditService", () => {
           appearance_count: "1",
           act_appearance_count: "0",
           timeline_count: "4",
+          first_timeline_at: "2025-02-01T12:00:00.000Z",
+          latest_timeline_at: "2026-08-20T12:00:00.000Z",
           open_follow_up_count: "0",
           gmail_thread_count: "0",
           calendar_link_count: "0",
