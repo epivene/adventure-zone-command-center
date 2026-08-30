@@ -50,8 +50,23 @@ jobs:
           python .github/scripts/apply_profile_appearance_reconciliation.py
           python <<'PY'
           from pathlib import Path
-          path = Path('lib/db/migrations/074_profile_appearance_integrity.sql')
-          path.write_text(path.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+
+          migration = Path('lib/db/migrations/074_profile_appearance_integrity.sql')
+          migration.write_text(
+              migration.read_text(encoding='utf-8').rstrip() + '\n',
+              encoding='utf-8',
+          )
+
+          test_file = Path(
+              'artifacts/api-server/src/features/profile-integrity/'
+              'profile-appearance-integrity-migration.pglite.test.ts'
+          )
+          test_source = test_file.read_text(encoding='utf-8')
+          old = '    create extension if not exists pgcrypto;\n'
+          new = '''    create sequence if not exists test_uuid_sequence;\n    create or replace function gen_random_uuid() returns uuid language sql volatile as $$\n      select ('00000000-0000-4000-8000-' || lpad(nextval('test_uuid_sequence')::text, 12, '0'))::uuid\n    $$;\n'''
+          if test_source.count(old) != 1:
+              raise SystemExit('Expected one pgcrypto setup line in the PGlite test')
+          test_file.write_text(test_source.replace(old, new, 1), encoding='utf-8')
           PY
 
       - name: Verify patch shape
@@ -62,6 +77,7 @@ jobs:
           ! grep -Eq 'UPDATE call_sessions[[:space:][:print:]]*updated_at' lib/db/migrations/074_profile_appearance_integrity.sql
           grep -q 'Event years & assignments' artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx
           grep -q 'booking_consolidations retired' artifacts/api-server/src/features/event-profiles/event-profile-repository.ts
+          grep -q 'create sequence if not exists test_uuid_sequence' artifacts/api-server/src/features/profile-integrity/profile-appearance-integrity-migration.pglite.test.ts
 
       - name: Run database and API regression tests
         run: |
