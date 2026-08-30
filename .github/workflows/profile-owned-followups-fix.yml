@@ -1,0 +1,81 @@
+name: Apply profile-owned follow-up fix
+
+on:
+  push:
+    branches:
+      - fix/profile-owned-followups
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Add regression tests first
+        run: python scripts/apply-profile-owned-followups-fix.py tests
+
+      - name: Prove the regression tests fail before the fix
+        shell: bash
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/follow-ups/single-active-follow-up.pglite.test.ts \
+            src/features/follow-ups/today-profile-followup.pglite.test.ts \
+            src/features/follow-ups/today-copilot.test.ts \
+            src/features/today/master-work-queue-repository-selection.test.ts \
+            > /tmp/profile-followup-red.log 2>&1
+          status=$?
+          set -e
+          cat /tmp/profile-followup-red.log
+          if [ "$status" -eq 0 ]; then
+            echo "Regression tests unexpectedly passed before the implementation." >&2
+            exit 1
+          fi
+          echo "Confirmed: the current code reproduces the profile/booking split bug."
+
+      - name: Apply the implementation
+        run: python scripts/apply-profile-owned-followups-fix.py implementation
+
+      - name: Run focused follow-up and Today tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/follow-ups/single-active-follow-up.pglite.test.ts \
+            src/features/follow-ups/follow-up-repository.pglite.test.ts \
+            src/features/follow-ups/today-profile-followup.pglite.test.ts \
+            src/features/follow-ups/today-copilot.test.ts \
+            src/features/follow-ups/today-query.test.ts \
+            src/features/bookings/booking-service.test.ts \
+            src/features/today/master-work-queue.test.ts \
+            src/features/today/master-work-queue-repository-selection.test.ts
+
+      - name: Typecheck API server
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Commit verified fix
+        shell: bash
+        run: |
+          rm .github/workflows/profile-owned-followups-fix.yml
+          rm scripts/apply-profile-owned-followups-fix.py
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: make event profiles own follow-ups [profile-followup-fixed]"
+          git push origin HEAD:fix/profile-owned-followups
