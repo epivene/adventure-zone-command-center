@@ -40,6 +40,7 @@ function statusForState(state: string | null | undefined) {
   if (state === "cancelled") return "cancelled" as const;
   if (state === "placeholder") return "possible" as const;
   if (state === "action_required") return "researching" as const;
+  if (state === "non_event") return "possible" as const;
   return "confirmed" as const;
 }
 

@@ -163,10 +163,12 @@ export class OperationalCalendarLinkRepository {
     }).onConflictDoNothing();
   }
 
-  async listPendingReviews(connectionId: string) {
-    return this.db.select().from(googleOperationalCalendarReviews).where(and(
-      eq(googleOperationalCalendarReviews.connectionId, connectionId),
-      eq(googleOperationalCalendarReviews.state, "pending"),
-    ));
+  async listPendingReviews(connectionId?: string) {
+    const pending = eq(googleOperationalCalendarReviews.state, "pending");
+    return this.db.select().from(googleOperationalCalendarReviews).where(
+      connectionId
+        ? and(eq(googleOperationalCalendarReviews.connectionId, connectionId), pending)
+        : pending,
+    );
   }
 }

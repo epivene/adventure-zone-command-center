@@ -90,6 +90,27 @@ function parseAddressLine(addressText: string | null) {
   return first || null;
 }
 
+function physicalEventKey(input: {
+  eventName: string;
+  city: string | null;
+  region: string | null;
+  managerToken: string | null;
+  actualDates: { startsAt: Date; endsAt: Date } | null;
+  reservedStart: Date;
+  reservedEnd: Date;
+}) {
+  return [
+    normalized(input.eventName),
+    normalized(input.city ?? ""),
+    normalized(input.region ?? ""),
+    normalized(input.managerToken ?? ""),
+    input.actualDates?.startsAt.toISOString() ?? "",
+    input.actualDates?.endsAt.toISOString() ?? "",
+    input.reservedStart.toISOString(),
+    input.reservedEnd.toISOString(),
+  ].join("|");
+}
+
 export class OperationalCalendarImportService {
   private readonly links: OperationalCalendarLinkRepository;
 
@@ -138,6 +159,7 @@ export class OperationalCalendarImportService {
     let created = 0;
     let review = 0;
     const results: OperationalCalendarImportRowResult[] = [];
+    const reconciledByPhysicalEvent = new Map<string, string>();
 
     for (const event of events) {
       const title = event.summary?.trim() || "Untitled Google calendar event";
@@ -176,10 +198,19 @@ export class OperationalCalendarImportService {
       }
       const packageKey = parsed.packageKey as Exclude<OperationalCalendarPackageKey, "unknown">;
       const recognizedManagerLegId = managerLegId!;
+      const reservedStart = startOfUtcDay(event.startDate);
+      const reservedEnd = startOfUtcDay(event.endDateExclusive);
+      const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
+      const eventKey = physicalEventKey({
+        eventName: parsed.eventName,
+        city: parsed.city,
+        region: parsed.region,
+        managerToken: parsed.managerToken,
+        actualDates,
+        reservedStart,
+        reservedEnd,
+      });
       if (existingLink) {
-        const reservedStart = startOfUtcDay(event.startDate);
-        const reservedEnd = startOfUtcDay(event.endDateExclusive);
-        const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
         await this.refreshExistingLink({
           connectionId: connection.connectionId,
           calendarId: connection.calendarId,
@@ -199,21 +230,28 @@ export class OperationalCalendarImportService {
           bookingName: await this.bookingName(existingLink.bookingId),
           reason: null,
         });
+        reconciledByPhysicalEvent.set(eventKey, existingLink.bookingId);
         continue;
       }
 
-      const reservedStart = startOfUtcDay(event.startDate);
-      const reservedEnd = startOfUtcDay(event.endDateExclusive);
-      const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
-      const match = matchOperationalCalendarEvent({
-        eventName: parsed.eventName,
-        city: parsed.city,
-        region: parsed.region,
-        actualStartsAt: actualDates?.startsAt ?? null,
-        actualEndsAt: actualDates?.endsAt ?? null,
-        managerToken: parsed.managerToken,
-        candidates: await this.loadCandidates(),
-      });
+      const reconciledBookingId = reconciledByPhysicalEvent.get(eventKey);
+      const match = reconciledBookingId
+        ? {
+            kind: "matched" as const,
+            bookingId: reconciledBookingId,
+            organizationId: null,
+            confidence: "high" as const,
+            score: 100,
+          }
+        : matchOperationalCalendarEvent({
+            eventName: parsed.eventName,
+            city: parsed.city,
+            region: parsed.region,
+            actualStartsAt: actualDates?.startsAt ?? null,
+            actualEndsAt: actualDates?.endsAt ?? null,
+            managerToken: parsed.managerToken,
+            candidates: await this.loadCandidates(),
+          });
 
       if (match.kind === "review") {
         await this.links.createReview({
@@ -268,6 +306,7 @@ export class OperationalCalendarImportService {
         created += 1;
       }
 
+      reconciledByPhysicalEvent.set(eventKey, bookingId);
       await this.ensurePackage(bookingId, packageKey);
       await this.links.saveSuccessfulSync({
         connectionId: connection.connectionId,
@@ -348,14 +387,22 @@ export class OperationalCalendarImportService {
 
   private async loadCandidates(): Promise<OperationalCalendarMatchCandidate[]> {
     const rows = await this.db
-      .select({ booking: bookings, legName: travelLegs.name })
+      .select({
+        booking: bookings,
+        organization: organizations,
+        legName: travelLegs.name,
+      })
       .from(bookings)
+      .leftJoin(organizations, eq(bookings.organizationId, organizations.id))
       .leftJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
       .orderBy(asc(bookings.startsAt), asc(bookings.name));
-    return rows.map(({ booking, legName }) => ({
+    return rows.map(({ booking, organization, legName }) => ({
       bookingId: booking.id,
       organizationId: booking.organizationId,
       name: booking.name,
+      organizationName: organization?.name ?? null,
+      actRecordId: booking.actRecordId,
+      organizationActRecordId: organization?.actRecordId ?? null,
       city: booking.city,
       region: booking.region,
       startsAt: booking.startsAt,
@@ -382,16 +429,29 @@ export class OperationalCalendarImportService {
     const [existing] = await this.db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
     if (!existing) return;
     await this.db.update(bookings).set({
+      name: input.parsed.eventName.trim() || existing.name,
       status: stateStatus(input.parsed.calendarState),
+      // The shared Drizzle schema still exposes the legacy probability union;
+      // the production enum and confirmed-booking trigger include "definite".
+      probability: (input.parsed.calendarState === "confirmed" ? "definite" : existing.probability) as any,
       startsAt: input.actualDates?.startsAt ?? existing.startsAt,
       endsAt: input.actualDates?.endsAt ?? existing.endsAt,
       travelLegId: legId ?? existing.travelLegId,
       city: input.parsed.city ?? existing.city,
       region: input.parsed.region ?? existing.region,
       address1: parseAddressLine(input.parsed.addressText) ?? existing.address1,
-      notes: input.parsed.originalDescription?.trim() || existing.notes,
+      notes: input.parsed.originalDescription?.trim() || null,
       updatedAt: this.now(),
     }).where(eq(bookings.id, input.bookingId));
+    if (existing.organizationId) {
+      await this.db.update(organizations).set({
+        name: input.parsed.eventName.trim() || undefined,
+        city: input.parsed.city ?? undefined,
+        region: input.parsed.region ?? undefined,
+        address1: parseAddressLine(input.parsed.addressText) ?? undefined,
+        updatedAt: this.now(),
+      }).where(eq(organizations.id, existing.organizationId));
+    }
     await this.saveWindow(input.bookingId, input.reservedStart, input.reservedEnd);
   }
 

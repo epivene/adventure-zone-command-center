@@ -35,6 +35,14 @@ describe("operational calendar import policy", () => {
       .toBe("Calendar row needs a recognized manager leg");
   });
 
+  it("does not promote personal reminders to confirmed bookings", () => {
+    const parsed = parseDavidOperationalCalendarEvent({
+      summary: "PERSONAL Dentist appointment",
+    });
+    expect(operationalCalendarReviewReason({ parsed, hasManagerLeg: false }))
+      .toBe("Calendar row is non event and needs review");
+  });
+
   it("routes a linked package change to review instead of accumulating package selections", () => {
     const parsed = parseDavidOperationalCalendarEvent({
       summary: "ANGEL County Fair - Delta UT (Pirates)",

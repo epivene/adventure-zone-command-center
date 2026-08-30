@@ -95,6 +95,15 @@ describe("parseDavidOperationalCalendarEvent", () => {
     expect(parsed.managerToken).toBeNull();
   });
 
+  it("classifies personal reminders as non-events instead of confirmed rows", () => {
+    expect(parseDavidOperationalCalendarEvent({
+      summary: "PERSONAL Dentist appointment",
+    })).toMatchObject({
+      calendarState: "non_event",
+      managerToken: null,
+    });
+  });
+
   it("does not invent missing description fields", () => {
     const parsed = parseDavidOperationalCalendarEvent({
       summary: "DAVE Beaverhead County Fair - Dillon MT (Warrior)",

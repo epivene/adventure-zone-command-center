@@ -4,6 +4,7 @@ import {
   bookingOperationalWindows,
   bookingPackageSelections,
   bookings,
+  organizations,
   packageTemplates,
   travelLegs,
 } from "@/db/schema";
@@ -165,5 +166,144 @@ describe("OperationalCalendarImportService manager reconciliation", () => {
       "package-pirates_rebellion",
     ]));
     expect(operationalWindows).toHaveLength(8);
+  });
+
+  it("creates one confirmed profile and booking for multiple package rows of one physical event", async () => {
+    const events: OperationalCalendarEvent[] = [
+      {
+        id: "google-dave-zone",
+        etag: "etag-zone",
+        updated: "2026-08-01T00:00:00.000Z",
+        status: "confirmed",
+        summary: "DAVE Beaverhead County Fair - Dillon MT (Zone)",
+        description: "EVENT DATES: September 10, 2026",
+        startDate: "2026-09-08",
+        endDateExclusive: "2026-09-13",
+      },
+      {
+        id: "google-dave-pirates",
+        etag: "etag-pirates",
+        updated: "2026-08-01T00:00:00.000Z",
+        status: "confirmed",
+        summary: "DAVE Beaverhead County Fair - Dillon MT (Pirates)",
+        description: "EVENT DATES: September 10, 2026",
+        startDate: "2026-09-08",
+        endDateExclusive: "2026-09-13",
+      },
+    ];
+    const createdOrganizations: Array<Record<string, unknown>> = [];
+    const createdBookings: Array<Record<string, unknown>> = [];
+    const packageSelections: Array<Record<string, unknown>> = [];
+    const operationalWindows: Array<Record<string, unknown>> = [];
+    const linksByEvent = new Map<string, any>();
+
+    const packageRows = [
+      { id: "package-adventure_zone", code: "adventure_zone", name: "Zone" },
+      { id: "package-pirates_rebellion", code: "pirates_rebellion", name: "Pirates" },
+    ];
+    const db: any = {
+      select(selection?: Record<string, unknown>) {
+        let table: unknown;
+        const query: any = {
+          from(value: unknown) { table = value; return query; },
+          leftJoin() { return query; },
+          where() { return query; },
+          limit: async () => rows(),
+          orderBy: async () => rows(),
+          then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+            return Promise.resolve(rows()).then(resolve, reject);
+          },
+        };
+        function rows() {
+          if (table === travelLegs) return [{ id: "leg-dave", name: "DAVE" }];
+          if (table === packageTemplates) return packageRows;
+          if (table === bookings && selection && "booking" in selection) {
+            return createdBookings.map((booking) => ({
+              booking,
+              organization: createdOrganizations.find((organization) => organization.id === booking.organizationId) ?? null,
+              legName: "DAVE",
+            }));
+          }
+          if (table === bookings && selection && "name" in selection) {
+            return createdBookings.slice(0, 1).map((booking) => ({ name: booking.name }));
+          }
+          if (table === bookings) return createdBookings;
+          return [];
+        }
+        return query;
+      },
+      insert(table: unknown) {
+        return {
+          values(values: Record<string, unknown>) {
+            if (table === organizations) {
+              createdOrganizations.push({ id: "org-created", ...values });
+            } else if (table === bookings) {
+              createdBookings.push({ id: "booking-created", ...values });
+            } else if (table === bookingPackageSelections) {
+              packageSelections.push(values);
+            } else if (table === bookingOperationalWindows) {
+              operationalWindows.push(values);
+            }
+            return {
+              returning: async () => table === organizations
+                ? [{ id: "org-created" }]
+                : [{ id: "booking-created" }],
+              onConflictDoNothing: vi.fn().mockResolvedValue(undefined),
+              onConflictDoUpdate: vi.fn().mockResolvedValue(undefined),
+            };
+          },
+        };
+      },
+      update(table: unknown) {
+        return {
+          set(values: Record<string, unknown>) {
+            if (table === bookings && createdBookings[0]) Object.assign(createdBookings[0], values);
+            return { where: vi.fn().mockResolvedValue(undefined) };
+          },
+        };
+      },
+      transaction: async (callback: (transaction: any) => Promise<unknown>) => callback(db),
+    };
+    const links = {
+      findByGoogleEvent: vi.fn(async ({ googleEventId }: { googleEventId: string }) => linksByEvent.get(googleEventId) ?? null),
+      createReview: vi.fn(),
+      saveSuccessfulSync: vi.fn(async (input: any) => {
+        const link = { id: `link-${input.googleEventId}`, ...input };
+        linksByEvent.set(input.googleEventId, link);
+        return link;
+      }),
+    };
+    const service = new OperationalCalendarImportService(
+      db,
+      async () => ({
+        connectionId: "connection-1",
+        calendarId: "calendar-1",
+        client: { listEvents: vi.fn(async () => ({ events, nextPageToken: null })) } as any,
+      }),
+      links as any,
+      () => new Date("2026-08-30T00:00:00.000Z"),
+    );
+
+    const result = await service.importWindow({
+      from: new Date("2026-09-01T00:00:00.000Z"),
+      to: new Date("2026-10-01T00:00:00.000Z"),
+    });
+
+    expect(result).toMatchObject({ created: 1, matched: 1, review: 0, rows: 2 });
+    expect(createdOrganizations).toHaveLength(1);
+    expect(createdBookings).toHaveLength(1);
+    expect(linksByEvent).toHaveLength(2);
+    expect(packageSelections.map((selection) => selection.packageTemplateId)).toEqual([
+      "package-adventure_zone",
+      "package-pirates_rebellion",
+    ]);
+    expect(operationalWindows).toHaveLength(2);
+    expect(createdBookings[0]).toMatchObject({
+      status: "confirmed",
+      probability: "definite",
+      startsAt: new Date("2026-09-10T00:00:00.000Z"),
+      endsAt: new Date("2026-09-10T00:00:00.000Z"),
+      travelLegId: "leg-dave",
+    });
   });
 });

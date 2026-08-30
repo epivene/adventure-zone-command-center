@@ -76,6 +76,42 @@ describe("operational calendar matcher", () => {
     })).toEqual({ kind: "new" });
   });
 
+  it("matches a stale imported booking when a strong identity and one corroborating field remain", () => {
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: candidate.city,
+      region: candidate.region,
+      actualStartsAt: new Date("2026-09-12T00:00:00.000Z"),
+      actualEndsAt: new Date("2026-09-12T00:00:00.000Z"),
+      managerToken: "MIKEY",
+      candidates: [{
+        ...candidate,
+        startsAt: null,
+        endsAt: null,
+        travelLegName: null,
+      }],
+    })).toMatchObject({ kind: "matched", bookingId: "booking-1" });
+  });
+
+  it("does not reject a clear identity when an imported location component is absent", () => {
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: candidate.city,
+      region: candidate.region,
+      actualStartsAt: candidate.startsAt,
+      actualEndsAt: candidate.endsAt,
+      managerToken: "MIKEY",
+      candidates: [{
+        ...candidate,
+        city: "",
+        region: candidate.region,
+        startsAt: null,
+        endsAt: null,
+        travelLegName: null,
+      }],
+    })).toMatchObject({ kind: "matched", bookingId: "booking-1" });
+  });
+
   it("does not match a same-name booking assigned to a different manager", () => {
     expect(matchOperationalCalendarEvent({
       eventName: candidate.name,

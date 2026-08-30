@@ -84,6 +84,7 @@ describe("projectOperationalCalendarReview", () => {
       ["placeholder", "possible"],
       ["cancelled", "cancelled"],
       ["action_required", "researching"],
+      ["non_event", "possible"],
     ] as const) {
       const event = projectOperationalCalendarReview({
         ...base,

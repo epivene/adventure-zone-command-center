@@ -2,6 +2,9 @@ export type OperationalCalendarMatchCandidate = {
   bookingId: string;
   organizationId: string | null;
   name: string;
+  organizationName?: string | null;
+  actRecordId?: string | null;
+  organizationActRecordId?: string | null;
   city: string;
   region: string;
   startsAt: Date | null;
@@ -42,6 +45,7 @@ function scoreCandidate(input: {
   let score = 0;
   const eventName = normalize(input.eventName);
   const candidateName = normalize(candidate.name);
+  const organizationName = normalize(candidate.organizationName);
   const exactName = Boolean(eventName && candidateName === eventName);
   const relatedName = Boolean(
     !exactName
@@ -49,11 +53,27 @@ function scoreCandidate(input: {
     && candidateName
     && (candidateName.includes(eventName) || eventName.includes(candidateName)),
   );
+  const organizationMatch = Boolean(
+    organizationName
+    && eventName
+    && (
+      organizationName === eventName
+      || organizationName.includes(eventName)
+      || eventName.includes(organizationName)
+    ),
+  );
   if (exactName) score += 60;
   else if (relatedName) score += 38;
+  if (organizationMatch && !exactName) score += organizationName === eventName ? 22 : 12;
 
-  const cityMatch = Boolean(input.city && normalize(candidate.city) === normalize(input.city));
-  const regionMatch = Boolean(input.region && normalize(candidate.region) === normalize(input.region));
+  const candidateCity = normalize(candidate.city);
+  const candidateRegion = normalize(candidate.region);
+  const inputCity = normalize(input.city);
+  const inputRegion = normalize(input.region);
+  const cityMatch = Boolean(inputCity && candidateCity === inputCity);
+  const regionMatch = Boolean(inputRegion && candidateRegion === inputRegion);
+  const cityConflict = Boolean(inputCity && candidateCity && inputCity !== candidateCity);
+  const regionConflict = Boolean(inputRegion && candidateRegion && inputRegion !== candidateRegion);
   if (cityMatch) score += 20;
   if (regionMatch) score += 10;
 
@@ -65,16 +85,42 @@ function scoreCandidate(input: {
     else if (days <= 14) score += 5;
   }
 
-  if (input.managerToken && candidate.travelLegName && normalize(candidate.travelLegName) === normalize(input.managerToken)) {
+  const managerMatch = Boolean(
+    input.managerToken
+    && candidate.travelLegName
+    && normalize(candidate.travelLegName) === normalize(input.managerToken),
+  );
+  const managerConflict = Boolean(
+    input.managerToken
+    && candidate.travelLegName
+    && normalize(candidate.travelLegName) !== normalize(input.managerToken),
+  );
+  if (managerMatch) {
     score += 8;
   }
-  const managerCompatible = !candidate.travelLegName
-    || Boolean(input.managerToken && normalize(candidate.travelLegName) === normalize(input.managerToken));
-  const reliable = (exactName || relatedName)
-    && cityMatch
-    && regionMatch
-    && overlap > 0
-    && managerCompatible;
+  const dateConflict = Boolean(
+    input.actualStartsAt
+    && candidate.startsAt
+    && overlap === 0
+    && Math.abs(input.actualStartsAt.getTime() - candidate.startsAt.getTime()) / 86_400_000 > 14,
+  );
+  const dateMatch = overlap > 0 || (
+    Boolean(input.actualStartsAt && candidate.startsAt)
+    && Math.abs(input.actualStartsAt!.getTime() - candidate.startsAt!.getTime()) / 86_400_000 <= 3
+  );
+  if (dateMatch && overlap === 0) score += 12;
+
+  // A stale import may be missing dates, a location component, or a leg assignment.
+  // Missing evidence is neutral; contradictory evidence is not. An identity match
+  // still needs one corroborating signal before it can be selected automatically.
+  const identityMatch = exactName || relatedName;
+  const corroborated = cityMatch || regionMatch || dateMatch || managerMatch || organizationMatch;
+  const reliable = identityMatch
+    && corroborated
+    && !cityConflict
+    && !regionConflict
+    && !managerConflict
+    && !dateConflict;
   return { score, reliable };
 }
 

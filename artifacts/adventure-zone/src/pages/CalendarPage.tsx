@@ -36,6 +36,17 @@ function isGoogleOperationalReview(event: CalendarEvent) {
   return (event as any).source === "google_operational_review";
 }
 
+function dedupeOperationalReviews(events: CalendarEvent[]) {
+  const seen = new Set<string>();
+  return events.filter((event) => {
+    if (!isGoogleOperationalReview(event)) return true;
+    const key = `google-review:${String((event as any).reviewId ?? event.id)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 type OperationalCalendarStatus = {
   reviewEvents?: Array<Record<string, unknown>>;
 };
@@ -128,7 +139,10 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
       apiGet<OperationalCalendarStatus>("/google-workspace/operational-calendar").catch(() => ({ reviewEvents: [] })),
     ])
       .then(([calendarData, operationalStatus]) => {
-        const combined = [...(calendarData ?? []), ...((operationalStatus.reviewEvents ?? []) as unknown as CalendarEvent[])];
+        const combined = dedupeOperationalReviews([
+          ...(calendarData ?? []),
+          ...((operationalStatus.reviewEvents ?? []) as unknown as CalendarEvent[]),
+        ]);
         const parsed = combined.map((event) => {
           const raw = event as any;
           const converted = {

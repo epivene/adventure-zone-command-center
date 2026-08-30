@@ -1,5 +1,10 @@
 export type OperationalPackageKey = "zone" | "pirates" | "warrior" | "unknown";
-export type OperationalCalendarState = "confirmed" | "placeholder" | "cancelled" | "action_required";
+export type OperationalCalendarState =
+  | "confirmed"
+  | "placeholder"
+  | "cancelled"
+  | "action_required"
+  | "non_event";
 
 export type ParsedOperationalCalendarEvent = {
   managerToken: string | null;
@@ -31,6 +36,19 @@ const actionPrefixes = [
   "FOLLOW UP",
 ];
 
+const nonEventPrefixes = [
+  "PERSONAL",
+  "PRIVATE",
+  "BLOCKED",
+  "OUT OF OFFICE",
+  "OOO",
+  "VACATION",
+  "TRAVEL",
+  "DRIVE",
+  "DRIVING",
+  "BIRTHDAY",
+];
+
 function packageKey(value: string | null): OperationalPackageKey {
   const normalized = value?.trim().toLowerCase() ?? "";
   if (normalized.includes("zone")) return "zone";
@@ -44,6 +62,9 @@ function calendarState(summary: string): OperationalCalendarState {
   if (upper.startsWith("CANCELLED") || upper.startsWith("CANCELED")) return "cancelled";
   if (upper.startsWith("PLACEHOLDER")) return "placeholder";
   if (actionPrefixes.some((prefix) => upper.startsWith(prefix))) return "action_required";
+  if (nonEventPrefixes.some((prefix) => upper === prefix || upper.startsWith(`${prefix} `) || upper.startsWith(`${prefix}:`))) {
+    return "non_event";
+  }
   return "confirmed";
 }
 

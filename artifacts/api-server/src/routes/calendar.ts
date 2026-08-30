@@ -1,6 +1,10 @@
 import { Router, type IRouter } from "express";
+import { db } from "@/db/client";
 import { getMapEvents, type MapFilters } from "@/features/routes/map-query";
+import { eventOverlapsBusinessWindow } from "@/features/routes/map-data";
 import { applyOperationalWindowsToCalendarBookings } from "@/features/google-workspace/calendar/calendar-operational-window-projection";
+import { OperationalCalendarLinkRepository } from "@/features/google-workspace/calendar/operational-calendar-link-repository";
+import { projectOperationalCalendarReview } from "@/features/google-workspace/calendar/operational-calendar-review-projection";
 import { DrizzleScheduleDisplaySettingsRepository } from "@/features/calendar/schedule-display-settings";
 
 const router: IRouter = Router();
@@ -276,13 +280,31 @@ router.get("/calendar", async (req, res): Promise<void> => {
 
     const operationalWindows = await getOperationalWindowsForCalendar(bookingEvents.map((event) => event.id));
     const calendarBookings = applyOperationalWindowsToCalendarBookings(bookingEvents, operationalWindows);
+    const pendingReviews = await new OperationalCalendarLinkRepository(db).listPendingReviews();
+    const reviewEvents = pendingReviews.flatMap((review) => {
+      try {
+        return [projectOperationalCalendarReview({
+          id: review.id,
+          googleEventId: review.googleEventId,
+          reason: review.reason,
+          bookingId: review.bookingId,
+          proposedChanges: review.proposedChanges,
+        })];
+      } catch {
+        return [];
+      }
+    }).filter((event) => eventOverlapsBusinessWindow(
+      event,
+      calendarFilters.dateFrom,
+      calendarFilters.dateTo,
+    ));
 
     const bookingsWithSource = calendarBookings.map((event) => ({
       ...event,
       source: "booking" as const,
     }));
 
-    res.json([...bookingsWithSource, ...actActivities]);
+    res.json([...bookingsWithSource, ...reviewEvents, ...actActivities]);
   } catch (err) {
     req.log.error({ err }, "Failed to load calendar");
     res.status(500).json({ error: "Failed to load calendar" });
