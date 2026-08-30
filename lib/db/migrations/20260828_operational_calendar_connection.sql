@@ -5,6 +5,16 @@ ALTER TABLE google_workspace_connections
 ALTER TABLE google_workspace_oauth_states
   ADD COLUMN IF NOT EXISTS connection_role text NOT NULL DEFAULT 'workspace';
 
+ALTER TABLE google_workspace_connections
+  DROP CONSTRAINT IF EXISTS google_workspace_connections_account_email_unique;
+
+DO $$ BEGIN
+  ALTER TABLE google_workspace_connections
+    ADD CONSTRAINT google_workspace_connections_account_email_role_unique
+    UNIQUE (account_email, role);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 DROP INDEX IF EXISTS google_workspace_connections_single_active_unique;
 DROP INDEX IF EXISTS google_workspace_connections_active_role_unique;
 

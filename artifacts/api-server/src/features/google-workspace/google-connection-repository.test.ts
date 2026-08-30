@@ -26,19 +26,24 @@ function repositoryHarness() {
     async query(text, values = []) {
       calls.push({ text, values });
       if (text.includes("INSERT INTO google_workspace_connections")) {
+        const operationalCalendar = text.includes("VALUES ($1, 'operational_calendar'");
         Object.assign(row, {
           id: "connection-id",
           account_email: values[0],
+          role: operationalCalendar ? "operational_calendar" : "workspace",
+          operational_calendar_id: operationalCalendar ? values[1] : null,
           status: "connected",
-          encrypted_refresh_token: values[1],
-          granted_scopes: typeof values[2] === "string" ? JSON.parse(values[2]) : values[2],
-          google_subject: values[3],
-          connected_at: values[4],
-          last_verified_at: values[4],
+          encrypted_refresh_token: values[operationalCalendar ? 2 : 1],
+          granted_scopes: typeof values[operationalCalendar ? 3 : 2] === "string"
+            ? JSON.parse(values[operationalCalendar ? 3 : 2] as string)
+            : values[operationalCalendar ? 3 : 2],
+          google_subject: values[operationalCalendar ? 4 : 3],
+          connected_at: values[operationalCalendar ? 5 : 4],
+          last_verified_at: values[operationalCalendar ? 5 : 4],
           disconnected_at: null,
           last_error_code: null,
-          created_at: values[4],
-          updated_at: values[4],
+          created_at: values[operationalCalendar ? 5 : 4],
+          updated_at: values[operationalCalendar ? 5 : 4],
         });
         return { rows: [row], rowCount: 1 };
       }
@@ -86,6 +91,45 @@ afterEach(() => {
 });
 
 describe("PostgresGoogleConnectionRepository", () => {
+  it("upserts workspace and operational-calendar credentials by account and role", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => fakeClient,
+    });
+
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: "google-subject",
+      refreshToken: "workspace-refresh-token",
+      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    const workspaceInsert = harness.calls.find((call) =>
+      call.text.includes("INSERT INTO google_workspace_connections"),
+    );
+    expect(workspaceInsert?.text).toContain("ON CONFLICT (account_email, role)");
+
+    harness.calls.length = 0;
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: "google-subject",
+      refreshToken: "calendar-refresh-token",
+      scopes: ["https://www.googleapis.com/auth/calendar.events"],
+      role: "operational_calendar",
+      operationalCalendarId: "zone@example.com",
+      now: new Date("2026-08-22T18:05:00.000Z"),
+    });
+
+    const calendarInsert = harness.calls.find((call) =>
+      call.text.includes("INSERT INTO google_workspace_connections"),
+    );
+    expect(calendarInsert?.text).toContain("ON CONFLICT (account_email, role)");
+    expect(calendarInsert?.text).not.toContain("role = 'workspace'");
+  });
+
   it("can be constructed and queried when Google Workspace is not configured", async () => {
     clearGoogleEnvironment();
     const harness = repositoryHarness();

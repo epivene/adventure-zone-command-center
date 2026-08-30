@@ -209,7 +209,7 @@ export class PostgresGoogleConnectionRepository {
                connected_at, last_verified_at, status, disconnected_at,
                last_error_code, created_at, updated_at
              ) VALUES ($1, $2, $3, $4, $5, $5, 'connected', NULL, NULL, $5, $5)
-             ON CONFLICT (account_email) DO UPDATE SET
+              ON CONFLICT (account_email, role) DO UPDATE SET
                encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
                granted_scopes = EXCLUDED.granted_scopes,
                google_subject = EXCLUDED.google_subject,
@@ -236,7 +236,7 @@ export class PostgresGoogleConnectionRepository {
                connected_at, last_verified_at, status, disconnected_at,
                last_error_code, created_at, updated_at
              ) VALUES ($1, 'operational_calendar', $2, $3, $4, $5, $6, $6, 'connected', NULL, NULL, $6, $6)
-             ON CONFLICT (account_email) DO UPDATE SET
+              ON CONFLICT (account_email, role) DO UPDATE SET
                role = 'operational_calendar', operational_calendar_id = EXCLUDED.operational_calendar_id,
                encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
                granted_scopes = EXCLUDED.granted_scopes, google_subject = EXCLUDED.google_subject,

@@ -79,8 +79,9 @@ export const googleWorkspaceConnections = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("google_workspace_connections_account_email_unique").on(
+    unique("google_workspace_connections_account_email_role_unique").on(
       table.accountEmail,
+      table.role,
     ),
     uniqueIndex("google_workspace_connections_active_role_unique")
       .on(table.role)

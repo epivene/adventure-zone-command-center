@@ -11,6 +11,10 @@ const migrationPath = path.join(
   repositoryRoot,
   "lib/db/migrations/20260822_google_workspace_foundation.sql",
 );
+const operationalCalendarMigrationPath = path.join(
+  repositoryRoot,
+  "lib/db/migrations/20260828_operational_calendar_connection.sql",
+);
 const renderPath = path.join(repositoryRoot, "render.yaml");
 
 function source(pathname: string) {
@@ -42,6 +46,14 @@ describe("Google Workspace foundation schema", () => {
     expect(migration).toContain("unique (connection_id, label_id)");
     expect(migration).toContain("unique (connection_id, calendar_id)");
     expect(migration).toContain("on delete cascade");
+  });
+
+  it("keeps workspace and operational-calendar credentials separate for the same account", () => {
+    const migration = source(operationalCalendarMigrationPath).toLowerCase();
+
+    expect(migration).toContain("drop constraint if exists google_workspace_connections_account_email_unique");
+    expect(migration).toContain("google_workspace_connections_account_email_role_unique");
+    expect(migration).toContain("unique (account_email, role)");
   });
 
   it("stores only encrypted credentials", () => {
