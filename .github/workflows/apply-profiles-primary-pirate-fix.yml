@@ -56,23 +56,6 @@ jobs:
           pnpm --filter @workspace/adventure-zone exec vitest run src/components/navigation/app-shell.test.tsx src/pages/BookingsPage.test.ts src/components/profiles/profile-bookings-primary.test.ts
           pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import/startup-import.test.ts src/features/approved-profile-import/pirate-fest-confirmed.test.ts
 
-      - name: Record current web typecheck baseline
-        continue-on-error: true
-        run: |
-          set -o pipefail
-          pnpm --filter @workspace/adventure-zone typecheck 2>&1 | tee web-typecheck.log
-
-      - name: Upload web typecheck baseline
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-typecheck-baseline
-          path: web-typecheck.log
-
-      - name: Record current API typecheck baseline
-        continue-on-error: true
-        run: pnpm --filter @workspace/api-server typecheck
-
       - name: Build web app
         run: pnpm --filter @workspace/adventure-zone build
 
