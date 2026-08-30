@@ -1,0 +1,45 @@
+name: Profile integrity audit CI
+
+on:
+  push:
+    branches:
+      - fix/profile-appearance-integrity-audit
+    paths:
+      - ".github/workflows/profile-integrity-audit-ci.yml"
+      - "artifacts/api-server/src/features/profile-integrity/**"
+      - "artifacts/api-server/src/routes/assistant-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+  pull_request:
+    paths:
+      - ".github/workflows/profile-integrity-audit-ci.yml"
+      - "artifacts/api-server/src/features/profile-integrity/**"
+      - "artifacts/api-server/src/routes/assistant-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused audit tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/profile-integrity/profile-integrity-audit.test.ts
+      - name: API typecheck diagnostics
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
