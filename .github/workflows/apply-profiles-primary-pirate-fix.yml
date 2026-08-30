@@ -34,237 +34,27 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Add regression tests first
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+        run: python .github/scripts/profiles_primary_pirate_fix.py tests
 
-          shell_test = Path('artifacts/adventure-zone/src/components/navigation/app-shell.test.tsx')
-          text = shell_test.read_text()
-          old = '''      ["/bookings", "Bookings"],'''
-          new = '''      ["/profiles", "Profiles"],'''
-          if old not in text:
-              raise SystemExit('desktop Booking navigation test anchor missing')
-          text = text.replace(old, new, 1)
-          old = '''    for (const href of ["/profiles", "/calls/workspace", "/research-sources"]) {'''
-          new = '''    for (const href of ["/bookings", "/calls/workspace", "/research-sources"]) {'''
-          if old not in text:
-              raise SystemExit('desktop Booking hidden-navigation test anchor missing')
-          text = text.replace(old, new, 1)
-          shell_test.write_text(text)
-
-          Path('artifacts/adventure-zone/src/pages/BookingsPage.test.ts').write_text(r'''import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-
-const bookingsPageSource = readFileSync("src/pages/BookingsPage.tsx", "utf8");
-const todayPageSource = readFileSync("src/pages/TodayPage.tsx", "utf8");
-const todayFocusSource = readFileSync("src/features/today/today-focus.ts", "utf8");
-
-describe("profile-first booking navigation", () => {
-  it("redirects the legacy top-level Bookings list to Profiles", () => {
-    expect(bookingsPageSource).toContain('<Redirect to="/profiles" />');
-    expect(bookingsPageSource).not.toContain('apiGet<any>("/bookings")');
-  });
-
-  it("routes Today booking work into Profiles instead of the hidden list", () => {
-    expect(todayPageSource).not.toContain('href="/bookings"');
-    expect(todayFocusSource).toContain('primaryHref: "/profiles"');
-    expect(todayFocusSource).not.toContain('primaryHref: "/bookings"');
-  });
-});
-''')
-
-          Path('artifacts/adventure-zone/src/components/profiles/profile-bookings-primary.test.ts').write_text(r'''import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-
-const source = readFileSync("src/components/profiles/simple-full-profile.tsx", "utf8");
-
-describe("bookings inside the permanent event profile", () => {
-  it("opens the profile's booking records by default when they exist", () => {
-    expect(source).toContain('profile.bookings.length ? "events" : null');
-    expect(source).toContain('label="Bookings"');
-    expect(source).toContain('>Bookings & opportunities</h2>');
-    expect(source).not.toContain('label="Upcoming events"');
-  });
-
-  it("keeps individual yearly booking details reachable from the profile", () => {
-    expect(source).toContain('href={`/bookings/${booking.id}`}');
-    expect(source).toContain('{booking.status.replaceAll("_", " ")}');
-  });
-});
-''')
-
-          Path('artifacts/api-server/src/features/approved-profile-import/pirate-fest-confirmed.test.ts').write_text(r'''import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
-
-const fixturePath = fileURLToPath(
-  new URL(
-    "../../../../../imports/approved-profiles/pirate-fest-northglenn-co-2026.json",
-    import.meta.url,
-  ),
-);
-const payload = JSON.parse(readFileSync(fixturePath, "utf8"));
-
-describe("Pirate Fest reviewed relationship state", () => {
-  it("records the signed current contract as confirmed", () => {
-    expect(payload.booking.status).toBe("confirmed");
-    expect(payload.booking.nextActionKind).toBe("renewal");
-  });
-
-  it("retains one next-year renewal instead of stale current contract work", () => {
-    expect(payload.followUps).toHaveLength(1);
-    expect(payload.followUps[0].dueAt).toMatch(/^2027-/);
-    expect(`${payload.followUps[0].label} ${payload.followUps[0].reason}`.toLowerCase())
-      .toContain("2027");
-  });
-
-  it("removes the superseded non-booking story", () => {
-    const text = JSON.stringify(payload).toLowerCase();
-    expect(text).toContain("signed");
-    expect(text).toContain("confirmed");
-    expect(text).not.toMatch(/budget cuts|will not use adventure zone|passed because/);
-  });
-});
-''')
-          PY
-
-      - name: Prove the regression tests fail before the repair
+      - name: Prove regressions fail against the old behavior
         run: |
           set +e
-          pnpm --filter @workspace/adventure-zone exec vitest run \
-            src/components/navigation/app-shell.test.tsx \
-            src/pages/BookingsPage.test.ts \
-            src/components/profiles/profile-bookings-primary.test.ts
+          pnpm --filter @workspace/adventure-zone exec vitest run src/components/navigation/app-shell.test.tsx src/pages/BookingsPage.test.ts src/components/profiles/profile-bookings-primary.test.ts
           WEB_RED=$?
-          pnpm --filter @workspace/api-server exec vitest run \
-            src/features/approved-profile-import/pirate-fest-confirmed.test.ts
+          pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import/pirate-fest-confirmed.test.ts
           API_RED=$?
           set -e
-          if [ "$WEB_RED" -eq 0 ]; then
-            echo "Frontend regression tests unexpectedly passed before the repair."
-            exit 1
-          fi
-          if [ "$API_RED" -eq 0 ]; then
-            echo "Pirate Fest regression unexpectedly passed before the repair."
-            exit 1
-          fi
-          echo "Both regression groups failed against the old behavior as expected."
+          test "$WEB_RED" -ne 0
+          test "$API_RED" -ne 0
+          echo "Both regression groups failed before the repair as expected."
 
-      - name: Apply the profile-first navigation and Pirate Fest repair
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import json
-
-          def replace(path, old, new, count=1):
-              file = Path(path)
-              text = file.read_text()
-              if old not in text:
-                  raise SystemExit(f'anchor missing in {path}: {old[:100]!r}')
-              file.write_text(text.replace(old, new, count))
-
-          replace(
-              'artifacts/adventure-zone/src/components/navigation/app-shell.tsx',
-              '{ href: "/bookings", label: "Bookings", icon: UsersRound },',
-              '{ href: "/profiles", label: "Profiles", icon: UsersRound },',
-          )
-          replace(
-              'artifacts/adventure-zone/src/components/navigation/app-menu.tsx',
-              '  { href: "/bookings", label: "Bookings" },\n',
-              '',
-          )
-
-          Path('artifacts/adventure-zone/src/pages/BookingsPage.tsx').write_text('''import { Redirect } from "wouter";\n\nexport default function BookingsPage() {\n  return <Redirect to="/profiles" />;\n}\n''')
-
-          profile_path = 'artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx'
-          replace(
-              profile_path,
-              '  const [openSection, setOpenSection] = useState<OpenSection>(null);',
-              '''  const [openSection, setOpenSection] = useState<OpenSection>(() =>
-    profile.bookings.length ? "events" : null,
-  );''',
-          )
-          replace(
-              profile_path,
-              '''  useEffect(() => {
-    setOptimisticActivities([]);
-  }, [profile.id]);''',
-              '''  useEffect(() => {
-    setOptimisticActivities([]);
-  }, [profile.id]);
-
-  useEffect(() => {
-    setOpenSection(profile.bookings.length ? "events" : null);
-  }, [profile.id, profile.bookings.length]);''',
-          )
-          replace(profile_path, '          label="Upcoming events"', '          label="Bookings"')
-          replace(
-              profile_path,
-              '>Bookings and opportunities</p>',
-              '>Yearly booking records</p>',
-          )
-          replace(profile_path, '>Upcoming events</h2>', '>Bookings & opportunities</h2>')
-          replace(
-              profile_path,
-              'No events have been added yet.',
-              'No bookings have been added yet.',
-          )
-
-          today_page = Path('artifacts/adventure-zone/src/pages/TodayPage.tsx')
-          today_text = today_page.read_text()
-          if 'href="/bookings"' not in today_text:
-              raise SystemExit('Today Booking-work link anchor missing')
-          today_page.write_text(today_text.replace('href="/bookings"', 'href="/profiles"'))
-
-          replace(
-              'artifacts/adventure-zone/src/features/today/today-focus.ts',
-              '      primaryHref: "/bookings",',
-              '      primaryHref: "/profiles",',
-          )
-
-          pirate_path = Path('imports/approved-profiles/pirate-fest-northglenn-co-2026.json')
-          pirate = json.loads(pirate_path.read_text())
-          pirate['profile']['description'] = (
-              'Confirmed Adventure Zone booking for Pirate Fest 2026 in Northglenn. '
-              'The event contract has been signed. Keep this permanent event profile '
-              'as the relationship record and retain the 2027 renewal follow-up.'
-          )
-          pirate['booking']['status'] = 'confirmed'
-          pirate['booking']['nextActionKind'] = 'renewal'
-          pirate['booking']['nextActionDueAt'] = '2027-01-15'
-          pirate['notes'] = [
-              {
-                  'subject': 'Pirate Fest 2026 signed contract / confirmed booking',
-                  'body': (
-                      'The Pirate Fest 2026 contract has been signed, so the current '
-                      'booking is confirmed. The current contract follow-up is complete. '
-                      'Keep the January 2027 reminder to reconnect with Michael about '
-                      'the next Pirate Fest.'
-                  ),
-              }
-          ]
-          pirate['followUps'] = [
-              {
-                  'label': 'Renew Pirate Fest with Michael Ringling for 2027',
-                  'reason': (
-                      'The 2026 Pirate Fest contract is signed and the booking is confirmed. '
-                      'Reconnect with Michael early about Pirate Fest 2027 and continue from '
-                      'the established booked relationship.'
-                  ),
-                  'dueAt': '2027-01-15T15:00:00.000Z',
-              }
-          ]
-          pirate_path.write_text(json.dumps(pirate, indent=2) + '\n')
-          PY
+      - name: Apply the repair
+        run: python .github/scripts/profiles_primary_pirate_fix.py fix
 
       - name: Run focused regression suites
         run: |
-          pnpm --filter @workspace/adventure-zone exec vitest run \
-            src/components/navigation/app-shell.test.tsx \
-            src/pages/BookingsPage.test.ts \
-            src/components/profiles/profile-bookings-primary.test.ts
-          pnpm --filter @workspace/api-server exec vitest run \
-            src/features/approved-profile-import
+          pnpm --filter @workspace/adventure-zone exec vitest run src/components/navigation/app-shell.test.tsx src/pages/BookingsPage.test.ts src/components/profiles/profile-bookings-primary.test.ts
+          pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
 
       - name: Typecheck changed applications
         run: |
@@ -276,24 +66,13 @@ describe("Pirate Fest reviewed relationship state", () => {
           pnpm --filter @workspace/adventure-zone build
           pnpm --filter @workspace/api-server build
 
-      - name: Verify patch and commit it
+      - name: Verify and commit repair
         run: |
           rm .github/workflows/apply-profiles-primary-pirate-fix.yml
+          rm .github/scripts/profiles_primary_pirate_fix.py
           git diff --check
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add \
-            artifacts/adventure-zone/src/components/navigation/app-shell.tsx \
-            artifacts/adventure-zone/src/components/navigation/app-shell.test.tsx \
-            artifacts/adventure-zone/src/components/navigation/app-menu.tsx \
-            artifacts/adventure-zone/src/pages/BookingsPage.tsx \
-            artifacts/adventure-zone/src/pages/BookingsPage.test.ts \
-            artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx \
-            artifacts/adventure-zone/src/components/profiles/profile-bookings-primary.test.ts \
-            artifacts/adventure-zone/src/pages/TodayPage.tsx \
-            artifacts/adventure-zone/src/features/today/today-focus.ts \
-            artifacts/api-server/src/features/approved-profile-import/pirate-fest-confirmed.test.ts \
-            imports/approved-profiles/pirate-fest-northglenn-co-2026.json \
-            .github/workflows/apply-profiles-primary-pirate-fix.yml
+          git add -A
           git commit -m "fix: make profiles primary and confirm Pirate Fest"
           git push origin HEAD:fix/profiles-primary-pirate-confirmed
