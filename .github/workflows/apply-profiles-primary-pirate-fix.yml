@@ -57,21 +57,10 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import/startup-import.test.ts src/features/approved-profile-import/pirate-fest-confirmed.test.ts
 
       - name: Typecheck web app
-        id: web_typecheck
-        continue-on-error: true
         run: pnpm --filter @workspace/adventure-zone typecheck
 
       - name: Typecheck API server
-        id: api_typecheck
-        continue-on-error: true
         run: pnpm --filter @workspace/api-server typecheck
-
-      - name: Enforce typecheck results
-        run: |
-          echo "Web typecheck: ${{ steps.web_typecheck.outcome }}"
-          echo "API typecheck: ${{ steps.api_typecheck.outcome }}"
-          test "${{ steps.web_typecheck.outcome }}" = "success"
-          test "${{ steps.api_typecheck.outcome }}" = "success"
 
       - name: Build web app
         run: pnpm --filter @workspace/adventure-zone build
