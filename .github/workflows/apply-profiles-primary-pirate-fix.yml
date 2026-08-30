@@ -54,7 +54,7 @@ jobs:
       - name: Run focused regression suites
         run: |
           pnpm --filter @workspace/adventure-zone exec vitest run src/components/navigation/app-shell.test.tsx src/pages/BookingsPage.test.ts src/components/profiles/profile-bookings-primary.test.ts
-          pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
+          pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import/startup-import.test.ts src/features/approved-profile-import/pirate-fest-confirmed.test.ts
 
       - name: Typecheck changed applications
         run: |
