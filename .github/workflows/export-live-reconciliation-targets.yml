@@ -1,0 +1,46 @@
+name: Export live reconciliation targets
+
+on:
+  push:
+    branches:
+      - fix/profile-appearance-reconciliation
+    paths:
+      - ".github/workflows/export-live-reconciliation-targets.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Export protected profile histories
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || exit 1
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || exit 1
+          mkdir -p reconciliation-targets
+          BASE_URL="${API_URL%/}"
+          cat > targets.txt <<'TARGETS'
+          f24033e1-801b-43ff-9a7e-a9d6d7b426c3 pirate-fest
+          dd318274-33b8-4331-9901-766d8a6ae4aa moab-music-festival
+          2aea58c4-3d36-4de1-b908-7f8d6e15ad99 southern-ute-tribal-fair
+          TARGETS
+          while read -r PROFILE_ID SLUG; do
+            STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output "reconciliation-targets/${SLUG}.json" \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${PROFILE_ID}" || true)
+            test "${STATUS}" = "200" || { echo "${SLUG} returned HTTP ${STATUS}"; cat "reconciliation-targets/${SLUG}.json"; exit 1; }
+            node -e "const fs=require('fs'); const p='reconciliation-targets/${SLUG}.json'; const x=JSON.parse(fs.readFileSync(p,'utf8')); if(x.ok!==true) process.exit(1)"
+          done < targets.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-reconciliation-targets
+          path: reconciliation-targets/*.json
+          retention-days: 3
