@@ -15,10 +15,10 @@ describe("workspace-aware Admin shell", () => {
 
     for (const [href, label] of [
       ["/today", "Today"],
-      ["/bookings", "Bookings"],
+      ["/profiles", "Profiles"],
       ["/schedule", "Schedule"],
     ]) expect(bookingPrimary).toContain(`{ href: "${href}", label: "${label}"`);
-    for (const href of ["/profiles", "/calls/workspace", "/research-sources"]) {
+    for (const href of ["/bookings", "/calls/workspace", "/research-sources"]) {
       expect(bookingPrimary).not.toContain(`href: "${href}"`);
     }
     expect(bookingPrimary).not.toContain('label: "Marketing"');

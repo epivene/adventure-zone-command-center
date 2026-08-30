@@ -22,7 +22,6 @@ type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boole
 type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
-  { href: "/bookings", label: "Bookings" },
   { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/office-coordinator", label: "Office Coordinator" },

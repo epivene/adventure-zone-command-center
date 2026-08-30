@@ -63,7 +63,7 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
       headline: attentionHeadline(input.contractCount),
       detail: "Booking or contract work needs your attention",
       primaryLabel: "Start",
-      primaryHref: "/bookings",
+      primaryHref: "/profiles",
     };
   }
   if (input.decisionCount > 0) {

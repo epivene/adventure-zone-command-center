@@ -24,7 +24,7 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
   if (workspace === "booking") {
     return [
       { href: "/today", label: "Today", icon: House },
-      { href: "/bookings", label: "Bookings", icon: UsersRound },
+      { href: "/profiles", label: "Profiles", icon: UsersRound },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
     ];
   }
