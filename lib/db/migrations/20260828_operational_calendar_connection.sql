@@ -9,10 +9,16 @@ ALTER TABLE google_workspace_connections
   DROP CONSTRAINT IF EXISTS google_workspace_connections_account_email_unique;
 
 DO $$ BEGIN
-  ALTER TABLE google_workspace_connections
-    ADD CONSTRAINT google_workspace_connections_account_email_role_unique
-    UNIQUE (account_email, role);
-EXCEPTION WHEN duplicate_object THEN NULL;
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'google_workspace_connections_account_email_role_unique'
+      AND conrelid = 'google_workspace_connections'::regclass
+  ) THEN
+    ALTER TABLE google_workspace_connections
+      ADD CONSTRAINT google_workspace_connections_account_email_role_unique
+      UNIQUE (account_email, role);
+  END IF;
 END $$;
 
 DROP INDEX IF EXISTS google_workspace_connections_single_active_unique;
