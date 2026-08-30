@@ -21,6 +21,7 @@ permissions:
 
 env:
   NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/profile_integrity_test
 
 jobs:
   verify:
