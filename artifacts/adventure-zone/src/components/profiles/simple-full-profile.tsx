@@ -127,7 +127,9 @@ export function SimpleFullProfile({
   onEditingChange?: (editing: boolean) => void;
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
-  const [openSection, setOpenSection] = useState<OpenSection>(null);
+  const [openSection, setOpenSection] = useState<OpenSection>(() =>
+    profile.bookings.length ? "events" : null,
+  );
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [noteSearch, setNoteSearch] = useState("");
@@ -144,6 +146,10 @@ export function SimpleFullProfile({
   useEffect(() => {
     setOptimisticActivities([]);
   }, [profile.id]);
+
+  useEffect(() => {
+    setOpenSection(profile.bookings.length ? "events" : null);
+  }, [profile.id, profile.bookings.length]);
 
   useEffect(() => {
     let active = true;
@@ -629,7 +635,7 @@ export function SimpleFullProfile({
         />
         <StatCard
           icon={<CalendarDays className="h-4 w-4" />}
-          label="Upcoming events"
+          label="Bookings"
           value={profile.bookings.length}
           active={openSection === "events"}
           onClick={() => toggleSection("events")}
@@ -810,8 +816,8 @@ export function SimpleFullProfile({
 
       {openSection === "events" ? (
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Bookings and opportunities</p>
-          <h2 className="mt-1 text-xl font-bold text-[#173b48]">Upcoming events</h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Yearly booking records</p>
+          <h2 className="mt-1 text-xl font-bold text-[#173b48]">Bookings & opportunities</h2>
           {profile.bookings.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.bookings.map((booking) => (
@@ -836,7 +842,7 @@ export function SimpleFullProfile({
               ))}
             </div>
           ) : (
-            <p className="mt-4 text-sm text-[#71848a]">No events have been added yet.</p>
+            <p className="mt-4 text-sm text-[#71848a]">No bookings have been added yet.</p>
           )}
         </section>
       ) : null}
