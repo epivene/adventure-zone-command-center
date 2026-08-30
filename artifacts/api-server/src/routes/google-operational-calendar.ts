@@ -40,7 +40,6 @@ router.get("/google-workspace/operational-calendar", async (_req, res): Promise<
       ? await new OperationalCalendarLinkRepository(db).listPendingReviews(connection.id)
       : [];
     const reviewEvents = reviews
-      .filter((review) => review.bookingId === null)
       .flatMap((review) => {
         try {
           return [projectOperationalCalendarReview({

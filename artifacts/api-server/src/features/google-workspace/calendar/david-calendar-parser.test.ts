@@ -3,6 +3,24 @@ import { describe, expect, it } from "vitest";
 import { parseDavidOperationalCalendarEvent } from "./david-calendar-parser";
 
 describe("parseDavidOperationalCalendarEvent", () => {
+  it.each([
+    ["ANGEL", "Sweetwater County Fair", "Rock Springs", "WY", "zone"],
+    ["DAVE", "Beaverhead County Fair", "Dillon", "MT", "warrior"],
+    ["HULK", "Millard County Fair", "Delta", "UT", "pirates"],
+    ["KRISTY", "Eastern Montana Fair", "Miles City", "MT", "zone"],
+  ] as const)("parses the %s manager prefix with the same confirmed import contract", (managerToken, eventName, city, region, packageKey) => {
+    expect(parseDavidOperationalCalendarEvent({
+      summary: `${managerToken} ${eventName} - ${city} ${region} (${packageKey})`,
+    })).toMatchObject({
+      managerToken,
+      eventName,
+      city,
+      region,
+      packageKey,
+      calendarState: "confirmed",
+    });
+  });
+
   it("parses manager, location, and Zone package from a normal operational row", () => {
     expect(parseDavidOperationalCalendarEvent({
       summary: "KRISTY Eastern Montana Fair - Miles City MT (Zone)",

@@ -31,6 +31,26 @@ export type OperationalCalendarImportRowResult = {
   reason: string | null;
 };
 
+export function operationalCalendarReviewReason(input: {
+  parsed: ReturnType<typeof parseDavidOperationalCalendarEvent>;
+  hasManagerLeg: boolean;
+  linkedPackageKey?: OperationalCalendarPackageKey | null;
+}): string | null {
+  if (input.parsed.calendarState !== "confirmed") {
+    return `Calendar row is ${input.parsed.calendarState.replace("_", " ")} and needs review`;
+  }
+  if (!input.parsed.eventName.trim() || input.parsed.packageKey === "unknown") {
+    return "Calendar row needs manual matching";
+  }
+  if (!input.parsed.managerToken || !input.hasManagerLeg) {
+    return "Calendar row needs a recognized manager leg";
+  }
+  if (input.linkedPackageKey && input.linkedPackageKey !== input.parsed.packageKey) {
+    return "Calendar row changed package and needs review";
+  }
+  return null;
+}
+
 function startOfUtcDay(value: string) {
   const date = new Date(`${value}T00:00:00.000Z`);
   if (!Number.isFinite(date.getTime())) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_DATE_INVALID");
@@ -126,8 +146,37 @@ export class OperationalCalendarImportService {
         calendarId: connection.calendarId,
         googleEventId: event.id,
       });
+      const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
+      const managerLegId = await this.findLegId(parsed.managerToken);
+      const preflightReviewReason = operationalCalendarReviewReason({
+        parsed,
+        hasManagerLeg: Boolean(managerLegId),
+        linkedPackageKey: existingLink?.packageKey,
+      });
+      if (preflightReviewReason) {
+        await this.links.createReview({
+          connectionId: connection.connectionId,
+          calendarId: connection.calendarId,
+          googleEventId: event.id,
+          bookingId: existingLink?.bookingId ?? null,
+          linkId: existingLink?.id ?? null,
+          reason: preflightReviewReason,
+          proposedChanges: { parsed, google: event },
+        });
+        review += 1;
+        results.push({
+          googleEventId: event.id,
+          title,
+          outcome: "review",
+          bookingId: existingLink?.bookingId ?? null,
+          bookingName: existingLink ? await this.bookingName(existingLink.bookingId) : null,
+          reason: preflightReviewReason,
+        });
+        continue;
+      }
+      const packageKey = parsed.packageKey as Exclude<OperationalCalendarPackageKey, "unknown">;
+      const recognizedManagerLegId = managerLegId!;
       if (existingLink) {
-        const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
         const reservedStart = startOfUtcDay(event.startDate);
         const reservedEnd = startOfUtcDay(event.endDateExclusive);
         const actualDates = parseOperationalEventDateText(parsed.actualEventDateText, reservedStart.getUTCFullYear());
@@ -150,21 +199,6 @@ export class OperationalCalendarImportService {
           bookingName: await this.bookingName(existingLink.bookingId),
           reason: null,
         });
-        continue;
-      }
-
-      const parsed = parseDavidOperationalCalendarEvent({ summary: event.summary, description: event.description });
-      if (!parsed.eventName.trim() || parsed.packageKey === "unknown") {
-        const reason = "Calendar row needs manual matching";
-        await this.links.createReview({
-          connectionId: connection.connectionId,
-          calendarId: connection.calendarId,
-          googleEventId: event.id,
-          reason,
-          proposedChanges: { parsed, google: event },
-        });
-        review += 1;
-        results.push({ googleEventId: event.id, title, outcome: "review", bookingId: null, bookingName: null, reason });
         continue;
       }
 
@@ -200,7 +234,14 @@ export class OperationalCalendarImportService {
         bookingId = match.bookingId;
         outcome = "matched";
         matched += 1;
-        await this.updateMatchedBooking({ bookingId, parsed, actualDates, reservedStart, reservedEnd });
+        await this.updateMatchedBooking({
+          bookingId,
+          parsed,
+          actualDates,
+          reservedStart,
+          reservedEnd,
+          managerLegId: recognizedManagerLegId,
+        });
         updated += 1;
       } else {
         if (!actualDates || !parsed.city || !parsed.region) {
@@ -216,18 +257,24 @@ export class OperationalCalendarImportService {
           results.push({ googleEventId: event.id, title, outcome: "review", bookingId: null, bookingName: null, reason });
           continue;
         }
-        bookingId = await this.createProfileAndBooking({ parsed, actualDates, reservedStart, reservedEnd });
+        bookingId = await this.createProfileAndBooking({
+          parsed,
+          actualDates,
+          reservedStart,
+          reservedEnd,
+          managerLegId: recognizedManagerLegId,
+        });
         outcome = "created";
         created += 1;
       }
 
-      await this.ensurePackage(bookingId, parsed.packageKey);
+      await this.ensurePackage(bookingId, packageKey);
       await this.links.saveSuccessfulSync({
         connectionId: connection.connectionId,
         calendarId: connection.calendarId,
         googleEventId: event.id,
         bookingId,
-        packageKey: parsed.packageKey,
+        packageKey,
         etag: event.etag,
         sourceChecksum: checksum(event),
         lastAppSnapshot: {
@@ -269,6 +316,7 @@ export class OperationalCalendarImportService {
     reservedStart: Date;
     reservedEnd: Date;
   }) {
+    const parsedPackageKey = input.parsed.packageKey as OperationalCalendarPackageKey;
     await this.updateMatchedBooking({
       bookingId: input.existingLink.bookingId,
       parsed: input.parsed,
@@ -276,13 +324,13 @@ export class OperationalCalendarImportService {
       reservedStart: input.reservedStart,
       reservedEnd: input.reservedEnd,
     });
-    await this.ensurePackage(input.existingLink.bookingId, input.existingLink.packageKey);
+    await this.ensurePackage(input.existingLink.bookingId, parsedPackageKey);
     await this.links.saveSuccessfulSync({
       connectionId: input.connectionId,
       calendarId: input.calendarId,
       googleEventId: input.event.id,
       bookingId: input.existingLink.bookingId,
-      packageKey: input.existingLink.packageKey,
+      packageKey: parsedPackageKey,
       etag: input.event.etag,
       sourceChecksum: checksum(input.event),
       lastAppSnapshot: {
@@ -328,8 +376,9 @@ export class OperationalCalendarImportService {
     actualDates: { startsAt: Date; endsAt: Date } | null;
     reservedStart: Date;
     reservedEnd: Date;
+    managerLegId?: string | null;
   }) {
-    const legId = await this.findLegId(input.parsed.managerToken);
+    const legId = input.managerLegId ?? await this.findLegId(input.parsed.managerToken);
     const [existing] = await this.db.select().from(bookings).where(eq(bookings.id, input.bookingId)).limit(1);
     if (!existing) return;
     await this.db.update(bookings).set({
@@ -351,8 +400,8 @@ export class OperationalCalendarImportService {
     actualDates: { startsAt: Date; endsAt: Date };
     reservedStart: Date;
     reservedEnd: Date;
+    managerLegId: string;
   }) {
-    const legId = await this.findLegId(input.parsed.managerToken);
     return this.db.transaction(async (tx) => {
       const [organization] = await tx.insert(organizations).values({
         name: input.parsed.eventName,
@@ -374,7 +423,7 @@ export class OperationalCalendarImportService {
         endsAt: input.actualDates.endsAt,
         status: stateStatus(input.parsed.calendarState),
         probability: (input.parsed.calendarState === "confirmed" ? "definite" : "possible") as any,
-        travelLegId: legId,
+        travelLegId: input.managerLegId,
         notes: input.parsed.originalDescription?.trim() || null,
         createdAt: this.now(),
         updatedAt: this.now(),

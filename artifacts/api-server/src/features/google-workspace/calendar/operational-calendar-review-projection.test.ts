@@ -30,7 +30,7 @@ describe("projectOperationalCalendarReview", () => {
       source: "google_operational_review",
       id: "?googleReview=review-1",
       googleEventId: "google-1",
-      name: "Eastern Montana Fair · Needs profile match",
+      name: "Eastern Montana Fair · Needs review",
       city: "Miles City",
       region: "MT",
       status: "confirmed",
@@ -39,6 +39,37 @@ describe("projectOperationalCalendarReview", () => {
     });
     expect(event.startsAt.toISOString()).toBe("2026-08-19T00:00:00.000Z");
     expect(event.endsAt.toISOString()).toBe("2026-08-23T00:00:00.000Z");
+  });
+
+  it("keeps an authoritative booking relationship while presenting the Google row for review", () => {
+    const event = projectOperationalCalendarReview({
+      id: "review-linked",
+      googleEventId: "google-linked",
+      reason: "Calendar row is cancelled and needs review",
+      bookingId: "booking-1",
+      proposedChanges: {
+        parsed: {
+          managerToken: null,
+          eventName: "County Fair",
+          city: "Delta",
+          region: "UT",
+          packageKey: "zone",
+          calendarState: "cancelled",
+        },
+        google: {
+          summary: "CANCELLED County Fair - Delta UT (Zone)",
+          startDate: "2026-08-05",
+          endDateExclusive: "2026-08-09",
+        },
+      },
+    });
+
+    expect(event).toMatchObject({
+      source: "google_operational_review",
+      bookingId: "booking-1",
+      status: "cancelled",
+      name: "County Fair · Needs review",
+    });
   });
 
   it("preserves placeholder/cancelled/action-required state instead of making every unresolved row confirmed", () => {

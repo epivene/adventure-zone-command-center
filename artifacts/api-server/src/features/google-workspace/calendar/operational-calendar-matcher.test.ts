@@ -17,6 +17,21 @@ const candidate = {
 };
 
 describe("operational calendar matcher", () => {
+  it.each(["ANGEL", "DAVE", "HULK", "KRISTY"] as const)(
+    "uses the same reliable event, location, date, and manager evidence for %s",
+    (managerToken) => {
+      expect(matchOperationalCalendarEvent({
+        eventName: candidate.name,
+        city: candidate.city,
+        region: candidate.region,
+        actualStartsAt: candidate.startsAt,
+        actualEndsAt: candidate.endsAt,
+        managerToken,
+        candidates: [{ ...candidate, travelLegName: managerToken }],
+      })).toMatchObject({ kind: "matched", bookingId: "booking-1", confidence: "high" });
+    },
+  );
+
   it("matches the Blanding calendar row to the existing profile instead of duplicating it", () => {
     expect(matchOperationalCalendarEvent({
       eventName: "Blanding City Fall Festival",
@@ -47,6 +62,52 @@ describe("operational calendar matcher", () => {
       candidateBookingIds: ["a", "b"],
       reason: "More than one existing event profile is a plausible calendar match.",
     });
+  });
+
+  it("does not match on an exact title without corroborating location or date evidence", () => {
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: "Elsewhere",
+      region: "CO",
+      actualStartsAt: new Date("2027-01-01T00:00:00.000Z"),
+      actualEndsAt: new Date("2027-01-02T00:00:00.000Z"),
+      managerToken: "MIKEY",
+      candidates: [candidate],
+    })).toEqual({ kind: "new" });
+  });
+
+  it("does not match a same-name booking assigned to a different manager", () => {
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: candidate.city,
+      region: candidate.region,
+      actualStartsAt: candidate.startsAt,
+      actualEndsAt: candidate.endsAt,
+      managerToken: "ANGEL",
+      candidates: [{ ...candidate, travelLegName: "DAVE" }],
+    })).toEqual({ kind: "new" });
+  });
+
+  it("does not match on title and region when city or dates disagree", () => {
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: "Elsewhere",
+      region: candidate.region,
+      actualStartsAt: candidate.startsAt,
+      actualEndsAt: candidate.endsAt,
+      managerToken: "MIKEY",
+      candidates: [candidate],
+    })).toEqual({ kind: "new" });
+
+    expect(matchOperationalCalendarEvent({
+      eventName: candidate.name,
+      city: candidate.city,
+      region: candidate.region,
+      actualStartsAt: new Date("2027-09-12T00:00:00.000Z"),
+      actualEndsAt: new Date("2027-09-12T00:00:00.000Z"),
+      managerToken: "MIKEY",
+      candidates: [candidate],
+    })).toEqual({ kind: "new" });
   });
 
   it("parses screenshot-style EVENT DATES without inventing a separate year", () => {

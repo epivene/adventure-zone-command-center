@@ -42,11 +42,20 @@ function scoreCandidate(input: {
   let score = 0;
   const eventName = normalize(input.eventName);
   const candidateName = normalize(candidate.name);
-  if (eventName && candidateName === eventName) score += 60;
-  else if (eventName && candidateName && (candidateName.includes(eventName) || eventName.includes(candidateName))) score += 38;
+  const exactName = Boolean(eventName && candidateName === eventName);
+  const relatedName = Boolean(
+    !exactName
+    && eventName
+    && candidateName
+    && (candidateName.includes(eventName) || eventName.includes(candidateName)),
+  );
+  if (exactName) score += 60;
+  else if (relatedName) score += 38;
 
-  if (input.city && normalize(candidate.city) === normalize(input.city)) score += 20;
-  if (input.region && normalize(candidate.region) === normalize(input.region)) score += 10;
+  const cityMatch = Boolean(input.city && normalize(candidate.city) === normalize(input.city));
+  const regionMatch = Boolean(input.region && normalize(candidate.region) === normalize(input.region));
+  if (cityMatch) score += 20;
+  if (regionMatch) score += 10;
 
   const overlap = dateOverlapDays(input.actualStartsAt, input.actualEndsAt, candidate.startsAt, candidate.endsAt);
   if (overlap > 0) score += 25;
@@ -59,7 +68,14 @@ function scoreCandidate(input: {
   if (input.managerToken && candidate.travelLegName && normalize(candidate.travelLegName) === normalize(input.managerToken)) {
     score += 8;
   }
-  return score;
+  const managerCompatible = !candidate.travelLegName
+    || Boolean(input.managerToken && normalize(candidate.travelLegName) === normalize(input.managerToken));
+  const reliable = (exactName || relatedName)
+    && cityMatch
+    && regionMatch
+    && overlap > 0
+    && managerCompatible;
+  return { score, reliable };
 }
 
 export function matchOperationalCalendarEvent(input: {
@@ -72,8 +88,8 @@ export function matchOperationalCalendarEvent(input: {
   candidates: OperationalCalendarMatchCandidate[];
 }): OperationalMatch {
   const ranked = input.candidates
-    .map((candidate) => ({ candidate, score: scoreCandidate(input, candidate) }))
-    .filter((item) => item.score >= 45)
+    .map((candidate) => ({ candidate, ...scoreCandidate(input, candidate) }))
+    .filter((item) => item.reliable && item.score >= 45)
     .sort((a, b) => b.score - a.score || a.candidate.name.localeCompare(b.candidate.name));
 
   if (!ranked.length) return { kind: "new" };
