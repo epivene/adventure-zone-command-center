@@ -1,0 +1,45 @@
+name: Export live calendar evidence
+
+on:
+  push:
+    branches:
+      - fix/profile-appearance-reconciliation
+    paths:
+      - ".github/workflows/export-live-calendar-evidence.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for protected calendar evidence endpoint
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || exit 1
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || exit 1
+          BASE_URL="${API_URL%/}"
+          PROFILE_ID="2aea58c4-3d36-4de1-b908-7f8d6e15ad99"
+          for attempt in $(seq 1 40); do
+            STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output southern-ute-calendar-evidence.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-integrity-calendar-links/${PROFILE_ID}" || true)
+            if [ "${STATUS}" = "200" ] && node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('southern-ute-calendar-evidence.json','utf8'));if(x.ok!==true||!Array.isArray(x.links))process.exit(1)"; then
+              exit 0
+            fi
+            sleep 15
+          done
+          cat southern-ute-calendar-evidence.json 2>/dev/null || true
+          exit 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-southern-ute-calendar-evidence
+          path: southern-ute-calendar-evidence.json
+          retention-days: 3
