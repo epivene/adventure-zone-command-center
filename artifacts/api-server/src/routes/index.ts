@@ -109,6 +109,10 @@ router.use(officeEventFamiliesRouter);
 router.use(officeMailRouter);
 router.use(officeEmailDraftsRouter);
 router.use(officeMessagesRouter);
+// Design Studio accepts either an Office session or an owner session and
+// enforces that boundary internally. Mount it before the owner-only gate so
+// Office coordinators can load projects, templates, assets, and editor tools.
+router.use(officeDesignStudioRouter);
 router.use(managerAuthRouter);
 router.use(managerMapRouter);
 router.use(managerRouter);
@@ -140,7 +144,6 @@ router.use(officeAdminTasksRouter);
 router.use(officeAdminMailRouter);
 router.use(officeAdminEmailDraftsRouter);
 router.use(officeAdminMessagesRouter);
-router.use(officeDesignStudioRouter);
 router.use(officeAdminHistoryRouter);
 router.use(managerAdminRouter);
 router.use(managerFinanceAdminRouter);

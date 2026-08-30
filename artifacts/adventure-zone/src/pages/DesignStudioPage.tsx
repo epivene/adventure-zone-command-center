@@ -29,6 +29,7 @@ import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Separator } from "@workspace/avz-crm/components/ui/separator";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { designStudioApi, type DesignAsset, type DesignProject, type DesignTemplate, type DesignType } from "@/lib/design-studio-api";
+import { createStarterCanvas, starterContent } from "@/lib/design-studio/starter-templates";
 
 const TYPE_META: Record<DesignType, { icon: React.ReactNode; accent: string }> = {
   flyer: {
@@ -172,6 +173,7 @@ export default function DesignStudioPage() {
       const project = await designStudioApi.create({
         type,
         name: template?.name ?? `${type === "blank" ? "Untitled design" : `${type[0]!.toUpperCase()}${type.slice(1)} concept`}`,
+        ...(template ? { canvas: createStarterCanvas(type), content: starterContent(type) } : {}),
       });
       setLocation(`/design-studio/${project.id}`);
     } catch (cause) {

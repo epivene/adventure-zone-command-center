@@ -93,6 +93,7 @@ const createProjectSchema = z
       .transform((value) => value.trim().toLowerCase().replaceAll(" ", "_"))
       .pipe(typeSchema),
     content: z.string().max(200000).optional(),
+    canvas: z.record(z.string(), z.unknown()).optional(),
     notes: z.string().max(20000).nullable().optional(),
     linkedOrganizationId: z.string().uuid().nullable().optional(),
     linkedContactId: z.string().uuid().nullable().optional(),
@@ -268,6 +269,7 @@ router.post("/office/design-studio/projects", requireStudio, async (req, res): P
         name: parsed.data.name,
         type: parsed.data.type as DesignType,
         content: parsed.data.content ?? "",
+        canvas: parsed.data.canvas ? sanitizeDesignStudioCanvas(parsed.data.canvas) : null,
         notes: parsed.data.notes ?? null,
         linkedOrganizationId: parsed.data.linkedOrganizationId ?? null,
         linkedContactId: parsed.data.linkedContactId ?? null,

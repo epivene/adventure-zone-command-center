@@ -26,6 +26,11 @@ export type DesignTemplate = {
   isFavorite?: boolean;
 };
 
+export type CreateDesignProjectInput = Pick<DesignProject, "name" | "type"> & {
+  content?: string;
+  canvas?: Record<string, unknown>;
+};
+
 export type DesignAsset = {
   id: string;
   name: string;
@@ -135,7 +140,7 @@ export const designStudioApi = {
     const response = await apiGet<{ project: DesignProject }>(`/office/design-studio/projects/${encodeURIComponent(id)}`);
     return response.project;
   },
-  create(input: Pick<DesignProject, "name" | "type">) {
+  create(input: CreateDesignProjectInput) {
     return apiPost<DesignProject>("/office/design-studio/projects", input);
   },
   update(
