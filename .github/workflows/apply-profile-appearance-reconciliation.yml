@@ -46,7 +46,13 @@ jobs:
           PY
 
       - name: Apply reconciliation patch
-        run: python .github/scripts/apply_profile_appearance_reconciliation.py
+        run: |
+          python .github/scripts/apply_profile_appearance_reconciliation.py
+          python <<'PY'
+          from pathlib import Path
+          path = Path('lib/db/migrations/074_profile_appearance_integrity.sql')
+          path.write_text(path.read_text(encoding='utf-8').rstrip() + '\n', encoding='utf-8')
+          PY
 
       - name: Verify patch shape
         run: |
