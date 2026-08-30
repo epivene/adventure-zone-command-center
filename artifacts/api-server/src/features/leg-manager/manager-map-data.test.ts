@@ -126,6 +126,7 @@ describe("loadManagerScopedMapData", () => {
 
     expect(result.events.map((event) => event.bookingId)).toEqual([kristyStop.bookingId]);
     expect(result.route?.trip.id).toBe(kristyTripId);
+    expect((result as any).trips.map((trip: { id: string }) => trip.id)).toEqual([kristyTripId]);
     expect(JSON.stringify(result)).not.toContain("Hulk private stop");
   });
 

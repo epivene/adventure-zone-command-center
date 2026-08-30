@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 
 import { db } from "@workspace/db";
+import { requireOwnerMiddleware } from "@/lib/auth";
 import {
   organizationIdSchema,
   setFillerInputSchema,
@@ -12,7 +13,7 @@ import {
 
 const router: IRouter = Router();
 
-router.get("/organizations/filler", async (req, res): Promise<void> => {
+router.get("/organizations/filler", requireOwnerMiddleware, async (req, res): Promise<void> => {
   const parsed = organizationIdSchema.safeParse(req.query.organizationId);
   if (!parsed.success) {
     res.status(400).json({ error: "Invalid organizationId" });
@@ -37,7 +38,7 @@ router.get("/organizations/filler", async (req, res): Promise<void> => {
   }
 });
 
-router.post("/organizations/filler", async (req, res): Promise<void> => {
+router.post("/organizations/filler", requireOwnerMiddleware, async (req, res): Promise<void> => {
   const parsed = setFillerInputSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
