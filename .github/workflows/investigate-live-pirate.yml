@@ -1,0 +1,95 @@
+name: Investigate live Pirate profile
+
+on:
+  push:
+    branches:
+      - investigate/live-pirate-profile
+    paths:
+      - .github/workflows/investigate-live-pirate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify live API configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "$API_URL"
+          test -n "$ASSISTANT_IMPORT_TOKEN"
+
+      - name: Read live Pirate profiles and follow-ups
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+
+          const base = process.env.API_URL.replace(/\/$/, '');
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+          const queries = ['Pirate', 'Pirate Fest', 'Northglenn', "Pirate's Rebellion"];
+
+          async function readJson(url) {
+            const response = await fetch(url, { headers });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${response.status} ${url}: ${text.slice(0, 500)}`);
+            return JSON.parse(text);
+          }
+
+          (async () => {
+            const searches = [];
+            const organizations = new Map();
+            for (const query of queries) {
+              const payload = await readJson(`${base}/api/assistant-import/profile-search?q=${encodeURIComponent(query)}&limit=100`);
+              searches.push({ query, payload });
+              for (const result of Array.isArray(payload.results) ? payload.results : []) {
+                if (result && result.kind === 'organization' && typeof result.id === 'string') {
+                  organizations.set(result.id, result);
+                }
+              }
+            }
+
+            const histories = [];
+            for (const [id, searchResult] of organizations) {
+              try {
+                const payload = await readJson(`${base}/api/assistant-import/profile-history/${id}`);
+                histories.push({ searchResult, payload });
+              } catch (error) {
+                histories.push({ searchResult, error: String(error) });
+              }
+            }
+
+            const followUpsPayload = await readJson(`${base}/api/assistant-import/today-followups?limit=500`);
+            const pirateFollowUps = (Array.isArray(followUpsPayload.followUps) ? followUpsPayload.followUps : []).filter((row) =>
+              JSON.stringify(row).toLowerCase().includes('pirate') ||
+              JSON.stringify(row).toLowerCase().includes('northglenn')
+            );
+
+            fs.writeFileSync('pirate-live-inspection.json', JSON.stringify({
+              generatedAt: new Date().toISOString(),
+              searches,
+              histories,
+              pirateFollowUps,
+            }, null, 2));
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload live inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: pirate-live-inspection
+          path: pirate-live-inspection.json
+          retention-days: 1
