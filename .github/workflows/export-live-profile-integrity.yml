@@ -1,0 +1,109 @@
+name: Export live profile integrity audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/export-live-profile-integrity.yml"
+      - "artifacts/api-server/src/features/profile-integrity/**"
+      - "artifacts/api-server/src/routes/assistant-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for deployed audit endpoint and export report
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          BASE_URL="${API_URL%/}"
+          rm -f profile-integrity-audit.json
+
+          for attempt in $(seq 1 40); do
+            HTTP_STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output profile-integrity-audit.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-integrity-audit" || true)
+
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('profile-integrity-audit.json','utf8')); if(x.ok!==true || x.mode!=='read_only' || !x.summary || !Array.isArray(x.profiles) || !Array.isArray(x.issues)) process.exit(1)"; then
+              echo "Live audit exported on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Audit endpoint not ready yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "The deployed audit endpoint never returned a valid report."
+          cat profile-integrity-audit.json 2>/dev/null || true
+          exit 1
+
+      - name: Create sanitized summary and issue CSV
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('profile-integrity-audit.json', 'utf8'));
+          const s = report.summary;
+          const lines = [
+            '# Live profile integrity audit',
+            '',
+            `- Generated: ${report.generatedAt}`,
+            `- Active profiles: ${s.profileCount}`,
+            `- Profiles with ACT company source: ${s.profileWithActSourceCount}`,
+            `- Profiles without ACT company source: ${s.profileWithoutActSourceCount}`,
+            `- Profiles with matched Gmail: ${s.profileWithGmailCount}`,
+            `- Profiles with operational calendar links: ${s.profileWithCalendarCount}`,
+            `- Exact duplicate appearance groups: ${s.duplicateAppearanceGroupCount}`,
+            `- Duplicate contact groups: ${s.duplicateContactGroupCount}`,
+            `- Pending Gmail review items: ${s.pendingGmailReviewCount}`,
+            `- Pending calendar review items: ${s.pendingCalendarReviewCount}`,
+            `- Errors: ${s.errorCount}`,
+            `- Warnings: ${s.warningCount}`,
+            `- Safe automatic fixes proposed: ${s.autoFixableCount}`,
+            `- Human-review items: ${s.reviewRequiredCount}`,
+          ];
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+
+          const quote = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+          const rows = [['severity','code','profileId','profileName','appearanceId','autoFixable','message']];
+          for (const item of report.issues) {
+            rows.push([
+              item.severity,
+              item.code,
+              item.profileId,
+              item.profileName,
+              item.appearanceId,
+              item.autoFixable,
+              item.message,
+            ]);
+          }
+          fs.writeFileSync('profile-integrity-issues.csv', rows.map((row) => row.map(quote).join(',')).join('\n') + '\n');
+          NODE
+
+      - name: Upload complete protected report
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-profile-integrity-audit
+          path: |
+            profile-integrity-audit.json
+            profile-integrity-issues.csv
+          retention-days: 7
