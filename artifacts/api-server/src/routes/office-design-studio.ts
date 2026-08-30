@@ -14,14 +14,20 @@ import {
   type DesignType,
 } from "@workspace/db/design-studio-schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
+import { sanitizeDesignStudioCanvas } from "@/features/design-studio/canvas-sanitizer";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { resolveOfficeSession } from "@/features/office/office-middleware";
 import { verifyOfficeToken } from "@/features/office/office-auth";
 import { verifyToken } from "@/lib/auth";
+import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { officeAccounts } from "@workspace/db/office-coordinator-schema";
 
 const router: IRouter = Router();
 const officeRepository = new DrizzleOfficeAccountRepository(db);
+const studioAssetStorage = new GoogleCloudPrivateObjectStorage(process.env, [
+  "GOOGLE_CLOUD_STORAGE_BUCKET",
+  "LEG_MANAGER_RECEIPT_BUCKET",
+]);
 
 /**
  * Marketing is owner-authenticated while the Office workspace uses an Office
@@ -339,7 +345,9 @@ router.patch("/office/design-studio/projects/:projectId", requireStudio, async (
         ...(parsed.data.type === undefined ? {} : { type: parsed.data.type as DesignType }),
         ...(parsed.data.content === undefined ? {} : { content: parsed.data.content }),
         ...(parsed.data.notes === undefined ? {} : { notes: parsed.data.notes }),
-        ...(parsed.data.canvas === undefined ? {} : { canvas: parsed.data.canvas }),
+        ...(parsed.data.canvas === undefined
+          ? {}
+          : { canvas: parsed.data.canvas === null ? null : sanitizeDesignStudioCanvas(parsed.data.canvas) }),
         ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
         ...(parsed.data.syncState === undefined ? {} : { syncState: parsed.data.syncState }),
         updatedAt: new Date(),
@@ -591,8 +599,25 @@ router.post("/office/design-studio/templates/:templateId/favorite", requireStudi
 router.get("/office/design-studio/assets", requireStudio, async (req, res): Promise<void> => {
   try {
     const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
-    const assets = await db.select().from(designAssets).where(scope ? eq(designAssets.scope, scope as never) : undefined).orderBy(desc(designAssets.createdAt));
-    res.json({ assets });
+    const permittedAssets = or(
+      eq(designAssets.uploadedByAccountId, req.officeAccount!.accountId),
+      and(
+        or(eq(designAssets.scope, "company"), eq(designAssets.scope, "package")),
+        eq(designAssets.isApproved, true),
+      ),
+    );
+    const assets = await db
+      .select()
+      .from(designAssets)
+      .where(scope ? and(permittedAssets, eq(designAssets.scope, scope as never)) : permittedAssets)
+      .orderBy(desc(designAssets.createdAt));
+    const addressableAssets = await Promise.all(assets.map(async (asset) => ({
+      ...asset,
+      url: asset.storageKey
+        ? await studioAssetStorage.getSignedReadUrl(asset.storageKey, 15 * 60).catch(() => null)
+        : null,
+    })));
+    res.json({ assets: addressableAssets });
   } catch (err) {
     req.log.error({ err }, "Failed to list Design Studio assets");
     res.status(500).json({ error: "Could not load the Brand Library." });
