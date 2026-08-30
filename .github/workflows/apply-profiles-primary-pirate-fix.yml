@@ -57,7 +57,22 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import/startup-import.test.ts src/features/approved-profile-import/pirate-fest-confirmed.test.ts
 
       - name: Typecheck web app
-        run: pnpm --filter @workspace/adventure-zone typecheck
+        id: web_typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/adventure-zone typecheck 2>&1 | tee web-typecheck.log
+
+      - name: Upload web typecheck diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-typecheck
+          path: web-typecheck.log
+
+      - name: Enforce web typecheck
+        if: steps.web_typecheck.outcome != 'success'
+        run: exit 1
 
       - name: Typecheck API server
         run: pnpm --filter @workspace/api-server typecheck
