@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   googleOperationalCalendarReviews,
 } from "@/db/schema";
@@ -12,6 +12,7 @@ import { OperationalCalendarLinkRepository } from "@/features/google-workspace/c
 import { OperationalCalendarProjectionRepository } from "@/features/google-workspace/calendar/operational-calendar-projection-repository";
 import { projectOperationalCalendarReview } from "@/features/google-workspace/calendar/operational-calendar-review-projection";
 import { OperationalCalendarSyncService } from "@/features/google-workspace/calendar/operational-calendar-sync-service";
+import { ensureBookingProbabilitySchema } from "@/features/bookings/booking-probability-schema";
 
 const router: IRouter = Router();
 const connectionRepository = new PostgresGoogleConnectionRepository();
@@ -79,6 +80,7 @@ router.post("/google-workspace/operational-calendar/import", async (req, res): P
   const from = parsed.data.from ?? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   const to = parsed.data.to ?? new Date(Date.UTC(now.getUTCFullYear() + 1, 11, 31, 23, 59, 59));
   try {
+    await ensureBookingProbabilitySchema(pool);
     const service = new OperationalCalendarImportService(
       db,
       () => connectionRepository.createOperationalCalendarClient(),

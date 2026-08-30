@@ -162,6 +162,7 @@ export function parseOperationalEventDateText(text: string | null, fallbackYear:
   const normalized = text
     .trim()
     .replace(/[–—]/g, "-")
+    .replace(/(\d)\s*-\s*(?=\d)/g, "$1 - ")
     .replace(/\b(\d{1,2})(st|nd|rd|th)\b/gi, "$1")
     .replace(/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+/i, "");
   const explicitYear = /\b(20\d{2})\b/.exec(normalized)?.[1];

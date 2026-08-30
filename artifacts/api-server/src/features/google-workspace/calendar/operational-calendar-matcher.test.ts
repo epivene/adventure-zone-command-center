@@ -151,5 +151,10 @@ describe("operational calendar matcher", () => {
       startsAt: new Date("2026-09-12T00:00:00.000Z"),
       endsAt: new Date("2026-09-12T00:00:00.000Z"),
     });
+
+    expect(parseOperationalEventDateText("July 3-4, 2026", 2004)).toEqual({
+      startsAt: new Date("2026-07-03T00:00:00.000Z"),
+      endsAt: new Date("2026-07-04T00:00:00.000Z"),
+    });
   });
 });
