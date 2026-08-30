@@ -32,9 +32,6 @@ export async function ensureGoogleWorkspaceSchema(
         CONSTRAINT google_workspace_connections_granted_scopes_array
           CHECK (jsonb_typeof(granted_scopes) = 'array')
       );
-      CREATE UNIQUE INDEX IF NOT EXISTS google_workspace_connections_single_active_unique
-        ON google_workspace_connections ((1))
-        WHERE status IN ('connected', 'reauthorization_required');
       CREATE INDEX IF NOT EXISTS google_workspace_connections_status_idx
         ON google_workspace_connections (status, updated_at DESC);
 

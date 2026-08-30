@@ -22,4 +22,20 @@ describe("ensureGoogleWorkspaceSchema review upgrades", () => {
       "ALTER TABLE google_workspace_validation_review_items ADD COLUMN IF NOT EXISTS reviewed_at timestamptz",
     );
   });
+
+  it("does not recreate the legacy single-active index before role upgrade runs", async () => {
+    const queries: string[] = [];
+    const client = {
+      async query(sql: string) {
+        queries.push(sql);
+        return { rows: [] };
+      },
+    };
+
+    await ensureGoogleWorkspaceSchema(client);
+
+    expect(queries.join("\n")).not.toContain(
+      "google_workspace_connections_single_active_unique",
+    );
+  });
 });
