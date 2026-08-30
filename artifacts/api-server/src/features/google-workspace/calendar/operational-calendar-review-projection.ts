@@ -1,5 +1,6 @@
 type PendingOperationalCalendarReview = {
   id: string;
+  calendarId?: string | null;
   googleEventId: string;
   reason: string;
   bookingId: string | null;
@@ -61,10 +62,10 @@ export function projectOperationalCalendarReview(review: PendingOperationalCalen
 
   return {
     source: "google_operational_review" as const,
-    // Calendar-only identity. EventCalendar's existing booking link resolves this
-    // to /bookings/?googleReview=<id>, which safely lands on the booking list
-    // instead of pretending there is a booking/profile record for this row.
+    // Calendar-only identity. The Schedule resolution panel uses reviewId while
+    // calendarId/googleEventId keep the external identity visible and auditable.
     id: `?googleReview=${encodeURIComponent(review.id)}`,
+    calendarId: review.calendarId ?? null,
     googleEventId: review.googleEventId,
     reviewId: review.id,
     reviewReason: review.reason,
@@ -82,5 +83,11 @@ export function projectOperationalCalendarReview(review: PendingOperationalCalen
     startsAt,
     endsAt,
     packageKey: typeof parsed.packageKey === "string" ? parsed.packageKey : "unknown",
+    candidateBookingIds: Array.isArray(proposed.candidateBookingIds)
+      ? proposed.candidateBookingIds.filter((value): value is string => typeof value === "string")
+      : [],
+    candidateBookings: Array.isArray(proposed.candidateBookings)
+      ? proposed.candidateBookings
+      : [],
   };
 }

@@ -32,6 +32,15 @@ const importSchema = z.object({
 const decisionSchema = z.object({
   decision: z.enum(["accepted", "rejected"]),
 }).strict();
+const resolutionSchema = z.discriminatedUnion("resolution", [
+  z.object({
+    resolution: z.literal("link_existing"),
+    bookingId: z.string().uuid(),
+  }).strict(),
+  z.object({
+    resolution: z.literal("create_new"),
+  }).strict(),
+]);
 
 router.get("/google-workspace/operational-calendar", async (_req, res): Promise<void> => {
   try {
@@ -44,6 +53,7 @@ router.get("/google-workspace/operational-calendar", async (_req, res): Promise<
         try {
           return [projectOperationalCalendarReview({
             id: review.id,
+            calendarId: review.calendarId,
             googleEventId: review.googleEventId,
             reason: review.reason,
             bookingId: review.bookingId,
@@ -121,6 +131,42 @@ router.post("/google-workspace/operational-calendar/reviews/:reviewId/decision",
   } catch (error) {
     req.log.error({ err: error }, "Operational calendar review decision failed");
     res.status(500).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_FAILED" });
+  }
+});
+
+router.post("/google-workspace/operational-calendar/reviews/:reviewId/resolve", async (req, res): Promise<void> => {
+  const parsed = resolutionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_RESOLUTION_INPUT_INVALID" });
+    return;
+  }
+  try {
+    const result = await new OperationalCalendarLinkRepository(db).resolveReview({
+      reviewId: req.params.reviewId,
+      ...parsed.data,
+      reviewedBy: (req as any).userId ?? "owner",
+    });
+    res.json({ ok: true, ...result });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_RESOLUTION_FAILED";
+    const clientErrors = new Set([
+      "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_NOT_FOUND",
+      "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_ALREADY_RESOLVED",
+      "GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_REQUIRED",
+      "GOOGLE_OPERATIONAL_CALENDAR_WINDOW_INVALID",
+      "GOOGLE_OPERATIONAL_CALENDAR_CANDIDATE_INVALID",
+      "GOOGLE_OPERATIONAL_CALENDAR_BOOKING_NOT_FOUND",
+      "GOOGLE_OPERATIONAL_CALENDAR_LOCATION_REQUIRED",
+      "GOOGLE_OPERATIONAL_CALENDAR_PACKAGE_TEMPLATE_NOT_FOUND",
+      "GOOGLE_OPERATIONAL_CALENDAR_RESERVED_START_INVALID",
+      "GOOGLE_OPERATIONAL_CALENDAR_RESERVED_END_INVALID",
+    ]);
+    if (clientErrors.has(code)) {
+      res.status(code.endsWith("NOT_FOUND") ? 404 : 400).json({ error: code });
+      return;
+    }
+    req.log.error({ err: error, reviewId: req.params.reviewId }, "Operational calendar review resolution failed");
+    res.status(500).json({ error: "GOOGLE_OPERATIONAL_CALENDAR_REVIEW_RESOLUTION_FAILED" });
   }
 });
 

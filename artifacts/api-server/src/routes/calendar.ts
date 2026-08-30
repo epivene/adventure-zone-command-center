@@ -285,6 +285,7 @@ router.get("/calendar", async (req, res): Promise<void> => {
       try {
         return [projectOperationalCalendarReview({
           id: review.id,
+          calendarId: review.calendarId,
           googleEventId: review.googleEventId,
           reason: review.reason,
           bookingId: review.bookingId,

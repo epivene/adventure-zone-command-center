@@ -31,10 +31,23 @@ export type OperationalCalendarReview = {
   createdAt: string;
 };
 
+export type OperationalCalendarCandidate = {
+  bookingId: string;
+  profileId: string | null;
+  bookingName: string;
+  profileName: string | null;
+  city: string;
+  region: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  travelLegName: string | null;
+};
+
 export type OperationalCalendarStatus = {
   connection: OperationalCalendarConnectionView | null;
   pendingReviewCount: number;
   reviews: OperationalCalendarReview[];
+  reviewEvents?: Array<Record<string, unknown>>;
 };
 
 export type OperationalCalendarImportRow = {
@@ -86,5 +99,22 @@ export async function decideOperationalCalendarReview(reviewId: string, decision
   return json<{ ok: true }>(await apiFetch(
     `/google-workspace/operational-calendar/reviews/${encodeURIComponent(reviewId)}/decision`,
     { method: "POST", body: JSON.stringify({ decision }) },
+  ));
+}
+
+export async function resolveOperationalCalendarReview(
+  reviewId: string,
+  resolution: "link_existing" | "create_new",
+  bookingId?: string,
+) {
+  return json<{ ok: true; state: "accepted"; bookingId: string; created: boolean }>(await apiFetch(
+    `/google-workspace/operational-calendar/reviews/${encodeURIComponent(reviewId)}/resolve`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        resolution,
+        ...(bookingId ? { bookingId } : {}),
+      }),
+    },
   ));
 }

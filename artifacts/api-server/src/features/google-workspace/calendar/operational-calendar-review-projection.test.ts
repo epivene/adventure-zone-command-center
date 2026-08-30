@@ -6,6 +6,7 @@ describe("projectOperationalCalendarReview", () => {
   it("shows an unresolved David operational row on Schedule without inventing a booking id", () => {
     const event = projectOperationalCalendarReview({
       id: "review-1",
+      calendarId: "david-calendar@example.com",
       googleEventId: "google-1",
       reason: "More than one existing event profile is a plausible calendar match.",
       bookingId: null,
@@ -23,6 +24,10 @@ describe("projectOperationalCalendarReview", () => {
           startDate: "2026-08-19",
           endDateExclusive: "2026-08-24",
         },
+        candidateBookings: [{
+          bookingId: "booking-1",
+          bookingName: "Eastern Montana Fair",
+        }],
       },
     });
 
@@ -30,12 +35,18 @@ describe("projectOperationalCalendarReview", () => {
       source: "google_operational_review",
       id: "?googleReview=review-1",
       googleEventId: "google-1",
+      calendarId: "david-calendar@example.com",
       name: "Eastern Montana Fair · Needs review",
       city: "Miles City",
       region: "MT",
       status: "confirmed",
       travelLegName: "KRISTY",
       bookingId: null,
+      candidateBookingIds: [],
+      candidateBookings: [{
+        bookingId: "booking-1",
+        bookingName: "Eastern Montana Fair",
+      }],
     });
     expect(event.startsAt.toISOString()).toBe("2026-08-19T00:00:00.000Z");
     expect(event.endsAt.toISOString()).toBe("2026-08-23T00:00:00.000Z");
