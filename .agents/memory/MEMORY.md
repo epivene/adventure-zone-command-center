@@ -13,3 +13,4 @@
 - [Design Studio autosave safety](design-studio-autosave.md) — autosave acknowledgements must not mark newer in-flight edits as saved.
 - [Role login routing boundary](role-login-routing.md) — broad owner middleware must not intercept Office, Manager, or development login routes.
 - [PostgreSQL prepared DO blocks](postgres-prepared-do-blocks.md) — application parameters are not visible inside dollar-quoted DO bodies; guard optional tables outside PL/pgSQL.
+- [Stale workflow port owners](stale-workflow-port-owners.md) — when a restart builds new code but logs EADDRINUSE, an orphan may still serve the old bundle.
