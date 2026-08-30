@@ -1,0 +1,111 @@
+name: Apply profiles-first reconciliation
+
+on:
+  push:
+    branches:
+      - fix/profile-appearance-reconciliation
+
+permissions:
+  contents: write
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/profile_reconciliation_test
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/profile-appearance-reconciliation
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Normalize patch-script backreferences
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/apply_profile_appearance_reconciliation.py')
+          value = path.read_text(encoding='utf-8')
+          value = value.replace("r'''\\\\1\n", "r'''\\1\n")
+          value = value.replace("  },\\\\2'''", "  },\\2'''")
+          path.write_text(value, encoding='utf-8')
+          PY
+
+      - name: Apply reconciliation patch
+        run: python .github/scripts/apply_profile_appearance_reconciliation.py
+
+      - name: Verify patch shape
+        run: |
+          git diff --check
+          grep -q '074_profile_appearance_integrity.sql' lib/db/src/migrations.ts
+          grep -q 'profile_appearance_integrity_release_20260830' lib/db/migrations/074_profile_appearance_integrity.sql
+          ! grep -Eq 'UPDATE call_sessions[[:space:][:print:]]*updated_at' lib/db/migrations/074_profile_appearance_integrity.sql
+          grep -q 'Event years & assignments' artifacts/adventure-zone/src/components/profiles/simple-full-profile.tsx
+          grep -q 'booking_consolidations retired' artifacts/api-server/src/features/event-profiles/event-profile-repository.ts
+
+      - name: Run database and API regression tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/profile-integrity/profile-appearance-integrity-migration.pglite.test.ts \
+            src/features/profile-integrity/profile-appearance-wiring.test.ts \
+            src/features/profile-integrity/profile-integrity-audit.test.ts \
+            src/features/approved-profile-import/startup-import.test.ts \
+            src/features/google-workspace/calendar/operational-calendar-import-service.test.ts
+
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: API production build
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Run web profile regressions
+        run: |
+          pnpm --filter @workspace/adventure-zone exec vitest run \
+            src/components/profiles/profile-bookings-primary.test.ts \
+            src/pages/BookingsPage.test.ts \
+            src/components/navigation/app-shell.test.tsx
+
+      - name: Web typecheck diagnostics
+        id: web_typecheck
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/adventure-zone typecheck 2>&1 | tee web-typecheck.log
+
+      - name: Reject new type errors in changed web files
+        run: |
+          if grep -E 'simple-full-profile|BookingDetailPage|BookingEditPage|TodayPage|today-focus' web-typecheck.log; then
+            echo 'Changed web files introduced TypeScript errors.'
+            exit 1
+          fi
+          echo "Repository-wide web typecheck outcome: ${{ steps.web_typecheck.outcome }}"
+
+      - name: Web production build
+        run: pnpm --filter @workspace/adventure-zone build
+
+      - name: Commit verified repair
+        run: |
+          rm -f .github/workflows/apply-profile-appearance-reconciliation.yml
+          rm -f .github/scripts/apply_profile_appearance_reconciliation.py
+          rm -f .github/workflows/export-live-reconciliation-targets.yml
+          rm -f .github/workflows/export-live-calendar-evidence.yml
+          git diff --check
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m "fix: make profiles own event years and relationship history"
+          git push origin HEAD:fix/profile-appearance-reconciliation
