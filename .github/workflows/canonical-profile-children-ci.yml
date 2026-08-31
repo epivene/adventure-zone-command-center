@@ -29,6 +29,9 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
 
+      - name: Build workspace libraries
+        run: pnpm run typecheck:libs
+
       - name: Apply production repair
         run: python .github/scripts/apply_canonical_profile_children.py
 
