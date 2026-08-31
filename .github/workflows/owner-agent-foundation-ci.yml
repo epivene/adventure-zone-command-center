@@ -44,6 +44,7 @@ jobs:
           pnpm --dir artifacts/api-server exec vitest run
           src/features/owner-auth/owner-token.test.ts
           src/features/owner-auth/owner-middleware.test.ts
+          src/features/owner-auth/owner-account-repository.test.ts
           src/routes/auth.test.ts
           src/routes/office-security-regression.test.ts
           src/db/required-schema-startup.test.ts
