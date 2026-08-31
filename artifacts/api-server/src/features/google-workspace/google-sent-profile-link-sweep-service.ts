@@ -123,6 +123,28 @@ function uniqueEvidence(...groups: string[][]): string[] {
   return [...new Set(groups.flat().filter(Boolean))];
 }
 
+function gmailDate(value: Date): string {
+  return [
+    String(value.getUTCFullYear()).padStart(4, "0"),
+    String(value.getUTCMonth() + 1).padStart(2, "0"),
+    String(value.getUTCDate()).padStart(2, "0"),
+  ].join("/");
+}
+
+export function gmailSentWindowQuery(after: Date, before: Date): string {
+  const searchAfter = new Date(Date.UTC(
+    after.getUTCFullYear(),
+    after.getUTCMonth(),
+    after.getUTCDate() - 1,
+  ));
+  const searchBefore = new Date(Date.UTC(
+    before.getUTCFullYear(),
+    before.getUTCMonth(),
+    before.getUTCDate() + 1,
+  ));
+  return `in:sent after:${gmailDate(searchAfter)} before:${gmailDate(searchBefore)} -in:trash -in:spam`;
+}
+
 function validWindow(after: Date, before: Date): void {
   const afterMs = after.getTime();
   const beforeMs = before.getTime();
@@ -221,6 +243,7 @@ export class GoogleSentProfileLinkSweepService {
       const page = await client.listMessagePage({
         maxResults: PAGE_SIZE,
         pageToken,
+        query: gmailSentWindowQuery(input.after, input.before),
       });
       pagesScanned += 1;
       pageToken = page.nextPageToken;

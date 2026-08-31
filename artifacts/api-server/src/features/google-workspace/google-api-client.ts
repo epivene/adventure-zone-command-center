@@ -550,6 +550,13 @@ export function createGoogleWorkspaceReadClient(input: {
       const url = new URL(`${gmailBaseEndpoint}/messages`);
       url.searchParams.set("maxResults", String(input.maxResults));
       url.searchParams.set("includeSpamTrash", "false");
+      if (input.query !== undefined && input.query !== null) {
+        const query = input.query.trim();
+        if (!query || query.length > 2_000) {
+          throw clientError("GOOGLE_WORKSPACE_MESSAGE_QUERY_INVALID");
+        }
+        url.searchParams.set("q", query);
+      }
       const pageToken = input.pageToken?.trim();
       if (pageToken) url.searchParams.set("pageToken", pageToken);
       const payload = await authorizedJson(url.toString());
