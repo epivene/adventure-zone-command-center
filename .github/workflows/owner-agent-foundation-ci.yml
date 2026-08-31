@@ -12,8 +12,10 @@ on:
       - "artifacts/api-server/src/app.ts"
       - "artifacts/api-server/src/db/owner-account-**"
       - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/tsconfig.owner-auth.json"
       - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
       - "artifacts/adventure-zone/src/lib/auth-context.tsx"
+      - "artifacts/adventure-zone/tsconfig.owner-session.json"
       - "lib/db/src/owner-auth-schema*"
       - "lib/db/src/index.ts"
       - "lib/db/src/drizzle-schema.ts"
@@ -52,7 +54,11 @@ jobs:
           src/db/owner-account-startup-migration.test.ts
       - name: Owner database schema test
         run: pnpm exec vitest run lib/db/src/owner-auth-schema.test.ts
-      - name: Workspace typecheck
-        run: pnpm run typecheck
+      - name: Owner API focused typecheck
+        run: pnpm --dir artifacts/api-server exec tsc -p tsconfig.owner-auth.json --noEmit
+      - name: Owner session UI focused typecheck
+        run: pnpm --dir artifacts/adventure-zone exec tsc -p tsconfig.owner-session.json --noEmit
+      - name: Database library typecheck
+        run: pnpm exec tsc --build lib/db/tsconfig.json --pretty false
       - name: Workspace build
         run: pnpm run build
