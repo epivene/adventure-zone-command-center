@@ -22,28 +22,15 @@ jobs:
       - name: Add Gmail query support and use the bounded sent-mail window
         run: |
           python <<'PY'
+          import re
           from pathlib import Path
 
           client = Path('artifacts/api-server/src/features/google-workspace/google-api-client.ts')
           text = client.read_text()
-          old = '''    async listMessagePage(input): Promise<GoogleMessagePage> {
-                if (!Number.isInteger(input.maxResults) || input.maxResults < 1 || input.maxResults > 250) {
-                  throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
-                }
-                const url = new URL(`${gmailBaseEndpoint}/messages`);
-                url.searchParams.set("maxResults", String(input.maxResults));
-                url.searchParams.set("includeSpamTrash", "false");
+          marker = '''      url.searchParams.set("includeSpamTrash", "false");
                 const pageToken = input.pageToken?.trim();
-                if (pageToken) url.searchParams.set("pageToken", pageToken);
-                const payload = await authorizedJson(url.toString());
           '''
-          new = '''    async listMessagePage(input): Promise<GoogleMessagePage> {
-                if (!Number.isInteger(input.maxResults) || input.maxResults < 1 || input.maxResults > 250) {
-                  throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
-                }
-                const url = new URL(`${gmailBaseEndpoint}/messages`);
-                url.searchParams.set("maxResults", String(input.maxResults));
-                url.searchParams.set("includeSpamTrash", "false");
+          insertion = '''      url.searchParams.set("includeSpamTrash", "false");
                 if (input.query !== undefined && input.query !== null) {
                   const query = input.query.trim();
                   if (!query || query.length > 2_000) {
@@ -52,17 +39,16 @@ jobs:
                   url.searchParams.set("q", query);
                 }
                 const pageToken = input.pageToken?.trim();
-                if (pageToken) url.searchParams.set("pageToken", pageToken);
-                const payload = await authorizedJson(url.toString());
           '''
-          if old not in text:
-              raise SystemExit('Google API listMessagePage block not found')
-          client.write_text(text.replace(old, new))
+          if 'GOOGLE_WORKSPACE_MESSAGE_QUERY_INVALID' not in text:
+              if marker not in text:
+                  raise SystemExit('Google API query insertion marker not found')
+              text = text.replace(marker, insertion, 1)
+          client.write_text(text)
 
           service = Path('artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts')
           text = service.read_text()
-          marker = '''function validWindow(after: Date, before: Date): void {
-          '''
+          marker = 'function validWindow(after: Date, before: Date): void {'
           helper = '''function gmailDate(value: Date): string {
             return [
               String(value.getUTCFullYear()).padStart(4, "0"),
@@ -89,22 +75,23 @@ jobs:
           if 'export function gmailSentWindowQuery' not in text:
               if marker not in text:
                   raise SystemExit('Service window marker not found')
-              text = text.replace(marker, helper + marker)
+              text = text.replace(marker, helper + marker, 1)
 
-          old_call = '''      const page = await client.listMessagePage({
-                maxResults: PAGE_SIZE,
-                pageToken,
-              });
-          '''
-          new_call = '''      const page = await client.listMessagePage({
-                maxResults: PAGE_SIZE,
-                pageToken,
-                query: gmailSentWindowQuery(input.after, input.before),
-              });
-          '''
-          if old_call not in text:
-              raise SystemExit('Service listMessagePage call not found')
-          service.write_text(text.replace(old_call, new_call))
+          page_pattern = re.compile(
+              r'(const page = await client\.listMessagePage\(\{\n'
+              r'\s*maxResults: PAGE_SIZE,\n'
+              r'\s*pageToken,\n)'
+              r'(\s*\}\);)'
+          )
+          if 'query: gmailSentWindowQuery(input.after, input.before)' not in text:
+              text, count = page_pattern.subn(
+                  r'\1        query: gmailSentWindowQuery(input.after, input.before),\n\2',
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit('Service listMessagePage call not found')
+          service.write_text(text)
 
           Path('.github/workflows/apply-gmail-profile-link-query-patch.yml').unlink()
           PY
