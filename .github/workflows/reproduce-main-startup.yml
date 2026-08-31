@@ -13,7 +13,7 @@ permissions:
 env:
   NODE_ENV: production
   PORT: "10000"
-  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable
   SESSION_SECRET: startup-reproduction-session-secret
   OWNER_PASSWORD: startup-reproduction-owner-password
   ASSISTANT_IMPORT_TOKEN: startup-reproduction-assistant-token
