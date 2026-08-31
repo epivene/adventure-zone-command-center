@@ -1,0 +1,47 @@
+name: Lead intake startup timeout CI
+
+on:
+  push:
+    branches:
+      - fix/lead-intake-startup-timeout
+    paths:
+      - ".github/workflows/lead-intake-startup-timeout-ci.yml"
+      - "artifacts/api-server/src/db/lead-intake-startup-migration.ts"
+      - "artifacts/api-server/src/db/lead-intake-startup-migration.test.ts"
+      - "artifacts/api-server/src/db/lead-intake-ready-fast-path.test.ts"
+  pull_request:
+    paths:
+      - ".github/workflows/lead-intake-startup-timeout-ci.yml"
+      - "artifacts/api-server/src/db/lead-intake-startup-migration.ts"
+      - "artifacts/api-server/src/db/lead-intake-startup-migration.test.ts"
+      - "artifacts/api-server/src/db/lead-intake-ready-fast-path.test.ts"
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_intake_startup_test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused ready-path regression
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-ready-fast-path.test.ts
+      - name: Lead intake startup migration suite
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-startup-migration.test.ts
+      - name: API typecheck
+        run: pnpm --filter @workspace/api-server typecheck
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build

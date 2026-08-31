@@ -1,0 +1,60 @@
+name: Apply lead intake startup fast path
+
+on:
+  push:
+    branches:
+      - fix/lead-intake-startup-timeout
+    paths:
+      - ".github/workflows/apply-lead-intake-startup-fast-path.yml"
+      - ".github/scripts/apply_lead_intake_startup_fast_path.py"
+
+permissions:
+  contents: write
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_intake_startup_test
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: fix/lead-intake-startup-timeout
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply production and existing-test change
+        run: python .github/scripts/apply_lead_intake_startup_fast_path.py
+
+      - name: Run focused ready-path regression
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-ready-fast-path.test.ts
+
+      - name: Run lead intake startup migration suite
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-startup-migration.test.ts src/db/lead-intake-required-startup.test.ts src/db/required-schema-startup.test.ts
+
+      - name: Typecheck API
+        run: pnpm --filter @workspace/api-server typecheck
+
+      - name: Build production API
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Commit verified repair
+        run: |
+          rm .github/workflows/apply-lead-intake-startup-fast-path.yml
+          rm .github/scripts/apply_lead_intake_startup_fast_path.py
+          git diff --check
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m "fix: skip lead migrations when schema is ready"
+          git push origin HEAD:fix/lead-intake-startup-timeout
