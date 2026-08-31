@@ -1,4 +1,5 @@
 import { runStartupStep } from "../lib/startup-step";
+import { ensureOwnerAccountSchemaBeforeListen } from "./owner-account-required-startup";
 import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-required-startup";
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 import { ensureLegAssignmentSchemaBeforeListen } from "./leg-assignment-required-startup";
@@ -12,6 +13,7 @@ type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
+  ensureOwnerAccount?: RequiredStep;
   ensurePaperNotes?: RequiredStep;
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
@@ -21,6 +23,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureDesignStudio?: RequiredStep;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
+  await run(
+    "required owner account schema",
+    dependencies?.ensureOwnerAccount ?? ensureOwnerAccountSchemaBeforeListen,
+  );
   await run(
     "required paper notes schema",
     dependencies?.ensurePaperNotes ?? ensurePaperNotesSchemaBeforeListen,
