@@ -16,6 +16,7 @@ on:
       - "lib/db/src/owner-auth-schema*"
       - "lib/db/src/index.ts"
       - "lib/db/src/drizzle-schema.ts"
+      - "lib/db/package.json"
       - "lib/db/migrations/20260831_owner_account.sql"
       - "docs/superpowers/specs/2026-08-31-owner-only-agent.md"
       - "docs/superpowers/plans/2026-08-31-owner-only-agent-foundation.md"
@@ -25,6 +26,8 @@ on:
 jobs:
   owner-agent-foundation:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/owner_agent_ci
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -35,16 +38,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Owner identity and route tests
+      - name: Owner API identity and route tests
         run: >-
-          pnpm exec vitest run
-          artifacts/api-server/src/features/owner-auth/owner-token.test.ts
-          artifacts/api-server/src/features/owner-auth/owner-middleware.test.ts
-          artifacts/api-server/src/routes/auth.test.ts
-          artifacts/api-server/src/routes/office-security-regression.test.ts
-          artifacts/api-server/src/db/required-schema-startup.test.ts
-          artifacts/api-server/src/db/owner-account-required-startup.test.ts
-          lib/db/src/owner-auth-schema.test.ts
+          pnpm --dir artifacts/api-server exec vitest run
+          src/features/owner-auth/owner-token.test.ts
+          src/features/owner-auth/owner-middleware.test.ts
+          src/routes/auth.test.ts
+          src/routes/office-security-regression.test.ts
+          src/db/required-schema-startup.test.ts
+          src/db/owner-account-required-startup.test.ts
+      - name: Owner database schema test
+        run: pnpm exec vitest run lib/db/src/owner-auth-schema.test.ts
       - name: Workspace typecheck
         run: pnpm run typecheck
       - name: Workspace build
