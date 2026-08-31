@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/lib/auth-context.tsx",
+    "src/components/navigation/app-menu.tsx"
+  ]
+}
