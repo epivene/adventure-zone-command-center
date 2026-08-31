@@ -1,0 +1,81 @@
+name: Persist Twin Falls Gmail linkage audit
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-link-integrity
+    paths:
+      - ".github/workflows/audit-live-twin-falls-gmail-link-commit.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-link-integrity
+      - name: Inspect protected live profile history
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-history/b447c83c-6348-4fab-b850-0db7a5576a83" \
+            > profile-history.json
+          mkdir -p .audits
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const root = JSON.parse(fs.readFileSync('profile-history.json', 'utf8'));
+          const needles = [
+            '1a03f76015409bfa',
+            '1a03f6d13a293ebf',
+            'Thank you for calling me back. I tried returning your call',
+          ];
+          const matches = [];
+          function walk(value, path = '$') {
+            if (Array.isArray(value)) {
+              value.forEach((item, index) => walk(item, `${path}[${index}]`));
+              return;
+            }
+            if (!value || typeof value !== 'object') return;
+            const serialized = JSON.stringify(value);
+            if (needles.some((needle) => serialized.includes(needle))) {
+              matches.push({
+                path,
+                keys: Object.keys(value),
+                id: value.id ?? value.messageId ?? value.gmailMessageId ?? null,
+                kind: value.kind ?? value.type ?? value.sourceType ?? null,
+                subject: value.subject ?? null,
+                occurredAt: value.occurredAt ?? value.emailTs ?? value.sentAt ?? null,
+              });
+            }
+            for (const [key, child] of Object.entries(value)) walk(child, `${path}.${key}`);
+          }
+          walk(root);
+          fs.writeFileSync('.audits/twin-falls-gmail-link-audit.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            profileId: root.place?.id ?? null,
+            profileName: root.place?.name ?? null,
+            exactMessageVisible: matches.length > 0,
+            matches,
+            topLevelKeys: Object.keys(root),
+            collectionCounts: Object.fromEntries(
+              Object.entries(root)
+                .filter(([, value]) => Array.isArray(value))
+                .map(([key, value]) => [key, value.length]),
+            ),
+          }, null, 2) + '\n');
+          NODE
+      - name: Commit audit result
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/twin-falls-gmail-link-audit.json
+          git commit -m "audit: record live Twin Falls Gmail linkage" || exit 0
+          git push origin HEAD:fix/gmail-profile-link-integrity
