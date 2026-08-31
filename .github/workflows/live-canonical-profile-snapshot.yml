@@ -1,0 +1,57 @@
+name: Live canonical profile snapshot
+
+on:
+  push:
+    branches:
+      - fix/canonical-profile-children
+    paths:
+      - .github/workflows/live-canonical-profile-snapshot.yml
+
+permissions:
+  contents: read
+
+env:
+  APP_BASE_URL: https://adventure-zone-command-center.onrender.com
+  PIRATE_PROFILE_ID: f24033e1-801b-43ff-9a7e-a9d6d7b426c3
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Capture one live snapshot
+        env:
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          mkdir -p live-canonical-profile-snapshot
+          set +e
+          for item in \
+            "profile-integrity-audit|/api/assistant-import/profile-integrity-audit" \
+            "pirate-profile-history|/api/assistant-import/profile-history/${PIRATE_PROFILE_ID}" \
+            "pirate-calendar-links|/api/assistant-import/profile-integrity-calendar-links/${PIRATE_PROFILE_ID}"
+          do
+            name="${item%%|*}"
+            path="${item#*|}"
+            code=$(curl --silent --show-error --location \
+              --connect-timeout 20 --max-time 150 \
+              --output "live-canonical-profile-snapshot/${name}.json" \
+              --write-out '%{http_code}' \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header 'Accept: application/json' \
+              "${APP_BASE_URL}${path}")
+            status=$?
+            printf '%s curl_status=%s http_status=%s\n' "$name" "$status" "$code" | tee -a live-canonical-profile-snapshot/status.txt
+          done
+          set -e
+          cat live-canonical-profile-snapshot/status.txt
+
+      - name: Upload snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-canonical-profile-snapshot
+          path: live-canonical-profile-snapshot
+          if-no-files-found: error
+          retention-days: 7
