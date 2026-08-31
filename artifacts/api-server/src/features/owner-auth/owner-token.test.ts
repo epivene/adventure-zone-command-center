@@ -31,7 +31,7 @@ describe("owner tokens", () => {
     expect(verifyOwnerToken(issued!.token, new Date(issued!.expiresAt).getTime())).toBeNull();
   });
 
-  it("rejects tampered, Office, leg-manager, and malformed tokens", () => {
+  it("rejects tampered, Office, leg-manager, malformed, and invalid-identity tokens", () => {
     const owner = issueOwnerToken({ ownerId, sessionVersion: 7 })!;
     const office = issueOfficeToken({
       accountId: "10000000-0000-4000-8000-000000000001",
@@ -46,6 +46,8 @@ describe("owner tokens", () => {
     expect(verifyOwnerToken(office.token)).toBeNull();
     expect(verifyOwnerToken(manager.token)).toBeNull();
     expect(verifyOwnerToken("owner.not-a-token")).toBeNull();
+    expect(issueOwnerToken({ ownerId: "not-a-uuid", sessionVersion: 1 })).toBeNull();
+    expect(issueOwnerToken({ ownerId, sessionVersion: Number.MAX_SAFE_INTEGER + 1 })).toBeNull();
   });
 
   it("fails closed when SESSION_SECRET is unavailable", () => {
