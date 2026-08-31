@@ -90,3 +90,5 @@ jobs:
             git commit -m "feat: apply blank profile batch 02 at startup"
             git push origin HEAD:research/blank-profiles-batch-02
           fi
+
+# Retriggered after separating workflow-file permissions from the code commit.
