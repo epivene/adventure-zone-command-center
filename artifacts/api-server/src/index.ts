@@ -9,6 +9,7 @@ import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
+import { cleanupKnownEmptyTestProfiles } from "./features/organizations/known-empty-test-profile-cleanup";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
@@ -203,6 +204,23 @@ async function runPostListenMaintenance() {
   await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
   await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
   await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
+  try {
+    const cleanup = await runStartupStep(
+      "known empty test profile cleanup",
+      cleanupKnownEmptyTestProfiles,
+    );
+    logger.info(
+      cleanup,
+      cleanup.deleted.length > 0
+        ? "Removed known empty test profiles"
+        : "No known empty test profiles were eligible for removal",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Known empty test profile cleanup deferred; startup will continue",
+    );
+  }
   await runStartupStep("approved profile startup import", () =>
     importApprovedProfilesAtStartup(port),
   );
