@@ -1,4 +1,4 @@
-name: Inspect live county fair profile matches
+name: Verify five live North Dakota fair profiles
 
 on:
   push:
@@ -9,49 +9,62 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Query protected profile search
+      - name: Wait for deployed profiles and verify records
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
+          set -euo pipefail
           test -n "${API_URL}"
           test -n "${ASSISTANT_IMPORT_TOKEN}"
           mkdir results
           BASE_URL="${API_URL%/}"
-          while IFS='|' read -r SLUG QUERY; do
-            HTTP_STATUS=$(curl --silent --show-error --get \
-              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --data-urlencode "q=${QUERY}" \
-              --data-urlencode "limit=20" \
-              --output "results/${SLUG}.json" \
-              --write-out "%{http_code}" \
-              "${BASE_URL}/api/assistant-import/profile-search" || true)
-            test "${HTTP_STATUS}" = "200"
-          done <<'QUERIES'
-          ramsey|Ramsey
-          wells|Wells
-          stutsman|Stutsman
-          pierce|Pierce
-          ransom|Ransom
-          devils-lake|Devils Lake
-          fessenden|Fessenden
-          jamestown|Jamestown
-          rugby|Rugby
-          lisbon|Lisbon
-          hanson|Hanson
-          hartl|Hartl
-          hatlewick|Hatlewick
-          sobolik|Sobolik
-          aabrekke|Aabrekke
-          QUERIES
 
-      - name: Upload search results
+          while IFS='|' read -r SLUG NAME CITY REGION EMAIL FOLLOWUP DUE DESCRIPTION_MARKER; do
+            FOUND=""
+            for ATTEMPT in $(seq 1 30); do
+              curl --fail --silent --show-error --get \
+                --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                --data-urlencode "q=${NAME}" \
+                --data-urlencode "limit=20" \
+                "${BASE_URL}/api/assistant-import/profile-search" > "results/${SLUG}-search.json"
+              PROFILE_ID=$(jq -r --arg name "${NAME}" --arg city "${CITY}" --arg region "${REGION}" '
+                [.results[] | select(.kind == "organization" and .label == $name and .city == $city and .region == $region)] |
+                if length == 1 then .[0].id else "" end
+              ' "results/${SLUG}-search.json")
+              if test -n "${PROFILE_ID}"; then
+                FOUND="${PROFILE_ID}"
+                break
+              fi
+              sleep 15
+            done
+            test -n "${FOUND}"
+
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${FOUND}" > "results/${SLUG}-profile.json"
+
+            jq -e --arg email "${EMAIL}" --arg followup "${FOLLOWUP}" --arg due "${DUE}" --arg marker "${DESCRIPTION_MARKER}" '
+              (.place.description | contains($marker)) and
+              ([.contacts[] | select((.email // "" | ascii_downcase) == ($email | ascii_downcase))] | length == 1) and
+              ([.notes[] | select(.subject == "EMAIL DRAFT — review only; do not send" and (.body | contains("The Adventure Zone")))] | length >= 1) and
+              ([.followUps[] | select(.label == $followup and .dueAt == $due)] | length == 1)
+            ' "results/${SLUG}-profile.json"
+          done <<'PROFILES'
+          ramsey|Ramsey County Fair|Devils Lake|ND|hanson_connie@outlook.com|Review 2027 Ramsey County Fair outreach|2027-03-17T15:00:00.000Z|Ramsey County 4-H Achievement Days
+          wells|Wells County Fair|Fessenden|ND|mhartl@gondtc.com|Review 2027 Wells County Fair outreach|2027-03-18T15:00:00.000Z|free-gate
+          stutsman|Stutsman County Fair|Jamestown|ND|hccdeb@daktel.com|Review 2027 Stutsman County Fair outreach|2027-03-24T15:00:00.000Z|Four-day family county fair
+          pierce|Pierce County Fair|Rugby|ND|pcfrugby@gmail.com|Review 2027 Pierce County Fair outreach|2027-03-25T15:00:00.000Z|Family Fun for Everyone
+          ransom|Ransom County Fair|Lisbon|ND|fair@ransomcountyfair.com|Review 2027 Ransom County Fair outreach|2027-05-25T15:00:00.000Z|August 25–29, 2027
+          PROFILES
+
+      - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: live-county-fair-profile-searches
+          name: verified-live-nd-fair-profiles
           path: results
           retention-days: 1
