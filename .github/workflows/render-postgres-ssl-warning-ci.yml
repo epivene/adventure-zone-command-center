@@ -1,0 +1,40 @@
+name: Render postgres SSL warning CI
+
+on:
+  push:
+    branches:
+      - fix/render-postgres-ssl-warning
+    paths:
+      - ".github/workflows/render-postgres-ssl-warning-ci.yml"
+      - "lib/db/src/connection-string.ts"
+      - "lib/db/src/connection-string.test.ts"
+      - "lib/db/src/index.ts"
+  pull_request:
+    paths:
+      - "lib/db/src/connection-string.ts"
+      - "lib/db/src/connection-string.test.ts"
+      - "lib/db/src/index.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Connection-string regression tests
+        run: pnpm --filter @workspace/db exec vitest run src/connection-string.test.ts
+      - name: Build DB package
+        run: pnpm --filter @workspace/db build
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
