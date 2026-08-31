@@ -1,0 +1,35 @@
+name: Canonical profile children CI
+
+on:
+  push:
+    branches:
+      - fix/canonical-profile-children
+
+permissions:
+  contents: write
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/canonical_profile_children_test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Canonical profile regression tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/event-profiles/event-profile-canonical-children.test.ts
+          src/features/approved-profile-import/approved-profile-existing-id.test.ts
