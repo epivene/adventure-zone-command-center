@@ -1,0 +1,112 @@
+name: Apply blank profile batch 02 code patches
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-02
+    paths:
+      - ".github/workflows/apply-blank-profile-batch-02-code-patches.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/blank-profiles-batch-02
+          fetch-depth: 0
+      - name: Wire batch 02 maintenance into the startup importer and tests
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          importer = Path('artifacts/api-server/src/features/approved-profile-import/startup-import.ts')
+          text = importer.read_text()
+          batch01_import = 'import { applyBlankProfileBatch01 } from "../organizations/blank-profile-batch-01";'
+          batch02_import = 'import { applyBlankProfileBatch02 } from "../organizations/blank-profile-batch-02";'
+          if batch02_import not in text:
+              text = text.replace(batch01_import, batch01_import + '\n' + batch02_import)
+
+          batch01_block = '''  try {
+            const batch01 = await applyBlankProfileBatch01();
+            logger.info(
+              batch01,
+              "Blank profile research batch 01 maintenance applied or safely skipped",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "Blank profile research batch 01 maintenance failed; approved profile imports will continue",
+            );
+          }
+
+          '''
+          batch02_block = '''  try {
+            const batch02 = await applyBlankProfileBatch02();
+            logger.info(
+              batch02,
+              "Blank profile research batch 02 maintenance applied or safely skipped",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "Blank profile research batch 02 maintenance failed; approved profile imports will continue",
+            );
+          }
+
+          '''
+          if batch02_block not in text:
+              if batch01_block not in text:
+                  raise SystemExit('Batch 01 maintenance block not found')
+              text = text.replace(batch01_block, batch01_block + batch02_block)
+          importer.write_text(text)
+
+          mock = '''
+          vi.mock("../organizations/blank-profile-batch-02", () => ({
+            applyBlankProfileBatch02: vi.fn().mockResolvedValue({
+              renamed: [],
+              alreadyCurrent: [],
+              skipped: [],
+            }),
+          }));
+          '''.strip() + '\n\n'
+
+          for filename in [
+              'artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts',
+              'artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts',
+          ]:
+              path = Path(filename)
+              test = path.read_text()
+              if '../organizations/blank-profile-batch-02' not in test:
+                  marker = 'import { readdir, readFile } from "node:fs/promises";'
+                  if marker not in test:
+                      raise SystemExit(f'Import marker not found in {filename}')
+                  test = test.replace(marker, mock + marker)
+                  path.write_text(test)
+
+          ci = Path('.github/workflows/approved-profile-import-ci.yml')
+          ci_text = ci.read_text()
+          ci_text = ci_text.replace(
+              'branches: [main, assistant-live-profile-notes-followups, research/blank-profiles-batch-01]',
+              'branches: [main, assistant-live-profile-notes-followups, research/blank-profiles-batch-01, research/blank-profiles-batch-02]',
+          )
+          ci.write_text(ci_text)
+          PY
+      - name: Commit code patches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/approved-profile-import/startup-import.ts \
+            artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts \
+            artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts \
+            .github/workflows/approved-profile-import-ci.yml
+          if git diff --cached --quiet; then
+            echo "Batch 02 code patches are already applied."
+          else
+            git commit -m "feat: apply blank profile batch 02 at startup"
+            git push origin HEAD:research/blank-profiles-batch-02
+          fi
