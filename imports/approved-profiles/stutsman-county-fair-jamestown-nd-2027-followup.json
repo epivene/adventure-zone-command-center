@@ -1,0 +1,41 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "requireExisting": true,
+  "aliases": [
+    "Stutsman County Fair Association"
+  ],
+  "event": {
+    "id": null,
+    "name": "Stutsman County Fair",
+    "city": "Jamestown",
+    "region": "ND"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "interested",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2027 outreach timing reviewed",
+      "body": "Stutsman County Fair ran June 24-27, 2026. No official 2027 fair dates or vendor/entertainment application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Deb Hatlewick but must be reviewed before sending."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Review 2027 Stutsman County Fair outreach",
+      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Deb Hatlewick; do not send automatically.",
+      "dueAt": "2027-03-24T15:00:00.000Z"
+    }
+  ]
+}
