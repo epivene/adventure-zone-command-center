@@ -1,0 +1,96 @@
+name: Export blank profile research batch 01
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-01
+    paths:
+      - ".github/workflows/export-blank-profile-batch-01.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export protected profile history and duplicate-search evidence
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+
+          node <<'NODE'
+          const fs = require('fs');
+
+          const candidates = [
+            { id: '5242da65-1a93-47bb-a48f-31186c22366f', name: 'ASSOC - WSAF Washington State Association of Fairs', queries: ['Washington State Association of Fairs', 'WSAF'] },
+            { id: 'ad4cb1ee-7c19-4afc-9aac-159c8d9270cd', name: 'Breckenridge Main Street Art Festival (Breckenridge) CO', queries: ['Breckenridge Main Street Art Festival', 'Main Street Art Festival Breckenridge'] },
+            { id: 'cc388d92-2ee6-44e0-b27b-3a6779d2c026', name: 'CAN - County Fair - Medicine Hat Exhibition & Stampede (Medicine Hat) AB', queries: ['Medicine Hat Exhibition & Stampede', 'Medicine Hat Stampede'] },
+            { id: 'ad383aa2-d0fb-49e7-bea4-70416c518aae', name: 'Colorado Brazil Fest () CO', queries: ['Colorado Brazil Fest', 'Brazil Fest Colorado'] },
+            { id: '00235299-ce09-4e3f-b8d5-ca3b8d4a1550', name: 'County Fair - Deschutes | Bi-Mart Fair & Rodeo (Redmond) OR', queries: ['Deschutes County Fair', 'Bi-Mart Fair and Rodeo'] },
+            { id: '95271417-8cf3-4666-b229-ace086cbf837', name: 'County Fair - Kittitas (Ellensburg) WA', queries: ['Kittitas County Fair', 'Ellensburg Rodeo Fair'] },
+            { id: 'f33b0771-edfc-4e80-94e5-fd94fefa4ed2', name: 'County Fair - Mineral (Superior) MT', queries: ['Mineral County Fair Superior', 'Mineral County Fair Montana'] },
+            { id: '95338907-699e-479b-9bdf-0d0e432c5ef0', name: 'County Fair - Minidoka (Rupert) ID', queries: ['Minidoka County Fair', 'Minidoka Fair Rupert'] },
+            { id: 'b85f2134-ce79-40e0-84a4-e00a8f4322a9', name: 'County Fair - Northwest Washington Fair (Lynden) WA', queries: ['Northwest Washington Fair', 'NW Washington Fair Lynden'] },
+            { id: '9dd4d699-fb77-4f72-b29c-ed32351b8803', name: 'County Fair - Phillips (Malta) MT', queries: ['Phillips County Fair Malta', 'Phillips County Fair Montana'] },
+            { id: 'e50f361c-aca4-4aa6-b3c5-ef817c647460', name: 'County Fair - Prairie (Terry) MT', queries: ['Prairie County Fair Terry', 'Prairie County Fair Montana'] },
+            { id: '176889d4-b85a-40e9-ae93-f506687f26ff', name: 'County Fair - Red River Valley Fair (West Fargo) ND', queries: ['Red River Valley Fair', 'West Fargo Fair'] },
+            { id: '18f5817e-8767-44ba-b514-baa3197d674f', name: 'County Fair - South Dakota State Fair (Huron) SD', queries: ['South Dakota State Fair', 'SD State Fair Huron'] },
+            { id: 'f86c00a2-1f36-4cd2-8c69-7e58e1a7ff43', name: 'County Fair - Stanwood Camano Community Fair (Stanwood) WA', queries: ['Stanwood Camano Community Fair', 'Stanwood Camano Fair'] },
+            { id: '148e4d3b-71b7-425d-a777-296b2f18ec6d', name: 'KOA - West Yellowstone', queries: ['KOA West Yellowstone', 'West Yellowstone KOA'] },
+            { id: '1f6301ab-2c14-41d9-abac-f2b280c2c0f2', name: 'KS Kansas', queries: ['KS Kansas', 'Kansas'] },
+            { id: 'e0761aed-d202-4d98-adb7-9fc70895467b', name: 'Legend of Old Ephraim, The (Logan) UT', queries: ['Legend of Old Ephraim', 'Old Ephraim Logan'] },
+            { id: '90cca325-9d99-4021-8461-236ce364efc1', name: 'Lemonade Day (Berthoud) CO', queries: ['Lemonade Day Berthoud', 'Berthoud Lemonade Day'] },
+            { id: '32a6351f-9069-47a8-a1ec-defc6eb5d431', name: 'Lemonade Day (Columbia Falls) MT', queries: ['Lemonade Day Columbia Falls', 'Columbia Falls Lemonade Day'] },
+            { id: '6bb6d0ac-57ee-40fc-a7b0-08bc7d47cff9', name: 'Lemonade Day (Flathead) MT', queries: ['Lemonade Day Flathead', 'Flathead Lemonade Day'] },
+            { id: '471b8fef-e10e-44ef-a39b-2cf00fd61766', name: 'Lemonade Day (Laramie) WY', queries: ['Lemonade Day Laramie', 'Laramie Lemonade Day'] },
+            { id: 'bf3808ff-2585-46fd-ad9a-a90ce32c7460', name: 'Lemonade Day (Treasure Valley) ID', queries: ['Lemonade Day Treasure Valley', 'Treasure Valley Lemonade Day'] },
+            { id: '83ef3e75-2e33-44f3-ba9d-6423f4c30807', name: 'National Western Stock Show (Denver) CO', queries: ['National Western Stock Show', 'NWSS Denver'] },
+            { id: 'b578bb24-f372-4919-984a-ff7a88639c90', name: 'Native American Day (HOLIDAY) MT', queries: ['Native American Day Montana', 'Native American Day'] },
+            { id: '6a894884-4722-46b4-8073-93a71d4543a1', name: 'ND North Dakota', queries: ['ND North Dakota', 'North Dakota'] },
+          ];
+
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+
+          async function getJson(path) {
+            const response = await fetch(`${base}/${path}`, { headers });
+            const text = await response.text();
+            let body;
+            try { body = JSON.parse(text); } catch { body = { raw: text }; }
+            return { status: response.status, body };
+          }
+
+          (async () => {
+            const output = [];
+            for (const candidate of candidates) {
+              const history = await getJson(`profile-history/${candidate.id}`);
+              const searches = [];
+              for (const query of candidate.queries) {
+                searches.push({
+                  query,
+                  ...(await getJson(`profile-search?q=${encodeURIComponent(query)}&limit=20`)),
+                });
+              }
+              output.push({ ...candidate, history, searches });
+            }
+            fs.writeFileSync('blank-profile-batch-01-live-evidence.json', JSON.stringify({
+              capturedAt: new Date().toISOString(),
+              candidateCount: candidates.length,
+              candidates: output,
+            }, null, 2));
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-live-evidence
+          path: blank-profile-batch-01-live-evidence.json
+          retention-days: 2
