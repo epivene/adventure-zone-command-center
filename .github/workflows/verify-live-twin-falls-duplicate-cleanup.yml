@@ -1,0 +1,285 @@
+name: Verify live Twin Falls duplicate cleanup
+
+on:
+  push:
+    branches:
+      - verify/twin-falls-duplicate-cleanup-live
+    paths:
+      - ".github/workflows/verify-live-twin-falls-duplicate-cleanup.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for deployment and verify the merged live records
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+          MERGED_COMMIT: 88bace9f1f2b32ee1746702040d8e0b4686b066e
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const baseUrl = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+          const ids = {
+            county: 'b447c83c-6348-4fab-b850-0db7a5576a83',
+            countyDuplicateAct: '7e746d1b-a5dd-4c54-8b5e-fce8697f5af2',
+            countyDuplicateLogo: '0498cac2-4c90-46ab-a214-5c9dcf0775d1',
+            western: '8fc7bc14-ce90-4895-8ae0-8d870fb77459',
+            westernDuplicate: 'aab7b545-d065-441b-98c0-bef04f78f034',
+            parktacular: '8e41b7c6-cb49-4a35-a46b-55a5f7024a7f',
+          };
+          const applicationNote = {
+            subject: 'Online application required',
+            body: 'Desiree confirmed that The Adventure Zone needs to fill out an online application for the Twin Falls County Fair. Keep this requirement with the surviving fair profile; no application link, deadline, or submission confirmation is recorded yet.',
+          };
+
+          async function read(route) {
+            const response = await fetch(`${baseUrl}/${route}`, { headers });
+            const raw = await response.text();
+            let body = null;
+            try { body = JSON.parse(raw); } catch {}
+            return { status: response.status, body, raw };
+          }
+
+          function normalizedPhone(value) {
+            const digits = String(value || '').replace(/\D/g, '');
+            return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          }
+
+          function hasContact(profile, expected) {
+            return (profile.contacts || []).some((contact) =>
+              String(contact.name || '').trim() === expected.name
+              && (!expected.email || String(contact.email || '').toLowerCase() === expected.email)
+              && (!expected.phone || normalizedPhone(contact.phone) === expected.phone)
+            );
+          }
+
+          function verifySnapshot(snapshot) {
+            const failures = [];
+            const county = snapshot.county.body;
+            const western = snapshot.western.body;
+            const parktacular = snapshot.parktacular.body;
+
+            for (const key of ['countyDuplicateAct', 'countyDuplicateLogo', 'westernDuplicate']) {
+              if (snapshot[key].status !== 404) failures.push(`${key} returned HTTP ${snapshot[key].status}, expected 404`);
+            }
+
+            if (snapshot.county.status !== 200 || county?.ok !== true) {
+              failures.push(`county survivor returned HTTP ${snapshot.county.status}`);
+            } else {
+              const place = county.place || {};
+              if (place.id !== ids.county) failures.push('county survivor ID changed');
+              if (place.name !== 'Twin Falls County Fair') failures.push(`county name is ${JSON.stringify(place.name)}`);
+              if (place.city !== 'Filer' || place.region !== 'ID') failures.push('county location is incorrect');
+              if (normalizedPhone(place.phone) !== '2083264396') failures.push('county phone is incorrect');
+              if (place.website !== 'https://www.tfcfair.com') failures.push(`county website is ${JSON.stringify(place.website)}`);
+
+              for (const contact of [
+                { name: 'Jerre Christophersen', email: 'jerre@tfcfair.com', phone: '2083264396' },
+                { name: 'John Pitz', email: 'fair@tfcfair.com', phone: '2083264396' },
+                { name: 'Christina Tipton', email: 'rippedswag83301@gmail.com' },
+              ]) {
+                if (!hasContact(county, contact)) failures.push(`county contact ${contact.name} is missing`);
+              }
+
+              if (!(county.bookings || []).some((booking) =>
+                booking.name === 'Twin Falls County Fair - 2026'
+                && booking.status === 'contacted'
+              )) failures.push('2026 county-fair booking is missing');
+
+              const notes = county.notes || [];
+              if (!notes.some((note) => note.subject === applicationNote.subject && note.body === applicationNote.body)) {
+                failures.push('exact online-application note is missing');
+              }
+              if (!notes.some((note) => note.subject === 'Latest contact — Melody callback and Aug. 26 email')) {
+                failures.push('Melody callback/current relationship note is missing');
+              }
+              if (!notes.some((note) => note.body === 'Sent Intro email')) {
+                failures.push('legacy ACT intro note is missing');
+              }
+              if (!notes.some((note) => String(note.body || '').includes('rmaf.net/events/2026/twin-falls-county-fair'))) {
+                failures.push('RMAF source note is missing');
+              }
+
+              const history = county.history || [];
+              if (!history.some((item) => item.subject === 'Introducing The Adventure Zone')) {
+                failures.push('ACT relationship history was not preserved');
+              }
+
+              const followUps = county.followUps || [];
+              if (!followUps.some((item) =>
+                item.kind === 'PRIORITY — Call Twin Falls after Melody callback'
+                && !item.completedAt
+              )) failures.push('open priority Melody follow-up is missing');
+              if (!followUps.some((item) => item.completedAt)) {
+                failures.push('completed historical county-fair follow-up is missing');
+              }
+            }
+
+            if (snapshot.western.status !== 200 || western?.ok !== true) {
+              failures.push(`Western Days survivor returned HTTP ${snapshot.western.status}`);
+            } else {
+              const place = western.place || {};
+              if (place.id !== ids.western) failures.push('Western Days survivor ID changed');
+              if (place.name !== 'Twin Falls Western Days (Twin Falls) ID') failures.push(`Western Days name is ${JSON.stringify(place.name)}`);
+              if (place.city !== 'Twin Falls' || place.region !== 'ID') failures.push('Western Days location is incorrect');
+              if (normalizedPhone(place.phone) !== '2087332094') failures.push('Western Days phone is incorrect');
+              if (place.address2 !== 'PO Box 2795' || place.postalCode !== '83301') failures.push('Western Days address is incorrect');
+              if (place.website !== 'https://www.twinfallswesterndays.com/') failures.push('Western Days website is incorrect');
+              if (!hasContact(western, { name: 'Stan C', email: 'westerndays@live.com', phone: '2087325265' })) {
+                failures.push('Western Days Stan contact is missing');
+              }
+              if (!(western.history || []).some((item) =>
+                item.subject === 'TF Western Days (Twin Falls) ID ~ May 30 - June 1, 2025'
+              )) failures.push('Western Days ACT history is missing');
+            }
+
+            if (snapshot.parktacular.status !== 200 || parktacular?.ok !== true) {
+              failures.push(`Parktacular returned HTTP ${snapshot.parktacular.status}`);
+            } else {
+              const place = parktacular.place || {};
+              if (place.id !== ids.parktacular || place.name !== 'Parktacular HOPEfest (Twin Falls) ID') {
+                failures.push('Parktacular identity changed');
+              }
+              if (place.city !== 'Twin Falls' || place.region !== 'ID') failures.push('Parktacular location changed');
+              if (normalizedPhone(place.phone) !== '2084428950') failures.push('Parktacular phone changed');
+              if (place.website !== 'https://www.project887.com/mec-events/parktacular/') failures.push('Parktacular website changed');
+            }
+
+            const search = snapshot.search.body;
+            if (snapshot.search.status !== 200 || search?.ok !== true) {
+              failures.push(`Twin Falls search returned HTTP ${snapshot.search.status}`);
+            } else {
+              const resultIds = new Set((search.results || []).filter((row) => row.kind === 'organization').map((row) => row.id));
+              for (const expected of [ids.county, ids.western, ids.parktacular]) {
+                if (!resultIds.has(expected)) failures.push(`Twin Falls search is missing ${expected}`);
+              }
+              for (const duplicate of [ids.countyDuplicateAct, ids.countyDuplicateLogo, ids.westernDuplicate]) {
+                if (resultIds.has(duplicate)) failures.push(`Twin Falls search still includes duplicate ${duplicate}`);
+              }
+            }
+
+            return failures;
+          }
+
+          const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+          let finalSnapshot = null;
+          let finalFailures = [];
+
+          for (let attempt = 1; attempt <= 100; attempt += 1) {
+            const [
+              county,
+              countyDuplicateAct,
+              countyDuplicateLogo,
+              western,
+              westernDuplicate,
+              parktacular,
+              search,
+            ] = await Promise.all([
+              read(`profile-history/${ids.county}`),
+              read(`profile-history/${ids.countyDuplicateAct}`),
+              read(`profile-history/${ids.countyDuplicateLogo}`),
+              read(`profile-history/${ids.western}`),
+              read(`profile-history/${ids.westernDuplicate}`),
+              read(`profile-history/${ids.parktacular}`),
+              read('profile-search?q=Twin%20Falls&limit=20'),
+            ]);
+            const snapshot = {
+              county,
+              countyDuplicateAct,
+              countyDuplicateLogo,
+              western,
+              westernDuplicate,
+              parktacular,
+              search,
+            };
+            const failures = verifySnapshot(snapshot);
+            if (failures.length === 0) {
+              finalSnapshot = snapshot;
+              finalFailures = [];
+              console.log(`Live Twin Falls cleanup verified on attempt ${attempt}.`);
+              break;
+            }
+            finalFailures = failures;
+            console.log(`Attempt ${attempt}: ${failures.length} checks are not ready.`);
+            if (attempt < 100) await sleep(15000);
+          }
+
+          if (!finalSnapshot) {
+            fs.writeFileSync('twin-falls-live-verification-failures.json', JSON.stringify({
+              ok: false,
+              checkedAt: new Date().toISOString(),
+              mergedCommit: process.env.MERGED_COMMIT,
+              failures: finalFailures,
+            }, null, 2));
+            throw new Error(`Live Twin Falls cleanup did not converge; ${finalFailures.length} checks remain.`);
+          }
+
+          const county = finalSnapshot.county.body;
+          const western = finalSnapshot.western.body;
+          const parktacular = finalSnapshot.parktacular.body;
+          const summary = {
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            mergedCommit: process.env.MERGED_COMMIT,
+            countyFair: {
+              id: county.place.id,
+              name: county.place.name,
+              contactNames: (county.contacts || []).map((contact) => contact.name),
+              bookingNames: (county.bookings || []).map((booking) => booking.name),
+              applicationNotePresent: true,
+              melodyCurrentNotePresent: true,
+              actHistoryPreserved: true,
+              openPriorityFollowUpPresent: true,
+              historicalCompletedFollowUpPresent: true,
+            },
+            westernDays: {
+              id: western.place.id,
+              name: western.place.name,
+              contactNames: (western.contacts || []).map((contact) => contact.name),
+              actHistoryPreserved: true,
+            },
+            removedDuplicateIds: [
+              ids.countyDuplicateAct,
+              ids.countyDuplicateLogo,
+              ids.westernDuplicate,
+            ],
+            parktacular: {
+              id: parktacular.place.id,
+              name: parktacular.place.name,
+              unchanged: true,
+            },
+            visibleKnownTwinFallsProfileIds: (finalSnapshot.search.body.results || [])
+              .filter((row) => [ids.county, ids.western, ids.parktacular].includes(row.id))
+              .map((row) => row.id),
+          };
+          fs.writeFileSync('twin-falls-live-verification.json', JSON.stringify(summary, null, 2));
+          console.log(JSON.stringify(summary, null, 2));
+          NODE
+
+      - name: Upload sanitized verification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-live-verification
+          path: |
+            twin-falls-live-verification.json
+            twin-falls-live-verification-failures.json
+          if-no-files-found: ignore
+          retention-days: 2
