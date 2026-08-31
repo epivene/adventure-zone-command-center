@@ -9,7 +9,10 @@ import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
-import { cleanupKnownEmptyTestProfiles } from "./features/organizations/known-empty-test-profile-cleanup";
+import {
+  cleanupKnownEmptyTestProfiles,
+  enrichKnownBlankProfiles,
+} from "./features/organizations/known-empty-test-profile-cleanup";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
@@ -219,6 +222,23 @@ async function runPostListenMaintenance() {
     logger.error(
       { err },
       "Known empty test profile cleanup deferred; startup will continue",
+    );
+  }
+  try {
+    const enrichment = await runStartupStep(
+      "known blank profile enrichment",
+      enrichKnownBlankProfiles,
+    );
+    logger.info(
+      enrichment,
+      enrichment.updated.length > 0
+        ? "Enriched verified blank organization profiles"
+        : "Verified blank organization profiles are already current or safely skipped",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Known blank profile enrichment deferred; startup will continue",
     );
   }
   await runStartupStep("approved profile startup import", () =>
