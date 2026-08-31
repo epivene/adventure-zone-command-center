@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Check,
+  Download,
   Redo2,
   RefreshCw,
   Save,
@@ -29,6 +30,7 @@ export function MobileEditorTopBar({
   onRedo,
   onZoomChange,
   onSave,
+  onExport,
 }: {
   name: string;
   type: DesignType;
@@ -44,6 +46,7 @@ export function MobileEditorTopBar({
   onRedo: () => void;
   onZoomChange: (zoom: number) => void;
   onSave: () => void;
+  onExport: () => void;
 }) {
   return (
     <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur">
@@ -71,6 +74,7 @@ export function MobileEditorTopBar({
         <Button aria-label="Zoom out" disabled={zoom <= 0.25} onClick={() => onZoomChange(zoom - 0.1)} size="icon" variant="ghost"><ZoomOut className="h-4 w-4" /></Button>
         <span className="hidden min-w-12 text-center text-xs font-semibold text-muted-foreground sm:inline">{Math.round(zoom * 100)}%</span>
         <Button aria-label="Zoom in" disabled={zoom >= 2} onClick={() => onZoomChange(zoom + 0.1)} size="icon" variant="ghost"><ZoomIn className="h-4 w-4" /></Button>
+        <Button aria-label="Export design" onClick={onExport} size="icon" variant="ghost"><Download className="h-4 w-4" /></Button>
         <Button className="ml-1 gap-1.5" disabled={saving || !name.trim()} onClick={onSave} size="sm">
           {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
           <span className="hidden sm:inline">{saving ? "Saving…" : saved || !dirty ? "Saved" : "Save"}</span>
