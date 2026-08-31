@@ -1,0 +1,99 @@
+name: Apply Gmail profile-link loop wiring
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/apply-gmail-profile-link-loop-wiring.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-2026-08-31
+          fetch-depth: 0
+
+      - name: Start and stop the recent sent-mail repair loop with the API
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('artifacts/api-server/src/index.ts')
+          text = path.read_text()
+
+          import_marker = 'import { createOpportunityEmailWorkerLoop } from "./features/opportunity-email/opportunity-email-worker-runtime";'
+          imports = '''import { GoogleSentProfileLinkSweepService } from "./features/google-workspace/google-sent-profile-link-sweep-service";
+          import {
+            GoogleSentProfileLinkSweepLoop,
+            systemGoogleSentProfileLinkSweepLoopScheduler,
+          } from "./features/google-workspace/google-sent-profile-link-sweep-loop";'''
+          if 'GoogleSentProfileLinkSweepLoop' not in text:
+              if import_marker not in text:
+                  raise SystemExit('Opportunity email import marker not found')
+              text = text.replace(import_marker, import_marker + '\n' + imports, 1)
+
+          instance_marker = '''const paperNoteLoop = new PaperNoteWorkerLoop({
+            worker: createPaperNoteExtractionWorker({
+              repository: new PaperNoteExtractionRepository(db),
+              storage: paperNoteStorage,
+            }),
+            workerId: `paper-notes-${randomUUID()}`,
+            clock: { now: () => new Date() },
+            scheduler: systemPaperNoteWorkerLoopScheduler,
+          });
+          '''
+          instance = '''
+          const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
+            sweep: new GoogleSentProfileLinkSweepService(),
+            clock: { now: () => new Date() },
+            scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
+          });
+          '''
+          if 'const gmailProfileLinkSweepLoop =' not in text:
+              if instance_marker not in text:
+                  raise SystemExit('Paper-note loop instance marker not found')
+              text = text.replace(instance_marker, instance_marker + instance, 1)
+
+          close_marker = '''      assistantJobLoop.close(),
+                paperNoteLoop.close(),
+          '''
+          close_replacement = '''      assistantJobLoop.close(),
+                paperNoteLoop.close(),
+                gmailProfileLinkSweepLoop.close(),
+          '''
+          if 'gmailProfileLinkSweepLoop.close()' not in text:
+              if close_marker not in text:
+                  raise SystemExit('Shutdown loop marker not found')
+              text = text.replace(close_marker, close_replacement, 1)
+
+          start_marker = '''  assistantJobLoop.start();
+            paperNoteLoop.start();
+          '''
+          start_replacement = '''  assistantJobLoop.start();
+            paperNoteLoop.start();
+            gmailProfileLinkSweepLoop.start();
+          '''
+          if 'gmailProfileLinkSweepLoop.start()' not in text:
+              if start_marker not in text:
+                  raise SystemExit('Background-worker start marker not found')
+              text = text.replace(start_marker, start_replacement, 1)
+
+          path.write_text(text)
+          Path('.github/workflows/apply-gmail-profile-link-loop-wiring.yml').unlink()
+          PY
+
+      - name: Commit worker wiring
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/index.ts \
+            .github/workflows/apply-gmail-profile-link-loop-wiring.yml
+          git commit -m "feat: keep recent sent Gmail linked to profiles"
+          git push origin HEAD:fix/gmail-profile-history-audit-2026-08-31
