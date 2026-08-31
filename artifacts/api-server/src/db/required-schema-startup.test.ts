@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
-  it("creates required Google Workspace schema before lead Gmail foreign keys", async () => {
+  it("creates owner auth first and Google Workspace before lead Gmail foreign keys", async () => {
     const calls: string[] = [];
+    let ownerReady = false;
     let googleReady = false;
     const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
       calls.push(name);
@@ -13,7 +14,14 @@ describe("runRequiredSchemaStartup", () => {
 
     await runRequiredSchemaStartup({
       run,
-      ensurePaperNotes: async () => false,
+      ensureOwnerAccount: async () => {
+        ownerReady = true;
+        return true;
+      },
+      ensurePaperNotes: async () => {
+        expect(ownerReady).toBe(true);
+        return false;
+      },
       ensureGoogleWorkspace: async () => {
         googleReady = true;
         return true;
@@ -29,6 +37,7 @@ describe("runRequiredSchemaStartup", () => {
     });
 
     expect(calls).toEqual([
+      "required owner account schema",
       "required paper notes schema",
       "required Google Workspace schema",
       "required lead intake schema",
