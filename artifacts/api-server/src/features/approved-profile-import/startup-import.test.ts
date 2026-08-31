@@ -15,6 +15,14 @@ vi.mock("../organizations/blank-profile-batch-01", () => ({
   }),
 }));
 
+vi.mock("../organizations/blank-profile-batch-02", () => ({
+  applyBlankProfileBatch02: vi.fn().mockResolvedValue({
+    renamed: [],
+    alreadyCurrent: [],
+    skipped: [],
+  }),
+}));
+
 import { readdir, readFile } from "node:fs/promises";
 import { importApprovedProfilesAtStartup } from "./startup-import";
 

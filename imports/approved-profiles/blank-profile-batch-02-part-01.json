@@ -1,0 +1,62 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": ["NE Nebraska"],
+    "event": {"id": "4723cd8b-52aa-4534-834a-3d2082626abe", "name": "Northeast Nebraska — Unresolved ACT Lead", "city": "", "region": "NE"},
+    "profile": {"placeType": "other", "description": "Legacy ACT geographic lead for northeast Nebraska. No authoritative event or organization identity has been resolved; retained for provenance rather than treated as a bookable event.", "phone": "", "website": "", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Reviewed the blank ACT-backed profile named ‘NE Nebraska’ and searched the live app for aliases and related organizations. No distinct fair, festival, organizer, or current public contact could be tied to this ACT record with sufficient confidence. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: unresolved regional ACT lead. Region is normalized to Nebraska, but no city or event is being invented. No follow-up is created until a source document, contact, or specific event identifies the record."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Payette Apple Blossom Festival (Payette) ID"],
+    "event": {"id": "72df61ec-c233-4e15-b8a9-6e2c638c2883", "name": "Payette Apple Blossom Festival (Payette) ID", "city": "Payette", "region": "ID"},
+    "profile": {"placeType": "festival_event", "description": "Active annual family festival in Payette, Idaho, with an established large carnival. Retained as a current event profile, but a separate full Adventure Zone carnival is not presently justified.", "phone": "208-739-3905", "website": "https://payetteappleblossomfestival.com/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [{"id": null, "name": "Twana Morin", "primary": true, "phone": "208-739-3905", "email": "appleblossomfestivalpayette@gmail.com", "role": "Festival president"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified through the official Payette Apple Blossom Festival site. The 2026 festival ran May 13-17 and the event describes free concerts, family activities, a parade, fireworks, and one of the area's largest carnivals. Official committee contact is Twana Morin, festival president, 208-739-3905; appleblossomfestivalpayette@gmail.com. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active family festival with an established carnival provider; no separate follow-up is currently justified. Sources: https://payetteappleblossomfestival.com/ and https://payetteappleblossomfestival.com/contact/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Pikes Peak Birding & Nature Fesitval (Colorado Springs) CO"],
+    "event": {"id": "53d622f0-b3df-495a-a56c-68f6ac7e20b3", "name": "Pikes Peak Birding & Nature Festival (Colorado Springs) CO", "city": "Colorado Springs", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Registration-based birding and nature festival built around field trips, seminars, workshops, and educational programming. Prior organizer reply established that an inflatable carnival is not a fit.", "phone": "719-499-4923", "website": "https://pikespeakbirdingandnaturefestival.org/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [{"id": null, "name": "Jessica Miller", "primary": true, "phone": "719-499-4923", "email": "jessicamiller@elpasoco.com", "role": "Festival co-chair"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Pikes Peak Birding & Nature Festival; the official site lists May 13-16, 2027 and Jessica Miller as festival co-chair. Adventure Zone emailed Jessica on 2025-04-29. She replied that the nonprofit event serves mostly adults and has neither a use nor budget for an inflatable carnival; Amy acknowledged the response. That direct organizer reply controls the classification. Status: active event, confirmed no-fit for Adventure Zone. No follow-up or renewed outreach is justified. Sources: https://pikespeakbirdingandnaturefestival.org/ and https://pikespeakbirdingandnaturefestival.org/contact-us/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Rocky Mountain Rambler 500"],
+    "event": {"id": "025c73a4-1d99-4a93-bc61-10e0c336e178", "name": "Rocky Mountain Rambler 500 (Cripple Creek) CO", "city": "Cripple Creek", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Budget-vehicle road rally and car-show-style event based in Cripple Creek. Retained as an active specialty event, but the reviewed format does not support a full inflatable carnival.", "phone": "", "website": "https://www.rmr500.com/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [{"id": null, "name": "Rocky Mountain Rambler 500 Team", "primary": true, "phone": "", "email": "rockymountainrambler500@gmail.com", "role": "Event organizer"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Rocky Mountain Rambler 500 in Cripple Creek, Colorado. Official materials describe a budget-vehicle road rally with a course, car-show activity, and awards; the published contact path is rockymountainrambler500@gmail.com. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active specialty automotive event, but no supported need or footprint for a full Adventure Zone package was found. No follow-up is created. Source: https://www.rmr500.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["San Juan Southern Paiute Tribe AZ"],
+    "event": {"id": "5fc9a416-6da5-415e-a723-3b328fa020ae", "name": "San Juan Southern Paiute Tribe (Tuba City) AZ", "city": "Tuba City", "region": "AZ"},
+    "profile": {"placeType": "tribe", "description": "Federally recognized tribal government headquartered in Tuba City, Arizona. Retained as an umbrella organization; a specific public event and event-level decision-maker must be identified before any entertainment outreach.", "phone": "928-212-9794", "website": "https://www.sanjuanpaiute-nsn.gov/", "address1": "67 NW Maple St", "address2": "", "postalCode": "86045"},
+    "contacts": [{"id": null, "name": "San Juan Southern Paiute Tribal Administration", "primary": true, "phone": "928-212-9794", "email": "", "role": "Tribal administration / routing contact"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified through the official San Juan Southern Paiute Tribe website. Tribal administration is at 67 NW Maple St, Tuba City, AZ 86045; official mail goes to P.O. Box 2950; main administration phone is 928-212-9794. No specific fair, powwow, celebration, or public event could be tied to this ACT company record. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active tribal umbrella organization, not a verified event lead. No generic outreach or follow-up is created; identify a specific public event and event organizer first. Sources: https://www.sanjuanpaiute-nsn.gov/ and https://www.sanjuanpaiute-nsn.gov/contact ."}],
+    "followUps": []
+  }
+]

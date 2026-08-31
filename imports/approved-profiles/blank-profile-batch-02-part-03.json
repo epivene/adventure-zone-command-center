@@ -1,0 +1,62 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": ["Kahler Memorial Golf Tournament (Alamosa) CO"],
+    "event": {"id": "b989ec78-adb7-4e32-b0e4-a177639b33bd", "name": "Alex P. Kahler Memorial Golf Tournament (Alamosa) CO", "city": "Alamosa", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Competitive 36-hole memorial golf tournament at Cattails Golf Course. Retained as an active event record but not a family-entertainment prospect.", "phone": "719-937-7843", "website": "https://www.alamosarec.org/cattails-golf-course", "address1": "500 Cottonwood Drive", "address2": "", "postalCode": "81101"},
+    "contacts": [{"id": null, "name": "Cattails Golf Course", "primary": true, "phone": "719-937-7843", "email": "", "role": "Tournament venue / routing contact"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Alex P. Kahler Memorial Golf Tournament at Cattails Golf Course, 500 Cottonwood Drive, Alamosa, CO 81101. The 2026 tournament ran Aug. 8-9 as a 36-hole stroke-play event requiring an active GHIN handicap. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active competitive golf tournament, not a supported family-carnival opportunity. No follow-up is created. Source: https://www.alamosarec.org/cattails-golf-course ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["National Park Celebration, A (Alamosa)  CO"],
+    "event": {"id": "b1943bf0-a264-462e-bc3f-3833978348c4", "name": "We Love Our National Park — Visit Alamosa", "city": "Alamosa", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Month-long Great Sand Dunes appreciation campaign coordinated through Visit Alamosa, rather than a single bookable festival site.", "phone": "800-258-7597", "website": "https://www.alamosa.org/events/we-love-our-national-park/", "address1": "610 State Avenue", "address2": "", "postalCode": "81101"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Resolved the ACT name ‘National Park Celebration, A’ to Visit Alamosa's current ‘We Love Our National Park’ campaign. Official information describes a month-long April appreciation program connected to Great Sand Dunes National Park, not one standalone event with a defined attraction footprint. Adventure Zone sent a 2024 inquiry to visit@alamosa.org on 2023-12-14 and no reply was found. The separate Alamosa 4th of July profile retains the verified Visit Alamosa contact to avoid creating duplicate generic contact records. Classification: active tourism campaign, not a verified bookable event; no follow-up. Source: https://www.alamosa.org/events/we-love-our-national-park/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Cumbres & Toltec Scenic Railroad (Antonito) CO"],
+    "event": {"id": "d7fa5317-0455-4117-baf9-7015a0843a43", "name": "Cumbres & Toltec Scenic Railroad (Antonito) CO", "city": "Antonito", "region": "CO"},
+    "profile": {"placeType": "venue", "description": "Historic scenic railroad and visitor attraction based in Antonito, Colorado. Retained as an organization/venue profile; entertainment outreach should be tied to a specific public celebration.", "phone": "888-286-2737", "website": "https://cumbrestoltec.com/", "address1": "5234 B US Highway 285", "address2": "", "postalCode": "81120"},
+    "contacts": [{"id": null, "name": "Cumbres & Toltec Guest Relations", "primary": true, "phone": "888-286-2737", "email": "info@cumbrestoltec.com", "role": "General information / event routing"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Cumbres & Toltec Scenic Railroad, with Antonito depot contact at 5234 B US Highway 285, Antonito, CO 81120; 888-286-2737; info@cumbrestoltec.com. Adventure Zone's 2026 Gmail thread shows that Mary had recently spoken with Kristy and Amy sent information on 2026-04-15 to cumberstoltecinfo@gmail.com for a May 23-24 opportunity; no reply was found. Classification: active scenic-railroad organization/venue, but no current specific event or invitation is established. No repeat follow-up is created. Source: https://cumbrestoltec.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Food & Wine Classic (Aspen) CO"],
+    "event": {"id": "4d060525-062b-4e1c-83b5-057b84ef9c95", "name": "Food & Wine Classic in Aspen (Aspen) CO", "city": "Aspen", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Large culinary and wine event in Aspen centered on tastings, chef demonstrations, seminars, wine, and spirits. Not a family-entertainment prospect.", "phone": "", "website": "https://classic.foodandwine.com/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Food & Wine Classic in Aspen. The 2026 event ran June 19-21 and centers on culinary demonstrations, tastings, wine, and spirits programming. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active adult-oriented culinary/alcohol event; no outreach or follow-up is justified. Source: https://classic.foodandwine.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Quilt, Craft & Sewing Festival (Aurora) CO"],
+    "event": {"id": "9d4ae48e-abfd-4297-8e3e-30a7327c3cd1", "name": "Quilt, Craft & Sewing Festival (Castle Rock) CO", "city": "Castle Rock", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Colorado edition of the Quilt, Craft & Sewing Festival. The current Colorado show is in Castle Rock; prior organizer reply established that the audience is overwhelmingly senior women and not a fit for inflatables.", "phone": "800-717-8789", "website": "https://quiltcraftsew.com/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [{"id": null, "name": "Chris Butler", "primary": true, "phone": "800-717-8789", "email": "rustybarn1@aol.com", "role": "Rusty Barn Promotion Group"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Updated the legacy Aurora profile to the current Colorado Quilt, Craft & Sewing Festival location in Castle Rock. Current official schedules list Castle Rock May 28-30, 2026 and do not list an Aurora edition. In the related 2023 Gmail conversation, organizer Chris Butler replied that attendees were approximately 99% senior citizen women and the event was not a fit; Amy acknowledged the response. Adventure Zone also sent a Castle Rock inquiry on 2024-01-04. Classification: active show, confirmed no-fit for inflatable family entertainment. No follow-up. Source: https://quiltcraftsew.com/ ."}],
+    "followUps": []
+  }
+]

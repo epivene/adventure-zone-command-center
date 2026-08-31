@@ -7,6 +7,7 @@ import {
   loadApprovedProfileReconciliation,
 } from "./reconciliation";
 import { applyBlankProfileBatch01 } from "../organizations/blank-profile-batch-01";
+import { applyBlankProfileBatch02 } from "../organizations/blank-profile-batch-02";
 
 type StartupImportResult = {
   imported: number;
@@ -370,6 +371,19 @@ export async function importApprovedProfilesAtStartup(
       "Blank profile research batch 01 maintenance failed; approved profile imports will continue",
     );
   }
+
+  try {
+  const batch02 = await applyBlankProfileBatch02();
+  logger.info(
+    batch02,
+    "Blank profile research batch 02 maintenance applied or safely skipped",
+  );
+} catch (error) {
+  logger.error(
+    { err: error },
+    "Blank profile research batch 02 maintenance failed; approved profile imports will continue",
+  );
+}
 
   const directory = path.resolve(process.cwd(), "imports", "approved-profiles");
   let entries: string[];
