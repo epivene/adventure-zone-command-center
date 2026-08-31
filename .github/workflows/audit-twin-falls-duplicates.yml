@@ -1,0 +1,87 @@
+name: Audit live Twin Falls duplicate profiles
+
+on:
+  push:
+    branches:
+      - maintenance/twin-falls-duplicate-audit
+    paths:
+      - ".github/workflows/audit-twin-falls-duplicates.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read matching live profiles and histories
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const baseUrl = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+
+          async function getJson(route) {
+            const response = await fetch(`${baseUrl}/${route}`, { headers });
+            const raw = await response.text();
+            let body = null;
+            try { body = JSON.parse(raw); } catch {}
+            if (!response.ok) {
+              throw new Error(`${route} returned HTTP ${response.status}: ${raw.slice(0, 500)}`);
+            }
+            return body;
+          }
+
+          const queries = [
+            'Twin Falls',
+            'County Fair Twin Falls',
+            'Twin Falls Western Days',
+          ];
+          const searches = [];
+          const byId = new Map();
+          for (const query of queries) {
+            const response = await getJson(`profile-search?q=${encodeURIComponent(query)}&limit=20`);
+            searches.push({ query, results: response.results ?? [] });
+            for (const result of response.results ?? []) {
+              if (result?.id && result?.kind === 'organization') byId.set(result.id, result);
+            }
+          }
+
+          const candidates = [...byId.values()].filter((item) => {
+            const haystack = `${item.label ?? ''} ${item.city ?? ''} ${item.region ?? ''}`.toLowerCase();
+            return haystack.includes('twin falls') || haystack.includes('filer');
+          });
+
+          const histories = [];
+          for (const candidate of candidates) {
+            const history = await getJson(`profile-history/${encodeURIComponent(candidate.id)}`);
+            histories.push({
+              searchResult: candidate,
+              profile: history,
+            });
+          }
+
+          const output = {
+            generatedAt: new Date().toISOString(),
+            queries: searches,
+            candidateCount: candidates.length,
+            candidates: histories,
+          };
+          fs.writeFileSync('twin-falls-duplicate-audit.json', JSON.stringify(output, null, 2));
+          console.log(`Captured ${candidates.length} Twin Falls/Filer profiles.`);
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-duplicate-audit
+          path: twin-falls-duplicate-audit.json
+          retention-days: 2
