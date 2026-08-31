@@ -4,26 +4,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { issueLegManagerToken } from "@/features/leg-manager/leg-manager-auth";
 import { issueOfficeToken } from "@/features/office/office-auth";
+import type { OwnerAccountSessionRecord } from "./owner-account-repository";
 import { createRequireOwnerMiddleware } from "./owner-middleware";
 import { issueOwnerToken } from "./owner-token";
 
 const ownerId = "30000000-0000-4000-8000-000000000001";
-const owner = {
+const owner: OwnerAccountSessionRecord = {
   id: ownerId,
   loginName: "desiree",
   displayName: "Desiree",
-  role: "owner" as const,
+  role: "owner",
   enabled: true,
   sessionVersion: 4,
 };
 
-function app(getActiveSession: ReturnType<typeof vi.fn>) {
+type SessionLookup = (ownerId: string) => Promise<OwnerAccountSessionRecord | null>;
+
+function sessionLookup(value: OwnerAccountSessionRecord | null) {
+  return vi.fn<SessionLookup>().mockResolvedValue(value);
+}
+
+function app(getActiveSession: SessionLookup) {
   const instance = express();
   instance.get(
     "/owner-only",
     createRequireOwnerMiddleware({ getActiveSession }),
     (req, res) => {
-      res.json({ userId: (req as any).userId, owner: (req as any).ownerAccount });
+      res.json({ userId: (req as any).userId, owner: req.ownerAccount });
     },
   );
   return instance;
@@ -35,7 +42,7 @@ beforeEach(() => {
 
 describe("owner middleware", () => {
   it("accepts only a live database session for the signed owner", async () => {
-    const getActiveSession = vi.fn().mockResolvedValue(owner);
+    const getActiveSession = sessionLookup(owner);
     const token = issueOwnerToken({ ownerId, sessionVersion: 4 })!.token;
 
     const response = await request(app(getActiveSession))
@@ -51,7 +58,7 @@ describe("owner middleware", () => {
   });
 
   it("rejects a token after the account session version changes", async () => {
-    const getActiveSession = vi.fn().mockResolvedValue({ ...owner, sessionVersion: 5 });
+    const getActiveSession = sessionLookup({ ...owner, sessionVersion: 5 });
     const token = issueOwnerToken({ ownerId, sessionVersion: 4 })!.token;
 
     expect(
@@ -60,7 +67,7 @@ describe("owner middleware", () => {
   });
 
   it("rejects missing, disabled, Office, and leg-manager credentials", async () => {
-    const getActiveSession = vi.fn().mockResolvedValue(null);
+    const getActiveSession = sessionLookup(null);
     const instance = app(getActiveSession);
     const office = issueOfficeToken({
       accountId: "10000000-0000-4000-8000-000000000001",
