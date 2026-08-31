@@ -3,6 +3,7 @@ import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-requ
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 import { ensureLegAssignmentSchemaBeforeListen } from "./leg-assignment-required-startup";
 import { ensureOfficeCoordinatorSchemaBeforeListen } from "./office-coordinator-required-startup";
+import { ensureOrganizerFeedbackSchemaBeforeListen } from "./organizer-feedback-required-startup";
 import { ensurePaperNotesSchemaBeforeListen } from "./paper-notes-required-startup";
 import { ensureProfileTouchSchema } from "../features/organizations/profile-touch-schema";
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
@@ -16,6 +17,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
   ensureLegAssignment?: RequiredStep;
+  ensureOrganizerFeedback?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
@@ -36,6 +38,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required leg assignment schema",
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
+  );
+  await run(
+    "required organizer feedback schema",
+    dependencies?.ensureOrganizerFeedback ?? ensureOrganizerFeedbackSchemaBeforeListen,
   );
   await run(
     "required office coordinator schema",
