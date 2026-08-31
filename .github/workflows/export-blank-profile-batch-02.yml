@@ -1,0 +1,220 @@
+name: Export blank profile research batch 02
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-02
+    paths:
+      - "docs/operations/receipts/blank-profile-batch-01-merge.json"
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/blank-profiles-batch-02
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+      - name: Select the remaining location problems and first Colorado group
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p docs/operations/blank-profile-batches/batch-02/evidence
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-integrity-audit" \
+            > /tmp/profile-integrity-audit.json
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const audit = JSON.parse(fs.readFileSync('/tmp/profile-integrity-audit.json', 'utf8'));
+          const batchOnePath = 'imports/approved-profiles/blank-profile-batch-01.json';
+          const batchOne = fs.existsSync(batchOnePath)
+            ? JSON.parse(fs.readFileSync(batchOnePath, 'utf8'))
+            : null;
+          const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+          function firstString(object, keys) {
+            for (const key of keys) {
+              const value = object?.[key];
+              if (typeof value === 'string' && value.trim()) return value.trim();
+            }
+            return null;
+          }
+
+          function collectObjects(value, output = [], pathParts = []) {
+            if (Array.isArray(value)) {
+              value.forEach((item, index) => collectObjects(item, output, [...pathParts, String(index)]));
+              return output;
+            }
+            if (!value || typeof value !== 'object') return output;
+            output.push({ value, path: pathParts.join('.') });
+            for (const [key, child] of Object.entries(value)) {
+              collectObjects(child, output, [...pathParts, key]);
+            }
+            return output;
+          }
+
+          function collectBatchOneIds(value, ids = new Set()) {
+            if (Array.isArray(value)) {
+              value.forEach((item) => collectBatchOneIds(item, ids));
+              return ids;
+            }
+            if (!value || typeof value !== 'object') return ids;
+            for (const [key, child] of Object.entries(value)) {
+              if (
+                typeof child === 'string'
+                && uuid.test(child)
+                && /^(id|profileId|organizationId|sourceProfileId|duplicateId|primaryId)$/i.test(key)
+              ) ids.add(child);
+              collectBatchOneIds(child, ids);
+            }
+            return ids;
+          }
+
+          function operationallyBlank(object) {
+            const text = JSON.stringify(object).toLowerCase();
+            if (
+              text.includes('no_linked_operational')
+              || text.includes('no linked operational')
+              || text.includes('operationally_empty')
+              || text.includes('operationally empty')
+              || text.includes('blank_profile')
+              || text.includes('blank profile')
+            ) return true;
+
+            const countKeys = Object.keys(object).filter((key) =>
+              /(contact|booking|appearance|activity|history|follow.?up|gmail|calendar|timeline).*count/i.test(key),
+            );
+            return countKeys.length >= 3 && countKeys.every((key) => Number(object[key] ?? 0) === 0);
+          }
+
+          const batchOneIds = batchOne ? collectBatchOneIds(batchOne) : new Set();
+          const rowsById = new Map();
+          for (const { value, path: objectPath } of collectObjects(audit)) {
+            const id = firstString(value, ['profileId', 'organizationId', 'id']);
+            const name = firstString(value, ['profileName', 'organizationName', 'name', 'label']);
+            if (!id || !uuid.test(id) || !name || !operationallyBlank(value)) continue;
+
+            const actCompanyId = firstString(value, [
+              'actCompanyId', 'actRecordId', 'actId', 'sourceCompanyId', 'externalCompanyId',
+            ]);
+            const serialized = JSON.stringify(value).toLowerCase();
+            const hasActProvenance = Boolean(actCompanyId)
+              || serialized.includes('act_company')
+              || serialized.includes('actcompany')
+              || serialized.includes('source_entity_type":"company');
+            if (!hasActProvenance) continue;
+
+            const city = firstString(value, ['city', 'profileCity', 'organizationCity']);
+            const region = firstString(value, ['region', 'state', 'profileRegion', 'organizationRegion']);
+            const candidate = {
+              profileId: id,
+              name,
+              city,
+              region: region ? region.toUpperCase() : null,
+              actCompanyId,
+              auditPath: objectPath,
+            };
+            const existing = rowsById.get(id);
+            if (!existing || JSON.stringify(value).length > existing._size) {
+              rowsById.set(id, { ...candidate, _size: JSON.stringify(value).length });
+            }
+          }
+
+          const candidates = [...rowsById.values()]
+            .filter((candidate) => !batchOneIds.has(candidate.profileId))
+            .map(({ _size, ...candidate }) => candidate);
+          const locationProblems = candidates
+            .filter((candidate) =>
+              !candidate.city
+              || !candidate.region
+              || !/^[A-Z]{2}$/.test(candidate.region)
+              || /\d/.test(candidate.region),
+            )
+            .sort((a, b) => a.name.localeCompare(b.name) || a.profileId.localeCompare(b.profileId));
+          const colorado = candidates
+            .filter((candidate) => candidate.region === 'CO')
+            .sort((a, b) =>
+              String(a.city ?? '').localeCompare(String(b.city ?? ''))
+              || a.name.localeCompare(b.name)
+              || a.profileId.localeCompare(b.profileId),
+            );
+
+          const selected = [
+            ...locationProblems.slice(0, 8),
+            ...colorado.filter((candidate) =>
+              !locationProblems.slice(0, 8).some((item) => item.profileId === candidate.profileId),
+            ).slice(0, 17),
+          ];
+
+          const diagnostics = {
+            generatedAt: new Date().toISOString(),
+            batchOneExcludedIds: batchOneIds.size,
+            detectedActBackedBlankProfiles: candidates.length,
+            remainingLocationProblems: locationProblems.length,
+            coloradoCandidates: colorado.length,
+            selectedCount: selected.length,
+            selected,
+          };
+          fs.writeFileSync(
+            'docs/operations/blank-profile-batches/batch-02/manifest.json',
+            JSON.stringify(diagnostics, null, 2),
+          );
+          if (selected.length !== 25 || locationProblems.length < 8 || colorado.length < 17) {
+            fs.writeFileSync(
+              'docs/operations/blank-profile-batches/batch-02/parser-diagnostics.json',
+              JSON.stringify({ diagnostics, auditTopLevelKeys: Object.keys(audit) }, null, 2),
+            );
+            throw new Error(`Expected 25 candidates (8 location + 17 Colorado), selected ${selected.length}.`);
+          }
+          NODE
+
+          node <<'NODE'
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync(
+            'docs/operations/blank-profile-batches/batch-02/manifest.json',
+            'utf8',
+          ));
+          fs.writeFileSync('/tmp/selected.tsv', manifest.selected
+            .map((candidate) => [candidate.profileId, candidate.name].join('\t'))
+            .join('\n') + '\n');
+          NODE
+
+          while IFS=$'\t' read -r PROFILE_ID PROFILE_NAME; do
+            SAFE_ID=$(printf '%s' "$PROFILE_ID" | tr -cd '[:alnum:]-')
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE_URL}/profile-history/${PROFILE_ID}" \
+              > "docs/operations/blank-profile-batches/batch-02/evidence/${SAFE_ID}-history.json"
+            ENCODED=$(node -p "encodeURIComponent(process.argv[1])" "$PROFILE_NAME")
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE_URL}/profile-search?q=${ENCODED}&limit=20" \
+              > "docs/operations/blank-profile-batches/batch-02/evidence/${SAFE_ID}-search.json"
+          done < /tmp/selected.tsv
+
+      - name: Commit the protected batch manifest and internal evidence
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/operations/blank-profile-batches/batch-02
+          git commit -m "research: export blank profile batch 02 evidence"
+          git push origin HEAD:research/blank-profiles-batch-02
