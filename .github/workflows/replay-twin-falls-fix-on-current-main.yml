@@ -1,0 +1,221 @@
+name: Replay Twin Falls duplicate fix on current main
+
+on:
+  push:
+    branches:
+      - fix/twin-falls-duplicate-profiles-current
+    paths:
+      - ".github/workflows/replay-twin-falls-fix-on-current-main.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/twin-falls-duplicate-profiles-current
+          fetch-depth: 0
+
+      - name: Bring the reviewed tests and cleanup implementation onto current main
+        run: |
+          set -euo pipefail
+          git fetch origin fix/twin-falls-duplicate-profiles:refs/remotes/origin/fix/twin-falls-duplicate-profiles
+          git checkout origin/fix/twin-falls-duplicate-profiles -- \
+            artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts \
+            artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts \
+            artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts
+
+          python <<'PY'
+          import json
+          from pathlib import Path
+
+          organization_repository = Path('artifacts/api-server/src/features/organizations/organization-repository.ts')
+          text = organization_repository.read_text()
+          old_query = '''export function duplicateOrganizationGroupsQuery() {
+            return sql`
+              SELECT
+                lower(trim(name)) AS normalized_name,
+                min(lower(trim(coalesce(city, '')))) AS normalized_city,
+                min(lower(trim(coalesce(region, '')))) AS normalized_region,
+                array_agg(id ORDER BY created_at ASC) AS ids
+              FROM organizations AS duplicate_candidate
+              WHERE consolidated_into_id IS NULL
+              GROUP BY 1
+              HAVING count(*) > 1
+              ORDER BY lower(trim(name))
+            `;
+          }
+          '''
+          new_query = '''export function duplicateOrganizationGroupsQuery() {
+            return sql`
+              SELECT
+                lower(regexp_replace(btrim(name), '\\\\s+', ' ', 'g')) AS normalized_name,
+                min(lower(trim(coalesce(city, '')))) AS normalized_city,
+                min(lower(trim(coalesce(region, '')))) AS normalized_region,
+                array_agg(id ORDER BY created_at ASC) AS ids
+              FROM organizations AS duplicate_candidate
+              WHERE consolidated_into_id IS NULL
+              GROUP BY 1
+              HAVING count(*) > 1
+              ORDER BY lower(regexp_replace(btrim(name), '\\\\s+', ' ', 'g'))
+            `;
+          }
+          '''
+          if old_query not in text:
+              raise SystemExit('Current duplicateOrganizationGroupsQuery did not match the reviewed base')
+          organization_repository.write_text(text.replace(old_query, new_query))
+
+          startup = Path('artifacts/api-server/src/features/approved-profile-import/startup-import.ts')
+          text = startup.read_text()
+          batch02_import = 'import { applyBlankProfileBatch02 } from "../organizations/blank-profile-batch-02";'
+          twin_import = 'import { applyTwinFallsDuplicateCleanup } from "../organizations/twin-falls-duplicate-cleanup";'
+          if twin_import not in text:
+              if batch02_import not in text:
+                  raise SystemExit('Batch 02 import marker is missing')
+              text = text.replace(batch02_import, batch02_import + '\n' + twin_import)
+
+          directory_marker = '  const directory = path.resolve(process.cwd(), "imports", "approved-profiles");'
+          cleanup_block = '''  try {
+            const twinFallsCleanup = await applyTwinFallsDuplicateCleanup();
+            logger.info(
+              twinFallsCleanup,
+              "Twin Falls duplicate profiles consolidated or safely skipped",
+            );
+          } catch (error) {
+            logger.error(
+              { err: error },
+              "Twin Falls duplicate profile cleanup failed; approved profile imports will continue",
+            );
+          }
+
+          '''
+          if cleanup_block not in text:
+              if directory_marker not in text:
+                  raise SystemExit('Approved-profile directory marker is missing')
+              text = text.replace(directory_marker, cleanup_block + directory_marker)
+          startup.write_text(text)
+
+          mock = '''vi.mock("../organizations/twin-falls-duplicate-cleanup", () => ({
+            applyTwinFallsDuplicateCleanup: vi.fn().mockResolvedValue({
+              merged: [],
+              alreadyMerged: [],
+              skipped: [],
+              note: "existing",
+            }),
+          }));
+
+          '''
+          for filename in [
+            'artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts',
+            'artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts',
+          ]:
+              path = Path(filename)
+              test = path.read_text()
+              if '../organizations/twin-falls-duplicate-cleanup' not in test:
+                  marker = 'import { readdir, readFile } from "node:fs/promises";'
+                  if marker not in test:
+                      raise SystemExit(f'Import marker missing in {filename}')
+                  path.write_text(test.replace(marker, mock + marker))
+
+          profile_path = Path('imports/approved-profiles/twin-falls-county-fair-2026.json')
+          profile = json.loads(profile_path.read_text())
+          profile['importRevision'] = 4
+          profile['matchExisting'] = True
+          profile['requireExisting'] = True
+          profile['aliases'] = [
+            'County Fair - Twin Falls (Filer) ID',
+            'County Fair- Twin Falls  (Filer) ID',
+            'County Fair – Twin Falls (Filer) ID',
+          ]
+          profile.setdefault('event', {})['id'] = None
+          application_note = {
+            'subject': 'Online application required',
+            'body': 'Desiree confirmed that The Adventure Zone needs to fill out an online application for the Twin Falls County Fair. Keep this requirement with the surviving fair profile; no application link, deadline, or submission confirmation is recorded yet.',
+          }
+          notes = profile.setdefault('notes', [])
+          if application_note not in notes:
+              notes.append(application_note)
+          profile_path.write_text(json.dumps(profile, indent=2) + '\n')
+
+          ci = Path('.github/workflows/twin-falls-duplicate-cleanup-ci.yml')
+          ci.write_text('''name: Twin Falls duplicate cleanup CI
+
+          on:
+            pull_request:
+              branches: [main]
+              paths:
+                - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+                - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+                - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+                - "artifacts/api-server/src/features/organizations/organization-repository.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts"
+                - "imports/approved-profiles/twin-falls-county-fair-2026.json"
+                - ".github/workflows/twin-falls-duplicate-cleanup-ci.yml"
+            push:
+              branches:
+                - fix/twin-falls-duplicate-profiles-current
+                - main
+              paths:
+                - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+                - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+                - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+                - "artifacts/api-server/src/features/organizations/organization-repository.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts"
+                - "artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts"
+                - "imports/approved-profiles/twin-falls-county-fair-2026.json"
+                - ".github/workflows/twin-falls-duplicate-cleanup-ci.yml"
+
+          jobs:
+            verify:
+              runs-on: ubuntu-latest
+              env:
+                DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+              steps:
+                - uses: actions/checkout@v4
+                - uses: pnpm/action-setup@v4
+                  with:
+                    version: 10
+                - uses: actions/setup-node@v4
+                  with:
+                    node-version: 22
+                    cache: pnpm
+                - run: pnpm install --frozen-lockfile
+                - name: Focused behavior tests
+                  run: >-
+                    pnpm --filter @workspace/api-server exec vitest run
+                    src/features/organizations/twin-falls-duplicate-cleanup.test.ts
+                    src/features/organizations/organization-duplicate-normalization.pglite.test.ts
+                    src/features/approved-profile-import/startup-import.test.ts
+                    src/features/approved-profile-import/startup-import-batch.test.ts
+                - name: Production API build
+                  run: pnpm --filter @workspace/api-server build
+                - name: Approved profile payload parses
+                  run: node -e "JSON.parse(require('fs').readFileSync('imports/approved-profiles/twin-falls-county-fair-2026.json','utf8')); console.log('Twin Falls payload valid')"
+          '''.replace('          ', ''))
+
+          Path('.github/workflows/replay-twin-falls-fix-on-current-main.yml').unlink()
+          PY
+
+      - name: Commit current-main version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts \
+            artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts \
+            artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts \
+            artifacts/api-server/src/features/organizations/organization-repository.ts \
+            artifacts/api-server/src/features/approved-profile-import/startup-import.ts \
+            artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts \
+            artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts \
+            imports/approved-profiles/twin-falls-county-fair-2026.json \
+            .github/workflows/twin-falls-duplicate-cleanup-ci.yml \
+            .github/workflows/replay-twin-falls-fix-on-current-main.yml
+          git commit -m "fix: consolidate Twin Falls duplicate profiles"
+          git push origin HEAD:fix/twin-falls-duplicate-profiles-current
