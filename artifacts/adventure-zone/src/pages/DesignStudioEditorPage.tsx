@@ -1,19 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  ExternalLink,
-  Redo2,
-  RefreshCw,
-  Save,
-  Undo2,
-  ZoomIn,
-  ZoomOut,
-} from "lucide-react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
 import { Link, useParams } from "wouter";
-import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import {
   designStudioApi,
@@ -27,6 +15,8 @@ import {
 } from "@/lib/design-studio/model";
 import { useFreeformEditor } from "@/components/design-studio/use-freeform-editor";
 import { FreeformCanvas } from "@/components/design-studio/FreeformCanvas";
+import { MobileEditorTopBar } from "@/components/design-studio/MobileEditorTopBar";
+import { ContextualBottomToolbar } from "@/components/design-studio/ContextualBottomToolbar";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
@@ -153,49 +143,26 @@ export default function DesignStudioEditorPage() {
 
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-background" data-testid="design-editor">
-      <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <Link
-            aria-label="Back to Design Studio"
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-muted"
-            href="/design-studio"
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <Input
-            aria-label="Project name"
-            className="h-9 min-w-0 max-w-sm border-0 bg-transparent px-2 text-sm font-black shadow-none focus-visible:ring-1"
-            disabled={!canEdit}
-            onChange={(event) => {
-              setName(event.target.value);
-              setDirty(true);
-              setSaved(false);
-            }}
-            value={name}
-          />
-          <Badge className="hidden capitalize sm:inline-flex" variant="outline">{project.type}</Badge>
-        </div>
-
-        <div className="flex items-center gap-1">
-          <Button aria-label="Undo" disabled={!canEdit || !editor.canUndo} onClick={editor.undo} size="icon" variant="ghost">
-            <Undo2 className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Redo" disabled={!canEdit || !editor.canRedo} onClick={editor.redo} size="icon" variant="ghost">
-            <Redo2 className="h-4 w-4" />
-          </Button>
-          <Button aria-label="Zoom out" disabled={editor.doc.zoom <= 0.25} onClick={() => editor.setZoom(editor.doc.zoom - 0.1)} size="icon" variant="ghost">
-            <ZoomOut className="h-4 w-4" />
-          </Button>
-          <span className="hidden min-w-12 text-center text-xs font-semibold text-muted-foreground sm:inline">{Math.round(editor.doc.zoom * 100)}%</span>
-          <Button aria-label="Zoom in" disabled={editor.doc.zoom >= 2} onClick={() => editor.setZoom(editor.doc.zoom + 0.1)} size="icon" variant="ghost">
-            <ZoomIn className="h-4 w-4" />
-          </Button>
-          <Button className="ml-1 gap-1.5" disabled={saving || !name.trim()} onClick={() => void save()} size="sm">
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-            <span className="hidden sm:inline">{saving ? "Saving…" : saved ? "Saved" : dirty ? "Save" : "Saved"}</span>
-          </Button>
-        </div>
-      </header>
+      <MobileEditorTopBar
+        canEdit={canEdit}
+        canRedo={editor.canRedo}
+        canUndo={editor.canUndo}
+        dirty={dirty}
+        name={name}
+        onNameChange={(nextName) => {
+          setName(nextName);
+          setDirty(true);
+          setSaved(false);
+        }}
+        onRedo={editor.redo}
+        onSave={() => void save()}
+        onUndo={editor.undo}
+        onZoomChange={editor.setZoom}
+        saved={saved}
+        saving={saving}
+        type={project.type}
+        zoom={editor.doc.zoom}
+      />
 
       {error ? (
         <div className="mx-3 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
@@ -207,22 +174,25 @@ export default function DesignStudioEditorPage() {
         <FreeformCanvas assets={assets} editor={editor} />
       </main>
 
-      <footer className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-3 py-2 backdrop-blur">
-        <div className="min-w-0 text-xs text-muted-foreground">
-          {editor.selectedNodes.length
-            ? `${editor.selectedNodes.length} layer${editor.selectedNodes.length === 1 ? "" : "s"} selected`
-            : "Tap a layer to edit it"}
+      <div className="relative z-20">
+        <ContextualBottomToolbar editor={editor} />
+        <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-3 py-1.5">
+          <span className="truncate text-[11px] text-muted-foreground">
+            {editor.selectedNodes.length
+              ? `${editor.selectedNodes.length} layer${editor.selectedNodes.length === 1 ? "" : "s"} selected`
+              : "Tap a layer to edit it"}
+          </span>
+          <Button
+            className="h-7 shrink-0 gap-1.5 px-2 text-xs"
+            onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}
+            size="sm"
+            variant="ghost"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Canva
+          </Button>
         </div>
-        <Button
-          className="shrink-0 gap-2"
-          onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}
-          size="sm"
-          variant="outline"
-        >
-          <ExternalLink className="h-4 w-4" />
-          Canva
-        </Button>
-      </footer>
+      </div>
     </div>
   );
 }
