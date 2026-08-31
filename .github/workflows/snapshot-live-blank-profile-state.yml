@@ -1,0 +1,65 @@
+name: Snapshot live blank profile state
+
+on:
+  push:
+    branches:
+      - cleanup/blank-profiles-2026-08-30
+    paths:
+      - ".github/workflows/snapshot-live-blank-profile-state.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export exact profile states
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || exit 1
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || exit 1
+          BASE_URL="${API_URL%/}"
+          mkdir -p snapshot
+          for PROFILE_ID in \
+            08e8e9b8-618a-4129-ab14-640345c1abf0 \
+            b0b9007c-e145-4f72-955e-03a28ef149f4 \
+            9fcb2baa-9014-46bc-96be-6009b95d93ba \
+            0bfee77c-e42c-417f-9d5e-7df54d57c38b \
+            7fff8f6c-5e88-46ad-9f00-d1a853040a42 \
+            9c6b750d-828a-4b97-b6aa-0a19c22f18cf \
+            e7ba291f-5d7c-48ec-9c66-7756196ee290
+          do
+            STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output "snapshot/${PROFILE_ID}.json" \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${PROFILE_ID}" || true)
+            printf '%s' "${STATUS}" > "snapshot/${PROFILE_ID}.status"
+          done
+          node <<'NODE'
+          const fs = require('fs');
+          const ids = [
+            '08e8e9b8-618a-4129-ab14-640345c1abf0',
+            'b0b9007c-e145-4f72-955e-03a28ef149f4',
+            '9fcb2baa-9014-46bc-96be-6009b95d93ba',
+            '0bfee77c-e42c-417f-9d5e-7df54d57c38b',
+            '7fff8f6c-5e88-46ad-9f00-d1a853040a42',
+            '9c6b750d-828a-4b97-b6aa-0a19c22f18cf',
+            'e7ba291f-5d7c-48ec-9c66-7756196ee290',
+          ];
+          const rows = ids.map((id) => {
+            const status = fs.readFileSync(`snapshot/${id}.status`, 'utf8').trim();
+            let body = null;
+            try { body = JSON.parse(fs.readFileSync(`snapshot/${id}.json`, 'utf8')); } catch {}
+            return { id, status, body };
+          });
+          fs.writeFileSync('live-blank-profile-state.json', JSON.stringify({ capturedAt: new Date().toISOString(), rows }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-blank-profile-state
+          path: live-blank-profile-state.json
+          retention-days: 1
