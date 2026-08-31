@@ -254,7 +254,14 @@ async function resolveExistingProfile(input: {
   }
 
   const event = input.payload.event as Record<string, unknown>;
-  if (typeof event.id === "string" && event.id.trim()) return input.payload;
+  if (typeof event.id === "string" && event.id.trim()) {
+    if (requireExisting) {
+      throw new ApprovedProfileMatchError(
+        `Approved profile import ${input.file} cannot preselect an event id when safe matching is required.`,
+      );
+    }
+    return input.payload;
+  }
   const name = typeof event.name === "string" ? event.name.trim() : "";
   if (!name) {
     if (requireExisting) {
