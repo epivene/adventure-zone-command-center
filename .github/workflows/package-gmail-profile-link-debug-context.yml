@@ -1,0 +1,38 @@
+name: Package Gmail profile-link debug context
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/package-gmail-profile-link-debug-context.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect source and indexes
+        run: |
+          set -euo pipefail
+          mkdir -p context
+          cp -R artifacts/api-server/src/features/google-workspace context/google-workspace
+          cp -R artifacts/api-server/src/routes context/api-routes
+          cp -R artifacts/api-server/src/features/event-profiles context/event-profiles
+          cp -R artifacts/api-server/src/db context/api-db
+          cp -R artifacts/web/src context/web-src
+          cp -R lib/db/src context/lib-db-src
+          cp -R lib/db/migrations context/lib-db-migrations 2>/dev/null || true
+          cp -R migrations context/root-migrations 2>/dev/null || true
+          grep -RniE "gmail|google_workspace|message[_A-Za-z]*id|thread[_A-Za-z]*id|profile-history|Notes & Call Outcomes|NOTES & CALL OUTCOMES" \
+            artifacts/api-server/src artifacts/web/src lib/db/src lib/db/migrations migrations \
+            > context/gmail-code-index.txt 2>/dev/null || true
+          find context -type f | sort > context/file-index.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gmail-profile-link-debug-context
+          path: context
+          retention-days: 2
