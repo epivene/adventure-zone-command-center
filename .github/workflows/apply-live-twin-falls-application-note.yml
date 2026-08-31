@@ -36,11 +36,14 @@ jobs:
             --write-out "%{http_code}" \
             "${BASE_URL}/profile-notes")
 
-          test "${STATUS}" = "200" || {
-            echo "Profile-note request returned HTTP ${STATUS}."
-            cat note-response.json
-            exit 1
-          }
+          case "${STATUS}" in
+            200|201) ;;
+            *)
+              echo "Profile-note request returned HTTP ${STATUS}."
+              cat note-response.json
+              exit 1
+              ;;
+          esac
 
           curl --fail --silent --show-error \
             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
