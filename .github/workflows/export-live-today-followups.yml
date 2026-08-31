@@ -1,4 +1,4 @@
-name: Verify live county fair follow-ups
+name: Inspect live county fair profile matches
 
 on:
   push:
@@ -9,42 +9,40 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  inspect:
     runs-on: ubuntu-latest
     steps:
-      - name: Check configuration
+      - name: Query protected profile search
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           test -n "${API_URL}"
           test -n "${ASSISTANT_IMPORT_TOKEN}"
-
-      - name: Wait for deployed follow-ups
-        env:
-          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
-          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
-        run: |
+          mkdir results
           BASE_URL="${API_URL%/}"
-          VERIFIED=false
-          for ATTEMPT in $(seq 1 1); do
-            HTTP_STATUS=$(curl --silent --show-error \
+          while IFS='|' read -r SLUG QUERY; do
+            HTTP_STATUS=$(curl --silent --show-error --get \
               --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              --output today-followups.json \
+              --data-urlencode "q=${QUERY}" \
+              --data-urlencode "limit=20" \
+              --output "results/${SLUG}.json" \
               --write-out "%{http_code}" \
-              "${BASE_URL}/api/assistant-import/today-followups?limit=500" || true)
-            if [ "${HTTP_STATUS}" = "200" ] && node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("today-followups.json","utf8")); const e=[["Ramsey County Fair","Review 2027 Ramsey County Fair outreach","2027-03-17T15:00:00.000Z"],["Wells County Fair","Review 2027 Wells County Fair outreach","2027-03-18T15:00:00.000Z"],["Stutsman County Fair","Review 2027 Stutsman County Fair outreach","2027-03-24T15:00:00.000Z"],["Pierce County Fair","Review 2027 Pierce County Fair outreach","2027-03-25T15:00:00.000Z"],["Ransom County Fair","Review 2027 Ransom County Fair outreach","2027-05-26T15:00:00.000Z"]]; if(!x.ok||!Array.isArray(x.followUps))process.exit(2); for(const [o,l,d] of e){const m=x.followUps.filter(r=>r.organizationName===o&&r.label===l&&r.dueAt===d); if(m.length!==1)process.exit(3);}' ; then
-              VERIFIED=true
-              break
-            fi
-            sleep 30
-          done
-          test "${VERIFIED}" = "true"
+              "${BASE_URL}/api/assistant-import/profile-search" || true)
+            test "${HTTP_STATUS}" = "200"
+          done <<'QUERIES'
+          ramsey|Ramsey County Fair
+          ramsey-achievement|Ramsey County 4-H Achievement Days
+          wells|Wells County Fair
+          stutsman|Stutsman County Fair
+          pierce|Pierce County Fair
+          ransom|Ransom County Fair
+          QUERIES
 
-      - name: Upload live list
+      - name: Upload search results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verified-live-today-followups
-          path: today-followups.json
+          name: live-county-fair-profile-searches
+          path: results
           retention-days: 1
