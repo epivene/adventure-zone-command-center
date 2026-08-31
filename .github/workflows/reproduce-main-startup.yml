@@ -56,7 +56,9 @@ jobs:
       - name: Bootstrap disposable production schema
         run: pnpm --filter @workspace/db bootstrap
       - name: Run production migrations
-        run: pnpm --filter @workspace/db run-migrations
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/db run-migrations 2>&1 | tee migrations.log
       - name: Start production API and exercise required startup schema
         run: |
           set -o pipefail
@@ -88,6 +90,7 @@ jobs:
         with:
           name: current-main-startup-evidence
           path: |
+            migrations.log
             startup-main.log
             health.json
             empty-profile-integrity-audit.json
