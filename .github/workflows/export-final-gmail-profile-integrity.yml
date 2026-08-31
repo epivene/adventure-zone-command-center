@@ -1,0 +1,110 @@
+name: Export final live Gmail profile integrity receipt
+
+on:
+  push:
+    branches:
+      - verify/gmail-profile-integrity-final
+    paths:
+      - ".github/workflows/export-final-gmail-profile-integrity.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Repair and audit protected live Gmail linkage
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          BASE_URL="${API_URL%/}/api/assistant-import"
+
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            "${BASE_URL}/gmail-profile-integrity-repair" \
+            > repair.json
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/gmail-profile-integrity-audit" \
+            > audit.json
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-history/b447c83c-6348-4fab-b850-0db7a5576a83" \
+            > twin-falls.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const repair = JSON.parse(fs.readFileSync('repair.json', 'utf8'));
+          const auditResponse = JSON.parse(fs.readFileSync('audit.json', 'utf8'));
+          const twin = JSON.parse(fs.readFileSync('twin-falls.json', 'utf8'));
+          const audit = auditResponse.audit;
+
+          if (repair.ok !== true || auditResponse.ok !== true || !audit) {
+            throw new Error('Protected Gmail repair/audit endpoints did not return a valid result.');
+          }
+          if (audit.eligibleUnlinkedSentEmails !== 0) {
+            throw new Error(`Found ${audit.eligibleUnlinkedSentEmails} profile-eligible sent emails without an active profile link.`);
+          }
+          if (audit.retiredProfileReferences !== 0) {
+            throw new Error(`Found ${audit.retiredProfileReferences} sent-email references still pointing at retired profiles.`);
+          }
+          if (!Array.isArray(audit.unresolved) || audit.unresolved.length !== 0) {
+            throw new Error('The sent-email integrity audit still contains unresolved profile-eligible messages.');
+          }
+          if (audit.profileEligibleSentEmails !== audit.activeProfileLinkedSentEmails) {
+            throw new Error('Profile-eligible and active-profile-linked sent-email counts do not match.');
+          }
+
+          const allTimelineItems = [
+            ...(Array.isArray(twin.history) ? twin.history : []),
+            ...(Array.isArray(twin.notes) ? twin.notes : []),
+          ];
+          const actualEmail = allTimelineItems.find((item) =>
+            (item.kind === 'email' || item.type === 'email' || item.status === 'sent')
+            && item.subject === 'Twin Falls County Fair - Sept 2-7 2026'
+            && String(item.body || '').includes('Thank you for calling me back. I tried returning your call')
+            && String(item.body || '').includes('who the best person is for me to speak with about entertainment for the 2027 fair')
+          );
+          const serialized = JSON.stringify(twin);
+          const messageIdentityPresent = serialized.includes('1a03f76015409bfa')
+            || serialized.includes('1a03f6d13a293ebf');
+          if (!actualEmail && !messageIdentityPresent) {
+            throw new Error('The actual Aug. 26 Twin Falls sent email is not visible on the surviving profile.');
+          }
+
+          const result = {
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            scope: 'All profile-eligible sent-email activities in the connected CRM/Google Workspace store',
+            actualTwinFallsEmail: {
+              profileId: twin.place?.id ?? null,
+              profileName: twin.place?.name ?? null,
+              gmailMessageId: '1a03f76015409bfa',
+              gmailThreadId: '1a03f6d13a293ebf',
+              subject: 'Twin Falls County Fair - Sept 2-7 2026',
+              visibleAsActualEmailHistory: Boolean(actualEmail || messageIdentityPresent),
+            },
+            repair: repair.result,
+            audit,
+          };
+          fs.writeFileSync('final-gmail-profile-integrity.json', JSON.stringify(result, null, 2));
+          console.log(JSON.stringify(result, null, 2));
+          NODE
+
+      - name: Upload sanitized final receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-gmail-profile-integrity
+          path: final-gmail-profile-integrity.json
+          retention-days: 3
