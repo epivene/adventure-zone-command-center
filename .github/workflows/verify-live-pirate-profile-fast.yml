@@ -1,0 +1,95 @@
+name: Verify live Pirate Fest canonical profile
+
+on:
+  push:
+    branches:
+      - verify/canonical-profile-children-merge
+    paths:
+      - ".github/workflows/verify-live-pirate-profile-fast.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for live Pirate Fest repair
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          BASE_URL="${API_URL%/}"
+          PROFILE_ID="f24033e1-801b-43ff-9a7e-a9d6d7b426c3"
+
+          for attempt in $(seq 1 100); do
+            STATUS=$(curl --max-time 30 --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output pirate-fest.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${PROFILE_ID}" || true)
+
+            if [ "${STATUS}" = "200" ] && node <<'NODE'
+          const fs = require('fs');
+          const profile = JSON.parse(fs.readFileSync('pirate-fest.json', 'utf8'));
+          if (profile.ok !== true) process.exit(1);
+          if (!Array.isArray(profile.contacts) || profile.contacts.length !== 1) process.exit(1);
+          if (!Array.isArray(profile.bookings) || profile.bookings.length !== 1) process.exit(1);
+          const contact = profile.contacts[0];
+          const booking = profile.bookings[0];
+          const phone = String(contact.phone ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+          if (contact.name !== 'Michael Ringling' || phone !== '7209553603') process.exit(1);
+          if (String(contact.email ?? '').toLowerCase() !== 'mringling@northglenn.org') process.exit(1);
+          if (booking.id !== 'cd7ce3ca-7370-47a3-9f07-0ca617e03695') process.exit(1);
+          if (booking.status !== 'declined') process.exit(1);
+          const open = profile.followUps.filter((item) => item.completedAt == null);
+          if (open.length !== 1 || open[0].dueAt !== '2027-01-15T15:00:00.000Z') process.exit(1);
+          if (!profile.notes.some((note) => String(note.body ?? '').toLowerCase().includes('budget and space limitations'))) process.exit(1);
+          NODE
+            then
+              node <<'NODE'
+          const fs = require('fs');
+          const profile = JSON.parse(fs.readFileSync('pirate-fest.json', 'utf8'));
+          const open = profile.followUps.filter((item) => item.completedAt == null);
+          fs.writeFileSync('live-pirate-profile-summary.json', JSON.stringify({
+            verifiedAt: new Date().toISOString(),
+            profileId: profile.profileId,
+            contactCount: profile.contacts.length,
+            contact: profile.contacts[0],
+            appearanceCount: profile.bookings.length,
+            appearance: profile.bookings[0],
+            openFollowUpCount: open.length,
+            openFollowUp: open[0],
+            noteCount: profile.notes.length,
+            historyCount: profile.history.length,
+          }, null, 2));
+          NODE
+              echo "Live Pirate Fest profile verified on attempt ${attempt}."
+              exit 0
+            fi
+
+            if [ $((attempt % 10)) -eq 0 ]; then
+              node -e "const fs=require('fs'); try { const p=JSON.parse(fs.readFileSync('pirate-fest.json','utf8')); console.log(JSON.stringify({attempt:${attempt},status:'${STATUS}',contacts:p.contacts?.length,bookings:p.bookings?.length,bookingStatus:p.bookings?.[0]?.status,openFollowUps:p.followUps?.filter(x=>x.completedAt==null).length},null,2)); } catch {}"
+            fi
+            sleep 10
+          done
+
+          echo "Live Pirate Fest profile did not reach the expected canonical state."
+          cat pirate-fest.json 2>/dev/null || true
+          exit 1
+
+      - name: Upload sanitized summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-pirate-profile-verification
+          path: live-pirate-profile-summary.json
+          retention-days: 7
