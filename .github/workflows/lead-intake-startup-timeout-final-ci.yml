@@ -11,6 +11,9 @@ on:
 permissions:
   contents: write
 
+env:
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/lead_intake_startup_test?sslmode=disable
+
 jobs:
   red-green:
     runs-on: ubuntu-latest
