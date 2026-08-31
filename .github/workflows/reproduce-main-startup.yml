@@ -1,0 +1,93 @@
+name: Reproduce current main production startup
+
+on:
+  push:
+    branches:
+      - fix/canonical-profile-children
+    paths:
+      - .github/workflows/reproduce-main-startup.yml
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: production
+  PORT: "10000"
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+  SESSION_SECRET: startup-reproduction-session-secret
+  OWNER_PASSWORD: startup-reproduction-owner-password
+  ASSISTANT_IMPORT_TOKEN: startup-reproduction-assistant-token
+
+jobs:
+  reproduce:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace declarations
+        run: pnpm run typecheck:libs
+      - name: Build production API
+        run: pnpm --filter @workspace/api-server build
+      - name: Run production migrations
+        run: pnpm --filter @workspace/db run-migrations
+      - name: Start production API and exercise required startup schema
+        run: |
+          set -o pipefail
+          node --enable-source-maps artifacts/api-server/dist/index.mjs > startup-main.log 2>&1 &
+          server_pid=$!
+          echo "$server_pid" > startup-main.pid
+          for attempt in $(seq 1 80); do
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              echo "Server exited before becoming healthy"
+              cat startup-main.log
+              exit 1
+            fi
+            if curl --fail --silent http://127.0.0.1:10000/api/healthz > health.json; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:10000/api/healthz | tee health.json
+          curl --fail --silent \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            http://127.0.0.1:10000/api/assistant-import/profile-integrity-audit \
+            | tee empty-profile-integrity-audit.json
+          kill "$server_pid"
+          wait "$server_pid" || true
+          cat startup-main.log
+      - name: Upload startup evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-main-startup-evidence
+          path: |
+            startup-main.log
+            health.json
+            empty-profile-integrity-audit.json
+          if-no-files-found: warn
+          retention-days: 7
