@@ -249,6 +249,47 @@ describe("GoogleSentProfileLinkSweepService", () => {
     ]);
   });
 
+  it("reloads profile evidence for each sweep run", async () => {
+    const messages = [message({
+      id: "fresh-profile-message",
+      dateMs: Date.UTC(2026, 7, 1),
+      subject: "Newly created event profile",
+    })];
+    const repository = new FakeRepository();
+    let factoryCalls = 0;
+    const service = new GoogleSentProfileLinkSweepService({
+      connection: { createReadClient: async () => client(messages) },
+      repository,
+      classifierFactory: () => {
+        factoryCalls += 1;
+        return classifier({
+          "fresh-profile-message": {
+            outcome: "attached",
+            organization: {
+              id: `org-run-${factoryCalls}`,
+              name: `Current profile ${factoryCalls}`,
+            },
+            evidenceCodes: ["fresh_profile_context"],
+          },
+        });
+      },
+    });
+
+    const window = {
+      after: new Date(Date.UTC(2026, 0, 1)),
+      before: new Date(Date.UTC(2027, 0, 1)),
+      repair: true,
+    } as const;
+    await service.run(window);
+    await service.run(window);
+
+    expect(factoryCalls).toBe(2);
+    expect(repository.linked.map((row) => row.organizationId)).toEqual([
+      "org-run-1",
+      "org-run-2",
+    ]);
+  });
+
   it("is read-only when repair is false", async () => {
     const messages = [message({
       id: "m1",
