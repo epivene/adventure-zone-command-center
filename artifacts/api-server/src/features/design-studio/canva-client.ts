@@ -29,6 +29,11 @@ export type CanvaDesignSummary = {
   };
 };
 
+export function hasRequiredCanvaScopes(scopes: string[] | null | undefined) {
+  const granted = new Set(scopes ?? []);
+  return CANVA_SCOPES.every((scope) => granted.has(scope));
+}
+
 function isTestLocalhost(url: URL) {
   return (
     process.env.NODE_ENV === "test" &&
@@ -165,6 +170,9 @@ export async function ensureCanvaAccessToken(officeAccountId: string) {
   if (!connection || connection.status !== "connected") {
     throw new Error("CANVA_NOT_CONNECTED");
   }
+  if (!hasRequiredCanvaScopes(connection.scopes)) {
+    throw new Error("CANVA_RECONNECT_REQUIRED");
+  }
 
   const key = tokenEncryptionKey();
   const expiresAt = connection.tokenExpiresAt?.getTime() ?? 0;
@@ -180,6 +188,9 @@ export async function ensureCanvaAccessToken(officeAccountId: string) {
   const refreshed = await refreshCanvaAccessToken(refreshToken);
   const nextRefreshToken = refreshed.refresh_token ?? refreshToken;
   const nextScopes = parseScopes(refreshed.scope, connection.scopes);
+  if (!hasRequiredCanvaScopes(nextScopes)) {
+    throw new Error("CANVA_RECONNECT_REQUIRED");
+  }
   const nextExpiry = new Date(Date.now() + Math.max(60, refreshed.expires_in) * 1000);
 
   await upsertCanvaConnection({
