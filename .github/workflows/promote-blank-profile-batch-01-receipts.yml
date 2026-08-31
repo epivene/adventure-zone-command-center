@@ -1,0 +1,86 @@
+name: Promote blank profile batch 01 receipts
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - "docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RECEIPT_BRANCH: docs/blank-profile-batch-01-verification
+    steps:
+      - name: Wait for both verified receipts on the operations branch
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 90); do
+            LIVE_STATUS=$(gh api \
+              "repos/$GITHUB_REPOSITORY/contents/docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json?ref=ops/merge-blank-profiles-batch-01" \
+              --silent >/dev/null 2>&1 && echo yes || echo no)
+            AUDIT_STATUS=$(gh api \
+              "repos/$GITHUB_REPOSITORY/contents/docs/operations/blank-profile-batch-01-post-audit-2026-08-31.json?ref=ops/merge-blank-profiles-batch-01" \
+              --silent >/dev/null 2>&1 && echo yes || echo no)
+            if [ "$LIVE_STATUS" = yes ] && [ "$AUDIT_STATUS" = yes ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Verified receipt files did not both appear."
+          exit 1
+
+      - name: Checkout main and fetch the operations receipts
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Create a receipt-only branch
+        run: |
+          set -euo pipefail
+          git fetch origin ops/merge-blank-profiles-batch-01
+          git checkout -B "$RECEIPT_BRANCH" origin/main
+          mkdir -p docs/operations
+          git show origin/ops/merge-blank-profiles-batch-01:docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json \
+            > docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json
+          git show origin/ops/merge-blank-profiles-batch-01:docs/operations/blank-profile-batch-01-post-audit-2026-08-31.json \
+            > docs/operations/blank-profile-batch-01-post-audit-2026-08-31.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/operations/blank-profile-batch-01-*.json
+          git commit -m "docs: add live verification for blank profile batch 01"
+          git push --force-with-lease origin "$RECEIPT_BRANCH"
+
+      - name: Merge the receipt-only pull request
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$RECEIPT_BRANCH" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$RECEIPT_BRANCH" \
+              --base main \
+              --title "Publish live verification for blank profile batch 01" \
+              --body "Adds the sanitized end-to-end verification and post-batch integrity-audit receipts. No application behavior changes.")
+            PR_NUMBER=${PR_URL##*/}
+          fi
+          gh pr merge "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --squash \
+            --admin \
+            --subject "Publish live verification for blank profile batch 01" \
+            --body "Add the sanitized batch 01 live verification and post-audit receipts."
