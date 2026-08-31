@@ -1,0 +1,61 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": [
+    "Te Moak Tribe of Western Shoshone",
+    "Te-Moak Tribe of Western Shoshone Indians of Nevada"
+  ],
+  "event": {
+    "id": "e7ba291f-5d7c-48ec-9c66-7756196ee290",
+    "name": "Te-Moak Tribe of Western Shoshone",
+    "city": "Elko",
+    "region": "NV"
+  },
+  "profile": {
+    "placeType": "tribe",
+    "phone": "775-738-9251",
+    "website": "https://www.temoaktribe.com/",
+    "address1": "525 Sunset Street",
+    "postalCode": "89801",
+    "description": "Umbrella tribal profile for the Battle Mountain, Elko, South Fork, and Wells bands. Identify the specific band and public event decision-maker before Adventure Zone outreach."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Te-Moak Tribal Headquarters",
+      "phone": "775-738-9251",
+      "email": "",
+      "role": "Tribal headquarters / routing contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "possible",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "research",
+    "nextActionDueAt": "2026-09-22",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Verified tribal umbrella identity and headquarters - 2026-08-30",
+      "body": "Official Te-Moak Tribe information identifies headquarters at 525 Sunset Street, Elko, NV 89801, phone 775-738-9251. The Tribe is the umbrella for the Battle Mountain, Elko, South Fork, and Wells bands. Preserve this as the parent organization rather than treating it as one unnamed event."
+    },
+    {
+      "subject": "Relationship and outreach status - 2026-08-30",
+      "body": "No Adventure Zone Gmail history was found for Te-Moak or the Western Shoshone search terms, and no verified public-event decision-maker or general event-booking email was established. Do not send a generic cold email to tribal headquarters. First identify the specific band and public celebration, verify the organizer, and attach the event to this parent profile."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Identify a specific Te-Moak band event",
+      "reason": "Research current public celebrations, powwows, community days, fairs, or family events for the Battle Mountain, Elko, South Fork, and Wells bands. Verify the specific organizer before creating an appearance or drafting outreach.",
+      "dueAt": "2026-09-22T16:00:00.000Z"
+    }
+  ]
+}
