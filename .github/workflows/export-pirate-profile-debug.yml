@@ -29,30 +29,47 @@ jobs:
             "${API_URL%/}/api/assistant-import/profile-integrity-audit" \
             --output profile-integrity-audit.json
 
-      - name: Extract Pirate Fest evidence
+      - name: Extract Pirate Fest audit evidence
+        id: pirate
         run: |
           node <<'NODE'
           const fs = require('fs');
           const report = JSON.parse(fs.readFileSync('profile-integrity-audit.json', 'utf8'));
           const profiles = report.profiles.filter((profile) => /pirate fest/i.test(profile.name));
-          const ids = new Set(profiles.map((profile) => profile.id));
+          if (profiles.length !== 1) {
+            console.error(`Expected one Pirate profile, found ${profiles.length}.`);
+            process.exit(2);
+          }
+          const profileId = profiles[0].id;
           const issues = report.issues.filter((issue) =>
-            ids.has(issue.profileId) || /pirate fest/i.test(issue.profileName || '')
+            issue.profileId === profileId || /pirate fest/i.test(issue.profileName || '')
           );
-          const output = {
+          fs.writeFileSync('pirate-profile-audit.json', JSON.stringify({
             generatedAt: report.generatedAt,
             profiles,
             issues,
             summary: report.summary,
-          };
-          fs.writeFileSync('pirate-profile-audit.json', JSON.stringify(output, null, 2));
-          console.log(JSON.stringify({ profiles: profiles.length, issues: issues.length }));
-          if (profiles.length !== 1) process.exit(2);
+          }, null, 2));
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `profile_id=${profileId}\n`);
           NODE
+
+      - name: Export protected full Pirate profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+          PROFILE_ID: ${{ steps.pirate.outputs.profile_id }}
+        run: |
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${API_URL%/}/api/assistant-import/profile-history/${PROFILE_ID}" \
+            --output pirate-profile-history.json
+          node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('pirate-profile-history.json','utf8')); if(x.ok!==true || x.profileId!==process.env.PROFILE_ID) process.exit(1); console.log(JSON.stringify({contacts:x.contacts.length,bookings:x.bookings.length,followUps:x.followUps.length,notes:x.notes.length}))"
 
       - name: Upload protected evidence
         uses: actions/upload-artifact@v4
         with:
           name: pirate-profile-duplicate-evidence
-          path: pirate-profile-audit.json
+          path: |
+            pirate-profile-audit.json
+            pirate-profile-history.json
           retention-days: 2
