@@ -9,6 +9,7 @@ import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
 import { autoConsolidateImportedLocationFamilies } from "./features/organizations/imported-location-family-consolidation";
+import { cleanupKnownEmptyTestProfileClusters } from "./features/organizations/known-empty-test-profile-cluster-cleanup";
 import {
   cleanupKnownEmptyTestProfiles,
   enrichKnownBlankProfiles,
@@ -207,6 +208,23 @@ async function runPostListenMaintenance() {
   await runStartupStep("activity delete schema", ensureActivityDeleteSchema);
   await runStartupStep("crew worker leg membership schema", ensureCrewWorkerLegMembershipSchema);
   await runStartupStep("event leg lifecycle schema", ensureEventLegLifecycleSchema);
+  try {
+    const clusterCleanup = await runStartupStep(
+      "known empty test profile cluster cleanup",
+      cleanupKnownEmptyTestProfileClusters,
+    );
+    logger.info(
+      clusterCleanup,
+      clusterCleanup.deleted.length > 0
+        ? "Removed known empty consolidated test profile clusters"
+        : "No known empty consolidated test profile clusters were eligible for removal",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Known empty test profile cluster cleanup deferred; startup will continue",
+    );
+  }
   try {
     const cleanup = await runStartupStep(
       "known empty test profile cleanup",
