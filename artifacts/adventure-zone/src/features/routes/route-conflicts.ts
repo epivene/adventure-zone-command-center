@@ -7,7 +7,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export type RouteConflictEvent = Pick<
   MapEvent,
   "id" | "name" | "status" | "travelLegId" | "travelLegName" | "startsAt" | "endsAt"
->;
+> & {
+  actualStartsAt?: Date | null;
+  actualEndsAt?: Date | null;
+  operationalWindowSource?: string;
+};
 
 export type RouteConflict = {
   legId: string;
@@ -29,10 +33,11 @@ function normalizedRange(event: RouteConflictEvent) {
   const eventStart = businessDateKey(event.startsAt);
   const candidateEnd = businessDateKey(event.endsAt ?? event.startsAt);
   const eventEnd = candidateEnd < eventStart ? eventStart : candidateEnd;
+  const alreadyReserved = Boolean(event.operationalWindowSource);
 
   return {
-    start: shiftBusinessDate(eventStart, -1),
-    end: shiftBusinessDate(eventEnd, 1),
+    start: shiftBusinessDate(eventStart, alreadyReserved ? 0 : -1),
+    end: shiftBusinessDate(eventEnd, alreadyReserved ? 0 : 1),
   };
 }
 

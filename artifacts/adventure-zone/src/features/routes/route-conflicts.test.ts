@@ -40,4 +40,21 @@ describe("findSameLegDateConflicts", () => {
       event("second", "2026-09-02", "2026-09-04", "leg-2"),
     ])).toHaveLength(0);
   });
+
+  it("does not pad reserved operational windows a second time", () => {
+    const first = {
+      ...event("first", "2026-07-16", "2026-07-20"),
+      actualStartsAt: new Date("2026-07-17T12:00:00Z"),
+      actualEndsAt: new Date("2026-07-19T12:00:00Z"),
+      operationalWindowSource: "google_calendar",
+    };
+    const second = {
+      ...event("second", "2026-07-21", "2026-07-23"),
+      actualStartsAt: new Date("2026-07-22T12:00:00Z"),
+      actualEndsAt: new Date("2026-07-22T12:00:00Z"),
+      operationalWindowSource: "google_calendar",
+    };
+
+    expect(findSameLegDateConflicts([first, second])).toHaveLength(0);
+  });
 });
