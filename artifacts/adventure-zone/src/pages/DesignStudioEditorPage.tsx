@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import {
   designStudioApi,
+  type CanvaProjectState,
   type DesignAsset,
   type DesignProject,
 } from "@/lib/design-studio-api";
@@ -30,8 +31,8 @@ import {
 import { LayersSheet } from "@/components/design-studio/LayersSheet";
 import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
 import { ExportSheet } from "@/components/design-studio/ExportSheet";
+import { CanvaHandoffSheet } from "@/components/design-studio/CanvaHandoffSheet";
 
-const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
 const EMPTY_CANVAS = normalizeCanvas(null);
 
@@ -54,12 +55,40 @@ function exportFilename(name: string, format: ExportFormat) {
   return `${stem}.${format}`;
 }
 
+function canvaButtonLabel(state: CanvaProjectState | null, dirty: boolean) {
+  if (!state) return "Canva";
+  if (!state.configured) return "Canva setup needed";
+  if (!state.connected) return "Connect Canva";
+  if (state.linked && (state.outdated || dirty)) return "Update Canva";
+  if (state.linked) return "Continue in Canva";
+  return "Open in Canva";
+}
+
+function openWaitingWindow() {
+  const target = window.open("about:blank", "_blank");
+  if (target) {
+    try { target.opener = null; } catch { /* browser may forbid changing opener */ }
+  }
+  return target;
+}
+
+function navigateCanvaWindow(target: Window | null, url: string) {
+  if (target && !target.closed) {
+    target.location.replace(url);
+    return;
+  }
+  window.location.assign(url);
+}
+
 export default function DesignStudioEditorPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<DesignProject | null>(null);
   const [name, setName] = useState("");
   const [assets, setAssets] = useState<DesignAsset[]>([]);
   const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
+  const [canvaState, setCanvaState] = useState<CanvaProjectState | null>(null);
+  const [canvaBusy, setCanvaBusy] = useState(false);
+  const [showCanvaHandoff, setShowCanvaHandoff] = useState(false);
   const [photoPickerMode, setPhotoPickerMode] = useState<PhotoPickerMode | null>(null);
   const [showLayers, setShowLayers] = useState(false);
   const [showAddElements, setShowAddElements] = useState(false);
@@ -90,6 +119,30 @@ export default function DesignStudioEditorPage() {
     onChange: onCanvasChange,
   });
 
+  const refreshCanvaState = useCallback(async () => {
+    if (!params.id) return null;
+    try {
+      const state = await designStudioApi.getCanvaState(params.id);
+      setCanvaState(state);
+      return state;
+    } catch {
+      setCanvaState(null);
+      return null;
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const canvaError = query.get("canvaError");
+    const connected = query.get("canvaConnected");
+    if (!canvaError && !connected) return;
+    if (canvaError) setError(`Canva connection failed: ${canvaError.replaceAll("_", " ").toLowerCase()}`);
+    query.delete("canvaError");
+    query.delete("canvaConnected");
+    const next = `${window.location.pathname}${query.size ? `?${query.toString()}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", next);
+  }, []);
+
   useEffect(() => {
     if (!params.id) return;
     setLoading(true);
@@ -98,11 +151,13 @@ export default function DesignStudioEditorPage() {
     Promise.all([
       designStudioApi.get(params.id),
       designStudioApi.listAssets().catch(() => [] as DesignAsset[]),
+      designStudioApi.getCanvaState(params.id).catch(() => null),
     ])
-      .then(([value, assetList]) => {
+      .then(([value, assetList, loadedCanvaState]) => {
         setProject(value);
         setName(value.name);
         setAssets(assetList);
+        setCanvaState(loadedCanvaState);
 
         const starterId = noteValue(value.notes, STARTER_PREFIX);
         const starterCanvas = starterById(starterId)?.canvas ?? null;
@@ -119,7 +174,7 @@ export default function DesignStudioEditorPage() {
   }, [params.id]);
 
   const save = useCallback(async () => {
-    if (!params.id || !project || !name.trim()) return;
+    if (!params.id || !project || !name.trim()) return false;
 
     setSaving(true);
     setError(null);
@@ -133,12 +188,15 @@ export default function DesignStudioEditorPage() {
       setProject(value);
       setDirty(false);
       setSaved(true);
+      void refreshCanvaState();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Project could not be saved.");
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [editor.doc, name, params.id, project]);
+  }, [editor.doc, name, params.id, project, refreshCanvaState]);
 
   const saveRef = useRef(save);
   saveRef.current = save;
@@ -186,6 +244,82 @@ export default function DesignStudioEditorPage() {
     } finally {
       setExporting(null);
     }
+  }
+
+  async function connectCanva() {
+    if (!project) return;
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      const started = await designStudioApi.startCanvaConnect(`/design-studio/${project.id}`);
+      window.location.assign(started.authorizationUrl);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start the Canva connection.");
+      setCanvaBusy(false);
+    }
+  }
+
+  async function openExistingCanva() {
+    if (!project) return;
+    const target = openWaitingWindow();
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      const result = await designStudioApi.getCanvaEditUrl(project.id);
+      setShowCanvaHandoff(false);
+      navigateCanvaWindow(target, result.editUrl);
+    } catch (cause) {
+      target?.close();
+      setError(cause instanceof Error ? cause.message : "Could not open the Canva design.");
+    } finally {
+      setCanvaBusy(false);
+    }
+  }
+
+  async function createCanvaCopy() {
+    if (!project) return;
+    const target = openWaitingWindow();
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      if (dirty) {
+        const savedOkay = await save();
+        if (!savedOkay) {
+          target?.close();
+          return;
+        }
+      }
+      const pdf = await exportCanvasPdf(latestCanvas.current ?? editor.doc, assets);
+      const imported = await designStudioApi.importToCanva(project.id, pdf);
+      await refreshCanvaState();
+      setShowCanvaHandoff(false);
+      navigateCanvaWindow(target, imported.editUrl);
+    } catch (cause) {
+      target?.close();
+      setError(cause instanceof Error ? cause.message : "Could not create the Canva copy.");
+    } finally {
+      setCanvaBusy(false);
+    }
+  }
+
+  function handleCanvaAction() {
+    if (!canvaState?.configured) {
+      setError("Canva Connect still needs server configuration before it can be used.");
+      return;
+    }
+    if (!canvaState.connected) {
+      void connectCanva();
+      return;
+    }
+    if (!canvaState.linked) {
+      void createCanvaCopy();
+      return;
+    }
+    if (canvaState.outdated || dirty) {
+      setShowCanvaHandoff(true);
+      return;
+    }
+    void openExistingCanva();
   }
 
   if (loading) {
@@ -256,16 +390,19 @@ export default function DesignStudioEditorPage() {
           <span className="truncate text-[11px] text-muted-foreground">
             {editor.selectedNodes.length
               ? `${editor.selectedNodes.length} layer${editor.selectedNodes.length === 1 ? "" : "s"} selected`
-              : "Tap a layer to edit it"}
+              : canvaState?.linked && (canvaState.outdated || dirty)
+                ? "Canva copy is older than this design"
+                : "Tap a layer to edit it"}
           </span>
           <Button
-            className="h-7 shrink-0 gap-1.5 px-2 text-xs"
-            onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}
+            className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+            disabled={canvaBusy || saving}
+            onClick={handleCanvaAction}
             size="sm"
-            variant="ghost"
+            variant={canvaState?.linked && !canvaState.outdated && !dirty ? "outline" : "default"}
           >
-            <ExternalLink className="h-3.5 w-3.5" />
-            Canva
+            {canvaBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+            {canvaButtonLabel(canvaState, dirty)}
           </Button>
         </div>
       </div>
@@ -292,6 +429,15 @@ export default function DesignStudioEditorPage() {
           onClose={() => setShowExport(false)}
           onExportPdf={() => void exportDesign("pdf")}
           onExportPng={() => void exportDesign("png")}
+        />
+      ) : null}
+
+      {showCanvaHandoff ? (
+        <CanvaHandoffSheet
+          busy={canvaBusy}
+          onClose={() => setShowCanvaHandoff(false)}
+          onCreateNewCopy={() => void createCanvaCopy()}
+          onOpenExisting={() => void openExistingCanva()}
         />
       ) : null}
     </div>
