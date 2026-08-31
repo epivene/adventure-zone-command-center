@@ -1,0 +1,128 @@
+name: Inspect blank profile database blockers
+
+on:
+  push:
+    branches:
+      - maintenance/final-blank-profile-cleanup
+    paths:
+      - ".github/workflows/inspect-blank-profile-database.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Inspect exact profile clusters when protected DB access is configured
+        env:
+          RENDER_DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+        run: |
+          if [ -z "${RENDER_DATABASE_URL:-}" ]; then
+            printf '%s\n' '{"databaseAccess":false}' > blank-profile-database-inspection.json
+            exit 0
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+          const pg = require('pg');
+          const raw = process.env.RENDER_DATABASE_URL;
+          const url = new URL(raw);
+          if (!url.searchParams.has('sslmode')) url.searchParams.set('sslmode', 'require');
+          const client = new pg.Client({ connectionString: url.toString() });
+
+          const profileIds = [
+            '08e8e9b8-618a-4129-ab14-640345c1abf0',
+            '0bfee77c-e42c-417f-9d5e-7df54d57c38b',
+          ];
+
+          const quote = (value) => `"${String(value).replaceAll('"', '""')}"`;
+
+          (async () => {
+            await client.connect();
+            try {
+              const metadata = await client.query(`
+                SELECT DISTINCT
+                  namespace.nspname AS "schemaName",
+                  relation.relname AS "tableName",
+                  source_attribute.attname AS "columnName"
+                FROM pg_constraint constraint_record
+                INNER JOIN pg_class relation ON relation.oid = constraint_record.conrelid
+                INNER JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+                INNER JOIN LATERAL unnest(constraint_record.conkey) WITH ORDINALITY source_key(attnum, position) ON true
+                INNER JOIN LATERAL unnest(constraint_record.confkey) WITH ORDINALITY target_key(attnum, position)
+                  ON target_key.position = source_key.position
+                INNER JOIN pg_attribute source_attribute
+                  ON source_attribute.attrelid = constraint_record.conrelid
+                 AND source_attribute.attnum = source_key.attnum
+                INNER JOIN pg_attribute target_attribute
+                  ON target_attribute.attrelid = constraint_record.confrelid
+                 AND target_attribute.attnum = target_key.attnum
+                WHERE constraint_record.contype = 'f'
+                  AND constraint_record.confrelid = 'organizations'::regclass
+                  AND target_attribute.attname = 'id'
+                ORDER BY namespace.nspname, relation.relname, source_attribute.attname
+              `);
+
+              const profiles = [];
+              for (const profileId of profileIds) {
+                const profile = await client.query(`
+                  SELECT id::text, name, city, region, place_type AS "placeType",
+                         consolidated_into_id::text AS "consolidatedIntoId",
+                         parent_organization_id::text AS "parentOrganizationId"
+                  FROM organizations
+                  WHERE id = $1::uuid
+                `, [profileId]);
+                const children = await client.query(`
+                  SELECT id::text, name, city, region, place_type AS "placeType",
+                         consolidated_into_id::text AS "consolidatedIntoId",
+                         parent_organization_id::text AS "parentOrganizationId"
+                  FROM organizations
+                  WHERE consolidated_into_id = $1::uuid
+                     OR parent_organization_id = $1::uuid
+                  ORDER BY name, id
+                `, [profileId]);
+                const references = [];
+                for (const reference of metadata.rows) {
+                  const table = `${quote(reference.schemaName)}.${quote(reference.tableName)}`;
+                  const column = quote(reference.columnName);
+                  const countResult = await client.query(
+                    `SELECT count(*)::int AS count FROM ${table} WHERE ${column} = $1::uuid`,
+                    [profileId],
+                  );
+                  const count = Number(countResult.rows[0]?.count ?? 0);
+                  if (count > 0) references.push({ ...reference, count });
+                }
+                profiles.push({
+                  profile: profile.rows[0] ?? null,
+                  childOrganizations: children.rows,
+                  references,
+                });
+              }
+              fs.writeFileSync('blank-profile-database-inspection.json', JSON.stringify({
+                databaseAccess: true,
+                capturedAt: new Date().toISOString(),
+                profiles,
+              }, null, 2));
+            } finally {
+              await client.end();
+            }
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exit(1);
+          });
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-database-inspection
+          path: blank-profile-database-inspection.json
+          retention-days: 1
