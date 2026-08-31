@@ -29,14 +29,55 @@ export type CanvaDesignSummary = {
   };
 };
 
+function isTestLocalhost(url: URL) {
+  return (
+    process.env.NODE_ENV === "test" &&
+    url.protocol === "http:" &&
+    ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
+  );
+}
+
+function validateHttpsUrl(value: string, errorCode: string) {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(errorCode);
+  }
+  if (url.protocol !== "https:" && !isTestLocalhost(url)) throw new Error(errorCode);
+  if (url.username || url.password) throw new Error(errorCode);
+  return url;
+}
+
 function requireCanvaConfig() {
   const clientId = process.env.CANVA_CLIENT_ID?.trim();
   const clientSecret = process.env.CANVA_CLIENT_SECRET?.trim();
-  const redirectUri = process.env.CANVA_REDIRECT_URI?.trim();
-  if (!clientId || !clientSecret || !redirectUri) {
+  const redirectUriValue = process.env.CANVA_REDIRECT_URI?.trim();
+  const appOriginValue = process.env.CANVA_APP_ORIGIN?.trim();
+  if (!clientId || !clientSecret || !redirectUriValue || !appOriginValue) {
     throw new Error("CANVA_CONNECT_NOT_CONFIGURED");
   }
-  return { clientId, clientSecret, redirectUri };
+
+  const redirectUri = validateHttpsUrl(redirectUriValue, "CANVA_REDIRECT_URI_INVALID");
+  if (
+    redirectUri.pathname !== "/api/office/design-studio/canva/callback" ||
+    redirectUri.search ||
+    redirectUri.hash
+  ) {
+    throw new Error("CANVA_REDIRECT_URI_INVALID");
+  }
+
+  const appOrigin = validateHttpsUrl(appOriginValue, "CANVA_APP_ORIGIN_INVALID");
+  if (appOrigin.pathname !== "/" || appOrigin.search || appOrigin.hash) {
+    throw new Error("CANVA_APP_ORIGIN_INVALID");
+  }
+
+  return {
+    clientId,
+    clientSecret,
+    redirectUri: redirectUri.toString(),
+    appOrigin: appOrigin.origin,
+  };
 }
 
 function tokenEncryptionKey() {
