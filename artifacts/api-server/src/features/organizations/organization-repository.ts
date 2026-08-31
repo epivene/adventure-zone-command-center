@@ -764,7 +764,7 @@ export function buildOrganizationListOrderBy(
 export function duplicateOrganizationGroupsQuery() {
   return sql`
     SELECT
-      lower(trim(name)) AS normalized_name,
+      lower(regexp_replace(btrim(name), '\\s+', ' ', 'g')) AS normalized_name,
       min(lower(trim(coalesce(city, '')))) AS normalized_city,
       min(lower(trim(coalesce(region, '')))) AS normalized_region,
       array_agg(id ORDER BY created_at ASC) AS ids
@@ -772,7 +772,7 @@ export function duplicateOrganizationGroupsQuery() {
     WHERE consolidated_into_id IS NULL
     GROUP BY 1
     HAVING count(*) > 1
-    ORDER BY lower(trim(name))
+    ORDER BY lower(regexp_replace(btrim(name), '\\s+', ' ', 'g'))
   `;
 }
 

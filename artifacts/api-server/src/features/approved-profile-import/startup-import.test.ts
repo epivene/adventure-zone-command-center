@@ -23,6 +23,15 @@ vi.mock("../organizations/blank-profile-batch-02", () => ({
   }),
 }));
 
+vi.mock("../organizations/twin-falls-duplicate-cleanup", () => ({
+  applyTwinFallsDuplicateCleanup: vi.fn().mockResolvedValue({
+    merged: [],
+    alreadyMerged: [],
+    skipped: [],
+    note: "existing",
+  }),
+}));
+
 import { readdir, readFile } from "node:fs/promises";
 import { importApprovedProfilesAtStartup } from "./startup-import";
 
