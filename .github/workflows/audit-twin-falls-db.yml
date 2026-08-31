@@ -1,0 +1,155 @@
+name: Audit Twin Falls duplicate database references
+
+on:
+  push:
+    branches:
+      - maintenance/twin-falls-duplicate-audit
+    paths:
+      - ".github/workflows/audit-twin-falls-db.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: Inspect exact live database records without changing data
+        env:
+          RENDER_DATABASE_URL: ${{ secrets.RENDER_DATABASE_URL }}
+        run: |
+          test -n "${RENDER_DATABASE_URL}" || { echo "RENDER_DATABASE_URL is not configured"; exit 1; }
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import pg from 'pg';
+
+          const { Client } = pg;
+          const ids = [
+            'b447c83c-6348-4fab-b850-0db7a5576a83',
+            '7e746d1b-a5dd-4c54-8b5e-fce8697f5af2',
+            '0498cac2-4c90-46ab-a214-5c9dcf0775d1',
+            '8fc7bc14-ce90-4895-8ae0-8d870fb77459',
+            'aab7b545-d065-441b-98c0-bef04f78f034',
+          ];
+          const client = new Client({
+            connectionString: process.env.RENDER_DATABASE_URL,
+            ssl: { rejectUnauthorized: false },
+          });
+          await client.connect();
+          try {
+            const queries = {
+              organizations: `
+                select id::text, name, place_type as "placeType", phone,
+                       address_1 as "address1", address_2 as "address2", city, region,
+                       postal_code as "postalCode", website,
+                       (profile_image_data_url is not null) as "hasProfileImage",
+                       coalesce(length(profile_image_data_url), 0) as "profileImageLength",
+                       created_at as "createdAt", updated_at as "updatedAt",
+                       last_worked_at as "lastWorkedAt",
+                       parent_organization_id::text as "parentOrganizationId",
+                       consolidated_into_id::text as "consolidatedIntoId"
+                from organizations where id = any($1::uuid[]) order by name, id`,
+              actExternalLinks: `
+                select entity_id::text as "entityId", act_record_id as "actRecordId",
+                       source_entity_type as "sourceEntityType", is_primary as "isPrimary",
+                       sync_mode as "syncMode", created_at as "createdAt"
+                from act_external_links
+                where entity_type = 'organization' and entity_id = any($1::uuid[])
+                order by entity_id, act_record_id`,
+              organizationContacts: `
+                select oc.organization_id::text as "organizationId", oc.id::text as "relationshipId",
+                       oc.contact_id::text as "contactId", oc.role, oc.is_primary as "isPrimary",
+                       oc.active, oc.source, c.first_name as "firstName", c.last_name as "lastName",
+                       c.email, c.phone, c.normalized_phone as "normalizedPhone",
+                       c.act_record_id as "contactActRecordId", c.organization_id::text as "contactOrganizationId",
+                       c.created_at as "createdAt", c.updated_at as "updatedAt"
+                from organization_contacts oc
+                join contacts c on c.id = oc.contact_id
+                where oc.organization_id = any($1::uuid[])
+                order by oc.organization_id, oc.is_primary desc, c.email nulls last, c.id`,
+              bookings: `
+                select id::text, organization_id::text as "organizationId", name,
+                       primary_contact_id::text as "primaryContactId", starts_at as "startsAt",
+                       ends_at as "endsAt", status, probability, act_record_id as "actRecordId",
+                       created_at as "createdAt", updated_at as "updatedAt"
+                from bookings where organization_id = any($1::uuid[])
+                order by organization_id, created_at, id`,
+              followUps: `
+                select f.id::text, f.organization_id::text as "organizationId",
+                       f.contact_id::text as "contactId", f.booking_id::text as "bookingId",
+                       f.kind, f.due_at as "dueAt", f.completed_at as "completedAt",
+                       f.created_at as "createdAt", f.updated_at as "updatedAt"
+                from follow_ups f
+                where f.organization_id = any($1::uuid[])
+                   or f.contact_id in (
+                     select contact_id from organization_contacts where organization_id = any($1::uuid[])
+                   )
+                   or f.booking_id in (
+                     select id from bookings where organization_id = any($1::uuid[])
+                   )
+                order by f.created_at, f.id`,
+              activities: `
+                select a.id::text, a.organization_id::text as "organizationId",
+                       a.contact_id::text as "contactId", a.booking_id::text as "bookingId",
+                       a.kind, a.subject, left(a.body, 500) as body,
+                       a.occurred_at as "occurredAt", a.created_at as "createdAt",
+                       a.source_record_id as "sourceRecordId"
+                from activities a
+                where a.organization_id = any($1::uuid[])
+                   or a.id in (
+                     select activity_id from activity_associations where organization_id = any($1::uuid[])
+                   )
+                order by a.occurred_at, a.id`,
+              activityAssociations: `
+                select activity_id::text as "activityId", organization_id::text as "organizationId",
+                       contact_id::text as "contactId", booking_id::text as "bookingId"
+                from activity_associations
+                where organization_id = any($1::uuid[])
+                order by organization_id, activity_id`,
+              locations: `
+                select id::text, organization_id::text as "organizationId", label, venue_name as "venueName",
+                       city, region, website, phone, consolidation_source_org_id::text as "consolidationSourceOrgId"
+                from organization_locations where organization_id = any($1::uuid[])
+                order by organization_id, id`,
+              familyMemberships: `
+                select event_family_id::text as "eventFamilyId", organization_id::text as "organizationId"
+                from event_family_members where organization_id = any($1::uuid[])
+                order by organization_id, event_family_id`,
+              contactConsolidations: `
+                select source_contact_id::text as "sourceContactId", canonical_contact_id::text as "canonicalContactId"
+                from contact_consolidations
+                where source_contact_id in (
+                  select contact_id from organization_contacts where organization_id = any($1::uuid[])
+                ) or canonical_contact_id in (
+                  select contact_id from organization_contacts where organization_id = any($1::uuid[])
+                )
+                order by source_contact_id`,
+            };
+            const output = { generatedAt: new Date().toISOString(), ids };
+            for (const [key, text] of Object.entries(queries)) {
+              const result = await client.query(text, [ids]);
+              output[key] = result.rows;
+            }
+            fs.writeFileSync('twin-falls-db-audit.json', JSON.stringify(output, null, 2));
+            console.log(`Captured ${output.organizations.length} exact organization rows.`);
+          } finally {
+            await client.end();
+          }
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-db-audit
+          path: twin-falls-db-audit.json
+          retention-days: 2
