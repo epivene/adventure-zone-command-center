@@ -48,10 +48,10 @@ jobs:
               "${BASE_URL}/api/assistant-import/profile-history/${FOUND}" > "results/${SLUG}-profile.json"
 
             jq -e --arg email "${EMAIL}" --arg followup "${FOLLOWUP}" --arg due "${DUE}" --arg marker "${DESCRIPTION_MARKER}" '
-              (.place.description | contains($marker)) and
               ([.contacts[] | select((.email // "" | ascii_downcase) == ($email | ascii_downcase))] | length == 1) and
+              ([.notes[] | select(.subject == "2027 prospect research — reviewed August 31, 2026" and (.body | contains($marker)))] | length >= 1) and
               ([.notes[] | select(.subject == "EMAIL DRAFT — review only; do not send" and (.body | contains("The Adventure Zone")))] | length >= 1) and
-              ([.followUps[] | select(.label == $followup and .dueAt == $due)] | length == 1)
+              ([.followUps[] | select(.kind == $followup and .dueAt == $due)] | length == 1)
             ' "results/${SLUG}-profile.json"
           done <<'PROFILES'
           ramsey|Ramsey County Fair|Devils Lake|ND|hanson_connie@outlook.com|Review 2027 Ramsey County Fair outreach|2027-03-17T15:00:00.000Z|Ramsey County 4-H Achievement Days
