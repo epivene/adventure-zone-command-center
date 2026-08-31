@@ -1,0 +1,75 @@
+name: Apply live Twin Falls application note
+
+on:
+  push:
+    branches:
+      - verify/twin-falls-duplicate-cleanup-live
+    paths:
+      - ".github/workflows/apply-live-twin-falls-application-note.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apply-note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add the reviewed note and verify it
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          PROFILE_ID="b447c83c-6348-4fab-b850-0db7a5576a83"
+          SUBJECT="Online application required"
+          BODY="Desiree confirmed that The Adventure Zone needs to fill out an online application for the Twin Falls County Fair. Keep this requirement with the surviving fair profile; no application link, deadline, or submission confirmation is recorded yet."
+
+          STATUS=$(curl --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data "$(node -e 'console.log(JSON.stringify({organizationId:process.argv[1],subject:process.argv[2],body:process.argv[3]}))' "${PROFILE_ID}" "${SUBJECT}" "${BODY}")" \
+            --output note-response.json \
+            --write-out "%{http_code}" \
+            "${BASE_URL}/profile-notes")
+
+          test "${STATUS}" = "200" || {
+            echo "Profile-note request returned HTTP ${STATUS}."
+            cat note-response.json
+            exit 1
+          }
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-history/${PROFILE_ID}" \
+            > profile-history.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const subject = 'Online application required';
+          const body = 'Desiree confirmed that The Adventure Zone needs to fill out an online application for the Twin Falls County Fair. Keep this requirement with the surviving fair profile; no application link, deadline, or submission confirmation is recorded yet.';
+          const history = JSON.parse(fs.readFileSync('profile-history.json', 'utf8'));
+          const matches = (history.notes || []).filter((note) =>
+            note.subject === subject && note.body === body
+          );
+          if (matches.length !== 1) {
+            throw new Error(`Expected exactly one reviewed application note, found ${matches.length}.`);
+          }
+          fs.writeFileSync('twin-falls-application-note-receipt.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            profileId: history.place.id,
+            profileName: history.place.name,
+            subject,
+            exactNoteCount: matches.length,
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-application-note-receipt
+          path: twin-falls-application-note-receipt.json
+          retention-days: 2
