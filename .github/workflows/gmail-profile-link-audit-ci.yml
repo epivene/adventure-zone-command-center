@@ -1,0 +1,66 @@
+name: Gmail profile-link audit CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/gmail-profile-link-audit-ci.yml"
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-final
+      - main
+    paths:
+      - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/gmail-profile-link-audit-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Gmail client and profile-link tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/google-api-client.test.ts
+          src/features/google-workspace/google-api-client-metadata.test.ts
+          src/features/google-workspace/google-api-client-query.test.ts
+          src/features/google-workspace/google-sent-profile-link-window-query.test.ts
+          src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
+          src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts
+          src/routes/assistant-gmail-profile-links.test.ts
+          src/routes/google-workspace-profile-email.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
