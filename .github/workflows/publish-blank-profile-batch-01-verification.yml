@@ -1,0 +1,86 @@
+name: Publish blank profile batch 01 verification
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/publish-blank-profile-batch-01-verification.yml"
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Wait for the end-to-end verification run
+        id: verified
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 200); do
+            ROW=$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow "Complete blank profiles batch 01" \
+              --branch ops/merge-blank-profiles-batch-01 \
+              --limit 1 \
+              --json databaseId,status,conclusion \
+              --jq '.[0] // empty')
+
+            if [ -n "$ROW" ]; then
+              RUN_ID=$(printf '%s' "$ROW" | jq -r '.databaseId')
+              STATUS=$(printf '%s' "$ROW" | jq -r '.status')
+              CONCLUSION=$(printf '%s' "$ROW" | jq -r '.conclusion // ""')
+              echo "Verification run $RUN_ID: $STATUS $CONCLUSION"
+
+              if [ "$STATUS" = "completed" ]; then
+                if [ "$CONCLUSION" != "success" ]; then
+                  echo "End-to-end batch verification failed."
+                  exit 1
+                fi
+                echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            sleep 10
+          done
+          echo "End-to-end verification did not complete in the allowed window."
+          exit 1
+
+      - name: Download the sanitized verification receipt
+        env:
+          RUN_ID: ${{ steps.verified.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p downloaded
+          gh run download "$RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name blank-profile-batch-01-live-verification \
+            --dir downloaded
+          test -f downloaded/blank-profile-batch-01-live-verification.json
+
+      - name: Publish the verified receipt on the operations branch
+        uses: actions/checkout@v4
+        with:
+          ref: ops/merge-blank-profiles-batch-01
+          fetch-depth: 0
+
+      - name: Commit the verification receipt
+        run: |
+          set -euo pipefail
+          mkdir -p docs/operations
+          cp downloaded/blank-profile-batch-01-live-verification.json \
+            docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json
+          if git diff --cached --quiet; then
+            echo "Verification receipt is already published."
+            exit 0
+          fi
+          git commit -m "docs: publish live verification for blank profile batch 01"
+          git push origin HEAD:ops/merge-blank-profiles-batch-01
