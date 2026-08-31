@@ -58,6 +58,11 @@ function requireCanvaConfig() {
     throw new Error("CANVA_CONNECT_NOT_CONFIGURED");
   }
 
+  // Treat the encryption key as part of the connection configuration so the
+  // status endpoint never advertises Canva as ready when tokens cannot be
+  // stored or refreshed safely.
+  parseCanvaEncryptionKey(process.env.CANVA_TOKEN_ENCRYPTION_KEY);
+
   const redirectUri = validateHttpsUrl(redirectUriValue, "CANVA_REDIRECT_URI_INVALID");
   if (
     redirectUri.pathname !== "/api/office/design-studio/canva/callback" ||
