@@ -211,4 +211,43 @@ describe("approved profile startup import", () => {
     expect(result).toMatchObject({ imported: 1, skipped: 1 });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
+
+  it("does not create a new profile when a reviewed update requires an existing profile", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({
+      ...basePayload(),
+      matchExisting: true,
+      requireExisting: true,
+      event: {
+        id: null,
+        name: "Ramsey County Fair",
+        city: "Devils Lake",
+        region: "ND",
+      },
+      profile: {},
+      notes: [],
+      followUps: [
+        {
+          label: "Review 2027 Ramsey County Fair outreach",
+          reason: "Confirm the 2027 dates and application timing before sending.",
+          dueAt: "2027-03-17T15:00:00.000Z",
+        },
+      ],
+    }) as never);
+
+    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
+      ok: true,
+      results: [],
+    }));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toMatchObject({ imported: 0, skipped: 1 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://127.0.0.1:5000/api/assistant-import/profile-search?q=Ramsey%20County%20Fair&limit=20",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
 });
