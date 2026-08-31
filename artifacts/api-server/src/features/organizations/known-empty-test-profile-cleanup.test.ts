@@ -5,9 +5,11 @@ import {
   KNOWN_EMPTY_TEST_PROFILES,
   cleanupKnownEmptyTestProfiles,
   enrichKnownBlankProfiles,
+  isKnownBlankProfileEnrichmentCompatible,
   type KnownBlankProfileEnrichment,
   type KnownBlankProfileEnrichmentApplyOutcome,
   type KnownBlankProfileEnrichmentRepository,
+  type KnownBlankProfileSnapshot,
   type KnownEmptyTestProfileInspection,
   type KnownEmptyTestProfileRepository,
 } from "./known-empty-test-profile-cleanup";
@@ -58,6 +60,7 @@ function cleanInspection(
       name: candidate.name,
       city: candidate.city,
       region: candidate.region,
+      place_type: candidate.placeType,
       phone: null,
       normalized_phone: null,
       address_1: null,
@@ -93,7 +96,7 @@ describe("cleanupKnownEmptyTestProfiles", () => {
     })));
   });
 
-  it("refuses candidates whose identity, location, source, references, or profile content changed", async () => {
+  it("refuses candidates whose identity, location, type, source, references, or profile content changed", async () => {
     const [nameChanged, sourceLinked, referenced, enriched] = KNOWN_EMPTY_TEST_PROFILES;
     const inspections = new Map<string, KnownEmptyTestProfileInspection | null>(
       KNOWN_EMPTY_TEST_PROFILES.map((candidate) => [candidate.id, cleanInspection(candidate)]),
@@ -101,8 +104,7 @@ describe("cleanupKnownEmptyTestProfiles", () => {
 
     inspections.set(nameChanged.id, {
       ...cleanInspection(nameChanged),
-      name: "Real Fair",
-      profile: { ...cleanInspection(nameChanged).profile, name: "Real Fair" },
+      profile: { ...cleanInspection(nameChanged).profile, place_type: "festival_event" },
     });
     inspections.set(sourceLinked.id, {
       ...cleanInspection(sourceLinked),
@@ -184,6 +186,96 @@ describe("enrichKnownBlankProfiles", () => {
         phone: "775-738-9251",
       }),
     ]));
+  });
+
+  it("accepts the exact legacy values verified in the live profiles", () => {
+    const [coloradoEvents, idahoFishAndGame, teMoak] = KNOWN_BLANK_PROFILE_ENRICHMENTS;
+    const liveSnapshots: KnownBlankProfileSnapshot[] = [
+      {
+        id: coloradoEvents.id,
+        name: "Colorado events",
+        city: null,
+        region: null,
+        placeType: "other",
+        phone: "720-272-7467",
+        normalizedPhone: "7202727467",
+        website: "https://www.coloradoevents.org/",
+        address1: null,
+        postalCode: null,
+        description: null,
+        consolidatedIntoId: null,
+      },
+      {
+        id: idahoFishAndGame.id,
+        name: "Idaho Fish and Game",
+        city: null,
+        region: null,
+        placeType: "other",
+        phone: null,
+        normalizedPhone: null,
+        website: "https://idfg.idaho.gov/offices",
+        address1: null,
+        postalCode: null,
+        description: null,
+        consolidatedIntoId: null,
+      },
+      {
+        id: teMoak.id,
+        name: "Te Moak Tribe of Western Shoshone",
+        city: null,
+        region: null,
+        placeType: "other",
+        phone: null,
+        normalizedPhone: null,
+        website: null,
+        address1: null,
+        postalCode: null,
+        description: null,
+        consolidatedIntoId: null,
+      },
+    ];
+
+    expect(liveSnapshots.map((snapshot, index) =>
+      isKnownBlankProfileEnrichmentCompatible(
+        KNOWN_BLANK_PROFILE_ENRICHMENTS[index]!,
+        snapshot,
+      ),
+    )).toEqual([true, true, true]);
+  });
+
+  it("rejects a profile whose existing type or website is outside the verified legacy values", () => {
+    const [coloradoEvents, idahoFishAndGame] = KNOWN_BLANK_PROFILE_ENRICHMENTS;
+    const conflictingType: KnownBlankProfileSnapshot = {
+      id: coloradoEvents.id,
+      name: "Colorado events",
+      city: null,
+      region: null,
+      placeType: "fair",
+      phone: "720-272-7467",
+      normalizedPhone: "7202727467",
+      website: "https://www.coloradoevents.org/",
+      address1: null,
+      postalCode: null,
+      description: null,
+      consolidatedIntoId: null,
+    };
+    const conflictingWebsite: KnownBlankProfileSnapshot = {
+      id: idahoFishAndGame.id,
+      name: "Idaho Fish and Game",
+      city: null,
+      region: null,
+      placeType: "other",
+      phone: null,
+      normalizedPhone: null,
+      website: "https://unrelated.example/",
+      address1: null,
+      postalCode: null,
+      description: null,
+      consolidatedIntoId: null,
+    };
+
+    expect(isKnownBlankProfileEnrichmentCompatible(coloradoEvents, conflictingType)).toBe(false);
+    expect(isKnownBlankProfileEnrichmentCompatible(idahoFishAndGame, conflictingWebsite)).toBe(false);
   });
 
   it("separates repeat-safe records from profiles that no longer match the verified identity", async () => {
