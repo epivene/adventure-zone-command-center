@@ -482,7 +482,7 @@ export async function importApprovedProfilesAtStartup(
         token,
         method: "POST",
         path: "today-followups",
-        payload: { organizationId: profileId, ...followUp },
+        payload: { organizationId: profileId, ...followUp, preserveExisting: true },
         failureLabel: `Approved profile follow-up import failed for ${file}`,
       });
     }
