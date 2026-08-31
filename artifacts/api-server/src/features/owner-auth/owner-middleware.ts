@@ -13,6 +13,14 @@ export interface OwnerSessionRepository {
   getActiveSession(ownerId: string): Promise<OwnerAccountSessionRecord | null>;
 }
 
+declare global {
+  namespace Express {
+    interface Request {
+      ownerAccount?: OwnerRequestContext;
+    }
+  }
+}
+
 type OwnerAuthenticatedRequest = Request & {
   userId: string;
   ownerAccount: OwnerRequestContext;
