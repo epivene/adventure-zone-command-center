@@ -1,0 +1,56 @@
+name: Blank Profile Cleanup CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
+      - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "imports/approved-profiles/*organization-profile-2026.json"
+      - "docs/operations/blank-profile-research-plan-2026-08-30.md"
+      - ".github/workflows/blank-profile-cleanup-ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
+      - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
+      - "artifacts/api-server/src/index.ts"
+      - "imports/approved-profiles/*organization-profile-2026.json"
+      - "docs/operations/blank-profile-research-plan-2026-08-30.md"
+      - ".github/workflows/blank-profile-cleanup-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Cleanup behavior tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/organizations/known-empty-test-profile-cleanup.test.ts
+      - name: API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Approved profile payloads parse
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => name.endsWith('organization-profile-2026.json'));
+          for (const file of files) {
+            JSON.parse(fs.readFileSync(`imports/approved-profiles/${file}`, 'utf8'));
+          }
+          console.log(`Validated ${files.length} organization profile payloads.`);
+          NODE

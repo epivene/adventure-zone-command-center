@@ -1,0 +1,58 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": ["Idaho Fish and Game", "IDFG"],
+  "event": {
+    "id": "9c6b750d-828a-4b97-b6aa-0a19c22f18cf",
+    "name": "Idaho Department of Fish and Game",
+    "city": "Boise",
+    "region": "ID"
+  },
+  "profile": {
+    "placeType": "other",
+    "phone": "208-334-3700",
+    "website": "https://idfg.idaho.gov/",
+    "address1": "600 S. Walnut Street",
+    "postalCode": "83712",
+    "description": "Statewide wildlife agency umbrella profile. Identify and attach a specific public, family, education, or outdoor event—and verify its organizer—before any Adventure Zone outreach."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Idaho Fish and Game Headquarters",
+      "phone": "208-334-3700",
+      "email": "",
+      "role": "General headquarters / routing contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "possible",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "research",
+    "nextActionDueAt": "2026-09-21",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Verified agency identity and headquarters - 2026-08-30",
+      "body": "The current official organization is the Idaho Department of Fish and Game. Headquarters is at 600 S. Walnut Street, Boise, ID 83712, phone 208-334-3700, with regional offices serving different parts of the state. This is an umbrella agency profile, not a verified event lead."
+    },
+    {
+      "subject": "Relationship and outreach status - 2026-08-30",
+      "body": "No Adventure Zone Gmail history was found for Idaho Fish and Game, and no verified general event-booking email was established. Do not send a generic cold email to the agency. First identify a specific current family/public event, confirm the regional or program organizer, and attach that event to this agency profile."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Identify a specific Idaho Fish and Game public event",
+      "reason": "Research current 2027 expos, open houses, outdoor days, education programs, or family events. Verify the event-level organizer and contact before creating an appearance or drafting outreach.",
+      "dueAt": "2026-09-21T16:00:00.000Z"
+    }
+  ]
+}

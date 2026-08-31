@@ -1,0 +1,58 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": ["Colorado events"],
+  "event": {
+    "id": "7fff8f6c-5e88-46ad-9f00-d1a853040a42",
+    "name": "Colorado Events",
+    "city": "Boulder",
+    "region": "CO"
+  },
+  "profile": {
+    "placeType": "company",
+    "phone": "720-272-7467",
+    "website": "https://www.coloradoevents.org/",
+    "address1": "2525 Arapahoe Avenue, Suite E4-720",
+    "postalCode": "80302",
+    "description": "Colorado event-production organization. Adventure Zone has an existing Gmail relationship with the producer; individual festivals should be tracked as event appearances or child event records rather than duplicate producer profiles."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Colorado Events Team",
+      "phone": "720-272-7467",
+      "email": "coloradoevents@gmail.com",
+      "role": "Event producer / entertainment partnership contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "possible",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "review",
+    "nextActionDueAt": "2026-09-03",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Verified current producer identity and contact - 2026-08-30",
+      "body": "Official Colorado Events information identifies the organization at 2525 Arapahoe Avenue, Suite E4-720, Boulder, CO 80302, with 720-272-7467 and coloradoevents@gmail.com. Treat this as the producer umbrella profile and attach its individual festivals as dated appearances or child event records rather than creating duplicate producer profiles."
+    },
+    {
+      "subject": "Newest Adventure Zone Gmail relationship status - 2026-08-30",
+      "body": "Adventure Zone has four sent messages to coloradoevents@gmail.com in 2026. The newest was sent Aug. 27 as one combined message covering ARTumn Festival in Crested Butte and Handmade in Colorado in Glenwood Springs. No reply was found through Aug. 30. Do not split those opportunities into separate duplicate emails; check the existing combined thread before any follow-up."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Check Colorado Events combined outreach",
+      "reason": "Check the existing Aug. 27 combined ARTumn/Handmade thread for a reply. If there is still no reply, decide whether one brief follow-up is appropriate; do not send separate event emails.",
+      "dueAt": "2026-09-03T16:00:00.000Z"
+    }
+  ]
+}
