@@ -1,0 +1,42 @@
+name: Package profile email UI context
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/package-profile-email-ui-context.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect matching source files
+        run: |
+          set -euo pipefail
+          mkdir -p context/files
+          rg -l -i \
+            "notes[[:space:]]*&[[:space:]]*call outcomes|googleWorkspaceValidationMappings|google_workspace_validation_mappings|listApprovedForOrganization|profile.*gmail|gmail.*profile|email activity|email history" \
+            artifacts lib migrations \
+            -g '*.ts' -g '*.tsx' -g '*.sql' -g '*.js' -g '*.jsx' \
+            > context/matched-files.txt || true
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            mkdir -p "context/files/$(dirname "$file")"
+            cp "$file" "context/files/$file"
+          done < context/matched-files.txt
+          rg -n -i \
+            "notes[[:space:]]*&[[:space:]]*call outcomes|googleWorkspaceValidationMappings|google_workspace_validation_mappings|listApprovedForOrganization|profile.*gmail|gmail.*profile|email activity|email history" \
+            artifacts lib migrations \
+            -g '*.ts' -g '*.tsx' -g '*.sql' -g '*.js' -g '*.jsx' \
+            > context/matches.txt || true
+          git log --oneline --all --grep='gmail\|email profile\|profile link' -i --max-count=80 > context/relevant-commits.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profile-email-ui-context
+          path: context
+          retention-days: 2
