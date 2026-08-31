@@ -5,6 +5,7 @@ on:
     paths:
       - "artifacts/api-server/src/features/owner-auth/**"
       - "artifacts/api-server/src/lib/auth.ts"
+      - "artifacts/api-server/src/lib/auth.owner-middleware.test.ts"
       - "artifacts/api-server/src/routes/auth.ts"
       - "artifacts/api-server/src/routes/auth.test.ts"
       - "artifacts/api-server/src/routes/index.ts"
@@ -47,6 +48,7 @@ jobs:
           src/features/owner-auth/owner-token.test.ts
           src/features/owner-auth/owner-middleware.test.ts
           src/features/owner-auth/owner-account-repository.test.ts
+          src/lib/auth.owner-middleware.test.ts
           src/routes/auth.test.ts
           src/routes/office-security-regression.test.ts
           src/db/required-schema-startup.test.ts
