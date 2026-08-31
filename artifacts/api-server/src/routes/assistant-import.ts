@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
+import { importedTravelLegPatch } from "@/features/approved-profile-import/imported-travel-leg";
 import {
   bookingContacts,
   bookings,
@@ -273,7 +274,7 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
               startsAt,
               endsAt,
               status: importedBooking.status ?? "new_lead",
-              travelLegId: importedBooking.travelLegId ?? null,
+              ...importedTravelLegPatch(importedBooking.travelLegId),
               updatedAt: now,
             } as any)
             .where(eq(bookings.id, bookingId));
