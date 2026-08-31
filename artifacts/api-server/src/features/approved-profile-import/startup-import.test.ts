@@ -118,6 +118,7 @@ describe("approved profile startup import", () => {
           label: "2027 booking follow-up",
           reason: "Check 2027 dates and begin renewal outreach.",
           dueAt: "2026-11-02T15:00:00.000Z",
+          preserveExisting: true,
         }),
       }),
     );
@@ -251,6 +252,26 @@ describe("approved profile startup import", () => {
       "http://127.0.0.1:5000/api/assistant-import/profile-search?q=Ramsey%20County%20Fair&limit=20",
       expect.objectContaining({ method: "GET" }),
     );
+  });
+
+  it("rejects requireExisting imports that do not opt into matching", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({
+      ...basePayload(),
+      requireExisting: true,
+      matchExisting: false,
+      profile: {},
+      notes: [],
+      followUps: [],
+    }) as never);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 201));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toMatchObject({ imported: 0, skipped: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
 });
