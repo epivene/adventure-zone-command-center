@@ -1,0 +1,68 @@
+name: Lead intake startup timeout final CI
+
+on:
+  push:
+    branches:
+      - fix/lead-intake-startup-timeout-final
+    paths:
+      - ".github/workflows/lead-intake-startup-timeout-final-ci.yml"
+      - ".github/scripts/apply_lead_intake_ready_fast_path.py"
+
+permissions:
+  contents: write
+
+jobs:
+  red-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/lead-intake-startup-timeout-final
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: RED - prove current main behavior violates the ready fast path
+        id: red
+        continue-on-error: true
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-ready-fast-path.test.ts
+
+      - name: Assert RED failed for the intended regression
+        run: |
+          if [ "${{ steps.red.outcome }}" != "failure" ]; then
+            echo "Expected the current slow startup behavior to fail the fast-path regression test."
+            exit 1
+          fi
+
+      - name: Apply minimal production repair
+        run: python .github/scripts/apply_lead_intake_ready_fast_path.py
+
+      - name: GREEN - ready fast path regression
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-ready-fast-path.test.ts
+
+      - name: Related startup schema tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/lead-intake-startup-migration.test.ts src/db/lead-intake-required-startup.test.ts src/db/required-schema-startup.test.ts
+
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+
+      - name: Commit verified production repair
+        run: |
+          rm -f .github/scripts/apply_lead_intake_ready_fast_path.py
+          rm -f .github/workflows/lead-intake-startup-timeout-final-ci.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: skip lead intake migrations when schema is ready"
+          git push origin HEAD:fix/lead-intake-startup-timeout-final
