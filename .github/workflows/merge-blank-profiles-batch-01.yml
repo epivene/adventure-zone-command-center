@@ -1,0 +1,100 @@
+name: Merge blank profiles batch 01
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/merge-blank-profiles-batch-01.yml"
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_BRANCH: research/blank-profiles-batch-01
+    steps:
+      - name: Find or create the batch pull request
+        id: pr
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$HEAD_BRANCH" \
+              --base main \
+              --title "Research and resolve blank profiles — batch 01" \
+              --body "Completes the first 25-profile missing/malformed-location research batch. Applies reviewed existing-profile updates, two guarded merges, 17 verified contacts, five justified follow-ups, territory holds, and documented no-follow-up decisions. No email is sent or drafted.")
+            PR_NUMBER=${PR_URL##*/}
+          fi
+
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "Pull request: $PR_NUMBER"
+
+      - name: Wait for the two focused verification workflows
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 80); do
+            CHECKS=$(gh pr checks "$PR_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json name,workflow,state,bucket 2>/dev/null || printf '[]')
+
+            APPROVED_STATE=$(printf '%s' "$CHECKS" | jq -r '[.[] | select(.workflow == "Approved Profile Import CI" and .name == "approved-profile-import")][0].bucket // "pending"')
+            CLEANUP_STATE=$(printf '%s' "$CHECKS" | jq -r '[.[] | select(.workflow == "Blank Profile Cleanup CI" and .name == "verify")][0].bucket // "pending"')
+
+            echo "Approved Profile Import CI: $APPROVED_STATE; Blank Profile Cleanup CI: $CLEANUP_STATE"
+
+            if [ "$APPROVED_STATE" = "fail" ] || [ "$APPROVED_STATE" = "cancel" ] || \
+               [ "$CLEANUP_STATE" = "fail" ] || [ "$CLEANUP_STATE" = "cancel" ]; then
+              printf '%s\n' "$CHECKS"
+              exit 1
+            fi
+
+            if [ "$APPROVED_STATE" = "pass" ] && [ "$CLEANUP_STATE" = "pass" ]; then
+              exit 0
+            fi
+            sleep 10
+          done
+
+          echo "Focused checks did not finish in the allowed window."
+          exit 1
+
+      - name: Merge the reviewed batch
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --squash \
+            --subject "Research and resolve blank profiles — batch 01" \
+            --body "Apply the reviewed first 25-profile research batch, including two guarded duplicate merges, verified profile data, 17 contacts, five justified follow-ups, territory holds, and explicit no-follow-up decisions."
+
+          gh pr view "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,url,state,mergedAt,mergeCommit \
+            > batch-01-merge-result.json
+
+      - name: Upload merge result
+        uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-merge-result
+          path: batch-01-merge-result.json
+          retention-days: 2
