@@ -237,13 +237,33 @@ async function resolveExistingProfile(input: {
   payload: ApprovedProfilePayload;
   file: string;
 }) {
+  const requireExisting = input.payload.requireExisting === true;
+  if (requireExisting && input.payload.matchExisting !== true) {
+    throw new ApprovedProfileMatchError(
+      `Approved profile import ${input.file} requires matchExisting to target an existing profile.`,
+    );
+  }
   if (input.payload.matchExisting !== true) return input.payload;
-  if (!input.payload.event || typeof input.payload.event !== "object") return input.payload;
+  if (!input.payload.event || typeof input.payload.event !== "object") {
+    if (requireExisting) {
+      throw new ApprovedProfileMatchError(
+        `Approved profile import ${input.file} requires valid event details for matching.`,
+      );
+    }
+    return input.payload;
+  }
 
   const event = input.payload.event as Record<string, unknown>;
   if (typeof event.id === "string" && event.id.trim()) return input.payload;
   const name = typeof event.name === "string" ? event.name.trim() : "";
-  if (!name) return input.payload;
+  if (!name) {
+    if (requireExisting) {
+      throw new ApprovedProfileMatchError(
+        `Approved profile import ${input.file} requires an event name for matching.`,
+      );
+    }
+    return input.payload;
+  }
 
   const aliases = readAliases(input.payload, input.file);
   const names = [...new Set([name, ...aliases])];
@@ -340,7 +360,10 @@ export async function importApprovedProfilesAtStartup(
     } catch (error) {
       if (error instanceof ApprovedProfileMatchError) {
         skipped += 1;
-        logger.warn({ file }, "Approved profile import skipped because profile match was ambiguous");
+        logger.warn(
+          { file, reason: error.message },
+          "Approved profile import skipped because profile matching did not produce one safe target",
+        );
         continue;
       }
       throw error;
@@ -397,7 +420,7 @@ export async function importApprovedProfilesAtStartup(
         token,
         method: "POST",
         path: "today-followups",
-        payload: { organizationId: profileId, ...followUp },
+        payload: { organizationId: profileId, ...followUp, preserveExisting: true },
         failureLabel: `Approved profile follow-up import failed for ${file}`,
       });
     }
