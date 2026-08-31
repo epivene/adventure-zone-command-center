@@ -22,6 +22,8 @@ import {
   AssetPickerSheet,
   type PickerAsset,
 } from "@/components/design-studio/AssetPickerSheet";
+import { LayersSheet } from "@/components/design-studio/LayersSheet";
+import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
@@ -43,6 +45,8 @@ export default function DesignStudioEditorPage() {
   const [assets, setAssets] = useState<DesignAsset[]>([]);
   const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
   const [photoPickerMode, setPhotoPickerMode] = useState<PhotoPickerMode | null>(null);
+  const [showLayers, setShowLayers] = useState(false);
+  const [showAddElements, setShowAddElements] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -208,6 +212,8 @@ export default function DesignStudioEditorPage() {
         <ContextualBottomToolbar
           editor={editor}
           onAddPhoto={() => setPhotoPickerMode("add")}
+          onOpenAdd={() => setShowAddElements(true)}
+          onOpenLayers={() => setShowLayers(true)}
           onReplacePhoto={() => setPhotoPickerMode("replace")}
         />
         <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-3 py-1.5">
@@ -234,6 +240,14 @@ export default function DesignStudioEditorPage() {
           onChoose={choosePhoto}
           onClose={() => setPhotoPickerMode(null)}
         />
+      ) : null}
+
+      {showLayers ? (
+        <LayersSheet editor={editor} onClose={() => setShowLayers(false)} />
+      ) : null}
+
+      {showAddElements ? (
+        <AddElementSheet editor={editor} onClose={() => setShowAddElements(false)} />
       ) : null}
     </div>
   );
