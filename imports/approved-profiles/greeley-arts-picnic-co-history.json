@@ -1,12 +1,77 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "event": {"id": null, "name": "Greeley Arts Picnic", "city": "Greeley", "region": "CO"},
-  "profile": {"placeType": "festival_event", "phone": "970-381-3278", "website": "https://greeleyco.gov/events/arts-picnic/", "description": "Active City of Greeley two-day arts festival with 150+ artists/crafters, food, kids activities and live entertainment. 2026 has passed; 2027 information is pending."},
-  "contacts": [{"id": null, "name": "Aaron Mitchell", "phone": "970-381-3278", "email": "Aaron.Mitchell@greeleygov.com", "role": "Special Event Manager", "primary": true}],
-  "booking": {"enabled": false, "name": "", "status": "possible", "startsAt": "", "endsAt": "", "nextActionKind": "review", "nextActionDueAt": "", "travelLegId": null},
+  "event": {
+    "id": null,
+    "name": "Greeley Arts Picnic",
+    "city": "Greeley",
+    "region": "CO"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "phone": "970-381-3278",
+    "website": "https://greeleyco.gov/events/arts-picnic/",
+    "description": "Active City of Greeley arts festival and a warm historical Adventure Zone prospect. 2026 has passed; 2027 information is pending."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Aaron Mitchell",
+      "phone": "970-381-3278",
+      "email": "Aaron.Mitchell@greeleygov.com",
+      "role": "Special Event Manager",
+      "primary": true
+    },
+    {
+      "id": null,
+      "name": "Andrea Haring",
+      "phone": "",
+      "email": "Andrea.Haring@greeleygov.com",
+      "role": "Historical festivals/special events contact; replied positively 2024-02-26",
+      "primary": false
+    },
+    {
+      "id": null,
+      "name": "Celeste McCorvey",
+      "phone": "",
+      "email": "celeste.mccorvey@greeleygov.com",
+      "role": "Historical 2023-2024 Arts Picnic contact/recipient",
+      "primary": false
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "possible",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "follow_up",
+    "nextActionDueAt": "2026-09-15T16:00:00.000Z",
+    "travelLegId": null
+  },
   "familyId": null,
   "parentOrganizationId": null,
-  "notes": [{"subject": "Active event - 2024 reply left door open for future summer events", "body": "Andrea Haring replied in February 2024 that Greeley would keep Adventure Zone's information if they had a need for inflatables at summer events. Current official information confirms Arts Picnic remains active; 2026 was a free two-day event with 150+ artists/crafters, food trucks, kids activities and performances. Current event contact is Aaron Mitchell, Special Event Manager. Continue from the prior relationship rather than treating this as a cold lead."}],
-  "followUps": [{"label": "Check 2027 Greeley Arts Picnic family-entertainment needs", "reason": "The city previously said it would keep Adventure Zone in mind for summer events and the event remains active with kids programming. Check early for 2027 before plans are set.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  "notes": [
+    {
+      "subject": "Verified Gmail history + current contact - Greeley Arts Picnic",
+      "body": "Verified Adventure Zone Gmail timeline: 12/20/2023 - Amy emailed Andrea Haring and Celeste McCorvey regarding the July 27-28, 2024 Greeley Arts Picnic and pitched Adventure Zone/Pirate's Rebellion; no reply found to the original thread. 02/26/2024 - Amy followed up/resubmitted the proposal. Andrea Haring replied the same day, thanked Amy, and said Greeley would keep Adventure Zone's contact information should they have a need for inflatables at future summer events. Adventure Zone did not reply after Andrea's answer, so future outreach may appropriately acknowledge the lapse. 07/03/2025 - Amy contacted Aaron Mitchell regarding the July 26-27, 2025 Arts Picnic and pitched Pirate's Rebellion at the then-quoted historical price of $7,000 for 1-5 days; no reply found. No Greeley Arts Picnic / Aaron / Andrea / Celeste correspondence was found for 2026. Current official City information identifies Aaron Mitchell as Special Event Manager and current Arts Picnic contact at Aaron.Mitchell@greeleygov.com and 970-381-3278. Andrea Haring and Celeste McCorvey remain historical relationship contacts, with Andrea specifically noted as the positive February 2024 responder. STATUS: possible / warm historical prospect - not declined and not cold/new. Continue the relationship rather than using a cold introduction. Confirm current Adventure Zone pricing and commercial models before sending any priced proposal; the $7,000 Pirate's Rebellion figure is historical only. First outreach path should be a short warm reconnection to Aaron; use Andrea/Celeste only as a relationship/referral path if Aaron does not engage. Live CRM application of this source-controlled update remains to be verified after runtime access is available because the startup importer may skip when its required token is absent."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Warm reconnection with Aaron Mitchell for 2027 Greeley Arts Picnic planning",
+      "reason": "Warm historical prospect. Contact Aaron first and continue from prior relationship; do not use stale pricing without reconfirming current Adventure Zone terms.",
+      "dueAt": "2026-09-15T16:00:00.000Z"
+    },
+    {
+      "label": "Greeley Arts Picnic second follow-up if Aaron has not replied",
+      "reason": "If unanswered after the September warm reconnection, follow up with Aaron. Andrea/Celeste may be used only as a referral/relationship path if Aaron does not engage.",
+      "dueAt": "2026-10-06T16:00:00.000Z"
+    },
+    {
+      "label": "Greeley Arts Picnic 2027 planning checkpoint",
+      "reason": "Meaningful 2027 planning checkpoint if no substantive response has been received. Confirm current pricing and commercial model before any priced proposal.",
+      "dueAt": "2027-01-12T16:00:00.000Z"
+    }
+  ]
 }
