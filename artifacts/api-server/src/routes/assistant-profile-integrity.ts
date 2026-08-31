@@ -2,10 +2,16 @@ import { Router, type IRouter } from "express";
 
 import { pool } from "@workspace/db";
 import { ProfileIntegrityAuditService } from "@/features/profile-integrity/profile-integrity-audit";
+import { inspectOrganizationReferenceBlockers } from "@/features/profile-integrity/organization-reference-inspector";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
 const router: IRouter = Router();
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+
+function readProfileId(value: string | string[] | undefined): string | null {
+  const profileId = Array.isArray(value) ? value[0] : value;
+  return profileId && UUID_PATTERN.test(profileId) ? profileId : null;
+}
 
 router.use(requireAssistantImportToken);
 
@@ -22,11 +28,34 @@ router.get("/profile-integrity-audit", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/profile-integrity-references/:profileId", async (req, res): Promise<void> => {
+  const profileId = readProfileId(req.params.profileId);
+  if (!profileId) {
+    res.status(400).json({ ok: false, error: "PROFILE_INTEGRITY_PROFILE_ID_INVALID" });
+    return;
+  }
+
+  try {
+    const references = await inspectOrganizationReferenceBlockers(profileId);
+    res.json({
+      ok: true,
+      mode: "read_only",
+      profileId,
+      referenceCount: references.reduce((sum, reference) => sum + reference.count, 0),
+      references,
+    });
+  } catch (error) {
+    req.log.error({ err: error, profileId }, "Failed profile reference evidence read");
+    res.status(500).json({
+      ok: false,
+      error: "PROFILE_INTEGRITY_REFERENCE_READ_FAILED",
+    });
+  }
+});
+
 router.get("/profile-integrity-calendar-links/:profileId", async (req, res): Promise<void> => {
-  const profileId = Array.isArray(req.params.profileId)
-    ? req.params.profileId[0]
-    : req.params.profileId;
-  if (!profileId || !UUID_PATTERN.test(profileId)) {
+  const profileId = readProfileId(req.params.profileId);
+  if (!profileId) {
     res.status(400).json({ ok: false, error: "PROFILE_INTEGRITY_PROFILE_ID_INVALID" });
     return;
   }

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/profile-appearance-integrity-audit
+      - maintenance/profile-reference-inspector
     paths:
       - ".github/workflows/profile-integrity-audit-ci.yml"
       - "artifacts/api-server/src/features/profile-integrity/**"
@@ -38,7 +39,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Focused audit tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/profile-integrity/profile-integrity-audit.test.ts
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/profile-integrity/profile-integrity-audit.test.ts
+          src/features/profile-integrity/organization-reference-inspector.test.ts
       - name: API typecheck diagnostics
         continue-on-error: true
         run: pnpm --filter @workspace/api-server typecheck
