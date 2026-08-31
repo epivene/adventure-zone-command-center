@@ -60,6 +60,13 @@ function normalizedText(value: string | null) {
   return value?.trim().toLocaleLowerCase("en-US").replace(/\s+/g, " ") ?? "";
 }
 
+export function canonicalContactCondition() {
+  return sql<boolean>`not exists (
+    select 1 from contact_consolidations cc
+    where cc.source_contact_id = ${contacts.id}
+  )`;
+}
+
 function candidatePhonesSql() {
   return sql<string[]>`array(
     select phone.normalized
@@ -98,7 +105,7 @@ async function queryQuickCallerExactExists(
   const [row] = await writer
     .select({ exactExists: sql<boolean>`count(*) > 0` })
     .from(contacts)
-    .where(or(phoneMatch, emailMatch))
+    .where(and(canonicalContactCondition(), or(phoneMatch, emailMatch)))
     .limit(1);
   return row?.exactExists ?? false;
 }
@@ -147,11 +154,14 @@ async function queryQuickCallerDuplicates(
     .from(contacts)
     .leftJoin(organizations, eq(contacts.organizationId, organizations.id))
     .where(
-      or(
-        phoneMatch,
-        emailMatch,
-        sql`${nameMatch} and ${organizationMatch}`,
-        sql`${nameMatch} and ${locationMatch}`,
+      and(
+        canonicalContactCondition(),
+        or(
+          phoneMatch,
+          emailMatch,
+          sql`${nameMatch} and ${organizationMatch}`,
+          sql`${nameMatch} and ${locationMatch}`,
+        ),
       ),
     )
     .orderBy(asc(contacts.id))
@@ -340,6 +350,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
   async listContacts(query: ContactListQuery): Promise<ContactListPage> {
     const condition =
       and(
+        canonicalContactCondition(),
         buildContactSearchCondition(query.search) ?? undefined,
         syncStateCondition(query.state) ?? undefined,
       ) ?? undefined;

@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   bookingContacts,
@@ -14,6 +14,7 @@ import eventProfilesRouter from "./event-profiles";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
 const router: IRouter = Router();
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function normalizedPhone(value: string | null | undefined) {
   if (!value) return null;
@@ -67,19 +68,35 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
   const name = String(event.name).trim();
   const city = String(event.city ?? "").trim();
   const region = String(event.region ?? "").trim().toUpperCase();
+  const requestedProfileId = typeof event.id === "string" && uuidPattern.test(event.id.trim())
+    ? event.id.trim()
+    : null;
 
   try {
-    const matches = await db.execute<{ id: string }>(sql`
-      select id
-      from organizations
-      where lower(trim(name)) = lower(trim(${name}))
-        and lower(trim(coalesce(city, ''))) = lower(trim(${city}))
-        and upper(trim(coalesce(region, ''))) = upper(trim(${region}))
-        and consolidated_into_id is null
-      limit 2
-    `);
+    type ExistingProfileRow = { id: string; name: string; city: string | null; region: string | null };
+    const matches = requestedProfileId
+      ? await db.execute<ExistingProfileRow>(sql`
+          select id, name, city, region
+          from organizations
+          where id = ${requestedProfileId}::uuid
+            and consolidated_into_id is null
+          limit 1
+        `)
+      : await db.execute<ExistingProfileRow>(sql`
+          select id, name, city, region
+          from organizations
+          where lower(trim(name)) = lower(trim(${name}))
+            and lower(trim(coalesce(city, ''))) = lower(trim(${city}))
+            and upper(trim(coalesce(region, ''))) = upper(trim(${region}))
+            and consolidated_into_id is null
+          limit 2
+        `);
 
     if (matches.rows.length === 0) {
+      if (requestedProfileId) {
+        res.status(404).json({ ok: false, error: "The resolved event profile no longer exists." });
+        return;
+      }
       next();
       return;
     }
@@ -92,7 +109,8 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
       return;
     }
 
-    const organizationId = matches.rows[0]!.id;
+    const existingProfile = matches.rows[0]!;
+    const organizationId = existingProfile.id;
     const profile = req.body?.profile ?? {};
     const importedContacts = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
     const importedBooking = req.body?.booking ?? null;
@@ -100,9 +118,9 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
 
     const result = await db.transaction(async (transaction) => {
       const organizationValues: Record<string, unknown> = {
-        name,
-        city: city || null,
-        region: region || null,
+        ...(requestedProfileId ? {} : { name }),
+        city: city || existingProfile.city || null,
+        region: region || existingProfile.region || null,
         updatedAt: now,
       };
       if (typeof profile.placeType === "string" && profile.placeType.trim()) organizationValues.placeType = profile.placeType.trim();
@@ -126,6 +144,7 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
       const contactInput = importedContacts.find((contact: any) => contact?.primary) ?? importedContacts[0];
       if (contactInput?.name) {
         const email = String(contactInput.email ?? "").trim().toLowerCase();
+        const inputPhone = normalizedPhone(String(contactInput.phone ?? ""));
         const inputName = splitName(String(contactInput.name));
         const linkedContacts = await transaction
           .select({
@@ -133,14 +152,24 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
             firstName: contacts.firstName,
             lastName: contacts.lastName,
             email: contacts.email,
+            normalizedPhone: contacts.normalizedPhone,
             isPrimary: organizationContacts.isPrimary,
           })
           .from(organizationContacts)
           .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
-          .where(and(eq(organizationContacts.organizationId, organizationId), eq(organizationContacts.active, true)));
+          .where(and(
+            eq(organizationContacts.organizationId, organizationId),
+            eq(organizationContacts.active, true),
+            sql`not exists (
+              select 1 from contact_consolidations cc
+              where cc.source_contact_id = ${contacts.id}
+            )`,
+          ))
+          .orderBy(desc(organizationContacts.isPrimary), asc(contacts.createdAt), asc(contacts.id));
 
         const matchingContact =
           linkedContacts.find((row) => email && row.email?.trim().toLowerCase() === email) ??
+          linkedContacts.find((row) => inputPhone && normalizedPhone(row.normalizedPhone) === inputPhone) ??
           linkedContacts.find((row) =>
             `${row.firstName} ${row.lastName}`.trim().toLowerCase() === String(contactInput.name).trim().toLowerCase(),
           ) ??
@@ -224,6 +253,12 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
           .select({ id: bookings.id })
           .from(bookings)
           .where(and(eq(bookings.organizationId, organizationId), eq(bookings.name, bookingName)))
+          .orderBy(
+            sql`case when coalesce(${bookings.notes}, '') like '[Merged duplicate] Canonical booking:%' then 1 else 0 end`,
+            desc(sql`case when ${bookings.startsAt} is not null then 1 else 0 end`),
+            asc(bookings.createdAt),
+            asc(bookings.id),
+          )
           .limit(1);
 
         if (existingBooking) {

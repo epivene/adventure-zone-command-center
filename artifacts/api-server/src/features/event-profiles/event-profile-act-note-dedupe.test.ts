@@ -69,7 +69,7 @@ describe("ACT notes on event profiles", () => {
       }),
     ]));
 
-    expect(profile.notes).toHaveLength(1);
+    expect([...profile.notes, ...profile.history]).toHaveLength(1);
     expect(profile.notes[0]?.body).toBe("Called organizer and sent the package.");
   });
 
@@ -90,7 +90,9 @@ describe("ACT notes on event profiles", () => {
       }),
     ]));
 
-    expect(profile.notes).toHaveLength(2);
+    expect(profile.notes).toHaveLength(1);
+    expect(profile.history).toHaveLength(1);
+    expect([...profile.notes, ...profile.history]).toHaveLength(2);
   });
 
   it("does not collapse two local notes just because their text and timestamp match", () => {
