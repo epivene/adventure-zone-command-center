@@ -1,0 +1,42 @@
+name: Verify canonical profile repair merge
+
+on:
+  push:
+    branches:
+      - verify/canonical-profile-children-merge
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/canonical_profile_children_test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace libraries
+        run: pnpm run typecheck:libs
+      - name: Canonical profile and integrity tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/event-profiles
+          src/features/profile-integrity/profile-integrity-audit.test.ts
+          src/features/approved-profile-import
+          src/db/required-schema-startup.test.ts
+          src/features/organizations/organization-list-sort.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Ensure generated cache files are absent
+        run: test -z "$(find .github -type f -name '*.pyc' -print -quit)"
