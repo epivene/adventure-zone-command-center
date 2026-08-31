@@ -1,0 +1,45 @@
+name: Trigger Render for blank profile batch 02
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-02
+    paths:
+      - ".github/workflows/trigger-render-for-batch-02.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger latest linked-branch deploy when configured
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+            printf '%s\n' '{"deployHookConfigured":false,"deployTriggered":false}' > render-deploy-trigger.json
+            exit 0
+          fi
+          STATUS=$(curl --silent --show-error \
+            --request POST \
+            --output render-deploy-response.json \
+            --write-out "%{http_code}" \
+            "${RENDER_DEPLOY_HOOK_URL}" || true)
+          case "${STATUS}" in
+            200|202)
+              printf '{"deployHookConfigured":true,"deployTriggered":true,"status":%s}\n' "${STATUS}" > render-deploy-trigger.json
+              ;;
+            *)
+              printf '{"deployHookConfigured":true,"deployTriggered":false,"status":%s}\n' "${STATUS:-0}" > render-deploy-trigger.json
+              cat render-deploy-response.json 2>/dev/null || true
+              exit 1
+              ;;
+          esac
+      - uses: actions/upload-artifact@v4
+        with:
+          name: batch-02-render-deploy-trigger
+          path: render-deploy-trigger.json
+          retention-days: 1
