@@ -1,5 +1,5 @@
 {
-  "importRevision": 2,
+  "importRevision": 3,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -9,7 +9,7 @@
   },
   "profile": {
     "placeType": "festival_event",
-    "description": "Confirmed Adventure Zone booking for Pirate Fest 2026 in Northglenn. The event contract has been signed. Keep this permanent event profile as the relationship record and retain the 2027 renewal follow-up.",
+    "description": "Pirate Fest did not move forward with Adventure Zone for 2026 because of budget and space limitations. Michael Ringling remains interested in working together in a future year. Keep 2026 as declined and retain one early-2027 relationship follow-up.",
     "phone": "303-450-8935",
     "website": "https://thepiratefest.com/",
     "address1": "11701 Community Center Dr.",
@@ -29,7 +29,7 @@
   "booking": {
     "enabled": true,
     "name": "Pirate Fest - 2026",
-    "status": "confirmed",
+    "status": "declined",
     "startsAt": "2026-09-18",
     "endsAt": "2026-09-19",
     "nextActionKind": "renewal",
@@ -40,14 +40,14 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "Pirate Fest 2026 signed contract / confirmed booking",
-      "body": "The Pirate Fest 2026 contract has been signed, so the current booking is confirmed. The current contract follow-up is complete. Keep the January 2027 reminder to reconnect with Michael about the next Pirate Fest."
+      "subject": "Pirate Fest 2026 declined / future interest",
+      "body": "On the August 28 follow-up call, Michael said Pirate Fest would not use Adventure Zone in 2026 because of budget and space limitations, but he wanted to work together in the future. Remove the incorrect signed-contract/confirmed-booking narrative. Keep one January 2027 reminder and ask about Pirate Fest 2027 and the possible July 4 standalone opportunity."
     }
   ],
   "followUps": [
     {
-      "label": "Renew Pirate Fest with Michael Ringling for 2027",
-      "reason": "The 2026 Pirate Fest contract is signed and the booking is confirmed. Reconnect with Michael early about Pirate Fest 2027 and continue from the established booked relationship.",
+      "label": "Reconnect with Michael Ringling for Pirate Fest 2027",
+      "reason": "Pirate Fest passed for 2026 because of budget and space limitations, but Michael expressed interest in working with Adventure Zone in 2027. Ask about Pirate Fest 2027 and the possible July 4 standalone opportunity.",
       "dueAt": "2027-01-15T15:00:00.000Z"
     }
   ]
