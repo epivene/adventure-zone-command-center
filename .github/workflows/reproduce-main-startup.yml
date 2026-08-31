@@ -53,6 +53,8 @@ jobs:
         run: pnpm run typecheck:libs
       - name: Build production API
         run: pnpm --filter @workspace/api-server build
+      - name: Bootstrap disposable production schema
+        run: pnpm --filter @workspace/db bootstrap
       - name: Run production migrations
         run: pnpm --filter @workspace/db run-migrations
       - name: Start production API and exercise required startup schema
