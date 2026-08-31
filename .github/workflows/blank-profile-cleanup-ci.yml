@@ -8,6 +8,10 @@ on:
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-01.test.ts"
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-02.ts"
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-02.test.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-repository.ts"
       - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
@@ -17,6 +21,7 @@ on:
       - "imports/approved-profiles/*organization-profile-2026.json"
       - "imports/approved-profiles/blank-profile-batch-01.json"
       - "imports/approved-profiles/blank-profile-batch-02*.json"
+      - "imports/approved-profiles/twin-falls-county-fair-2026.json"
       - "docs/operations/blank-profile-research-plan-2026-08-30.md"
       - ".github/workflows/blank-profile-cleanup-ci.yml"
   push:
@@ -24,11 +29,16 @@ on:
       - main
       - cleanup/final-empty-test-clusters
       - research/blank-profiles-batch-01
+      - fix/twin-falls-duplicate-profiles
     paths:
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-01.ts"
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-01.test.ts"
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-02.ts"
       - "artifacts/api-server/src/features/organizations/blank-profile-batch-02.test.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-repository.ts"
       - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
@@ -38,6 +48,7 @@ on:
       - "imports/approved-profiles/*organization-profile-2026.json"
       - "imports/approved-profiles/blank-profile-batch-01.json"
       - "imports/approved-profiles/blank-profile-batch-02*.json"
+      - "imports/approved-profiles/twin-falls-county-fair-2026.json"
       - "docs/operations/blank-profile-research-plan-2026-08-30.md"
       - ".github/workflows/blank-profile-cleanup-ci.yml"
 
@@ -61,6 +72,8 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/organizations/blank-profile-batch-01.test.ts
           src/features/organizations/blank-profile-batch-02.test.ts
+          src/features/organizations/twin-falls-duplicate-cleanup.test.ts
+          src/features/organizations/organization-duplicate-normalization.pglite.test.ts
           src/features/organizations/known-empty-test-profile-cleanup.test.ts
           src/features/organizations/known-empty-test-profile-cluster-cleanup.test.ts
       - name: API build
@@ -74,6 +87,7 @@ jobs:
               name.endsWith('organization-profile-2026.json')
               || name === 'blank-profile-batch-01.json'
               || name.startsWith('blank-profile-batch-02')
+              || name === 'twin-falls-county-fair-2026.json'
             );
           for (const file of files) {
             JSON.parse(fs.readFileSync(`imports/approved-profiles/${file}`, 'utf8'));
