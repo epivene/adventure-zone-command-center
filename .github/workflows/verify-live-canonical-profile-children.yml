@@ -1,0 +1,140 @@
+name: Verify live canonical profile children
+
+on:
+  push:
+    branches:
+      - verify/canonical-profile-children-merge
+    paths:
+      - ".github/workflows/verify-live-canonical-profile-children.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for deployed repair and verify live records
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          BASE_URL="${API_URL%/}"
+          PROFILE_ID="f24033e1-801b-43ff-9a7e-a9d6d7b426c3"
+          mkdir -p live-verification
+
+          for attempt in $(seq 1 80); do
+            AUDIT_STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output live-verification/audit.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-integrity-audit" || true)
+
+            PROFILE_STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output live-verification/pirate-fest.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${PROFILE_ID}" || true)
+
+            if [ "${AUDIT_STATUS}" = "200" ] && [ "${PROFILE_STATUS}" = "200" ] && node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('live-verification/audit.json', 'utf8'));
+          const profile = JSON.parse(fs.readFileSync('live-verification/pirate-fest.json', 'utf8'));
+          const expectedProfileId = 'f24033e1-801b-43ff-9a7e-a9d6d7b426c3';
+          const expectedBookingId = 'cd7ce3ca-7370-47a3-9f07-0ca617e03695';
+
+          if (audit.ok !== true || !audit.summary) process.exit(1);
+          if (audit.summary.duplicateAppearanceGroupCount !== 0) process.exit(1);
+          if (audit.summary.duplicateContactGroupCount !== 0) process.exit(1);
+
+          if (profile.ok !== true || profile.profileId !== expectedProfileId) process.exit(1);
+          if (!Array.isArray(profile.contacts) || profile.contacts.length !== 1) process.exit(1);
+          const contact = profile.contacts[0];
+          const phone = String(contact.phone ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+          if (contact.name !== 'Michael Ringling') process.exit(1);
+          if (phone !== '7209553603') process.exit(1);
+          if (String(contact.email ?? '').toLowerCase() !== 'mringling@northglenn.org') process.exit(1);
+
+          if (!Array.isArray(profile.bookings) || profile.bookings.length !== 1) process.exit(1);
+          const booking = profile.bookings[0];
+          if (booking.id !== expectedBookingId) process.exit(1);
+          if (booking.name !== 'Pirate Fest - 2026') process.exit(1);
+          if (booking.status !== 'declined') process.exit(1);
+          if (!String(booking.startsAt ?? '').startsWith('2026-09-18')) process.exit(1);
+          if (!String(booking.endsAt ?? '').startsWith('2026-09-19')) process.exit(1);
+          if (booking.primaryContactId !== contact.id) process.exit(1);
+
+          const openFollowUps = Array.isArray(profile.followUps)
+            ? profile.followUps.filter((followUp) => followUp.completedAt == null)
+            : [];
+          if (openFollowUps.length !== 1) process.exit(1);
+          if (openFollowUps[0].dueAt !== '2027-01-15T15:00:00.000Z') process.exit(1);
+          if (openFollowUps[0].contactId !== contact.id) process.exit(1);
+          if (openFollowUps[0].bookingId !== booking.id) process.exit(1);
+
+          if (!Array.isArray(profile.notes) || profile.notes.length < 4) process.exit(1);
+          if (!profile.notes.some((note) => String(note.body ?? '').toLowerCase().includes('budget and space limitations'))) process.exit(1);
+          if (!Array.isArray(profile.history) || profile.history.length < 2) process.exit(1);
+          NODE
+            then
+              node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('live-verification/audit.json', 'utf8'));
+          const profile = JSON.parse(fs.readFileSync('live-verification/pirate-fest.json', 'utf8'));
+          const openFollowUps = profile.followUps.filter((followUp) => followUp.completedAt == null);
+          fs.writeFileSync('live-canonical-profile-children-summary.json', JSON.stringify({
+            verifiedAt: new Date().toISOString(),
+            duplicateAppearanceGroupCount: audit.summary.duplicateAppearanceGroupCount,
+            duplicateContactGroupCount: audit.summary.duplicateContactGroupCount,
+            pirateFest: {
+              profileId: profile.profileId,
+              visibleContactCount: profile.contacts.length,
+              contact: {
+                id: profile.contacts[0].id,
+                name: profile.contacts[0].name,
+                phone: profile.contacts[0].phone,
+                email: profile.contacts[0].email,
+              },
+              visibleAppearanceCount: profile.bookings.length,
+              appearance: {
+                id: profile.bookings[0].id,
+                name: profile.bookings[0].name,
+                status: profile.bookings[0].status,
+                startsAt: profile.bookings[0].startsAt,
+                endsAt: profile.bookings[0].endsAt,
+              },
+              openFollowUpCount: openFollowUps.length,
+              openFollowUpDueAt: openFollowUps[0].dueAt,
+              visibleNoteCount: profile.notes.length,
+              visibleHistoryCount: profile.history.length,
+            },
+          }, null, 2));
+          NODE
+              echo "Live canonical profile repair verified on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Live repair is not complete yet (audit HTTP ${AUDIT_STATUS}, profile HTTP ${PROFILE_STATUS}, attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "The deployed app never reached the expected canonical profile state."
+          cat live-verification/audit.json 2>/dev/null || true
+          cat live-verification/pirate-fest.json 2>/dev/null || true
+          exit 1
+
+      - name: Upload sanitized verification summary
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-canonical-profile-children-verification
+          path: live-canonical-profile-children-summary.json
+          retention-days: 7
