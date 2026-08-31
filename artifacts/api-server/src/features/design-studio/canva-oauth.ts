@@ -27,13 +27,17 @@ function randomUrlSafe(bytes = 48) {
   return randomBytes(bytes).toString("base64url");
 }
 
+export function canvaPkceChallenge(verifier: string) {
+  return createHash("sha256").update(verifier).digest("base64url");
+}
+
 export function createCanvaPkcePair() {
   const verifier = randomUrlSafe(64);
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
+  const challenge = canvaPkceChallenge(verifier);
   return { verifier, challenge };
 }
 
-function safeReturnPath(value: string | undefined) {
+export function safeCanvaReturnPath(value: string | undefined) {
   const candidate = value?.trim() || "/design-studio";
   if (!candidate.startsWith("/design-studio")) return "/design-studio";
   if (candidate.startsWith("//")) return "/design-studio";
@@ -47,7 +51,7 @@ export async function startCanvaOauth(input: {
   const { clientId, redirectUri } = canvaClientConfig();
   const state = randomUrlSafe(32);
   const { verifier, challenge } = createCanvaPkcePair();
-  const returnPath = safeReturnPath(input.returnPath);
+  const returnPath = safeCanvaReturnPath(input.returnPath);
 
   await saveCanvaOauthState({
     officeAccountId: input.officeAccountId,
@@ -101,7 +105,7 @@ export async function completeCanvaOauth(input: {
 
   return {
     officeAccountId: oauthState.officeAccountId,
-    returnPath: safeReturnPath(oauthState.returnPath),
+    returnPath: safeCanvaReturnPath(oauthState.returnPath),
     scopes,
   };
 }
