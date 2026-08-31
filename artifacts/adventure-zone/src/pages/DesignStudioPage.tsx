@@ -31,6 +31,11 @@ import { designStudioApi, type DesignProject, type DesignType } from "@/lib/desi
 import { CANVA_STARTERS, type CanvaStarter } from "@/lib/design-studio/canva-starters";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
+const LOGO_SRC = `${import.meta.env.BASE_URL}adventure-zone-logo.png`;
+const NAVY = "#11192d";
+const CREAM = "#f7f4ed";
+const PINK = "#ff0a8a";
+const YELLOW = "#ffc900";
 
 const typeIcon: Partial<Record<DesignType, React.ReactNode>> = {
   flyer: <FileText className="h-4 w-4" />,
@@ -47,89 +52,134 @@ function dateLabel(value?: string) {
     : `Updated ${date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
+function LogoMark({ dark = false }: { dark?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between border-b-2 px-3 py-2 ${dark ? "border-white/20 bg-[#11192d]" : "border-[#11192d] bg-[#f7f4ed]"}`}>
+      <img alt="The Adventure Zone" className="h-8 w-auto object-contain" src={LOGO_SRC} />
+      <div className={`h-7 w-7 border-2 p-1 ${dark ? "border-white bg-[#ffc900]" : "border-[#11192d] bg-[#ffc900]"}`}>
+        <span className="block h-0.5 bg-[#11192d]" /><span className="mt-1 block h-0.5 bg-[#11192d]" /><span className="mt-1 block h-0.5 bg-[#11192d]" />
+      </div>
+    </div>
+  );
+}
+
+function GridBackground({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return (
+    <div
+      className={className}
+      style={{
+        backgroundColor: CREAM,
+        backgroundImage:
+          "linear-gradient(rgba(17,25,45,.09) 1px, transparent 1px), linear-gradient(90deg, rgba(17,25,45,.09) 1px, transparent 1px)",
+        backgroundSize: "15px 15px",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function TemplatePreview({ starter }: { starter: CanvaStarter }) {
   if (starter.id === "event-flyer") {
     return (
-      <div className="mx-auto aspect-[8.5/11] w-44 overflow-hidden rounded-md bg-[#fff7e8] shadow-xl ring-1 ring-black/10">
-        <div className="bg-[#18243a] px-3 py-4 text-white">
-          <p className="text-[6px] font-black tracking-[0.22em]">THE ADVENTURE ZONE</p>
-          <p className="mt-1 text-[16px] font-black leading-[0.95]">FAMILY FUN<br />IS COMING!</p>
-        </div>
-        <div className="space-y-3 p-3">
-          <div>
-            <p className="text-[12px] font-black text-[#e6427a]">[EVENT NAME]</p>
-            <p className="text-[7px] font-bold text-[#18243a]">[DATE] • [TIME]</p>
-            <p className="text-[6px] text-slate-500">[VENUE / CITY, STATE]</p>
-          </div>
-          <div className="border-l-4 border-[#f4c542] pl-2">
-            <p className="text-[7px] font-black text-[#18243a]">10 ATTRACTIONS. ONE BIG ADVENTURE.</p>
-            <p className="mt-1 text-[5px] leading-tight text-slate-500">Slides • obstacle courses • interactive games • bounce houses</p>
-          </div>
-          <div className="rounded-md bg-[#e6427a] p-2 text-white">
-            <p className="text-[7px] font-black">COME PLAY WITH US!</p>
-            <p className="text-[5px]">Tickets / admission details</p>
+      <div className="mx-auto aspect-[8.5/11] w-48 overflow-hidden bg-[#f7f4ed] shadow-2xl ring-1 ring-black/15">
+        <LogoMark />
+        <div className="relative h-20 overflow-hidden bg-[#27334b]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(255,201,0,.28),transparent_35%),radial-gradient(circle_at_85%_60%,rgba(255,10,138,.25),transparent_38%)]" />
+          <div className="absolute left-3 top-2 -rotate-3 border-2 border-[#11192d] bg-[#ff0a8a] px-2 py-1 text-[5px] font-black tracking-[0.16em] text-white shadow-[3px_3px_0_#11192d]">★ AMERICA'S BEST BOUNCE HOUSE CARNIVAL! ★</div>
+          <div className="absolute bottom-2 left-3 right-3">
+            <p className="text-[16px] font-black leading-[.82] text-white">WE BRING</p>
+            <p className="text-[19px] font-black leading-[.82] text-[#ffc900]">THE ACTION</p>
           </div>
         </div>
+        <GridBackground className="min-h-[160px] px-3 py-3">
+          <p className="text-[12px] font-black leading-none text-[#11192d]">[EVENT NAME]</p>
+          <p className="mt-1 text-[6px] font-black uppercase tracking-wide text-[#ff0a8a]">[DATE] • [TIME] • [CITY, STATE]</p>
+          <div className="mt-3 border-2 border-[#11192d] bg-white p-2 shadow-[3px_3px_0_#11192d]">
+            <p className="text-[6px] font-black text-[#11192d]">10 PREMIUM ATTRACTIONS</p>
+            <p className="mt-1 text-[5px] leading-tight text-slate-600">Giant slides • obstacle courses • bounces • interactive games</p>
+          </div>
+          <div className="mt-3 flex gap-2">
+            <div className="flex-1 border-2 border-[#11192d] bg-[#ffc900] p-2 text-[6px] font-black text-[#11192d] shadow-[3px_3px_0_#11192d]">[ADMISSION / TICKETS]</div>
+            <div className="border-2 border-[#11192d] bg-[#ff0a8a] p-2 text-[6px] font-black text-white shadow-[3px_3px_0_#11192d]">SEE YOU THERE →</div>
+          </div>
+        </GridBackground>
       </div>
     );
   }
 
   if (starter.id === "social-post") {
     return (
-      <div className="relative mx-auto aspect-[4/5] w-44 overflow-hidden rounded-md bg-[#18243a] p-4 text-white shadow-xl ring-1 ring-black/10">
-        <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#f4c542]" />
-        <div className="absolute -bottom-10 -left-10 h-28 w-28 rounded-full bg-[#e6427a]" />
-        <p className="relative text-[6px] font-black tracking-[0.2em]">THE ADVENTURE ZONE</p>
-        <p className="relative mt-8 text-[20px] font-black leading-[0.9]">WEEKEND<br />PLANS?<br /><span className="text-[#f4c542]">SOLVED.</span></p>
-        <p className="relative mt-5 text-[7px]">Find us at <b>[EVENT NAME]</b><br />[DATE] • [CITY, STATE]</p>
-        <div className="relative mt-5 rounded-full border border-white px-2 py-1 text-center text-[5px] font-bold">Slides • Games • Challenges • Bounce</div>
+      <div className="relative mx-auto aspect-[4/5] w-48 overflow-hidden bg-[#11192d] shadow-2xl ring-1 ring-black/15">
+        <LogoMark dark />
+        <div className="relative h-[210px] overflow-hidden px-4 py-4 text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_25%,rgba(255,201,0,.24),transparent_28%),radial-gradient(circle_at_78%_55%,rgba(255,10,138,.34),transparent_36%),linear-gradient(145deg,#27334b,#11192d_70%)]" />
+          <div className="relative inline-block -rotate-2 border-2 border-[#11192d] bg-[#ff0a8a] px-2 py-1 text-[5px] font-black tracking-[0.16em] shadow-[3px_3px_0_#ffc900]">★ WE BRING THE ACTION ★</div>
+          <p className="relative mt-5 text-[24px] font-black leading-[.82]">BIG DAY.</p>
+          <p className="relative text-[24px] font-black leading-[.82] text-[#ffc900]">BIG FUN.</p>
+          <div className="relative mt-5 border-t border-[#ff0a8a] pt-3 text-[7px] font-bold leading-snug">[EVENT NAME]<br /><span className="text-white/70">[DATE] • [CITY, STATE]</span></div>
+          <div className="relative mt-4 inline-block border-2 border-white px-3 py-2 text-[6px] font-black shadow-[3px_3px_0_#ff0a8a]">BRING THE WHOLE CREW →</div>
+        </div>
       </div>
     );
   }
 
   if (starter.id === "last-minute-booking") {
     return (
-      <div className="mx-auto aspect-[4/5] w-44 overflow-hidden rounded-md bg-[#fffaf0] shadow-xl ring-1 ring-black/10">
-        <div className="bg-[#e6427a] px-3 py-3 text-[6px] font-black tracking-[0.15em] text-white">OPEN DATE ALERT</div>
-        <div className="p-4">
-          <p className="text-[19px] font-black leading-[0.9] text-[#18243a]">NEED<br />FAMILY FUN<br /><span className="text-[#e6427a]">FAST?</span></p>
-          <p className="mt-4 text-[6px] text-slate-500">Opening near [REGION / ROUTE]</p>
-          <p className="text-[9px] font-black text-[#18243a]">[AVAILABLE DATE]</p>
-          <div className="mt-4 rounded-md bg-[#f4c542] p-2 text-[#18243a]">
-            <p className="text-[6px] font-black">A COMPLETE STAFFED ATTRACTION AREA</p>
-            <p className="mt-1 text-[5px]">Set-up • tear-down • staffing • insured</p>
+      <div className="mx-auto aspect-[4/5] w-48 overflow-hidden bg-[#f7f4ed] shadow-2xl ring-1 ring-black/15">
+        <LogoMark />
+        <GridBackground className="min-h-[210px] p-3">
+          <div className="inline-block border-2 border-[#11192d] bg-[#ff0a8a] px-2 py-1 text-[5px] font-black tracking-[0.14em] text-white shadow-[3px_3px_0_#11192d]">OPEN DATE ALERT</div>
+          <p className="mt-4 text-[20px] font-black leading-[.85] text-[#11192d]">FILL THE GAP.</p>
+          <p className="text-[20px] font-black leading-[.85] text-[#ff0a8a]">BRING THE FUN.</p>
+          <p className="mt-3 text-[6px] font-bold text-slate-600">Opening near [REGION / ROUTE]</p>
+          <div className="mt-2 border-2 border-[#11192d] bg-[#ffc900] p-2 shadow-[3px_3px_0_#11192d]">
+            <p className="text-[5px] font-black uppercase tracking-wider">AVAILABLE DATE</p>
+            <p className="text-[11px] font-black">[DATE]</p>
           </div>
-          <p className="mt-4 text-[7px] font-black text-[#e6427a]">Booking: (435) 760-5583</p>
-        </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="border-2 border-[#11192d] bg-white p-2 text-[5px] font-bold shadow-[2px_2px_0_#11192d]">✓ SETUP<br />✓ STAFFING</div>
+            <div className="border-2 border-[#11192d] bg-white p-2 text-[5px] font-bold shadow-[2px_2px_0_#11192d]">✓ INSURED<br />✓ TURNKEY</div>
+          </div>
+          <div className="mt-3 border-2 border-[#11192d] bg-[#ff0a8a] px-3 py-2 text-center text-[6px] font-black text-white shadow-[3px_3px_0_#11192d]">LET'S TALK DATES • (435) 760-5583</div>
+        </GridBackground>
       </div>
     );
   }
 
   if (starter.id === "package-overview") {
     return (
-      <div className="mx-auto aspect-[8.5/11] w-44 overflow-hidden rounded-md bg-slate-50 shadow-xl ring-1 ring-black/10">
-        <div className="bg-[#18243a] px-3 py-3 text-white">
-          <p className="text-[5px] font-black tracking-[0.2em]">THE ADVENTURE ZONE</p>
-          <p className="mt-1 text-[11px] font-black">3 WAYS TO BRING THE FUN</p>
-        </div>
-        <div className="space-y-2 p-3">
-          <div className="border-l-4 border-[#e6427a] bg-white p-2"><p className="text-[7px] font-black">ADVENTURE ZONE</p><p className="text-[6px] font-black text-[#e6427a]">$9,000 • 1–4 days</p></div>
-          <div className="border-l-4 border-sky-400 bg-white p-2"><p className="text-[7px] font-black">PIRATE’S REBELLION</p><p className="text-[6px] font-black text-sky-600">$7,500 • 1–4 days</p></div>
-          <div className="border-l-4 border-amber-400 bg-white p-2"><p className="text-[7px] font-black">WARRIOR’S PLAYGROUND</p><p className="text-[6px] font-black text-amber-600">$7,500 • 1–4 days</p></div>
-          <div className="rounded bg-[#f4c542] p-2 text-[5px] font-bold text-[#18243a]">SET-UP • STAFFING • $2M INSURANCE • TEAR-DOWN</div>
+      <div className="mx-auto aspect-[8.5/11] w-48 overflow-hidden bg-[#11192d] shadow-2xl ring-1 ring-black/15">
+        <LogoMark dark />
+        <div className="px-3 py-3 text-white">
+          <div className="flex items-center justify-center gap-2 text-[5px] font-black tracking-[0.18em] text-[#ffc900]"><span className="h-0.5 w-6 bg-[#ffc900]" />THE FLEET<span className="h-0.5 w-6 bg-[#ffc900]" /></div>
+          <p className="mt-1 text-center text-[17px] font-black">EPIC PACKAGES</p>
+          <p className="mt-1 text-center text-[5px] text-white/65">Fully staffed for 1–4 days.</p>
+          <div className="mt-3 border-2 border-white bg-[#f7f4ed] text-[#11192d] shadow-[3px_3px_0_#ffc900]">
+            <div className="h-8 bg-[linear-gradient(135deg,#ff0a8a,#ffc900)] opacity-80" />
+            <div className="p-2"><p className="text-[7px] font-black">★ ADVENTURE ZONE</p><p className="mt-1 text-[5px]">10 premium attractions • giant slides • obstacles</p><p className="mt-1 text-[8px] font-black">$9,000 <span className="text-[5px]">/ 1–4 DAYS</span></p></div>
+          </div>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            <div className="border-2 border-white bg-[#f7f4ed] p-2 text-[#11192d] shadow-[2px_2px_0_#ff0a8a]"><p className="text-[6px] font-black">⚓ PIRATE'S REBELLION</p><p className="mt-1 text-[5px]">Water & pirate themed fun</p><p className="mt-2 text-[8px] font-black">$7,500</p></div>
+            <div className="border-2 border-white bg-[#f7f4ed] p-2 text-[#11192d] shadow-[2px_2px_0_#ffc900]"><p className="text-[6px] font-black">◎ WARRIOR'S PLAYGROUND</p><p className="mt-1 text-[5px]">Paintball • AirSoft • Orbeez</p><p className="mt-2 text-[8px] font-black">$7,500</p></div>
+          </div>
+          <div className="mt-2 border border-[#ffc900] p-2 text-center text-[4.5px] font-bold text-[#ffc900]">SETUP • STAFFING • $2M INSURANCE • TEARDOWN</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative mx-auto aspect-square w-44 overflow-hidden rounded-md bg-[#fff8e7] p-5 text-center shadow-xl ring-1 ring-black/10">
-      <div className="absolute -left-7 -top-7 h-20 w-20 rounded-full bg-[#e6427a]" />
-      <div className="absolute -bottom-8 -right-8 h-24 w-24 rounded-full bg-[#f4c542]" />
-      <p className="relative text-[6px] font-black tracking-[0.2em] text-[#18243a]">THE ADVENTURE ZONE</p>
-      <p className="relative mt-6 text-[18px] font-black leading-none text-[#18243a]">HOW DID<br />WE DO?</p>
-      <p className="relative mt-3 text-[11px] tracking-widest text-[#e6427a]">★★★★★</p>
-      <div className="relative mt-5 rounded-full bg-[#18243a] px-2 py-2 text-[6px] font-black text-white">SCAN / CLICK TO REVIEW</div>
+    <div className="mx-auto aspect-square w-48 overflow-hidden bg-[#f7f4ed] shadow-2xl ring-1 ring-black/15">
+      <LogoMark />
+      <GridBackground className="relative min-h-[160px] p-4 text-center">
+        <div className="mx-auto flex h-8 w-8 items-center justify-center border-2 border-[#11192d] bg-[#ffc900] text-[13px] shadow-[3px_3px_0_#11192d]">★</div>
+        <div className="mt-3 inline-block bg-[#ff0a8a] px-2 py-1 text-[5px] font-black tracking-[0.14em] text-white">THANKS FOR THE BIG DAY!</div>
+        <p className="mt-3 text-[19px] font-black leading-[.9] text-[#11192d]">HOW DID<br />WE DO?</p>
+        <p className="mt-2 text-[9px] tracking-[.22em] text-[#ff0a8a]">★★★★★</p>
+        <div className="mx-auto mt-3 h-11 w-11 border-2 border-[#11192d] bg-white p-1 shadow-[3px_3px_0_#11192d]"><div className="h-full w-full bg-[repeating-linear-gradient(45deg,#11192d_0_2px,transparent_2px_4px)] opacity-70" /></div>
+        <div className="mt-3 border-2 border-[#11192d] bg-[#ffc900] px-2 py-2 text-[5px] font-black text-[#11192d] shadow-[3px_3px_0_#11192d]">SHARE YOUR EXPERIENCE →</div>
+      </GridBackground>
     </div>
   );
 }
@@ -137,15 +187,12 @@ function TemplatePreview({ starter }: { starter: CanvaStarter }) {
 function StarterCard({ starter, creating, onUse }: { starter: CanvaStarter; creating: boolean; onUse: () => void }) {
   return (
     <article className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
-      <div className="flex min-h-64 items-center justify-center border-b bg-[radial-gradient(circle_at_top,_hsl(var(--muted)),_transparent_70%)] p-5">
+      <div className="flex min-h-72 items-center justify-center border-b bg-[radial-gradient(circle_at_top,_hsl(var(--muted)),_transparent_70%)] p-5">
         <TemplatePreview starter={starter} />
       </div>
       <div className="p-5">
         <div className="flex items-center justify-between gap-3">
-          <Badge variant="secondary" className="gap-1.5 capitalize">
-            {typeIcon[starter.type] ?? <Sparkles className="h-4 w-4" />}
-            {starter.type}
-          </Badge>
+          <Badge variant="secondary" className="gap-1.5 capitalize">{typeIcon[starter.type] ?? <Sparkles className="h-4 w-4" />}{starter.type}</Badge>
           <span className="text-xs font-semibold text-muted-foreground">{starter.canvasSize}</span>
         </div>
         <h3 className="mt-3 font-black text-foreground">{starter.name}</h3>
@@ -165,36 +212,19 @@ function ProjectCard({ project, deleting, onDelete }: { project: DesignProject; 
     <article className="rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 hover:shadow-md">
       <Link className="block" href={`/design-studio/${project.id}`}>
         <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30">
-          <div className="text-center">
-            <FolderOpen className="mx-auto h-6 w-6 text-primary" />
-            <p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Canva project</p>
-          </div>
+          <div className="text-center"><FolderOpen className="mx-auto h-6 w-6 text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Canva project</p></div>
         </div>
         <div className="mt-3 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="truncate font-bold text-foreground">{project.name}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{dateLabel(project.updatedAt)}</p>
-          </div>
+          <div className="min-w-0"><p className="truncate font-bold text-foreground">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{dateLabel(project.updatedAt)}</p></div>
           <Badge variant="outline" className="shrink-0 capitalize">{status}</Badge>
         </div>
       </Link>
       <div className="mt-3 flex justify-end border-t border-border pt-3">
         <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button className="gap-1.5 text-destructive" disabled={deleting} size="sm" variant="ghost">
-              {deleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-              Delete
-            </Button>
-          </AlertDialogTrigger>
+          <AlertDialogTrigger asChild><Button className="gap-1.5 text-destructive" disabled={deleting} size="sm" variant="ghost">{deleting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}Delete</Button></AlertDialogTrigger>
           <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle>
-              <AlertDialogDescription>This removes the design from your active Design Studio. This cannot be undone from this screen.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep it</AlertDialogCancel>
-              <AlertDialogAction onClick={onDelete}>Delete design</AlertDialogAction>
-            </AlertDialogFooter>
+            <AlertDialogHeader><AlertDialogTitle>Delete “{project.name}”?</AlertDialogTitle><AlertDialogDescription>This removes the design from your active Design Studio. This cannot be undone from this screen.</AlertDialogDescription></AlertDialogHeader>
+            <AlertDialogFooter><AlertDialogCancel>Keep it</AlertDialogCancel><AlertDialogAction onClick={onDelete}>Delete design</AlertDialogAction></AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
       </div>
@@ -236,12 +266,7 @@ export default function DesignStudioPage() {
     setCreatingId(starter.id);
     setError(null);
     try {
-      const project = await designStudioApi.create({
-        type: starter.type,
-        name: starter.name,
-        content: starter.content,
-        notes: `CANVA_STARTER_ID=${starter.id}`,
-      });
+      const project = await designStudioApi.create({ type: starter.type, name: starter.name, content: starter.content, notes: `CANVA_STARTER_ID=${starter.id}` });
       setLocation(`/design-studio/${project.id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The starter project could not be created.");
@@ -269,12 +294,9 @@ export default function DesignStudioPage() {
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-20 left-24 h-60 w-60 rounded-full bg-primary/20 blur-3xl" />
         <div className="relative max-w-3xl">
-          <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]">
-            <Sparkles className="h-3.5 w-3.5 text-accent" />
-            Design Studio + Canva Free
-          </div>
-          <h1 className="mt-5 text-3xl font-black tracking-tight md:text-5xl">Choose the look here. Finish it in Canva.</h1>
-          <p className="mt-3 max-w-2xl text-base leading-relaxed text-sidebar-foreground/70">See the actual Adventure Zone layout before you pick it. Command Center keeps the design organized; Canva handles the visual editing without requiring Brand Kit or Autofill.</p>
+          <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]"><Sparkles className="h-3.5 w-3.5 text-accent" />Design Studio + Canva Free</div>
+          <h1 className="mt-5 text-3xl font-black tracking-tight md:text-5xl">Adventure Zone looks. Canva editing.</h1>
+          <p className="mt-3 max-w-2xl text-base leading-relaxed text-sidebar-foreground/70">The starter designs now follow the same visual system as the website: deep navy, warm cream, yellow, hot pink, heavy outlines, offset shadows, grid texture, oversized type, and the Adventure Zone logo.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Button className="gap-2" onClick={() => document.getElementById("starter-templates")?.scrollIntoView({ behavior: "smooth" })}><Sparkles className="h-4 w-4" />Choose a starter</Button>
             <Button className="gap-2 border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground hover:bg-sidebar-accent" variant="outline" onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}><ExternalLink className="h-4 w-4" />Open Canva Free</Button>
@@ -285,7 +307,7 @@ export default function DesignStudioPage() {
       {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert"><span className="text-destructive">{error}</span><Button onClick={() => void loadProjects()} size="sm" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></div> : null}
 
       <section id="starter-templates" aria-labelledby="starter-heading">
-        <div className="mb-4"><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Built for Adventure Zone</p><h2 className="mt-1 text-2xl font-black tracking-tight" id="starter-heading">Visual starter templates</h2><p className="mt-1 text-sm text-muted-foreground">What you see on the card is the layout you’re starting from — not just a text prompt.</p></div>
+        <div className="mb-4"><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Built for Adventure Zone</p><h2 className="mt-1 text-2xl font-black tracking-tight" id="starter-heading">Website-matched starter templates</h2><p className="mt-1 text-sm text-muted-foreground">These previews now use the same branding language as the site you showed me, including the actual Adventure Zone logo.</p></div>
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{CANVA_STARTERS.map((starter) => <StarterCard key={starter.id} starter={starter} creating={creatingId === starter.id} onUse={() => void useStarter(starter)} />)}</div>
       </section>
 
