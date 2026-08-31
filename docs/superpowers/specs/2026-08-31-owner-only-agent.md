@@ -13,7 +13,7 @@ Replace the current collection of phrase-matched assistant paths with one consis
 - Office Coordinator and leg-manager credentials can never authenticate as the owner.
 - The manager assistant remains a separate, leg-scoped helper and receives none of the owner agent's cross-CRM tools.
 - Internal import credentials remain machine-only and cannot open an owner session.
-- Owner sessions are individually attributable and revocable through a session-version check.
+- Every owner session is attributable to the stable owner account. The first foundation release can revoke all owner devices together through a session-version check; per-device session management is a later hardening option.
 
 ## Identity migration
 
@@ -42,7 +42,7 @@ The agent must enforce the approved Adventure Zone workflow, including alternate
 
 ## Delivery sequence
 
-1. Database-backed singleton owner identity and revocable owner sessions.
+1. Database-backed singleton owner identity and revoke-all owner sessions.
 2. Persistent conversational memory for general and profile assistant modes.
 3. Unified owner-agent runtime and read-only CRM tools.
 4. Reversible write tools, approval cards, audit records, and undo.
