@@ -1,0 +1,365 @@
+name: Complete blank profiles batch 01
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/complete-blank-profiles-batch-01.yml"
+
+permissions:
+  actions: read
+  checks: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_BRANCH: research/blank-profiles-batch-01
+    steps:
+      - name: Checkout the reviewed batch branch
+        uses: actions/checkout@v4
+        with:
+          ref: research/blank-profiles-batch-01
+
+      - name: Locate and validate the reviewed batch payload
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          function walk(directory) {
+            const files = [];
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+              const full = path.join(directory, entry.name);
+              if (entry.isDirectory()) files.push(...walk(full));
+              else if (entry.isFile() && entry.name.endsWith('.json')) files.push(full);
+            }
+            return files;
+          }
+
+          const candidates = walk('imports/approved-profiles');
+          let selected = null;
+          for (const file of candidates) {
+            let parsed;
+            try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+            const profiles = Array.isArray(parsed)
+              ? parsed
+              : Array.isArray(parsed?.profiles)
+                ? parsed.profiles
+                : null;
+            if (!profiles) continue;
+            const batchMarker = `${file} ${parsed?.batchId ?? ''} ${parsed?.name ?? ''}`.toLowerCase();
+            if (profiles.length === 25 && (batchMarker.includes('batch-01') || batchMarker.includes('batch 01') || batchMarker.includes('blank-profile'))) {
+              selected = { file, parsed, profiles };
+              break;
+            }
+          }
+
+          if (!selected) {
+            throw new Error('Could not locate the reviewed 25-profile batch payload.');
+          }
+
+          const contactCount = selected.profiles.reduce((sum, item) => sum + (Array.isArray(item.contacts) ? item.contacts.length : 0), 0);
+          const followUpCount = selected.profiles.reduce((sum, item) => sum + (Array.isArray(item.followUps) ? item.followUps.length : 0), 0);
+          const requireExistingCount = selected.profiles.filter((item) => item?.requireExisting === true).length;
+
+          if (contactCount !== 17) throw new Error(`Expected 17 reviewed contacts; found ${contactCount}.`);
+          if (followUpCount !== 5) throw new Error(`Expected 5 reviewed follow-ups; found ${followUpCount}.`);
+          if (requireExistingCount !== 25) throw new Error(`Every batch entry must require an existing profile; found ${requireExistingCount}/25.`);
+
+          fs.writeFileSync('batch-01-runtime-payload.json', JSON.stringify({
+            sourceFile: selected.file,
+            profiles: selected.profiles,
+          }, null, 2));
+          console.log(`Validated ${selected.file}: 25 profiles, 17 contacts, 5 follow-ups.`);
+          NODE
+
+      - name: Find or create the pull request and wait for merge
+        id: pr
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" \
+            --base main \
+            --state all \
+            --json number,state,mergedAt \
+            --jq 'sort_by(.number) | reverse | .[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$HEAD_BRANCH" \
+              --base main \
+              --title "Research and resolve blank profiles — batch 01" \
+              --body "Completes the reviewed first 25-profile missing/malformed-location batch. No email is sent or drafted.")
+            PR_NUMBER=${PR_URL##*/}
+          fi
+          echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+          for attempt in $(seq 1 150); do
+            STATE=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,mergedAt --jq 'if .mergedAt then "MERGED" else .state end')
+            if [ "$STATE" = "MERGED" ]; then
+              echo "Batch PR $PR_NUMBER is merged."
+              exit 0
+            fi
+            if [ "$STATE" = "CLOSED" ]; then
+              echo "Batch PR was closed without merging."
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Batch PR did not merge in the allowed window."
+          exit 1
+
+      - name: Trigger the production deployment when a deploy hook is configured
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+            curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+            echo "Triggered Render deployment."
+          else
+            echo "No deploy hook is configured; waiting for the linked main-branch deployment."
+          fi
+
+      - name: Verify every reviewed live profile, contact, note, follow-up, hold, and consolidation
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL:-}" || { echo "ADVENTURE_ZONE_API_URL is missing"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN:-}" || { echo "ASSISTANT_IMPORT_TOKEN is missing"; exit 1; }
+
+          node <<'NODE'
+          const fs = require('fs');
+          const payload = JSON.parse(fs.readFileSync('batch-01-runtime-payload.json', 'utf8'));
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const normalize = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const digits = (value) => String(value ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+
+          async function getJson(url) {
+            const response = await fetch(url, { headers });
+            const text = await response.text();
+            let body = null;
+            try { body = JSON.parse(text); } catch {}
+            return { status: response.status, body, text };
+          }
+
+          function compatibleLocation(result, event) {
+            const expectedCity = normalize(event?.city);
+            const expectedRegion = normalize(event?.region);
+            const resultCity = normalize(result?.city);
+            const resultRegion = normalize(result?.region);
+            if (expectedCity && resultCity && expectedCity !== resultCity) return false;
+            if (expectedRegion && resultRegion && expectedRegion !== resultRegion) return false;
+            return true;
+          }
+
+          async function resolveProfile(item) {
+            const event = item.event ?? {};
+            const names = [...new Set([event.name, ...(Array.isArray(item.aliases) ? item.aliases : [])].filter(Boolean))];
+            const byId = new Map();
+            for (const name of names) {
+              const result = await getJson(`${base}/profile-search?q=${encodeURIComponent(name)}&limit=20`);
+              if (result.status !== 200 || !Array.isArray(result.body?.results)) continue;
+              for (const row of result.body.results) {
+                if (row?.kind === 'organization' && row?.id && compatibleLocation(row, event)) byId.set(row.id, row);
+              }
+            }
+            const exactNames = new Set(names.map(normalize));
+            const exact = [...byId.values()].filter((row) => exactNames.has(normalize(row.label)));
+            if (exact.length === 1) return exact[0];
+            const close = [...byId.values()].filter((row) => names.some((name) => {
+              const a = normalize(name);
+              const b = normalize(row.label);
+              return a && b && (a.includes(b) || b.includes(a));
+            }));
+            if (close.length === 1) return close[0];
+            return null;
+          }
+
+          function contactMatches(actual, expected) {
+            const expectedEmail = normalize(expected?.email);
+            const expectedPhone = digits(expected?.phone);
+            const expectedName = normalize(expected?.name);
+            if (expectedEmail && normalize(actual?.email) === expectedEmail) return true;
+            if (expectedPhone && digits(actual?.phone) === expectedPhone) return true;
+            if (expectedName && normalize(actual?.name) === expectedName) return true;
+            return false;
+          }
+
+          function noteMatches(actual, expected) {
+            return normalize(actual?.subject) === normalize(expected?.subject)
+              && normalize(actual?.body).includes(normalize(expected?.body).slice(0, 80));
+          }
+
+          function followUpMatches(actual, expected) {
+            const label = normalize(actual?.label ?? actual?.kind);
+            const due = new Date(actual?.dueAt ?? actual?.due_at ?? 0).toISOString().slice(0, 10);
+            const expectedDue = new Date(expected?.dueAt ?? 0).toISOString().slice(0, 10);
+            return label === normalize(expected?.label) && due === expectedDue;
+          }
+
+          async function verifyOnce() {
+            const resolved = [];
+            const failures = [];
+            let verifiedContacts = 0;
+            let verifiedFollowUps = 0;
+            let territoryHoldProfiles = 0;
+
+            for (const [index, item] of payload.profiles.entries()) {
+              const match = await resolveProfile(item);
+              if (!match) {
+                failures.push({ index, name: item?.event?.name, reason: 'profile_not_resolved' });
+                continue;
+              }
+              const historyResult = await getJson(`${base}/profile-history/${match.id}`);
+              if (historyResult.status !== 200 || historyResult.body?.ok !== true) {
+                failures.push({ index, name: item?.event?.name, reason: `history_http_${historyResult.status}` });
+                continue;
+              }
+              const history = historyResult.body;
+              const place = history.place ?? {};
+              const expectedEvent = item.event ?? {};
+              if (expectedEvent.city && normalize(place.city) !== normalize(expectedEvent.city)) {
+                failures.push({ index, name: expectedEvent.name, reason: `city_mismatch:${place.city}` });
+              }
+              if (expectedEvent.region && normalize(place.region) !== normalize(expectedEvent.region)) {
+                failures.push({ index, name: expectedEvent.name, reason: `region_mismatch:${place.region}` });
+              }
+
+              for (const expected of Array.isArray(item.contacts) ? item.contacts : []) {
+                if (!(history.contacts ?? []).some((actual) => contactMatches(actual, expected))) {
+                  failures.push({ index, name: expectedEvent.name, reason: `contact_missing:${expected.name ?? expected.email ?? expected.phone}` });
+                } else verifiedContacts += 1;
+              }
+              for (const expected of Array.isArray(item.notes) ? item.notes : []) {
+                if (!(history.notes ?? []).some((actual) => noteMatches(actual, expected))) {
+                  failures.push({ index, name: expectedEvent.name, reason: `note_missing:${expected.subject}` });
+                }
+              }
+              for (const expected of Array.isArray(item.followUps) ? item.followUps : []) {
+                if (!(history.followUps ?? []).some((actual) => followUpMatches(actual, expected))) {
+                  failures.push({ index, name: expectedEvent.name, reason: `follow_up_missing:${expected.label}` });
+                } else verifiedFollowUps += 1;
+              }
+
+              const allReviewedText = JSON.stringify({ notes: item.notes ?? [], profile: item.profile ?? {} }).toLowerCase();
+              if (['OR', 'KS'].includes(String(expectedEvent.region ?? '').toUpperCase())) {
+                if (!allReviewedText.includes('territory hold')) {
+                  failures.push({ index, name: expectedEvent.name, reason: 'territory_hold_not_documented' });
+                } else territoryHoldProfiles += 1;
+              }
+
+              resolved.push({
+                index,
+                sourceName: expectedEvent.name,
+                profileId: match.id,
+                liveName: place.name ?? match.label,
+                city: place.city ?? null,
+                region: place.region ?? null,
+              });
+            }
+
+            async function verifyMergedFamily(queries, requiredContactFragment) {
+              const ids = new Map();
+              for (const query of queries) {
+                const result = await getJson(`${base}/profile-search?q=${encodeURIComponent(query)}&limit=20`);
+                if (result.status !== 200) return { ok: false, reason: `search_http_${result.status}` };
+                for (const row of result.body?.results ?? []) {
+                  if (row?.kind === 'organization' && row?.id) ids.set(row.id, row);
+                }
+              }
+              if (ids.size !== 1) return { ok: false, reason: `active_profile_count_${ids.size}`, ids: [...ids.keys()] };
+              const [id] = ids.keys();
+              const historyResult = await getJson(`${base}/profile-history/${id}`);
+              if (historyResult.status !== 200) return { ok: false, reason: `history_http_${historyResult.status}` };
+              const history = historyResult.body;
+              const actEvidence = [
+                ...(Array.isArray(history?.actCompanyIds) ? history.actCompanyIds : []),
+                ...(Array.isArray(history?.migrationSourceIds) ? history.migrationSourceIds : []),
+              ];
+              if (!actEvidence.length) return { ok: false, reason: 'act_provenance_missing', id };
+              if (requiredContactFragment) {
+                const found = (history.contacts ?? []).some((contact) => normalize(contact?.name).includes(normalize(requiredContactFragment)));
+                if (!found) return { ok: false, reason: `contact_fragment_missing:${requiredContactFragment}`, id };
+              }
+              return { ok: true, id, name: history.place?.name ?? null };
+            }
+
+            const breckenridgeMerge = await verifyMergedFamily([
+              'Breckenridge Main Street',
+              'Breckenridge August Art Festival',
+            ], null);
+            if (!breckenridgeMerge.ok) failures.push({ name: 'Breckenridge merge', reason: breckenridgeMerge.reason });
+
+            const redRiverMerge = await verifyMergedFamily([
+              'Red River Valley Fair',
+            ], 'Carson');
+            if (!redRiverMerge.ok) failures.push({ name: 'Red River Valley Fair merge', reason: redRiverMerge.reason });
+
+            return {
+              ok: failures.length === 0
+                && resolved.length === 25
+                && verifiedContacts === 17
+                && verifiedFollowUps === 5,
+              failures,
+              resolved,
+              verifiedContacts,
+              verifiedFollowUps,
+              territoryHoldProfiles,
+              uniqueLiveProfileCount: new Set(resolved.map((row) => row.profileId)).size,
+              merges: { breckenridge: breckenridgeMerge, redRiverValleyFair: redRiverMerge },
+            };
+          }
+
+          (async () => {
+            let latest = null;
+            for (let attempt = 1; attempt <= 120; attempt += 1) {
+              latest = await verifyOnce();
+              if (latest.ok) {
+                const receipt = {
+                  verifiedAt: new Date().toISOString(),
+                  sourceFile: payload.sourceFile,
+                  batchEntries: 25,
+                  resolvedEntries: latest.resolved.length,
+                  uniqueLiveProfiles: latest.uniqueLiveProfileCount,
+                  verifiedContacts: latest.verifiedContacts,
+                  verifiedFollowUps: latest.verifiedFollowUps,
+                  territoryHoldProfiles: latest.territoryHoldProfiles,
+                  merges: latest.merges,
+                  profiles: latest.resolved,
+                };
+                fs.writeFileSync('blank-profile-batch-01-live-verification.json', JSON.stringify(receipt, null, 2));
+                console.log('Live batch verification succeeded.');
+                return;
+              }
+              console.log(`Live verification attempt ${attempt} not complete: ${JSON.stringify(latest.failures.slice(0, 8))}`);
+              await sleep(15000);
+            }
+            throw new Error(`Live batch verification never reached the reviewed state: ${JSON.stringify(latest?.failures ?? [])}`);
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload the sanitized live verification receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-live-verification
+          path: blank-profile-batch-01-live-verification.json
+          retention-days: 7
