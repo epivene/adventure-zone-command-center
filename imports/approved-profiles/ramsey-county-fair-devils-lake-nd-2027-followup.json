@@ -1,0 +1,42 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "requireExisting": true,
+  "aliases": [
+    "Ramsey County 4-H Achievement Days",
+    "Ramsey County Fairgrounds"
+  ],
+  "event": {
+    "id": null,
+    "name": "Ramsey County Fair",
+    "city": "Devils Lake",
+    "region": "ND"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "interested",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2027 outreach timing reviewed",
+      "body": "Ramsey County 4-H Achievement Days ran June 17-19, 2026. No official 2027 dates or vendor/entertainment application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Connie Hanson but must be reviewed before sending."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Review 2027 Ramsey County Fair outreach",
+      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Connie Hanson; do not send automatically.",
+      "dueAt": "2027-03-17T15:00:00.000Z"
+    }
+  ]
+}
