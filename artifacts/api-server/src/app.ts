@@ -3,7 +3,7 @@ import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
-import { requireOwnerMiddleware } from "./lib/auth";
+import { requireOwnerMiddleware } from "./features/owner-auth/owner-runtime";
 import followUpsRouter from "./routes/follow-ups";
 import assistantImportRouter from "./routes/assistant-import";
 import assistantProfileHistoryRouter from "./routes/assistant-profile-history";
