@@ -1,0 +1,62 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": ["Breckenridge Food & Wine Festival (Breckenridge) CO"],
+    "event": {"id": "fe8d1eb0-b19a-40e8-b51d-4e1fb1b29cd1", "name": "Breckenridge Food & Wine Festival (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Wine-tasting and culinary festival at Main Street Station and The Village at Breckenridge. Active event but not a family-entertainment prospect.", "phone": "", "website": "https://www.breckenridgefoodandwine.com/", "address1": "505 South Main Street", "address2": "", "postalCode": "80424"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Breckenridge Food & Wine Festival, held July 24-26, 2026 at Main Street Station and The Village at Breckenridge. The reviewed programming is centered on wine tasting and culinary experiences. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active adult-oriented food/wine event; no outreach or follow-up. Source: https://www.breckenridgefoodandwine.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Breckenridge Gathering at the Great Divide Art Festival (Breckenridge) CO"],
+    "event": {"id": "2270d699-8681-4fee-861f-6b326f55bbfc", "name": "Breckenridge Gathering at the Great Divide Art Festival (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Mountain Art Festivals fine-art event at Colorado Mountain College in Breckenridge. Retained as a separate dated event under the existing Mountain Art Festivals producer relationship.", "phone": "970-406-1866", "website": "https://www.mountainartfestivals.com/gathering-at-the-great-divide-art-festival", "address1": "107 Denison Placer Road", "address2": "", "postalCode": "80424"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as Gathering at the Great Divide Art Festival, scheduled Sept. 5-7, 2026 at Colorado Mountain College, 107 Denison Placer Road, Breckenridge. It is produced by Dick and Tina Cunningham/Mountain Art Festivals; the existing Breckenridge August Art Festival profile already holds mountainartfestivals@gmail.com and 970-406-1866. Adventure Zone sent outreach to that producer in 2023 and 2024 with no reply. This profile remains a separate event and is not merged with the producer's other Breckenridge festival. Classification: active fine-art event with no clearly supported independent carnival lane; no new contact duplicate or follow-up. Source: https://www.mountainartfestivals.com/gathering-at-the-great-divide-art-festival ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Breckenridge International Festival of the Arts (Breckenridge)  CO"],
+    "event": {"id": "85f40144-40dd-45c4-a975-887e4b94b5ed", "name": "Breckenridge International Festival of the Arts (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Multi-disciplinary arts festival produced by Breck Create. Existing programming includes large-scale inflatable art and youth/family activities, so a separate Adventure Zone package is not currently supported.", "phone": "970-453-3187", "website": "https://breckcreate.org/bifa", "address1": "150 West Adams Avenue", "address2": "", "postalCode": "80424"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Breckenridge International Festival of the Arts, scheduled Aug. 20-23, 2026 and produced by Breck Create, 150 W. Adams Avenue, Breckenridge; info@breckcreate.org; 970-453-3187. The live app separately contains the Breck Create event ‘10 Mile Pride,’ with three contacts and substantial relationship history; BIFA is intentionally retained as its own event rather than merged. Adventure Zone sent BIFA outreach on 2025-07-10 and no reply was found. Current BIFA programming already includes large inflatable sculpture/performance work and youth/family activities. Classification: active arts event with existing program coverage; no follow-up. Source: https://breckcreate.org/bifa ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["CKS Paddlefest (Buena Vista) CO"],
+    "event": {"id": "6873915f-608a-4720-a3b5-820ac4d66d41", "name": "CKS Paddlefest (Buena Vista) CO", "city": "Buena Vista", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Multi-day whitewater and river-sports festival in Buena Vista. Active specialty event; current format and river-focused footprint do not support a full inflatable carnival.", "phone": "719-395-9206", "website": "https://ckspaddlefest.com/", "address1": "426 East Main Street", "address2": "", "postalCode": "81211"},
+    "contacts": [{"id": null, "name": "CKS Paddlefest Team", "primary": true, "phone": "719-395-9206", "email": "paddlefest@cksmainstreet.com", "role": "Festival organizer"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as CKS Paddlefest, scheduled May 21-25, 2026 in Buena Vista. CKS River Supply is at 426 E. Main Street, Buena Vista, CO 81211; 719-395-9206; paddlefest@cksmainstreet.com. Adventure Zone sent outreach in 2024 and again on 2025-04-29 to paddlefest@cksmainstreet.com and shop@cksriversupply.com; no reply was found. Classification: active specialized river/whitewater festival, but no supported full-carnival need or footprint. No follow-up. Sources: https://ckspaddlefest.com/ and https://www.cksriversupply.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Tough Mudder (Byers) CO"],
+    "event": {"id": "9e1d19c6-565d-40f6-8f96-e5434d0ce4fc", "name": "Tough Mudder Colorado (Fort Carson) CO", "city": "Fort Carson", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Obstacle-course endurance event. The 2026 Colorado edition moved from the legacy Byers location to Fort Carson; its own obstacle attractions make it a poor fit for an inflatable carnival.", "phone": "", "website": "https://toughmudder.com/events/colorado/", "address1": "2700 Wilderness Road", "address2": "", "postalCode": "80913"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Updated the legacy Byers profile to the current Tough Mudder Colorado location at Fort Carson, 2700 Wilderness Road. The 2026 event is scheduled Sept. 26 and offers 5K and 15K obstacle courses plus Mudder Village. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active obstacle-course event whose core product already overlaps Adventure Zone's attraction category; no outreach or follow-up. Source: https://toughmudder.com/events/colorado/ ."}],
+    "followUps": []
+  }
+]
