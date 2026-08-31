@@ -4,6 +4,7 @@ on:
   pull_request:
     branches: [main]
     paths:
+      - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
       - "artifacts/api-server/src/index.ts"
@@ -13,6 +14,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "artifacts/api-server/src/features/organizations/known-blank-profile-enrichment.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.ts"
       - "artifacts/api-server/src/features/organizations/known-empty-test-profile-cleanup.test.ts"
       - "artifacts/api-server/src/index.ts"
