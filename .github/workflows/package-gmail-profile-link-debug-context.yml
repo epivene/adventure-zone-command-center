@@ -18,24 +18,22 @@ jobs:
       - name: Collect source and indexes
         run: |
           set -euo pipefail
-          mkdir -p context/relevant-files
+          mkdir -p context
           cp -R artifacts/api-server/src/features/google-workspace context/google-workspace
           cp -R artifacts/api-server/src/routes context/api-routes
           cp -R artifacts/api-server/src/features/event-profiles context/event-profiles
           cp -R artifacts/api-server/src/db context/api-db
+          cp -R artifacts/avz-crm/src context/web-src
           cp -R lib/db/src context/lib-db-src
-          cp -R lib/db/migrations context/lib-db-migrations 2>/dev/null || true
-          cp -R migrations context/root-migrations 2>/dev/null || true
+          [ ! -d lib/db/migrations ] || cp -R lib/db/migrations context/lib-db-migrations
+          [ ! -d migrations ] || cp -R migrations context/root-migrations
 
-          grep -RniE "gmail|google_workspace|message[_A-Za-z]*id|thread[_A-Za-z]*id|profile-history|Notes & Call Outcomes|NOTES & CALL OUTCOMES" \
-            artifacts lib migrations \
-            > context/gmail-code-index.txt 2>/dev/null || true
-          grep -RlE "gmail|google_workspace|profile-history|Notes & Call Outcomes|NOTES & CALL OUTCOMES" \
-            artifacts lib migrations 2>/dev/null \
-            | while read -r file; do
-                mkdir -p "context/relevant-files/$(dirname "$file")"
-                cp "$file" "context/relevant-files/$file"
-              done
+          : > context/gmail-code-index.txt
+          for root in artifacts/api-server/src artifacts/avz-crm/src lib/db/src lib/db/migrations migrations; do
+            [ -e "$root" ] || continue
+            grep -RniE "gmail|google_workspace|message[_A-Za-z]*id|thread[_A-Za-z]*id|profile-history|Notes & Call Outcomes|NOTES & CALL OUTCOMES" "$root" \
+              >> context/gmail-code-index.txt 2>/dev/null || true
+          done
           find context -type f | sort > context/file-index.txt
       - uses: actions/upload-artifact@v4
         with:
