@@ -1,0 +1,51 @@
+name: Owner Agent Foundation CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/owner-auth/**"
+      - "artifacts/api-server/src/lib/auth.ts"
+      - "artifacts/api-server/src/routes/auth.ts"
+      - "artifacts/api-server/src/routes/auth.test.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/routes/office-security-regression.test.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/db/owner-account-**"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/adventure-zone/src/lib/auth-context.tsx"
+      - "lib/db/src/owner-auth-schema*"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/drizzle-schema.ts"
+      - "lib/db/migrations/20260831_owner_account.sql"
+      - "docs/superpowers/specs/2026-08-31-owner-only-agent.md"
+      - "docs/superpowers/plans/2026-08-31-owner-only-agent-foundation.md"
+      - ".github/workflows/owner-agent-foundation-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  owner-agent-foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Owner identity and route tests
+        run: >-
+          pnpm exec vitest run
+          artifacts/api-server/src/features/owner-auth/owner-token.test.ts
+          artifacts/api-server/src/features/owner-auth/owner-middleware.test.ts
+          artifacts/api-server/src/routes/auth.test.ts
+          artifacts/api-server/src/routes/office-security-regression.test.ts
+          artifacts/api-server/src/db/required-schema-startup.test.ts
+          artifacts/api-server/src/db/owner-account-required-startup.test.ts
+          lib/db/src/owner-auth-schema.test.ts
+      - name: Workspace typecheck
+        run: pnpm run typecheck
+      - name: Workspace build
+        run: pnpm run build
