@@ -1,0 +1,40 @@
+name: Package current Gmail profile-link debug context
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/package-gmail-profile-link-debug-context-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collect source and indexes
+        run: |
+          set -euo pipefail
+          mkdir -p context
+          cp -R artifacts/api-server/src/features/google-workspace context/google-workspace
+          cp -R artifacts/api-server/src/routes context/api-routes
+          cp -R artifacts/api-server/src/features/event-profiles context/event-profiles
+          cp -R artifacts/api-server/src/db context/api-db
+          cp -R artifacts/avz-crm/src context/web-src
+          cp -R lib/db/src context/lib-db-src
+          [ ! -d lib/db/migrations ] || cp -R lib/db/migrations context/lib-db-migrations
+          [ ! -d migrations ] || cp -R migrations context/root-migrations
+          git log --oneline --decorate --max-count=40 > context/branch-log.txt
+          git status --short > context/git-status.txt
+          grep -RniE "gmail|google_workspace|message[_A-Za-z]*id|thread[_A-Za-z]*id|profile-history|Notes & Call Outcomes|NOTES & CALL OUTCOMES" \
+            artifacts/api-server/src artifacts/avz-crm/src lib/db/src lib/db/migrations migrations \
+            > context/gmail-code-index.txt 2>/dev/null || true
+          find context -type f | sort > context/file-index.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gmail-profile-link-debug-context-current
+          path: context
+          retention-days: 2
