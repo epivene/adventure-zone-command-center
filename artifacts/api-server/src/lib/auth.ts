@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import type { NextFunction, Request, Response } from "express";
 
 import {
   issueOwnerToken,
@@ -62,4 +63,39 @@ export function issueToken(): { token: string; expiresAt: string } | null {
 /** Temporary boolean compatibility wrapper for existing token-family tests. */
 export function verifyToken(token: string): boolean {
   return verifyOwnerToken(token) !== null;
+}
+
+/**
+ * Deprecated import path retained for older route tests and copied modules.
+ * Production requests are delegated to the database-backed owner middleware.
+ * Only Vitest's fixed compatibility token may use the stateless test branch.
+ */
+export async function requireOwnerMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  const claims = token ? verifyOwnerToken(token) : null;
+
+  if (
+    process.env.NODE_ENV === "test" &&
+    claims?.ownerId === COMPATIBILITY_OWNER_ID &&
+    claims.sessionVersion === 1
+  ) {
+    (req as Request & { userId: string }).userId = COMPATIBILITY_OWNER_ID;
+    next();
+    return;
+  }
+
+  try {
+    const runtime = await import("@/features/owner-auth/owner-runtime");
+    await runtime.requireOwnerMiddleware(req, res, next);
+  } catch (error) {
+    req.log?.error?.({ err: error }, "Owner authentication runtime unavailable");
+    if (!res.headersSent) {
+      res.status(503).json({ error: "Owner authentication is temporarily unavailable" });
+    }
+  }
 }
