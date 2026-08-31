@@ -106,6 +106,7 @@ export interface GoogleWorkspaceReadClient {
   listMessagePage?(input: {
     maxResults: number;
     pageToken?: string | null;
+    query?: string | null;
   }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
