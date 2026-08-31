@@ -14,6 +14,11 @@ import {
   normalizeCanvas,
   type CanvasDocument,
 } from "@/lib/design-studio/model";
+import {
+  downloadDesignBlob,
+  exportCanvasPdf,
+  exportCanvasPng,
+} from "@/lib/design-studio/export-canvas";
 import { useFreeformEditor } from "@/components/design-studio/use-freeform-editor";
 import { FreeformCanvas } from "@/components/design-studio/FreeformCanvas";
 import { MobileEditorTopBar } from "@/components/design-studio/MobileEditorTopBar";
@@ -24,18 +29,29 @@ import {
 } from "@/components/design-studio/AssetPickerSheet";
 import { LayersSheet } from "@/components/design-studio/LayersSheet";
 import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
+import { ExportSheet } from "@/components/design-studio/ExportSheet";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
 const EMPTY_CANVAS = normalizeCanvas(null);
 
 type PhotoPickerMode = "add" | "replace";
+type ExportFormat = "png" | "pdf";
 
 function noteValue(notes: string | null | undefined, prefix: string) {
   return (notes ?? "")
     .split("\n")
     .find((line) => line.startsWith(prefix))
     ?.slice(prefix.length) ?? "";
+}
+
+function exportFilename(name: string, format: ExportFormat) {
+  const stem = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "adventure-zone-design";
+  return `${stem}.${format}`;
 }
 
 export default function DesignStudioEditorPage() {
@@ -47,6 +63,8 @@ export default function DesignStudioEditorPage() {
   const [photoPickerMode, setPhotoPickerMode] = useState<PhotoPickerMode | null>(null);
   const [showLayers, setShowLayers] = useState(false);
   const [showAddElements, setShowAddElements] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -153,6 +171,23 @@ export default function DesignStudioEditorPage() {
     setPhotoPickerMode(null);
   }
 
+  async function exportDesign(format: ExportFormat) {
+    setExporting(format);
+    setError(null);
+    try {
+      const doc = latestCanvas.current ?? editor.doc;
+      const blob = format === "png"
+        ? await exportCanvasPng(doc, assets)
+        : await exportCanvasPdf(doc, assets);
+      downloadDesignBlob(blob, exportFilename(name, format));
+      setShowExport(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : `Could not export ${format.toUpperCase()}.`);
+    } finally {
+      setExporting(null);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[70dvh] flex-col gap-4 p-4">
@@ -183,6 +218,7 @@ export default function DesignStudioEditorPage() {
         canUndo={editor.canUndo}
         dirty={dirty}
         name={name}
+        onExport={() => setShowExport(true)}
         onNameChange={(nextName) => {
           setName(nextName);
           setDirty(true);
@@ -248,6 +284,15 @@ export default function DesignStudioEditorPage() {
 
       {showAddElements ? (
         <AddElementSheet editor={editor} onClose={() => setShowAddElements(false)} />
+      ) : null}
+
+      {showExport ? (
+        <ExportSheet
+          exporting={exporting}
+          onClose={() => setShowExport(false)}
+          onExportPdf={() => void exportDesign("pdf")}
+          onExportPng={() => void exportDesign("png")}
+        />
       ) : null}
     </div>
   );
