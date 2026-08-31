@@ -16,34 +16,55 @@ export type OwnerAccountSessionRecord = Omit<
   "passwordHash" | "passwordSalt"
 >;
 
-type QueryResult = { rows: Array<Record<string, any>> };
+type QueryResult = { rows: Array<Record<string, unknown>> };
 type Queryable = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
 };
 type OwnerClient = Queryable & { release(): void };
 type OwnerPool = Queryable & { connect(): Promise<OwnerClient> };
 
-function mapCredential(row: Record<string, unknown>): OwnerAccountCredentialRecord {
-  return {
-    id: String(row.id),
-    loginName: String(row.login_name),
-    displayName: String(row.display_name),
-    role: "owner",
-    passwordHash: String(row.password_hash),
-    passwordSalt: String(row.password_salt),
-    enabled: row.enabled === true,
-    sessionVersion: Number(row.session_version),
-  };
+const canonicalUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function invalidOwnerRecord(): never {
+  throw new Error("OWNER_ACCOUNT_RECORD_INVALID");
+}
+
+function requiredString(row: Record<string, unknown>, key: string): string {
+  const value = row[key];
+  if (typeof value !== "string" || !value.trim()) return invalidOwnerRecord();
+  return value;
 }
 
 function mapSession(row: Record<string, unknown>): OwnerAccountSessionRecord {
-  const credential = mapCredential({
-    ...row,
-    password_hash: "",
-    password_salt: "",
-  });
-  const { passwordHash: _passwordHash, passwordSalt: _passwordSalt, ...session } = credential;
-  return session;
+  const id = requiredString(row, "id");
+  const loginName = requiredString(row, "login_name");
+  const displayName = requiredString(row, "display_name");
+  const sessionVersion = Number(row.session_version);
+  if (
+    !canonicalUuid.test(id) ||
+    row.role !== "owner" ||
+    typeof row.enabled !== "boolean" ||
+    !Number.isSafeInteger(sessionVersion) ||
+    sessionVersion < 1
+  ) {
+    return invalidOwnerRecord();
+  }
+  return {
+    id,
+    loginName,
+    displayName,
+    role: "owner",
+    enabled: row.enabled,
+    sessionVersion,
+  };
+}
+
+function mapCredential(row: Record<string, unknown>): OwnerAccountCredentialRecord {
+  return {
+    ...mapSession(row),
+    passwordHash: requiredString(row, "password_hash"),
+    passwordSalt: requiredString(row, "password_salt"),
+  };
 }
 
 const credentialColumns = `
@@ -122,6 +143,12 @@ export class PostgresOwnerAccountRepository {
     passwordHash: string;
     passwordSalt: string;
   }): Promise<OwnerAccountCredentialRecord> {
+    const loginName = input.loginName.trim();
+    const displayName = input.displayName.trim();
+    if (!loginName || !displayName || !input.passwordHash || !input.passwordSalt) {
+      throw new Error("OWNER_ACCOUNT_INPUT_INVALID");
+    }
+
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -146,12 +173,7 @@ export class PostgresOwnerAccountRepository {
             password_salt, enabled, session_version, updated_at)
          VALUES ('primary', $1, $2, 'owner', $3, $4, true, 1, now())
          RETURNING ${credentialColumns}`,
-        [
-          input.loginName.trim(),
-          input.displayName.trim(),
-          input.passwordHash,
-          input.passwordSalt,
-        ],
+        [loginName, displayName, input.passwordHash, input.passwordSalt],
       );
       const row = created.rows[0];
       if (!row) throw new Error("OWNER_ACCOUNT_CREATE_FAILED");
