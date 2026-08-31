@@ -1,0 +1,73 @@
+name: Export blank profile research batch 01 secondary evidence
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-01
+    paths:
+      - ".github/workflows/export-blank-profile-batch-01-secondary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export duplicate histories and broad family searches
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+
+          async function get(path) {
+            const response = await fetch(`${base}/${path}`, { headers });
+            const text = await response.text();
+            let body;
+            try { body = JSON.parse(text); } catch { body = { raw: text }; }
+            return { status: response.status, body };
+          }
+
+          (async () => {
+            const histories = {};
+            for (const id of [
+              '0965cbf6-2396-42b9-89b8-666cd3150cda',
+              '1e289bf1-4f19-42ee-9bef-ce0a0c885479',
+              '97653632-0df6-4f11-9584-cd001cc0d0aa',
+            ]) {
+              histories[id] = await get(`profile-history/${id}`);
+            }
+
+            const searches = {};
+            for (const query of [
+              'Lemonade Day',
+              'Mountain Art Festivals',
+              'Breckenridge August Art Festival',
+              'Old Ephraim Heritage Park',
+              'Colorado Brazil Fest',
+              'Red River Valley Fair',
+              'Washington State Fairs Association',
+            ]) {
+              searches[query] = await get(`profile-search?q=${encodeURIComponent(query)}&limit=20`);
+            }
+
+            fs.writeFileSync('blank-profile-batch-01-secondary-evidence.json', JSON.stringify({
+              capturedAt: new Date().toISOString(),
+              histories,
+              searches,
+            }, null, 2));
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-secondary-evidence
+          path: blank-profile-batch-01-secondary-evidence.json
+          retention-days: 2
