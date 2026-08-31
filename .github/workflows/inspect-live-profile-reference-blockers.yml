@@ -1,0 +1,66 @@
+name: Inspect live profile reference blockers
+
+on:
+  push:
+    branches:
+      - maintenance/profile-reference-inspector
+    paths:
+      - ".github/workflows/inspect-live-profile-reference-blockers.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wait for protected inspector and export blockers
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p reference-results
+
+          for attempt in $(seq 1 60); do
+            READY=true
+            for PROFILE_ID in \
+              08e8e9b8-618a-4129-ab14-640345c1abf0 \
+              0bfee77c-e42c-417f-9d5e-7df54d57c38b
+            do
+              STATUS=$(curl --silent --show-error \
+                --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                --output "reference-results/${PROFILE_ID}.json" \
+                --write-out "%{http_code}" \
+                "${BASE_URL}/profile-integrity-references/${PROFILE_ID}" || true)
+              if [ "${STATUS}" != "200" ]; then READY=false; fi
+            done
+            if [ "${READY}" = "true" ]; then break; fi
+            sleep 15
+          done
+
+          node <<'NODE'
+          const fs = require('fs');
+          const ids = [
+            '08e8e9b8-618a-4129-ab14-640345c1abf0',
+            '0bfee77c-e42c-417f-9d5e-7df54d57c38b',
+          ];
+          const profiles = ids.map((id) => {
+            const body = JSON.parse(fs.readFileSync(`reference-results/${id}.json`, 'utf8'));
+            if (body.ok !== true || body.mode !== 'read_only' || !Array.isArray(body.references)) {
+              throw new Error(`Inspector did not return a valid result for ${id}`);
+            }
+            return body;
+          });
+          fs.writeFileSync('live-profile-reference-blockers.json', JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            profiles,
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-profile-reference-blockers
+          path: live-profile-reference-blockers.json
+          retention-days: 1
