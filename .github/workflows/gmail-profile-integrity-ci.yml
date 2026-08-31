@@ -1,0 +1,45 @@
+name: Gmail profile integrity CI
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-link-integrity
+      - main
+    paths:
+      - "artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.test.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/gmail-profile-integrity-ci.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.test.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/gmail-profile-integrity-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused behavior tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/gmail-profile-integrity.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
