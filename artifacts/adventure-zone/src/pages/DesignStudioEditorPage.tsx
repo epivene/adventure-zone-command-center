@@ -1,27 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   Check,
-  Clipboard,
   ExternalLink,
-  Link as LinkIcon,
+  Redo2,
   RefreshCw,
   Save,
-  Sparkles,
+  Undo2,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import { Link, useParams } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
-import { Label } from "@workspace/avz-crm/components/ui/label";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { Textarea } from "@workspace/avz-crm/components/ui/textarea";
-import { designStudioApi, type DesignProject } from "@/lib/design-studio-api";
-import { CANVA_STARTERS } from "@/lib/design-studio/canva-starters";
+import {
+  designStudioApi,
+  type DesignAsset,
+  type DesignProject,
+} from "@/lib/design-studio-api";
+import { starterById } from "@/lib/design-studio/canva-starters";
+import {
+  normalizeCanvas,
+  type CanvasDocument,
+} from "@/lib/design-studio/model";
+import { useFreeformEditor } from "@/components/design-studio/use-freeform-editor";
+import { FreeformCanvas } from "@/components/design-studio/FreeformCanvas";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
-const CANVA_URL_PREFIX = "CANVA_URL=";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
+const EMPTY_CANVAS = normalizeCanvas(null);
 
 function noteValue(notes: string | null | undefined, prefix: string) {
   return (notes ?? "")
@@ -30,91 +39,106 @@ function noteValue(notes: string | null | undefined, prefix: string) {
     ?.slice(prefix.length) ?? "";
 }
 
-function buildNotes(existing: string | null | undefined, starterId: string, canvaUrl: string) {
-  const other = (existing ?? "")
-    .split("\n")
-    .filter((line) => line && !line.startsWith(STARTER_PREFIX) && !line.startsWith(CANVA_URL_PREFIX));
-  const lines = [starterId ? `${STARTER_PREFIX}${starterId}` : "", canvaUrl.trim() ? `${CANVA_URL_PREFIX}${canvaUrl.trim()}` : "", ...other].filter(Boolean);
-  return lines.join("\n");
-}
-
 export default function DesignStudioEditorPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<DesignProject | null>(null);
   const [name, setName] = useState("");
-  const [content, setContent] = useState("");
-  const [canvaUrl, setCanvaUrl] = useState("");
+  const [assets, setAssets] = useState<DesignAsset[]>([]);
+  const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestCanvas = useRef<CanvasDocument | null>(null);
+
+  const canEdit = Boolean(
+    project &&
+      project.status !== "archived" &&
+      project.status !== "used" &&
+      project.status !== "sent",
+  );
+
+  const onCanvasChange = useCallback((doc: CanvasDocument) => {
+    latestCanvas.current = doc;
+    setDirty(true);
+    setSaved(false);
+  }, []);
+
+  const editor = useFreeformEditor(canvasDoc ?? EMPTY_CANVAS, {
+    canEdit,
+    onChange: onCanvasChange,
+  });
 
   useEffect(() => {
     if (!params.id) return;
     setLoading(true);
-    designStudioApi.get(params.id)
-      .then((value) => {
+    setError(null);
+
+    Promise.all([
+      designStudioApi.get(params.id),
+      designStudioApi.listAssets().catch(() => [] as DesignAsset[]),
+    ])
+      .then(([value, assetList]) => {
         setProject(value);
         setName(value.name);
-        setContent(value.content ?? "");
-        setCanvaUrl(noteValue(value.notes, CANVA_URL_PREFIX));
+        setAssets(assetList);
+
+        const starterId = noteValue(value.notes, STARTER_PREFIX);
+        const starterCanvas = starterById(starterId)?.canvas ?? null;
+        const doc = normalizeCanvas(value.canvas ?? starterCanvas);
+        latestCanvas.current = doc;
+        setCanvasDoc(doc);
+        setDirty(false);
+        setSaved(false);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Project could not be loaded."))
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Project could not be loaded.");
+      })
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  const starterId = useMemo(() => noteValue(project?.notes, STARTER_PREFIX), [project?.notes]);
-  const starter = useMemo(() => CANVA_STARTERS.find((item) => item.id === starterId), [starterId]);
-
-  async function save() {
+  const save = useCallback(async () => {
     if (!params.id || !project || !name.trim()) return;
+
     setSaving(true);
-    setSaved(false);
     setError(null);
     try {
       const value = await designStudioApi.update(params.id, {
         name: name.trim(),
         type: project.type,
-        content,
-        notes: buildNotes(project.notes, starterId, canvaUrl),
+        canvas: latestCanvas.current ?? editor.doc,
         syncState: "synced",
       });
       setProject(value);
+      setDirty(false);
       setSaved(true);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Project could not be saved.");
     } finally {
       setSaving(false);
     }
-  }
+  }, [editor.doc, name, params.id, project]);
 
-  async function copyContent() {
-    try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setError("Could not copy automatically. You can still select the text below and copy it manually.");
-    }
-  }
+  const saveRef = useRef(save);
+  saveRef.current = save;
 
-  function openCanva() {
-    const target = canvaUrl.trim() || CANVA_CREATE_URL;
-    window.open(target, "_blank", "noopener,noreferrer");
-  }
+  useEffect(() => {
+    if (!dirty || loading || saving) return;
+    const timer = window.setTimeout(() => void saveRef.current(), 1200);
+    return () => window.clearTimeout(timer);
+  }, [dirty, loading, name, saving]);
 
   if (loading) {
     return (
-      <div className="mx-auto grid max-w-6xl gap-5 p-4">
+      <div className="flex min-h-[70dvh] flex-col gap-4 p-4">
         <Skeleton className="h-12 rounded-xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-80 rounded-2xl" />
+        <Skeleton className="min-h-[32rem] flex-1 rounded-2xl" />
       </div>
     );
   }
 
-  if (!project) {
+  if (!project || !canvasDoc) {
     return (
       <div className="mx-auto max-w-lg rounded-2xl border border-destructive/30 bg-destructive/10 p-8 text-center" role="alert">
         <p className="text-lg font-bold">This design is unavailable.</p>
@@ -128,94 +152,77 @@ export default function DesignStudioEditorPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 pb-12">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-muted" href="/design-studio" aria-label="Back to Design Studio">
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-background" data-testid="design-editor">
+      <header className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-2 border-b border-border bg-card/95 px-3 py-2.5 shadow-sm backdrop-blur">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Link
+            aria-label="Back to Design Studio"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-muted"
+            href="/design-studio"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Canva project</p>
-            <h1 className="truncate text-xl font-black text-foreground">{project.name}</h1>
-          </div>
-          <Badge variant="outline" className="hidden capitalize sm:inline-flex">{project.type}</Badge>
+          <Input
+            aria-label="Project name"
+            className="h-9 min-w-0 max-w-sm border-0 bg-transparent px-2 text-sm font-black shadow-none focus-visible:ring-1"
+            disabled={!canEdit}
+            onChange={(event) => {
+              setName(event.target.value);
+              setDirty(true);
+              setSaved(false);
+            }}
+            value={name}
+          />
+          <Badge className="hidden capitalize sm:inline-flex" variant="outline">{project.type}</Badge>
         </div>
-        <div className="flex items-center gap-2">
-          {saved ? <span className="hidden items-center gap-1 text-xs font-semibold text-primary sm:flex"><Check className="h-3.5 w-3.5" />Saved</span> : null}
-          <Button className="gap-2" disabled={saving || !name.trim()} onClick={() => void save()}>
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Saving…" : "Save"}
+
+        <div className="flex items-center gap-1">
+          <Button aria-label="Undo" disabled={!canEdit || !editor.canUndo} onClick={editor.undo} size="icon" variant="ghost">
+            <Undo2 className="h-4 w-4" />
+          </Button>
+          <Button aria-label="Redo" disabled={!canEdit || !editor.canRedo} onClick={editor.redo} size="icon" variant="ghost">
+            <Redo2 className="h-4 w-4" />
+          </Button>
+          <Button aria-label="Zoom out" disabled={editor.doc.zoom <= 0.25} onClick={() => editor.setZoom(editor.doc.zoom - 0.1)} size="icon" variant="ghost">
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <span className="hidden min-w-12 text-center text-xs font-semibold text-muted-foreground sm:inline">{Math.round(editor.doc.zoom * 100)}%</span>
+          <Button aria-label="Zoom in" disabled={editor.doc.zoom >= 2} onClick={() => editor.setZoom(editor.doc.zoom + 0.1)} size="icon" variant="ghost">
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button className="ml-1 gap-1.5" disabled={saving || !name.trim()} onClick={() => void save()} size="sm">
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
+            <span className="hidden sm:inline">{saving ? "Saving…" : saved ? "Saved" : dirty ? "Save" : "Saved"}</span>
           </Button>
         </div>
       </header>
 
-      {error ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{error}</div> : null}
-
-      <section className="relative overflow-hidden rounded-2xl bg-sidebar p-6 text-sidebar-foreground shadow-lg md:p-8">
-        <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-accent/20 blur-3xl" />
-        <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/40 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              Free Canva workflow
-            </div>
-            <h2 className="mt-4 text-3xl font-black tracking-tight">Edit the visual in Canva. Keep the project organized here.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-sidebar-foreground/70">
-              Copy the prepared Adventure Zone text, open Canva, build or duplicate the design there, then paste the Canva design link back into this project. No Brand Kit, Autofill, or Canva Pro feature is required.
-            </p>
-          </div>
-          <Button className="gap-2 bg-primary text-primary-foreground" size="lg" onClick={openCanva}>
-            <ExternalLink className="h-4 w-4" />
-            {canvaUrl.trim() ? "Open saved Canva design" : "Open Canva Free"}
-          </Button>
+      {error ? (
+        <div className="mx-3 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          {error}
         </div>
-      </section>
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Prepared content</p>
-              <h2 className="mt-1 text-xl font-black">Copy into Canva</h2>
-              {starter ? <p className="mt-1 text-sm text-muted-foreground">Starter: {starter.name} • {starter.canvasSize}</p> : null}
-            </div>
-            <Button className="gap-2" onClick={() => void copyContent()} variant="outline">
-              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy all text"}
-            </Button>
-          </div>
-          <Textarea
-            className="mt-5 min-h-[28rem] resize-y font-mono text-sm leading-relaxed"
-            onChange={(event) => { setContent(event.target.value); setSaved(false); }}
-            value={content}
-          />
-        </section>
+      <main className="relative flex min-h-0 flex-1 flex-col" data-testid="design-canvas">
+        <FreeformCanvas assets={assets} editor={editor} />
+      </main>
 
-        <aside className="grid content-start gap-5">
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <Label htmlFor="design-name">Project name</Label>
-            <Input id="design-name" className="mt-2" value={name} onChange={(event) => { setName(event.target.value); setSaved(false); }} />
-          </section>
-
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4 text-primary" />
-              <h2 className="font-black">Canva design link</h2>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">After you make or duplicate the design in Canva, paste its normal share/edit URL here so you can jump straight back to it later.</p>
-            <Input className="mt-4" placeholder="https://www.canva.com/design/..." value={canvaUrl} onChange={(event) => { setCanvaUrl(event.target.value); setSaved(false); }} />
-            <Button className="mt-3 w-full gap-2" onClick={openCanva} variant="outline">
-              <ExternalLink className="h-4 w-4" />
-              {canvaUrl.trim() ? "Open design" : "Create in Canva"}
-            </Button>
-          </section>
-
-          <section className="rounded-2xl border border-dashed border-border bg-muted/20 p-5">
-            <p className="font-black text-foreground">What happened to the old editor?</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">It is intentionally retired from this workflow. Canva now handles visual editing; Command Center handles the business context, prepared copy, and saved design links.</p>
-          </section>
-        </aside>
-      </div>
+      <footer className="sticky bottom-0 z-20 flex items-center justify-between gap-3 border-t border-border bg-card/95 px-3 py-2 backdrop-blur">
+        <div className="min-w-0 text-xs text-muted-foreground">
+          {editor.selectedNodes.length
+            ? `${editor.selectedNodes.length} layer${editor.selectedNodes.length === 1 ? "" : "s"} selected`
+            : "Tap a layer to edit it"}
+        </div>
+        <Button
+          className="shrink-0 gap-2"
+          onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}
+          size="sm"
+          variant="outline"
+        >
+          <ExternalLink className="h-4 w-4" />
+          Canva
+        </Button>
+      </footer>
     </div>
   );
 }
