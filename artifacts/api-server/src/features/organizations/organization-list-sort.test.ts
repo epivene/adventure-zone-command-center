@@ -51,6 +51,13 @@ describe("organization list sorting", () => {
     expect(profileTouchSource).not.toMatch(/SET updated_at = GREATEST\(updated_at, touched_at\)/i);
   });
 
+  it("repairs the filler fields before the Profiles directory can query them", () => {
+    expect(profileTouchSource).toMatch(/ADD COLUMN IF NOT EXISTS filler boolean/i);
+    expect(profileTouchSource).toMatch(/ADD COLUMN IF NOT EXISTS filler_reason text/i);
+    expect(profileTouchSource).toMatch(/ADD COLUMN IF NOT EXISTS filler_changed_at timestamptz/i);
+    expect(profileTouchSource).toMatch(/organizations_filler_reason_required/i);
+  });
+
   it("touches the owning profile when an organization location is created, edited, or deleted", () => {
     expect(profileTouchSource).toMatch(/touch_profile_from_organization_location/i);
     expect(profileTouchSource).toMatch(/organization_locations_touch_profile_work/i);
