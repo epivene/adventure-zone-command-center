@@ -8,6 +8,7 @@ import {
 } from "./reconciliation";
 import { applyBlankProfileBatch01 } from "../organizations/blank-profile-batch-01";
 import { applyBlankProfileBatch02 } from "../organizations/blank-profile-batch-02";
+import { applyTwinFallsDuplicateCleanup } from "../organizations/twin-falls-duplicate-cleanup";
 
 type StartupImportResult = {
   imported: number;
@@ -382,6 +383,19 @@ export async function importApprovedProfilesAtStartup(
   logger.error(
     { err: error },
     "Blank profile research batch 02 maintenance failed; approved profile imports will continue",
+  );
+}
+
+  try {
+  const twinFallsCleanup = await applyTwinFallsDuplicateCleanup();
+  logger.info(
+    twinFallsCleanup,
+    "Twin Falls duplicate profiles consolidated or safely skipped",
+  );
+} catch (error) {
+  logger.error(
+    { err: error },
+    "Twin Falls duplicate profile cleanup failed; approved profile imports will continue",
   );
 }
 
