@@ -61,21 +61,16 @@ describe("lead Gmail draft startup readiness", () => {
 });
 
 describe("ensureLeadIntakeSchema", () => {
-  it("runs the canonical idempotent repair even when readiness initially passes", async () => {
-    const query = vi.fn()
-      .mockResolvedValueOnce({ rows: [{ ready: true }] })
-      .mockResolvedValueOnce({ rows: [] })
-      .mockResolvedValueOnce({ rows: [{ ready: true }] });
+  it("returns immediately when the canonical schema is already ready", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ ready: true }] });
     const loadSql = vi.fn().mockResolvedValue("-- canonical idempotent repair");
 
     await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
-    expect(loadSql).toHaveBeenCalledOnce();
-    expect(query).toHaveBeenCalledTimes(3);
+    expect(loadSql).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
     expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
     expect(query.mock.calls[0]?.[0]).toContain("territory_status");
     expect(query.mock.calls[0]?.[0]).toContain("fit_status");
-    expect(query.mock.calls[1]?.[0]).toBe("-- canonical idempotent repair");
-    expect(query.mock.calls[2]?.[0]).toBe(query.mock.calls[0]?.[0]);
   });
 
   it("runs both lead-intake migrations when the schema is incomplete", async () => {
