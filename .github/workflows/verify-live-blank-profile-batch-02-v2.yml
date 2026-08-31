@@ -1,0 +1,229 @@
+name: Verify live blank profile batch 02 v2
+
+on:
+  push:
+    branches:
+      - verify/blank-profile-batch-02-live
+    paths:
+      - ".github/workflows/verify-live-blank-profile-batch-02-v2.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify the deployed app contains the reviewed batch
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+          MERGED_COMMIT: 3efc693665c7c3e2c569bcfd7112f240a8e685ce
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+          mkdir -p live-batch-02
+
+          node <<'NODE' > live-batch-02/profile-ids.txt
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = files.flatMap((name) => {
+            const value = JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8'));
+            if (!Array.isArray(value)) throw new Error(`${name} must contain an array.`);
+            return value;
+          });
+          if (payloads.length !== 25) throw new Error(`Expected 25 profiles; found ${payloads.length}.`);
+          const ids = payloads.map((payload) => payload.event?.id);
+          if (new Set(ids).size !== 25 || ids.some((id) => typeof id !== 'string' || !id)) {
+            throw new Error('Batch 02 profile IDs are missing or duplicated.');
+          }
+          for (const id of ids) console.log(id);
+          NODE
+
+          cat > live-batch-02/verify.cjs <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          const root = 'live-batch-02';
+          const sourceFiles = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = sourceFiles.flatMap((name) =>
+            JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8'))
+          );
+          const normalizePhone = (value) => {
+            const digits = String(value || '').replace(/\D/g, '');
+            return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          };
+          const nullable = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+          const failures = [];
+          const histories = [];
+
+          for (const payload of payloads) {
+            const id = payload.event.id;
+            const status = fs.readFileSync(path.join(root, `${id}.status`), 'utf8').trim();
+            let history = null;
+            try {
+              history = JSON.parse(fs.readFileSync(path.join(root, `${id}.json`), 'utf8'));
+            } catch {}
+            histories.push(history);
+            const fail = (reason) => failures.push({ id, name: payload.event.name, reason });
+
+            if (status !== '200' || history?.ok !== true) {
+              fail(`profile-history returned HTTP ${status || 'unknown'}`);
+              continue;
+            }
+
+            const place = history.place || {};
+            if (place.id !== id) fail('profile ID mismatch');
+            if (place.name !== payload.event.name) fail(`name is ${JSON.stringify(place.name)}`);
+            if ((place.city || null) !== nullable(payload.event.city)) fail(`city is ${JSON.stringify(place.city)}`);
+            if ((place.region || null) !== nullable(payload.event.region)?.toUpperCase()) fail(`region is ${JSON.stringify(place.region)}`);
+
+            const profile = payload.profile || {};
+            for (const key of ['placeType', 'phone', 'website', 'address1', 'address2', 'postalCode']) {
+              if ((place[key] || null) !== nullable(profile[key])) {
+                fail(`${key} is ${JSON.stringify(place[key])}`);
+              }
+            }
+
+            const notes = Array.isArray(history.notes) ? history.notes : [];
+            for (const expected of payload.notes || []) {
+              if (!notes.some((note) => note.subject === expected.subject && note.body === expected.body)) {
+                fail(`reviewed note ${expected.subject} is not live`);
+              }
+            }
+
+            const contacts = Array.isArray(history.contacts) ? history.contacts : [];
+            for (const expected of payload.contacts || []) {
+              const found = contacts.some((contact) =>
+                String(contact.name || '').trim() === String(expected.name || '').trim()
+                && (!expected.email || String(contact.email || '').toLowerCase() === String(expected.email).toLowerCase())
+                && (!expected.phone || normalizePhone(contact.phone) === normalizePhone(expected.phone))
+              );
+              if (!found) fail(`contact ${expected.name} is not live`);
+            }
+
+            const followUps = Array.isArray(history.followUps) ? history.followUps : [];
+            for (const expected of payload.followUps || []) {
+              const found = followUps.some((followUp) =>
+                followUp.kind === expected.label
+                && followUp.dueAt === expected.dueAt
+                && !followUp.completedAt
+              );
+              if (!found) fail(`follow-up ${expected.label} is not open/live`);
+            }
+          }
+
+          const auditStatus = fs.readFileSync(path.join(root, 'audit.status'), 'utf8').trim();
+          let audit = null;
+          try { audit = JSON.parse(fs.readFileSync(path.join(root, 'audit.json'), 'utf8')); } catch {}
+          if (auditStatus !== '200' || audit?.ok !== true) {
+            failures.push({ id: null, name: 'profile-integrity-audit', reason: `HTTP ${auditStatus || 'unknown'}` });
+          }
+
+          const batchIds = new Set(payloads.map((payload) => payload.event.id));
+          const blankActBacked = audit?.profiles?.filter((profile) =>
+            profile.actRecordId
+            && Number(profile.contactCount || 0) === 0
+            && Number(profile.appearanceCount || 0) === 0
+            && Number(profile.timelineCount || 0) === 0
+            && Number(profile.openFollowUpCount || 0) === 0
+            && Number(profile.gmailThreadCount || 0) === 0
+            && Number(profile.calendarLinkCount || 0) === 0
+          ) || [];
+          for (const profile of blankActBacked.filter((profile) => batchIds.has(profile.id))) {
+            failures.push({ id: profile.id, name: profile.name, reason: 'profile still qualifies as blank in live audit' });
+          }
+
+          fs.writeFileSync(path.join(root, 'failures.json'), JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            mergedCommit: process.env.MERGED_COMMIT,
+            failures,
+          }, null, 2));
+
+          if (failures.length > 0) {
+            console.log(`${new Set(failures.map((failure) => failure.id)).size} records are not fully applied.`);
+            process.exit(1);
+          }
+
+          const expectedContacts = payloads.reduce((sum, payload) => sum + (payload.contacts || []).length, 0);
+          const expectedFollowUps = payloads.reduce((sum, payload) => sum + (payload.followUps || []).length, 0);
+          const receipt = {
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            mergedCommit: process.env.MERGED_COMMIT,
+            auditGeneratedAt: audit.generatedAt,
+            profileCount: payloads.length,
+            reviewedNoteCount: payloads.reduce((sum, payload) => sum + (payload.notes || []).length, 0),
+            verifiedContactCount: expectedContacts,
+            verifiedFollowUpCount: expectedFollowUps,
+            intentionalNoFollowUpCount: payloads.filter((payload) => (payload.followUps || []).length === 0).length,
+            batchProfilesStillBlank: 0,
+            liveBlankActBackedCountAfter: blankActBacked.length,
+            profiles: payloads.map((payload, index) => ({
+              id: payload.event.id,
+              name: histories[index].place.name,
+              city: histories[index].place.city,
+              region: histories[index].place.region,
+              contactCount: (histories[index].contacts || []).length,
+              noteCount: (histories[index].notes || []).length,
+              openFollowUpCount: (histories[index].followUps || []).filter((item) => !item.completedAt).length,
+            })),
+          };
+          fs.writeFileSync('batch-02-live-verification.json', JSON.stringify(receipt, null, 2));
+          console.log(JSON.stringify(receipt, null, 2));
+          NODE
+
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          verified=false
+          for attempt in $(seq 1 80); do
+            while IFS= read -r PROFILE_ID; do
+              STATUS=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+                --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                --output "live-batch-02/${PROFILE_ID}.json" \
+                --write-out "%{http_code}" \
+                "${BASE_URL}/profile-history/${PROFILE_ID}" || true)
+              printf '%s' "${STATUS}" > "live-batch-02/${PROFILE_ID}.status"
+            done < live-batch-02/profile-ids.txt
+
+            STATUS=$(curl --silent --show-error --connect-timeout 10 --max-time 90 \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output live-batch-02/audit.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/profile-integrity-audit" || true)
+            printf '%s' "${STATUS}" > live-batch-02/audit.status
+
+            if MERGED_COMMIT="${MERGED_COMMIT}" node live-batch-02/verify.cjs; then
+              echo "All 25 live profiles verified on attempt ${attempt}."
+              verified=true
+              break
+            fi
+
+            echo "Batch 02 is not fully live yet (attempt ${attempt})."
+            if [ "${attempt}" -lt 80 ]; then sleep 15; fi
+          done
+
+          if [ "${verified}" != "true" ]; then
+            cp live-batch-02/failures.json batch-02-live-verification-failures.json
+            exit 1
+          fi
+
+      - name: Upload sanitized live verification receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: batch-02-live-verification
+          path: |
+            batch-02-live-verification.json
+            batch-02-live-verification-failures.json
+          if-no-files-found: ignore
+          retention-days: 2
