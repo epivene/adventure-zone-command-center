@@ -1,0 +1,62 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": ["June Jubilee (CO Springs) CO"],
+    "event": {"id": "b570449b-e589-4bce-9690-26a7d734d37d", "name": "June Jubilee (Colorado Springs) CO", "city": "Colorado Springs", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Colorado Springs art and community festival produced by Colorado Events. Retained as a separate event under the existing Colorado Events producer relationship.", "phone": "720-272-7467", "website": "https://www.coloradoevents.org/june-jubilee", "address1": "Acacia Park", "address2": "", "postalCode": "80903"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as June Jubilee in Acacia Park, Colorado Springs, produced by Colorado Events; the 2026 event ran June 20-21. The existing live Colorado Events umbrella profile already holds the verified central contact, coloradoevents@gmail.com and 720-272-7467. Adventure Zone has recent 2026 Colorado Events outreach for other shows, so this event is intentionally retained as a separate event record without creating a duplicate producer contact or another outreach task. Classification: active producer-managed art/community festival. No follow-up is created unless Colorado Events responds with interest in this or another location. Sources: https://www.coloradoevents.org/june-jubilee and https://www.coloradoevents.org/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Pearl Street Arts Fest (Boulder) CO"],
+    "event": {"id": "5c731276-69f6-429f-b824-7f106ed261b3", "name": "Pearl Street Arts Fest (Boulder) CO", "city": "Boulder", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Downtown Boulder fine-art festival on Pearl Street. Active public event; a full Adventure Zone setup would require an explicitly approved separate attraction footprint.", "phone": "303-449-3774", "website": "https://boulderdowntown.com/arts-fest", "address1": "1320 Pearl Street, Suite 232", "address2": "", "postalCode": "80302"},
+    "contacts": [{"id": null, "name": "Ava Esposito", "primary": true, "phone": "303-449-3774", "email": "ava@downtownboulder.org", "role": "Events coordinator"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as Pearl Street Arts Fest in Downtown Boulder. Official information lists July 17-19, 2026 and July 16-18, 2027; current event contact is Ava Esposito, events coordinator, ava@downtownboulder.org, 303-449-3774, Downtown Boulder Partnership, 1320 Pearl Street Suite 232. Adventure Zone sent outreach to info@downtownboulder.org on 2025-04-29 and no reply was found. Classification: active high-attendance art festival, but a staffed inflatable area would require a separate approved footprint rather than normal artist/vendor placement. A 2027 research follow-up is justified to verify space, organizer interest, and route fit before drafting anything. Sources: https://boulderdowntown.com/arts-fest and https://boulderdowntown.com/about-us/staff ."}],
+    "followUps": [{"label": "Review 2027 Pearl Street Arts Fest fit", "reason": "Before any outreach, verify the July 16-18, 2027 dates, current events contact, whether Downtown Boulder can accommodate a separate staffed attraction area, and Colorado route/package feasibility. Review the unanswered 2025 email first.", "dueAt": "2027-01-12T16:00:00.000Z"}]
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Breck Epic (Breckenridge) CO"],
+    "event": {"id": "44d4a55b-1e9d-4555-871c-17399c9e5f9a", "name": "Breck Epic (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Six-day backcountry mountain-bike stage race based in Breckenridge. Active endurance event, but the reviewed race format does not support a full inflatable carnival.", "phone": "", "website": "https://breckepic.com/", "address1": "620 Village Road", "address2": "", "postalCode": "80424"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Breck Epic, a six-day backcountry mountain-bike stage race held Aug. 9-14, 2026, with event headquarters/packet activity at Beaver Run, 620 Village Road, Breckenridge. Adventure Zone sent outreach on 2025-07-10 to a BikeReg address; no reply was found, and that registration-platform address is not being treated as a verified current organizer contact. Classification: active specialized endurance race with no supported full-carnival footprint. No follow-up is created. Source: https://breckepic.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Breck Film Fest (Breckenridge) CO"],
+    "event": {"id": "8f479cd9-d627-4029-874b-443fb419b075", "name": "Breck Film Fest (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Annual film festival in Breckenridge. Current outreach is already in progress; preserve the profile and check the existing 2026 thread rather than sending another introduction.", "phone": "970-453-6200", "website": "https://breckfilm.org/", "address1": "P.O. Box 718", "address2": "", "postalCode": "80424"},
+    "contacts": [{"id": null, "name": "Breck Film", "primary": true, "phone": "970-453-6200", "email": "info@breckfilm.org", "role": "Festival office"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as Breck Film Fest, scheduled Sept. 17-20, 2026. Official contact is info@breckfilm.org, 970-453-6200, P.O. Box 718, Breckenridge, CO 80424. Adventure Zone has prior 2023 and 2024 outreach, and Desiree sent a new history-aware 2026 email on 2026-08-27. No reply was found through the batch review. Classification: active event with current outreach already sent. Do not create a second introduction or duplicate draft; one short app follow-up is created solely to check the existing thread. Source: https://breckfilm.org/ ."}],
+    "followUps": [{"label": "Check Breck Film Fest 2026 outreach", "reason": "Check the existing Aug. 27, 2026 Gmail thread for a reply. Do not send a second introduction or create a duplicate draft; decide from the current thread whether any brief follow-up is appropriate.", "dueAt": "2026-09-03T16:00:00.000Z"}]
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Breckenridge Beer Festival (Breckenridge) CO"],
+    "event": {"id": "b024a26d-eb1a-4c4b-b134-2ee1e309c5c2", "name": "Breckenridge Summer Beer Festival (Breckenridge) CO", "city": "Breckenridge", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Summer beer festival at Beaver Run in Breckenridge. Although children may be admitted, the event is centered on beer tasting and is not an appropriate Adventure Zone prospect.", "phone": "", "website": "https://www.breckenridgebeerfestival.com/", "address1": "620 Village Road", "address2": "", "postalCode": "80424"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the Breckenridge Summer Beer Festival, held July 11, 2026 at Beaver Run Resort. Current information centers the event on beer tasting; children may attend, but the venue is described as busy and crowded and the event remains alcohol-focused. Adventure Zone sent outreach to info@radiatelive.com on 2023-12-15 and no reply was found. Classification: active alcohol-centered event, not suitable for normal Adventure Zone outreach. No follow-up. Source: https://www.breckenridgebeerfestival.com/ ."}],
+    "followUps": []
+  }
+]
