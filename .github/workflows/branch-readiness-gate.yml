@@ -1,0 +1,64 @@
+name: Gmail profile-link branch readiness
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-current
+    paths:
+      - ".github/workflows/branch-readiness-gate.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-and-clean:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-current
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify focused behavior
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
+          src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts
+          src/features/google-workspace/google-api-client.test.ts
+          src/routes/assistant-gmail-profile-links.test.ts
+          src/routes/google-workspace-profile-gmail.test.ts
+      - name: Verify production API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Verify no temporary workflows remain in proposed tree
+        run: |
+          for file in \
+            .github/workflows/trigger-gmail-refresh-red-ci.yml \
+            .github/workflows/package-gmail-profile-link-review-bundle.yml \
+            .github/workflows/apply-gmail-sweep-refresh-fix.yml \
+            .github/workflows/apply-gmail-sweep-refresh-fix-v2.yml \
+            .github/workflows/package-gmail-profile-link-debug-context.yml \
+            .github/workflows/package-gmail-profile-link-debug-context-v2.yml \
+            .github/workflows/package-profile-email-ui-context.yml \
+            .github/workflows/export-gmail-branch-history.yml \
+            .github/workflows/add-gmail-sweep-refresh-test.yml \
+            .github/workflows/cleanup-gmail-profile-link-branch.yml; do
+            test ! -e "$file" || { echo "Temporary file remains: $file"; exit 1; }
+          done
+      - name: Remove this one-time readiness workflow
+        run: rm .github/workflows/branch-readiness-gate.yml
+      - name: Commit readiness cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: finalize Gmail profile-link branch"
+          git push origin HEAD:fix/gmail-profile-history-audit-current
