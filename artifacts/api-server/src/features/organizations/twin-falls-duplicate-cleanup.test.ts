@@ -131,4 +131,12 @@ describe("applyTwinFallsDuplicateCleanup", () => {
       "aab7b545-d065-441b-98c0-bef04f78f034": [],
     });
   });
+
+  it("records the online application requirement on the surviving fair profile", () => {
+    expect(TWIN_FALLS_APPLICATION_NOTE).toEqual({
+      organizationId: "b447c83c-6348-4fab-b850-0db7a5576a83",
+      subject: "Online application required",
+      body: "Desiree confirmed that The Adventure Zone needs to fill out an online application for the Twin Falls County Fair. Keep this requirement with the surviving fair profile; no application link, deadline, or submission confirmation is recorded yet.",
+    });
+  });
 });
