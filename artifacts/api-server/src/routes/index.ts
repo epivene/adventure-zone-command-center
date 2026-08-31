@@ -91,7 +91,7 @@ import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import managerAssistantAdminRouter from "./manager-assistant-admin";
 import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
-import { requireOwnerMiddleware } from "../lib/auth";
+import { requireOwnerMiddleware } from "@/features/owner-auth/owner-runtime";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
