@@ -1,0 +1,167 @@
+name: Verify live blank profile batch 02 core
+
+on:
+  push:
+    branches:
+      - verify/blank-profile-batch-02-live
+    paths:
+      - ".github/workflows/verify-live-blank-profile-batch-02-core.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify every reviewed profile, field, contact, note, and follow-up
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+          MERGED_COMMIT: 3efc693665c7c3e2c569bcfd7112f240a8e685ce
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          mkdir -p core-state
+
+          node <<'NODE' > core-state/ids.txt
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = files.flatMap((name) => JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8')));
+          if (payloads.length !== 25) throw new Error(`Expected 25 profiles; found ${payloads.length}.`);
+          for (const payload of payloads) console.log(payload.event.id);
+          NODE
+
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          while IFS= read -r PROFILE_ID; do
+            STATUS=$(curl --silent --show-error --connect-timeout 10 --max-time 45 \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output "core-state/${PROFILE_ID}.json" \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/profile-history/${PROFILE_ID}" || true)
+            printf '%s' "${STATUS}" > "core-state/${PROFILE_ID}.status"
+          done < core-state/ids.txt
+
+          MERGED_COMMIT="${MERGED_COMMIT}" node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = files.flatMap((name) => JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8')));
+          const nullable = (value) => typeof value === 'string' && value.trim() ? value.trim() : null;
+          const phone = (value) => {
+            const digits = String(value || '').replace(/\D/g, '');
+            return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          };
+          const failures = [];
+          const verified = [];
+
+          for (const payload of payloads) {
+            const id = payload.event.id;
+            const status = fs.readFileSync(`core-state/${id}.status`, 'utf8').trim();
+            let history = null;
+            try { history = JSON.parse(fs.readFileSync(`core-state/${id}.json`, 'utf8')); } catch {}
+            const fail = (reason) => failures.push({ id, name: payload.event.name, reason });
+            if (status !== '200' || history?.ok !== true) {
+              fail(`profile-history returned HTTP ${status || 'unknown'}`);
+              continue;
+            }
+
+            const place = history.place || {};
+            const profile = payload.profile || {};
+            const expected = {
+              id,
+              name: payload.event.name,
+              city: nullable(payload.event.city),
+              region: nullable(payload.event.region)?.toUpperCase() || null,
+              placeType: nullable(profile.placeType),
+              phone: nullable(profile.phone),
+              website: nullable(profile.website),
+              address1: nullable(profile.address1),
+              address2: nullable(profile.address2),
+              postalCode: nullable(profile.postalCode),
+            };
+            for (const [key, value] of Object.entries(expected)) {
+              if ((place[key] || null) !== value) fail(`${key} expected ${JSON.stringify(value)} but found ${JSON.stringify(place[key] || null)}`);
+            }
+
+            const notes = Array.isArray(history.notes) ? history.notes : [];
+            let noteMatches = 0;
+            for (const note of payload.notes || []) {
+              if (notes.some((live) => live.subject === note.subject && live.body === note.body)) noteMatches += 1;
+              else fail(`reviewed note ${note.subject} is missing`);
+            }
+
+            const contacts = Array.isArray(history.contacts) ? history.contacts : [];
+            let contactMatches = 0;
+            for (const contact of payload.contacts || []) {
+              const matched = contacts.some((live) =>
+                String(live.name || '').trim() === String(contact.name || '').trim()
+                && (!contact.email || String(live.email || '').toLowerCase() === String(contact.email).toLowerCase())
+                && (!contact.phone || phone(live.phone) === phone(contact.phone))
+              );
+              if (matched) contactMatches += 1;
+              else fail(`contact ${contact.name} is missing`);
+            }
+
+            const followUps = Array.isArray(history.followUps) ? history.followUps : [];
+            let followUpMatches = 0;
+            for (const followUp of payload.followUps || []) {
+              const matched = followUps.some((live) =>
+                live.kind === followUp.label
+                && live.dueAt === followUp.dueAt
+                && !live.completedAt
+              );
+              if (matched) followUpMatches += 1;
+              else fail(`open follow-up ${followUp.label} is missing`);
+            }
+
+            verified.push({
+              id,
+              name: place.name,
+              city: place.city,
+              region: place.region,
+              reviewedNotesVerified: noteMatches,
+              contactsVerified: contactMatches,
+              followUpsVerified: followUpMatches,
+            });
+          }
+
+          if (failures.length) {
+            fs.writeFileSync('batch-02-live-core-failures.json', JSON.stringify({ checkedAt: new Date().toISOString(), failures }, null, 2));
+            throw new Error(`${failures.length} live verification checks failed.`);
+          }
+
+          const receipt = {
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            mergedCommit: process.env.MERGED_COMMIT,
+            profileCount: payloads.length,
+            identityAndProfileFieldCountVerified: payloads.length,
+            reviewedNoteCountVerified: payloads.reduce((sum, payload) => sum + (payload.notes || []).length, 0),
+            contactCountVerified: payloads.reduce((sum, payload) => sum + (payload.contacts || []).length, 0),
+            followUpCountVerified: payloads.reduce((sum, payload) => sum + (payload.followUps || []).length, 0),
+            intentionalNoFollowUpCount: payloads.filter((payload) => (payload.followUps || []).length === 0).length,
+            batchProfilesStillBlank: 0,
+            blankReason: "Every batch profile has its exact reviewed timeline note in the live app.",
+            profiles: verified,
+          };
+          fs.writeFileSync('batch-02-live-core-verification.json', JSON.stringify(receipt, null, 2));
+          console.log(JSON.stringify(receipt, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: batch-02-live-core-verification
+          path: |
+            batch-02-live-core-verification.json
+            batch-02-live-core-failures.json
+          if-no-files-found: ignore
+          retention-days: 2
