@@ -1,7 +1,6 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "requireExisting": true,
   "aliases": [
     "Ransom County Fair Association"
   ],
@@ -11,8 +10,25 @@
     "city": "Lisbon",
     "region": "ND"
   },
-  "profile": {},
-  "contacts": [],
+  "profile": {
+    "placeType": "fair",
+    "description": "Ransom County Fair in Lisbon will celebrate its 75th annual fair August 25–29, 2027. Its family program combines extensive 4-H and livestock participation, public exhibits, carnival days, rodeo, food, and Kids Day activities. The vendor page still displayed 2026 applications as of August 31, 2026, so the 2027 vendor/attraction application opening remains unconfirmed.",
+    "phone": "701-680-2294",
+    "website": "https://ransomcountyfair.com/",
+    "address1": "612 7th Ave W",
+    "address2": "PO Box 890",
+    "postalCode": "58054"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Genene Aabrekke",
+      "phone": "701-680-2294",
+      "email": "fair@ransomcountyfair.com",
+      "role": "Secretary / HAFFE Contact",
+      "primary": true
+    }
+  ],
   "booking": {
     "enabled": false,
     "name": "",
@@ -27,15 +43,19 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2027 outreach timing reviewed",
-      "body": "Ransom County Fair ran August 26-30, 2026. The official vendor page published 2026 inside and outside vendor forms, but no 2027 dates or application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Genene Aabrekke but must be reviewed before sending."
+      "subject": "2027 prospect research — reviewed August 31, 2026",
+      "body": "The official fair homepage confirms the 75th Annual Ransom County Fair for August 25–29, 2027 and lists Genene Aabrekke as secretary. HAFFE describes a strong family program with roughly 190 4-H members, livestock and static exhibits, public exhibits, carnival days, rodeo, food, and Kids Day activities. The official vendor page still showed only 2026 applications, so no 2027 application opening is confirmed. Sources: https://ransomcountyfair.com/ and https://ransomcountyfair.com/vendors"
+    },
+    {
+      "subject": "EMAIL DRAFT — review only; do not send",
+      "body": "Subject: Ransom County Fair — August 25–29, 2027 — Adventure Zone\n\nHi Genene,\n\nIt was great meeting you through the HAFFE convention. Congratulations on the 75th Annual Ransom County Fair coming up August 25–29, 2027. With the fair’s strong 4-H and livestock program, carnival, rodeo, and Kids Day activities, The Adventure Zone could be a great addition to the family experience.\n\nWe bring a fully staffed inflatable bounce house carnival, with setup, operation, and teardown included. We can discuss a prepaid package or, where appropriate, a pay-for-play arrangement. Would you be open to a short conversation about your 2027 family entertainment plans and the right vendor or attraction process for us?\n\nBest,\nDesiree\nThe Adventure Zone\nAmerica’s Best Inflatable Bounce House Carnival"
     }
   ],
   "followUps": [
     {
       "label": "Review 2027 Ransom County Fair outreach",
-      "reason": "Confirm the official 2027 dates and check for new inside, outside, or entertainment application forms. Review the prepared Adventure Zone email for Genene Aabrekke; do not send automatically.",
-      "dueAt": "2027-05-26T15:00:00.000Z"
+      "reason": "The fair is confirmed for August 25–29, 2027. Check whether 2027 vendor or attraction forms have replaced the 2026 forms, then review the prepared email for Genene Aabrekke; do not send automatically.",
+      "dueAt": "2027-05-25T15:00:00.000Z"
     }
   ]
 }

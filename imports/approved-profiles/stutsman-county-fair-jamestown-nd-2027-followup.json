@@ -1,7 +1,6 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "requireExisting": true,
   "aliases": [
     "Stutsman County Fair Association"
   ],
@@ -11,8 +10,25 @@
     "city": "Jamestown",
     "region": "ND"
   },
-  "profile": {},
-  "contacts": [],
+  "profile": {
+    "placeType": "fair",
+    "description": "Four-day family county fair in Jamestown featuring 4-H and open-class exhibits, carnival rides, fair food, entertainment, livestock events and shows, contests, and additional fairgrounds programming. Verified 2026 dates were June 24–27; 2027 fair dates and vendor/entertainment application timing were not published as of August 31, 2026.",
+    "phone": "701-252-2404",
+    "website": "https://www.stutsmancountyfair.com/",
+    "address1": "3325 83rd Ave SE",
+    "address2": "",
+    "postalCode": "58401"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Deb Hatlewick",
+      "phone": "701-320-6293",
+      "email": "hccdeb@daktel.com",
+      "role": "Fair Board Director / HAFFE Contact",
+      "primary": true
+    }
+  ],
   "booking": {
     "enabled": false,
     "name": "",
@@ -27,14 +43,18 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2027 outreach timing reviewed",
-      "body": "Stutsman County Fair ran June 24-27, 2026. No official 2027 fair dates or vendor/entertainment application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Deb Hatlewick but must be reviewed before sending."
+      "subject": "2027 prospect research — reviewed August 31, 2026",
+      "body": "The official Stutsman County Fair site lists 4-H, open-class exhibits, carnival rides, entertainment, food, livestock events, contests, and the fairgrounds at 3325 83rd Ave SE in Jamestown. Deb Hatlewick is listed as a board director, and HAFFE listed the 2026 fair for June 24–27. No official 2027 dates or application opening were found. Sources: https://www.stutsmancountyfair.com/ and https://www.stutsmancountyfair.com/p/about/board-of-directors"
+    },
+    {
+      "subject": "EMAIL DRAFT — review only; do not send",
+      "body": "Subject: Stutsman County Fair — early 2027 Adventure Zone planning\n\nHi Deb,\n\nIt was great meeting you through the HAFFE convention. With Stutsman County Fair’s four days of 4-H and open exhibits, carnival rides, fair food, and family entertainment, I wanted to reach out early about 2027.\n\nThe Adventure Zone brings a fully staffed inflatable bounce house carnival, with setup, operation, and teardown included. We can discuss a prepaid package or, where appropriate, a pay-for-play arrangement. Would you be open to a short conversation once your 2027 dates and attraction plans begin taking shape?\n\nBest,\nDesiree\nThe Adventure Zone\nAmerica’s Best Inflatable Bounce House Carnival"
     }
   ],
   "followUps": [
     {
       "label": "Review 2027 Stutsman County Fair outreach",
-      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Deb Hatlewick; do not send automatically.",
+      "reason": "Check for official 2027 dates and any vendor or entertainment application opening. Review the prepared email for Deb Hatlewick; do not send automatically.",
       "dueAt": "2027-03-24T15:00:00.000Z"
     }
   ]
