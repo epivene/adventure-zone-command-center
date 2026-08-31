@@ -18,6 +18,7 @@ const createSchema = z.object({
   label: z.string().trim().min(1).max(180),
   reason: z.string().trim().min(1).max(4000),
   dueAt: z.coerce.date(),
+  preserveExisting: z.boolean().optional().default(false),
 }).strict();
 
 const clearSchema = z.object({
@@ -95,7 +96,7 @@ router.post("/today-followups", async (req, res): Promise<void> => {
     return;
   }
 
-  const { organizationId, label, reason, dueAt } = parsed.data;
+  const { organizationId, label, reason, dueAt, preserveExisting } = parsed.data;
   if (!Number.isFinite(dueAt.getTime())) {
     res.status(400).json({ ok: false, error: "Choose a valid due date." });
     return;
@@ -126,6 +127,24 @@ router.post("/today-followups", async (req, res): Promise<void> => {
         .limit(1);
 
       if (existing) {
+        if (!preserveExisting) {
+          await transaction
+            .update(followUps)
+            .set({
+              completedAt: now,
+              outcome: "Replaced by newer follow-up",
+              updatedAt: now,
+            })
+            .where(and(
+              eq(followUps.organizationId, organizationId),
+              isNull(followUps.completedAt),
+              ne(followUps.id, existing.id),
+            ));
+        }
+        return { id: existing.id, created: false };
+      }
+
+      if (!preserveExisting) {
         await transaction
           .update(followUps)
           .set({
@@ -136,22 +155,8 @@ router.post("/today-followups", async (req, res): Promise<void> => {
           .where(and(
             eq(followUps.organizationId, organizationId),
             isNull(followUps.completedAt),
-            ne(followUps.id, existing.id),
           ));
-        return { id: existing.id, created: false };
       }
-
-      await transaction
-        .update(followUps)
-        .set({
-          completedAt: now,
-          outcome: "Replaced by newer follow-up",
-          updatedAt: now,
-        })
-        .where(and(
-          eq(followUps.organizationId, organizationId),
-          isNull(followUps.completedAt),
-        ));
 
       const [created] = await transaction
         .insert(followUps)
