@@ -54,6 +54,8 @@ jobs:
       - name: Focused Gmail profile-link tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/google-api-client.test.ts
+          src/features/google-workspace/google-api-client-metadata.test.ts
           src/features/google-workspace/google-api-client-query.test.ts
           src/features/google-workspace/google-sent-profile-link-window-query.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
