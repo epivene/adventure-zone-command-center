@@ -1,0 +1,110 @@
+name: Snapshot live blank profile batch 02
+
+on:
+  push:
+    branches:
+      - verify/blank-profile-batch-02-live
+    paths:
+      - ".github/workflows/snapshot-live-blank-profile-batch-02.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read all 25 current live profiles once
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p state
+          node <<'NODE' > state/ids.txt
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = files.flatMap((name) => JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8')));
+          for (const payload of payloads) console.log(payload.event.id);
+          NODE
+
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          while IFS= read -r PROFILE_ID; do
+            STATUS=$(curl --silent --show-error --connect-timeout 10 --max-time 30 \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output "state/${PROFILE_ID}.json" \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/profile-history/${PROFILE_ID}" || true)
+            printf '%s' "${STATUS}" > "state/${PROFILE_ID}.status"
+          done < state/ids.txt
+
+          STATUS=$(curl --silent --show-error --connect-timeout 10 --max-time 90 \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --output state/audit.json \
+            --write-out "%{http_code}" \
+            "${BASE_URL}/profile-integrity-audit" || true)
+          printf '%s' "${STATUS}" > state/audit.status
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('imports/approved-profiles')
+            .filter((name) => /^blank-profile-batch-02-part-\d+\.json$/.test(name))
+            .sort();
+          const payloads = files.flatMap((name) => JSON.parse(fs.readFileSync(path.join('imports/approved-profiles', name), 'utf8')));
+          const rows = payloads.map((payload) => {
+            const id = payload.event.id;
+            const status = fs.readFileSync(`state/${id}.status`, 'utf8').trim();
+            let history = null;
+            try { history = JSON.parse(fs.readFileSync(`state/${id}.json`, 'utf8')); } catch {}
+            const expectedNote = payload.notes?.[0];
+            return {
+              id,
+              expectedName: payload.event.name,
+              liveName: history?.place?.name ?? null,
+              httpStatus: status,
+              exactName: history?.place?.name === payload.event.name,
+              exactCity: (history?.place?.city || null) === (payload.event.city || null),
+              exactRegion: (history?.place?.region || null) === (payload.event.region || null),
+              exactReviewedNote: Boolean(expectedNote && history?.notes?.some((note) => note.subject === expectedNote.subject && note.body === expectedNote.body)),
+              expectedContactCount: payload.contacts?.length || 0,
+              liveContactCount: history?.contacts?.length || 0,
+              expectedFollowUpCount: payload.followUps?.length || 0,
+              liveOpenFollowUpCount: history?.followUps?.filter((followUp) => !followUp.completedAt).length || 0,
+            };
+          });
+          const auditStatus = fs.readFileSync('state/audit.status', 'utf8').trim();
+          let audit = null;
+          try { audit = JSON.parse(fs.readFileSync('state/audit.json', 'utf8')); } catch {}
+          const blankActBacked = audit?.profiles?.filter((profile) =>
+            profile.actRecordId
+            && Number(profile.contactCount || 0) === 0
+            && Number(profile.appearanceCount || 0) === 0
+            && Number(profile.timelineCount || 0) === 0
+            && Number(profile.openFollowUpCount || 0) === 0
+            && Number(profile.gmailThreadCount || 0) === 0
+            && Number(profile.calendarLinkCount || 0) === 0
+          ) || [];
+          const batchIds = new Set(rows.map((row) => row.id));
+          const report = {
+            capturedAt: new Date().toISOString(),
+            auditStatus,
+            auditGeneratedAt: audit?.generatedAt || null,
+            liveBlankActBackedCount: blankActBacked.length,
+            batchProfilesStillBlank: blankActBacked.filter((profile) => batchIds.has(profile.id)).map((profile) => profile.id),
+            exactNameCount: rows.filter((row) => row.exactName).length,
+            exactReviewedNoteCount: rows.filter((row) => row.exactReviewedNote).length,
+            rows,
+          };
+          fs.writeFileSync('batch-02-live-snapshot.json', JSON.stringify(report, null, 2));
+          console.log(JSON.stringify(report, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: batch-02-live-snapshot
+          path: batch-02-live-snapshot.json
+          retention-days: 1
