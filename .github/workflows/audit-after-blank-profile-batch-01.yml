@@ -1,0 +1,82 @@
+name: Audit after blank profile batch 01
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - "docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/merge-blank-profiles-batch-01
+          fetch-depth: 0
+
+      - name: Export the protected post-batch integrity audit
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL:-}"
+          test -n "${ASSISTANT_IMPORT_TOKEN:-}"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${API_URL%/}/api/assistant-import/profile-integrity-audit" \
+            > post-batch-01-audit.json
+
+          node <<'NODE'
+          const fs = require('fs');
+          const audit = JSON.parse(fs.readFileSync('post-batch-01-audit.json', 'utf8'));
+          const verification = JSON.parse(fs.readFileSync(
+            'docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json',
+            'utf8',
+          ));
+
+          const issues = Array.isArray(audit.issues) ? audit.issues : [];
+          const blankIssues = issues.filter((issue) => {
+            const text = JSON.stringify(issue).toLowerCase();
+            return text.includes('blank') || text.includes('no linked operational information');
+          });
+          const verifiedIds = new Set((verification.profiles ?? []).map((row) => row.profileId));
+          const verifiedStillBlank = blankIssues.filter((issue) => {
+            const id = issue.profileId ?? issue.organizationId ?? issue.id;
+            return id && verifiedIds.has(id);
+          });
+          if (verifiedStillBlank.length) {
+            throw new Error(`Verified batch profiles remain in the blank queue: ${JSON.stringify(verifiedStillBlank)}`);
+          }
+
+          const summary = {
+            auditedAt: new Date().toISOString(),
+            batchVerificationFile: 'blank-profile-batch-01-live-verification-2026-08-31.json',
+            verifiedBatchEntries: verification.batchEntries,
+            verifiedUniqueProfiles: verification.uniqueLiveProfiles,
+            verifiedContacts: verification.verifiedContacts,
+            verifiedFollowUps: verification.verifiedFollowUps,
+            blankIssueCount: blankIssues.length,
+            verifiedBatchProfilesStillBlank: 0,
+            auditSummary: audit.summary ?? null,
+          };
+          fs.writeFileSync(
+            'docs/operations/blank-profile-batch-01-post-audit-2026-08-31.json',
+            JSON.stringify(summary, null, 2),
+          );
+          NODE
+
+      - name: Publish post-batch audit receipt
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/operations/blank-profile-batch-01-post-audit-2026-08-31.json
+          git commit -m "docs: publish post-audit for blank profile batch 01"
+          git push origin HEAD:ops/merge-blank-profiles-batch-01
