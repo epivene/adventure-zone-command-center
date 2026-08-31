@@ -1,0 +1,107 @@
+name: Apply Gmail sweep context refresh fix v2
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-current
+    paths:
+      - ".github/workflows/apply-gmail-sweep-refresh-fix-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-current
+          fetch-depth: 0
+
+      - name: Patch the sweep service
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts')
+          text = path.read_text()
+
+          old = '  private readonly classifier: GoogleSentProfileLinkSweepClassifier;\n'
+          new = '  private readonly classifierFactory: () => GoogleSentProfileLinkSweepClassifier;\n'
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('classifier field marker not found')
+
+          old = '    classifier?: GoogleSentProfileLinkSweepClassifier;\n  }) {'
+          new = '    classifier?: GoogleSentProfileLinkSweepClassifier;\n    classifierFactory?: () => GoogleSentProfileLinkSweepClassifier;\n  }) {'
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif 'classifierFactory?: () => GoogleSentProfileLinkSweepClassifier;' not in text:
+              raise SystemExit('constructor option marker not found')
+
+          old = '''    this.classifier = options?.classifier
+      ?? new GoogleHistoricalMessageClassifier({ aiEnabled: false });
+'''
+          new = '''    this.classifierFactory = options?.classifierFactory
+      ?? (() => options?.classifier
+        ?? new GoogleHistoricalMessageClassifier({ aiEnabled: false }));
+'''
+          if old in text:
+              text = text.replace(old, new, 1)
+          elif new not in text:
+              raise SystemExit('classifier constructor assignment marker not found')
+
+          marker = '''    if (!client.listMessagePage || !client.getMessageMetadata) {
+      throw new Error("GOOGLE_WORKSPACE_SENT_PROFILE_LINK_UNAVAILABLE");
+    }
+
+'''
+          insertion = marker + '''    // GoogleHistoricalMessageClassifier caches its CRM evidence snapshot. Build a
+    // new classifier for every sweep so profiles or contacts added after process
+    // start are eligible on the next automatic pass.
+    const classifier = this.classifierFactory();
+
+'''
+          if 'const classifier = this.classifierFactory();' not in text:
+              if marker not in text:
+                  raise SystemExit('run client validation marker not found')
+              text = text.replace(marker, insertion, 1)
+
+          text = text.replace(
+              'const classification = await this.classifier.classify(message, client);',
+              'const classification = await classifier.classify(message, client);',
+          )
+
+          if 'private readonly classifier:' in text:
+              raise SystemExit('old classifier field remains')
+          if 'this.classifier = options?.classifier' in text:
+              raise SystemExit('old classifier assignment remains')
+          if 'this.classifier.classify' in text:
+              raise SystemExit('old classifier call remains')
+          if 'classifierFactory?: () => GoogleSentProfileLinkSweepClassifier;' not in text:
+              raise SystemExit('classifierFactory option missing')
+          if 'const classifier = this.classifierFactory();' not in text:
+              raise SystemExit('per-run classifier missing')
+
+          path.write_text(text)
+
+          for name in [
+              '.github/workflows/apply-gmail-sweep-refresh-fix.yml',
+              '.github/workflows/apply-gmail-sweep-refresh-fix-v2.yml',
+              '.github/workflows/trigger-gmail-refresh-red-ci.yml',
+              '.github/workflows/package-gmail-profile-link-review-bundle.yml',
+          ]:
+              candidate = Path(name)
+              if candidate.exists():
+                  candidate.unlink()
+          PY
+
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: refresh Gmail profile evidence on every sweep"
+          git push origin HEAD:fix/gmail-profile-history-audit-current
