@@ -1,0 +1,87 @@
+name: Trigger batch 02 Render API deploy
+
+on:
+  push:
+    branches:
+      - verify/blank-profile-batch-02-live
+    paths:
+      - ".github/workflows/trigger-batch-02-render-api-deploy.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the API service when Render API credentials are configured
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+          RENDER_API_SERVICE_ID: ${{ secrets.RENDER_API_SERVICE_ID }}
+          COMMIT_ID: 3efc693665c7c3e2c569bcfd7112f240a8e685ce
+        run: |
+          set -euo pipefail
+          if [ -z "${RENDER_API_KEY:-}" ]; then
+            printf '%s\n' '{"apiKeyConfigured":false,"deployTriggered":false}' > render-api-deploy.json
+            exit 0
+          fi
+
+          SERVICE_ID="${RENDER_API_SERVICE_ID:-${RENDER_SERVICE_ID:-}}"
+          if [ -z "${SERVICE_ID}" ]; then
+            curl --fail --silent --show-error \
+              --header "Accept: application/json" \
+              --header "Authorization: Bearer ${RENDER_API_KEY}" \
+              "https://api.render.com/v1/services?limit=100" \
+              > render-services.json
+            SERVICE_ID=$(node <<'NODE'
+          const fs = require('fs');
+          const value = JSON.parse(fs.readFileSync('render-services.json', 'utf8'));
+          const rows = Array.isArray(value) ? value : Array.isArray(value.items) ? value.items : [];
+          const service = rows
+            .map((entry) => entry.service || entry)
+            .find((entry) => entry?.name === 'adventure-zone-api');
+          process.stdout.write(service?.id || '');
+          NODE
+            )
+          fi
+
+          if [ -z "${SERVICE_ID}" ]; then
+            printf '%s\n' '{"apiKeyConfigured":true,"serviceFound":false,"deployTriggered":false}' > render-api-deploy.json
+            exit 1
+          fi
+
+          STATUS=$(curl --silent --show-error \
+            --request POST \
+            --header "Accept: application/json" \
+            --header "Authorization: Bearer ${RENDER_API_KEY}" \
+            --header "Content-Type: application/json" \
+            --data "{\"commitId\":\"${COMMIT_ID}\",\"clearCache\":\"do_not_clear\"}" \
+            --output render-deploy-response.json \
+            --write-out "%{http_code}" \
+            "https://api.render.com/v1/services/${SERVICE_ID}/deploys" || true)
+
+          if [ "${STATUS}" != "201" ] && [ "${STATUS}" != "202" ]; then
+            printf '{"apiKeyConfigured":true,"serviceFound":true,"deployTriggered":false,"status":%s}\n' "${STATUS:-0}" > render-api-deploy.json
+            exit 1
+          fi
+
+          node <<'NODE'
+          const fs = require('fs');
+          let response = null;
+          try { response = JSON.parse(fs.readFileSync('render-deploy-response.json', 'utf8')); } catch {}
+          fs.writeFileSync('render-api-deploy.json', JSON.stringify({
+            apiKeyConfigured: true,
+            serviceFound: true,
+            deployTriggered: true,
+            deployId: response?.id || response?.deploy?.id || null,
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: batch-02-render-api-deploy
+          path: render-api-deploy.json
+          if-no-files-found: error
+          retention-days: 1
