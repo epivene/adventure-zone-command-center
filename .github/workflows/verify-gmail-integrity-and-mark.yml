@@ -1,0 +1,53 @@
+name: Verify Gmail integrity and persist marker
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-link-integrity
+    paths:
+      - ".github/workflows/verify-gmail-integrity-and-mark.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-link-integrity
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/gmail-profile-integrity.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Persist success marker
+        run: |
+          mkdir -p .audits
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          fs.writeFileSync('.audits/gmail-profile-integrity-ci-success.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            focusedTests: true,
+            productionBuild: true,
+          }, null, 2) + '\n');
+          NODE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/gmail-profile-integrity-ci-success.json
+          git commit -m "ci: record Gmail integrity verification" || exit 0
+          git push origin HEAD:fix/gmail-profile-link-integrity
