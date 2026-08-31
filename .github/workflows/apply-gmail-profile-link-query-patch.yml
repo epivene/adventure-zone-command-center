@@ -1,0 +1,121 @@
+name: Apply Gmail profile-link query patch
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/apply-gmail-profile-link-query-patch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-2026-08-31
+          fetch-depth: 0
+
+      - name: Add Gmail query support and use the bounded sent-mail window
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          client = Path('artifacts/api-server/src/features/google-workspace/google-api-client.ts')
+          text = client.read_text()
+          old = '''    async listMessagePage(input): Promise<GoogleMessagePage> {
+                if (!Number.isInteger(input.maxResults) || input.maxResults < 1 || input.maxResults > 250) {
+                  throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
+                }
+                const url = new URL(`${gmailBaseEndpoint}/messages`);
+                url.searchParams.set("maxResults", String(input.maxResults));
+                url.searchParams.set("includeSpamTrash", "false");
+                const pageToken = input.pageToken?.trim();
+                if (pageToken) url.searchParams.set("pageToken", pageToken);
+                const payload = await authorizedJson(url.toString());
+          '''
+          new = '''    async listMessagePage(input): Promise<GoogleMessagePage> {
+                if (!Number.isInteger(input.maxResults) || input.maxResults < 1 || input.maxResults > 250) {
+                  throw clientError("GOOGLE_WORKSPACE_MESSAGE_LIMIT_INVALID");
+                }
+                const url = new URL(`${gmailBaseEndpoint}/messages`);
+                url.searchParams.set("maxResults", String(input.maxResults));
+                url.searchParams.set("includeSpamTrash", "false");
+                if (input.query !== undefined && input.query !== null) {
+                  const query = input.query.trim();
+                  if (!query || query.length > 2_000) {
+                    throw clientError("GOOGLE_WORKSPACE_MESSAGE_QUERY_INVALID");
+                  }
+                  url.searchParams.set("q", query);
+                }
+                const pageToken = input.pageToken?.trim();
+                if (pageToken) url.searchParams.set("pageToken", pageToken);
+                const payload = await authorizedJson(url.toString());
+          '''
+          if old not in text:
+              raise SystemExit('Google API listMessagePage block not found')
+          client.write_text(text.replace(old, new))
+
+          service = Path('artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts')
+          text = service.read_text()
+          marker = '''function validWindow(after: Date, before: Date): void {
+          '''
+          helper = '''function gmailDate(value: Date): string {
+            return [
+              String(value.getUTCFullYear()).padStart(4, "0"),
+              String(value.getUTCMonth() + 1).padStart(2, "0"),
+              String(value.getUTCDate()).padStart(2, "0"),
+            ].join("/");
+          }
+
+          export function gmailSentWindowQuery(after: Date, before: Date): string {
+            const searchAfter = new Date(Date.UTC(
+              after.getUTCFullYear(),
+              after.getUTCMonth(),
+              after.getUTCDate() - 1,
+            ));
+            const searchBefore = new Date(Date.UTC(
+              before.getUTCFullYear(),
+              before.getUTCMonth(),
+              before.getUTCDate() + 1,
+            ));
+            return `in:sent after:${gmailDate(searchAfter)} before:${gmailDate(searchBefore)} -in:trash -in:spam`;
+          }
+
+          '''
+          if 'export function gmailSentWindowQuery' not in text:
+              if marker not in text:
+                  raise SystemExit('Service window marker not found')
+              text = text.replace(marker, helper + marker)
+
+          old_call = '''      const page = await client.listMessagePage({
+                maxResults: PAGE_SIZE,
+                pageToken,
+              });
+          '''
+          new_call = '''      const page = await client.listMessagePage({
+                maxResults: PAGE_SIZE,
+                pageToken,
+                query: gmailSentWindowQuery(input.after, input.before),
+              });
+          '''
+          if old_call not in text:
+              raise SystemExit('Service listMessagePage call not found')
+          service.write_text(text.replace(old_call, new_call))
+
+          Path('.github/workflows/apply-gmail-profile-link-query-patch.yml').unlink()
+          PY
+
+      - name: Commit the bounded-query implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/google-workspace/google-api-client.ts \
+            artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts \
+            .github/workflows/apply-gmail-profile-link-query-patch.yml
+          git commit -m "feat: bound sent Gmail profile-link sweeps"
+          git push origin HEAD:fix/gmail-profile-history-audit-2026-08-31
