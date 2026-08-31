@@ -17,11 +17,11 @@ env:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
 
-      - name: Capture one live snapshot
+      - name: Capture one lightweight live snapshot
         env:
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
@@ -30,14 +30,13 @@ jobs:
           for item in \
             "health|/api/healthz" \
             "database-health|/api/healthz/db" \
-            "profile-integrity-audit|/api/assistant-import/profile-integrity-audit" \
             "pirate-profile-history|/api/assistant-import/profile-history/${PIRATE_PROFILE_ID}" \
             "pirate-calendar-links|/api/assistant-import/profile-integrity-calendar-links/${PIRATE_PROFILE_ID}"
           do
             name="${item%%|*}"
             path="${item#*|}"
             code=$(curl --silent --show-error --location \
-              --connect-timeout 20 --max-time 180 \
+              --connect-timeout 20 --max-time 60 \
               --dump-header "live-canonical-profile-snapshot/${name}.headers.txt" \
               --output "live-canonical-profile-snapshot/${name}.json" \
               --write-out '%{http_code}' \
