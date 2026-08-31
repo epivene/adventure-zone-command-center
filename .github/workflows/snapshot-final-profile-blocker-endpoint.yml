@@ -1,0 +1,58 @@
+name: Snapshot final profile blocker endpoint
+
+on:
+  push:
+    branches:
+      - maintenance/final-blank-profile-cleanup
+    paths:
+      - ".github/workflows/snapshot-final-profile-blocker-endpoint.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Capture current endpoint state
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p state
+          for PROFILE_ID in \
+            08e8e9b8-618a-4129-ab14-640345c1abf0 \
+            0bfee77c-e42c-417f-9d5e-7df54d57c38b
+          do
+            curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output "state/${PROFILE_ID}.json" \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/profile-integrity-references/${PROFILE_ID}" \
+              > "state/${PROFILE_ID}.status" || true
+          done
+          node <<'NODE'
+          const fs = require('fs');
+          const ids = [
+            '08e8e9b8-618a-4129-ab14-640345c1abf0',
+            '0bfee77c-e42c-417f-9d5e-7df54d57c38b',
+          ];
+          const rows = ids.map((id) => {
+            const status = fs.readFileSync(`state/${id}.status`, 'utf8').trim();
+            const raw = fs.readFileSync(`state/${id}.json`, 'utf8');
+            let body = raw;
+            try { body = JSON.parse(raw); } catch {}
+            return { id, status, body };
+          });
+          fs.writeFileSync('final-profile-blocker-endpoint-state.json', JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            rows,
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-profile-blocker-endpoint-state
+          path: final-profile-blocker-endpoint-state.json
+          retention-days: 1
