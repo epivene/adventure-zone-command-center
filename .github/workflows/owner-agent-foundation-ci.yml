@@ -12,6 +12,7 @@ on:
       - "artifacts/api-server/src/app.ts"
       - "artifacts/api-server/src/db/owner-account-**"
       - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
       - "artifacts/adventure-zone/src/lib/auth-context.tsx"
       - "lib/db/src/owner-auth-schema*"
       - "lib/db/src/index.ts"
@@ -47,6 +48,7 @@ jobs:
           src/routes/office-security-regression.test.ts
           src/db/required-schema-startup.test.ts
           src/db/owner-account-required-startup.test.ts
+          src/db/owner-account-startup-migration.test.ts
       - name: Owner database schema test
         run: pnpm exec vitest run lib/db/src/owner-auth-schema.test.ts
       - name: Workspace typecheck
