@@ -1,0 +1,84 @@
+name: Persist final live Gmail profile integrity receipt
+
+on:
+  push:
+    branches:
+      - verify/gmail-profile-integrity-final
+    paths:
+      - ".github/workflows/export-final-gmail-profile-integrity-commit.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: verify/gmail-profile-integrity-final
+          fetch-depth: 0
+
+      - name: Repair and audit protected live Gmail linkage
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            "${BASE_URL}/gmail-profile-integrity-repair" > repair.json
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/gmail-profile-integrity-audit" > audit.json
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-history/b447c83c-6348-4fab-b850-0db7a5576a83" > twin-falls.json
+
+          mkdir -p .audits
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const repair = JSON.parse(fs.readFileSync('repair.json', 'utf8'));
+          const auditResponse = JSON.parse(fs.readFileSync('audit.json', 'utf8'));
+          const twin = JSON.parse(fs.readFileSync('twin-falls.json', 'utf8'));
+          const audit = auditResponse.audit;
+          if (repair.ok !== true || auditResponse.ok !== true || !audit) throw new Error('Invalid protected Gmail integrity response.');
+          if (audit.eligibleUnlinkedSentEmails !== 0) throw new Error(`Unlinked profile-eligible sent emails: ${audit.eligibleUnlinkedSentEmails}`);
+          if (audit.retiredProfileReferences !== 0) throw new Error(`Retired-profile email references: ${audit.retiredProfileReferences}`);
+          if (!Array.isArray(audit.unresolved) || audit.unresolved.length !== 0) throw new Error('Unresolved profile-eligible sent emails remain.');
+          if (audit.profileEligibleSentEmails !== audit.activeProfileLinkedSentEmails) throw new Error('Eligible and linked sent-email counts differ.');
+          const serialized = JSON.stringify(twin);
+          const actualMessageVisible = serialized.includes('1a03f76015409bfa')
+            || serialized.includes('1a03f6d13a293ebf')
+            || (serialized.includes('Twin Falls County Fair - Sept 2-7 2026')
+              && serialized.includes('Thank you for calling me back. I tried returning your call')
+              && serialized.includes('who the best person is for me to speak with about entertainment for the 2027 fair'));
+          if (!actualMessageVisible) throw new Error('Actual Twin Falls Gmail message is not visible on the surviving profile.');
+          fs.writeFileSync('.audits/final-gmail-profile-integrity.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            scope: 'All profile-eligible sent-email activities in the connected CRM/Google Workspace store',
+            actualTwinFallsEmail: {
+              profileId: twin.place?.id ?? null,
+              profileName: twin.place?.name ?? null,
+              gmailMessageId: '1a03f76015409bfa',
+              gmailThreadId: '1a03f6d13a293ebf',
+              subject: 'Twin Falls County Fair - Sept 2-7 2026',
+              visibleAsActualEmailHistory: true,
+            },
+            repair: repair.result,
+            audit,
+          }, null, 2) + '\n');
+          NODE
+
+      - name: Commit sanitized receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/final-gmail-profile-integrity.json
+          git commit -m "audit: record final live Gmail profile integrity" || exit 0
+          git push origin HEAD:verify/gmail-profile-integrity-final
