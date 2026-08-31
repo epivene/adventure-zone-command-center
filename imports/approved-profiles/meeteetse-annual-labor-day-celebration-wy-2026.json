@@ -1,5 +1,5 @@
 {
-  "importRevision": 5,
+  "importRevision": 6,
   "matchExisting": true,
   "event": {
     "id": null,
@@ -12,7 +12,7 @@
     "website": "https://www.meeteetsewy.com/events",
     "address1": "1906 State Street",
     "postalCode": "82433",
-    "description": "116th Meeteetse Labor Day Celebration, Sept. 5-7, 2026. Confirmed Kristy-leg pay-for-play booking. Signed contract was returned by Discover Meeteetse on Aug. 28, 2026 after Dave Gordon and Codi-Brooke Robinson signed/dated it Aug. 27. Terms: no upfront entertainment fee; Adventure Zone pays 10% of ticket-box sales. Current authorized event/site contact: Codi-Brooke Robinson, Oasis Motel and RV Park, (214) 463-8506, office@meeteetsewy.com."
+    "description": "116th Meeteetse Labor Day Celebration, Sept. 5-7, 2026. Confirmed Kristy-leg pay-for-play booking. Signed contract was returned by Discover Meeteetse on Aug. 28, 2026 after Dave Gordon and Codi-Brooke Robinson signed/dated it Aug. 27. Terms: no upfront entertainment fee; Adventure Zone pays 10% of ticket-box sales. Certificate of Insurance was delivered to Codi-Brooke by email on Aug. 31, 2026. Current authorized event/site contact: Codi-Brooke Robinson, Oasis Motel and RV Park, (214) 463-8506, office@meeteetsewy.com."
   },
   "contacts": [],
   "booking": {
@@ -30,13 +30,17 @@
   "notes": [
     {
       "subject": "Aug. 28 — signed contract returned; booking confirmed",
-      "body": "CONFIRMED BOOKING: Discover Meeteetse returned the signed contract on Aug. 28, 2026. The contract page identifies Dave Gordon and Codi-Brooke Robinson and is dated Aug. 27, 2026. Codi-Brooke's email also states she is thrilled to have The Adventure Zone in Meeteetse and that she started distributing the flyer. Event dates are Sept. 5-7, 2026. Commercial structure is pay-for-play with no upfront entertainment fee to the event; Adventure Zone sets/collects public admission and pays the sponsoring event 10% of ticket-box sales within 24 hours after the final operating day. Current attraction commitment is 8-10 inflatables. Adventure Zone is the exclusive commercial inflatable attraction, amusement ride, and pay-to-play carnival game operator at the approved site. Event-side requirements include permission to arrive Sept. 3 and remain through Sept. 8 at midnight; (4) 220V 50-amp outlets or 24 separate 110V outlets within 150 feet, or a 50 kW generator; water within 150 feet; camping or suitable lodging; 24-hour restroom access; local/state permits and inspection costs; and a forklift/operator for reload if available. Remaining operations items are final setup location/footprint, operating hours, final attraction/site layout, and final electrical plan. COI was requested Aug. 28."
+      "body": "CONFIRMED BOOKING: Discover Meeteetse returned the signed contract on Aug. 28, 2026. The contract page identifies Dave Gordon and Codi-Brooke Robinson and is dated Aug. 27, 2026. Codi-Brooke's email also states she is thrilled to have The Adventure Zone in Meeteetse and that she started distributing the flyer. Event dates are Sept. 5-7, 2026. Commercial structure is pay-for-play with no upfront entertainment fee to the event; Adventure Zone sets/collects public admission and pays the sponsoring event 10% of ticket-box sales within 24 hours after the final operating day. Current attraction commitment is 8-10 inflatables. Adventure Zone is the exclusive commercial inflatable attraction, amusement ride, and pay-to-play carnival game operator at the approved site. Event-side requirements include permission to arrive Sept. 3 and remain through Sept. 8 at midnight; (4) 220V 50-amp outlets or 24 separate 110V outlets within 150 feet, or a 50 kW generator; water within 150 feet; camping or suitable lodging; 24-hour restroom access; local/state permits and inspection costs; and a forklift/operator for reload if available. Remaining operations items are final setup location/footprint, operating hours, final attraction/site layout, and final electrical plan."
+    },
+    {
+      "subject": "Aug. 31 — Certificate of Insurance delivered",
+      "body": "Adventure Zone received the Certificate of Insurance and emailed it to Codi-Brooke Robinson at office@meeteetsewy.com on Aug. 31, 2026. The sent reply asked her to let us know if anything else is needed before the celebration. COI delivery is complete; remaining pre-event operations items are the final setup location/footprint, public operating hours, attraction/site layout, and electrical plan."
     }
   ],
   "followUps": [
     {
       "label": "Meeteetse — finalize site hours and power",
-      "reason": "Booking is confirmed. Confirm exact approved setup location/footprint, public operating hours, final attraction/site layout, final electrical plan, and COI delivery with Codi-Brooke Robinson before the Sept. 3 arrival window.",
+      "reason": "Booking is confirmed and the COI has been delivered. Confirm exact approved setup location/footprint, public operating hours, final attraction/site layout, and final electrical plan with Codi-Brooke Robinson before the Sept. 3 arrival window.",
       "dueAt": "2026-08-31T15:00:00.000Z"
     }
   ]
