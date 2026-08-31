@@ -1,0 +1,32 @@
+name: Package blank profile batch 02 development context
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-02
+    paths:
+      - ".github/workflows/package-batch-02-development-context.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy relevant implementation files
+        run: |
+          mkdir -p context/imports context/features context/workflows
+          cp imports/approved-profiles/blank-profile-batch-01.json context/imports/
+          cp artifacts/api-server/src/features/organizations/blank-profile-batch-01.ts context/features/
+          cp artifacts/api-server/src/features/organizations/blank-profile-batch-01.test.ts context/features/
+          cp artifacts/api-server/src/features/approved-profile-import/startup-import.ts context/features/
+          cp artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts context/features/
+          cp .github/workflows/approved-profile-import-ci.yml context/workflows/
+          cp .github/workflows/blank-profile-cleanup-ci.yml context/workflows/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-02-development-context
+          path: context
+          retention-days: 1
