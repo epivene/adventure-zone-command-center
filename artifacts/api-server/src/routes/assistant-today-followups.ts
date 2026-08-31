@@ -1,4 +1,4 @@
-import { and, asc, count, eq, isNull, ne } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, ne } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -9,6 +9,7 @@ import {
   followUps,
   organizations,
 } from "@/db/schema";
+import { decideImportedFollowUpAction } from "@/features/approved-profile-import/imported-follow-up-policy";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
 const router: IRouter = Router();
@@ -115,18 +116,33 @@ router.post("/today-followups", async (req, res): Promise<void> => {
   try {
     const now = new Date();
     const result = await db.transaction(async (transaction) => {
-      const [existing] = await transaction
-        .select({ id: followUps.id })
+      const open = await transaction
+        .select({
+          id: followUps.id,
+          label: followUps.kind,
+          dueAt: followUps.dueAt,
+        })
         .from(followUps)
         .where(and(
           eq(followUps.organizationId, organizationId),
-          eq(followUps.kind, label),
-          eq(followUps.dueAt, dueAt),
           isNull(followUps.completedAt),
         ))
-        .limit(1);
+        .orderBy(
+          desc(followUps.updatedAt),
+          desc(followUps.createdAt),
+          asc(followUps.id),
+        );
 
-      if (existing) {
+      const exact = open.find((item) =>
+        item.label === label && item.dueAt.getTime() === dueAt.getTime(),
+      ) ?? null;
+      const action = decideImportedFollowUpAction({
+        preserveExisting,
+        exactOpenId: exact?.id ?? null,
+        openIds: open.map((item) => item.id),
+      });
+
+      if (action.action === "reuse_exact") {
         if (!preserveExisting) {
           await transaction
             .update(followUps)
@@ -138,13 +154,25 @@ router.post("/today-followups", async (req, res): Promise<void> => {
             .where(and(
               eq(followUps.organizationId, organizationId),
               isNull(followUps.completedAt),
-              ne(followUps.id, existing.id),
+              ne(followUps.id, action.followUpId),
             ));
         }
-        return { id: existing.id, created: false };
+        return {
+          id: action.followUpId,
+          created: false,
+          preservedExisting: false,
+        };
       }
 
-      if (!preserveExisting) {
+      if (action.action === "preserve_open") {
+        return {
+          id: action.followUpId,
+          created: false,
+          preservedExisting: true,
+        };
+      }
+
+      if (action.action === "replace_and_create") {
         await transaction
           .update(followUps)
           .set({
@@ -182,12 +210,17 @@ router.post("/today-followups", async (req, res): Promise<void> => {
         updatedAt: now,
       });
 
-      return { id: created.id, created: true };
+      return {
+        id: created.id,
+        created: true,
+        preservedExisting: false,
+      };
     });
 
     res.status(result.created ? 201 : 200).json({
       ok: true,
       created: result.created,
+      preservedExisting: result.preservedExisting,
       followUpId: result.id,
       organizationId,
       organizationName: organization.name,
