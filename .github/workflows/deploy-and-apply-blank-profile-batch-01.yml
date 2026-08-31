@@ -1,0 +1,227 @@
+name: Deploy and apply blank profile batch 01
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/deploy-and-apply-blank-profile-batch-01.yml"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  apply-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/blank-profiles-batch-01
+
+      - name: Wait for the reviewed pull request to merge
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head research/blank-profiles-batch-01 \
+            --base main \
+            --state all \
+            --json number \
+            --jq 'sort_by(.number) | reverse | .[0].number // empty')
+          test -n "$PR_NUMBER"
+          for attempt in $(seq 1 120); do
+            MERGED=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergedAt --jq '.mergedAt // empty')
+            if [ -n "$MERGED" ]; then exit 0; fi
+            sleep 10
+          done
+          echo "Reviewed batch pull request did not merge."
+          exit 1
+
+      - name: Trigger Render deployment when configured
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          set -euo pipefail
+          if [ -n "${RENDER_DEPLOY_HOOK_URL:-}" ]; then
+            curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL" >/dev/null
+          fi
+
+      - name: Safely apply every reviewed payload to its existing live profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL:-}"
+          test -n "${ASSISTANT_IMPORT_TOKEN:-}"
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+          const normalize = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          function walk(directory) {
+            const files = [];
+            for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+              const full = path.join(directory, entry.name);
+              if (entry.isDirectory()) files.push(...walk(full));
+              else if (entry.isFile() && entry.name.endsWith('.json')) files.push(full);
+            }
+            return files;
+          }
+
+          function loadBatch() {
+            for (const file of walk('imports/approved-profiles')) {
+              let parsed;
+              try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+              const profiles = Array.isArray(parsed) ? parsed : parsed?.profiles;
+              if (!Array.isArray(profiles) || profiles.length !== 25) continue;
+              const marker = `${file} ${parsed?.batchId ?? ''}`.toLowerCase();
+              if (marker.includes('batch-01') || marker.includes('batch 01') || marker.includes('blank-profile')) {
+                return { file, profiles };
+              }
+            }
+            throw new Error('Reviewed 25-profile batch payload was not found.');
+          }
+
+          async function request(pathname, options = {}) {
+            const response = await fetch(`${base}/${pathname}`, {
+              ...options,
+              headers: { ...headers, ...(options.headers ?? {}) },
+            });
+            const text = await response.text();
+            let body = null;
+            try { body = JSON.parse(text); } catch {}
+            if (!response.ok) throw new Error(`${pathname}: HTTP ${response.status} ${text.slice(0, 500)}`);
+            return body;
+          }
+
+          function compatibleLocation(row, event) {
+            const expectedCity = normalize(event?.city);
+            const expectedRegion = normalize(event?.region);
+            const rowCity = normalize(row?.city);
+            const rowRegion = normalize(row?.region);
+            if (expectedCity && rowCity && expectedCity !== rowCity) return false;
+            if (expectedRegion && rowRegion && expectedRegion !== rowRegion) return false;
+            return true;
+          }
+
+          async function resolve(item) {
+            const event = item.event ?? {};
+            const names = [...new Set([event.name, ...(Array.isArray(item.aliases) ? item.aliases : [])].filter(Boolean))];
+            const results = new Map();
+            for (const name of names) {
+              const search = await request(`profile-search?q=${encodeURIComponent(name)}&limit=20`, {
+                method: 'GET',
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              for (const row of search?.results ?? []) {
+                if (row?.kind === 'organization' && row?.id && compatibleLocation(row, event)) results.set(row.id, row);
+              }
+            }
+            const exactNames = new Set(names.map(normalize));
+            const exact = [...results.values()].filter((row) => exactNames.has(normalize(row.label)));
+            if (exact.length === 1) return exact[0];
+            const close = [...results.values()].filter((row) => names.some((name) => {
+              const a = normalize(name);
+              const b = normalize(row.label);
+              return a && b && (a.includes(b) || b.includes(a));
+            }));
+            if (close.length === 1) return close[0];
+            return null;
+          }
+
+          (async () => {
+            const batch = loadBatch();
+            const expectedContacts = batch.profiles.reduce((sum, item) => sum + (item.contacts?.length ?? 0), 0);
+            const expectedFollowUps = batch.profiles.reduce((sum, item) => sum + (item.followUps?.length ?? 0), 0);
+            if (expectedContacts !== 17 || expectedFollowUps !== 5) throw new Error('Reviewed batch totals changed.');
+
+            let lastUnresolved = [];
+            for (let readinessAttempt = 1; readinessAttempt <= 100; readinessAttempt += 1) {
+              lastUnresolved = [];
+              for (const item of batch.profiles) {
+                const match = await resolve(item);
+                if (!match) lastUnresolved.push(item.event?.name ?? 'unnamed');
+              }
+              if (!lastUnresolved.length) break;
+              await sleep(15000);
+            }
+            if (lastUnresolved.length) throw new Error(`Existing live targets did not resolve: ${lastUnresolved.join(', ')}`);
+
+            const applied = [];
+            for (const item of batch.profiles) {
+              if (item.requireExisting !== true) throw new Error(`Unsafe batch entry: ${item.event?.name}`);
+              const match = await resolve(item);
+              if (!match) throw new Error(`Existing target disappeared: ${item.event?.name}`);
+
+              const payload = {
+                ...item,
+                event: { ...(item.event ?? {}), id: match.id },
+              };
+              delete payload.requireExisting;
+              delete payload.matchExisting;
+              delete payload.aliases;
+              delete payload.notes;
+              delete payload.followUps;
+              delete payload.clearFollowUps;
+
+              const imported = await request('event-profiles', {
+                method: 'POST',
+                body: JSON.stringify(payload),
+              });
+              const profileId = imported?.profileId;
+              if (!profileId) throw new Error(`No profileId returned for ${item.event?.name}`);
+
+              for (const note of item.notes ?? []) {
+                await request('profile-notes', {
+                  method: 'POST',
+                  body: JSON.stringify({ organizationId: profileId, ...note }),
+                });
+              }
+              if (item.clearFollowUps === true && !(item.followUps ?? []).length) {
+                await request('today-followups/clear', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    organizationId: profileId,
+                    reason: 'Reviewed batch 01: no future action is currently justified.',
+                  }),
+                });
+              }
+              for (const followUp of item.followUps ?? []) {
+                await request('today-followups', {
+                  method: 'POST',
+                  body: JSON.stringify({ organizationId: profileId, ...followUp, preserveExisting: true }),
+                });
+              }
+              applied.push({ sourceName: item.event?.name, profileId });
+            }
+
+            fs.writeFileSync('blank-profile-batch-01-direct-apply.json', JSON.stringify({
+              appliedAt: new Date().toISOString(),
+              sourceFile: batch.file,
+              appliedEntries: applied.length,
+              uniqueProfiles: new Set(applied.map((row) => row.profileId)).size,
+              expectedContacts,
+              expectedFollowUps,
+              applied,
+            }, null, 2));
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-direct-apply
+          path: blank-profile-batch-01-direct-apply.json
+          retention-days: 7
