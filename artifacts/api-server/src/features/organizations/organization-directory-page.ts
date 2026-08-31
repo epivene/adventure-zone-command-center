@@ -128,7 +128,11 @@ function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined 
     ? sql`exists (select 1 from ${followUps} f where f.organization_id = ${organizations.id} or f.contact_id in (select oc.contact_id from ${organizationContacts} oc where oc.organization_id = ${organizations.id} and oc.active))`
     : undefined;
   const bookingCondition = query.hasBooking
-    ? sql`exists (select 1 from ${bookings} b where b.organization_id = ${organizations.id})`
+    ? sql`exists (
+        select 1 from ${bookings} b
+        where b.organization_id = ${organizations.id}
+          and coalesce(b.notes, '') not like '[Merged duplicate] Canonical booking:%'
+      )`
     : undefined;
   const locationCondition = query.hasLocations
     ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`
@@ -236,12 +240,22 @@ export async function listOrganizationDirectoryPage(
     db
       .select({ organizationId: organizationContacts.organizationId, value: count() })
       .from(organizationContacts)
-      .where(and(inArray(organizationContacts.organizationId, organizationIds), eq(organizationContacts.active, true)))
+      .where(and(
+        inArray(organizationContacts.organizationId, organizationIds),
+        eq(organizationContacts.active, true),
+        sql`not exists (
+          select 1 from contact_consolidations cc
+          where cc.source_contact_id = ${organizationContacts.contactId}
+        )`,
+      ))
       .groupBy(organizationContacts.organizationId),
     db
       .select({ organizationId: bookings.organizationId, value: count() })
       .from(bookings)
-      .where(inArray(bookings.organizationId, organizationIds))
+      .where(and(
+        inArray(bookings.organizationId, organizationIds),
+        sql`coalesce(${bookings.notes}, '') not like '[Merged duplicate] Canonical booking:%'`,
+      ))
       .groupBy(bookings.organizationId),
     db
       .select({ organizationId: organizationContacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName })
@@ -251,6 +265,10 @@ export async function listOrganizationDirectoryPage(
         inArray(organizationContacts.organizationId, organizationIds),
         eq(organizationContacts.active, true),
         eq(organizationContacts.isPrimary, true),
+        sql`not exists (
+          select 1 from contact_consolidations cc
+          where cc.source_contact_id = ${organizationContacts.contactId}
+        )`,
       )),
     db
       .select({ organizationId: organizationLocations.organizationId, value: count() })

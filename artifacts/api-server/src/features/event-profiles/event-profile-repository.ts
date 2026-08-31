@@ -186,6 +186,171 @@ function contactOrder(left: EventProfileContactRecord, right: EventProfileContac
     || left.id.localeCompare(right.id);
 }
 
+
+type CanonicalProfileContact = EventProfileContact & {
+  sourceContactIds: string[];
+};
+
+type CanonicalProfileBookingSelection = {
+  bookings: EventProfileBookingRecord[];
+  canonicalBookingIds: Map<string, string>;
+};
+
+function normalizedIdentityPart(value: string | null | undefined) {
+  return value?.trim().toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, "") ?? "";
+}
+
+function normalizedContactEmail(value: string | null | undefined) {
+  return value?.trim().toLocaleLowerCase("en-US") ?? "";
+}
+
+function normalizedContactPhone(value: string | null | undefined) {
+  const digits = value?.replace(/\D/g, "") ?? "";
+  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+}
+
+function contactsShareIdentity(left: EventProfileContact, right: EventProfileContact) {
+  const leftName = normalizedIdentityPart(left.name);
+  const rightName = normalizedIdentityPart(right.name);
+  if (!leftName || leftName !== rightName) return false;
+
+  const leftEmail = normalizedContactEmail(left.email);
+  const rightEmail = normalizedContactEmail(right.email);
+  if (leftEmail && rightEmail && leftEmail === rightEmail) return true;
+
+  const leftPhone = normalizedContactPhone(left.phone);
+  const rightPhone = normalizedContactPhone(right.phone);
+  return Boolean(leftPhone && rightPhone && leftPhone === rightPhone);
+}
+
+function mergeCanonicalContact(
+  canonical: CanonicalProfileContact,
+  contact: EventProfileContact,
+  sourceContactIds: readonly string[] = [contact.id],
+) {
+  for (const sourceContactId of sourceContactIds) {
+    if (!canonical.sourceContactIds.includes(sourceContactId)) canonical.sourceContactIds.push(sourceContactId);
+  }
+  canonical.isPrimary ||= contact.isPrimary;
+  canonical.role ||= contact.role;
+  canonical.phone ||= contact.phone;
+  canonical.email ||= contact.email;
+  canonical.actRecordId ||= contact.actRecordId;
+  canonical.locationName ||= contact.locationName;
+  canonical.locationCity ||= contact.locationCity;
+  canonical.locationRegion ||= contact.locationRegion;
+}
+
+function canonicalProfileContacts(records: EventProfileContactRecord[]) {
+  const groups: CanonicalProfileContact[] = [];
+
+  for (const record of records.toSorted(contactOrder)) {
+    const contact: EventProfileContact = {
+      id: record.id,
+      name: `${record.firstName} ${record.lastName}`.trim(),
+      role: record.role,
+      isPrimary: record.isPrimary,
+      phone: record.phone,
+      email: record.email,
+      source: record.source,
+      actRecordId: record.actRecordId,
+      locationName: record.locationName,
+      locationCity: record.locationCity,
+      locationRegion: record.locationRegion,
+    };
+
+    const matchingIndexes = groups
+      .map((group, index) => contactsShareIdentity(group, contact) ? index : -1)
+      .filter((index) => index >= 0);
+
+    if (matchingIndexes.length === 0) {
+      groups.push({ ...contact, sourceContactIds: [contact.id] });
+      continue;
+    }
+
+    const canonical = groups[matchingIndexes[0]!]!;
+    mergeCanonicalContact(canonical, contact);
+    for (const index of matchingIndexes.slice(1).toSorted((left, right) => right - left)) {
+      const merged = groups[index]!;
+      mergeCanonicalContact(canonical, merged, merged.sourceContactIds);
+      groups.splice(index, 1);
+    }
+  }
+
+  return groups;
+}
+
+const mergedBookingNotePattern = /^\s*\[Merged duplicate\]\s*Canonical booking:\s*([0-9a-f-]{36})/i;
+
+function exactBookingKey(booking: EventProfileBookingRecord) {
+  if (!booking.startsAt) return `booking:${booking.id}`;
+  return [
+    normalizedIdentityPart(booking.name),
+    normalizedIdentityPart(booking.city),
+    normalizedIdentityPart(booking.region),
+    booking.startsAt.toISOString(),
+    booking.endsAt?.toISOString() ?? "",
+  ].join("\u0000");
+}
+
+function appearanceScore(booking: EventProfileBookingRecord, namedCanonicalIds: Set<string>) {
+  return (namedCanonicalIds.has(booking.id.toLowerCase()) ? 1_000 : 0)
+    + (booking.startsAt ? 100 : 0)
+    + (booking.endsAt ? 20 : 0)
+    + (booking.actRecordId ? 5 : 0);
+}
+
+function canonicalProfileBookings(records: EventProfileBookingRecord[]): CanonicalProfileBookingSelection {
+  const namedCanonicalIds = new Set<string>();
+  const canonicalBookingIds = new Map<string, string>();
+  for (const booking of records) {
+    const canonicalId = booking.notes?.match(mergedBookingNotePattern)?.[1];
+    if (!canonicalId) continue;
+    namedCanonicalIds.add(canonicalId.toLowerCase());
+    canonicalBookingIds.set(booking.id, canonicalId.toLowerCase());
+  }
+
+  const selected = new Map<string, EventProfileBookingRecord>();
+  for (const booking of records) {
+    if (mergedBookingNotePattern.test(booking.notes ?? "")) continue;
+    const key = exactBookingKey(booking);
+    const existing = selected.get(key);
+    if (!existing) {
+      selected.set(key, booking);
+      continue;
+    }
+
+    const candidateScore = appearanceScore(booking, namedCanonicalIds);
+    const existingScore = appearanceScore(existing, namedCanonicalIds);
+    if (candidateScore > existingScore || (candidateScore === existingScore && booking.id < existing.id)) {
+      canonicalBookingIds.set(existing.id, booking.id);
+      selected.set(key, booking);
+    } else {
+      canonicalBookingIds.set(booking.id, existing.id);
+    }
+  }
+
+  return {
+    bookings: [...selected.values()].toSorted((left, right) =>
+      Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0)
+      || left.name.localeCompare(right.name)
+      || left.id.localeCompare(right.id),
+    ),
+    canonicalBookingIds,
+  };
+}
+
+function canonicalRecordId(mapping: ReadonlyMap<string, string>, id: string | null) {
+  if (!id) return null;
+  let current = id;
+  const seen = new Set<string>();
+  while (mapping.has(current) && !seen.has(current)) {
+    seen.add(current);
+    current = mapping.get(current)!;
+  }
+  return current;
+}
+
 function sourceReference(
   entityType: EventProfileSourceReference["entityType"],
   entityId: string,
@@ -352,42 +517,47 @@ export function buildEventProfile(
     contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
 ): EventProfile {
-  const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
-    id: contact.id,
-    name: `${contact.firstName} ${contact.lastName}`.trim(),
-    role: contact.role,
-    isPrimary: contact.isPrimary,
-    phone: contact.phone,
-    email: contact.email,
-    source: contact.source,
-    actRecordId: contact.actRecordId,
-    locationName: contact.locationName,
-    locationCity: contact.locationCity,
-    locationRegion: contact.locationRegion,
-  }));
-  const selectedContactId = contacts.some(({ id }) => id === requestedContactId)
-    ? requestedContactId!
-    : contacts[0]?.id ?? null;
-  const timeline = splitProfileActivities(records.activities);
+  const contactGroups = canonicalProfileContacts(records.contacts);
+  const contactIdMap = new Map<string, string>();
+  for (const contact of contactGroups) {
+    for (const sourceContactId of contact.sourceContactIds) contactIdMap.set(sourceContactId, contact.id);
+  }
+  const requestedContactGroup = contactGroups.find((contact) =>
+    requestedContactId ? contact.sourceContactIds.includes(requestedContactId) : false,
+  );
+  const contacts = contactGroups.map(({ sourceContactIds: _sourceContactIds, ...contact }) => contact);
+  const selectedContactId = requestedContactGroup?.id ?? contacts[0]?.id ?? null;
+
+  const bookingSelection = canonicalProfileBookings(records.bookings);
+  const timeline = splitProfileActivities(records.activities.map((activity) => ({
+    ...activity,
+    contactId: canonicalRecordId(contactIdMap, activity.contactId),
+    bookingId: canonicalRecordId(bookingSelection.canonicalBookingIds, activity.bookingId),
+  })));
 
   return {
     id: records.place.id,
     place: records.place,
     contacts,
     selectedContactId,
-    bookings: records.bookings.toSorted((left, right) =>
-      Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0)
-      || left.name.localeCompare(right.name)
-      || left.id.localeCompare(right.id),
-    ),
+    bookings: bookingSelection.bookings.map((booking) => ({
+      ...booking,
+      primaryContactId: canonicalRecordId(contactIdMap, booking.primaryContactId),
+    })),
     notes: timeline.notes,
     scoutNotes: timeline.scoutNotes,
     history: timeline.history,
-    followUps: records.followUps.toSorted((left, right) =>
-      Number(left.completedAt !== null) - Number(right.completedAt !== null)
-      || Number(left.dueAt) - Number(right.dueAt)
-      || left.id.localeCompare(right.id),
-    ),
+    followUps: records.followUps
+      .map((followUp) => ({
+        ...followUp,
+        contactId: canonicalRecordId(contactIdMap, followUp.contactId),
+        bookingId: canonicalRecordId(bookingSelection.canonicalBookingIds, followUp.bookingId),
+      }))
+      .toSorted((left, right) =>
+        Number(left.completedAt !== null) - Number(right.completedAt !== null)
+        || Number(left.dueAt) - Number(right.dueAt)
+        || left.id.localeCompare(right.id),
+      ),
     groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
     migrationHistory,
@@ -559,7 +729,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       occurredAt: activity.occurredAt,
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt,
-      importedFromAct: activity.importedFromAct,
+      importedFromAct: Boolean(activity.importedFromAct),
       actSourceType: activity.actSourceType,
       historicalDateUnknown: activity.actSourceType === "paper_note"
         && activity.sourceOccurredAt === null

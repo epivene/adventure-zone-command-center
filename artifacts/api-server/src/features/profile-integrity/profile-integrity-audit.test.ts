@@ -5,9 +5,12 @@ import { ProfileIntegrityAuditService } from "./profile-integrity-audit";
 type Row = Record<string, unknown>;
 
 class FakePool {
+  readonly queries: string[] = [];
+
   constructor(private readonly responses: Array<{ marker: string; rows: Row[] }>) {}
 
   async query(sql: string): Promise<{ rows: Row[] }> {
+    this.queries.push(sql);
     const match = this.responses.find((response) => sql.includes(response.marker));
     return { rows: match?.rows ?? [] };
   }
@@ -156,5 +159,20 @@ describe("ProfileIntegrityAuditService", () => {
       "profile_without_act_company_id",
     ]);
     expect(report.issues.every((item) => item.autoFixable === false)).toBe(true);
+  });
+
+  it("does not count non-destructively consolidated profile children as active duplicates", async () => {
+    const pool = new FakePool([]);
+
+    const report = await new ProfileIntegrityAuditService(pool).run(
+      new Date("2026-08-30T18:00:00.000Z"),
+    );
+
+    expect(report.summary.duplicateAppearanceGroupCount).toBe(0);
+    expect(report.summary.duplicateContactGroupCount).toBe(0);
+    const sql = pool.queries.join("\n");
+    expect(sql).toContain("contact_consolidations");
+    expect(sql).toContain("booking_consolidations");
+    expect(sql).toContain("[Merged duplicate] Canonical booking:%");
   });
 });
