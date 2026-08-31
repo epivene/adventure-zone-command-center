@@ -1,0 +1,68 @@
+name: Apply Gmail sweep context refresh fix
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-current
+    paths:
+      - ".github/workflows/apply-gmail-sweep-refresh-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-current
+          fetch-depth: 0
+      - name: Refresh classifier evidence for each sweep
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts')
+          text = path.read_text()
+          text = text.replace(
+          '''  private readonly classifier: GoogleSentProfileLinkSweepClassifier;\n''',
+          '''  private readonly classifierFactory: () => GoogleSentProfileLinkSweepClassifier;\n''',
+          )
+          text = text.replace(
+          '''    classifier?: GoogleSentProfileLinkSweepClassifier;\n''',
+          '''    classifier?: GoogleSentProfileLinkSweepClassifier;\n    classifierFactory?: () => GoogleSentProfileLinkSweepClassifier;\n''',
+          )
+          text = text.replace(
+          '''    this.classifier = options?.classifier ?? new GoogleHistoricalMessageClassifier();\n''',
+          '''    this.classifierFactory = options?.classifierFactory\n      ?? (() => options?.classifier ?? new GoogleHistoricalMessageClassifier());\n''',
+          )
+          marker = '''    const mappedTargets = await this.repository.mappedTargets(allRefs.map((ref) => ({\n      messageId: ref.id,\n      threadId: ref.threadId,\n    })));\n'''
+          replacement = marker + '''    // The historical classifier caches a profile/contact evidence snapshot. Create a\n    // fresh classifier for each sweep so profiles added since process start are\n    // eligible on the next hourly pass. Injected classifiers remain supported for\n    // deterministic tests.\n    const classifier = this.classifierFactory();\n'''
+          if replacement not in text:
+              if marker not in text:
+                  raise SystemExit('mappedTargets marker not found')
+              text = text.replace(marker, replacement)
+          text = text.replace(
+          '''        const classification = await this.classifier.classify(message, client);\n''',
+          '''        const classification = await classifier.classify(message, client);\n''',
+          )
+          if 'private readonly classifier:' in text or 'this.classifier.classify' in text:
+              raise SystemExit('stale classifier reference remains')
+          path.write_text(text)
+
+          for name in [
+            '.github/workflows/apply-gmail-sweep-refresh-fix.yml',
+            '.github/workflows/trigger-gmail-refresh-red-ci.yml',
+            '.github/workflows/package-gmail-profile-link-review-bundle.yml',
+          ]:
+              candidate = Path(name)
+              if candidate.exists():
+                  candidate.unlink()
+          PY
+      - name: Commit implementation and remove one-time workflows
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: refresh Gmail profile evidence on every sweep"
+          git push origin HEAD:fix/gmail-profile-history-audit-current
