@@ -1,0 +1,62 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": ["Vail Comedy Festival (Vail) CO"],
+    "event": {"id": "fa957d93-e903-491e-b23d-71bd80060db3", "name": "Vail Comedy Festival (Vail) CO", "city": "Vail", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Active Memorial Day weekend comedy, cinema, and magic festival in Vail. Programming is primarily ticketed adult comedy, with limited free family magic; not a strong fit for a staffed inflatable carnival.", "phone": "", "website": "https://www.vailcomedyfestival.com/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the active Vail Comedy Festival. The official site currently lists May 29-31, 2027 and describes comedy, cinema, magic, ticketed adult events, and limited free family entertainment. Adventure Zone sent outreach to sponsorship@vailcomedy.com on 2025-04-29 and no reply was found. The current format remains primarily adult/ticketed and does not establish a practical attraction footprint for a full Adventure Zone package. Classification: active event, low/no fit. No follow-up is created. Source: https://www.vailcomedyfestival.com/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Denver Food & Wine Festival (Denver) CO"],
+    "event": {"id": "42e4d2f4-d72d-4176-843c-cb4a1282defd", "name": "Denver Food + Wine Festival (Denver) CO", "city": "Denver", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Multi-day food, wine, and spirits fundraiser presented by the Colorado Restaurant Foundation. Signature public events are 21+ and prohibit children, so this is not an Adventure Zone prospect.", "phone": "303-717-0939", "website": "https://denverfoodandwine.com/", "address1": "1000 Larimer Street", "address2": "", "postalCode": "80204"},
+    "contacts": [{"id": null, "name": "Devany McNeill", "primary": true, "phone": "303-717-0939", "email": "dmcneill@corestaurant.org", "role": "VP, Strategic Partnerships"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified through the official Denver Food + Wine Festival site. The 2026 festival ran Aug. 26-29 at Tivoli Quad, Auraria Campus, 1000 Larimer Street, Denver. The Grand Tasting and Shake + Brake Showdown explicitly require attendees to be 21 or older and prohibit children and pets. Official involvement contact: Devany McNeill, VP Strategic Partnerships, dmcneill@corestaurant.org, 303-717-0939. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active adult-only food/alcohol event; no outreach or follow-up. Sources: https://denverfoodandwine.com/ and https://denverfoodandwine.com/about-2/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["No Barriers - Summit  (Estes Park) CO", "No Barriers - Summit (Estes Park) CO"],
+    "event": {"id": "5527509f-a08c-4519-a8a2-66c6fa5825e1", "name": "No Barriers USA", "city": "Fort Collins", "region": "CO"},
+    "profile": {"placeType": "association", "description": "National nonprofit serving people affected by disability through accessible programs and events. This is the umbrella organization profile; event-specific opportunities remain separate records.", "phone": "970-484-3633", "website": "https://nobarriersusa.org/", "address1": "301 Boardwalk Drive, Box #270637", "address2": "", "postalCode": "80527"},
+    "contacts": [],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Resolved the blank ACT shell as the No Barriers USA umbrella organization, not a current Estes Park event. Official contact is info@nobarriersusa.org, 970-484-3633, 301 Boardwalk Drive Box #270637, Fort Collins, CO 80527. The live app already contains a separate event profile, ‘No Barriers - What's Your Everest (Copper Mtn) CO,’ with Mike Jaworski, the same organization phone/email, and two ACT history entries; it is intentionally not merged into this umbrella record. Adventure Zone sent No Barriers outreach in 2023 and no reply was found. Classification: active nonprofit umbrella organization. No generic follow-up is created; future work should attach to a specific current program or event. Sources: https://nobarriersusa.org/ and https://nobarriersusa.org/contact/ ."}],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["Orofino All American Fireworks Celebrations (Orofino)  ID"],
+    "event": {"id": "065416a5-70cd-4937-ad28-844712434cbc", "name": "Orofino All American Fireworks Celebration (Orofino) ID", "city": "Orofino", "region": "ID"},
+    "profile": {"placeType": "festival_event", "description": "Community Independence Day fireworks celebration supported by the Clearwater County Chamber of Commerce. Prior Adventure Zone correspondence showed organizer interest but a nonprofit fundraising constraint.", "phone": "208-476-4335", "website": "https://www.orofino.com/", "address1": "217 College Avenue, Suite 18", "address2": "", "postalCode": "83544"},
+    "contacts": [{"id": null, "name": "Clearwater County Chamber of Commerce", "primary": true, "phone": "208-476-4335", "email": "6cdirector@gmail.com", "role": "Community event organizer / chamber office"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as Orofino's community Independence Day fireworks celebration, supported by the Clearwater County Chamber of Commerce. Current chamber contact is 217 College Avenue, Suite 18, Orofino, ID 83544; 208-476-4335; 6cdirector@gmail.com. Adventure Zone emailed the chamber on 2023-12-20. The chamber director replied on 2023-12-21 requesting pricing and explained that the free nonprofit event would need to fundraise; Amy answered with package/pricing information. Classification: active community event with genuine prior interest and a funding constraint. A 2027 research follow-up is justified to verify dates, organizer, fundraising progress, entertainment plan, and route fit before any new outreach. Source: https://www.orofino.com/ ."}],
+    "followUps": [{"label": "Research 2027 Orofino fireworks opportunity", "reason": "Verify the 2027 celebration date, current chamber organizer, fundraising or entertainment budget, existing attractions, and Idaho route fit. Review the warm 2023 pricing conversation before deciding whether to draft follow-up outreach.", "dueAt": "2027-01-15T16:00:00.000Z"}]
+  },
+  {
+    "importRevision": 1,
+    "aliases": ["4th of July Celebrating the 4th (Alamosa) CO"],
+    "event": {"id": "1a3c59e3-7828-4158-9411-7834c1eb6b2d", "name": "4th of July Parade & Park Party for America (Alamosa) CO", "city": "Alamosa", "region": "CO"},
+    "profile": {"placeType": "festival_event", "description": "Alamosa Independence Day parade and park celebration. Current programming already includes a Family Adventure Zone with bounce houses and children's activities.", "phone": "800-258-7597", "website": "https://www.alamosa.org/events/4th-of-july/", "address1": "", "address2": "", "postalCode": ""},
+    "contacts": [{"id": null, "name": "Visit Alamosa", "primary": true, "phone": "800-258-7597", "email": "visit@alamosa.org", "role": "Destination and event information"}],
+    "booking": {"enabled": false},
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [{"subject": "Blank profile batch 02 research - 2026-08-31", "body": "Verified as the current ‘4th of July Parade & Park Party for America’ in Alamosa. The 2026 celebration was held July 4 at Cole Park and advertised its own Family Adventure Zone with a bubble foam pit, bounce houses, face painting, and water activities. Adventure Zone sent outreach to visit@alamosa.org on 2023-12-15 and no reply was found. Classification: active community celebration, but the event already has a dedicated children's attraction area and no unsupported replacement need is being assumed. No follow-up is created. Source: https://www.alamosa.org/events/4th-of-july/ ."}],
+    "followUps": []
+  }
+]
