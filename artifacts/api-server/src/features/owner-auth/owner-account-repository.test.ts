@@ -85,4 +85,17 @@ describe("PostgresOwnerAccountRepository", () => {
     expect(query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
     expect(release).toHaveBeenCalledOnce();
   });
+
+  it("fails closed when a database row does not satisfy the owner record contract", async () => {
+    const pool = {
+      query: vi.fn().mockResolvedValue({
+        rows: [{ ...ownerRow, role: "office_coordinator" }],
+      }),
+      connect: vi.fn(),
+    };
+
+    await expect(
+      new PostgresOwnerAccountRepository(pool as never).findPrimary(),
+    ).rejects.toThrow("OWNER_ACCOUNT_RECORD_INVALID");
+  });
 });
