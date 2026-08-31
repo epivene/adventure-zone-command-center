@@ -132,4 +132,67 @@ describe("canonical profile children", () => {
       startsAt: new Date("2026-09-18T17:00:00.000Z"),
     });
   });
+
+  it("preserves distinct appearances that happen in the same year", () => {
+    const input = records();
+    input.bookings.push({
+      id: "30000000-0000-4000-8000-000000000001",
+      name: "Northglenn July 4 Celebration - 2026",
+      primaryContactId: canonicalContactId,
+      city: "Northglenn",
+      region: "CO",
+      startsAt: new Date("2026-07-04T17:00:00.000Z"),
+      endsAt: new Date("2026-07-04T23:00:00.000Z"),
+      status: "interested",
+      probability: "possible",
+      notes: null,
+      actRecordId: null,
+    });
+
+    const profile = buildEventProfile(input);
+
+    expect(profile.bookings.map((booking) => booking.id)).toEqual([
+      canonicalBookingId,
+      "30000000-0000-4000-8000-000000000001",
+    ]);
+  });
+
+  it("rewrites child references to their canonical contact and appearance", () => {
+    const input = records();
+    const duplicateContactId = input.contacts[2]!.id;
+    const duplicateBookingId = input.bookings[1]!.id;
+    input.activities.push({
+      id: "40000000-0000-4000-8000-000000000001",
+      contactId: duplicateContactId,
+      bookingId: duplicateBookingId,
+      kind: "note",
+      subject: "Duplicate-linked note",
+      body: "Preserve this history on the canonical profile children.",
+      occurredAt: new Date("2026-08-29T12:00:00.000Z"),
+      createdAt: new Date("2026-08-29T12:00:00.000Z"),
+      updatedAt: new Date("2026-08-29T12:00:00.000Z"),
+      importedFromAct: false,
+      actSourceType: null,
+    });
+    input.followUps.push({
+      id: "50000000-0000-4000-8000-000000000001",
+      contactId: duplicateContactId,
+      bookingId: duplicateBookingId,
+      kind: "Follow up in 2027",
+      dueAt: new Date("2027-01-15T15:00:00.000Z"),
+      completedAt: null,
+    });
+
+    const profile = buildEventProfile(input);
+
+    expect(profile.notes[0]).toMatchObject({
+      contactId: canonicalContactId,
+      bookingId: canonicalBookingId,
+    });
+    expect(profile.followUps[0]).toMatchObject({
+      contactId: canonicalContactId,
+      bookingId: canonicalBookingId,
+    });
+    expect(profile.bookings[0]!.primaryContactId).toBe(canonicalContactId);
+  });
 });

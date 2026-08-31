@@ -12,6 +12,7 @@ const payload = JSON.parse(readFileSync(fixturePath, "utf8"));
 
 describe("Pirate Fest reviewed relationship state", () => {
   it("records 2026 as declined rather than a signed booking", () => {
+    expect(payload.event.id).toBe("f24033e1-801b-43ff-9a7e-a9d6d7b426c3");
     expect(payload.booking.status).toBe("declined");
     expect(payload.booking.nextActionKind).toBe("renewal");
   });

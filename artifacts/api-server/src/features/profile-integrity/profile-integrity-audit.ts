@@ -438,15 +438,27 @@ export class ProfileIntegrityAuditService {
 
 const PROFILE_SUMMARY_SQL = `
 WITH profile_contacts AS (
-  SELECT organization_id, count(DISTINCT contact_id) FILTER (WHERE active) AS contact_count
-    FROM organization_contacts
-   GROUP BY organization_id
+  SELECT relationship.organization_id,
+         count(DISTINCT relationship.contact_id) FILTER (
+           WHERE relationship.active
+             AND NOT EXISTS (
+               SELECT 1 FROM contact_consolidations mapping
+               WHERE mapping.source_contact_id = relationship.contact_id
+             )
+         ) AS contact_count
+    FROM organization_contacts relationship
+   GROUP BY relationship.organization_id
 ), profile_appearances AS (
-  SELECT organization_id,
+  SELECT booking.organization_id,
          count(*) AS appearance_count,
-         count(act_record_id) AS act_appearance_count
-    FROM bookings
-   GROUP BY organization_id
+         count(booking.act_record_id) AS act_appearance_count
+    FROM bookings booking
+   WHERE NOT EXISTS (
+           SELECT 1 FROM booking_consolidations mapping
+           WHERE mapping.source_booking_id = booking.id
+         )
+     AND coalesce(booking.notes, '') NOT LIKE '[Merged duplicate] Canonical booking:%'
+   GROUP BY booking.organization_id
 ), profile_timeline AS (
   SELECT owned.organization_id,
          count(DISTINCT owned.activity_id) AS timeline_count,
@@ -539,7 +551,7 @@ WITH candidates AS (
          b.organization_id,
          o.name AS profile_name,
          b.name,
-         lower(regexp_replace(coalesce(b.name, ''), '[^a-z0-9]+', '', 'g')) AS normalized_name,
+         regexp_replace(lower(coalesce(b.name, '')), '[^a-z0-9]+', '', 'g') AS normalized_name,
          lower(trim(coalesce(b.city, ''))) AS normalized_city,
          upper(trim(coalesce(b.region, ''))) AS normalized_region,
          b.starts_at::date AS starts_on,
@@ -549,6 +561,11 @@ WITH candidates AS (
     FROM bookings b
     JOIN organizations o ON o.id = b.organization_id
    WHERE o.consolidated_into_id IS NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM booking_consolidations mapping
+       WHERE mapping.source_booking_id = b.id
+     )
+     AND coalesce(b.notes, '') NOT LIKE '[Merged duplicate] Canonical booking:%'
 )
 SELECT organization_id::text,
        min(profile_name) AS profile_name,
@@ -580,6 +597,10 @@ WITH candidates AS (
     JOIN contacts c ON c.id = oc.contact_id
    WHERE oc.active = true
      AND o.consolidated_into_id IS NULL
+     AND NOT EXISTS (
+       SELECT 1 FROM contact_consolidations mapping
+       WHERE mapping.source_contact_id = c.id
+     )
 ), grouped AS (
   SELECT organization_id,
          min(profile_name) AS profile_name,
@@ -592,7 +613,7 @@ WITH candidates AS (
     FROM candidates
    WHERE email IS NOT NULL OR normalized_phone IS NOT NULL
    GROUP BY organization_id,
-            lower(regexp_replace(contact_name, '[^a-z0-9]+', '', 'g')),
+            regexp_replace(lower(contact_name), '[^a-z0-9]+', '', 'g'),
             email,
             normalized_phone
   HAVING count(*) > 1

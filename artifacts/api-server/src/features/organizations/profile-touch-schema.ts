@@ -22,6 +22,156 @@ export async function ensureProfileTouchSchema(
     locked = true;
 
     await client.query(`
+      CREATE TABLE IF NOT EXISTS contact_consolidations (
+        source_contact_id uuid PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+        canonical_contact_id uuid NOT NULL REFERENCES contacts(id) ON DELETE RESTRICT,
+        consolidated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT contact_consolidations_distinct_ids
+          CHECK (source_contact_id <> canonical_contact_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS contact_consolidations_canonical_idx
+        ON contact_consolidations (canonical_contact_id);
+
+      DELETE FROM contact_consolidations;
+
+      WITH contact_identity AS (
+        SELECT
+          c.id AS contact_id,
+          CASE
+            WHEN nullif(lower(btrim(c.email)), '') IS NOT NULL THEN
+              'email:'
+              || regexp_replace(lower(btrim(concat_ws(' ', c.first_name, c.last_name))), '[^a-z0-9]+', '', 'g')
+              || ':' || lower(btrim(c.email))
+            WHEN nullif(btrim(c.normalized_phone), '') IS NOT NULL THEN
+              'phone:'
+              || regexp_replace(lower(btrim(concat_ws(' ', c.first_name, c.last_name))), '[^a-z0-9]+', '', 'g')
+              || ':' || btrim(c.normalized_phone)
+            ELSE NULL
+          END AS identity_key,
+          EXISTS (
+            SELECT 1 FROM organization_contacts oc
+            WHERE oc.contact_id = c.id AND oc.active = true AND oc.is_primary = true
+          ) AS is_primary,
+          EXISTS (
+            SELECT 1 FROM organization_contacts oc
+            WHERE oc.contact_id = c.id AND oc.active = true AND oc.source = 'local'
+          ) AS has_local_relationship,
+          c.normalized_phone IS NOT NULL AS has_phone,
+          c.updated_at
+        FROM contacts c
+      ), duplicate_identity_keys AS (
+        SELECT DISTINCT candidate.identity_key
+        FROM contact_identity candidate
+        JOIN organization_contacts relationship
+          ON relationship.contact_id = candidate.contact_id
+         AND relationship.active = true
+        WHERE candidate.identity_key IS NOT NULL
+          AND candidate.identity_key NOT IN ('email::', 'phone::')
+        GROUP BY relationship.organization_id, candidate.identity_key
+        HAVING count(DISTINCT candidate.contact_id) > 1
+      ), contact_candidates AS (
+        SELECT identity.*
+        FROM contact_identity identity
+        JOIN duplicate_identity_keys duplicate
+          ON duplicate.identity_key = identity.identity_key
+      ), ranked_contact_candidates AS (
+        SELECT
+          contact_id,
+          identity_key,
+          first_value(contact_id) OVER (
+            PARTITION BY identity_key
+            ORDER BY is_primary DESC, has_local_relationship DESC, has_phone DESC, updated_at DESC, contact_id
+          ) AS canonical_contact_id,
+          row_number() OVER (
+            PARTITION BY identity_key
+            ORDER BY is_primary DESC, has_local_relationship DESC, has_phone DESC, updated_at DESC, contact_id
+          ) AS duplicate_rank
+        FROM contact_candidates
+      )
+      INSERT INTO contact_consolidations (
+        source_contact_id,
+        canonical_contact_id,
+        consolidated_at
+      )
+      SELECT contact_id, canonical_contact_id, now()
+      FROM ranked_contact_candidates
+      WHERE duplicate_rank > 1
+        AND contact_id <> canonical_contact_id;
+
+      WITH preferred_relationships AS (
+        SELECT DISTINCT ON (relationship.organization_id, mapping.canonical_contact_id)
+          relationship.organization_id,
+          mapping.canonical_contact_id AS contact_id,
+          relationship.role,
+          relationship.source
+        FROM contact_consolidations mapping
+        JOIN organization_contacts relationship
+          ON relationship.contact_id = mapping.source_contact_id
+         AND relationship.active = true
+        ORDER BY
+          relationship.organization_id,
+          mapping.canonical_contact_id,
+          relationship.is_primary DESC,
+          CASE WHEN relationship.source = 'local' THEN 0 ELSE 1 END,
+          relationship.updated_at DESC,
+          relationship.id
+      )
+      INSERT INTO organization_contacts (
+        organization_id,
+        contact_id,
+        role,
+        is_primary,
+        active,
+        source,
+        created_at,
+        updated_at
+      )
+      SELECT
+        organization_id,
+        contact_id,
+        role,
+        false,
+        true,
+        source,
+        now(),
+        now()
+      FROM preferred_relationships
+      ON CONFLICT (organization_id, contact_id) DO UPDATE
+      SET
+        role = coalesce(organization_contacts.role, excluded.role),
+        active = true,
+        source = CASE
+          WHEN organization_contacts.source = 'local' OR excluded.source = 'local' THEN 'local'
+          ELSE organization_contacts.source
+        END,
+        updated_at = now();
+
+      INSERT INTO audit_entries (
+        entity_type,
+        entity_id,
+        action,
+        before,
+        after,
+        created_at
+      )
+      SELECT
+        'contact',
+        mapping.source_contact_id,
+        'consolidate_duplicate',
+        jsonb_build_object('sourceContactId', mapping.source_contact_id),
+        jsonb_build_object('canonicalContactId', mapping.canonical_contact_id),
+        mapping.consolidated_at
+      FROM contact_consolidations mapping
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM audit_entries audit
+        WHERE audit.entity_type = 'contact'
+          AND audit.entity_id = mapping.source_contact_id
+          AND audit.action = 'consolidate_duplicate'
+          AND audit.after ->> 'canonicalContactId' = mapping.canonical_contact_id::text
+      );
+
       ALTER TABLE organizations
         ADD COLUMN IF NOT EXISTS filler boolean DEFAULT false NOT NULL;
 
