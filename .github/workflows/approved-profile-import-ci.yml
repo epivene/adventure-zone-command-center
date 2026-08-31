@@ -2,7 +2,10 @@ name: Approved Profile Import CI
 
 on:
   push:
-    branches: [main, assistant-live-profile-notes-followups]
+    branches:
+      - main
+      - assistant-live-profile-notes-followups
+      - research/blank-profiles-batch-01
     paths:
       - "artifacts/api-server/src/features/approved-profile-import/**"
       - "artifacts/api-server/src/routes/assistant-profile-notes.ts"

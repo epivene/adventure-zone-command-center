@@ -1,0 +1,980 @@
+[
+  {
+    "importRevision": 1,
+    "aliases": [
+      "ASSOC - WSAF Washington State Association of Fairs",
+      "WSAF"
+    ],
+    "event": {
+      "id": "5242da65-1a93-47bb-a48f-31186c22366f",
+      "name": "Washington State Fairs Association",
+      "city": "Conway",
+      "region": "WA"
+    },
+    "profile": {
+      "placeType": "association",
+      "description": "Statewide association serving Washington fairs. Retained as an industry relationship and convention/trade-show prospect rather than an individual event booking profile.",
+      "phone": "360-269-9971",
+      "website": "https://www.wastatefairs.com/",
+      "address1": "18497 Main Street",
+      "postalCode": "98238"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Gale Sobolesky",
+        "primary": true,
+        "phone": "360-269-9971",
+        "email": "wastatefairs@outlook.com",
+        "role": "Executive Director"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Washington State Fairs Association, based in Conway, Washington. Official sources list the association at 18497 Main Street, Conway, WA 98238; phone 360-269-9971; email wastatefairs@outlook.com; and Gale Sobolesky as executive director. Its 2026 convention is scheduled for Oct. 22-24 in Wenatchee. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active industry association. Duplicate search found only this profile. Source: https://www.wastatefairs.com/ . A follow-up is justified to assess service membership or trade-show participation, not to send a normal event pitch."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Review Washington State Fairs Association participation",
+        "reason": "Review the association's service membership and Oct. 22-24, 2026 convention/trade-show options. Decide whether Adventure Zone should participate as an industry service provider before any outreach.",
+        "dueAt": "2026-09-08T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Breckenridge August Art Festivals (Breckenridge)  CO",
+      "Breckenridge Main Street Art Festival (Breckenridge) CO"
+    ],
+    "event": {
+      "id": "2d29adc2-5482-4d95-9e50-b60d4aae908c",
+      "name": "Breckenridge August Art Festival (Breckenridge) CO",
+      "city": "Breckenridge",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Current Mountain Art Festivals profile for the Breckenridge August Art Festival. The retired Main Street Art Festival ACT profile is consolidated here to preserve its provenance without a duplicate active profile.",
+      "phone": "970-406-1866",
+      "website": "https://www.mountainartfestivals.com/breckenridge-august-art-festival",
+      "address1": "P.O. Box 3578",
+      "postalCode": "80424"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Mountain Art Festivals Team",
+        "primary": true,
+        "phone": "970-406-1866",
+        "email": "mountainartfestivals@gmail.com",
+        "role": "Festival producer"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Current official Mountain Art Festivals information identifies the Breckenridge August Art Festival as a juried fine-art event in Breckenridge, with the 2026 edition listed for Aug. 6-8. The historical ACT profile named Breckenridge Main Street Art Festival referred to the predecessor/overlapping Mountain Art Festivals account and was consolidated into this surviving record after both histories were checked. Official contact path: mountainartfestivals@gmail.com and 970-406-1866. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active art festival, but no clearly supported separate family-attraction lane was found; no follow-up is being created. Sources: https://www.mountainartfestivals.com/ and https://www.mountainartfestivals.com/breckenridge-august-art-festival ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "CAN - County Fair - Medicine Hat Exhibition & Stampede (Medicine Hat) AB",
+      "Medicine Hat Stampede"
+    ],
+    "event": {
+      "id": "cc388d92-2ee6-44e0-b27b-3a6779d2c026",
+      "name": "Medicine Hat Exhibition & Stampede (Medicine Hat) AB",
+      "city": "Medicine Hat",
+      "region": "AB"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Canadian exhibition, stampede, rodeo, trade show, and community fair. Retained as an active fair profile, but Canadian operational, insurance, and routing requirements must be approved before outreach.",
+      "phone": "403-527-1234",
+      "website": "https://www.mhstampede.com/",
+      "address1": "2055 21 Avenue SE",
+      "postalCode": "T1A 7N1"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Medicine Hat Stampede Office",
+        "primary": true,
+        "phone": "403-527-1234",
+        "email": "mhstampede@mhstampede.com",
+        "role": "General office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the active Medicine Hat Exhibition & Stampede in Medicine Hat, Alberta. Official information lists 2055 21 Avenue SE, Medicine Hat, AB T1A 7N1; phone 403-527-1234; email mhstampede@mhstampede.com. The event is an established four-day exhibition/stampede with rodeo, trade-show, free-entertainment, and amusement programming. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active fair outside the normal U.S. operating area. No follow-up is created because Canadian insurance, staffing, customs, and routing feasibility are not approved. Source: https://www.mhstampede.com/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Colorado Brazil Fest () CO"
+    ],
+    "event": {
+      "id": "ad383aa2-d0fb-49e7-bea4-70416c518aae",
+      "name": "Colorado Brazil Fest (Boulder) CO",
+      "city": "Boulder",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Boulder cultural festival produced by Boulder Samba School, centered on Brazilian music, dance, workshops, and performances.",
+      "phone": "303-960-8972",
+      "website": "https://coloradobrazilfest.org/"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Colorado Brazil Fest / Boulder Samba School",
+        "primary": true,
+        "phone": "303-960-8972",
+        "email": "ColoradoBrazilFest@gmail.com",
+        "role": "Festival producer"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Colorado Brazil Fest in Boulder, produced by Boulder Samba School. The official site lists ColoradoBrazilFest@gmail.com and 303-960-8972. Current programming is centered on Brazilian music, dance, concerts, workshops, and cultural performances. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active cultural festival with family attendance, but the reviewed format does not establish a large independent carnival or attraction footprint. No follow-up is being created. Source: https://coloradobrazilfest.org/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Deschutes | Bi-Mart Fair & Rodeo (Redmond) OR",
+      "Bi-Mart Fair & Rodeo"
+    ],
+    "event": {
+      "id": "00235299-ce09-4e3f-b8d5-ca3b8d4a1550",
+      "name": "Deschutes County Fair & Rodeo (Redmond) OR",
+      "city": "Redmond",
+      "region": "OR"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active county fair and rodeo at the Deschutes County Fair & Expo Center. Oregon territory hold applies; preserve as a viable historical lead without new outreach.",
+      "phone": "541-548-2711",
+      "website": "https://expo.deschutes.org/p/fair",
+      "address1": "3800 SW Airport Way",
+      "postalCode": "97756"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Deschutes County Fair & Expo Marketing",
+        "primary": true,
+        "phone": "541-548-2711",
+        "email": "expomarketing@deschutes.org",
+        "role": "Fair and expo contact"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Deschutes County Fair & Rodeo at the Deschutes County Fair & Expo Center, 3800 SW Airport Way, Redmond, OR 97756. Official contact: 541-548-2711 and expomarketing@deschutes.org. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active county fair and strong general fit, but Oregon is under the standing territory hold. Do not draft or send new outreach, and do not create a routine follow-up until that restriction is lifted or this opportunity is specifically approved. Source: https://expo.deschutes.org/p/fair ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Kittitas (Ellensburg) WA"
+    ],
+    "event": {
+      "id": "95271417-8cf3-4666-b229-ace086cbf837",
+      "name": "Kittitas County Fair (Ellensburg) WA",
+      "city": "Ellensburg",
+      "region": "WA"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active county fair at the Kittitas Valley Event Center. Existing carnival operation makes a separate full inflatable carnival a low-priority fit unless a distinct attraction area is requested.",
+      "phone": "509-962-7639",
+      "website": "https://www.kittitasvalleyeventcenter.com/p/fair",
+      "address1": "901 E. 7th Avenue, Suite 1",
+      "postalCode": "98926"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Kady Porterfield",
+        "primary": true,
+        "phone": "509-962-7639",
+        "email": "fairgrounds@co.kittitas.wa.us",
+        "role": "Event Center Director"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Kittitas County Fair in Ellensburg. Official sources list the Kittitas Valley Event Center at 901 E. 7th Avenue, Suite 1, Ellensburg, WA 98926; phone 509-962-7639; email fairgrounds@co.kittitas.wa.us; and Kady Porterfield as Event Center Director. The 2026 fair is listed for Sept. 3-7 and includes the Paul Maurer Shows carnival. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active fair with established carnival service; no follow-up is currently justified. Source: https://www.kittitasvalleyeventcenter.com/p/fair ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Mineral (Superior) MT"
+    ],
+    "event": {
+      "id": "f33b0771-edfc-4e80-94e5-fd94fefa4ed2",
+      "name": "Mineral County Fair (Superior) MT",
+      "city": "Superior",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active small county fair in Superior, Montana. Retained as a possible route-filler lead pending verified 2027 dates and entertainment needs.",
+      "website": "https://co.mineral.mt.us/departments/fairgrounds/",
+      "address1": "P.O. Box 70",
+      "postalCode": "59872"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Mary Jo Berry",
+        "primary": true,
+        "email": "mineralcofair@blackfoot.net",
+        "role": "Fair Board Chairperson"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Mineral County Fair in Superior, Montana. County information places the fair on the first weekend in August and lists the Mineral County Fair Board, P.O. Box 70, Superior, MT 59872; email mineralcofair@blackfoot.net; Mary Jo Berry as chairperson. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active small county fair and possible route-filler rather than a high-priority anchor event. A 2027 research follow-up is justified to verify dates, budget, current midway/entertainment plans, and route fit before outreach. Source: https://co.mineral.mt.us/departments/fairgrounds/ ."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Research 2027 Mineral County Fair",
+        "reason": "Verify the 2027 fair dates, current fair-board contact, entertainment or midway plans, budget structure, and Montana route fit before deciding whether to draft outreach.",
+        "dueAt": "2027-01-12T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Minidoka (Rupert) ID",
+      "Minidoka County Fair"
+    ],
+    "event": {
+      "id": "95338907-699e-479b-9bdf-0d0e432c5ef0",
+      "name": "Minidoka County Fair & Rodeo (Rupert) ID",
+      "city": "Rupert",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active county fair and rodeo in Rupert. Current published sources conflict on 2026 dates, so dates must be verified directly before any outreach or scheduling.",
+      "phone": "208-436-9748",
+      "website": "https://www.minidokacountyfairboard.com/",
+      "address1": "85 E. Baseline Road",
+      "postalCode": "83350"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Minidoka County Fair Board",
+        "primary": true,
+        "phone": "208-436-9748",
+        "email": "minfairboard@pmt.org",
+        "role": "Fair board office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Minidoka County Fair & Rodeo in Rupert, Idaho. Official county/fair information lists 85 E. Baseline Road, Rupert, ID 83350; phone 208-436-9748; email minfairboard@pmt.org. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Current sources conflict on the 2026 dates: the county page remained on prior-year information while industry and local-entry listings showed different late-July/early-August ranges. Classification: active fair and plausible fit, but do not assert dates or draft outreach until the fair board confirms them. Sources: https://www.minidoka.id.us/285/Fairboard and https://www.minidokacountyfairboard.com/ ."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Verify 2027 Minidoka County Fair dates and fit",
+        "reason": "Contact or re-check the fair board for authoritative 2027 dates, application timing, current midway provider, and whether an independent family-entertainment area is wanted before drafting outreach.",
+        "dueAt": "2027-01-13T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Northwest Washington Fair (Lynden) WA"
+    ],
+    "event": {
+      "id": "b85f2134-ce79-40e0-84a4-e00a8f4322a9",
+      "name": "Northwest Washington Fair (Lynden) WA",
+      "city": "Lynden",
+      "region": "WA"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Large established fair in Lynden with an existing carnival midway. Retained as an active fair account; no new task without a distinct entertainment need.",
+      "phone": "360-354-4111",
+      "website": "https://www.nwwafair.com/",
+      "address1": "1775 Front Street",
+      "postalCode": "98264"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Northwest Washington Fair Office",
+        "primary": true,
+        "phone": "360-354-4111",
+        "email": "info@nwwafair.com",
+        "role": "General fair office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Northwest Washington Fair in Lynden. Official sources list 1775 Front Street, Lynden, WA 98264; phone 360-354-4111; email info@nwwafair.com. The 2026 fair is scheduled for Aug. 13-22, uses Funtastic Shows for the carnival, and reported 2026 vendor space full. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active major fair with an established carnival and no current separate attraction opening; no follow-up is justified. Source: https://www.nwwafair.com/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Phillips (Malta) MT",
+      "Phillips County Fair Malta MT"
+    ],
+    "event": {
+      "id": "9dd4d699-fb77-4f72-b29c-ed32351b8803",
+      "name": "Phillips County Fair (Dodson) MT",
+      "city": "Dodson",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active Phillips County, Montana fair held in Dodson. This is not the separately booked Phillips County Fair in Holyoke, Colorado.",
+      "phone": "406-383-4322",
+      "website": "https://phillipscountyfair.com/"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Phillips County Fair — Montana Office",
+        "primary": true,
+        "phone": "406-383-4322",
+        "role": "Fair office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Phillips County Fair in Dodson, Montana, not Malta and not the unrelated Phillips County Fair in Holyoke, Colorado. The official Montana fair site lists the 2026 fair for July 30-Aug. 2 and describes races, concert, vendors, and carnival programming; fair-time phone 406-383-4322. Adventure Zone Gmail was searched on 2026-08-31. Results for Phillips County Fair belonged to the booked Holyoke, Colorado account and were intentionally not attached here. Classification: active fair, but existing carnival programming and the risk of cross-account confusion do not justify a new follow-up now. Source: https://phillipscountyfair.com/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Prairie (Terry) MT"
+    ],
+    "event": {
+      "id": "e50f361c-aca4-4aa6-b3c5-ef817c647460",
+      "name": "Prairie County Fair (Terry) MT",
+      "city": "Terry",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active small county fair in Terry, Montana. Retained as a possible route-filler lead pending verified 2027 dates and current entertainment needs.",
+      "phone": "406-635-2121",
+      "website": "https://prairiecounty.org/fair",
+      "address1": "31 Fairgrounds Road",
+      "postalCode": "59349"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Sharla Sackman",
+        "primary": true,
+        "phone": "406-635-2121",
+        "email": "sackman@montana.edu",
+        "role": "Extension and fair contact"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Prairie County Fair in Terry, Montana. Official/local sources identify the fairgrounds at 31 Fairgrounds Road, Terry, MT 59349, with Prairie County Extension/Fair contact Sharla Sackman at 406-635-2121 and sackman@montana.edu. The 2026 fair was listed for Aug. 6-9, while the county page retained some prior-year content. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active small county fair and possible Montana route-filler. A 2027 follow-up is justified to verify dates, contact, budget, current entertainment, and route fit. Source: https://prairiecounty.org/fair ."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Research 2027 Prairie County Fair",
+        "reason": "Verify authoritative 2027 dates, the current fair contact, budget and entertainment plans, and whether the event fits a Montana route gap before drafting outreach.",
+        "dueAt": "2027-01-14T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Red River Valley Fair (West Fargo) ND"
+    ],
+    "event": {
+      "id": "176889d4-b85a-40e9-ae93-f506687f26ff",
+      "name": "Red River Valley Fair (West Fargo) ND",
+      "city": "West Fargo",
+      "region": "ND"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Large active regional fair and year-round event complex. The duplicate contact shell is consolidated into this ACT-backed profile so Carson and ACT provenance remain together.",
+      "phone": "701-282-2200",
+      "website": "https://www.redrivervalleyfair.com/",
+      "address1": "1805 Main Avenue W",
+      "postalCode": "58078"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Carson",
+        "primary": true,
+        "email": "carson@redrivervalleyfair.com",
+        "role": "Existing fair contact preserved from duplicate profile"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Red River Valley Fair in West Fargo, North Dakota. Official sources list 1805 Main Avenue W, West Fargo, ND 58078; phone 701-282-2200; general email info@redrivervalleyfair.com. The 2026 fair ran July 3-12. A duplicate profile containing the existing Carson contact was consolidated into this ACT-backed record after both histories were reviewed; Carson's contact record was preserved. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active major fair with established operations. No new follow-up is created without a verified separate attraction opportunity. Source: https://www.redrivervalleyfair.com/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - South Dakota State Fair (Huron) SD"
+    ],
+    "event": {
+      "id": "18f5817e-8767-44ba-b514-baa3197d674f",
+      "name": "South Dakota State Fair (Huron) SD",
+      "city": "Huron",
+      "region": "SD"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active state fair in Huron with an established amusement midway. Retained as a major fair account, but no separate Adventure Zone need is currently established.",
+      "phone": "605-353-7340",
+      "website": "https://www.sdstatefair.com/",
+      "address1": "1060 3rd Street SW",
+      "postalCode": "57350"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Peggy Besch",
+        "primary": true,
+        "phone": "605-353-7340",
+        "role": "State Fair Manager"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the South Dakota State Fair in Huron. Official sources list 1060 3rd Street SW, Huron, SD 57350; phone 605-353-7340; and Peggy Besch as State Fair Manager. The 2026 fair is scheduled for Sept. 2-7 and uses GoldStar Amusements for its midway. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active major state fair with an established carnival provider; no follow-up is currently justified. Source: https://www.sdstatefair.com/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "County Fair - Stanwood Camano Community Fair (Stanwood) WA",
+      "Stanwood Camano Community Fair"
+    ],
+    "event": {
+      "id": "f86c00a2-1f36-4cd2-8c69-7e58e1a7ff43",
+      "name": "Stanwood-Camano Community Fair (Stanwood) WA",
+      "city": "Stanwood",
+      "region": "WA"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Active community fair in Stanwood with an established carnival midway. Retained as an active fair account; no distinct attraction opportunity is currently established.",
+      "phone": "360-629-4121",
+      "website": "https://www.stanwoodcamanofair.org/",
+      "address1": "6431 Pioneer Highway",
+      "postalCode": "98292"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Stanwood-Camano Community Fair Office",
+        "primary": true,
+        "phone": "360-629-4121",
+        "email": "info@stanwoodcamanofair.org",
+        "role": "General fair office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Stanwood-Camano Community Fair in Stanwood, Washington. Official sources list 6431 Pioneer Highway, Stanwood, WA 98292; phone 360-629-4121; email info@stanwoodcamanofair.org. The 2026 fair is scheduled for July 31-Aug. 2 and advertises Paradise Amusements as its carnival provider. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active community fair with an established midway; no follow-up is currently justified. Source: https://www.stanwoodcamanofair.org/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "KOA - West Yellowstone",
+      "West Yellowstone KOA"
+    ],
+    "event": {
+      "id": "148e4d3b-71b7-425d-a777-296b2f18ec6d",
+      "name": "Yellowstone park / West Gate KOA Holiday (West Yellowstone) MT",
+      "city": "West Yellowstone",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "venue",
+      "description": "Campground and recreation venue near Yellowstone's west entrance. Not a fair or festival lead; existing on-site recreation already includes a jumping pad, pool, and playground.",
+      "phone": "406-646-7606",
+      "website": "https://koa.com/campgrounds/yellowstone-park/",
+      "address1": "3305 Targhee Pass Highway",
+      "postalCode": "59758"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Yellowstone Park / West Gate KOA Holiday",
+        "primary": true,
+        "phone": "406-646-7606",
+        "role": "Campground office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Yellowstone Park / West Gate KOA Holiday at 3305 Targhee Pass Highway, West Yellowstone, MT 59758; phone 406-646-7606. This is a campground/venue rather than a recurring public fair or festival. Its official amenities already include a jumping pad, heated indoor pool, and playground. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: venue/no current event lead. No follow-up is being created unless a specific public event at the property is identified later. Source: https://koa.com/campgrounds/yellowstone-park/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "KS Kansas"
+    ],
+    "event": {
+      "id": "1f6301ab-2c14-41d9-abac-f2b280c2c0f2",
+      "name": "Kansas — Territory Placeholder",
+      "city": "",
+      "region": "KS"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Administrative ACT state placeholder. Not an event and not the Kansas Fairs & Festivals Association profile. Kansas territory hold applies."
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "This ACT record is a state-level administrative placeholder, not a bookable event. Duplicate review confirmed it is distinct from the existing Kansas Fairs & Festivals Association profile in Great Bend. Kansas is under the standing Adventure Zone territory hold. Preserve this record for provenance, but do not perform normal lead research, create outreach, or add a routine follow-up until the hold is lifted or a specific opportunity is approved. Adventure Zone Gmail was searched on 2026-08-31 and no matching relationship was found."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Legend of Old Ephraim, The (Logan)  UT",
+      "Legend of Old Ephraim Logan"
+    ],
+    "event": {
+      "id": "e0761aed-d202-4d98-adb7-9fc70895467b",
+      "name": "Legend of Old Ephraim (Montpelier) ID",
+      "city": "Montpelier",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Small annual historical storytelling and film program at Old Ephraim Heritage Park. Corrected from the malformed Logan Canyon location; not a carnival-scale event lead.",
+      "phone": "208-847-0824",
+      "website": "https://www.oregontrailcenter.org/",
+      "address1": "821 Washington Street",
+      "postalCode": "83254"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Old Ephraim Heritage Park / Oregon-California Trails Center",
+        "primary": true,
+        "phone": "208-847-0824",
+        "role": "Program contact"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "The old ACT location fields were malformed and mixed the Old Ephraim monument near Logan Canyon with the current public program in Montpelier, Idaho. Current official event information places Legend of Old Ephraim at Old Ephraim Heritage Park, 821 Washington Street, Montpelier, ID 83254, phone 208-847-0824. The Aug. 22, 2026 program is a one-evening story and screening of the 1966 film, not a multi-day fair or family-entertainment event. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active historical program/no fit; no follow-up. Source: https://www.oregontrailcenter.org/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Berthoud Lemonade Day"
+    ],
+    "event": {
+      "id": "90cca325-9d99-4021-8461-236ce364efc1",
+      "name": "Lemonade Day (Berthoud) CO",
+      "city": "Berthoud",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Youth entrepreneurship program made up of community-wide lemonade stands rather than one centralized festival site.",
+      "website": "https://local.lemonadeday.org/berthoud"
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Berthoud Lemonade Day youth entrepreneurship program. The 2026 local event was held May 16 through independently operated stands around the community, not as one centralized fairground or festival. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active community program but not a practical staffed-carnival booking lead; no follow-up. Sources: https://lemonadeday.org/berthoud and https://local.lemonadeday.org/berthoud ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Columbia Falls Lemonade Day"
+    ],
+    "event": {
+      "id": "32a6351f-9069-47a8-a1ec-defc6eb5d431",
+      "name": "Lemonade Day (Columbia Falls) MT",
+      "city": "Columbia Falls",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Historical local Lemonade Day youth entrepreneurship chapter. The current national directory does not list Columbia Falls as an active chapter.",
+      "website": "https://lemonadeday.org/cities"
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "This ACT record refers to a historical Columbia Falls Lemonade Day chapter. The current Lemonade Day city directory reviewed on 2026-08-31 did not list Columbia Falls as an active local program, and Adventure Zone Gmail contained no matching correspondence. Classification: historical/inactive community program, not a centralized festival lead. No follow-up is being created. Sources checked: https://lemonadeday.org/cities and the historical local path https://local.lemonadeday.org/columbia-falls ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Flathead Lemonade Day"
+    ],
+    "event": {
+      "id": "6bb6d0ac-57ee-40fc-a7b0-08bc7d47cff9",
+      "name": "Lemonade Day (Flathead) MT",
+      "city": "Kalispell",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Flathead-area youth entrepreneurship program organized through community-wide lemonade stands, not a centralized carnival-scale event.",
+      "website": "https://local.lemonadeday.org/flathead"
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the Flathead-area Lemonade Day youth entrepreneurship program, centered in the Kalispell/Flathead community. The program is distributed among youth-run stands rather than a single festival site. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: community program, not a practical staffed-carnival booking lead; no follow-up. Source: https://local.lemonadeday.org/flathead ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Laramie Lemonade Day"
+    ],
+    "event": {
+      "id": "471b8fef-e10e-44ef-a39b-2cf00fd61766",
+      "name": "Lemonade Day (Laramie) WY",
+      "city": "Laramie",
+      "region": "WY"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Youth entrepreneurship program made up of community-wide lemonade stands rather than one centralized public festival.",
+      "website": "https://local.lemonadeday.org/laramie"
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as Laramie Lemonade Day. Current local information lists the 2026 program for Aug. 8 and describes youth-run lemonade stands across the community rather than one centralized fair or festival. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active community program but not a practical staffed-carnival booking lead; no follow-up. Source: https://local.lemonadeday.org/laramie ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Treasure Valley Lemonade Day"
+    ],
+    "event": {
+      "id": "bf3808ff-2585-46fd-ad9a-a90ce32c7460",
+      "name": "Lemonade Day (Treasure Valley) ID",
+      "city": "Boise",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Historical Treasure Valley Lemonade Day youth entrepreneurship chapter. The current national directory does not list an Idaho affiliate.",
+      "website": "https://lemonadeday.org/cities"
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "This ACT record refers to a historical Treasure Valley Lemonade Day chapter. The current Lemonade Day city directory reviewed on 2026-08-31 did not list an Idaho affiliate, and Adventure Zone Gmail contained no matching correspondence. Classification: historical/inactive regional youth program, not a centralized festival lead. No follow-up is being created. Sources checked: https://lemonadeday.org/cities and the historical local path https://local.lemonadeday.org/treasure-valley ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "NWSS Denver"
+    ],
+    "event": {
+      "id": "83ef3e75-2e33-44f3-ba9d-6423f4c30807",
+      "name": "National Western Stock Show (Denver) CO",
+      "city": "Denver",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Large 16-day stock show, rodeo, trade show, and family destination in Denver. High-value account, but participation requires an event-level decision-maker and a realistic limited-duration operating concept.",
+      "phone": "303-297-1166",
+      "website": "https://nationalwestern.com/",
+      "address1": "4655 Humboldt Street",
+      "postalCode": "80216"
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "National Western Stock Show Office",
+        "primary": true,
+        "phone": "303-297-1166",
+        "role": "General office"
+      }
+    ],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "Verified as the National Western Stock Show in Denver. Official sources list 4655 Humboldt Street, Denver, CO 80216; general phone 303-297-1166. The next show is scheduled for Jan. 9-24, 2027. It draws roughly three-quarters of a million visitors, hosts about 250 vendors, and already operates dedicated family/kids programming. Adventure Zone Gmail was searched on 2026-08-31 and no matching correspondence was found. Classification: active high-value event, but the full 16-day run exceeds normal Adventure Zone terms. A follow-up is justified to identify the attractions/partnership decision-maker and assess whether a limited-weekend or separate staffed attraction area is possible before outreach. Source: https://nationalwestern.com/ ."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Research National Western attraction contact and operating window",
+        "reason": "Identify the current family-attractions or event-partnership decision-maker and determine whether a limited-weekend or separate staffed attraction area could fit the Jan. 9-24, 2027 show before drafting outreach. Do not frame this as buying sponsorship.",
+        "dueAt": "2026-09-10T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "Native American Day (HOLIDAY) MT"
+    ],
+    "event": {
+      "id": "b578bb24-f372-4919-984a-ff7a88639c90",
+      "name": "Native American Day (Montana Holiday)",
+      "city": "",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Administrative holiday/observance record, not an event lead. Montana's statutory observance is American Indian Heritage Day on the last Friday in September."
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "This ACT record is a holiday placeholder rather than a bookable event. Montana law designates the last Friday in September as American Indian Heritage Day; it is an observance, not one statewide event with an organizer or venue. Adventure Zone Gmail was searched on 2026-08-31 and no matching relationship was found. Classification: administrative holiday/no event. No follow-up or outreach should be created unless a specific tribal or community celebration is separately identified. Source: Montana Code Annotated, Title 1, chapter 1, part 2, American Indian Heritage Day: https://leg.mt.gov/bills/mca/title_0010/chapter_0010/part_0020/section_0170/ ."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "aliases": [
+      "ND North Dakota"
+    ],
+    "event": {
+      "id": "6a894884-4722-46b4-8073-93a71d4543a1",
+      "name": "North Dakota — State Placeholder",
+      "city": "",
+      "region": "ND"
+    },
+    "profile": {
+      "placeType": "other",
+      "description": "Administrative ACT state placeholder. Not an event and distinct from the North Dakota State Fair profile in Minot."
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Blank profile batch 01 research - 2026-08-31",
+        "body": "This ACT record is a state-level administrative placeholder, not a bookable event. Duplicate review confirmed it is distinct from the existing North Dakota State Fair profile in Minot. Adventure Zone Gmail was searched on 2026-08-31 and no matching relationship was found. Classification: administrative placeholder. Preserve the ACT provenance, but do not create outreach or a routine follow-up unless a specific North Dakota event is attached later."
+      }
+    ],
+    "followUps": []
+  }
+]
