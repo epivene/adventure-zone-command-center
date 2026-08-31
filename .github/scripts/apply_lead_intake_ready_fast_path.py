@@ -1,8 +1,9 @@
 from pathlib import Path
 
 SOURCE = Path("artifacts/api-server/src/db/lead-intake-startup-migration.ts")
+TEST = Path("artifacts/api-server/src/db/lead-intake-startup-migration.test.ts")
 
-old = '''  const marker = await client.query(readinessSql);
+old_source = '''  const marker = await client.query(readinessSql);
   const wasReady = marker.rows[0]?.["ready"] === true;
 
   // Always run the forward, idempotent migrations before trusting readiness. This
@@ -17,7 +18,7 @@ old = '''  const marker = await client.query(readinessSql);
   return !wasReady;
 }'''
 
-new = '''  const marker = await client.query(readinessSql);
+new_source = '''  const marker = await client.query(readinessSql);
   const wasReady = marker.rows[0]?.["ready"] === true;
 
   // The readiness probe above verifies the canonical lead-intake schema. Replaying
@@ -34,7 +35,41 @@ new = '''  const marker = await client.query(readinessSql);
   return true;
 }'''
 
-text = SOURCE.read_text()
-if old not in text:
+old_test = '''  it("runs the canonical idempotent repair even when readiness initially passes", async () => {
+    const query = vi.fn()
+      .mockResolvedValueOnce({ rows: [{ ready: true }] })
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ ready: true }] });
+    const loadSql = vi.fn().mockResolvedValue("-- canonical idempotent repair");
+
+    await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
+    expect(loadSql).toHaveBeenCalledOnce();
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
+    expect(query.mock.calls[0]?.[0]).toContain("territory_status");
+    expect(query.mock.calls[0]?.[0]).toContain("fit_status");
+    expect(query.mock.calls[1]?.[0]).toBe("-- canonical idempotent repair");
+    expect(query.mock.calls[2]?.[0]).toBe(query.mock.calls[0]?.[0]);
+  });'''
+
+new_test = '''  it("returns immediately when the canonical schema is already ready", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ ready: true }] });
+    const loadSql = vi.fn().mockResolvedValue("-- canonical idempotent repair");
+
+    await expect(ensureLeadIntakeSchema({ query }, { loadSql })).resolves.toBe(false);
+    expect(loadSql).not.toHaveBeenCalled();
+    expect(query).toHaveBeenCalledTimes(1);
+    expect(query.mock.calls[0]?.[0]).toContain("lead_import_evidence");
+    expect(query.mock.calls[0]?.[0]).toContain("territory_status");
+    expect(query.mock.calls[0]?.[0]).toContain("fit_status");
+  });'''
+
+source_text = SOURCE.read_text()
+if old_source not in source_text:
     raise SystemExit("Expected slow lead-intake startup block was not found")
-SOURCE.write_text(text.replace(old, new, 1))
+SOURCE.write_text(source_text.replace(old_source, new_source, 1))
+
+test_text = TEST.read_text()
+if old_test not in test_text:
+    raise SystemExit("Expected stale lead-intake startup test block was not found")
+TEST.write_text(test_text.replace(old_test, new_test, 1))
