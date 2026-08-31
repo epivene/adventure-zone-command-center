@@ -37,6 +37,19 @@ jobs:
           python -m py_compile .github/scripts/apply_canonical_profile_children.py
           python -m py_compile .github/scripts/refine_canonical_profile_children.py
           python .github/scripts/apply_canonical_profile_children.py
+          python <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/refine_canonical_profile_children.py')
+          value = path.read_text(encoding='utf-8')
+          value = value.replace(
+              '"        importedFromAct: activity.importedFromAct,"',
+              '"importedFromAct: activity.importedFromAct,"',
+          ).replace(
+              '"        importedFromAct: Boolean(activity.importedFromAct),"',
+              '"importedFromAct: Boolean(activity.importedFromAct),"',
+          )
+          path.write_text(value, encoding='utf-8')
+          PY
           python .github/scripts/refine_canonical_profile_children.py
 
       - name: Canonical profile regression tests
