@@ -23,6 +23,8 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
