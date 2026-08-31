@@ -6,7 +6,6 @@ on:
       - main
       - assistant-live-profile-notes-followups
       - research/blank-profiles-batch-01
-      - research/blank-profiles-batch-02
     paths:
       - "artifacts/api-server/src/features/approved-profile-import/**"
       - "artifacts/api-server/src/routes/assistant-profile-notes.ts"
