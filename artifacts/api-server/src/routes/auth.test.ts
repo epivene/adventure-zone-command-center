@@ -29,6 +29,8 @@ import router from "./auth";
 
 const previousSecret = process.env.SESSION_SECRET;
 const previousPassword = process.env.OWNER_PASSWORD;
+const previousLoginName = process.env.OWNER_LOGIN_NAME;
+const previousDisplayName = process.env.OWNER_DISPLAY_NAME;
 const owner = {
   id: "30000000-0000-4000-8000-000000000001",
   loginName: "desiree",
@@ -39,6 +41,11 @@ const owner = {
   enabled: true,
   sessionVersion: 3,
 };
+
+function restoreEnvironment(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}
 
 function app() {
   const instance = express();
@@ -51,6 +58,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.SESSION_SECRET = "owner-route-test-secret";
   process.env.OWNER_PASSWORD = "existing-owner-password";
+  delete process.env.OWNER_LOGIN_NAME;
+  delete process.env.OWNER_DISPLAY_NAME;
   mocks.findPrimary.mockResolvedValue(owner);
   mocks.createPrimary.mockResolvedValue(owner);
   mocks.getActiveSession.mockResolvedValue(owner);
@@ -60,10 +69,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  if (previousSecret === undefined) delete process.env.SESSION_SECRET;
-  else process.env.SESSION_SECRET = previousSecret;
-  if (previousPassword === undefined) delete process.env.OWNER_PASSWORD;
-  else process.env.OWNER_PASSWORD = previousPassword;
+  restoreEnvironment("SESSION_SECRET", previousSecret);
+  restoreEnvironment("OWNER_PASSWORD", previousPassword);
+  restoreEnvironment("OWNER_LOGIN_NAME", previousLoginName);
+  restoreEnvironment("OWNER_DISPLAY_NAME", previousDisplayName);
 });
 
 describe("owner auth routes", () => {
