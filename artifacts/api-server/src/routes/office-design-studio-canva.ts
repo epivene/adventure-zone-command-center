@@ -14,6 +14,7 @@ import {
   canvaClientConfig,
   CANVA_SCOPES,
   getFreshCanvaEditUrl,
+  hasRequiredCanvaScopes,
 } from "@/features/design-studio/canva-client";
 import { importPdfToCanva } from "@/features/design-studio/canva-import-service";
 import {
@@ -87,6 +88,10 @@ function canvaConfigured() {
   }
 }
 
+function connectionReady(connection: Awaited<ReturnType<typeof getCanvaConnection>>) {
+  return connection?.status === "connected" && hasRequiredCanvaScopes(connection.scopes);
+}
+
 function safeCanvaError(error: unknown, fallback: string) {
   const message = error instanceof Error ? error.message : "";
   if (message.startsWith("CANVA_")) return message.split(":")[0] ?? fallback;
@@ -138,7 +143,7 @@ router.get("/office/design-studio/canva/status", requireStudio, async (req, res)
     const connection = await getCanvaConnection(req.officeAccount!.accountId);
     res.json({
       configured: true,
-      connected: connection?.status === "connected",
+      connected: connectionReady(connection),
       scopes: connection?.scopes ?? [],
       requiredScopes: [...CANVA_SCOPES],
     });
@@ -219,7 +224,7 @@ router.get("/office/design-studio/projects/:projectId/canva", requireStudio, asy
     ]);
     res.json({
       configured: canvaConfigured(),
-      connected: connection?.status === "connected",
+      connected: connectionReady(connection),
       linked: Boolean(link?.designId),
       designId: link?.designId ?? null,
       importedVersionId: link?.importedVersionId ?? null,
