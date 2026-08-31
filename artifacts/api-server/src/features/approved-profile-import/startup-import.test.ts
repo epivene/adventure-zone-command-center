@@ -274,4 +274,25 @@ describe("approved profile startup import", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("rejects preselected profile ids when requireExisting needs a safe match", async () => {
+    vi.mocked(readFile).mockResolvedValue(JSON.stringify({
+      ...basePayload(),
+      requireExisting: true,
+      matchExisting: true,
+      event: { ...basePayload().event, id: PROFILE_ID },
+      profile: {},
+      notes: [],
+      followUps: [],
+    }) as never);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 200));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toMatchObject({ imported: 0, skipped: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
 });
