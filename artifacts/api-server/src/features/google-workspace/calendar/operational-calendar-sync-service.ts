@@ -9,6 +9,7 @@ import type {
 } from "./operational-calendar-client";
 import type { OperationalCalendarLink } from "./operational-calendar-link-repository";
 import type { OperationalCalendarProjection, OperationalBookingState } from "./operational-calendar-projection-repository";
+import { findExactOperationalCalendarEvent } from "./operational-calendar-existing-event";
 import { renderOperationalCalendarRows } from "./operational-calendar-renderer";
 
 export interface OperationalCalendarProjectionStore {
@@ -129,6 +130,36 @@ export class OperationalCalendarSyncService {
       });
       try {
         if (!link) {
+          const listed = await connection.client.listEvents({
+            calendarId: connection.calendarId,
+            timeMin: `${eventInput.startDate}T00:00:00.000Z`,
+            timeMax: `${eventInput.endDateExclusive}T00:00:00.000Z`,
+          });
+          const existing = findExactOperationalCalendarEvent(listed.events, eventInput);
+          if (existing.kind === "matched") {
+            await this.links.saveSuccessfulSync({
+              connectionId: connection.connectionId, calendarId: connection.calendarId,
+              googleEventId: existing.event.id, bookingId, packageKey: row.packageKey,
+              etag: existing.event.etag, sourceChecksum: checksum(eventSnapshot(existing.event)),
+              lastAppSnapshot: appSnapshot, reservedStartsAt: row.reservedStart,
+              reservedEndsAt: row.reservedEnd, syncedAt: this.now(),
+            });
+            updated += 1;
+            continue;
+          }
+          if (existing.kind === "ambiguous") {
+            await this.links.createReview({
+              connectionId: connection.connectionId, bookingId,
+              calendarId: connection.calendarId, googleEventId: existing.events[0]!.id,
+              reason: "Multiple matching calendar events found",
+              proposedChanges: {
+                app: appSnapshot,
+                googleMatches: existing.events.map(eventSnapshot),
+              },
+            });
+            reviewCount += 1;
+            continue;
+          }
           const googleEvent = await connection.client.createEvent(connection.calendarId, eventInput);
           await this.links.saveSuccessfulSync({
             connectionId: connection.connectionId, calendarId: connection.calendarId,
