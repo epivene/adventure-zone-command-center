@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
-  it("creates required Google Workspace schema before lead Gmail foreign keys", async () => {
+  it("creates required schemas in dependency order before the API listens", async () => {
     const calls: string[] = [];
     let googleReady = false;
     const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
@@ -23,6 +23,7 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureOrganizerFeedback: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
@@ -33,6 +34,7 @@ describe("runRequiredSchemaStartup", () => {
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
+      "required organizer feedback schema",
       "required office coordinator schema",
       "required profile touch schema",
       "required Design Studio schema",
