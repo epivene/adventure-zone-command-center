@@ -15,6 +15,7 @@ import * as leadIntakeSchema from "./lead-intake-schema";
 import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
 import * as legAssignmentSchema from "./leg-assignment-schema";
+import { normalizeDatabaseConnectionString } from "./connection-string";
 import {
   designAssets,
   designOutputs,
@@ -35,13 +36,12 @@ if (!connectionString) {
   );
 }
 
-// Render's external database URL requires SSL. When RENDER_DATABASE_URL is set
-// and doesn't already include an sslmode param, we enforce SSL.
-const isRender = Boolean(process.env.RENDER_DATABASE_URL);
-const finalConnectionString =
-  isRender && !connectionString.includes("sslmode")
-    ? `${connectionString}?sslmode=require`
-    : connectionString;
+// Render's external PostgreSQL connection requires TLS. Use the explicit mode
+// matching pg's current secure behavior so future pg/libpq changes cannot silently
+// weaken certificate and hostname verification, and preserve existing URL params.
+const finalConnectionString = normalizeDatabaseConnectionString(connectionString, {
+  isRender: Boolean(process.env.RENDER_DATABASE_URL),
+});
 
 export const pool = new Pool({
   connectionString: finalConnectionString,
