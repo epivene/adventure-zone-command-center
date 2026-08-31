@@ -1,6 +1,6 @@
 export const DEFAULT_SCHEDULE_DISPLAY_COLORS = {
   eventColor: "#ec4899",
-  travelColor: "#94a3b8",
+  travelColor: "rgba(100, 116, 139, 0.42)",
 } as const;
 
 export type ScheduleDisplayColors = {
@@ -16,7 +16,15 @@ type VisualBookingDates = {
   actualStartsAt?: Date | null;
   actualEndsAt?: Date | null;
   operationalWindowSource?: string | null;
+  travelLegColor?: string | null;
 };
+
+type CalendarBookingLabel = {
+  name: string;
+  travelLegName?: string | null;
+};
+
+const COMMON_FAIR_SUFFIX = /\s+(?:County\s+)?Fair$/i;
 
 function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
@@ -48,5 +56,11 @@ export function colorForBookingDay(
 ): string | null {
   const kind = bookingVisualKindOnDate(booking, dateKeyValue);
   if (!kind) return null;
-  return kind === "event" ? colors.eventColor : colors.travelColor;
+  return kind === "event" ? booking.travelLegColor ?? colors.eventColor : colors.travelColor;
+}
+
+export function calendarBookingLabel(booking: CalendarBookingLabel): string {
+  if (!booking.travelLegName) return booking.name;
+  const shortName = booking.name.replace(COMMON_FAIR_SUFFIX, "").trim() || booking.name;
+  return `${booking.travelLegName.toUpperCase()} • ${shortName}`;
 }

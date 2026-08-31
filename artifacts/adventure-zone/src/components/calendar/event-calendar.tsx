@@ -7,6 +7,7 @@ import type { MapEvent } from "@/features/routes/map-data";
 import { buildMonthSpanSegments, type MonthSpanSegment } from "@/features/calendar/month-spans";
 import {
   bookingVisualKindOnDate,
+  calendarBookingLabel,
   colorForBookingDay,
   DEFAULT_SCHEDULE_DISPLAY_COLORS,
   type ScheduleDisplayColors,
@@ -127,7 +128,7 @@ function BookingEventLink({ event, compact = false }: { event: BookingEvent; com
   const color = event.travelLegColor ?? "#64748b";
   return (
     <Link className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"}`} href={bookingHref(event)} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>
-      <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>{event.name}</span>
+      <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>{calendarBookingLabel(event)}</span>
       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
         <span className={confirmed ? "rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800" : "rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800"}>{confirmed ? "Confirmed" : "Tentative"}</span>
         {!compact ? <span>{formatStatus(event.status)}</span> : null}
@@ -206,7 +207,7 @@ function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments,
           const event = eventById.get(segment.eventId);
           if (!event) return null;
           const confirmed = event.status === "confirmed";
-          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-orange-300 ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={bookingHref(event)} key={`${event.id}-${weekIndex}`} style={{ background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1 }} title={`${event.name}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? event.name : `↳ ${event.name}`}</Link>;
+          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-orange-300 ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={bookingHref(event)} key={`${event.id}-${weekIndex}`} style={{ background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1, textShadow: "0 1px 2px rgba(15, 23, 42, 0.8)" }} title={`${calendarBookingLabel(event)}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? calendarBookingLabel(event) : `↳ ${calendarBookingLabel(event)}`}</Link>;
         })}
       </div>
     </div>
@@ -221,16 +222,17 @@ function MobileBookingStrip({ event, dateKey, colors }: { event: BookingEvent; d
   const endsOn = utcDateKey(event.endsAt ?? event.startsAt);
   const startsHere = dateKey === startsOn;
   const endsHere = dateKey === endsOn;
-  const color = kind === "event" ? colors.eventColor : colors.travelColor;
+  const color = colorForBookingDay(event, dateKey, colors) ?? colors.eventColor;
+  const label = calendarBookingLabel(event);
   return (
     <Link
-      aria-label={`${event.name}, ${kind === "event" ? "event" : "travel/setup"}`}
-      className={`block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 text-white shadow-sm ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`}
+      aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`}
+      className={`block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 shadow-sm ${kind === "event" ? "text-white" : "text-slate-800"} ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`}
       href={bookingHref(event)}
       style={{ backgroundColor: color }}
-      title={`${event.name} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`}
+      title={`${label} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`}
     >
-      {startsHere ? <span className="block truncate">{event.name}</span> : <span aria-hidden="true">&nbsp;</span>}
+      {startsHere ? <span className="block truncate">{label}</span> : <span aria-hidden="true">&nbsp;</span>}
     </Link>
   );
 }
