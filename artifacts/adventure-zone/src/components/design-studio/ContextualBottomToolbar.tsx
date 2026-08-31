@@ -11,18 +11,13 @@ import {
   Lock,
   Plus,
   SendToBack,
-  Shapes,
   Trash2,
   Type,
   Unlock,
 } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
-import {
-  createImageNode,
-  createShapeNode,
-  createTextNode,
-} from "@/lib/design-studio/model";
+import { createTextNode } from "@/lib/design-studio/model";
 import type { FreeformEditor } from "./use-freeform-editor";
 
 function validColor(value: string, fallback: string) {
@@ -34,11 +29,13 @@ export function ContextualBottomToolbar({
   onReplacePhoto,
   onAddPhoto,
   onOpenLayers,
+  onOpenAdd,
 }: {
   editor: FreeformEditor;
   onReplacePhoto?: () => void;
   onAddPhoto?: () => void;
   onOpenLayers?: () => void;
+  onOpenAdd?: () => void;
 }) {
   const selected = editor.selectedNodes.length === 1 ? editor.selectedNodes[0]! : null;
   const multi = editor.selectedNodes.length > 1;
@@ -50,14 +47,11 @@ export function ContextualBottomToolbar({
           <Button aria-label="Add text" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={() => editor.insertNode(createTextNode())} size="sm" variant="outline">
             <Type className="h-4 w-4" />Text
           </Button>
-          <Button aria-label="Add photo" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={() => onAddPhoto ? onAddPhoto() : editor.insertNode(createImageNode())} size="sm" variant="outline">
+          <Button aria-label="Add photo" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={onAddPhoto} size="sm" variant="outline">
             <ImagePlus className="h-4 w-4" />Photo
           </Button>
-          <Button aria-label="Add shape" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={() => editor.insertNode(createShapeNode("rectangle"))} size="sm" variant="outline">
-            <Shapes className="h-4 w-4" />Shape
-          </Button>
-          <Button aria-label="Add star" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={() => editor.insertNode(createShapeNode("star", { fill: "#ffd21c", stroke: "#080808", strokeWidth: 6 }))} size="sm" variant="outline">
-            <Plus className="h-4 w-4" />Sticker
+          <Button aria-label="Add elements" className="shrink-0 gap-2" disabled={!editor.canEdit} onClick={onOpenAdd} size="sm" variant="outline">
+            <Plus className="h-4 w-4" />Elements
           </Button>
           <Button aria-label="Open layers" className="shrink-0 gap-2" onClick={onOpenLayers} size="sm" variant="outline">
             <Layers3 className="h-4 w-4" />Layers
@@ -74,6 +68,7 @@ export function ContextualBottomToolbar({
           <span className="shrink-0 text-xs font-bold text-muted-foreground">{editor.selectedNodes.length} selected</span>
           <Button aria-label="Duplicate" className="shrink-0 gap-1.5" disabled={!editor.canEdit} onClick={editor.duplicateSelected} size="sm" variant="outline"><Copy className="h-4 w-4" />Duplicate</Button>
           <Button aria-label="Delete" className="shrink-0 gap-1.5 text-destructive" disabled={!editor.canEdit} onClick={editor.removeSelected} size="sm" variant="outline"><Trash2 className="h-4 w-4" />Delete</Button>
+          <Button aria-label="Open layers" className="shrink-0 gap-1.5" onClick={onOpenLayers} size="sm" variant="outline"><Layers3 className="h-4 w-4" />Layers</Button>
         </div>
       </div>
     );
@@ -151,6 +146,7 @@ export function ContextualBottomToolbar({
         <Button aria-label={locked ? "Unlock" : "Lock"} className="shrink-0 gap-1.5" disabled={!editor.canEdit} onClick={() => editor.patchSelected({ locked: !locked })} size="sm" variant="outline">{locked ? <Unlock className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{locked ? "Unlock" : "Lock"}</Button>
         <Button aria-label="Duplicate" className="shrink-0 gap-1.5" disabled={!editor.canEdit} onClick={editor.duplicateSelected} size="sm" variant="outline"><Copy className="h-4 w-4" />Duplicate</Button>
         <Button aria-label="Delete" className="shrink-0 gap-1.5 text-destructive" disabled={!editor.canEdit} onClick={editor.removeSelected} size="sm" variant="outline"><Trash2 className="h-4 w-4" />Delete</Button>
+        <Button aria-label="Open layers" className="shrink-0 gap-1.5" onClick={onOpenLayers} size="sm" variant="outline"><Layers3 className="h-4 w-4" />Layers</Button>
       </div>
     </div>
   );
