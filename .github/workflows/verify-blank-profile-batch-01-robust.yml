@@ -1,0 +1,263 @@
+name: Verify blank profile batch 01 robustly
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/verify-blank-profile-batch-01-robust.yml"
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/blank-profiles-batch-01
+          fetch-depth: 0
+
+      - name: Wait for merge and verify the live reviewed state
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL:-}"
+          test -n "${ASSISTANT_IMPORT_TOKEN:-}"
+
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head research/blank-profiles-batch-01 \
+            --base main \
+            --state all \
+            --json number \
+            --jq 'sort_by(.number) | reverse | .[0].number // empty')
+          test -n "$PR_NUMBER"
+          for attempt in $(seq 1 120); do
+            MERGED=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergedAt --jq '.mergedAt // empty')
+            if [ -n "$MERGED" ]; then break; fi
+            sleep 10
+          done
+          test -n "${MERGED:-}"
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+          const norm = (value) => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+          const digits = (value) => String(value ?? '').replace(/\D/g, '').replace(/^1(?=\d{10}$)/, '');
+
+          function walk(directory) {
+            return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+              const full = path.join(directory, entry.name);
+              return entry.isDirectory() ? walk(full) : entry.name.endsWith('.json') ? [full] : [];
+            });
+          }
+
+          function loadBatch() {
+            for (const file of walk('imports/approved-profiles')) {
+              let parsed;
+              try { parsed = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { continue; }
+              const profiles = Array.isArray(parsed) ? parsed : parsed?.profiles;
+              if (!Array.isArray(profiles) || profiles.length !== 25) continue;
+              const marker = `${file} ${parsed?.batchId ?? ''} ${parsed?.name ?? ''}`.toLowerCase();
+              if (marker.includes('batch-01') || marker.includes('batch 01') || marker.includes('blank-profile')) return { file, profiles };
+            }
+            throw new Error('Reviewed batch payload not found.');
+          }
+
+          async function get(pathname) {
+            const response = await fetch(`${base}/${pathname}`, { headers });
+            const text = await response.text();
+            let body = null;
+            try { body = JSON.parse(text); } catch {}
+            return { status: response.status, body, text };
+          }
+
+          function compatible(row, event) {
+            const ec = norm(event?.city), er = norm(event?.region);
+            const rc = norm(row?.city), rr = norm(row?.region);
+            return !(ec && rc && ec !== rc) && !(er && rr && er !== rr);
+          }
+
+          async function resolve(item) {
+            const event = item.event ?? {};
+            const names = [...new Set([event.name, ...(item.aliases ?? [])].filter(Boolean))];
+            const map = new Map();
+            for (const name of names) {
+              const result = await get(`profile-search?q=${encodeURIComponent(name)}&limit=20`);
+              for (const row of result.body?.results ?? []) {
+                if (row?.kind === 'organization' && row?.id && compatible(row, event)) map.set(row.id, row);
+              }
+            }
+            const normalizedNames = new Set(names.map(norm));
+            const exact = [...map.values()].filter((row) => normalizedNames.has(norm(row.label)));
+            if (exact.length === 1) return exact[0];
+            const close = [...map.values()].filter((row) => names.some((name) => {
+              const a = norm(name), b = norm(row.label);
+              return a && b && (a.includes(b) || b.includes(a));
+            }));
+            return close.length === 1 ? close[0] : null;
+          }
+
+          function contactPresent(history, expected) {
+            const raw = JSON.stringify(history.contacts ?? []).toLowerCase();
+            const email = String(expected?.email ?? '').trim().toLowerCase();
+            const phone = digits(expected?.phone);
+            const name = norm(expected?.name);
+            if (email) return raw.includes(email);
+            if (phone) return digits(raw).includes(phone);
+            if (name) return name.split(' ').filter(Boolean).every((part) => norm(raw).includes(part));
+            return false;
+          }
+
+          function notePresent(history, expected) {
+            const subjects = (history.notes ?? []).map((note) => norm(note?.subject));
+            return subjects.includes(norm(expected?.subject));
+          }
+
+          function followUpPresent(history, expected) {
+            const targetLabel = norm(expected?.label);
+            const targetDate = String(expected?.dueAt ?? '').slice(0, 10);
+            return (history.followUps ?? []).some((row) => {
+              const raw = JSON.stringify(row);
+              return norm(row?.label ?? row?.kind) === targetLabel && raw.includes(targetDate);
+            });
+          }
+
+          async function mergedFamily(queries, mustContain) {
+            const ids = new Map();
+            for (const query of queries) {
+              const result = await get(`profile-search?q=${encodeURIComponent(query)}&limit=20`);
+              for (const row of result.body?.results ?? []) {
+                if (row?.kind === 'organization' && row?.id) ids.set(row.id, row);
+              }
+            }
+            if (ids.size !== 1) return { ok: false, reason: `active_profiles_${ids.size}`, ids: [...ids.keys()] };
+            const [id] = ids.keys();
+            const result = await get(`profile-history/${id}`);
+            if (result.status !== 200 || result.body?.ok !== true) return { ok: false, reason: `history_${result.status}`, id };
+            const raw = JSON.stringify(result.body).toLowerCase();
+            if (mustContain && !raw.includes(mustContain.toLowerCase())) return { ok: false, reason: `missing_${mustContain}`, id };
+            const actValues = [
+              ...(result.body?.actCompanyIds ?? []),
+              ...(result.body?.migrationSourceIds ?? []),
+            ];
+            if (!actValues.length) return { ok: false, reason: 'missing_act_provenance', id };
+            return { ok: true, id, name: result.body?.place?.name ?? ids.get(id)?.label ?? null };
+          }
+
+          async function inspectOnce(batch) {
+            const failures = [];
+            const rows = [];
+            let contacts = 0;
+            let followUps = 0;
+            let holds = 0;
+
+            for (const [index, item] of batch.profiles.entries()) {
+              const match = await resolve(item);
+              if (!match) {
+                failures.push({ index, name: item.event?.name, reason: 'unresolved' });
+                continue;
+              }
+              const result = await get(`profile-history/${match.id}`);
+              if (result.status !== 200 || result.body?.ok !== true) {
+                failures.push({ index, name: item.event?.name, reason: `history_${result.status}` });
+                continue;
+              }
+              const history = result.body;
+              for (const expected of item.contacts ?? []) {
+                if (contactPresent(history, expected)) contacts += 1;
+                else failures.push({ index, name: item.event?.name, reason: `missing_contact:${expected.name ?? expected.email ?? expected.phone}` });
+              }
+              for (const expected of item.notes ?? []) {
+                if (!notePresent(history, expected)) failures.push({ index, name: item.event?.name, reason: `missing_note:${expected.subject}` });
+              }
+              for (const expected of item.followUps ?? []) {
+                if (followUpPresent(history, expected)) followUps += 1;
+                else failures.push({ index, name: item.event?.name, reason: `missing_follow_up:${expected.label}` });
+              }
+              if (['OR', 'KS'].includes(String(item.event?.region ?? '').toUpperCase())) {
+                if (JSON.stringify(history.notes ?? []).toLowerCase().includes('territory hold')) holds += 1;
+                else failures.push({ index, name: item.event?.name, reason: 'missing_live_territory_hold' });
+              }
+              rows.push({
+                sourceName: item.event?.name ?? null,
+                profileId: match.id,
+                liveName: history.place?.name ?? match.label,
+                city: history.place?.city ?? null,
+                region: history.place?.region ?? null,
+              });
+            }
+
+            const breckenridge = await mergedFamily(['Breckenridge Main Street', 'Breckenridge August Art Festival'], null);
+            const redRiver = await mergedFamily(['Red River Valley Fair'], 'carson');
+            if (!breckenridge.ok) failures.push({ name: 'Breckenridge consolidation', reason: breckenridge.reason });
+            if (!redRiver.ok) failures.push({ name: 'Red River Valley Fair consolidation', reason: redRiver.reason });
+
+            return {
+              ok: failures.length === 0 && rows.length === 25 && contacts === 17 && followUps === 5,
+              failures,
+              rows,
+              contacts,
+              followUps,
+              holds,
+              merges: { breckenridge, redRiverValleyFair: redRiver },
+            };
+          }
+
+          (async () => {
+            const batch = loadBatch();
+            let latest = null;
+            for (let attempt = 1; attempt <= 120; attempt += 1) {
+              latest = await inspectOnce(batch);
+              if (latest.ok) {
+                fs.writeFileSync('/tmp/blank-profile-batch-01-robust-live-verification.json', JSON.stringify({
+                  verifiedAt: new Date().toISOString(),
+                  state: 'verified',
+                  sourceFile: batch.file,
+                  reviewedEntries: 25,
+                  resolvedEntries: latest.rows.length,
+                  uniqueLiveProfiles: new Set(latest.rows.map((row) => row.profileId)).size,
+                  verifiedContacts: latest.contacts,
+                  verifiedFollowUps: latest.followUps,
+                  territoryHoldProfiles: latest.holds,
+                  merges: latest.merges,
+                  profiles: latest.rows,
+                }, null, 2));
+                return;
+              }
+              console.log(`Attempt ${attempt}: ${JSON.stringify(latest.failures.slice(0, 10))}`);
+              await sleep(15000);
+            }
+            throw new Error(JSON.stringify(latest?.failures ?? []));
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+
+      - name: Publish the robust verification receipt
+        run: |
+          set -euo pipefail
+          git fetch origin ops/merge-blank-profiles-batch-01
+          git checkout -B ops/merge-blank-profiles-batch-01 origin/ops/merge-blank-profiles-batch-01
+          mkdir -p docs/operations
+          cp /tmp/blank-profile-batch-01-robust-live-verification.json \
+            docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/operations/blank-profile-batch-01-live-verification-2026-08-31.json
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "docs: publish robust live verification for blank profile batch 01"
+          git push origin HEAD:ops/merge-blank-profiles-batch-01
