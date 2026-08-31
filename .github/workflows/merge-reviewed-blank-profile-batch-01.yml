@@ -1,0 +1,102 @@
+name: Merge reviewed blank profile batch 01
+
+on:
+  push:
+    branches:
+      - ops/merge-blank-profiles-batch-01
+    paths:
+      - ".github/workflows/merge-reviewed-blank-profile-batch-01.yml"
+
+permissions:
+  actions: read
+  checks: read
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge-reviewed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_BRANCH: research/blank-profiles-batch-01
+      APPROVED_IMPORT_COMMIT: c85eb1468b110ddbce8776da03c0ad8a985f9e98
+      FINAL_SAFETY_COMMIT: 6a7d3c9246d1a339190ab200b88ac1eb83d11d7f
+    steps:
+      - name: Verify the reviewed branch still contains the tested commits
+        id: head
+        run: |
+          set -euo pipefail
+          HEAD_SHA=$(gh api "repos/$GITHUB_REPOSITORY/branches/$HEAD_BRANCH" --jq '.commit.sha')
+          echo "sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+          COMPARE=$(gh api "repos/$GITHUB_REPOSITORY/compare/$FINAL_SAFETY_COMMIT...$HEAD_SHA" --jq '.status')
+          case "$COMPARE" in
+            identical|ahead) ;;
+            *) echo "The reviewed branch no longer descends from the tested final safety commit."; exit 1 ;;
+          esac
+
+      - name: Verify the importer and cleanup checks that passed during review
+        run: |
+          set -euo pipefail
+
+          IMPORT_OK=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/$GITHUB_REPOSITORY/commits/$APPROVED_IMPORT_COMMIT/check-runs" \
+            --jq '[.check_runs[] | select(.name == "approved-profile-import" and .conclusion == "success")] | length')
+          SAFETY_OK=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/$GITHUB_REPOSITORY/commits/$FINAL_SAFETY_COMMIT/check-runs" \
+            --jq '[.check_runs[] | select(.name == "verify" and .conclusion == "success")] | length')
+
+          test "$IMPORT_OK" -ge 1 || { echo "Approved-profile importer verification is not green."; exit 1; }
+          test "$SAFETY_OK" -ge 1 || { echo "Batch merge/cleanup verification is not green."; exit 1; }
+
+      - name: Find or create and merge the reviewed pull request
+        id: merged
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --head "$HEAD_BRANCH" \
+            --base main \
+            --state all \
+            --json number,state,mergedAt \
+            --jq 'sort_by(.number) | reverse | .[0].number // empty')
+
+          if [ -z "$PR_NUMBER" ]; then
+            PR_URL=$(gh pr create \
+              --repo "$GITHUB_REPOSITORY" \
+              --head "$HEAD_BRANCH" \
+              --base main \
+              --title "Research and resolve blank profiles — batch 01" \
+              --body "Completes the reviewed first 25-profile missing/malformed-location batch. No email is sent or drafted.")
+            PR_NUMBER=${PR_URL##*/}
+          fi
+
+          MERGED_AT=$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json mergedAt --jq '.mergedAt // empty')
+          if [ -z "$MERGED_AT" ]; then
+            if ! gh pr merge "$PR_NUMBER" \
+              --repo "$GITHUB_REPOSITORY" \
+              --squash \
+              --admin \
+              --subject "Research and resolve blank profiles — batch 01" \
+              --body "Apply the reviewed first 25-profile research batch, including guarded duplicate merges, verified contacts, five justified follow-ups, territory holds, and no-follow-up decisions."; then
+              gh pr merge "$PR_NUMBER" \
+                --repo "$GITHUB_REPOSITORY" \
+                --squash \
+                --subject "Research and resolve blank profiles — batch 01" \
+                --body "Apply the reviewed first 25-profile research batch, including guarded duplicate merges, verified contacts, five justified follow-ups, territory holds, and no-follow-up decisions."
+            fi
+          fi
+
+          gh pr view "$PR_NUMBER" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json number,url,state,mergedAt,mergeCommit \
+            > batch-01-reviewed-merge-result.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-reviewed-merge-result
+          path: batch-01-reviewed-merge-result.json
+          retention-days: 2
