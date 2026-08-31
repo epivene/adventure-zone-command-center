@@ -34,6 +34,73 @@ export const KNOWN_EMPTY_TEST_PROFILES = [
   },
 ] as const satisfies readonly KnownEmptyTestProfileCandidate[];
 
+export type KnownBlankProfileEnrichment = {
+  id: string;
+  expectedNames: readonly string[];
+  name: string;
+  city: string;
+  region: string;
+  placeType: "association" | "company" | "other" | "tribe";
+  phone: string;
+  normalizedPhone: string;
+  website: string;
+  address1: string;
+  postalCode: string;
+  description: string;
+};
+
+export const KNOWN_BLANK_PROFILE_ENRICHMENTS = [
+  {
+    id: "7fff8f6c-5e88-46ad-9f00-d1a853040a42",
+    expectedNames: ["Colorado events", "Colorado Events"],
+    name: "Colorado Events",
+    city: "Boulder",
+    region: "CO",
+    placeType: "company",
+    phone: "720-272-7467",
+    normalizedPhone: "7202727467",
+    website: "https://www.coloradoevents.org/",
+    address1: "2525 Arapahoe Avenue, Suite E4-720",
+    postalCode: "80302",
+    description:
+      "Colorado event-production organization. Adventure Zone has an existing Gmail relationship with the producer; individual festivals should be tracked as event appearances or child event records rather than duplicate producer profiles.",
+  },
+  {
+    id: "9c6b750d-828a-4b97-b6aa-0a19c22f18cf",
+    expectedNames: ["Idaho Fish and Game", "Idaho Department of Fish and Game"],
+    name: "Idaho Department of Fish and Game",
+    city: "Boise",
+    region: "ID",
+    placeType: "other",
+    phone: "208-334-3700",
+    normalizedPhone: "2083343700",
+    website: "https://idfg.idaho.gov/",
+    address1: "600 S. Walnut Street",
+    postalCode: "83712",
+    description:
+      "Statewide wildlife agency umbrella profile. Identify and attach a specific public, family, education, or outdoor event—and verify its organizer—before any Adventure Zone outreach.",
+  },
+  {
+    id: "e7ba291f-5d7c-48ec-9c66-7756196ee290",
+    expectedNames: [
+      "Te Moak Tribe of Western Shoshone",
+      "Te-Moak Tribe of Western Shoshone",
+      "Te-Moak Tribe of Western Shoshone Indians of Nevada",
+    ],
+    name: "Te-Moak Tribe of Western Shoshone",
+    city: "Elko",
+    region: "NV",
+    placeType: "tribe",
+    phone: "775-738-9251",
+    normalizedPhone: "7757389251",
+    website: "https://www.temoaktribe.com/",
+    address1: "525 Sunset Street",
+    postalCode: "89801",
+    description:
+      "Umbrella tribal profile for the Battle Mountain, Elko, South Fork, and Wells bands. Identify the specific band and public event decision-maker before Adventure Zone outreach.",
+  },
+] as const satisfies readonly KnownBlankProfileEnrichment[];
+
 export type KnownEmptyTestProfileInspection = {
   id: string;
   name: string;
@@ -73,6 +140,29 @@ export type KnownEmptyTestProfileCleanupResult = {
   }>;
 };
 
+export type KnownBlankProfileEnrichmentApplyOutcome =
+  | "updated"
+  | "already_current"
+  | "missing"
+  | "identity_changed"
+  | "act_source_present";
+
+export interface KnownBlankProfileEnrichmentRepository {
+  apply(input: KnownBlankProfileEnrichment): Promise<KnownBlankProfileEnrichmentApplyOutcome>;
+}
+
+export type KnownBlankProfileEnrichmentResult = {
+  updated: string[];
+  alreadyCurrent: string[];
+  skipped: Array<{
+    id: string;
+    reason: Exclude<
+      KnownBlankProfileEnrichmentApplyOutcome,
+      "updated" | "already_current"
+    >;
+  }>;
+};
+
 type QueryResult<Row extends Record<string, unknown>> = {
   rows: Row[];
 };
@@ -96,6 +186,21 @@ type ReferenceColumn = {
   schemaName: string;
   tableName: string;
   columnName: string;
+};
+
+type BlankProfileRow = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  placeType: string | null;
+  phone: string | null;
+  normalizedPhone: string | null;
+  website: string | null;
+  address1: string | null;
+  postalCode: string | null;
+  description: string | null;
+  consolidatedIntoId: string | null;
 };
 
 const PROFILE_CONTENT_KEYS = [
@@ -139,6 +244,10 @@ function normalizedRegion(value: unknown): string | null {
   return nullableText(value)?.toUpperCase() ?? null;
 }
 
+function normalizedIdentity(value: unknown): string {
+  return nullableText(value)?.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() ?? "";
+}
+
 function hasProfileContent(profile: Record<string, unknown>): boolean {
   if (PROFILE_CONTENT_KEYS.some((key) => nullableText(profile[key]))) return true;
   return profile.last_resort === true
@@ -154,6 +263,52 @@ function identityMatches(
     && inspection.name.trim() === candidate.name
     && nullableText(inspection.city) === candidate.city
     && normalizedRegion(inspection.region) === candidate.region;
+}
+
+function isCompatibleValue(current: unknown, target: string): boolean {
+  const existing = nullableText(current);
+  return existing === null || existing === target;
+}
+
+function isCompatibleRegion(current: unknown, target: string): boolean {
+  const existing = normalizedRegion(current);
+  return existing === null || existing === target;
+}
+
+function enrichmentIdentityMatches(
+  input: KnownBlankProfileEnrichment,
+  row: BlankProfileRow,
+): boolean {
+  const allowedNames = new Set(input.expectedNames.map(normalizedIdentity));
+  return row.id === input.id
+    && !row.consolidatedIntoId
+    && allowedNames.has(normalizedIdentity(row.name))
+    && isCompatibleValue(row.city, input.city)
+    && isCompatibleRegion(row.region, input.region)
+    && isCompatibleValue(row.placeType, input.placeType)
+    && isCompatibleValue(row.phone, input.phone)
+    && isCompatibleValue(row.normalizedPhone, input.normalizedPhone)
+    && isCompatibleValue(row.website, input.website)
+    && isCompatibleValue(row.address1, input.address1)
+    && isCompatibleValue(row.postalCode, input.postalCode)
+    && isCompatibleValue(row.description, input.description);
+}
+
+function enrichmentIsCurrent(
+  input: KnownBlankProfileEnrichment,
+  row: BlankProfileRow,
+): boolean {
+  return row.name === input.name
+    && row.city === input.city
+    && normalizedRegion(row.region) === input.region
+    && row.placeType === input.placeType
+    && row.phone === input.phone
+    && row.normalizedPhone === input.normalizedPhone
+    && row.website === input.website
+    && row.address1 === input.address1
+    && row.postalCode === input.postalCode
+    && row.description === input.description
+    && !row.consolidatedIntoId;
 }
 
 export async function cleanupKnownEmptyTestProfiles(
@@ -202,6 +357,30 @@ export async function cleanupKnownEmptyTestProfiles(
   return result;
 }
 
+export async function enrichKnownBlankProfiles(
+  repository: KnownBlankProfileEnrichmentRepository = new PostgresKnownBlankProfileEnrichmentRepository(),
+  profiles: readonly KnownBlankProfileEnrichment[] = KNOWN_BLANK_PROFILE_ENRICHMENTS,
+): Promise<KnownBlankProfileEnrichmentResult> {
+  const result: KnownBlankProfileEnrichmentResult = {
+    updated: [],
+    alreadyCurrent: [],
+    skipped: [],
+  };
+
+  for (const profile of profiles) {
+    const outcome = await repository.apply(profile);
+    if (outcome === "updated") {
+      result.updated.push(profile.id);
+    } else if (outcome === "already_current") {
+      result.alreadyCurrent.push(profile.id);
+    } else {
+      result.skipped.push({ id: profile.id, reason: outcome });
+    }
+  }
+
+  return result;
+}
+
 function quoteIdentifier(value: string): string {
   return `"${value.replaceAll('"', '""')}"`;
 }
@@ -210,6 +389,110 @@ function postgresCode(error: unknown): string | null {
   if (!error || typeof error !== "object" || !("code" in error)) return null;
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" ? code : null;
+}
+
+async function countActLinks(executor: QueryExecutor, id: string): Promise<number> {
+  const result = await executor.query<{ count: number | string }>(
+    `SELECT count(*)::int AS count
+     FROM act_external_links
+     WHERE entity_type = 'organization'
+       AND entity_id = $1::uuid`,
+    [id],
+  );
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+export class PostgresKnownBlankProfileEnrichmentRepository
+implements KnownBlankProfileEnrichmentRepository {
+  constructor(private readonly pool: QueryPool = defaultPool as unknown as QueryPool) {}
+
+  async apply(
+    input: KnownBlankProfileEnrichment,
+  ): Promise<KnownBlankProfileEnrichmentApplyOutcome> {
+    const client = await this.pool.connect();
+    let transactionStarted = false;
+    try {
+      await client.query("BEGIN");
+      transactionStarted = true;
+      const profileResult = await client.query<BlankProfileRow>(
+        `SELECT
+           o.id::text AS id,
+           o.name,
+           o.city,
+           o.region,
+           o.place_type AS "placeType",
+           o.phone,
+           o.normalized_phone AS "normalizedPhone",
+           o.website,
+           o.address_1 AS "address1",
+           o.postal_code AS "postalCode",
+           o.description,
+           o.consolidated_into_id::text AS "consolidatedIntoId"
+         FROM organizations o
+         WHERE o.id = $1::uuid
+         FOR UPDATE`,
+        [input.id],
+      );
+      const row = profileResult.rows[0];
+      if (!row) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return "missing";
+      }
+      if (!enrichmentIdentityMatches(input, row)) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return "identity_changed";
+      }
+      if (await countActLinks(client, input.id) > 0) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return "act_source_present";
+      }
+      if (enrichmentIsCurrent(input, row)) {
+        await client.query("ROLLBACK");
+        transactionStarted = false;
+        return "already_current";
+      }
+
+      await client.query(
+        `UPDATE organizations
+         SET name = $2,
+             city = $3,
+             region = $4,
+             place_type = $5,
+             phone = $6,
+             normalized_phone = $7,
+             website = $8,
+             address_1 = $9,
+             postal_code = $10,
+             description = $11,
+             updated_at = now()
+         WHERE id = $1::uuid`,
+        [
+          input.id,
+          input.name,
+          input.city,
+          input.region,
+          input.placeType,
+          input.phone,
+          input.normalizedPhone,
+          input.website,
+          input.address1,
+          input.postalCode,
+          input.description,
+        ],
+      );
+      await client.query("COMMIT");
+      transactionStarted = false;
+      return "updated";
+    } catch (error) {
+      if (transactionStarted) await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 export class PostgresKnownEmptyTestProfileRepository
@@ -241,7 +524,7 @@ implements KnownEmptyTestProfileRepository {
     if (!row) return null;
 
     const [actLinkCount, referenceCount] = await Promise.all([
-      this.countActLinks(this.pool, id),
+      countActLinks(this.pool, id),
       this.countReferences(this.pool, id),
     ]);
 
@@ -301,7 +584,7 @@ implements KnownEmptyTestProfileRepository {
         city: row.city,
         region: row.region,
         profile: row.profile ?? {},
-        actLinkCount: await this.countActLinks(client, id),
+        actLinkCount: await countActLinks(client, id),
         referenceCount: await this.countReferences(client, id),
       };
       if (
@@ -336,17 +619,6 @@ implements KnownEmptyTestProfileRepository {
     } finally {
       client.release();
     }
-  }
-
-  private async countActLinks(executor: QueryExecutor, id: string): Promise<number> {
-    const result = await executor.query<{ count: number | string }>(
-      `SELECT count(*)::int AS count
-       FROM act_external_links
-       WHERE entity_type = 'organization'
-         AND entity_id = $1::uuid`,
-      [id],
-    );
-    return Number(result.rows[0]?.count ?? 0);
   }
 
   private async countReferences(executor: QueryExecutor, id: string): Promise<number> {
