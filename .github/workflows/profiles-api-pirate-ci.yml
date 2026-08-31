@@ -1,0 +1,42 @@
+name: Profiles API and Pirate outcome CI
+
+on:
+  push:
+    branches:
+      - fix/profiles-api-pirate-outcome
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/organizations/profile-touch-schema.ts"
+      - "artifacts/api-server/src/features/organizations/organization-list-sort.test.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/pirate-fest-confirmed.test.ts"
+      - "imports/approved-profiles/pirate-fest-northglenn-co-2026.json"
+      - ".github/workflows/profiles-api-pirate-ci.yml"
+
+permissions:
+  contents: read
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: postgresql://postgres:postgres@localhost:5432/profiles_api_test
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused regression tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/organizations/organization-list-sort.test.ts
+          src/features/approved-profile-import/pirate-fest-confirmed.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
