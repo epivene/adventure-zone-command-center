@@ -1,0 +1,30 @@
+name: Package Gmail profile-link review bundle
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-current
+    paths:
+      - ".github/workflows/package-gmail-profile-link-review-bundle.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create reviewable git bundle
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+          git bundle create gmail-profile-link-review.bundle \
+            HEAD \
+            refs/remotes/origin/main
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gmail-profile-link-review-bundle
+          path: gmail-profile-link-review.bundle
+          retention-days: 1
