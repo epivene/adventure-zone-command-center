@@ -1,0 +1,56 @@
+name: Twin Falls duplicate cleanup CI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-repository.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts"
+      - "imports/approved-profiles/twin-falls-county-fair-2026.json"
+      - ".github/workflows/twin-falls-duplicate-cleanup-ci.yml"
+  push:
+    branches:
+      - fix/twin-falls-duplicate-profiles-current
+      - main
+    paths:
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.ts"
+      - "artifacts/api-server/src/features/organizations/twin-falls-duplicate-cleanup.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-duplicate-normalization.pglite.test.ts"
+      - "artifacts/api-server/src/features/organizations/organization-repository.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts"
+      - "artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts"
+      - "imports/approved-profiles/twin-falls-county-fair-2026.json"
+      - ".github/workflows/twin-falls-duplicate-cleanup-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused behavior tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/organizations/twin-falls-duplicate-cleanup.test.ts
+          src/features/organizations/organization-duplicate-normalization.pglite.test.ts
+          src/features/approved-profile-import/startup-import.test.ts
+          src/features/approved-profile-import/startup-import-batch.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Approved profile payload parses
+        run: node -e "JSON.parse(require('fs').readFileSync('imports/approved-profiles/twin-falls-county-fair-2026.json','utf8')); console.log('Twin Falls payload valid')"
