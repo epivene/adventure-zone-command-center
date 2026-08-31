@@ -1,0 +1,61 @@
+name: Check Render deploy capability
+
+on:
+  push:
+    branches:
+      - verify/twin-falls-duplicate-cleanup-live
+    paths:
+      - ".github/workflows/check-render-deploy-capability.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      SECRET_RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+      SECRET_RENDER_API_TOKEN: ${{ secrets.RENDER_API_TOKEN }}
+      SECRET_RENDER_TOKEN: ${{ secrets.RENDER_TOKEN }}
+      SECRET_RENDER_SERVICE_ID: ${{ secrets.RENDER_SERVICE_ID }}
+      SECRET_RENDER_API_SERVICE_ID: ${{ secrets.RENDER_API_SERVICE_ID }}
+      SECRET_API_RENDER_SERVICE_ID: ${{ secrets.API_RENDER_SERVICE_ID }}
+      SECRET_RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+      SECRET_RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+      SECRET_RENDER_API_DEPLOY_HOOK_URL: ${{ secrets.RENDER_API_DEPLOY_HOOK_URL }}
+      SECRET_RENDER_API_DEPLOY_HOOK: ${{ secrets.RENDER_API_DEPLOY_HOOK }}
+      SECRET_DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+      VAR_RENDER_SERVICE_ID: ${{ vars.RENDER_SERVICE_ID }}
+      VAR_RENDER_API_SERVICE_ID: ${{ vars.RENDER_API_SERVICE_ID }}
+      VAR_API_RENDER_SERVICE_ID: ${{ vars.API_RENDER_SERVICE_ID }}
+    steps:
+      - name: Record capability booleans only
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const names = [
+            'SECRET_RENDER_API_KEY',
+            'SECRET_RENDER_API_TOKEN',
+            'SECRET_RENDER_TOKEN',
+            'SECRET_RENDER_SERVICE_ID',
+            'SECRET_RENDER_API_SERVICE_ID',
+            'SECRET_API_RENDER_SERVICE_ID',
+            'SECRET_RENDER_DEPLOY_HOOK_URL',
+            'SECRET_RENDER_DEPLOY_HOOK',
+            'SECRET_RENDER_API_DEPLOY_HOOK_URL',
+            'SECRET_RENDER_API_DEPLOY_HOOK',
+            'SECRET_DEPLOY_HOOK_URL',
+            'VAR_RENDER_SERVICE_ID',
+            'VAR_RENDER_API_SERVICE_ID',
+            'VAR_API_RENDER_SERVICE_ID',
+          ];
+          fs.writeFileSync('render-deploy-capability.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            configured: Object.fromEntries(names.map((name) => [name, Boolean(process.env[name])])),
+          }, null, 2));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: render-deploy-capability
+          path: render-deploy-capability.json
+          retention-days: 1
