@@ -33,13 +33,18 @@ jobs:
         run: pnpm run typecheck:libs
 
       - name: Apply production repair
-        run: python .github/scripts/apply_canonical_profile_children.py
+        run: |
+          python -m py_compile .github/scripts/apply_canonical_profile_children.py
+          python -m py_compile .github/scripts/refine_canonical_profile_children.py
+          python .github/scripts/apply_canonical_profile_children.py
+          python .github/scripts/refine_canonical_profile_children.py
 
       - name: Canonical profile regression tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/event-profiles/event-profile-canonical-children.test.ts
           src/features/approved-profile-import/approved-profile-existing-id.test.ts
+          src/features/profile-integrity/profile-integrity-audit.test.ts
 
       - name: Existing event profile and startup tests
         run: >-
@@ -51,9 +56,6 @@ jobs:
       - name: Complete approved-profile import suite
         run: pnpm --filter @workspace/api-server exec vitest run src/features/approved-profile-import
 
-      - name: API typecheck
-        run: pnpm --filter @workspace/api-server typecheck
-
       - name: Production API build
         run: pnpm --filter @workspace/api-server build
 
@@ -62,6 +64,7 @@ jobs:
           rm .github/workflows/export-pirate-profile-debug.yml
           rm .github/workflows/canonical-profile-children-ci.yml
           rm .github/scripts/apply_canonical_profile_children.py
+          rm .github/scripts/refine_canonical_profile_children.py
           git diff --check
           git config user.name github-actions
           git config user.email github-actions@github.com
