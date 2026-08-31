@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+
       - name: Check protected live configuration
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
@@ -32,45 +34,28 @@ jobs:
           BASE_URL="${API_URL%/}/api/assistant-import"
           mkdir -p batch02/history batch02/search
 
-          # Batch 01 must be visible in production before selecting the next 25.
-          # Its merged changes leave fewer than 435 ACT-backed blank profiles.
-          for attempt in $(seq 1 60); do
-            curl --fail --silent --show-error \
-              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-              "${BASE_URL}/profile-integrity-audit" \
-              > batch02/audit.json
-
-            if node <<'NODE'
-          const fs = require('fs');
-          const audit = JSON.parse(fs.readFileSync('batch02/audit.json', 'utf8'));
-          const blanks = (audit.profiles || []).filter((profile) =>
-            profile.actRecordId
-            && Number(profile.contactCount || 0) === 0
-            && Number(profile.appearanceCount || 0) === 0
-            && Number(profile.timelineCount || 0) === 0
-            && Number(profile.openFollowUpCount || 0) === 0
-            && Number(profile.gmailThreadCount || 0) === 0
-            && Number(profile.calendarLinkCount || 0) === 0
-          );
-          process.exit(blanks.length < 435 ? 0 : 1);
-          NODE
-            then
-              echo "Batch 01 is reflected in production on attempt ${attempt}."
-              break
-            fi
-
-            if [ "${attempt}" = "60" ]; then
-              echo "Batch 01 never became visible in the live audit."
-              exit 1
-            fi
-            sleep 15
-          done
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/profile-integrity-audit" \
+            > batch02/audit.json
 
           node <<'NODE'
           const fs = require('fs');
           const audit = JSON.parse(fs.readFileSync('batch02/audit.json', 'utf8'));
+          const batch01 = JSON.parse(fs.readFileSync('imports/approved-profiles/blank-profile-batch-01.json', 'utf8'));
+          const batch01Source = fs.readFileSync(
+            'artifacts/api-server/src/features/organizations/blank-profile-batch-01.ts',
+            'utf8',
+          );
+          const excludedIds = new Set(
+            batch01.map((entry) => entry?.event?.id).filter(Boolean),
+          );
+          for (const match of batch01Source.matchAll(/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}/gi)) {
+            excludedIds.add(match[0]);
+          }
+
           const statePattern = /^[A-Z]{2}$/;
-          const blanks = (audit.profiles || []).filter((profile) =>
+          const allBlanks = (audit.profiles || []).filter((profile) =>
             profile.actRecordId
             && Number(profile.contactCount || 0) === 0
             && Number(profile.appearanceCount || 0) === 0
@@ -79,6 +64,7 @@ jobs:
             && Number(profile.gmailThreadCount || 0) === 0
             && Number(profile.calendarLinkCount || 0) === 0
           );
+          const blanks = allBlanks.filter((profile) => !excludedIds.has(profile.id));
 
           const locationProblem = (profile) =>
             !String(profile.city || '').trim()
@@ -101,7 +87,9 @@ jobs:
           fs.writeFileSync('batch02/selection.json', JSON.stringify({
             generatedAt: new Date().toISOString(),
             auditGeneratedAt: audit.generatedAt,
-            blankActBackedCount: blanks.length,
+            liveBlankActBackedCount: allBlanks.length,
+            excludedBatch01IdCount: excludedIds.size,
+            remainingUnprocessedBlankCount: blanks.length,
             selected,
           }, null, 2));
           NODE
@@ -147,7 +135,9 @@ jobs:
           fs.writeFileSync('blank-profile-batch-02-live-evidence.json', JSON.stringify({
             generatedAt: new Date().toISOString(),
             auditGeneratedAt: selection.auditGeneratedAt,
-            blankActBackedCount: selection.blankActBackedCount,
+            liveBlankActBackedCount: selection.liveBlankActBackedCount,
+            excludedBatch01IdCount: selection.excludedBatch01IdCount,
+            remainingUnprocessedBlankCount: selection.remainingUnprocessedBlankCount,
             records,
           }, null, 2));
           NODE
