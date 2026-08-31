@@ -1,92 +1,49 @@
-name: Export live Today follow-ups
+name: Verify live county fair follow-ups
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - codex/verify-live-county-followups
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  export:
+  verify:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
       - name: Check configuration
-        id: config
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
-          mkdir -p .github/runtime-status
-          {
-            echo "run_id=${GITHUB_RUN_ID}"
-            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
-          } > .github/runtime-status/live-today-followups.txt
-          if [ -z "${API_URL}" ]; then
-            echo "status=CONFIG_ERROR" >> .github/runtime-status/live-today-followups.txt
-            echo "detail=ADVENTURE_ZONE_API_URL missing" >> .github/runtime-status/live-today-followups.txt
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if [ -z "${ASSISTANT_IMPORT_TOKEN}" ]; then
-            echo "status=CONFIG_ERROR" >> .github/runtime-status/live-today-followups.txt
-            echo "detail=ASSISTANT_IMPORT_TOKEN missing" >> .github/runtime-status/live-today-followups.txt
-            echo "configured=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "configured=true" >> "$GITHUB_OUTPUT"
-          echo "status=CONFIG_OK" >> .github/runtime-status/live-today-followups.txt
-          echo "detail=required secrets present" >> .github/runtime-status/live-today-followups.txt
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
 
-      - name: Fetch live follow-ups
-        id: fetch
-        if: steps.config.outputs.configured == 'true'
+      - name: Wait for deployed follow-ups
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           BASE_URL="${API_URL%/}"
-          HTTP_STATUS=$(curl --silent --show-error \
-            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            --output today-followups.json \
-            --write-out "%{http_code}" \
-            "${BASE_URL}/api/assistant-import/today-followups?limit=500" || true)
+          VERIFIED=false
+          for ATTEMPT in $(seq 1 12); do
+            HTTP_STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output today-followups.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/today-followups?limit=500" || true)
+            if [ "${HTTP_STATUS}" = "200" ] && node -e 'const fs=require("fs"); const x=JSON.parse(fs.readFileSync("today-followups.json","utf8")); const e=[["Ramsey County Fair","Review 2027 Ramsey County Fair outreach","2027-03-17T15:00:00.000Z"],["Wells County Fair","Review 2027 Wells County Fair outreach","2027-03-18T15:00:00.000Z"],["Stutsman County Fair","Review 2027 Stutsman County Fair outreach","2027-03-24T15:00:00.000Z"],["Pierce County Fair","Review 2027 Pierce County Fair outreach","2027-03-25T15:00:00.000Z"],["Ransom County Fair","Review 2027 Ransom County Fair outreach","2027-05-26T15:00:00.000Z"]]; if(!x.ok||!Array.isArray(x.followUps))process.exit(2); for(const [o,l,d] of e){const m=x.followUps.filter(r=>r.organizationName===o&&r.label===l&&r.dueAt===d); if(m.length!==1)process.exit(3);}' ; then
+              VERIFIED=true
+              break
+            fi
+            sleep 30
+          done
+          test "${VERIFIED}" = "true"
 
-          echo "http_status=${HTTP_STATUS}" >> "$GITHUB_OUTPUT"
-          sed -i '/^status=/d;/^detail=/d' .github/runtime-status/live-today-followups.txt
-          echo "status=HTTP_${HTTP_STATUS}" >> .github/runtime-status/live-today-followups.txt
-          echo "detail=follow-up endpoint response" >> .github/runtime-status/live-today-followups.txt
-
-          if [ "${HTTP_STATUS}" = "200" ]; then
-            COUNT=$(node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('today-followups.json','utf8')); if(!x.ok || !Array.isArray(x.followUps)) process.exit(2); process.stdout.write(String(x.returned ?? x.followUps.length));")
-            echo "count=${COUNT}" >> .github/runtime-status/live-today-followups.txt
-            echo "valid=true" >> "$GITHUB_OUTPUT"
-          else
-            rm -f today-followups.json
-            echo "valid=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload follow-up list
-        if: steps.fetch.outputs.valid == 'true'
+      - name: Upload verified live list
         uses: actions/upload-artifact@v4
         with:
-          name: live-today-followups
+          name: verified-live-today-followups
           path: today-followups.json
           retention-days: 1
-
-      - name: Persist sanitized diagnostic
-        if: always()
-        continue-on-error: true
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/runtime-status/live-today-followups.txt
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Update live follow-up export status"
-          git pull --rebase origin main
-          git push origin HEAD:main
