@@ -264,7 +264,13 @@ export default function DesignStudioPage() {
     setCreatingId(starter.id);
     setError(null);
     try {
-      const project = await designStudioApi.create({ type: starter.type, name: starter.name, content: starter.content, notes: `CANVA_STARTER_ID=${starter.id}` });
+      const project = await designStudioApi.create({
+        type: starter.type,
+        name: starter.name,
+        content: starter.content,
+        canvas: starter.canvas,
+        notes: `CANVA_STARTER_ID=${starter.id}`,
+      });
       setLocation(`/design-studio/${project.id}`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The starter project could not be created.");
