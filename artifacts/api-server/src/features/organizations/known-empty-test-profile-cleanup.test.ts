@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  KNOWN_BLANK_PROFILE_ENRICHMENTS,
   KNOWN_EMPTY_TEST_PROFILES,
   cleanupKnownEmptyTestProfiles,
+  enrichKnownBlankProfiles,
+  type KnownBlankProfileEnrichment,
+  type KnownBlankProfileEnrichmentApplyOutcome,
+  type KnownBlankProfileEnrichmentRepository,
   type KnownEmptyTestProfileInspection,
   type KnownEmptyTestProfileRepository,
 } from "./known-empty-test-profile-cleanup";
@@ -22,6 +27,19 @@ class FakeRepository implements KnownEmptyTestProfileRepository {
   async remove(id: string, expectedName: string): Promise<"deleted" | "missing" | "referenced"> {
     this.removed.push({ id, expectedName });
     return this.deleteOutcomes.get(id) ?? "deleted";
+  }
+}
+
+class FakeEnrichmentRepository implements KnownBlankProfileEnrichmentRepository {
+  readonly applied: KnownBlankProfileEnrichment[] = [];
+
+  constructor(
+    private readonly outcomes = new Map<string, KnownBlankProfileEnrichmentApplyOutcome>(),
+  ) {}
+
+  async apply(input: KnownBlankProfileEnrichment): Promise<KnownBlankProfileEnrichmentApplyOutcome> {
+    this.applied.push(input);
+    return this.outcomes.get(input.id) ?? "updated";
   }
 }
 
@@ -128,6 +146,61 @@ describe("cleanupKnownEmptyTestProfiles", () => {
     expect(result.alreadyAbsent).toEqual([alreadyGone.id]);
     expect(result.skipped).toEqual([
       { id: becameReferenced.id, reason: "referenced_during_delete" },
+    ]);
+  });
+});
+
+describe("enrichKnownBlankProfiles", () => {
+  it("uses the verified identities and current organization details for all three real blank profiles", async () => {
+    const repository = new FakeEnrichmentRepository();
+
+    const result = await enrichKnownBlankProfiles(repository);
+
+    expect(result.updated).toEqual(KNOWN_BLANK_PROFILE_ENRICHMENTS.map((profile) => profile.id));
+    expect(result.alreadyCurrent).toEqual([]);
+    expect(result.skipped).toEqual([]);
+    expect(repository.applied).toEqual(KNOWN_BLANK_PROFILE_ENRICHMENTS);
+
+    expect(KNOWN_BLANK_PROFILE_ENRICHMENTS).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "7fff8f6c-5e88-46ad-9f00-d1a853040a42",
+        name: "Colorado Events",
+        city: "Boulder",
+        region: "CO",
+        phone: "720-272-7467",
+      }),
+      expect.objectContaining({
+        id: "9c6b750d-828a-4b97-b6aa-0a19c22f18cf",
+        name: "Idaho Department of Fish and Game",
+        city: "Boise",
+        region: "ID",
+        phone: "208-334-3700",
+      }),
+      expect.objectContaining({
+        id: "e7ba291f-5d7c-48ec-9c66-7756196ee290",
+        name: "Te-Moak Tribe of Western Shoshone",
+        city: "Elko",
+        region: "NV",
+        phone: "775-738-9251",
+      }),
+    ]));
+  });
+
+  it("separates repeat-safe records from profiles that no longer match the verified identity", async () => {
+    const [current, renamed, linked] = KNOWN_BLANK_PROFILE_ENRICHMENTS;
+    const repository = new FakeEnrichmentRepository(new Map([
+      [current.id, "already_current"],
+      [renamed.id, "identity_changed"],
+      [linked.id, "act_source_present"],
+    ]));
+
+    const result = await enrichKnownBlankProfiles(repository);
+
+    expect(result.updated).toEqual([]);
+    expect(result.alreadyCurrent).toEqual([current.id]);
+    expect(result.skipped).toEqual([
+      { id: renamed.id, reason: "identity_changed" },
+      { id: linked.id, reason: "act_source_present" },
     ]);
   });
 });
