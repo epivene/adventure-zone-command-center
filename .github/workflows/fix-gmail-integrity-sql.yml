@@ -1,0 +1,47 @@
+name: Fix Gmail integrity SQL
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-link-integrity
+    paths:
+      - ".github/workflows/fix-gmail-integrity-sql.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-link-integrity
+      - name: Fix UUID aggregation and remove this workflow
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.ts')
+          text = path.read_text()
+          text = text.replace(
+              'min(booking.organization_id)::uuid AS organization_id',
+              'min(booking.organization_id::text)::uuid AS organization_id',
+          )
+          text = text.replace(
+              'min(link.organization_id)::uuid AS organization_id',
+              'min(link.organization_id::text)::uuid AS organization_id',
+          )
+          text = text.replace(
+              'min(association.organization_id)::uuid AS organization_id',
+              'min(association.organization_id::text)::uuid AS organization_id',
+          )
+          path.write_text(text)
+          Path('.github/workflows/fix-gmail-integrity-sql.yml').unlink()
+          PY
+      - name: Commit SQL fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.ts .github/workflows/fix-gmail-integrity-sql.yml
+          git commit -m "fix: aggregate Gmail profile UUIDs safely"
+          git push origin HEAD:fix/gmail-profile-link-integrity
