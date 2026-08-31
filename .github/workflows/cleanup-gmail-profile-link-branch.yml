@@ -1,0 +1,44 @@
+name: Clean Gmail profile-link branch
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-current
+    paths:
+      - ".github/workflows/cleanup-gmail-profile-link-branch.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-history-audit-current
+          fetch-depth: 0
+      - name: Remove one-time debugging and patch workflows
+        run: |
+          rm -f \
+            .github/workflows/cleanup-gmail-profile-link-branch.yml \
+            .github/workflows/trigger-gmail-refresh-red-ci.yml \
+            .github/workflows/package-gmail-profile-link-review-bundle.yml \
+            .github/workflows/apply-gmail-sweep-refresh-fix.yml \
+            .github/workflows/apply-gmail-sweep-refresh-fix-v2.yml \
+            .github/workflows/package-gmail-profile-link-debug-context.yml \
+            .github/workflows/package-gmail-profile-link-debug-context-v2.yml \
+            .github/workflows/package-profile-email-ui-context.yml \
+            .github/workflows/export-gmail-branch-history.yml \
+            .github/workflows/add-gmail-sweep-refresh-test.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No temporary workflows remained."
+          else
+            git commit -m "chore: remove Gmail profile-link debug workflows"
+            git push origin HEAD:fix/gmail-profile-history-audit-current
+          fi
