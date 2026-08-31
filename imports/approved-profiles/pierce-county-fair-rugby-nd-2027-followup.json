@@ -1,7 +1,6 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "requireExisting": true,
   "aliases": [
     "Pierce County Fair Rugby",
     "Pierce County Fair Association"
@@ -12,8 +11,25 @@
     "city": "Rugby",
     "region": "ND"
   },
-  "profile": {},
-  "contacts": [],
+  "profile": {
+    "placeType": "fair",
+    "description": "Family-focused county fair serving Rugby and Pierce County. HAFFE describes the event as “Family Fun for Everyone” and listed the 2026 fair for June 25–28. The fair’s 2027 dates and vendor/entertainment application timing were not published as of August 31, 2026.",
+    "phone": "701-208-0830",
+    "website": "https://www.piercecountyfairrugby.com/",
+    "address1": "PO Box 391",
+    "address2": "",
+    "postalCode": "58368"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Khloe Sobolik",
+      "phone": "701-208-0830",
+      "email": "pcfrugby@gmail.com",
+      "role": "Secretary / HAFFE Contact",
+      "primary": true
+    }
+  ],
   "booking": {
     "enabled": false,
     "name": "",
@@ -28,14 +44,18 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2027 outreach timing reviewed",
-      "body": "Pierce County Fair ran June 25-28, 2026. No official 2027 dates or vendor/entertainment application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Khloe Sobolik but must be reviewed before sending."
+      "subject": "2027 prospect research — reviewed August 31, 2026",
+      "body": "HAFFE lists Pierce County Fair in Rugby as “Family Fun for Everyone,” with 2026 dates of June 25–28, the fair contact phone 701-208-0830, and PO Box 391. Public North Dakota legislative testimony identifies Khloe Sobolik as secretary of the Pierce County Fair. No official 2027 dates or application opening were found. Sources: https://www.heartlandassociationffe.com/members/view/pierce-county-fair/ and https://ndlegis.gov/assembly/69-2025/testimony/SAVA-1591-20250313-41160-F-SOBOLIK_KHLOE_K.pdf"
+    },
+    {
+      "subject": "EMAIL DRAFT — review only; do not send",
+      "body": "Subject: Pierce County Fair — early 2027 Adventure Zone planning\n\nHi Khloe,\n\nIt was great meeting you through the HAFFE convention. Pierce County Fair’s family-focused approach in Rugby looks like a natural fit for The Adventure Zone, so I wanted to reach out early as 2027 planning develops.\n\nWe bring a fully staffed inflatable bounce house carnival, with setup, operation, and teardown included. We can discuss a prepaid package or, where appropriate, a pay-for-play arrangement. Are you considering an interactive family attraction area for 2027, and would you be open to a short conversation when your dates and plans are taking shape?\n\nBest,\nDesiree\nThe Adventure Zone\nAmerica’s Best Inflatable Bounce House Carnival"
     }
   ],
   "followUps": [
     {
       "label": "Review 2027 Pierce County Fair outreach",
-      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Khloe Sobolik; do not send automatically.",
+      "reason": "Check for official 2027 dates and any vendor or entertainment application opening. Review the prepared email for Khloe Sobolik; do not send automatically.",
       "dueAt": "2027-03-25T15:00:00.000Z"
     }
   ]

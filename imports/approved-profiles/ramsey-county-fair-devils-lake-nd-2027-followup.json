@@ -1,7 +1,6 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "requireExisting": true,
   "aliases": [
     "Ramsey County 4-H Achievement Days",
     "Ramsey County Fairgrounds"
@@ -12,8 +11,25 @@
     "city": "Devils Lake",
     "region": "ND"
   },
-  "profile": {},
-  "contacts": [],
+  "profile": {
+    "placeType": "fair",
+    "description": "County fair and 4-H prospect centered on Ramsey County 4-H Achievement Days. The Devils Lake fairgrounds offers a 4-H Hall, outdoor arena, and a newer multipurpose event center with vendor electrical hookups, supporting family-focused public programming. Verified 2026 Achievement Days were June 17–19; 2027 dates and application timing were not published as of August 31, 2026.",
+    "phone": "701-351-1639",
+    "website": "https://www.ramseycountyfair.org/",
+    "address1": "7823 Hwy 19 W",
+    "address2": "",
+    "postalCode": "58301"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Connie Hanson",
+      "phone": "701-351-1639",
+      "email": "hanson_connie@outlook.com",
+      "role": "Fair Board Member / HAFFE Contact",
+      "primary": true
+    }
+  ],
   "booking": {
     "enabled": false,
     "name": "",
@@ -28,14 +44,18 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2027 outreach timing reviewed",
-      "body": "Ramsey County 4-H Achievement Days ran June 17-19, 2026. No official 2027 dates or vendor/entertainment application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Connie Hanson but must be reviewed before sending."
+      "subject": "2027 prospect research — reviewed August 31, 2026",
+      "body": "Official Ramsey County Fairgrounds information confirms a family-driven mission, the venue at 7823 Hwy 19 W in Devils Lake, and facilities including the 4-H Hall, Peterson Arena, and Western State Bank Event Center with electrical hookups for vendors. Connie Hanson is listed on the fair board. NDSU published June 17–19 for the 2026 Ramsey County 4-H Achievement Days. No official 2027 fair dates or vendor/entertainment opening were found. Sources: https://www.ramseycountyfairgrounds.com/ and https://www.ndsu.edu/agriculture/extension/events/ramsey-county-4-h-achievement-days"
+    },
+    {
+      "subject": "EMAIL DRAFT — review only; do not send",
+      "body": "Subject: Ramsey County Fair — early 2027 Adventure Zone planning\n\nHi Connie,\n\nIt was great meeting you through the HAFFE convention. I have been looking at Ramsey County Fair’s growth around the multipurpose event center and the expanded public programming alongside the 4-H activities, and I wanted to reach out early as you begin planning for 2027.\n\nThe Adventure Zone brings a fully staffed inflatable bounce house carnival, with setup, operation, and teardown included. We can discuss a prepaid package or, where appropriate, a pay-for-play arrangement. Would you be open to a short conversation once your 2027 dates and entertainment plans begin taking shape?\n\nBest,\nDesiree\nThe Adventure Zone\nAmerica’s Best Inflatable Bounce House Carnival"
     }
   ],
   "followUps": [
     {
       "label": "Review 2027 Ramsey County Fair outreach",
-      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Connie Hanson; do not send automatically.",
+      "reason": "Check for official 2027 dates and any vendor or entertainment application opening. Review the prepared email for Connie Hanson and personalize if needed; do not send automatically.",
       "dueAt": "2027-03-17T15:00:00.000Z"
     }
   ]

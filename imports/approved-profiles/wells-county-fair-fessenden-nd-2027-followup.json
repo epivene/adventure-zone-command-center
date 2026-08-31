@@ -1,7 +1,6 @@
 {
-  "importRevision": 1,
+  "importRevision": 2,
   "matchExisting": true,
-  "requireExisting": true,
   "aliases": [
     "Wells County Fair Association"
   ],
@@ -11,8 +10,25 @@
     "city": "Fessenden",
     "region": "ND"
   },
-  "profile": {},
-  "contacts": [],
+  "profile": {
+    "placeType": "fair",
+    "description": "Long-running free-gate county fair in Fessenden, established in 1907. Programming includes carnival rides, 4-H and FFA exhibits, animals, the Main Street Parade, Rhubarb Fest, a free stage, races, vendor shopping, food, and other family entertainment. Verified 2026 dates were June 18–21; 2027 dates and vendor application timing were not published as of August 31, 2026.",
+    "phone": "701-947-5476",
+    "website": "https://www.wellscountyfair.com/",
+    "address1": "",
+    "address2": "",
+    "postalCode": ""
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Mary Hartl",
+      "phone": "701-947-5476",
+      "email": "mhartl@gondtc.com",
+      "role": "Secretary / HAFFE Contact",
+      "primary": true
+    }
+  ],
   "booking": {
     "enabled": false,
     "name": "",
@@ -27,14 +43,18 @@
   "parentOrganizationId": null,
   "notes": [
     {
-      "subject": "2027 outreach timing reviewed",
-      "body": "Wells County Fair ran June 18-21, 2026. Its official site includes vendor information, but no official 2027 dates or application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Mary Hartl but must be reviewed before sending."
+      "subject": "2027 prospect research — reviewed August 31, 2026",
+      "body": "The official Wells County Fair site describes a Fessenden tradition established in 1907 and the state’s last free-gate fair, with carnival rides, 4-H/FFA exhibits, animals, parade, Rhubarb Fest, free-stage entertainment, races, vendors, and food. Mary Hartl is the fair board secretary. HAFFE listed the 2026 fair for June 18–21. No official 2027 dates or application opening were found. Sources: https://www.wellscountyfair.com/about-wells-co-fair and https://www.heartlandassociationffe.com/members/view/wells-county-fair/"
+    },
+    {
+      "subject": "EMAIL DRAFT — review only; do not send",
+      "body": "Subject: Wells County Fair — early 2027 Adventure Zone planning\n\nHi Mary,\n\nIt was great meeting you through the HAFFE convention. Wells County Fair’s free-gate community tradition, 4-H and FFA exhibits, parade, Rhubarb Fest, and family entertainment make it feel like a strong fit for The Adventure Zone.\n\nWe bring a fully staffed inflatable bounce house carnival, with setup, operation, and teardown included. We can discuss a prepaid package or, where appropriate, a pay-for-play arrangement. As 2027 planning develops, would you be open to a short conversation—and could you let me know when your vendor or entertainment process opens?\n\nBest,\nDesiree\nThe Adventure Zone\nAmerica’s Best Inflatable Bounce House Carnival"
     }
   ],
   "followUps": [
     {
       "label": "Review 2027 Wells County Fair outreach",
-      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Mary Hartl; do not send automatically.",
+      "reason": "Check the official site for 2027 dates and a vendor or entertainment application opening. Review the prepared email for Mary Hartl; do not send automatically.",
       "dueAt": "2027-03-18T15:00:00.000Z"
     }
   ]
