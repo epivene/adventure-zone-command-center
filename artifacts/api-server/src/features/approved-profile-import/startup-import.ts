@@ -34,6 +34,12 @@ type ApprovedProfilePayload = Record<string, unknown> & {
   clearFollowUps?: unknown;
 };
 
+type ApprovedProfilePayloadEntry = {
+  file: string;
+  sourceFile: string;
+  payload: ApprovedProfilePayload;
+};
+
 type ProfileImportResponse = {
   profileId?: unknown;
 };
@@ -124,6 +130,37 @@ function selectExistingProfile(
     );
   }
   return null;
+}
+
+function readPayloadObject(value: unknown, file: string): ApprovedProfilePayload {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Approved profile import ${file} must contain a profile object.`);
+  }
+  return value as ApprovedProfilePayload;
+}
+
+function expandApprovedProfilePayloads(
+  parsed: unknown,
+  sourceFile: string,
+): ApprovedProfilePayloadEntry[] {
+  if (!Array.isArray(parsed)) {
+    return [{
+      file: sourceFile,
+      sourceFile,
+      payload: readPayloadObject(parsed, sourceFile),
+    }];
+  }
+  if (parsed.length === 0) {
+    throw new Error(`Approved profile import ${sourceFile} contains an empty batch.`);
+  }
+  return parsed.map((value, index) => {
+    const file = `${sourceFile}#${index + 1}`;
+    return {
+      file,
+      sourceFile,
+      payload: readPayloadObject(value, file),
+    };
+  });
 }
 
 function readAliases(payload: ApprovedProfilePayload, file: string): string[] {
@@ -337,21 +374,25 @@ export async function importApprovedProfilesAtStartup(
   }
 
   const files = entries.filter((entry) => entry.endsWith(".json")).sort();
-  // Read the approved payloads first. Besides keeping startup I/O deterministic,
-  // this lets the optional reconciliation overlay stay isolated from the core
-  // import-file reads and preserves the existing startup-import contract.
   const rawPayloads = await Promise.all(files.map(async (file) => ({
     file,
     raw: await readFile(path.join(directory, file), "utf8"),
   })));
+  const payloadEntries = rawPayloads.flatMap(({ file, raw }) =>
+    expandApprovedProfilePayloads(JSON.parse(raw) as unknown, file),
+  );
   const reconciliation = await loadApprovedProfileReconciliation();
 
   let imported = 0;
   let skipped = 0;
 
-  for (const { file, raw } of rawPayloads) {
-    const parsedPayload = JSON.parse(raw) as ApprovedProfilePayload;
-    const originalPayload = applyApprovedProfileReconciliation(parsedPayload, reconciliation, file);
+  for (const entry of payloadEntries) {
+    const { file, sourceFile } = entry;
+    const originalPayload = applyApprovedProfileReconciliation(
+      entry.payload,
+      reconciliation,
+      sourceFile,
+    );
     const notes = readApprovedNotes(originalPayload, file);
     const followUps = readApprovedFollowUps(originalPayload, file);
     const clearFollowUps = originalPayload.clearFollowUps === true;
@@ -368,7 +409,7 @@ export async function importApprovedProfilesAtStartup(
       if (error instanceof ApprovedProfileMatchError) {
         skipped += 1;
         logger.warn(
-          { file, reason: error.message },
+          { file, sourceFile, reason: error.message },
           "Approved profile import skipped because profile matching did not produce one safe target",
         );
         continue;
@@ -433,7 +474,7 @@ export async function importApprovedProfilesAtStartup(
     }
 
     imported += 1;
-    logger.info({ file }, "Approved profile imported at startup");
+    logger.info({ file, sourceFile }, "Approved profile imported at startup");
   }
 
   return { imported, skipped, files };
