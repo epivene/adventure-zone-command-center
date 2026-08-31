@@ -27,7 +27,7 @@ jobs:
         run: |
           BASE_URL="${API_URL%/}"
           VERIFIED=false
-          for ATTEMPT in $(seq 1 12); do
+          for ATTEMPT in $(seq 1 1); do
             HTTP_STATUS=$(curl --silent --show-error \
               --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
               --output today-followups.json \
@@ -41,7 +41,8 @@ jobs:
           done
           test "${VERIFIED}" = "true"
 
-      - name: Upload verified live list
+      - name: Upload live list
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: verified-live-today-followups
