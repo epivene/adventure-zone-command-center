@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { FollowUpCompletionDialog } from "@/components/bookings/follow-up-completion-dialog";
+import { BookingCalendarSendButton } from "@/components/bookings/booking-calendar-send-button";
 import { PackageHistorySignals } from "@/components/bookings/package-history-signals";
 import { BookingBriefCard } from "@/components/assistant/booking-brief-card";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
@@ -148,7 +149,8 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
           </div>
           <p className="mt-1 text-slate-600">{booking.city}, {booking.region}</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
+          <BookingCalendarSendButton bookingId={bookingId} />
           <button
             className="button-secondary"
             onClick={() => openAssistant("What should I know before I contact them?")}

@@ -11,6 +11,12 @@ async function json<T>(response: Response): Promise<T> {
   return body as T;
 }
 
+export type OperationalCalendarSyncResult =
+  | { state: "not_confirmed_or_incomplete" }
+  | { state: "not_connected" }
+  | { state: "synced"; created: number; updated: number }
+  | { state: "review_required"; created: number; updated: number; reviewCount: number };
+
 export type OperationalCalendarConnectionView = {
   id: string;
   email: string;
@@ -116,5 +122,12 @@ export async function resolveOperationalCalendarReview(
         ...(bookingId ? { bookingId } : {}),
       }),
     },
+  ));
+}
+
+export async function syncOperationalCalendarBooking(bookingId: string) {
+  return json<OperationalCalendarSyncResult>(await apiFetch(
+    `/google-workspace/operational-calendar/bookings/${encodeURIComponent(bookingId)}/sync`,
+    { method: "POST" },
   ));
 }
