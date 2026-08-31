@@ -75,27 +75,6 @@ jobs:
                       raise SystemExit(f'Import marker not found in {filename}')
                   test = test.replace(marker, mock + marker, 1)
                   path.write_text(test)
-
-          ci = Path('.github/workflows/approved-profile-import-ci.yml')
-          ci_text = ci.read_text()
-          if 'research/blank-profiles-batch-02' not in ci_text:
-              old = '''    branches:
-                - main
-                - assistant-live-profile-notes-followups
-                - research/blank-profiles-batch-01'''
-              new = old + '\n      - research/blank-profiles-batch-02'
-              if old in ci_text:
-                  ci_text = ci_text.replace(old, new, 1)
-              else:
-                  inline = 'branches: [main, assistant-live-profile-notes-followups, research/blank-profiles-batch-01]'
-                  if inline not in ci_text:
-                      raise SystemExit('Approved-profile CI branch anchor not found')
-                  ci_text = ci_text.replace(
-                      inline,
-                      'branches: [main, assistant-live-profile-notes-followups, research/blank-profiles-batch-01, research/blank-profiles-batch-02]',
-                      1,
-                  )
-          ci.write_text(ci_text)
           PY
       - name: Commit code patches
         run: |
@@ -104,8 +83,7 @@ jobs:
           git add \
             artifacts/api-server/src/features/approved-profile-import/startup-import.ts \
             artifacts/api-server/src/features/approved-profile-import/startup-import.test.ts \
-            artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts \
-            .github/workflows/approved-profile-import-ci.yml
+            artifacts/api-server/src/features/approved-profile-import/startup-import-batch.test.ts
           if git diff --cached --quiet; then
             echo "Batch 02 code patches are already applied."
           else
