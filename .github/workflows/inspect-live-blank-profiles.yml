@@ -1,0 +1,64 @@
+name: Inspect live blank profile candidates
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cleanup/blank-profiles-2026-08-30
+    paths:
+      - ".github/workflows/inspect-live-blank-profiles.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Export exact live profile histories
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          BASE_URL="${API_URL%/}"
+          mkdir -p live-blank-profiles
+          for PROFILE_ID in \
+            08e8e9b8-618a-4129-ab14-640345c1abf0 \
+            b0b9007c-e145-4f72-955e-03a28ef149f4 \
+            9fcb2baa-9014-46bc-96be-6009b95d93ba \
+            0bfee77c-e42c-417f-9d5e-7df54d57c38b \
+            7fff8f6c-5e88-46ad-9f00-d1a853040a42 \
+            9c6b750d-828a-4b97-b6aa-0a19c22f18cf \
+            e7ba291f-5d7c-48ec-9c66-7756196ee290
+          do
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE_URL}/api/assistant-import/profile-history/${PROFILE_ID}" \
+              > "live-blank-profiles/${PROFILE_ID}.json"
+          done
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const directory = 'live-blank-profiles';
+          const report = fs.readdirSync(directory)
+            .filter((name) => name.endsWith('.json'))
+            .sort()
+            .map((name) => JSON.parse(fs.readFileSync(path.join(directory, name), 'utf8')));
+          fs.writeFileSync('live-blank-profile-candidates.json', JSON.stringify(report, null, 2));
+          NODE
+
+      - name: Upload protected inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-blank-profile-candidates
+          path: live-blank-profile-candidates.json
+          retention-days: 1
