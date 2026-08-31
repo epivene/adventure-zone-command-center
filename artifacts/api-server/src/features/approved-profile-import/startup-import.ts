@@ -26,6 +26,7 @@ type ApprovedProfileFollowUp = {
 
 type ApprovedProfilePayload = Record<string, unknown> & {
   matchExisting?: unknown;
+  requireExisting?: unknown;
   aliases?: unknown;
   event?: unknown;
   notes?: unknown;
@@ -268,6 +269,11 @@ async function resolveExistingProfile(input: {
     names,
     input.file,
   );
+  if (!profileId && input.payload.requireExisting === true) {
+    throw new ApprovedProfileMatchError(
+      `Approved profile import ${input.file} requires one existing profile match.`,
+    );
+  }
   if (!profileId) return input.payload;
 
   return {
