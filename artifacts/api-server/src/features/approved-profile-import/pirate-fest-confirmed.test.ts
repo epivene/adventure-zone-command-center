@@ -11,12 +11,12 @@ const fixturePath = fileURLToPath(
 const payload = JSON.parse(readFileSync(fixturePath, "utf8"));
 
 describe("Pirate Fest reviewed relationship state", () => {
-  it("records the signed current contract as confirmed", () => {
-    expect(payload.booking.status).toBe("confirmed");
+  it("records 2026 as declined rather than a signed booking", () => {
+    expect(payload.booking.status).toBe("declined");
     expect(payload.booking.nextActionKind).toBe("renewal");
   });
 
-  it("retains one next-year renewal instead of stale current contract work", () => {
+  it("retains one future-year renewal instead of current-year contract work", () => {
     expect(payload.followUps).toHaveLength(1);
     expect(payload.followUps[0].dueAt).toMatch(/^2027-/);
     expect(
@@ -24,12 +24,10 @@ describe("Pirate Fest reviewed relationship state", () => {
     ).toContain("2027");
   });
 
-  it("removes the superseded non-booking story", () => {
+  it("preserves the newest 2026 no and the organizer's future interest", () => {
     const text = JSON.stringify(payload).toLowerCase();
-    expect(text).toContain("signed");
-    expect(text).toContain("confirmed");
-    expect(text).not.toMatch(
-      /budget cuts|will not use adventure zone|passed because/,
-    );
+    expect(text).toMatch(/not moving forward|not participating|will not use adventure zone|declined/);
+    expect(text).toContain("2027");
+    expect(text).not.toMatch(/signed contract|contract has been signed|booking is confirmed/);
   });
 });
