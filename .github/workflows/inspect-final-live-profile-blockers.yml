@@ -1,0 +1,77 @@
+name: Inspect final live profile blockers
+
+on:
+  push:
+    branches:
+      - maintenance/final-blank-profile-cleanup
+    paths:
+      - ".github/workflows/inspect-final-live-profile-blockers.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Wait for corrected endpoint and export blockers
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p blockers
+
+          for attempt in $(seq 1 60); do
+            READY=true
+            for PROFILE_ID in \
+              08e8e9b8-618a-4129-ab14-640345c1abf0 \
+              0bfee77c-e42c-417f-9d5e-7df54d57c38b
+            do
+              STATUS=$(curl --silent --show-error \
+                --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                --output "blockers/${PROFILE_ID}.json" \
+                --write-out "%{http_code}" \
+                "${BASE_URL}/profile-integrity-references/${PROFILE_ID}" || true)
+              if [ "${STATUS}" != "200" ]; then READY=false; fi
+            done
+
+            if [ "${READY}" = "true" ]; then
+              node <<'NODE'
+          const fs = require('fs');
+          const ids = [
+            '08e8e9b8-618a-4129-ab14-640345c1abf0',
+            '0bfee77c-e42c-417f-9d5e-7df54d57c38b',
+          ];
+          const profiles = ids.map((id) => {
+            const body = JSON.parse(fs.readFileSync(`blockers/${id}.json`, 'utf8'));
+            if (body.ok !== true || body.mode !== 'read_only' || !Array.isArray(body.references)) {
+              throw new Error(`Invalid blocker response for ${id}`);
+            }
+            return body;
+          });
+          fs.writeFileSync('final-live-profile-blockers.json', JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            profiles,
+          }, null, 2));
+          NODE
+              echo "Corrected live endpoint available on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Corrected endpoint not ready yet (attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "Corrected endpoint never became ready."
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-live-profile-blockers
+          path: final-live-profile-blockers.json
+          retention-days: 1
