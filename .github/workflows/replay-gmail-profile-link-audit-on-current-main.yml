@@ -34,8 +34,7 @@ jobs:
             artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.ts \
             artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts \
             artifacts/api-server/src/routes/assistant-gmail-profile-links.ts \
-            artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts \
-            .github/workflows/gmail-profile-link-audit-ci.yml
+            artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts
 
           git diff "${BASE}".."origin/${SOURCE_BRANCH}" -- \
             artifacts/api-server/src/features/google-workspace/google-api-types.ts \
@@ -117,19 +116,9 @@ jobs:
                   raise SystemExit('Worker-start marker is missing')
               text = text.replace(start_marker, start_replacement, 1)
           index.write_text(text)
-
-          workflow = Path('.github/workflows/gmail-profile-link-audit-ci.yml')
-          ci = workflow.read_text()
-          ci = ci.replace(
-              'fix/gmail-profile-history-audit-2026-08-31',
-              'fix/gmail-profile-history-audit-current',
-          )
-          workflow.write_text(ci)
-
-          Path('.github/workflows/replay-gmail-profile-link-audit-on-current-main.yml').unlink()
           PY
 
-      - name: Commit replayed changes
+      - name: Commit replayed source changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -145,8 +134,6 @@ jobs:
             artifacts/api-server/src/routes/assistant-gmail-profile-links.ts \
             artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts \
             artifacts/api-server/src/app.ts \
-            artifacts/api-server/src/index.ts \
-            .github/workflows/gmail-profile-link-audit-ci.yml \
-            .github/workflows/replay-gmail-profile-link-audit-on-current-main.yml
+            artifacts/api-server/src/index.ts
           git commit -m "Fix and audit sent Gmail profile links"
           git push origin HEAD:fix/gmail-profile-history-audit-current
