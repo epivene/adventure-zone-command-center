@@ -14,6 +14,41 @@ const YELLOW = "#ffd21c";
 const WHITE = "#ffffff";
 const NAVY = "#11192d";
 
+export const STARTER_PHOTOS = {
+  polarBear: {
+    id: "builtin-polar-bear",
+    name: "Sabretooth & Polar Bear",
+    url: "https://static.wixstatic.com/media/81786c_03c4528320c64347805d5ecfb2d15fc6~mv2.jpg/v1/fill/w_700,h_700,al_c,q_85/81786c_03c4528320c64347805d5ecfb2d15fc6~mv2.jpg",
+  },
+  joust: {
+    id: "builtin-action-arena",
+    name: "Action Arena",
+    url: "https://static.wixstatic.com/media/81786c_53777ae5a685418aa8b0f2d2cc1a3389~mv2.jpg/v1/fill/w_960,h_638,al_c,q_85/81786c_53777ae5a685418aa8b0f2d2cc1a3389~mv2.jpg",
+  },
+  obstacle: {
+    id: "builtin-obstacle",
+    name: "Obstacle Course",
+    url: "https://static.wixstatic.com/media/81786c_41e3ae81e9f7495f82d6f7a40a8624ec~mv2.png/v1/fill/w_600,h_530,al_c,q_85/81786c_41e3ae81e9f7495f82d6f7a40a8624ec~mv2.png",
+  },
+  pirate: {
+    id: "builtin-pirate",
+    name: "Pirate Attraction",
+    url: "https://static.wixstatic.com/media/81786c_b76e99322ab349f582e890f5b18248a3~mv2.png/v1/fill/w_980,h_524,al_c,q_90/81786c_b76e99322ab349f582e890f5b18248a3~mv2.png",
+  },
+  water: {
+    id: "builtin-water",
+    name: "Water Slide Action",
+    url: "https://static.wixstatic.com/media/81786c_badfcecb67e04dfdac46e86aeb86dd72~mv2.png/v1/fill/w_980,h_653,al_c,q_90/81786c_badfcecb67e04dfdac46e86aeb86dd72~mv2.png",
+  },
+  pirateCombo: {
+    id: "builtin-pirate-combo",
+    name: "Pirate Combo",
+    url: "https://static.wixstatic.com/media/81786c_9f98479bedc14a7a9036318fa0d93792~mv2.png/v1/fill/w_647,h_378,al_c,q_85/81786c_9f98479bedc14a7a9036318fa0d93792~mv2.png",
+  },
+} as const;
+
+export const STARTER_PHOTO_LIBRARY = Object.values(STARTER_PHOTOS);
+
 function baseNode(id: string, name: string, x: number, y: number, width: number, height: number) {
   return {
     id,
@@ -122,9 +157,9 @@ const eventFlyerCanvas = document("event-flyer", 816, 1056, BLACK, [
   text("ef-kicker", "★ AMERICA'S BEST BOUNCE HOUSE CARNIVAL! ★", 58, 40, 480, 42, { color: WHITE, fontSize: 23, fontFamily: "Impact", align: "center" }),
   text("ef-logo", "THE\nADVENTURE\nZONE", 55, 105, 370, 180, { color: WHITE, fontSize: 72, lineHeight: 0.82 }),
   shape("ef-yellow-star", "star", 622, 48, 115, 115, { fill: YELLOW, stroke: WHITE, strokeWidth: 7, rotation: 10 }),
-  image("ef-photo-aerial", "Aerial carnival photo", 390, 165, 355, 230, { rotation: 4 }),
-  image("ef-photo-tiger", "Sabretooth and polar bear photo", 48, 326, 330, 220, { rotation: -4 }),
-  image("ef-photo-action", "Action arena photo", 403, 424, 330, 206, { rotation: 3 }),
+  image("ef-photo-aerial", "Sabretooth & Polar Bear", 390, 165, 355, 230, { rotation: 4, src: STARTER_PHOTOS.polarBear.url }),
+  image("ef-photo-tiger", "Action Arena", 48, 326, 330, 220, { rotation: -4, src: STARTER_PHOTOS.joust.url }),
+  image("ef-photo-action", "Obstacle Course", 403, 424, 330, 206, { rotation: 3, src: STARTER_PHOTOS.obstacle.url }),
   shape("ef-photo-frame-1", "rectangle", 35, 313, 356, 246, { fill: "transparent", stroke: WHITE, strokeWidth: 10, rotation: -4 }),
   shape("ef-photo-frame-2", "rectangle", 390, 411, 356, 232, { fill: "transparent", stroke: WHITE, strokeWidth: 10, rotation: 3 }),
   shape("ef-yellow-block", "rectangle", 44, 612, 728, 177, { fill: YELLOW, stroke: BLACK, strokeWidth: 8, rotation: -1 }),
@@ -138,7 +173,7 @@ const eventFlyerCanvas = document("event-flyer", 816, 1056, BLACK, [
 ]);
 
 const socialPostCanvas = document("social-post", 1080, 1350, BLACK, [
-  image("sp-photo-hero", "Kids in action photo", 0, 0, 1080, 770),
+  image("sp-photo-hero", "Action Arena", 0, 0, 1080, 770, { src: STARTER_PHOTOS.joust.url }),
   shape("sp-dark-overlay", "rectangle", 0, 0, 1080, 770, { fill: NAVY, strokeWidth: 0, opacity: 0.45 }),
   shape("sp-pink-brush", "rectangle", 68, 72, 650, 82, { fill: PINK, strokeWidth: 0, rotation: -2 }),
   text("sp-kicker", "★ WE BRING THE ACTION ★", 96, 88, 596, 54, { color: WHITE, fontSize: 37, align: "center" }),
@@ -154,7 +189,7 @@ const socialPostCanvas = document("social-post", 1080, 1350, BLACK, [
 
 const openDateCanvas = document("last-minute-booking", 1080, 1350, CREAM, [
   shape("od-black-panel", "rectangle", 0, 0, 1080, 570, { fill: BLACK, strokeWidth: 0 }),
-  image("od-photo", "Aerial carnival photo", 478, 62, 520, 360, { rotation: 4 }),
+  image("od-photo", "Sabretooth & Polar Bear", 478, 62, 520, 360, { rotation: 4, src: STARTER_PHOTOS.polarBear.url }),
   shape("od-frame", "rectangle", 458, 42, 560, 400, { fill: "transparent", stroke: WHITE, strokeWidth: 12, rotation: 4 }),
   shape("od-pink", "rectangle", 62, 78, 440, 78, { fill: PINK, strokeWidth: 0, rotation: -3 }),
   text("od-alert", "OPEN DATE ALERT", 82, 92, 400, 50, { color: WHITE, fontSize: 38, align: "center" }),
@@ -176,18 +211,18 @@ const packageCanvas = document("package-overview", 816, 1056, BLACK, [
   text("pk-kicker", "— THE FLEET —", 214, 34, 388, 42, { color: YELLOW, fontSize: 28, align: "center" }),
   text("pk-title", "EPIC PACKAGES", 94, 82, 628, 84, { color: WHITE, fontSize: 70, align: "center" }),
   text("pk-sub", "Fully staffed for 1–4 days.", 208, 169, 400, 34, { color: WHITE, fontSize: 22, fontFamily: "Trebuchet MS", align: "center" }),
-  image("pk-az-photo", "Adventure Zone carnival photo", 54, 246, 300, 184, { rotation: -2 }),
+  image("pk-az-photo", "Sabretooth & Polar Bear", 54, 246, 300, 184, { rotation: -2, src: STARTER_PHOTOS.polarBear.url }),
   shape("pk-az-frame", "rectangle", 42, 234, 324, 208, { fill: "transparent", stroke: WHITE, strokeWidth: 9, rotation: -2 }),
   shape("pk-az-card", "rectangle", 374, 228, 386, 228, { fill: CREAM, stroke: WHITE, strokeWidth: 7, rotation: 1 }),
   text("pk-az-name", "★ ADVENTURE ZONE", 400, 251, 332, 48, { color: BLACK, fontSize: 31 }),
   text("pk-az-copy", "10 premium attractions\nGiant slides • obstacles • bounces", 402, 312, 326, 70, { color: BLACK, fontSize: 20, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
   text("pk-az-price", "$9,000", 406, 389, 215, 48, { color: PINK, fontSize: 38 }),
-  image("pk-pirate-photo", "Pirate attraction photo", 70, 514, 288, 174, { rotation: 2 }),
+  image("pk-pirate-photo", "Pirate Attraction", 70, 514, 288, 174, { rotation: 2, src: STARTER_PHOTOS.pirate.url }),
   shape("pk-pirate-card", "rectangle", 378, 498, 368, 206, { fill: CREAM, stroke: WHITE, strokeWidth: 7, rotation: -1 }),
   text("pk-pirate-name", "⚓ PIRATE'S REBELLION", 401, 522, 323, 50, { color: BLACK, fontSize: 27 }),
   text("pk-pirate-copy", "Water & pirate-themed fun\nBoats • wet attractions • games", 402, 579, 315, 68, { color: BLACK, fontSize: 18, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
   text("pk-pirate-price", "$7,500", 407, 652, 190, 42, { color: PINK, fontSize: 35 }),
-  image("pk-warrior-photo", "Action arena photo", 72, 764, 286, 166, { rotation: -2 }),
+  image("pk-warrior-photo", "Action Arena", 72, 764, 286, 166, { rotation: -2, src: STARTER_PHOTOS.joust.url }),
   shape("pk-warrior-card", "rectangle", 378, 746, 370, 203, { fill: CREAM, stroke: WHITE, strokeWidth: 7, rotation: 1 }),
   text("pk-warrior-name", "◎ WARRIOR'S PLAYGROUND", 398, 770, 330, 50, { color: BLACK, fontSize: 25 }),
   text("pk-warrior-copy", "Paintball • AirSoft • Orbeez\n+ four additional attractions", 402, 826, 318, 67, { color: BLACK, fontSize: 18, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
@@ -197,7 +232,7 @@ const packageCanvas = document("package-overview", 816, 1056, BLACK, [
 
 const reviewCanvas = document("review-request", 1080, 1080, CREAM, [
   shape("rv-black", "rectangle", 0, 0, 1080, 340, { fill: BLACK, strokeWidth: 0 }),
-  image("rv-photo", "Kids in action photo", 556, 48, 444, 270, { rotation: 3 }),
+  image("rv-photo", "Water Slide Action", 556, 48, 444, 270, { rotation: 3, src: STARTER_PHOTOS.water.url }),
   shape("rv-photo-frame", "rectangle", 536, 29, 484, 308, { fill: "transparent", stroke: WHITE, strokeWidth: 11, rotation: 3 }),
   shape("rv-pink", "rectangle", 62, 62, 430, 66, { fill: PINK, strokeWidth: 0, rotation: -3 }),
   text("rv-thanks", "THANKS FOR THE BIG DAY!", 80, 76, 392, 42, { color: WHITE, fontSize: 28, align: "center" }),
