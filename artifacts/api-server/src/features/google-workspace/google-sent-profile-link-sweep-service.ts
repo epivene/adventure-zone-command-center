@@ -197,17 +197,19 @@ function reviewInput(
 export class GoogleSentProfileLinkSweepService {
   private readonly connection: GoogleSentProfileLinkSweepConnection;
   private readonly repository: GoogleSentProfileLinkSweepRepository;
-  private readonly classifier: GoogleSentProfileLinkSweepClassifier;
+  private readonly classifierFactory: () => GoogleSentProfileLinkSweepClassifier;
 
   constructor(options?: {
     connection?: GoogleSentProfileLinkSweepConnection;
     repository?: GoogleSentProfileLinkSweepRepository;
     classifier?: GoogleSentProfileLinkSweepClassifier;
+    classifierFactory?: () => GoogleSentProfileLinkSweepClassifier;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.repository = options?.repository ?? new PostgresGoogleSentProfileLinkSweepRepository();
-    this.classifier = options?.classifier
-      ?? new GoogleHistoricalMessageClassifier({ aiEnabled: false });
+    this.classifierFactory = options?.classifierFactory
+      ?? (() => options?.classifier
+        ?? new GoogleHistoricalMessageClassifier({ aiEnabled: false }));
   }
 
   async run(input: {
@@ -221,6 +223,11 @@ export class GoogleSentProfileLinkSweepService {
     if (!client.listMessagePage || !client.getMessageMetadata) {
       throw new Error("GOOGLE_WORKSPACE_SENT_PROFILE_LINK_UNAVAILABLE");
     }
+
+    // GoogleHistoricalMessageClassifier caches its CRM evidence snapshot. Build a
+    // fresh classifier for every sweep so profiles or contacts added after process
+    // start are eligible on the next automatic pass.
+    const classifier = this.classifierFactory();
 
     const afterMs = input.after.getTime();
     const beforeMs = input.before.getTime();
@@ -306,7 +313,7 @@ export class GoogleSentProfileLinkSweepService {
         }
 
         try {
-          const classification = await this.classifier.classify(message, client);
+          const classification = await classifier.classify(message, client);
           if (classification.outcome === "attached") {
             const evidenceCodes = uniqueEvidence(
               classification.evidenceCodes,
