@@ -1,0 +1,58 @@
+name: Apply live blank profile details
+
+on:
+  push:
+    branches:
+      - cleanup/blank-profiles-2026-08-30
+    paths:
+      - ".github/workflows/apply-live-blank-profile-details.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apply exact reviewed profile details
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          BASE_URL="${API_URL%/}/api/assistant-import"
+
+          post() {
+            local path="$1"
+            local payload="$2"
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "${payload}" \
+              "${BASE_URL}/${path}"
+          }
+
+          post event-profiles '{"event":{"id":"7fff8f6c-5e88-46ad-9f00-d1a853040a42","name":"Colorado Events","city":"Boulder","region":"CO"},"profile":{"placeType":"company","phone":"720-272-7467","website":"https://www.coloradoevents.org/","address1":"2525 Arapahoe Avenue, Suite E4-720","postalCode":"80302","description":"Colorado event-production organization. Adventure Zone has an existing Gmail relationship with the producer; individual festivals should be tracked as event appearances or child event records rather than duplicate producer profiles."},"contacts":[{"name":"Colorado Events Team","phone":"720-272-7467","email":"coloradoevents@gmail.com","role":"Event producer / entertainment partnership contact","primary":true}],"booking":{"enabled":false}}'
+          post profile-notes '{"organizationId":"7fff8f6c-5e88-46ad-9f00-d1a853040a42","subject":"Verified current producer identity and contact - 2026-08-30","body":"Official Colorado Events information identifies the organization at 2525 Arapahoe Avenue, Suite E4-720, Boulder, CO 80302, with 720-272-7467 and coloradoevents@gmail.com. Treat this as the producer umbrella profile and attach its individual festivals as dated appearances or child event records rather than creating duplicate producer profiles."}'
+          post profile-notes '{"organizationId":"7fff8f6c-5e88-46ad-9f00-d1a853040a42","subject":"Newest Adventure Zone Gmail relationship status - 2026-08-30","body":"Adventure Zone has four sent messages to coloradoevents@gmail.com in 2026. The newest was sent Aug. 27 as one combined message covering ARTumn Festival in Crested Butte and Handmade in Colorado in Glenwood Springs. No reply was found through Aug. 30. Do not split those opportunities into separate duplicate emails; check the existing combined thread before any follow-up."}'
+          post today-followups '{"organizationId":"7fff8f6c-5e88-46ad-9f00-d1a853040a42","label":"Check Colorado Events combined outreach","reason":"Check the existing Aug. 27 combined ARTumn/Handmade thread for a reply. If there is still no reply, decide whether one brief follow-up is appropriate; do not send separate event emails.","dueAt":"2026-09-03T16:00:00.000Z"}'
+
+          post event-profiles '{"event":{"id":"9c6b750d-828a-4b97-b6aa-0a19c22f18cf","name":"Idaho Department of Fish and Game","city":"Boise","region":"ID"},"profile":{"placeType":"other","phone":"208-334-3700","website":"https://idfg.idaho.gov/","address1":"600 S. Walnut Street","postalCode":"83712","description":"Statewide wildlife agency umbrella profile. Identify and attach a specific public, family, education, or outdoor event—and verify its organizer—before any Adventure Zone outreach."},"contacts":[{"name":"Idaho Fish and Game Headquarters","phone":"208-334-3700","email":"","role":"General headquarters / routing contact","primary":true}],"booking":{"enabled":false}}'
+          post profile-notes '{"organizationId":"9c6b750d-828a-4b97-b6aa-0a19c22f18cf","subject":"Verified agency identity and headquarters - 2026-08-30","body":"The current official organization is the Idaho Department of Fish and Game. Headquarters is at 600 S. Walnut Street, Boise, ID 83712, phone 208-334-3700, with regional offices serving different parts of the state. This is an umbrella agency profile, not a verified event lead."}'
+          post profile-notes '{"organizationId":"9c6b750d-828a-4b97-b6aa-0a19c22f18cf","subject":"Relationship and outreach status - 2026-08-30","body":"No Adventure Zone Gmail history was found for Idaho Fish and Game, and no verified general event-booking email was established. Do not send a generic cold email to the agency. First identify a specific current family/public event, confirm the regional or program organizer, and attach that event to this agency profile."}'
+          post today-followups '{"organizationId":"9c6b750d-828a-4b97-b6aa-0a19c22f18cf","label":"Identify a specific Idaho Fish and Game public event","reason":"Research current 2027 expos, open houses, outdoor days, education programs, or family events. Verify the event-level organizer and contact before creating an appearance or drafting outreach.","dueAt":"2026-09-21T16:00:00.000Z"}'
+
+          post event-profiles '{"event":{"id":"e7ba291f-5d7c-48ec-9c66-7756196ee290","name":"Te-Moak Tribe of Western Shoshone","city":"Elko","region":"NV"},"profile":{"placeType":"tribe","phone":"775-738-9251","website":"https://www.temoaktribe.com/","address1":"525 Sunset Street","postalCode":"89801","description":"Umbrella tribal profile for the Battle Mountain, Elko, South Fork, and Wells bands. Identify the specific band and public event decision-maker before Adventure Zone outreach."},"contacts":[{"name":"Te-Moak Tribal Headquarters","phone":"775-738-9251","email":"","role":"Tribal headquarters / routing contact","primary":true}],"booking":{"enabled":false}}'
+          post profile-notes '{"organizationId":"e7ba291f-5d7c-48ec-9c66-7756196ee290","subject":"Verified tribal umbrella identity and headquarters - 2026-08-30","body":"Official Te-Moak Tribe information identifies headquarters at 525 Sunset Street, Elko, NV 89801, phone 775-738-9251. The Tribe is the umbrella for the Battle Mountain, Elko, South Fork, and Wells bands. Preserve this as the parent organization rather than treating it as one unnamed event."}'
+          post profile-notes '{"organizationId":"e7ba291f-5d7c-48ec-9c66-7756196ee290","subject":"Relationship and outreach status - 2026-08-30","body":"No Adventure Zone Gmail history was found for Te-Moak or the Western Shoshone search terms, and no verified public-event decision-maker or general event-booking email was established. Do not send a generic cold email to tribal headquarters. First identify the specific band and public celebration, verify the organizer, and attach the event to this parent profile."}'
+          post today-followups '{"organizationId":"e7ba291f-5d7c-48ec-9c66-7756196ee290","label":"Identify a specific Te-Moak band event","reason":"Research current public celebrations, powwows, community days, fairs, or family events for the Battle Mountain, Elko, South Fork, and Wells bands. Verify the specific organizer before creating an appearance or drafting outreach.","dueAt":"2026-09-22T16:00:00.000Z"}'
+
+          printf '%s\n' '{"ok":true,"profilesUpdated":3,"contactsApplied":3,"notesApplied":6,"followUpsApplied":3}' > apply-summary.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: live-blank-profile-details-apply-summary
+          path: apply-summary.json
+          retention-days: 1
