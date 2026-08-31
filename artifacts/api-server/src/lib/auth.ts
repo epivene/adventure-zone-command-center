@@ -1,54 +1,47 @@
-import type { NextFunction, Request, Response } from "express";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { timingSafeEqual } from "node:crypto";
 
-const TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // ~30 days
-// Password auth currently represents one owner rather than a user table row.
-// Keep the existing blank actor namespace so already-saved Lead Scout runs
-// remain owned by the same actor while protected routes receive a real string.
-const SINGLE_OWNER_ACTOR_ID = "";
-type OwnerAuthenticatedRequest = Request & { userId: string };
+import {
+  issueOwnerToken,
+  verifyOwnerToken,
+} from "@/features/owner-auth/owner-token";
+
+const COMPATIBILITY_OWNER_ID = "00000000-0000-4000-8000-000000000001";
 
 /**
- * Logs a startup warning if OWNER_PASSWORD or SESSION_SECRET is not
- * configured. The middleware fails closed regardless — all protected
- * requests return 401 when either env var is absent — but this surfaces
- * the misconfiguration early.
+ * Logs startup warnings for settings required to bootstrap and sign owner
+ * sessions. Existing database-backed owner credentials can still authenticate
+ * when OWNER_PASSWORD is absent, but a fresh deployment cannot bootstrap.
  */
 export function validateOwnerConfig(): void {
   if (!process.env.OWNER_PASSWORD) {
     // eslint-disable-next-line no-console
     console.warn(
       "[auth] WARNING: OWNER_PASSWORD is not set. " +
-        "Login is disabled and all protected CRM routes will return 401 until it is configured.",
+        "A fresh owner account cannot be bootstrapped; an existing database-backed owner can still sign in.",
     );
   }
   if (!process.env.SESSION_SECRET) {
     // eslint-disable-next-line no-console
     console.warn(
       "[auth] WARNING: SESSION_SECRET is not set. " +
-        "Tokens cannot be signed or verified; all protected CRM routes will return 401 until it is configured.",
+        "Owner tokens cannot be signed or verified; protected routes fail closed.",
     );
   }
 }
 
 function timingSafeStringEqual(a: string, b: string): boolean {
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-  if (bufA.length !== bufB.length) {
-    // Still perform a comparison to keep timing uniform.
-    timingSafeEqual(bufA, bufA);
+  const left = Buffer.from(a, "utf8");
+  const right = Buffer.from(b, "utf8");
+  if (left.length !== right.length) {
+    timingSafeEqual(left, left);
     return false;
   }
-  return timingSafeEqual(bufA, bufB);
-}
-
-function sign(payload: string, secret: string): string {
-  return createHmac("sha256", secret).update(payload).digest("base64url");
+  return timingSafeEqual(left, right);
 }
 
 /**
- * Verifies the owner password (timing-safe). Fails closed when
- * OWNER_PASSWORD is unset.
+ * Verifies the legacy environment password used only to bootstrap the one
+ * primary owner record. It is not consulted after that database record exists.
  */
 export function verifyOwnerPassword(password: string): boolean {
   const expected = process.env.OWNER_PASSWORD;
@@ -56,53 +49,17 @@ export function verifyOwnerPassword(password: string): boolean {
   return timingSafeStringEqual(password, expected);
 }
 
+export { issueOwnerToken, verifyOwnerToken };
+
 /**
- * Issues an HMAC-signed bearer token: `owner.<expiresAtMs>.<signature>`.
- * Returns null when SESSION_SECRET is unset (fail closed).
+ * Temporary compatibility helper for older isolated tests. Production login
+ * always calls issueOwnerToken with the real database owner ID and version.
  */
 export function issueToken(): { token: string; expiresAt: string } | null {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return null;
-  const expiresAtMs = Date.now() + TOKEN_TTL_MS;
-  const payload = `owner.${expiresAtMs}`;
-  const token = `${payload}.${sign(payload, secret)}`;
-  return { token, expiresAt: new Date(expiresAtMs).toISOString() };
+  return issueOwnerToken({ ownerId: COMPATIBILITY_OWNER_ID, sessionVersion: 1 });
 }
 
-/**
- * Verifies a bearer token's signature (timing-safe) and expiry.
- * Fails closed when SESSION_SECRET is unset.
- */
+/** Temporary boolean compatibility wrapper for existing token-family tests. */
 export function verifyToken(token: string): boolean {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) return false;
-  const parts = token.split(".");
-  if (parts.length !== 3 || parts[0] !== "owner") return false;
-  const expiresAtMs = Number(parts[1]);
-  if (!Number.isFinite(expiresAtMs)) return false;
-  const payload = `${parts[0]}.${parts[1]}`;
-  if (!timingSafeStringEqual(parts[2] ?? "", sign(payload, secret))) {
-    return false;
-  }
-  return Date.now() < expiresAtMs;
-}
-
-/**
- * Requires a valid owner bearer token. Fails closed: returns 401 when the
- * Authorization header is missing/invalid, the token is expired, or the
- * server is missing SESSION_SECRET.
- */
-export function requireOwnerMiddleware(
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): void {
-  const header = req.headers.authorization;
-  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
-  if (!token || !verifyToken(token)) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  (req as OwnerAuthenticatedRequest).userId = SINGLE_OWNER_ACTOR_ID;
-  next();
+  return verifyOwnerToken(token) !== null;
 }
