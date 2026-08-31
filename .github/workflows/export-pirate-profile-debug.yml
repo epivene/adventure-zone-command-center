@@ -1,0 +1,58 @@
+name: Export Pirate profile duplicate evidence
+
+on:
+  push:
+    branches:
+      - fix/canonical-profile-children
+    paths:
+      - ".github/workflows/export-pirate-profile-debug.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Export protected live integrity report
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${API_URL%/}/api/assistant-import/profile-integrity-audit" \
+            --output profile-integrity-audit.json
+
+      - name: Extract Pirate Fest evidence
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('profile-integrity-audit.json', 'utf8'));
+          const profiles = report.profiles.filter((profile) => /pirate fest/i.test(profile.name));
+          const ids = new Set(profiles.map((profile) => profile.id));
+          const issues = report.issues.filter((issue) =>
+            ids.has(issue.profileId) || /pirate fest/i.test(issue.profileName || '')
+          );
+          const output = {
+            generatedAt: report.generatedAt,
+            profiles,
+            issues,
+            summary: report.summary,
+          };
+          fs.writeFileSync('pirate-profile-audit.json', JSON.stringify(output, null, 2));
+          console.log(JSON.stringify({ profiles: profiles.length, issues: issues.length }));
+          if (profiles.length !== 1) process.exit(2);
+          NODE
+
+      - name: Upload protected evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pirate-profile-duplicate-evidence
+          path: pirate-profile-audit.json
+          retention-days: 2
