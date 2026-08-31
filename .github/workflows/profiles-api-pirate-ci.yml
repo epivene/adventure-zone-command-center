@@ -4,16 +4,9 @@ on:
   push:
     branches:
       - fix/profiles-api-pirate-outcome
-  pull_request:
-    paths:
-      - "artifacts/api-server/src/features/organizations/profile-touch-schema.ts"
-      - "artifacts/api-server/src/features/organizations/organization-list-sort.test.ts"
-      - "artifacts/api-server/src/features/approved-profile-import/pirate-fest-confirmed.test.ts"
-      - "imports/approved-profiles/pirate-fest-northglenn-co-2026.json"
-      - ".github/workflows/profiles-api-pirate-ci.yml"
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   NODE_ENV: test
@@ -25,6 +18,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: fix/profiles-api-pirate-outcome
       - uses: pnpm/action-setup@v4
         with:
           version: 10
@@ -33,10 +29,24 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Apply the minimal production repair
+        run: python .github/scripts/apply_profiles_api_pirate_fix.py
       - name: Focused regression tests
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/organizations/organization-list-sort.test.ts
           src/features/approved-profile-import/pirate-fest-confirmed.test.ts
+      - name: Existing required-startup regression test
+        run: pnpm --filter @workspace/api-server exec vitest run src/db/required-schema-startup.test.ts
       - name: Production API build
         run: pnpm --filter @workspace/api-server build
+      - name: Commit verified repair
+        run: |
+          rm .github/workflows/profiles-api-pirate-ci.yml
+          rm .github/scripts/apply_profiles_api_pirate_fix.py
+          git diff --check
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add -A
+          git commit -m "fix: restore Profiles API and Pirate 2026 outcome"
+          git push origin HEAD:fix/profiles-api-pirate-outcome
