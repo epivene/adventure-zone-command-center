@@ -5,6 +5,7 @@ on:
     branches:
       - fix/profile-appearance-integrity-audit
       - maintenance/profile-reference-inspector
+      - fix/profile-integrity-uuid-validation
     paths:
       - ".github/workflows/profile-integrity-audit-ci.yml"
       - "artifacts/api-server/src/features/profile-integrity/**"
@@ -43,6 +44,7 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/profile-integrity/profile-integrity-audit.test.ts
           src/features/profile-integrity/organization-reference-inspector.test.ts
+          src/features/profile-integrity/profile-integrity-input.test.ts
       - name: API typecheck diagnostics
         continue-on-error: true
         run: pnpm --filter @workspace/api-server typecheck
