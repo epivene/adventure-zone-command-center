@@ -17,7 +17,7 @@ env:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -28,6 +28,8 @@ jobs:
           mkdir -p live-canonical-profile-snapshot
           set +e
           for item in \
+            "health|/api/healthz" \
+            "database-health|/api/healthz/db" \
             "profile-integrity-audit|/api/assistant-import/profile-integrity-audit" \
             "pirate-profile-history|/api/assistant-import/profile-history/${PIRATE_PROFILE_ID}" \
             "pirate-calendar-links|/api/assistant-import/profile-integrity-calendar-links/${PIRATE_PROFILE_ID}"
@@ -35,7 +37,8 @@ jobs:
             name="${item%%|*}"
             path="${item#*|}"
             code=$(curl --silent --show-error --location \
-              --connect-timeout 20 --max-time 150 \
+              --connect-timeout 20 --max-time 180 \
+              --dump-header "live-canonical-profile-snapshot/${name}.headers.txt" \
               --output "live-canonical-profile-snapshot/${name}.json" \
               --write-out '%{http_code}' \
               --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
