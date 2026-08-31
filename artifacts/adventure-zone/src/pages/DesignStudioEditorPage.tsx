@@ -10,6 +10,7 @@ import {
 } from "@/lib/design-studio-api";
 import { starterById } from "@/lib/design-studio/canva-starters";
 import {
+  createImageNode,
   normalizeCanvas,
   type CanvasDocument,
 } from "@/lib/design-studio/model";
@@ -17,10 +18,16 @@ import { useFreeformEditor } from "@/components/design-studio/use-freeform-edito
 import { FreeformCanvas } from "@/components/design-studio/FreeformCanvas";
 import { MobileEditorTopBar } from "@/components/design-studio/MobileEditorTopBar";
 import { ContextualBottomToolbar } from "@/components/design-studio/ContextualBottomToolbar";
+import {
+  AssetPickerSheet,
+  type PickerAsset,
+} from "@/components/design-studio/AssetPickerSheet";
 
 const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
 const EMPTY_CANVAS = normalizeCanvas(null);
+
+type PhotoPickerMode = "add" | "replace";
 
 function noteValue(notes: string | null | undefined, prefix: string) {
   return (notes ?? "")
@@ -35,6 +42,7 @@ export default function DesignStudioEditorPage() {
   const [name, setName] = useState("");
   const [assets, setAssets] = useState<DesignAsset[]>([]);
   const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
+  const [photoPickerMode, setPhotoPickerMode] = useState<PhotoPickerMode | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -119,6 +127,28 @@ export default function DesignStudioEditorPage() {
     return () => window.clearTimeout(timer);
   }, [dirty, loading, name, saving]);
 
+  function choosePhoto(asset: PickerAsset) {
+    const common = {
+      name: asset.name,
+      alt: asset.altText ?? asset.name,
+      assetId: asset.builtin ? null : asset.id,
+      src: asset.builtin ? asset.url ?? null : null,
+    };
+
+    if (photoPickerMode === "replace") {
+      editor.patchSelected(common);
+    } else {
+      editor.insertNode(createImageNode({
+        ...common,
+        x: Math.max(24, editor.doc.width * 0.18),
+        y: Math.max(24, editor.doc.height * 0.18),
+        width: Math.min(420, editor.doc.width * 0.52),
+        height: Math.min(300, editor.doc.height * 0.32),
+      }));
+    }
+    setPhotoPickerMode(null);
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[70dvh] flex-col gap-4 p-4">
@@ -175,7 +205,11 @@ export default function DesignStudioEditorPage() {
       </main>
 
       <div className="relative z-20">
-        <ContextualBottomToolbar editor={editor} />
+        <ContextualBottomToolbar
+          editor={editor}
+          onAddPhoto={() => setPhotoPickerMode("add")}
+          onReplacePhoto={() => setPhotoPickerMode("replace")}
+        />
         <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-3 py-1.5">
           <span className="truncate text-[11px] text-muted-foreground">
             {editor.selectedNodes.length
@@ -193,6 +227,14 @@ export default function DesignStudioEditorPage() {
           </Button>
         </div>
       </div>
+
+      {photoPickerMode ? (
+        <AssetPickerSheet
+          assets={assets}
+          onChoose={choosePhoto}
+          onClose={() => setPhotoPickerMode(null)}
+        />
+      ) : null}
     </div>
   );
 }
