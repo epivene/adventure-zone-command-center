@@ -31,12 +31,11 @@ jobs:
               "${BASE_URL}/api/assistant-import/profile-search" || true)
             test "${HTTP_STATUS}" = "200"
           done <<'QUERIES'
-          ramsey|Ramsey County Fair
-          ramsey-achievement|Ramsey County 4-H Achievement Days
-          wells|Wells County Fair
-          stutsman|Stutsman County Fair
-          pierce|Pierce County Fair
-          ransom|Ransom County Fair
+          connie|Connie Hanson
+          mary|Mary Hartl
+          deb|Deb Hatlewick
+          khloe|Khloe Sobolik
+          genene|Genene Aabrekke
           QUERIES
 
       - name: Upload search results
