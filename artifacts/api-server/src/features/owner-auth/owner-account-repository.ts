@@ -1,4 +1,3 @@
-import type { Pool, PoolClient, QueryResult } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
 export type OwnerAccountCredentialRecord = {
@@ -17,16 +16,12 @@ export type OwnerAccountSessionRecord = Omit<
   "passwordHash" | "passwordSalt"
 >;
 
+type QueryResult = { rows: Array<Record<string, any>> };
 type Queryable = {
-  query<R extends Record<string, unknown> = Record<string, unknown>>(
-    text: string,
-    values?: unknown[],
-  ): Promise<QueryResult<R>>;
+  query(text: string, values?: unknown[]): Promise<QueryResult>;
 };
-
-type OwnerPool = Queryable & {
-  connect(): Promise<PoolClient>;
-};
+type OwnerClient = Queryable & { release(): void };
+type OwnerPool = Queryable & { connect(): Promise<OwnerClient> };
 
 function mapCredential(row: Record<string, unknown>): OwnerAccountCredentialRecord {
   return {
@@ -75,11 +70,17 @@ const legacyActorTables = ["assistant_conversations", "assistant_jobs", "lead_sc
 
 async function adoptLegacyOwnerActors(client: Queryable, ownerId: string): Promise<void> {
   for (const tableName of legacyActorTables) {
-    const existing = await client.query<{ relation_name: string | null }>(
-      "SELECT to_regclass($1) AS relation_name",
-      [`public.${tableName}`],
+    const existing = await client.query(
+      `SELECT EXISTS (
+         SELECT 1
+         FROM information_schema.columns
+         WHERE table_schema = current_schema()
+           AND table_name = $1
+           AND column_name = 'actor_id'
+       ) AS has_actor_id`,
+      [tableName],
     );
-    if (!existing.rows[0]?.relation_name) continue;
+    if (existing.rows[0]?.has_actor_id !== true) continue;
     await client.query(
       `UPDATE ${tableName} SET actor_id = $1 WHERE actor_id = ''`,
       [ownerId],
@@ -88,7 +89,9 @@ async function adoptLegacyOwnerActors(client: Queryable, ownerId: string): Promi
 }
 
 export class PostgresOwnerAccountRepository {
-  constructor(private readonly pool: OwnerPool = defaultPool as unknown as Pool) {}
+  constructor(
+    private readonly pool: OwnerPool = defaultPool as unknown as OwnerPool,
+  ) {}
 
   async findPrimary(): Promise<OwnerAccountCredentialRecord | null> {
     const result = await this.pool.query(
