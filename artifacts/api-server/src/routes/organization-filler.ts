@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 
 import { db } from "@workspace/db";
-import { requireOwnerMiddleware } from "@/lib/auth";
+import { requireOwnerMiddleware } from "@/features/owner-auth/owner-runtime";
 import {
   organizationIdSchema,
   setFillerInputSchema,

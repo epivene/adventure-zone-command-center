@@ -6,7 +6,7 @@ import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-ma
 import { DrizzleEventWrapUpRepository } from "@/features/leg-manager/event-wrap-up-repository";
 import { EventWrapUpService, type EventWrapUpDraftInput } from "@/features/leg-manager/event-wrap-up-service";
 import { DrizzleEventWrapUpSource } from "@/features/leg-manager/event-wrap-up-source";
-import { requireOwnerMiddleware } from "../lib/auth";
+import { requireOwnerMiddleware } from "@/features/owner-auth/owner-runtime";
 import {
   organizerFeedbackAdminRouter,
   organizerFeedbackManagerRouter,

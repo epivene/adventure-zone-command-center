@@ -1,0 +1,69 @@
+name: Owner Agent Foundation CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/features/owner-auth/**"
+      - "artifacts/api-server/src/lib/auth.ts"
+      - "artifacts/api-server/src/lib/auth.owner-middleware.test.ts"
+      - "artifacts/api-server/src/routes/auth.ts"
+      - "artifacts/api-server/src/routes/auth.test.ts"
+      - "artifacts/api-server/src/routes/index.ts"
+      - "artifacts/api-server/src/routes/office-security-regression.test.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/db/owner-account-**"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/tsconfig.owner-auth.json"
+      - "artifacts/adventure-zone/src/components/navigation/app-menu.tsx"
+      - "artifacts/adventure-zone/src/lib/auth-context.tsx"
+      - "artifacts/adventure-zone/src/lib/auth-context.test.tsx"
+      - "artifacts/adventure-zone/tsconfig.owner-session.json"
+      - "lib/db/src/owner-auth-schema*"
+      - "lib/db/src/index.ts"
+      - "lib/db/src/drizzle-schema.ts"
+      - "lib/db/package.json"
+      - "lib/db/migrations/20260831_owner_account.sql"
+      - "docs/superpowers/specs/2026-08-31-owner-only-agent.md"
+      - "docs/superpowers/plans/2026-08-31-owner-only-agent-foundation.md"
+      - ".github/workflows/owner-agent-foundation-ci.yml"
+  workflow_dispatch:
+
+jobs:
+  owner-agent-foundation:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/owner_agent_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Owner API identity and route tests
+        run: >-
+          pnpm --dir artifacts/api-server exec vitest run
+          src/features/owner-auth/owner-token.test.ts
+          src/features/owner-auth/owner-middleware.test.ts
+          src/features/owner-auth/owner-account-repository.test.ts
+          src/lib/auth.owner-middleware.test.ts
+          src/routes/auth.test.ts
+          src/routes/office-security-regression.test.ts
+          src/db/required-schema-startup.test.ts
+          src/db/owner-account-required-startup.test.ts
+          src/db/owner-account-startup-migration.test.ts
+      - name: Owner session browser tests
+        run: pnpm --dir artifacts/adventure-zone exec vitest run src/lib/auth-context.test.tsx
+      - name: Owner database schema test
+        run: pnpm exec vitest run lib/db/src/owner-auth-schema.test.ts
+      - name: Owner API focused typecheck
+        run: pnpm --dir artifacts/api-server exec tsc -p tsconfig.owner-auth.json --noEmit
+      - name: Owner session UI focused typecheck
+        run: pnpm --dir artifacts/adventure-zone exec tsc -p tsconfig.owner-session.json --noEmit
+      - name: Database library typecheck
+        run: pnpm exec tsc --build lib/db/tsconfig.json --pretty false
+      - name: Workspace build
+        run: pnpm run build

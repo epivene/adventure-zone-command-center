@@ -8,6 +8,7 @@ import * as commercialOfferSchema from "./commercial-offer-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
+import * as ownerAuthSchema from "./owner-auth-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 import * as googleWorkspaceSchema from "./google-workspace-schema";
 import * as operationalCalendarSchema from "./operational-calendar-schema";
@@ -58,6 +59,7 @@ const schema = {
   ...eventChecklistSchema,
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
+  ...ownerAuthSchema,
   ...officeCoordinatorSchema,
   ...googleWorkspaceSchema,
   ...operationalCalendarSchema,
@@ -83,6 +85,7 @@ export * from "./commercial-offer-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
+export * from "./owner-auth-schema";
 export * from "./office-coordinator-schema";
 export * from "./google-workspace-schema";
 export * from "./operational-calendar-schema";
