@@ -1,0 +1,90 @@
+name: Snapshot live Twin Falls state
+
+on:
+  push:
+    branches:
+      - verify/twin-falls-duplicate-cleanup-live
+    paths:
+      - ".github/workflows/snapshot-live-twin-falls-state.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read protected live profiles
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const baseUrl = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+          const ids = [
+            'b447c83c-6348-4fab-b850-0db7a5576a83',
+            '7e746d1b-a5dd-4c54-8b5e-fce8697f5af2',
+            '0498cac2-4c90-46ab-a214-5c9dcf0775d1',
+            '8fc7bc14-ce90-4895-8ae0-8d870fb77459',
+            'aab7b545-d065-441b-98c0-bef04f78f034',
+            '8e41b7c6-cb49-4a35-a46b-55a5f7024a7f',
+          ];
+
+          async function read(route) {
+            const response = await fetch(`${baseUrl}/${route}`, { headers });
+            const raw = await response.text();
+            let body = null;
+            try { body = JSON.parse(raw); } catch {}
+            return { status: response.status, body };
+          }
+
+          const profiles = [];
+          for (const id of ids) {
+            const response = await read(`profile-history/${id}`);
+            profiles.push({
+              id,
+              status: response.status,
+              name: response.body?.place?.name ?? null,
+              city: response.body?.place?.city ?? null,
+              region: response.body?.place?.region ?? null,
+              contacts: (response.body?.contacts || []).map((contact) => ({
+                name: contact.name,
+                email: contact.email,
+                phone: contact.phone,
+              })),
+              bookings: (response.body?.bookings || []).map((booking) => ({
+                name: booking.name,
+                status: booking.status,
+              })),
+              followUps: (response.body?.followUps || []).map((item) => ({
+                kind: item.kind,
+                completed: Boolean(item.completedAt),
+              })),
+              noteSubjects: (response.body?.notes || []).map((note) => note.subject),
+              noteBodies: (response.body?.notes || []).map((note) => note.body),
+              historySubjects: (response.body?.history || []).map((item) => item.subject),
+            });
+          }
+          const search = await read('profile-search?q=Twin%20Falls&limit=20');
+          fs.writeFileSync('twin-falls-live-state.json', JSON.stringify({
+            capturedAt: new Date().toISOString(),
+            profiles,
+            searchStatus: search.status,
+            searchResults: (search.body?.results || []).map((row) => ({
+              id: row.id,
+              kind: row.kind,
+              label: row.label,
+              city: row.city,
+              region: row.region,
+            })),
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-live-state
+          path: twin-falls-live-state.json
+          retention-days: 1
