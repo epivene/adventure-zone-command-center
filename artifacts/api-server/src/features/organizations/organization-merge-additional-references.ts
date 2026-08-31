@@ -169,7 +169,10 @@ export async function reparentAdditionalOrganizationReferences(
         'profile_research_runs',
         'lead_scout_candidates',
         'scout_alert_watches',
-        'scout_alerts'
+        'scout_alerts',
+        'google_workspace_validation_mappings',
+        'google_workspace_validation_review_items',
+        'google_workspace_profile_files'
       )
   `);
   const optionalTables = new Set(
@@ -208,6 +211,27 @@ export async function reparentAdditionalOrganizationReferences(
   if (optionalTables.has("scout_alerts")) {
     await transaction.execute(sql`
       UPDATE scout_alerts SET organization_id = ${primaryId}
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_validation_mappings")) {
+    await transaction.execute(sql`
+      UPDATE google_workspace_validation_mappings
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_validation_review_items")) {
+    await transaction.execute(sql`
+      UPDATE google_workspace_validation_review_items
+      SET resolved_organization_id = ${primaryId}, updated_at = now()
+      WHERE resolved_organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_profile_files")) {
+    await transaction.execute(sql`
+      UPDATE google_workspace_profile_files
+      SET organization_id = ${primaryId}, updated_at = now()
       WHERE organization_id = ${duplicateId}
     `);
   }
