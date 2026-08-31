@@ -234,10 +234,13 @@ describe("approved profile startup import", () => {
       ],
     }) as never);
 
-    const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({
-      ok: true,
-      results: [],
-    }));
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        results: [],
+      }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, created: true }, 201));
     globalThis.fetch = fetchMock as typeof fetch;
 
     const result = await importApprovedProfilesAtStartup(5000);
