@@ -11,6 +11,7 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
       - "artifacts/api-server/src/app.ts"
@@ -23,6 +24,7 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
       - "artifacts/api-server/src/app.ts"
@@ -47,6 +49,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/google-workspace/google-api-client-query.test.ts
+          src/features/google-workspace/google-sent-profile-link-window-query.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
           src/routes/assistant-gmail-profile-links.test.ts
       - name: Production API build
