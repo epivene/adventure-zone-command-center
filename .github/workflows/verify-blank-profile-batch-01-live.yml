@@ -1,0 +1,238 @@
+name: Verify blank profile batch 01 live
+
+on:
+  push:
+    branches:
+      - verify/blank-profile-batch-01-live
+    paths:
+      - ".github/workflows/verify-blank-profile-batch-01-live.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for deployed batch and verify exact live state
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+          for attempt in $(seq 1 80); do
+            if node <<'NODE'
+          const fs = require('fs');
+
+          const batch = JSON.parse(
+            fs.readFileSync('imports/approved-profiles/blank-profile-batch-01.json', 'utf8'),
+          );
+          const base = process.env.API_URL.replace(/\/$/, '') + '/api/assistant-import';
+          const headers = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
+          const retiredProfileIds = [
+            'ad4cb1ee-7c19-4afc-9aac-159c8d9270cd',
+            '0965cbf6-2396-42b9-89b8-666cd3150cda',
+          ];
+
+          function normalizedPhone(value) {
+            const digits = String(value ?? '').replace(/\D/g, '');
+            return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+          }
+
+          async function get(path) {
+            const response = await fetch(`${base}/${path}`, { headers });
+            const text = await response.text();
+            let body;
+            try { body = JSON.parse(text); } catch { body = { raw: text }; }
+            return { status: response.status, body };
+          }
+
+          function contactMatches(actual, expected) {
+            const expectedEmail = String(expected.email ?? '').trim().toLowerCase();
+            const expectedPhone = normalizedPhone(expected.phone);
+            const expectedName = String(expected.name ?? '').trim().toLowerCase();
+            if (expectedEmail) {
+              return String(actual.email ?? '').trim().toLowerCase() === expectedEmail;
+            }
+            if (expectedPhone) {
+              return normalizedPhone(actual.phone) === expectedPhone;
+            }
+            return expectedName && String(actual.name ?? '').trim().toLowerCase() === expectedName;
+          }
+
+          (async () => {
+            const failures = [];
+            const profiles = [];
+
+            for (const retiredId of retiredProfileIds) {
+              const retired = await get(`profile-history/${retiredId}`);
+              if (retired.status !== 404) {
+                failures.push(`${retiredId}: expected retired profile to return 404, got ${retired.status}`);
+              }
+            }
+
+            let expectedContactCount = 0;
+            let verifiedContactCount = 0;
+            let expectedNoteCount = 0;
+            let verifiedNoteCount = 0;
+            let expectedFollowUpCount = 0;
+            let exactFollowUpCount = 0;
+            let preservedHumanFollowUpCount = 0;
+
+            for (const expected of batch) {
+              const profileId = expected?.event?.id;
+              if (typeof profileId !== 'string' || !profileId) {
+                failures.push(`Batch entry ${expected?.event?.name ?? 'unknown'} has no exact profile id.`);
+                continue;
+              }
+
+              const response = await get(`profile-history/${profileId}`);
+              if (response.status !== 200 || response.body?.ok !== true) {
+                failures.push(`${profileId}: profile history returned ${response.status}`);
+                continue;
+              }
+
+              const actual = response.body;
+              const place = actual.place ?? {};
+              const event = expected.event ?? {};
+              const profile = expected.profile ?? {};
+              const placeFailures = [];
+
+              for (const [field, value] of [
+                ['name', event.name],
+                ['city', event.city],
+                ['region', event.region],
+                ['placeType', profile.placeType],
+                ['phone', profile.phone],
+                ['website', profile.website],
+                ['address1', profile.address1],
+                ['postalCode', profile.postalCode],
+              ]) {
+                if (value == null || value === '') continue;
+                if (String(place[field] ?? '') !== String(value)) {
+                  placeFailures.push(`${field} expected ${JSON.stringify(value)} got ${JSON.stringify(place[field] ?? null)}`);
+                }
+              }
+              if (placeFailures.length) {
+                failures.push(`${profileId}: ${placeFailures.join('; ')}`);
+              }
+
+              const expectedContacts = Array.isArray(expected.contacts) ? expected.contacts : [];
+              const actualContacts = Array.isArray(actual.contacts) ? actual.contacts : [];
+              expectedContactCount += expectedContacts.length;
+              let matchedContacts = 0;
+              for (const contact of expectedContacts) {
+                if (actualContacts.some((candidate) => contactMatches(candidate, contact))) {
+                  matchedContacts += 1;
+                  verifiedContactCount += 1;
+                } else {
+                  failures.push(`${profileId}: missing reviewed contact ${contact.email || contact.phone || contact.name}`);
+                }
+              }
+
+              const expectedNotes = Array.isArray(expected.notes) ? expected.notes : [];
+              const actualNotes = Array.isArray(actual.notes) ? actual.notes : [];
+              expectedNoteCount += expectedNotes.length;
+              let matchedNotes = 0;
+              for (const note of expectedNotes) {
+                if (actualNotes.some((candidate) =>
+                  candidate.subject === note.subject && candidate.body === note.body,
+                )) {
+                  matchedNotes += 1;
+                  verifiedNoteCount += 1;
+                } else {
+                  failures.push(`${profileId}: missing reviewed note ${note.subject}`);
+                }
+              }
+
+              const expectedFollowUps = Array.isArray(expected.followUps) ? expected.followUps : [];
+              const actualFollowUps = (Array.isArray(actual.followUps) ? actual.followUps : [])
+                .filter((followUp) => followUp.completedAt == null);
+              expectedFollowUpCount += expectedFollowUps.length;
+              let followUpState = expectedFollowUps.length ? 'missing' : 'not_requested';
+
+              for (const followUp of expectedFollowUps) {
+                const exact = actualFollowUps.find((candidate) =>
+                  candidate.kind === followUp.label
+                  && new Date(candidate.dueAt).toISOString() === new Date(followUp.dueAt).toISOString(),
+                );
+                if (exact) {
+                  exactFollowUpCount += 1;
+                  followUpState = 'exact';
+                } else if (actualFollowUps.length > 0) {
+                  preservedHumanFollowUpCount += 1;
+                  followUpState = 'preserved_existing';
+                } else {
+                  failures.push(`${profileId}: expected reviewed follow-up ${followUp.label} or a preserved existing open task`);
+                }
+              }
+
+              profiles.push({
+                id: profileId,
+                name: place.name ?? null,
+                city: place.city ?? null,
+                region: place.region ?? null,
+                reviewedContacts: expectedContacts.length,
+                matchedContacts,
+                reviewedNotes: expectedNotes.length,
+                matchedNotes,
+                requestedFollowUps: expectedFollowUps.length,
+                followUpState,
+                openFollowUpCount: actualFollowUps.length,
+              });
+            }
+
+            const summary = {
+              verifiedAt: new Date().toISOString(),
+              batchEntryCount: batch.length,
+              retiredDuplicateCount: retiredProfileIds.length,
+              expectedContactCount,
+              verifiedContactCount,
+              expectedNoteCount,
+              verifiedNoteCount,
+              expectedFollowUpCount,
+              exactFollowUpCount,
+              preservedHumanFollowUpCount,
+              failureCount: failures.length,
+              failures,
+              profiles,
+            };
+
+            fs.writeFileSync(
+              'blank-profile-batch-01-live-verification.json',
+              JSON.stringify(summary, null, 2),
+            );
+
+            if (batch.length !== 25) failures.push(`Expected 25 batch entries, found ${batch.length}`);
+            if (failures.length > 0) {
+              console.error(JSON.stringify(summary, null, 2));
+              process.exit(1);
+            }
+          })().catch((error) => {
+            console.error(error instanceof Error ? error.stack : String(error));
+            process.exit(1);
+          });
+          NODE
+            then
+              echo "Live batch 01 verification succeeded on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Live batch 01 is not fully deployed yet (attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "The live app never reached the reviewed batch 01 state."
+          exit 1
+
+      - name: Upload sanitized live verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-live-verification
+          path: blank-profile-batch-01-live-verification.json
+          retention-days: 2
