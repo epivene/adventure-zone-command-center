@@ -1,0 +1,111 @@
+name: Verify live Gmail profile integrity
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "artifacts/api-server/src/features/google-workspace/gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/routes/assistant-gmail-profile-integrity.ts"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/api-server/src/index.ts"
+      - ".github/workflows/verify-live-gmail-profile-integrity.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Wait for deploy and verify every profile-eligible sent email
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p .audits
+
+          for attempt in $(seq 1 100); do
+            REPAIR_STATUS=$(curl --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --output repair.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/gmail-profile-integrity-repair" || true)
+
+            if [ "${REPAIR_STATUS}" = "200" ]; then
+              curl --fail --silent --show-error \
+                --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+                "${BASE_URL}/profile-history/b447c83c-6348-4fab-b850-0db7a5576a83" \
+                > twin-falls.json
+
+              if node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const repair = JSON.parse(fs.readFileSync('repair.json', 'utf8'));
+          const twin = JSON.parse(fs.readFileSync('twin-falls.json', 'utf8'));
+          const audit = repair.result?.audit;
+          if (!repair.ok || !audit) process.exit(1);
+          if (audit.eligibleUnlinkedSentEmails !== 0) process.exit(1);
+          if (audit.retiredProfileReferences !== 0) process.exit(1);
+          const serialized = JSON.stringify(twin);
+          if (!serialized.includes('1a03f76015409bfa')
+              && !serialized.includes('Thank you for calling me back. I tried returning your call')) {
+            process.exit(1);
+          }
+          NODE
+              then
+                node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const repair = JSON.parse(fs.readFileSync('repair.json', 'utf8'));
+          const twin = JSON.parse(fs.readFileSync('twin-falls.json', 'utf8'));
+          const collections = Object.fromEntries(
+            Object.entries(twin)
+              .filter(([, value]) => Array.isArray(value))
+              .map(([key, value]) => [key, value.length]),
+          );
+          fs.writeFileSync('.audits/gmail-profile-integrity-live-verification.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            twinFallsProfileId: twin.place?.id ?? null,
+            twinFallsProfileName: twin.place?.name ?? null,
+            actualGmailMessageId: '1a03f76015409bfa',
+            actualGmailThreadId: '1a03f6d13a293ebf',
+            actualMessageVisible: true,
+            repair: {
+              canonicalReferencesRepaired: repair.result.canonicalReferencesRepaired,
+              deterministicLinksRepaired: repair.result.deterministicLinksRepaired,
+              twinFallsMessage: repair.result.twinFallsMessage,
+            },
+            audit: repair.result.audit,
+            twinFallsCollectionCounts: collections,
+          }, null, 2) + '\n');
+          NODE
+                echo "Live Gmail profile integrity verified on attempt ${attempt}."
+                break
+              fi
+            fi
+
+            if [ "${attempt}" = "100" ]; then
+              echo "Live Gmail profile integrity did not converge."
+              cat repair.json 2>/dev/null || true
+              exit 1
+            fi
+            sleep 15
+          done
+
+      - name: Commit sanitized live verification
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/gmail-profile-integrity-live-verification.json
+          git commit -m "audit: verify live Gmail profile integrity" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
