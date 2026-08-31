@@ -239,7 +239,7 @@ export function AppMenu({
   mobile?: boolean;
   unreadMessages?: number;
 }) {
-  const { signOut } = useAuth();
+  const { signOut, signOutAll } = useAuth();
   const { openAssistant } = useAssistantContext();
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -251,6 +251,15 @@ export function AppMenu({
   function chooseAppearance(value: Appearance) {
     saveAppearance(value);
     setAppearance(value);
+  }
+
+  async function revokeAllOwnerSessions() {
+    const confirmed = window.confirm(
+      "Sign out every owner device? You will need the owner password to sign in again anywhere.",
+    );
+    if (!confirmed) return;
+    const result = await signOutAll();
+    if (!result.ok) window.alert(result.error);
   }
 
   return (
@@ -364,7 +373,10 @@ export function AppMenu({
         <AppearanceChoices appearance={appearance} onChange={chooseAppearance} />
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">Account</DropdownMenuLabel>
-        <DropdownMenuItem onSelect={() => signOut()}>Sign out</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => signOut()}>Sign out this device</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => { void revokeAllOwnerSessions(); }}>
+          Sign out all owner devices
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
