@@ -2,16 +2,11 @@ import { Router, type IRouter } from "express";
 
 import { pool } from "@workspace/db";
 import { ProfileIntegrityAuditService } from "@/features/profile-integrity/profile-integrity-audit";
+import { readProfileIntegrityId } from "@/features/profile-integrity/profile-integrity-input";
 import { inspectOrganizationReferenceBlockers } from "@/features/profile-integrity/organization-reference-inspector";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
 const router: IRouter = Router();
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
-
-function readProfileId(value: string | string[] | undefined): string | null {
-  const profileId = Array.isArray(value) ? value[0] : value;
-  return profileId && UUID_PATTERN.test(profileId) ? profileId : null;
-}
 
 router.use(requireAssistantImportToken);
 
@@ -29,7 +24,7 @@ router.get("/profile-integrity-audit", async (req, res): Promise<void> => {
 });
 
 router.get("/profile-integrity-references/:profileId", async (req, res): Promise<void> => {
-  const profileId = readProfileId(req.params.profileId);
+  const profileId = readProfileIntegrityId(req.params.profileId);
   if (!profileId) {
     res.status(400).json({ ok: false, error: "PROFILE_INTEGRITY_PROFILE_ID_INVALID" });
     return;
@@ -54,7 +49,7 @@ router.get("/profile-integrity-references/:profileId", async (req, res): Promise
 });
 
 router.get("/profile-integrity-calendar-links/:profileId", async (req, res): Promise<void> => {
-  const profileId = readProfileId(req.params.profileId);
+  const profileId = readProfileIntegrityId(req.params.profileId);
   if (!profileId) {
     res.status(400).json({ ok: false, error: "PROFILE_INTEGRITY_PROFILE_ID_INVALID" });
     return;
