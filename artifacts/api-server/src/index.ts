@@ -52,6 +52,11 @@ import {
   systemPaperNoteWorkerLoopScheduler,
 } from "./features/paper-notes/paper-note-worker-loop";
 import { createOpportunityEmailWorkerLoop } from "./features/opportunity-email/opportunity-email-worker-runtime";
+import { GoogleSentProfileLinkSweepService } from "./features/google-workspace/google-sent-profile-link-sweep-service";
+import {
+  GoogleSentProfileLinkSweepLoop,
+  systemGoogleSentProfileLinkSweepLoopScheduler,
+} from "./features/google-workspace/google-sent-profile-link-sweep-loop";
 import {
   createActExtractionRuntime,
   createActServerShutdown,
@@ -98,6 +103,12 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
   scheduler: systemPaperNoteWorkerLoopScheduler,
 });
 
+const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
+  sweep: new GoogleSentProfileLinkSweepService(),
+  clock: { now: () => new Date() },
+  scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
+});
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
@@ -138,6 +149,7 @@ const shutdown = createActServerShutdown({
       scoutAlertLoop.close(),
       assistantJobLoop.close(),
       paperNoteLoop.close(),
+      gmailProfileLinkSweepLoop.close(),
     ]);
   },
   closeServer() {
@@ -325,6 +337,7 @@ async function startBackgroundWorkers() {
   scoutAlertLoop.start();
   assistantJobLoop.start();
   paperNoteLoop.start();
+  gmailProfileLinkSweepLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();
