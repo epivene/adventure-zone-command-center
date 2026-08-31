@@ -31,11 +31,21 @@ jobs:
               "${BASE_URL}/api/assistant-import/profile-search" || true)
             test "${HTTP_STATUS}" = "200"
           done <<'QUERIES'
-          connie|Connie Hanson
-          mary|Mary Hartl
-          deb|Deb Hatlewick
-          khloe|Khloe Sobolik
-          genene|Genene Aabrekke
+          ramsey|Ramsey
+          wells|Wells
+          stutsman|Stutsman
+          pierce|Pierce
+          ransom|Ransom
+          devils-lake|Devils Lake
+          fessenden|Fessenden
+          jamestown|Jamestown
+          rugby|Rugby
+          lisbon|Lisbon
+          hanson|Hanson
+          hartl|Hartl
+          hatlewick|Hatlewick
+          sobolik|Sobolik
+          aabrekke|Aabrekke
           QUERIES
 
       - name: Upload search results
