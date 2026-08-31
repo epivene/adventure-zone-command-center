@@ -1,0 +1,37 @@
+name: Export Gmail profile-link branch history
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-history-audit-2026-08-31
+    paths:
+      - ".github/workflows/export-gmail-branch-history.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Export commits and changed files
+        run: |
+          set -euo pipefail
+          mkdir -p history
+          git log --oneline --decorate --graph --all --max-count=120 > history/all-log.txt
+          git log --reverse --format='%H%x09%ad%x09%s' --date=iso-strict origin/main..HEAD > history/branch-commits.tsv
+          git diff --name-status origin/main...HEAD > history/changed-files.txt
+          git diff --stat origin/main...HEAD > history/diff-stat.txt
+          for sha in $(git rev-list --reverse origin/main..HEAD); do
+            echo "===== $sha =====" >> history/commit-details.txt
+            git show --stat --oneline --decorate --no-renames "$sha" >> history/commit-details.txt
+            echo >> history/commit-details.txt
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gmail-profile-link-branch-history
+          path: history
+          retention-days: 2
