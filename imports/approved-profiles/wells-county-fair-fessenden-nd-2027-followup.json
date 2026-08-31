@@ -1,0 +1,41 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "requireExisting": true,
+  "aliases": [
+    "Wells County Fair Association"
+  ],
+  "event": {
+    "id": null,
+    "name": "Wells County Fair",
+    "city": "Fessenden",
+    "region": "ND"
+  },
+  "profile": {},
+  "contacts": [],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "interested",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2027 outreach timing reviewed",
+      "body": "Wells County Fair ran June 18-21, 2026. Its official site includes vendor information, but no official 2027 dates or application opening were published when reviewed on August 30, 2026. A personalized Adventure Zone email is prepared for Mary Hartl but must be reviewed before sending."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Review 2027 Wells County Fair outreach",
+      "reason": "Confirm the official 2027 dates and any vendor or entertainment application opening. Review the prepared Adventure Zone email for Mary Hartl; do not send automatically.",
+      "dueAt": "2027-03-18T15:00:00.000Z"
+    }
+  ]
+}
