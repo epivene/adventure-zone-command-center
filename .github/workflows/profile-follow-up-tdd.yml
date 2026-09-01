@@ -31,6 +31,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Follow-up frontend test
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/event-profiles/event-profile-workspace.follow-up.test.tsx
       - name: Follow-up API tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/follow-ups.test.ts
       - name: Frontend build
