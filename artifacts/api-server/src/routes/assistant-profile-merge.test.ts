@@ -2,7 +2,9 @@ import express from "express";
 import request from "supertest";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-const addProfileAsLocation = vi.fn();
+const { addProfileAsLocation } = vi.hoisted(() => ({
+  addProfileAsLocation: vi.fn(),
+}));
 
 vi.mock("@/features/organizations/add-profile-as-location", () => ({
   addProfileAsLocation,
