@@ -118,3 +118,5 @@ jobs:
           git add .github/runtime-status/meeker-decline.txt
           git commit -m "Record Meeker decline profile update"
           git push origin HEAD:ops/log-meeker-decline-2026-09-01
+
+# Verification rerun: the protected endpoint must report the exact note already present.
