@@ -12,6 +12,9 @@ vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch }));
 vi.mock("@/features/assistant/assistant-context", () => ({
   useAssistantContext: () => ({ openAssistant: vi.fn() }),
 }));
+vi.mock("@/components/assistant/assistant-context-registration", () => ({
+  AssistantContextRegistration: () => null,
+}));
 vi.mock("wouter", () => ({
   useParams: () => ({ profileId: organizationId }),
   useSearch: () => `?contactId=${contactId}&bookingId=${bookingId}`,
