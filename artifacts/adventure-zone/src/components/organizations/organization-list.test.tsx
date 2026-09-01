@@ -54,6 +54,8 @@ describe("OrganizationList filters", () => {
 
 
 describe("OrganizationList About previews", () => {
+  afterEach(cleanup);
+
   it("shows a two-line description preview when a profile has an About section", () => {
     render(
       <OrganizationList
