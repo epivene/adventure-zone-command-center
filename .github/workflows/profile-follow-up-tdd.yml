@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/profile-follow-up-scheduler
+      - fix/profile-follow-up-typed-date
   pull_request:
     paths:
       - "artifacts/adventure-zone/src/components/event-profiles/event-profile-workspace*"
