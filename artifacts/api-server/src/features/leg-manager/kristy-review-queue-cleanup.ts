@@ -18,6 +18,7 @@ export type ReviewCleanupCandidate = {
 
 export type ReviewCleanupInspection = ReviewCleanupCandidate & {
   reviewCount: number;
+  submittedWrapUpCount: number;
   dismissedAt: Date | null;
 };
 
@@ -130,7 +131,9 @@ export async function cleanupKristyReviewQueue(
     };
   }
 
-  const completed = inspected.filter((row) => row.reviewCount > 0);
+  const completed = inspected.filter(
+    (row) => row.reviewCount > 0 || row.submittedWrapUpCount > 0,
+  );
   if (completed.length > 0) {
     return {
       status: "skipped",
@@ -159,21 +162,69 @@ export async function cleanupKristyReviewQueue(
   return { status: result, legId, bookingIds };
 }
 
-type QueryClient = {
+type QueryResult<T> = { rows: T[] };
+
+type QueryExecutor = {
   query<T extends Record<string, unknown> = Record<string, unknown>>(
     sql: string,
     values?: unknown[],
-  ): Promise<{ rows: T[] }>;
+  ): Promise<QueryResult<T>>;
+};
+
+type QueryClient = QueryExecutor & {
   release(): void;
 };
 
-type QueryPool = {
-  query<T extends Record<string, unknown> = Record<string, unknown>>(
-    sql: string,
-    values?: unknown[],
-  ): Promise<{ rows: T[] }>;
+type QueryPool = QueryExecutor & {
   connect(): Promise<QueryClient>;
 };
+
+async function hasEventWrapUpsTable(database: QueryExecutor): Promise<boolean> {
+  const result = await database.query<{ table_name: string | null }>(
+    "SELECT to_regclass('public.event_wrap_ups')::text AS table_name",
+  );
+  return result.rows[0]?.table_name === "event_wrap_ups";
+}
+
+async function submittedWrapUpCounts(
+  database: QueryExecutor,
+  legId: string,
+  bookingIds: string[],
+): Promise<Map<string, number>> {
+  if (!(await hasEventWrapUpsTable(database))) return new Map();
+  const result = await database.query<{
+    booking_id: string;
+    wrap_up_count: number | string;
+  }>(
+    `SELECT booking_id, count(*)::int AS wrap_up_count
+       FROM event_wrap_ups
+      WHERE leg_id = $1
+        AND booking_id = ANY($2::uuid[])
+        AND status IN ('submitted', 'reviewed')
+      GROUP BY booking_id`,
+    [legId, bookingIds],
+  );
+  return new Map(result.rows.map((row) => [row.booking_id, Number(row.wrap_up_count)]));
+}
+
+function lockedCandidateMatches(
+  row: {
+    id: string;
+    name: string;
+    city: string;
+    region: string;
+    starts_at: Date | string;
+    ends_at: Date | string;
+  },
+  expected: ReviewCleanupCandidate,
+) {
+  return row.id === expected.id
+    && row.name === expected.name
+    && row.city === expected.city
+    && row.region === expected.region
+    && new Date(row.starts_at).toISOString() === expected.startsAt.toISOString()
+    && new Date(row.ends_at).toISOString() === expected.endsAt.toISOString();
+}
 
 export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanupRepository {
   constructor(private readonly database: QueryPool = defaultPool as unknown as QueryPool) {}
@@ -234,6 +285,7 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
       [legId, bookingIds],
     );
 
+    const wrapUpCounts = await submittedWrapUpCounts(this.database, legId, bookingIds);
     return result.rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -242,6 +294,7 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
       startsAt: new Date(row.starts_at),
       endsAt: new Date(row.ends_at),
       reviewCount: Number(row.review_count),
+      submittedWrapUpCount: wrapUpCounts.get(row.id) ?? 0,
       dismissedAt: row.dismissed_at == null ? null : new Date(row.dismissed_at),
     }));
   }
@@ -254,8 +307,20 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
-      const locked = await client.query<{ id: string }>(
-        `SELECT booking.id
+      const locked = await client.query<{
+        id: string;
+        name: string;
+        city: string;
+        region: string;
+        starts_at: Date | string;
+        ends_at: Date | string;
+      }>(
+        `SELECT booking.id,
+                booking.name,
+                booking.city,
+                booking.region,
+                booking.starts_at,
+                booking.ends_at
            FROM bookings booking
           WHERE booking.travel_leg_id = $1
             AND booking.id = ANY($2::uuid[])
@@ -264,6 +329,17 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
         [legId, bookingIds],
       );
       if (locked.rows.length !== bookingIds.length) {
+        await client.query("ROLLBACK");
+        return "changed";
+      }
+
+      const expectedById = new Map(
+        KRISTY_STALE_REVIEW_CANDIDATES.map((candidate) => [candidate.id, candidate]),
+      );
+      if (locked.rows.some((row) => {
+        const expected = expectedById.get(row.id);
+        return !expected || !lockedCandidateMatches(row, expected);
+      })) {
         await client.query("ROLLBACK");
         return "changed";
       }
@@ -278,6 +354,22 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
       if (reviewed.rows.length > 0) {
         await client.query("ROLLBACK");
         return "changed";
+      }
+
+      const wrapUpsTablePresent = await hasEventWrapUpsTable(client);
+      if (wrapUpsTablePresent) {
+        const submitted = await client.query<{ booking_id: string }>(
+          `SELECT DISTINCT booking_id
+             FROM event_wrap_ups
+            WHERE leg_id = $1
+              AND booking_id = ANY($2::uuid[])
+              AND status IN ('submitted', 'reviewed')`,
+          [legId, bookingIds],
+        );
+        if (submitted.rows.length > 0) {
+          await client.query("ROLLBACK");
+          return "changed";
+        }
       }
 
       const existing = await client.query<{ booking_id: string }>(
@@ -322,6 +414,33 @@ export class PostgresKristyReviewCleanupRepository implements KristyReviewCleanu
       if (inserted.rows.length !== bookingIds.length) {
         await client.query("ROLLBACK");
         return "changed";
+      }
+
+      const finalReviews = await client.query<{ booking_id: string }>(
+        `SELECT DISTINCT review.booking_id
+           FROM event_manager_reviews review
+          WHERE review.leg_id = $1
+            AND review.booking_id = ANY($2::uuid[])`,
+        [legId, bookingIds],
+      );
+      if (finalReviews.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return "changed";
+      }
+
+      if (wrapUpsTablePresent) {
+        const finalWrapUps = await client.query<{ booking_id: string }>(
+          `SELECT DISTINCT booking_id
+             FROM event_wrap_ups
+            WHERE leg_id = $1
+              AND booking_id = ANY($2::uuid[])
+              AND status IN ('submitted', 'reviewed')`,
+          [legId, bookingIds],
+        );
+        if (finalWrapUps.rows.length > 0) {
+          await client.query("ROLLBACK");
+          return "changed";
+        }
       }
 
       await client.query("COMMIT");
