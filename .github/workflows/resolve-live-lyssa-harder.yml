@@ -14,7 +14,7 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     steps:
-      - name: Search protected live profiles
+      - name: Inspect protected live candidate histories
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -22,18 +22,16 @@ jobs:
           set -euo pipefail
           test -n "${API_URL}"
           test -n "${ASSISTANT_IMPORT_TOKEN}"
-          BASE_URL="${API_URL%/}"
-          curl --fail --silent --show-error \
-            --get \
-            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
-            --data-urlencode "q=Lyssa Harder" \
-            --data-urlencode "limit=20" \
-            "${BASE_URL}/api/assistant-import/profile-search" \
-            > lyssa-profile-search.json
-          node -e "const x=require('./lyssa-profile-search.json'); if(!x.ok || !Array.isArray(x.results)) process.exit(2)"
-      - name: Upload protected search result
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          for PROFILE_ID in 93ee6ee1-9bea-403e-a83c-83a3de8566d4 6813439b-4ba6-478c-9c51-70b583914e9e; do
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              "${BASE_URL}/profile-history/${PROFILE_ID}" \
+              > "${PROFILE_ID}.json"
+          done
+      - name: Upload protected candidate histories
         uses: actions/upload-artifact@v4
         with:
-          name: lyssa-profile-search
-          path: lyssa-profile-search.json
+          name: lyssa-profile-candidate-histories
+          path: "*.json"
           retention-days: 1
