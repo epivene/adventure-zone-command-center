@@ -1,4 +1,4 @@
-name: Diagnose Meeker profile match
+name: Log Meeker decline
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  log-decline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -25,7 +25,7 @@ jobs:
           test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
           test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
 
-      - name: Export focused live search evidence
+      - name: Resolve proven profile and add decline note
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -33,38 +33,76 @@ jobs:
           mkdir -p .github/runtime-status
           node <<'NODE'
           const fs = require("fs");
-          const baseUrl = process.env.API_URL.replace(/\/$/, "");
-          const auth = { Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}` };
 
-          async function search(query) {
-            const response = await fetch(
-              `${baseUrl}/api/assistant-import/profile-search?q=${encodeURIComponent(query)}&limit=20`,
-              { headers: auth },
-            );
+          const expectedOrganizationId = "88390368-2bc1-4601-b34b-50fe6e89ed68";
+          const expectedOrganizationName = "Meeker Classic Sheepdog Championship Trials";
+          const baseUrl = process.env.API_URL.replace(/\/$/, "");
+          const headers = {
+            Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}`,
+            "Content-Type": "application/json",
+          };
+
+          async function readJson(response, label) {
             const text = await response.text();
-            const body = JSON.parse(text);
-            if (!response.ok || body.ok !== true || !Array.isArray(body.results)) {
-              throw new Error(`Search failed for ${query} (HTTP ${response.status}): ${body.error || "unknown error"}`);
+            let body;
+            try {
+              body = JSON.parse(text);
+            } catch {
+              throw new Error(`${label} returned non-JSON (HTTP ${response.status})`);
             }
-            return body.results.map(({ id, kind, label, secondaryLabel, city, region, matchedOn }) => ({
-              id, kind, label, secondaryLabel, city, region, matchedOn,
-            }));
+            if (!response.ok || body.ok !== true) {
+              throw new Error(`${label} failed (HTTP ${response.status}): ${body.error || "unknown error"}`);
+            }
+            return body;
           }
 
           async function main() {
-            const queries = ["Mary Cunn", "Maym", "Meeker Classic Sheepdog Trials"];
-            const evidence = {};
-            for (const query of queries) evidence[query] = await search(query);
-            fs.writeFileSync(
-              ".github/runtime-status/meeker-search-results.json",
-              JSON.stringify({ generatedAt: new Date().toISOString(), evidence }, null, 2) + "\n",
+            const searchResponse = await fetch(
+              `${baseUrl}/api/assistant-import/profile-search?q=${encodeURIComponent("Maym")}&limit=20`,
+              { headers: { Authorization: headers.Authorization } },
             );
-            for (const [query, results] of Object.entries(evidence)) {
-              console.log(`${query}: ${results.length} result(s)`);
-              for (const item of results) {
-                console.log(JSON.stringify(item));
-              }
+            const search = await readJson(searchResponse, "Profile search");
+            const candidates = search.results.filter((result) =>
+              result.kind === "organization" &&
+              result.id === expectedOrganizationId &&
+              result.label === expectedOrganizationName &&
+              result.city === "Meeker" &&
+              result.region === "CO" &&
+              Array.isArray(result.matchedOn) &&
+              result.matchedOn.includes("contact"),
+            );
+
+            if (candidates.length !== 1) {
+              throw new Error(`Expected one proven Mary Maym Cunningham profile match; found ${candidates.length}.`);
             }
+
+            const subject = "Organizer declined - not a fit";
+            const body = "September 1, 2026 — Mary Maym Cunningham replied by text regarding the Meeker Classic Sheepdog Championship Trials: “Thank you for your inquiry about the Meeker Classic Sheepdog trials. I don’t think we are a match. All the best-” Outcome: declined/not a fit for this opportunity. No follow-up task was created. This is not a Do Not Contact request.";
+
+            const noteResponse = await fetch(`${baseUrl}/api/assistant-import/profile-notes`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                organizationId: expectedOrganizationId,
+                subject,
+                body,
+              }),
+            });
+            const note = await readJson(noteResponse, "Profile note");
+
+            if (note.organizationName !== expectedOrganizationName) {
+              throw new Error(`Profile note receipt returned an unexpected organization: ${note.organizationName}`);
+            }
+
+            const receipt = [
+              `status=${note.created ? "NOTE_CREATED" : "NOTE_ALREADY_PRESENT"}`,
+              `profile=${note.organizationName}`,
+              `subject=${subject}`,
+              `created=${String(note.created)}`,
+              `completed_at=${new Date().toISOString()}`,
+            ].join("\n") + "\n";
+            fs.writeFileSync(".github/runtime-status/meeker-decline.txt", receipt);
+            console.log(`Verified live profile note for ${note.organizationName}: ${note.created ? "created" : "already present"}.`);
           }
 
           main().catch((error) => {
@@ -73,10 +111,10 @@ jobs:
           });
           NODE
 
-      - name: Persist diagnostic evidence
+      - name: Persist sanitized receipt
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/runtime-status/meeker-search-results.json
-          git commit -m "Record Meeker profile search evidence"
+          git add .github/runtime-status/meeker-decline.txt
+          git commit -m "Record Meeker decline profile update"
           git push origin HEAD:ops/log-meeker-decline-2026-09-01
