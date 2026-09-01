@@ -1,5 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -20,8 +19,7 @@ import { EventProfileWorkspace } from "./event-profile-workspace";
 afterEach(cleanup);
 
 describe("EventProfileWorkspace profile follow-up creation", () => {
-  it("accepts a typed YYYY-MM-DD date in the follow-up scheduler", async () => {
-    const user = userEvent.setup();
+  it("exposes keyboard-friendly YYYY-MM-DD entry in the follow-up scheduler", () => {
     render(
       <EventProfileWorkspace
         profile={{
@@ -69,7 +67,9 @@ describe("EventProfileWorkspace profile follow-up creation", () => {
     const save = screen.getByRole("button", { name: "Save follow-up" });
     expect(save).toBeDisabled();
 
-    await user.type(dueDate, "2027-06-20");
+    expect(dueDate).toHaveAttribute("inputmode", "numeric");
+    expect(dueDate).toHaveAttribute("placeholder", "YYYY-MM-DD");
+    fireEvent.change(dueDate, { target: { value: "2027-06-20" } });
 
     expect(dueDate).toHaveValue("2027-06-20");
     expect(save).toBeEnabled();
