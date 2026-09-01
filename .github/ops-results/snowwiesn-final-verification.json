@@ -1,0 +1,12 @@
+{
+  "verifiedAt": "2026-09-01T22:03:38.759Z",
+  "ok": true,
+  "profileId": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+  "currentContact": "zach.smith@snowbasin.com",
+  "knownEventWindow": {
+    "startsAt": "2026-08-29T17:00:00.000Z",
+    "endsAt": "2026-10-18T17:00:00.000Z"
+  },
+  "bookingStatus": "possible",
+  "researchedCorrectionPresent": true
+}
