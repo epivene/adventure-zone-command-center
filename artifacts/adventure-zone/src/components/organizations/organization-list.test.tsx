@@ -48,7 +48,7 @@ describe("OrganizationList filters", () => {
     expect(screen.getByRole("checkbox", { name: "Has email" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Has follow-up" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Has booking" })).toBeChecked();
-    expect(screen.getByRole("checkbox", { name: "Show family/group members" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Show family members" })).not.toBeChecked();
   });
 });
 
