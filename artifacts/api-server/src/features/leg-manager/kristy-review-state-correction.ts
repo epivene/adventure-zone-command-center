@@ -108,6 +108,43 @@ export const DON_KING_DAYS_BOOKING: BookingIdentity = {
 const correctionReason =
   "Owner corrected the manager workflow: Kristy wants the five historical review prompts restored, and Don King Days is not assigned to her leg.";
 
+export const REVIEW_PROMPT_RESTORATION_AUDIT_SQL = `
+INSERT INTO audit_entries
+  (entity_type, entity_id, action, before, after)
+SELECT 'booking',
+       restored.booking_id,
+       'manager_review_prompt_restored',
+       jsonb_build_object(
+         'dismissed', true,
+         'legId', $1::uuid,
+         'reason', $3::text
+       ),
+       jsonb_build_object(
+         'dismissed', false,
+         'legId', $1::uuid
+       )
+  FROM unnest($2::uuid[]) AS restored(booking_id)
+`;
+
+export const DON_KING_UNASSIGNMENT_AUDIT_SQL = `
+INSERT INTO audit_entries
+  (entity_type, entity_id, action, before, after)
+VALUES (
+  'booking',
+  $1::uuid,
+  'incorrect_manager_leg_removed',
+  jsonb_build_object(
+    'travelLegId', $2::uuid,
+    'status', 'new_lead',
+    'reason', $3::text
+  ),
+  jsonb_build_object(
+    'travelLegId', NULL::text,
+    'status', 'new_lead'
+  )
+)
+`;
+
 function sameIdentity(actual: BookingIdentity, expected: BookingIdentity) {
   return actual.id === expected.id
     && actual.name === expected.name
@@ -465,17 +502,11 @@ implements KristyReviewStateCorrectionRepository {
           return "changed";
         }
 
-        await client.query(
-          `INSERT INTO audit_entries
-            (entity_type, entity_id, action, before, after)
-           SELECT 'booking',
-                  booking_id,
-                  'manager_review_prompt_restored',
-                  jsonb_build_object('dismissed', true, 'legId', $1, 'reason', $3),
-                  jsonb_build_object('dismissed', false, 'legId', $1)
-             FROM unnest($2::uuid[]) AS booking_id`,
-          [input.legId, input.restoreBookingIds, input.reason],
-        );
+        await client.query(REVIEW_PROMPT_RESTORATION_AUDIT_SQL, [
+          input.legId,
+          input.restoreBookingIds,
+          input.reason,
+        ]);
       }
 
       if (input.unassignDonKing) {
@@ -493,18 +524,11 @@ implements KristyReviewStateCorrectionRepository {
           await client.query("ROLLBACK");
           return "changed";
         }
-        await client.query(
-          `INSERT INTO audit_entries
-            (entity_type, entity_id, action, before, after)
-           VALUES (
-             'booking',
-             $1,
-             'incorrect_manager_leg_removed',
-             jsonb_build_object('travelLegId', $2, 'status', 'new_lead', 'reason', $3),
-             jsonb_build_object('travelLegId', NULL, 'status', 'new_lead')
-           )`,
-          [input.donKingBookingId, input.legId, input.reason],
-        );
+        await client.query(DON_KING_UNASSIGNMENT_AUDIT_SQL, [
+          input.donKingBookingId,
+          input.legId,
+          input.reason,
+        ]);
       }
 
       if (input.clearDonKingPersistedAssignment) {
