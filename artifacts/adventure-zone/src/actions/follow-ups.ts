@@ -1,4 +1,4 @@
-import { apiFetch, apiPatch } from "@/lib/auth-token";
+import { apiFetch, apiPatch, apiPost } from "@/lib/auth-token";
 import type {
   EditFollowUpInput,
   FollowUpMutationResult,
@@ -20,6 +20,23 @@ function coerceFollowUpRecord(record: SerializedFollowUpRecord): FollowUpRecord 
     dueAt: new Date(record.dueAt),
     completedAt: record.completedAt ? new Date(record.completedAt) : null,
   };
+}
+
+
+export async function createFollowUpAction(input: {
+  organizationId: string;
+  contactId?: string | null;
+  bookingId?: string | null;
+  kind: string;
+  dueAt: Date;
+}): Promise<FollowUpMutationResult> {
+  try {
+    const result = await apiPost<SerializedFollowUpMutationResult>("/follow-ups", input);
+    if (!result.ok) return result;
+    return { ok: true, followUp: coerceFollowUpRecord(result.followUp) };
+  } catch (error: any) {
+    return { ok: false, error: error.message ?? "Could not create follow-up." };
+  }
 }
 
 export async function editFollowUpAction(
