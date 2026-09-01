@@ -1,4 +1,4 @@
-name: One-time Ak-Chin December opportunity update
+name: One-time Ak-Chin December opportunity verification
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  update:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ops/ak-chin-december-event-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Add Cecily and December opportunity
+      - name: Verify live Ak-Chin profile state
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -28,60 +28,49 @@ jobs:
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
           PROFILE_ID="86509cbd-60c8-4ea7-a061-f1a39681448b"
+          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/ak-chin-verified.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          fs.writeFileSync('/tmp/ak-chin-contact.json', JSON.stringify({
-            event: {
-              id: '86509cbd-60c8-4ea7-a061-f1a39681448b',
-              name: 'Ak-Chin Native American Recognition Day (Maricopa) AZ',
-              city: 'Maricopa',
-              region: 'AZ'
-            },
-            profile: {},
-            contacts: [{
-              name: 'Cecily Peters',
-              role: 'Community Events Manager',
-              email: 'CPeters2@ak-chin.nsn.us',
-              phone: '520-568-1045',
-              primary: true
-            }]
-          }));
-          fs.writeFileSync('/tmp/ak-chin-note.json', JSON.stringify({
-            organizationId: '86509cbd-60c8-4ea7-a061-f1a39681448b',
-            subject: 'December 17-20 winter event opportunity',
-            body: 'On August 31, 2026, Cecily Peters, Community Events Manager for the Ak-Chin Indian Community, invited Adventure Zone to participate in a large free public event scheduled for December 17-20, 2026. Adventure Zone is interested, provided the attractions can be set up indoors with sufficient ceiling height and floor space and the package is prepaid by the event organizer. Public-pay and revenue-share are not available for this winter event. Reply drafted September 1 requesting indoor venue dimensions, ceiling height, and event hours. Cecily: CPeters2@ak-chin.nsn.us; office 520-568-1045; mobile 520-709-1846.'
-          }));
-          NODE
-
-          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/ak-chin-contact.json             "${BASE_URL}/event-profiles" > /tmp/ak-chin-contact-response.json
-
-          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/ak-chin-note.json             "${BASE_URL}/profile-notes" > /tmp/ak-chin-note-response.json
-
-          node --input-type=module <<'NODE'
-          import fs from 'node:fs';
-          const contact = JSON.parse(fs.readFileSync('/tmp/ak-chin-contact-response.json', 'utf8'));
-          const note = JSON.parse(fs.readFileSync('/tmp/ak-chin-note-response.json', 'utf8'));
-          const expectedId = '86509cbd-60c8-4ea7-a061-f1a39681448b';
-          if (contact.ok !== true || contact.organizationId !== expectedId) throw new Error('Ak-Chin contact update failed.');
-          if (note.ok !== true || note.organizationId !== expectedId) throw new Error('Ak-Chin opportunity note failed.');
+          const root = JSON.parse(fs.readFileSync('/tmp/ak-chin-verified.json', 'utf8'));
+          const serialized = JSON.stringify(root);
+          const contact = (root.contacts ?? []).find((item) =>
+            item.name === 'Cecily Peters' &&
+            String(item.email ?? '').toLowerCase() === 'cpeters2@ak-chin.nsn.us' &&
+            item.role === 'Community Events Manager' &&
+            item.isPrimary === true
+          );
+          const notePresent =
+            serialized.includes('December 17-20 winter event opportunity') &&
+            serialized.includes('set up indoors with sufficient ceiling height and floor space') &&
+            serialized.includes('prepaid by the event organizer') &&
+            serialized.includes('Public-pay and revenue-share are not available') &&
+            serialized.includes('520-709-1846');
+          if (root.ok !== true || root.profileId !== '86509cbd-60c8-4ea7-a061-f1a39681448b' || !contact || !notePresent) {
+            throw new Error('Fresh live verification did not find the expected Ak-Chin state.');
+          }
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/ak-chin-profile-update.json', JSON.stringify({
-            completedAt: new Date().toISOString(),
+          fs.writeFileSync('.github/ops-results/ak-chin-profile-verification.json', JSON.stringify({
+            verifiedAt: new Date().toISOString(),
             ok: true,
-            organizationId: expectedId,
-            organizationName: note.organizationName,
-            contactId: contact.contactId,
-            noteCreated: note.created,
-            activityId: note.activityId
+            profileId: root.profileId,
+            profileName: root.place?.name,
+            primaryContact: {
+              name: contact.name,
+              role: contact.role,
+              email: contact.email,
+              phone: contact.phone
+            },
+            decemberOpportunityNotePresent: true,
+            winterTermsPresent: true
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit update receipt
+      - name: Commit verification receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/ak-chin-profile-update.json
-          git commit -m "ops: record Ak-Chin profile update receipt"
+          git add .github/ops-results/ak-chin-profile-verification.json
+          git commit -m "ops: verify live Ak-Chin profile update"
           git push origin HEAD:ops/ak-chin-december-event-2026-09-01
