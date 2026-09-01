@@ -2,6 +2,11 @@ name: Export Kristy manager review audit
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/export-kristy-manager-review-audit.yml"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/app.ts"
   push:
     branches:
       - main
@@ -14,7 +19,34 @@ permissions:
   contents: read
 
 jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build protected audit route with the production API
+        run: pnpm --filter @workspace/api-server run build
+      - name: Guard the read-only token boundary and route mount
+        run: |
+          grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-manager-review-audit.ts
+          grep -F 'router.get("/manager-review-audit"' artifacts/api-server/src/routes/assistant-manager-review-audit.ts
+          grep -F 'assistantManagerReviewAuditRouter' artifacts/api-server/src/app.ts
+          if grep -Eq 'router\.(post|put|patch|delete)\(' artifacts/api-server/src/routes/assistant-manager-review-audit.ts; then
+            echo "The audit route must remain read-only."
+            exit 1
+          fi
+
   export:
+    if: github.event_name != 'pull_request'
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
