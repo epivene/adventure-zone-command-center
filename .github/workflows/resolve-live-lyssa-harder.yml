@@ -1,0 +1,39 @@
+name: Resolve live Lyssa Harder profile
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/resolve-live-lyssa-harder.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Search protected live profiles
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          BASE_URL="${API_URL%/}"
+          curl --fail --silent --show-error \
+            --get \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --data-urlencode "q=Lyssa Harder" \
+            --data-urlencode "limit=20" \
+            "${BASE_URL}/api/assistant-import/profile-search" \
+            > lyssa-profile-search.json
+          node -e "const x=require('./lyssa-profile-search.json'); if(!x.ok || !Array.isArray(x.results)) process.exit(2)"
+      - name: Upload protected search result
+        uses: actions/upload-artifact@v4
+        with:
+          name: lyssa-profile-search
+          path: lyssa-profile-search.json
+          retention-days: 1
