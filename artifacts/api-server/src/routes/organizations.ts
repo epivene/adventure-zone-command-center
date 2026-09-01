@@ -66,6 +66,7 @@ type ProfileCardDetails = {
   phone: string | null;
   email: string | null;
   website: string | null;
+  description: string | null;
   placeType: string | null;
   profileImageDataUrl: string | null;
   ratingAverage: number | null;
@@ -112,6 +113,7 @@ export async function loadProfileCardDetailsWith(
         coalesce(c.phone, o.phone) as phone,
         c.email,
         o.website,
+        o.description,
         o.place_type as "placeType"
       from organizations o
       left join organization_contacts oc
@@ -160,6 +162,7 @@ export async function loadProfileCardDetailsWith(
       phone: core.phone ?? null,
       email: core.email ?? null,
       website: core.website ?? null,
+      description: core.description ?? null,
       placeType: core.placeType ?? null,
       profileImageDataUrl: photosById.get(id) ?? null,
       ...rating,
@@ -212,6 +215,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
           phone: null,
           email: null,
           website: null,
+          description: null,
           placeType: null,
           profileImageDataUrl: null,
           ratingAverage: null,

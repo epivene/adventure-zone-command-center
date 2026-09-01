@@ -9,6 +9,12 @@ const contactId = "20000000-0000-4000-8000-000000000001";
 const bookingId = "30000000-0000-4000-8000-000000000001";
 
 vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch }));
+vi.mock("@/features/assistant/assistant-context", () => ({
+  useAssistantContext: () => ({ openAssistant: vi.fn() }),
+}));
+vi.mock("@/components/assistant/assistant-context-registration", () => ({
+  AssistantContextRegistration: () => null,
+}));
 vi.mock("wouter", () => ({
   useParams: () => ({ profileId: organizationId }),
   useSearch: () => `?contactId=${contactId}&bookingId=${bookingId}`,
@@ -74,6 +80,7 @@ function contactDetail(doNotCallAt: string | null) {
 
 function profileApi(path: string, value: any = profile) {
   if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+  if (path === `/event-profiles/${organizationId}/description`) return Promise.resolve({ description: value.place?.description ?? null });
   if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(value);
   if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
   return Promise.resolve(contactDetail(null));
@@ -84,6 +91,31 @@ afterEach(() => {
   apiGet.mockReset();
   apiPatch.mockReset();
   setLocation.mockReset();
+});
+
+describe("EventProfilePage About section", () => {
+  it("shows the complete saved event description on the profile page", async () => {
+    const describedProfile = {
+      ...profile,
+      place: {
+        ...profile.place,
+        description: "A full event description that visitors can read without opening Edit.",
+      },
+    };
+    apiGet.mockImplementation((path: string) => profileApi(path, describedProfile));
+    render(<EventProfilePage />);
+
+    expect((await screen.findAllByRole("heading", { name: "About" })).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("A full event description that visitors can read without opening Edit.")).length).toBeGreaterThan(0);
+  });
+
+  it("does not show an empty About section", async () => {
+    apiGet.mockImplementation((path: string) => profileApi(path));
+    render(<EventProfilePage />);
+
+    expect((await screen.findAllByText("Prairie Days")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("heading", { name: "About" })).not.toBeInTheDocument();
+  });
 });
 
 describe("EventProfilePage navigation", () => {

@@ -598,6 +598,15 @@ export function SimpleFullProfile({
           </div>
         </div>
 
+        {profile.place.description?.trim() ? (
+          <div className="border-t border-[#e1e8e3] px-4 py-4 sm:px-7">
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">About</h2>
+            <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#4d666d]">
+              {profile.place.description.trim()}
+            </p>
+          </div>
+        ) : null}
+
         <div className="flex flex-col gap-3 border-t border-[#e1e8e3] px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-7">
           <div className="min-w-0">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
