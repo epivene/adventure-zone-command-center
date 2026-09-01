@@ -1,0 +1,59 @@
+name: Snapshot live Twin Falls Gmail mappings
+
+on:
+  push:
+    branches:
+      - ops/gmail-profile-link-live-fix
+    paths:
+      - ".github/workflows/snapshot-live-twin-falls-nine-emails.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read current protected mappings
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/gmail-profile-links/profile/b447c83c-6348-4fab-b850-0db7a5576a83" \
+            > twin-falls-current-mappings.json
+
+          node <<'NODE'
+          const fs = require('fs');
+          const body = JSON.parse(fs.readFileSync('twin-falls-current-mappings.json', 'utf8'));
+          const expected = new Set([
+            '19fcecd42a246598|19fce31d023b574c',
+            '1a03b81260003d6b|1a03b6f9b7b72e83',
+            '1a03b97f6fcb3569|1a03b927824374fd',
+            '1a03f76015409bfa|1a03f6d13a293ebf',
+          ]);
+          const mappings = Array.isArray(body.mappings) ? body.mappings : [];
+          const rows = mappings.map((row) => ({
+            messageId: row.messageId,
+            threadId: row.threadId,
+            evidenceCodes: row.evidenceCodes,
+            expected: expected.has(`${row.messageId}|${row.threadId}`),
+          }));
+          fs.writeFileSync('twin-falls-nine-email-snapshot.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            organizationId: body.organizationId,
+            mappingCount: rows.length,
+            expectedCount: rows.filter((r) => r.expected).length,
+            extraCount: rows.filter((r) => !r.expected).length,
+            mappings: rows,
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: twin-falls-nine-email-snapshot
+          path: twin-falls-nine-email-snapshot.json
+          retention-days: 2
