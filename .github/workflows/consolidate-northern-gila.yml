@@ -64,7 +64,7 @@ jobs:
             -o source-history.json
 
           jq -e --arg id "$CANONICAL_ID" '.ok == true and .profileId == $id' canonical-history.json
-          jq -e --arg id "$FOLLOWUP_ID" 'any(.followUps[]?; .id == $id and .status == "open")' canonical-history.json
+          jq -e --arg id "$FOLLOWUP_ID" 'any(.followUps[]?; .id == $id and .completedAt == null and .dueAt == "2026-11-02T16:00:00.000Z")' canonical-history.json
           jq -e --arg id "$BOOKING_ID" 'any(.bookings[]?; .id == $id and .status == "declined")' canonical-history.json
           jq -e 'any(.contacts[]?; (.email // "" | ascii_downcase) == "lyssaharder88@gmail.com")' canonical-history.json
           jq -e '.contacts | length == 0' source-history.json
@@ -74,4 +74,4 @@ jobs:
           jq -n \
             --slurpfile merge merge-response.json \
             --slurpfile canonical canonical-history.json \
-            '{merged:$merge[0].ok,locationId:$merge[0].locationId,canonicalProfile:$canonical[0].place.name,openFollowUp:($canonical[0].followUps | map(select(.status == "open")) | map({id,label,dueAt,status})),declinedBooking:($canonical[0].bookings | map(select(.status == "declined")) | map({id,name,status}))}'
+            '{merged:$merge[0].ok,locationId:$merge[0].locationId,canonicalProfile:$canonical[0].place.name,openFollowUp:($canonical[0].followUps | map(select(.completedAt == null)) | map({id,kind,dueAt,completedAt})),declinedBooking:($canonical[0].bookings | map(select(.status == "declined")) | map({id,name,status}))}'
