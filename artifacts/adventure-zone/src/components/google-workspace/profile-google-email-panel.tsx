@@ -18,6 +18,34 @@ function fileSize(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
+function conversationYear(conversation: GoogleProfileEmailConversation): number | null {
+  const parsedHeaderDate = Date.parse(conversation.date);
+  if (Number.isFinite(parsedHeaderDate)) {
+    return new Date(parsedHeaderDate).getUTCFullYear();
+  }
+  if (
+    typeof conversation.internalDateMs === "number" &&
+    Number.isFinite(conversation.internalDateMs)
+  ) {
+    return new Date(conversation.internalDateMs).getUTCFullYear();
+  }
+  return null;
+}
+
+function splitCurrentAndHistorical(
+  conversations: GoogleProfileEmailConversation[],
+  currentYear: number,
+) {
+  return {
+    current: conversations.filter(
+      (conversation) => conversationYear(conversation) === currentYear,
+    ),
+    historical: conversations.filter(
+      (conversation) => conversationYear(conversation) !== currentYear,
+    ),
+  };
+}
+
 function ThreadDetail({
   organizationId,
   thread,
@@ -256,10 +284,12 @@ export function ProfileGoogleEmailPanel({
 }) {
   const [tab, setTab] = useState<"emails" | "files">("emails");
   const [conversations, setConversations] = useState<GoogleProfileEmailConversation[]>([]);
+  const [historicalConversations, setHistoricalConversations] = useState<GoogleProfileEmailConversation[]>([]);
   const [files, setFiles] = useState<GoogleProfileFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [filesLoading, setFilesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const currentYear = new Date().getUTCFullYear();
 
   useEffect(() => {
     let active = true;
@@ -272,7 +302,15 @@ export function ProfileGoogleEmailPanel({
     ])
       .then(([emailResult, fileResult]) => {
         if (!active) return;
-        setConversations(emailResult.conversations);
+        const returnedHistorical = (emailResult as any).historicalConversations;
+        if (Array.isArray(returnedHistorical)) {
+          setConversations(emailResult.conversations);
+          setHistoricalConversations(returnedHistorical);
+        } else {
+          const split = splitCurrentAndHistorical(emailResult.conversations, currentYear);
+          setConversations(split.current);
+          setHistoricalConversations(split.historical);
+        }
         setFiles(fileResult.files);
       })
       .catch((caught) => {
@@ -289,7 +327,7 @@ export function ProfileGoogleEmailPanel({
     return () => {
       active = false;
     };
-  }, [organizationId]);
+  }, [organizationId, currentYear]);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/20">
@@ -300,7 +338,7 @@ export function ProfileGoogleEmailPanel({
             Google history
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Matched Gmail conversations from the approved validation sample and historical backfill, plus saved Gmail attachments for this profile.
+            Current Gmail conversations stay up front. Earlier matched Gmail remains available below as relationship history, along with saved Gmail attachments for this profile.
           </p>
           <div className="mt-3 flex gap-2 border-b border-slate-200 dark:border-slate-700">
             <button
@@ -326,13 +364,20 @@ export function ProfileGoogleEmailPanel({
       {tab === "emails" ? (
         <>
           {loading ? <p className="mt-3 text-sm text-slate-500">Loading emails…</p> : null}
+          {!loading && !error ? (
+            <div className="mt-3">
+              <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">
+                {currentYear} emails ({conversations.length})
+              </p>
+            </div>
+          ) : null}
           {!loading && !error && conversations.length === 0 ? (
             <p className="mt-3 text-sm text-slate-500">
-              No matched Gmail conversations are attached to this profile yet.
+              No matched Gmail conversations for {currentYear} are attached to this profile yet.
             </p>
           ) : null}
           {conversations.length > 0 ? (
-            <div className="mt-3 grid gap-2">
+            <div className="mt-2 grid gap-2">
               {conversations.map((conversation) => (
                 <ConversationCard
                   conversation={conversation}
@@ -342,6 +387,26 @@ export function ProfileGoogleEmailPanel({
                 />
               ))}
             </div>
+          ) : null}
+          {!loading && !error && historicalConversations.length > 0 ? (
+            <details className="mt-4 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/20">
+              <summary className="cursor-pointer text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Earlier Gmail history ({historicalConversations.length})
+              </summary>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Older conversations are preserved for relationship context but are not counted as current-year emails.
+              </p>
+              <div className="mt-3 grid gap-2">
+                {historicalConversations.map((conversation) => (
+                  <ConversationCard
+                    conversation={conversation}
+                    key={conversation.threadId}
+                    onFilesCopied={setFiles}
+                    organizationId={organizationId}
+                  />
+                ))}
+              </div>
+            </details>
           ) : null}
         </>
       ) : (

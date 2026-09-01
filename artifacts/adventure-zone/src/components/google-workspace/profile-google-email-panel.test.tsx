@@ -29,6 +29,21 @@ const storedFile = {
   createdAt: "2026-08-24T18:00:00.000Z",
 };
 
+function conversation(threadId: string, year: number) {
+  return {
+    threadId,
+    subject: `${year} Twin Falls County Fair ${threadId}`,
+    from: "Adventure Zone <theadventurezone12@gmail.com>",
+    to: "fair@tfcfair.com",
+    date: `${year}-08-25`,
+    internalDateMs: Date.UTC(year, 7, 25, 18, 0, 0),
+    hasAttachments: false,
+    contactId: null,
+    evidenceCodes: ["exact_contact_email"],
+    originalGmailUrl: `https://mail.google.com/mail/u/0/#all/${threadId}`,
+  };
+}
+
 beforeEach(() => {
   client.getGoogleProfileEmails.mockResolvedValue({
     validationSampleOnly: false,
@@ -40,7 +55,7 @@ beforeEach(() => {
         from: "fair@example.org",
         to: "zone@example.com",
         date: "Mon, 24 Aug 2026 10:00:00 -0600",
-        internalDateMs: 1000,
+        internalDateMs: Date.UTC(2026, 7, 24, 16, 0, 0),
         hasAttachments: true,
         contactId: "contact-1",
         evidenceCodes: ["exact_contact_email", "contact_active_organization"],
@@ -55,7 +70,7 @@ beforeEach(() => {
     messages: [
       {
         id: "m1",
-        internalDateMs: 1000,
+        internalDateMs: Date.UTC(2026, 7, 24, 16, 0, 0),
         from: "fair@example.org",
         to: "zone@example.com",
         cc: "",
@@ -94,10 +109,29 @@ describe("ProfileGoogleEmailPanel", () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
     expect(await screen.findByRole("heading", { name: "Google history" })).toBeInTheDocument();
-    expect(screen.getByText(/historical backfill/i)).toBeInTheDocument();
+    expect(screen.getByText(/relationship history/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair follow up")).toBeInTheDocument();
+  });
+
+  it("shows current-year conversations separately from earlier Gmail history", async () => {
+    const currentYear = new Date().getUTCFullYear();
+    const current = [1, 2, 3, 4].map((n) => conversation(`current-${n}`, currentYear));
+    const earlier = [1, 2, 3, 4, 5].map((n) => conversation(`history-${n}`, currentYear - n));
+    client.getGoogleProfileEmails.mockResolvedValue({
+      validationSampleOnly: false,
+      historicalBackfillIncluded: true,
+      liveGmail: true,
+      unavailableThreadCount: 0,
+      conversations: [...current, ...earlier],
+    });
+
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+
+    expect(await screen.findByText(`${currentYear} emails (4)`)).toBeInTheDocument();
+    expect(screen.getByText("Earlier Gmail history (5)")).toBeInTheDocument();
+    expect(screen.getByText(`${currentYear} Twin Falls County Fair current-4`)).toBeInTheDocument();
   });
 
   it("opens the complete readable thread and lets attachments be saved to Files", async () => {
