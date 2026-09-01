@@ -99,7 +99,7 @@ export function EventProfileWorkspace({
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const organizationLike = organizationContext.children.length > 0 || ["company", "association", "city_government", "tribe", "school"].includes(profile.place.placeType);
 
-  const newFollowUpDueAtValid = /^\\d{4}-\\d{2}-\\d{2}$/.test(newFollowUpDueAt) && !Number.isNaN(new Date(`${newFollowUpDueAt}T12:00:00`).getTime());
+  const newFollowUpDueAtValid = /^\d{4}-\d{2}-\d{2}$/.test(newFollowUpDueAt) && !Number.isNaN(new Date(`${newFollowUpDueAt}T12:00:00`).getTime());
 
   async function saveNewFollowUp() {
     if (!newFollowUpDueAtValid || newFollowUpSaving) return;
