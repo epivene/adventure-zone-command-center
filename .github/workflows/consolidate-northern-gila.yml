@@ -63,6 +63,42 @@ jobs:
             "$base/api/assistant-import/profile-history/$SOURCE_ID" \
             -o source-history.json
 
+          jq '{
+            event: {
+              id: .profileId,
+              name: .place.name,
+              city: (.place.city // ""),
+              region: (.place.region // "")
+            },
+            profile: {
+              address1: (.place.address1 // ""),
+              address2: (.place.address2 // ""),
+              postalCode: (.place.postalCode // "")
+            },
+            contacts: [],
+            booking: (
+              (.bookings | map(select(.name == "Northern Gila County Fair - 2026")) | first)
+              | {
+                  enabled: true,
+                  name: .name,
+                  startsAt: .startsAt,
+                  endsAt: .endsAt,
+                  status: "declined"
+                }
+            )
+          }' canonical-history.json > booking-update.json
+          curl -fsS \
+            -X POST "$base/api/assistant-import/event-profiles" \
+            -H "Authorization: Bearer $ASSISTANT_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @booking-update.json \
+            -o booking-update-response.json
+          jq -e '.ok == true' booking-update-response.json
+          curl -fsS \
+            -H "Authorization: Bearer $ASSISTANT_TOKEN" \
+            "$base/api/assistant-import/profile-history/$CANONICAL_ID" \
+            -o canonical-history.json
+
           jq '{profileId,followUps:(.followUps | map({id,kind,dueAt,completedAt})),bookings:(.bookings | map({id,name,status})),contacts:(.contacts | map({id,name,email}))}' canonical-history.json
           jq -e --arg id "$CANONICAL_ID" '.ok == true and .profileId == $id' canonical-history.json
           jq -e --arg id "$FOLLOWUP_ID" 'any(.followUps[]?; .id == $id and .completedAt == null and .dueAt == "2026-11-02T16:00:00.000Z")' canonical-history.json
