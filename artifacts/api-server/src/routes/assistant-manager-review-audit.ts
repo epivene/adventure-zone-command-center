@@ -33,6 +33,15 @@ type BookingReviewRow = {
   dismissed_at: Date | string | null;
 };
 
+type WrapUpAuditRow = {
+  id: string;
+  booking_id: string;
+  rating_stars: number | string | null;
+  rating_notes: string | null;
+  status: string;
+  completed_at: Date | string;
+};
+
 function iso(value: Date | string | null) {
   return value == null ? null : new Date(value).toISOString();
 }
@@ -119,11 +128,35 @@ managerReviewAuditRouter.get("/manager-review-audit", async (req, res): Promise<
       [leg.leg_id],
     );
 
+    const tableResult = await pool.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.event_wrap_ups')::text AS table_name",
+    );
+    const wrapUpResult = tableResult.rows[0]?.table_name === "event_wrap_ups"
+      ? await pool.query<WrapUpAuditRow>(
+          `SELECT id,
+                  booking_id,
+                  rating_stars,
+                  rating_notes,
+                  status,
+                  coalesce(reviewed_at, submitted_at, updated_at) AS completed_at
+             FROM event_wrap_ups
+            WHERE leg_id = $1
+              AND status IN ('submitted', 'reviewed')
+            ORDER BY coalesce(reviewed_at, submitted_at, updated_at) DESC, id DESC`,
+          [leg.leg_id],
+        )
+      : { rows: [] as WrapUpAuditRow[] };
+    const wrapUpByBooking = new Map(
+      wrapUpResult.rows.map((row) => [row.booking_id, row]),
+    );
+
     const now = new Date();
     const bookings = bookingResult.rows.map((row) => {
       const startsAt = row.starts_at == null ? null : new Date(row.starts_at);
       const endsAt = row.ends_at == null ? null : new Date(row.ends_at);
-      const hasReview = row.review_id != null;
+      const managerReviewPresent = row.review_id != null;
+      const fallbackWrapUp = managerReviewPresent ? null : wrapUpByBooking.get(row.id) ?? null;
+      const hasReview = managerReviewPresent || fallbackWrapUp !== null;
       const dismissed = !hasReview && row.dismissed_at != null;
       const due = !hasReview && !dismissed && isEventReviewDue({ startsAt, endsAt }, now);
       const upcoming = !hasReview && !dismissed && !due && (endsAt ?? startsAt) != null;
@@ -145,9 +178,10 @@ managerReviewAuditRouter.get("/manager-review-audit", async (req, res): Promise<
               : upcoming
                 ? "upcoming"
                 : "undated",
-        review: hasReview
+        review: managerReviewPresent
           ? {
               id: row.review_id,
+              source: "manager_review",
               rating: row.rating,
               feedback: row.feedback,
               organizerSiteNotes: row.organizer_site_notes,
@@ -155,7 +189,20 @@ managerReviewAuditRouter.get("/manager-review-audit", async (req, res): Promise<
               recommendReturn: row.recommend_return,
               createdAt: iso(row.review_created_at),
             }
-          : null,
+          : fallbackWrapUp
+            ? {
+                id: fallbackWrapUp.id,
+                source: "event_wrap_up",
+                rating: fallbackWrapUp.rating_stars == null
+                  ? null
+                  : Number(fallbackWrapUp.rating_stars),
+                feedback: fallbackWrapUp.rating_notes,
+                organizerSiteNotes: null,
+                crewNotes: null,
+                recommendReturn: null,
+                createdAt: iso(fallbackWrapUp.completed_at),
+              }
+            : null,
         dismissal: dismissed
           ? {
               reason: row.dismissal_reason,
