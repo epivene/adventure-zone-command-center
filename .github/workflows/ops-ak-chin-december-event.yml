@@ -1,0 +1,52 @@
+name: One-time Ak-Chin profile audit
+
+on:
+  push:
+    branches:
+      - ops/ak-chin-december-event-2026-09-01
+    paths:
+      - ".github/workflows/ops-ak-chin-december-event.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ops/ak-chin-december-event-2026-09-01
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Find exact live profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error --get             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --data-urlencode "q=Ak-Chin"             --data-urlencode "limit=20"             "${BASE_URL}/profile-search" > /tmp/ak-chin-search.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const root = JSON.parse(fs.readFileSync('/tmp/ak-chin-search.json', 'utf8'));
+          const results = Array.isArray(root.results) ? root.results : [];
+          fs.mkdirSync('.github/ops-results', { recursive: true });
+          fs.writeFileSync('.github/ops-results/ak-chin-profile-audit.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            ok: root.ok === true,
+            resultCount: results.length,
+            results
+          }, null, 2) + '\n');
+          NODE
+
+      - name: Commit audit result
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/ops-results/ak-chin-profile-audit.json
+          git commit -m "ops: record Ak-Chin live profile audit"
+          git push origin HEAD:ops/ak-chin-december-event-2026-09-01
