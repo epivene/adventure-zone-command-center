@@ -135,6 +135,53 @@ export async function ensureDesignStudioSchemaBeforeListen(
       );
       CREATE INDEX IF NOT EXISTS design_outputs_project_created_idx
         ON design_outputs (project_id, created_at DESC);
+
+      CREATE TABLE IF NOT EXISTS design_canva_connections (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        office_account_id uuid NOT NULL REFERENCES office_accounts(id) ON DELETE CASCADE,
+        canva_user_id text,
+        encrypted_access_token jsonb NOT NULL,
+        encrypted_refresh_token jsonb,
+        token_expires_at timestamptz,
+        scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
+        status text NOT NULL DEFAULT 'connected' CHECK (status IN ('connected','disconnected','error')),
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS design_canva_connections_account_unique
+        ON design_canva_connections (office_account_id);
+      CREATE INDEX IF NOT EXISTS design_canva_connections_status_idx
+        ON design_canva_connections (status, updated_at DESC);
+
+      CREATE TABLE IF NOT EXISTS design_project_canva_links (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        project_id uuid NOT NULL REFERENCES design_projects(id) ON DELETE CASCADE,
+        design_id text NOT NULL,
+        imported_version_id uuid NOT NULL REFERENCES design_project_versions(id) ON DELETE RESTRICT,
+        status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','ready','failed')),
+        last_import_at timestamptz,
+        last_error text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS design_project_canva_links_project_unique
+        ON design_project_canva_links (project_id);
+      CREATE INDEX IF NOT EXISTS design_project_canva_links_design_idx
+        ON design_project_canva_links (design_id);
+
+      CREATE TABLE IF NOT EXISTS design_canva_oauth_states (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        office_account_id uuid NOT NULL REFERENCES office_accounts(id) ON DELETE CASCADE,
+        state text NOT NULL,
+        encrypted_code_verifier jsonb NOT NULL,
+        return_path text NOT NULL DEFAULT '/design-studio',
+        expires_at timestamptz NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS design_canva_oauth_states_state_unique
+        ON design_canva_oauth_states (state);
+      CREATE INDEX IF NOT EXISTS design_canva_oauth_states_account_idx
+        ON design_canva_oauth_states (office_account_id, expires_at DESC);
     `);
     return true;
   } finally {

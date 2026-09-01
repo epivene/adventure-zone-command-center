@@ -66,6 +66,7 @@ import officeAdminMailRouter from "./office-admin-mail";
 import officeAdminEmailDraftsRouter from "./office-admin-email-drafts";
 import officeAdminMessagesRouter from "./office-admin-messages";
 import officeDesignStudioRouter from "./office-design-studio";
+import officeDesignStudioCanvaRouter from "./office-design-studio-canva";
 import officeAdminHistoryRouter from "./office-admin-history";
 import managerAuthRouter from "./leg-manager-auth";
 import managerMapRouter from "./leg-manager-map";
@@ -113,6 +114,7 @@ router.use(officeMessagesRouter);
 // enforces that boundary internally. Mount it before the owner-only gate so
 // Office coordinators can load projects, templates, assets, and editor tools.
 router.use(officeDesignStudioRouter);
+router.use(officeDesignStudioCanvaRouter);
 router.use(managerAuthRouter);
 router.use(managerMapRouter);
 router.use(managerRouter);

@@ -1,27 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Check,
-  Clipboard,
-  ExternalLink,
-  Link as LinkIcon,
-  RefreshCw,
-  Save,
-  Sparkles,
-} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, ExternalLink, RefreshCw } from "lucide-react";
 import { Link, useParams } from "wouter";
-import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import { Input } from "@workspace/avz-crm/components/ui/input";
-import { Label } from "@workspace/avz-crm/components/ui/label";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { Textarea } from "@workspace/avz-crm/components/ui/textarea";
-import { designStudioApi, type DesignProject } from "@/lib/design-studio-api";
-import { CANVA_STARTERS } from "@/lib/design-studio/canva-starters";
+import {
+  designStudioApi,
+  type CanvaProjectState,
+  type DesignAsset,
+  type DesignProject,
+} from "@/lib/design-studio-api";
+import { starterById } from "@/lib/design-studio/canva-starters";
+import {
+  createImageNode,
+  normalizeCanvas,
+  type CanvasDocument,
+} from "@/lib/design-studio/model";
+import {
+  downloadDesignBlob,
+  exportCanvasPdf,
+  exportCanvasPng,
+} from "@/lib/design-studio/export-canvas";
+import { useFreeformEditor } from "@/components/design-studio/use-freeform-editor";
+import { FreeformCanvas } from "@/components/design-studio/FreeformCanvas";
+import { MobileEditorTopBar } from "@/components/design-studio/MobileEditorTopBar";
+import { ContextualBottomToolbar } from "@/components/design-studio/ContextualBottomToolbar";
+import {
+  AssetPickerSheet,
+  type PickerAsset,
+} from "@/components/design-studio/AssetPickerSheet";
+import { LayersSheet } from "@/components/design-studio/LayersSheet";
+import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
+import { ExportSheet } from "@/components/design-studio/ExportSheet";
+import { CanvaHandoffSheet } from "@/components/design-studio/CanvaHandoffSheet";
 
-const CANVA_CREATE_URL = "https://www.canva.com/create/";
-const CANVA_URL_PREFIX = "CANVA_URL=";
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
+const EMPTY_CANVAS = normalizeCanvas(null);
+
+type PhotoPickerMode = "add" | "replace";
+type ExportFormat = "png" | "pdf";
 
 function noteValue(notes: string | null | undefined, prefix: string) {
   return (notes ?? "")
@@ -30,91 +46,292 @@ function noteValue(notes: string | null | undefined, prefix: string) {
     ?.slice(prefix.length) ?? "";
 }
 
-function buildNotes(existing: string | null | undefined, starterId: string, canvaUrl: string) {
-  const other = (existing ?? "")
-    .split("\n")
-    .filter((line) => line && !line.startsWith(STARTER_PREFIX) && !line.startsWith(CANVA_URL_PREFIX));
-  const lines = [starterId ? `${STARTER_PREFIX}${starterId}` : "", canvaUrl.trim() ? `${CANVA_URL_PREFIX}${canvaUrl.trim()}` : "", ...other].filter(Boolean);
-  return lines.join("\n");
+function exportFilename(name: string, format: ExportFormat) {
+  const stem = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "adventure-zone-design";
+  return `${stem}.${format}`;
+}
+
+function canvaButtonLabel(state: CanvaProjectState | null, dirty: boolean) {
+  if (!state) return "Canva";
+  if (!state.configured) return "Canva setup needed";
+  if (!state.connected) return "Connect Canva";
+  if (state.linked && (state.outdated || dirty)) return "Update Canva";
+  if (state.linked) return "Continue in Canva";
+  return "Open in Canva";
+}
+
+function openWaitingWindow() {
+  const target = window.open("about:blank", "_blank");
+  if (target) {
+    try { target.opener = null; } catch { /* browser may forbid changing opener */ }
+  }
+  return target;
+}
+
+function navigateCanvaWindow(target: Window | null, url: string) {
+  if (target && !target.closed) {
+    target.location.replace(url);
+    return;
+  }
+  window.location.assign(url);
 }
 
 export default function DesignStudioEditorPage() {
   const params = useParams<{ id: string }>();
   const [project, setProject] = useState<DesignProject | null>(null);
   const [name, setName] = useState("");
-  const [content, setContent] = useState("");
-  const [canvaUrl, setCanvaUrl] = useState("");
+  const [assets, setAssets] = useState<DesignAsset[]>([]);
+  const [canvasDoc, setCanvasDoc] = useState<CanvasDocument | null>(null);
+  const [canvaState, setCanvaState] = useState<CanvaProjectState | null>(null);
+  const [canvaBusy, setCanvaBusy] = useState(false);
+  const [showCanvaHandoff, setShowCanvaHandoff] = useState(false);
+  const [photoPickerMode, setPhotoPickerMode] = useState<PhotoPickerMode | null>(null);
+  const [showLayers, setShowLayers] = useState(false);
+  const [showAddElements, setShowAddElements] = useState(false);
+  const [showExport, setShowExport] = useState(false);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const latestCanvas = useRef<CanvasDocument | null>(null);
+
+  const canEdit = Boolean(
+    project &&
+      project.status !== "archived" &&
+      project.status !== "used" &&
+      project.status !== "sent",
+  );
+
+  const onCanvasChange = useCallback((doc: CanvasDocument) => {
+    latestCanvas.current = doc;
+    setDirty(true);
+    setSaved(false);
+  }, []);
+
+  const editor = useFreeformEditor(canvasDoc ?? EMPTY_CANVAS, {
+    canEdit,
+    onChange: onCanvasChange,
+  });
+
+  const refreshCanvaState = useCallback(async () => {
+    if (!params.id) return null;
+    try {
+      const state = await designStudioApi.getCanvaState(params.id);
+      setCanvaState(state);
+      return state;
+    } catch {
+      setCanvaState(null);
+      return null;
+    }
+  }, [params.id]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    const canvaError = query.get("canvaError");
+    const connected = query.get("canvaConnected");
+    if (!canvaError && !connected) return;
+    if (canvaError) setError(`Canva connection failed: ${canvaError.replaceAll("_", " ").toLowerCase()}`);
+    query.delete("canvaError");
+    query.delete("canvaConnected");
+    const next = `${window.location.pathname}${query.size ? `?${query.toString()}` : ""}${window.location.hash}`;
+    window.history.replaceState(null, "", next);
+  }, []);
 
   useEffect(() => {
     if (!params.id) return;
     setLoading(true);
-    designStudioApi.get(params.id)
-      .then((value) => {
+    setError(null);
+
+    Promise.all([
+      designStudioApi.get(params.id),
+      designStudioApi.listAssets().catch(() => [] as DesignAsset[]),
+      designStudioApi.getCanvaState(params.id).catch(() => null),
+    ])
+      .then(([value, assetList, loadedCanvaState]) => {
         setProject(value);
         setName(value.name);
-        setContent(value.content ?? "");
-        setCanvaUrl(noteValue(value.notes, CANVA_URL_PREFIX));
+        setAssets(assetList);
+        setCanvaState(loadedCanvaState);
+
+        const starterId = noteValue(value.notes, STARTER_PREFIX);
+        const starterCanvas = starterById(starterId)?.canvas ?? null;
+        const doc = normalizeCanvas(value.canvas ?? starterCanvas);
+        latestCanvas.current = doc;
+        setCanvasDoc(doc);
+        setDirty(false);
+        setSaved(false);
       })
-      .catch((cause) => setError(cause instanceof Error ? cause.message : "Project could not be loaded."))
+      .catch((cause) => {
+        setError(cause instanceof Error ? cause.message : "Project could not be loaded.");
+      })
       .finally(() => setLoading(false));
   }, [params.id]);
 
-  const starterId = useMemo(() => noteValue(project?.notes, STARTER_PREFIX), [project?.notes]);
-  const starter = useMemo(() => CANVA_STARTERS.find((item) => item.id === starterId), [starterId]);
+  const save = useCallback(async () => {
+    if (!params.id || !project || !name.trim()) return false;
 
-  async function save() {
-    if (!params.id || !project || !name.trim()) return;
     setSaving(true);
-    setSaved(false);
     setError(null);
     try {
       const value = await designStudioApi.update(params.id, {
         name: name.trim(),
         type: project.type,
-        content,
-        notes: buildNotes(project.notes, starterId, canvaUrl),
+        canvas: latestCanvas.current ?? editor.doc,
         syncState: "synced",
       });
       setProject(value);
+      setDirty(false);
       setSaved(true);
+      void refreshCanvaState();
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Project could not be saved.");
+      return false;
     } finally {
       setSaving(false);
     }
+  }, [editor.doc, name, params.id, project, refreshCanvaState]);
+
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  useEffect(() => {
+    if (!dirty || loading || saving) return;
+    const timer = window.setTimeout(() => void saveRef.current(), 1200);
+    return () => window.clearTimeout(timer);
+  }, [dirty, loading, name, saving]);
+
+  function choosePhoto(asset: PickerAsset) {
+    const common = {
+      name: asset.name,
+      alt: asset.altText ?? asset.name,
+      assetId: asset.builtin ? null : asset.id,
+      src: asset.builtin ? asset.url ?? null : null,
+    };
+
+    if (photoPickerMode === "replace") {
+      editor.patchSelected(common);
+    } else {
+      editor.insertNode(createImageNode({
+        ...common,
+        x: Math.max(24, editor.doc.width * 0.18),
+        y: Math.max(24, editor.doc.height * 0.18),
+        width: Math.min(420, editor.doc.width * 0.52),
+        height: Math.min(300, editor.doc.height * 0.32),
+      }));
+    }
+    setPhotoPickerMode(null);
   }
 
-  async function copyContent() {
+  async function exportDesign(format: ExportFormat) {
+    setExporting(format);
+    setError(null);
     try {
-      await navigator.clipboard.writeText(content);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setError("Could not copy automatically. You can still select the text below and copy it manually.");
+      const doc = latestCanvas.current ?? editor.doc;
+      const blob = format === "png"
+        ? await exportCanvasPng(doc, assets)
+        : await exportCanvasPdf(doc, assets);
+      downloadDesignBlob(blob, exportFilename(name, format));
+      setShowExport(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : `Could not export ${format.toUpperCase()}.`);
+    } finally {
+      setExporting(null);
     }
   }
 
-  function openCanva() {
-    const target = canvaUrl.trim() || CANVA_CREATE_URL;
-    window.open(target, "_blank", "noopener,noreferrer");
+  async function connectCanva() {
+    if (!project) return;
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      const started = await designStudioApi.startCanvaConnect(`/design-studio/${project.id}`);
+      window.location.assign(started.authorizationUrl);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not start the Canva connection.");
+      setCanvaBusy(false);
+    }
+  }
+
+  async function openExistingCanva() {
+    if (!project) return;
+    const target = openWaitingWindow();
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      const result = await designStudioApi.getCanvaEditUrl(project.id);
+      setShowCanvaHandoff(false);
+      navigateCanvaWindow(target, result.editUrl);
+    } catch (cause) {
+      target?.close();
+      setError(cause instanceof Error ? cause.message : "Could not open the Canva design.");
+    } finally {
+      setCanvaBusy(false);
+    }
+  }
+
+  async function createCanvaCopy() {
+    if (!project) return;
+    const target = openWaitingWindow();
+    setCanvaBusy(true);
+    setError(null);
+    try {
+      if (dirty) {
+        const savedOkay = await save();
+        if (!savedOkay) {
+          target?.close();
+          return;
+        }
+      }
+      const pdf = await exportCanvasPdf(latestCanvas.current ?? editor.doc, assets);
+      const imported = await designStudioApi.importToCanva(project.id, pdf);
+      await refreshCanvaState();
+      setShowCanvaHandoff(false);
+      navigateCanvaWindow(target, imported.editUrl);
+    } catch (cause) {
+      target?.close();
+      setError(cause instanceof Error ? cause.message : "Could not create the Canva copy.");
+    } finally {
+      setCanvaBusy(false);
+    }
+  }
+
+  function handleCanvaAction() {
+    if (!canvaState?.configured) {
+      setError("Canva Connect still needs server configuration before it can be used.");
+      return;
+    }
+    if (!canvaState.connected) {
+      void connectCanva();
+      return;
+    }
+    if (!canvaState.linked) {
+      void createCanvaCopy();
+      return;
+    }
+    if (canvaState.outdated || dirty) {
+      setShowCanvaHandoff(true);
+      return;
+    }
+    void openExistingCanva();
   }
 
   if (loading) {
     return (
-      <div className="mx-auto grid max-w-6xl gap-5 p-4">
+      <div className="flex min-h-[70dvh] flex-col gap-4 p-4">
         <Skeleton className="h-12 rounded-xl" />
-        <Skeleton className="h-64 rounded-2xl" />
-        <Skeleton className="h-80 rounded-2xl" />
+        <Skeleton className="min-h-[32rem] flex-1 rounded-2xl" />
       </div>
     );
   }
 
-  if (!project) {
+  if (!project || !canvasDoc) {
     return (
       <div className="mx-auto max-w-lg rounded-2xl border border-destructive/30 bg-destructive/10 p-8 text-center" role="alert">
         <p className="text-lg font-bold">This design is unavailable.</p>
@@ -128,94 +345,101 @@ export default function DesignStudioEditorPage() {
   }
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 pb-12">
-      <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border hover:bg-muted" href="/design-studio" aria-label="Back to Design Studio">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-          <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Canva project</p>
-            <h1 className="truncate text-xl font-black text-foreground">{project.name}</h1>
-          </div>
-          <Badge variant="outline" className="hidden capitalize sm:inline-flex">{project.type}</Badge>
+    <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-background" data-testid="design-editor">
+      <MobileEditorTopBar
+        canEdit={canEdit}
+        canRedo={editor.canRedo}
+        canUndo={editor.canUndo}
+        dirty={dirty}
+        name={name}
+        onExport={() => setShowExport(true)}
+        onNameChange={(nextName) => {
+          setName(nextName);
+          setDirty(true);
+          setSaved(false);
+        }}
+        onRedo={editor.redo}
+        onSave={() => void save()}
+        onUndo={editor.undo}
+        onZoomChange={editor.setZoom}
+        saved={saved}
+        saving={saving}
+        type={project.type}
+        zoom={editor.doc.zoom}
+      />
+
+      {error ? (
+        <div className="mx-3 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
+          {error}
         </div>
-        <div className="flex items-center gap-2">
-          {saved ? <span className="hidden items-center gap-1 text-xs font-semibold text-primary sm:flex"><Check className="h-3.5 w-3.5" />Saved</span> : null}
-          <Button className="gap-2" disabled={saving || !name.trim()} onClick={() => void save()}>
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {saving ? "Saving…" : "Save"}
+      ) : null}
+
+      <main className="relative flex min-h-0 flex-1 flex-col" data-testid="design-canvas">
+        <FreeformCanvas assets={assets} editor={editor} />
+      </main>
+
+      <div className="relative z-20">
+        <ContextualBottomToolbar
+          editor={editor}
+          onAddPhoto={() => setPhotoPickerMode("add")}
+          onOpenAdd={() => setShowAddElements(true)}
+          onOpenLayers={() => setShowLayers(true)}
+          onReplacePhoto={() => setPhotoPickerMode("replace")}
+        />
+        <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-3 py-1.5">
+          <span className="truncate text-[11px] text-muted-foreground">
+            {editor.selectedNodes.length
+              ? `${editor.selectedNodes.length} layer${editor.selectedNodes.length === 1 ? "" : "s"} selected`
+              : canvaState?.linked && (canvaState.outdated || dirty)
+                ? "Canva copy is older than this design"
+                : "Tap a layer to edit it"}
+          </span>
+          <Button
+            className="h-8 shrink-0 gap-1.5 px-2.5 text-xs"
+            disabled={canvaBusy || saving}
+            onClick={handleCanvaAction}
+            size="sm"
+            variant={canvaState?.linked && !canvaState.outdated && !dirty ? "outline" : "default"}
+          >
+            {canvaBusy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <ExternalLink className="h-3.5 w-3.5" />}
+            {canvaButtonLabel(canvaState, dirty)}
           </Button>
         </div>
-      </header>
-
-      {error ? <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">{error}</div> : null}
-
-      <section className="relative overflow-hidden rounded-2xl bg-sidebar p-6 text-sidebar-foreground shadow-lg md:p-8">
-        <div className="pointer-events-none absolute -right-12 -top-20 h-64 w-64 rounded-full bg-accent/20 blur-3xl" />
-        <div className="relative grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/40 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]">
-              <Sparkles className="h-3.5 w-3.5 text-accent" />
-              Free Canva workflow
-            </div>
-            <h2 className="mt-4 text-3xl font-black tracking-tight">Edit the visual in Canva. Keep the project organized here.</h2>
-            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-sidebar-foreground/70">
-              Copy the prepared Adventure Zone text, open Canva, build or duplicate the design there, then paste the Canva design link back into this project. No Brand Kit, Autofill, or Canva Pro feature is required.
-            </p>
-          </div>
-          <Button className="gap-2 bg-primary text-primary-foreground" size="lg" onClick={openCanva}>
-            <ExternalLink className="h-4 w-4" />
-            {canvaUrl.trim() ? "Open saved Canva design" : "Open Canva Free"}
-          </Button>
-        </div>
-      </section>
-
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <section className="rounded-2xl border border-border bg-card p-5 shadow-sm md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Prepared content</p>
-              <h2 className="mt-1 text-xl font-black">Copy into Canva</h2>
-              {starter ? <p className="mt-1 text-sm text-muted-foreground">Starter: {starter.name} • {starter.canvasSize}</p> : null}
-            </div>
-            <Button className="gap-2" onClick={() => void copyContent()} variant="outline">
-              {copied ? <Check className="h-4 w-4" /> : <Clipboard className="h-4 w-4" />}
-              {copied ? "Copied" : "Copy all text"}
-            </Button>
-          </div>
-          <Textarea
-            className="mt-5 min-h-[28rem] resize-y font-mono text-sm leading-relaxed"
-            onChange={(event) => { setContent(event.target.value); setSaved(false); }}
-            value={content}
-          />
-        </section>
-
-        <aside className="grid content-start gap-5">
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <Label htmlFor="design-name">Project name</Label>
-            <Input id="design-name" className="mt-2" value={name} onChange={(event) => { setName(event.target.value); setSaved(false); }} />
-          </section>
-
-          <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4 text-primary" />
-              <h2 className="font-black">Canva design link</h2>
-            </div>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">After you make or duplicate the design in Canva, paste its normal share/edit URL here so you can jump straight back to it later.</p>
-            <Input className="mt-4" placeholder="https://www.canva.com/design/..." value={canvaUrl} onChange={(event) => { setCanvaUrl(event.target.value); setSaved(false); }} />
-            <Button className="mt-3 w-full gap-2" onClick={openCanva} variant="outline">
-              <ExternalLink className="h-4 w-4" />
-              {canvaUrl.trim() ? "Open design" : "Create in Canva"}
-            </Button>
-          </section>
-
-          <section className="rounded-2xl border border-dashed border-border bg-muted/20 p-5">
-            <p className="font-black text-foreground">What happened to the old editor?</p>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">It is intentionally retired from this workflow. Canva now handles visual editing; Command Center handles the business context, prepared copy, and saved design links.</p>
-          </section>
-        </aside>
       </div>
+
+      {photoPickerMode ? (
+        <AssetPickerSheet
+          assets={assets}
+          onChoose={choosePhoto}
+          onClose={() => setPhotoPickerMode(null)}
+        />
+      ) : null}
+
+      {showLayers ? (
+        <LayersSheet editor={editor} onClose={() => setShowLayers(false)} />
+      ) : null}
+
+      {showAddElements ? (
+        <AddElementSheet editor={editor} onClose={() => setShowAddElements(false)} />
+      ) : null}
+
+      {showExport ? (
+        <ExportSheet
+          exporting={exporting}
+          onClose={() => setShowExport(false)}
+          onExportPdf={() => void exportDesign("pdf")}
+          onExportPng={() => void exportDesign("png")}
+        />
+      ) : null}
+
+      {showCanvaHandoff ? (
+        <CanvaHandoffSheet
+          busy={canvaBusy}
+          onClose={() => setShowCanvaHandoff(false)}
+          onCreateNewCopy={() => void createCanvaCopy()}
+          onOpenExisting={() => void openExistingCanva()}
+        />
+      ) : null}
     </div>
   );
 }
