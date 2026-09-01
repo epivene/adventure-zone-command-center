@@ -99,8 +99,10 @@ export function EventProfileWorkspace({
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const organizationLike = organizationContext.children.length > 0 || ["company", "association", "city_government", "tribe", "school"].includes(profile.place.placeType);
 
+  const newFollowUpDueAtValid = /^\d{4}-\d{2}-\d{2}$/.test(newFollowUpDueAt) && !Number.isNaN(new Date(`${newFollowUpDueAt}T12:00:00`).getTime());
+
   async function saveNewFollowUp() {
-    if (!newFollowUpDueAt || newFollowUpSaving) return;
+    if (!newFollowUpDueAtValid || newFollowUpSaving) return;
     setNewFollowUpSaving(true);
     setNewFollowUpError("");
     const dueAt = new Date(`${newFollowUpDueAt}T12:00:00`);
@@ -326,11 +328,11 @@ export function EventProfileWorkspace({
                   </label>
                   <label className="grid gap-1 text-sm font-semibold text-slate-800">
                     Due date
-                    <input aria-label="Due date" type="date" value={newFollowUpDueAt} onChange={(event) => setNewFollowUpDueAt(event.target.value)} />
+                    <input aria-label="Due date" inputMode="numeric" maxLength={10} placeholder="YYYY-MM-DD" type="text" value={newFollowUpDueAt} onChange={(event) => setNewFollowUpDueAt(event.target.value)} />
                   </label>
                 </div>
                 {newFollowUpError ? <p className="text-sm font-semibold text-red-700" role="alert">{newFollowUpError}</p> : null}
-                <button className="button-primary justify-self-start" disabled={!newFollowUpDueAt || newFollowUpSaving} onClick={() => void saveNewFollowUp()} type="button">
+                <button className="button-primary justify-self-start" disabled={!newFollowUpDueAtValid || newFollowUpSaving} onClick={() => void saveNewFollowUp()} type="button">
                   {newFollowUpSaving ? "Saving…" : "Save follow-up"}
                 </button>
               </div>
