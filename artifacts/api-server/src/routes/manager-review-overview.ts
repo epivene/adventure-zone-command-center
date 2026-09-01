@@ -30,6 +30,14 @@ type ReviewRow = {
   created_at: Date | string;
 };
 
+type WrapUpRow = {
+  id: string;
+  booking_id: string;
+  rating_stars: number | string | null;
+  rating_notes: string | null;
+  completed_at: Date | string;
+};
+
 type DismissalRow = { booking_id: string };
 
 router.get("/manager/reviews/due", requireManager, async (req, res): Promise<void> => {
@@ -71,6 +79,50 @@ router.get("/manager/reviews/due", requireManager, async (req, res): Promise<voi
       ),
     ]);
 
+    const tableResult = await pool.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.event_wrap_ups')::text AS table_name",
+    );
+    const wrapUpResult = tableResult.rows[0]?.table_name === "event_wrap_ups"
+      ? await pool.query<WrapUpRow>(
+          `SELECT id,
+                  booking_id,
+                  rating_stars,
+                  rating_notes,
+                  coalesce(reviewed_at, submitted_at, updated_at) AS completed_at
+             FROM event_wrap_ups
+            WHERE leg_id = $1
+              AND status IN ('submitted', 'reviewed')
+            ORDER BY coalesce(reviewed_at, submitted_at, updated_at) DESC, id DESC`,
+          [legId],
+        )
+      : { rows: [] as WrapUpRow[] };
+
+    const reviewBookingIds = new Set(reviewResult.rows.map((row) => row.booking_id));
+    const reviews = [
+      ...reviewResult.rows.map((row) => ({
+        id: row.id,
+        bookingId: row.booking_id,
+        rating: row.rating,
+        feedback: row.feedback,
+        organizerSiteNotes: row.organizer_site_notes,
+        crewNotes: row.crew_notes,
+        recommendReturn: row.recommend_return,
+        createdAt: new Date(row.created_at),
+      })),
+      ...wrapUpResult.rows
+        .filter((row) => !reviewBookingIds.has(row.booking_id))
+        .map((row) => ({
+          id: row.id,
+          bookingId: row.booking_id,
+          rating: row.rating_stars == null ? 0 : Number(row.rating_stars),
+          feedback: row.rating_notes,
+          organizerSiteNotes: null,
+          crewNotes: null,
+          recommendReturn: null,
+          createdAt: new Date(row.completed_at),
+        })),
+    ];
+
     const overview = buildManagerReviewOverview({
       bookings: bookingResult.rows.map((row) => ({
         id: row.id,
@@ -81,16 +133,7 @@ router.get("/manager/reviews/due", requireManager, async (req, res): Promise<voi
         endsAt: row.ends_at == null ? null : new Date(row.ends_at),
         status: row.status,
       })),
-      reviews: reviewResult.rows.map((row) => ({
-        id: row.id,
-        bookingId: row.booking_id,
-        rating: row.rating,
-        feedback: row.feedback,
-        organizerSiteNotes: row.organizer_site_notes,
-        crewNotes: row.crew_notes,
-        recommendReturn: row.recommend_return,
-        createdAt: new Date(row.created_at),
-      })),
+      reviews,
       dismissedBookingIds: new Set(dismissalResult.rows.map((row) => row.booking_id)),
       now: new Date(),
     });
