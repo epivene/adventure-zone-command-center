@@ -1,0 +1,23 @@
+{
+  "checkedAt": "2026-09-01T21:35:02.004Z",
+  "ok": true,
+  "query": "WYO-131",
+  "resultCount": 1,
+  "results": [
+    {
+      "id": "47a2421f-efbd-4abe-bc21-3123bb65f40f",
+      "kind": "organization",
+      "label": "WYO-131 Biketoberfest Gravel Race",
+      "secondaryLabel": null,
+      "city": "Lander",
+      "region": "WY",
+      "status": "declined",
+      "lastContactAt": null,
+      "bookingCount": 1,
+      "matchedOn": [
+        "name",
+        "booking"
+      ]
+    }
+  ]
+}
