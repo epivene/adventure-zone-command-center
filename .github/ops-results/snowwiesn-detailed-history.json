@@ -1,0 +1,135 @@
+{
+  "checkedAt": "2026-09-01T22:01:47.775Z",
+  "profileId": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+  "place": {
+    "id": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+    "name": "SnowWiesn Oktoberfest",
+    "placeType": "festival_event",
+    "phone": "801-620-1075",
+    "address1": null,
+    "address2": null,
+    "city": "Huntsville",
+    "region": "UT",
+    "postalCode": null,
+    "website": "https://www.snowbasin.com/events/snowwiesn-oktoberfest/",
+    "lastResort": false,
+    "lastResortReason": null,
+    "actRecordId": null
+  },
+  "contacts": [
+    {
+      "id": "8bd987a2-18e8-436c-ad38-81119923ed6f",
+      "name": "Zachary Smith",
+      "role": "Current SnowWiesn contact",
+      "isPrimary": true,
+      "phone": null,
+      "email": "zach.smith@snowbasin.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    },
+    {
+      "id": "8a1f1712-4124-4e1b-a68d-dfe856e6d84d",
+      "name": "Michael Rueckert",
+      "role": "Historical SnowWiesn contact / copied on current draft",
+      "isPrimary": false,
+      "phone": null,
+      "email": "mrueckert@snowbasin.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    }
+  ],
+  "bookings": [
+    {
+      "id": "f1a65479-a506-4dc5-902f-8a62d76c2340",
+      "name": "SnowWiesn Oktoberfest - 2026",
+      "primaryContactId": "8bd987a2-18e8-436c-ad38-81119923ed6f",
+      "city": "Huntsville",
+      "region": "UT",
+      "startsAt": "2026-08-29T17:00:00.000Z",
+      "endsAt": "2026-10-18T17:00:00.000Z",
+      "status": "possible",
+      "probability": "possible",
+      "notes": null,
+      "actRecordId": null
+    }
+  ],
+  "followUps": [
+    {
+      "id": "a1841746-9b8a-4a9e-8370-e96d8041fbfe",
+      "contactId": null,
+      "bookingId": null,
+      "kind": "Reconnect with SnowWiesn",
+      "dueAt": "2026-09-01T16:00:00.000Z",
+      "completedAt": null
+    },
+    {
+      "id": "5fb6ba59-a516-4e10-9be8-095da7d52cf0",
+      "contactId": "8bd987a2-18e8-436c-ad38-81119923ed6f",
+      "bookingId": "f1a65479-a506-4dc5-902f-8a62d76c2340",
+      "kind": "email",
+      "dueAt": "2026-09-01T17:00:00.000Z",
+      "completedAt": null
+    }
+  ],
+  "notes": [
+    {
+      "id": "0d65500c-7bed-4693-9372-b7fa3e301f7f",
+      "contactId": null,
+      "bookingId": null,
+      "kind": "note",
+      "subject": "September 1 SnowWiesn handoff to Zach Smith",
+      "body": "Carrie Lindsay, Director of Event Sales at Snowbasin, connected Desiree with Zachary Smith on September 1, 2026. Zach will provide additional information to determine whether Adventure Zone is a good fit for SnowWiesn. Zach: zach.smith@snowbasin.com. Carrie: clindsay@snowbasin.com; office 801-620-1076; cell 801-941-3656. Michael Rueckert remains copied at mrueckert@snowbasin.com. Reply-all draft created requesting the 2026 dates and hours, expected attendance, available attraction space, and whether Snowbasin prefers a prepaid package or pay-for-play/revenue-share arrangement. Original general contact: events@snowbasin.com.",
+      "occurredAt": "2026-09-01T21:59:46.684Z",
+      "createdAt": "2026-09-01T21:59:46.684Z",
+      "updatedAt": "2026-09-01T21:59:46.684Z",
+      "importedFromAct": false,
+      "actSourceType": null,
+      "historicalDateUnknown": false,
+      "paperNoteSource": null
+    },
+    {
+      "id": "c9d78039-e5d7-434e-82d5-9e0ff32189a5",
+      "contactId": null,
+      "bookingId": null,
+      "kind": "note",
+      "subject": "Reconnect with SnowWiesn",
+      "body": "Continue from the prior insurance/revenue-share questions and ask whether any late-2026 or 2027 opportunity remains.",
+      "occurredAt": "2026-08-31T14:02:09.369Z",
+      "createdAt": "2026-08-31T14:02:09.369Z",
+      "updatedAt": "2026-08-31T14:02:09.369Z",
+      "importedFromAct": false,
+      "actSourceType": null,
+      "historicalDateUnknown": false,
+      "paperNoteSource": null
+    },
+    {
+      "id": "04d4413e-1899-4754-822e-3fc2e494ffc3",
+      "contactId": null,
+      "bookingId": null,
+      "kind": "note",
+      "subject": "Newest verified relationship status",
+      "body": "No later SnowWiesn conversation was found after Michael Rueckert's 2022 reply. He was open to future consideration and asked specifically about insurance strength, ticket price, and revenue-share percentage. Current 2026 SnowWiesn remains active, so this is a live relationship to reconnect with rather than a decline.",
+      "occurredAt": "2026-08-31T14:02:09.263Z",
+      "createdAt": "2026-08-31T14:02:09.263Z",
+      "updatedAt": "2026-08-31T14:02:09.263Z",
+      "importedFromAct": false,
+      "actSourceType": null,
+      "historicalDateUnknown": false,
+      "paperNoteSource": null
+    }
+  ],
+  "history": [],
+  "migrationHistory": {
+    "contactSourceIds": [],
+    "phones": [],
+    "notes": [],
+    "bookingSourceIds": [],
+    "groupSourceIds": []
+  }
+}
