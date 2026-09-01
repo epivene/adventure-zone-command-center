@@ -16,13 +16,64 @@ type OrganizerReview = {
   managerResponse: string | null;
 };
 
+type ManagerReviewEvent = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+};
+
+type CompletedManagerReview = {
+  event: ManagerReviewEvent;
+  review: {
+    id: string;
+    rating: number;
+    feedback: string | null;
+    createdAt: string;
+  };
+};
+
+type ManagerReviewOverview = {
+  reviewsDue: ManagerReviewEvent[];
+  recentCompleted: CompletedManagerReview | null;
+  nextUpcoming: ManagerReviewEvent | null;
+};
+
 function Stars({ value }: { value: number }) {
   return <span aria-label={`${value} out of 5 stars`} className="tracking-wide text-amber-500">{"★".repeat(value)}<span className="text-slate-300">{"★".repeat(5 - value)}</span></span>;
 }
 
+function locationLabel(event: ManagerReviewEvent) {
+  return [event.city, event.region].filter(Boolean).join(", ");
+}
+
+function eventDateLabel(event: ManagerReviewEvent) {
+  if (!event.startsAt) return "Date not set";
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "America/Chicago",
+  });
+  const startsAt = new Date(event.startsAt);
+  const endsAt = event.endsAt ? new Date(event.endsAt) : null;
+  if (!endsAt || startsAt.toISOString().slice(0, 10) === endsAt.toISOString().slice(0, 10)) {
+    return formatter.format(startsAt);
+  }
+  return `${formatter.format(startsAt)} – ${formatter.format(endsAt)}`;
+}
+
+const emptyOverview: ManagerReviewOverview = {
+  reviewsDue: [],
+  recentCompleted: null,
+  nextUpcoming: null,
+};
+
 export default function ManagerEventReviewPage() {
   const { managerApi } = useManagerAuth();
-  const [due, setDue] = useState<any[]>([]);
+  const [overview, setOverview] = useState<ManagerReviewOverview>(emptyOverview);
   const [feedback, setFeedback] = useState<OrganizerReview[]>([]);
   const [summary, setSummary] = useState<{ reviewCount: number; averageOverallRating: number | null; inviteBackRate: number | null }>({ reviewCount: 0, averageOverallRating: null, inviteBackRate: null });
   const [responses, setResponses] = useState<Record<string, string>>({});
@@ -37,7 +88,11 @@ export default function ManagerEventReviewPage() {
 
   useEffect(() => {
     Promise.all([
-      managerApi<any>("/manager/reviews/due").then((data) => setDue(data.reviewsDue ?? [])),
+      managerApi<ManagerReviewOverview>("/manager/reviews/due").then((data) => setOverview({
+        reviewsDue: data.reviewsDue ?? [],
+        recentCompleted: data.recentCompleted ?? null,
+        nextUpcoming: data.nextUpcoming ?? null,
+      })),
       loadFeedback(),
     ]).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load event reviews"));
   }, [managerApi]);
@@ -63,13 +118,35 @@ export default function ManagerEventReviewPage() {
     {message ? <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p> : null}
 
     <section className="grid gap-3">
-      <div><h2 className="text-xl font-bold">Your event wrap-ups</h2><p className="text-sm text-slate-600">These are your own post-event reports about the event.</p></div>
-      {due.length ? <div className="grid gap-2">
-        {due.map((event) => <a key={event.id} href={`/manager/events/${event.id}/wrap-up`} className="flex items-center justify-between gap-3 rounded-xl border bg-white p-4">
-          <div><p className="font-bold">{event.name}</p><p className="text-sm text-slate-600">{[event.city, event.region].filter(Boolean).join(", ")}</p></div>
+      <div><h2 className="text-xl font-bold">Your event wrap-ups</h2><p className="text-sm text-slate-600">Your latest completed report, anything due now, and your next upcoming event.</p></div>
+
+      {overview.recentCompleted ? <article className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+        <div className="grid gap-1">
+          <span className="w-fit rounded-full bg-emerald-700 px-2 py-1 text-xs font-bold uppercase tracking-wide text-white">Completed</span>
+          <p className="font-bold">{overview.recentCompleted.event.name}</p>
+          <p className="text-sm text-slate-600">{locationLabel(overview.recentCompleted.event)}</p>
+          <p className="text-sm text-slate-600">{eventDateLabel(overview.recentCompleted.event)}</p>
+          <Stars value={overview.recentCompleted.review.rating} />
+        </div>
+        <a className="button-secondary" href={`/manager/events/${overview.recentCompleted.event.id}/wrap-up`}>View report</a>
+      </article> : null}
+
+      {overview.reviewsDue.length ? <div className="grid gap-2">
+        {overview.reviewsDue.map((event) => <a key={event.id} href={`/manager/events/${event.id}/wrap-up`} className="flex items-center justify-between gap-3 rounded-xl border bg-white p-4">
+          <div><p className="font-bold">{event.name}</p><p className="text-sm text-slate-600">{locationLabel(event)}</p><p className="text-sm text-slate-600">{eventDateLabel(event)}</p></div>
           <span className="button-primary">Open wrap-up</span>
         </a>)}
-      </div> : <p className="rounded-xl border bg-white p-4 text-sm text-slate-600">No event wrap-ups are due.</p>}
+      </div> : <p className="rounded-xl border bg-white p-4 text-sm text-slate-600">No other event wrap-ups are due.</p>}
+
+      {overview.nextUpcoming ? <article className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4">
+        <div className="grid gap-1">
+          <span className="w-fit rounded-full bg-blue-700 px-2 py-1 text-xs font-bold uppercase tracking-wide text-white">Upcoming</span>
+          <p className="font-bold">{overview.nextUpcoming.name}</p>
+          <p className="text-sm text-slate-600">{locationLabel(overview.nextUpcoming)}</p>
+          <p className="text-sm text-slate-600">{eventDateLabel(overview.nextUpcoming)}</p>
+        </div>
+        <span className="text-right text-xs font-semibold text-blue-800">Wrap-up opens<br />after the event</span>
+      </article> : null}
     </section>
 
     <section className="grid gap-4">
