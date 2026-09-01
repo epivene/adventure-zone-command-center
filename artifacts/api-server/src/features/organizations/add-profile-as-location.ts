@@ -110,12 +110,9 @@ export async function addProfileAsLocation(
     if (!location) throw new Error("Could not create organization location.");
 
     const locationId = location.id;
-    await tx.update(contacts).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(contacts.organizationId, source.id));
-    await tx.update(bookings).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(bookings.organizationId, source.id));
-    await tx.update(activities).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(activities.organizationId, source.id));
-    await tx.update(followUps).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(followUps.organizationId, source.id));
-    await tx.update(callSessions).set({ organizationId: canonical.id, organizationLocationId: locationId }).where(eq(callSessions.organizationId, source.id));
 
+    // The contacts table has a composite FK to organization_contacts. Create
+    // the canonical association before changing contacts.organization_id.
     const sourceAssociations = await tx
       .select()
       .from(organizationContacts)
@@ -135,6 +132,13 @@ export async function addProfileAsLocation(
         })
         .onConflictDoNothing();
     }
+
+    await tx.update(contacts).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(contacts.organizationId, source.id));
+    await tx.update(bookings).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(bookings.organizationId, source.id));
+    await tx.update(activities).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(activities.organizationId, source.id));
+    await tx.update(followUps).set({ organizationId: canonical.id, organizationLocationId: locationId, updatedAt: now }).where(eq(followUps.organizationId, source.id));
+    await tx.update(callSessions).set({ organizationId: canonical.id, organizationLocationId: locationId }).where(eq(callSessions.organizationId, source.id));
+
     await tx.delete(organizationContacts).where(eq(organizationContacts.organizationId, source.id));
 
     await tx
