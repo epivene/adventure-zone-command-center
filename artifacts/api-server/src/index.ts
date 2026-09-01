@@ -24,6 +24,8 @@ import { ensureBusinessSourceSeed } from "./features/business-sources/business-s
 import { ensureCommercialOfferSeed } from "./features/commercial-offers/commercial-offer-seed";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
+import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./features/approved-profile-import/startup-config";
+import { runMaintenanceAndStartWorkers } from "./features/approved-profile-import/post-listen-startup";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -123,14 +125,21 @@ await runStartupStep(
 
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
-  void runPostListenMaintenance()
-    .then(() => startBackgroundWorkers())
-    .catch((err) => {
+  void runMaintenanceAndStartWorkers({
+    runMaintenance: runPostListenMaintenance,
+    startBackgroundWorkers,
+    onMaintenanceError(err) {
       logger.error(
         { err },
         "Post-listen database maintenance failed; server remains available",
       );
-    });
+    },
+  }).catch((err) => {
+    logger.error(
+      { err },
+      "Background worker startup failed; server remains available",
+    );
+  });
 });
 
 server.on("error", (err) => {
@@ -271,8 +280,10 @@ async function runPostListenMaintenance() {
       "Known blank profile enrichment deferred; startup will continue",
     );
   }
-  await runStartupStep("approved profile startup import", () =>
-    importApprovedProfilesAtStartup(port),
+  await runStartupStep(
+    "approved profile startup import",
+    () => importApprovedProfilesAtStartup(port),
+    APPROVED_PROFILE_STARTUP_TIMEOUT_MS,
   );
   await runStartupStep("booking assistant business knowledge seed", () =>
     new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
