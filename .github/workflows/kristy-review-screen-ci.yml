@@ -10,7 +10,6 @@ on:
       - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
-      - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
   push:
@@ -24,7 +23,6 @@ on:
       - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
-      - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
 
@@ -60,12 +58,11 @@ jobs:
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/pages/ManagerEventReviewPage.test.tsx
-      - name: Guard cleanup route and route precedence
+      - name: Guard exact cleanup and route precedence
         run: |
-          grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-manager-review-maintenance.ts
-          grep -F 'router.post("/manager-review-dismissals"' artifacts/api-server/src/routes/assistant-manager-review-maintenance.ts
-          grep -F 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts
           grep -F 'guarded Kristy event review cleanup' artifacts/api-server/src/db/required-schema-startup.ts
+          grep -F 'KRISTY_STALE_REVIEW_CANDIDATES' artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup.ts
+          grep -F 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts
           test "$(grep -n 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts | cut -d: -f1)" -lt "$(grep -n 'app.use("/api", router);' artifacts/api-server/src/app.ts | cut -d: -f1)"
       - name: Production API build
         run: pnpm --filter @workspace/api-server run build
