@@ -1,0 +1,206 @@
+name: Repair and verify live Gmail profile links
+
+on:
+  push:
+    branches:
+      - ops/gmail-profile-link-live-fix
+    paths:
+      - ".github/workflows/repair-live-gmail-profile-links.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  repair-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for deployed sweep endpoint
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          for attempt in $(seq 1 80); do
+            STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output endpoint.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/gmail-profile-links/profile/b447c83c-6348-4fab-b850-0db7a5576a83" || true)
+            if [ "${STATUS}" = "200" ]; then
+              echo "Sweep endpoint is live on attempt ${attempt}."
+              exit 0
+            fi
+            echo "Endpoint not live yet (HTTP ${STATUS}, attempt ${attempt})."
+            sleep 15
+          done
+          echo "Sweep endpoint did not become live in time."
+          exit 1
+
+      - name: Repair August Twin Falls links first
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{"after":"2026-08-01T00:00:00.000Z","before":"2026-09-01T06:00:00.000Z","repair":true}' \
+            "${BASE_URL}/gmail-profile-links/sweep" \
+            > twin-falls-sweep.json
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/gmail-profile-links/profile/b447c83c-6348-4fab-b850-0db7a5576a83" \
+            > twin-falls-mappings.json
+
+          node <<'NODE'
+          const fs = require('fs');
+          const expected = [
+            ['19fcecd42a246598', '19fce31d023b574c'],
+            ['1a03b81260003d6b', '1a03b6f9b7b72e83'],
+            ['1a03b97f6fcb3569', '1a03b927824374fd'],
+            ['1a03f76015409bfa', '1a03f6d13a293ebf'],
+          ];
+          const body = JSON.parse(fs.readFileSync('twin-falls-mappings.json', 'utf8'));
+          if (body.ok !== true || !Array.isArray(body.mappings)) {
+            throw new Error('Twin Falls mapping endpoint returned an invalid response.');
+          }
+          const key = (row) => `${row.messageId ?? row.message_id}|${row.threadId ?? row.thread_id}`;
+          const actual = new Set(body.mappings.map(key));
+          const missing = expected.filter(([messageId, threadId]) => !actual.has(`${messageId}|${threadId}`));
+          if (missing.length) {
+            console.error(JSON.stringify({ missing, mappings: body.mappings }, null, 2));
+            throw new Error(`Twin Falls still has ${missing.length} missing Gmail mappings.`);
+          }
+          fs.writeFileSync('twin-falls-four-message-verification.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            organizationId: 'b447c83c-6348-4fab-b850-0db7a5576a83',
+            expectedMessages: expected.map(([messageId, threadId]) => ({ messageId, threadId })),
+            mappedCount: expected.length,
+          }, null, 2));
+          NODE
+
+      - name: Repair full sent-mail history in bounded windows
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          mkdir -p full-audit
+          cat > windows.tsv <<'EOF'
+          2016-01-01T00:00:00.000Z	2018-01-01T00:00:00.000Z
+          2018-01-01T00:00:00.000Z	2020-01-01T00:00:00.000Z
+          2020-01-01T00:00:00.000Z	2022-01-01T00:00:00.000Z
+          2022-01-01T00:00:00.000Z	2024-01-01T00:00:00.000Z
+          2024-01-01T00:00:00.000Z	2026-01-01T00:00:00.000Z
+          2026-01-01T00:00:00.000Z	2026-09-01T06:00:00.000Z
+          EOF
+
+          i=0
+          while IFS=$'\t' read -r AFTER BEFORE; do
+            i=$((i + 1))
+            PAYLOAD=$(node -e 'console.log(JSON.stringify({after:process.argv[1],before:process.argv[2],repair:true}))' "${AFTER}" "${BEFORE}")
+            curl --fail --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data "${PAYLOAD}" \
+              "${BASE_URL}/gmail-profile-links/sweep" \
+              > "full-audit/window-${i}.json"
+          done < windows.tsv
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const files = fs.readdirSync('full-audit').filter((name) => name.endsWith('.json')).sort();
+          const rows = files.map((name) => ({ name, body: JSON.parse(fs.readFileSync(path.join('full-audit', name), 'utf8')) }));
+          const totals = {
+            examined: 0,
+            sentInWindow: 0,
+            alreadyLinked: 0,
+            linked: 0,
+            needsReview: 0,
+            ignored: 0,
+            failed: 0,
+          };
+          const needsReview = [];
+          const failed = [];
+          for (const { name, body } of rows) {
+            if (body.ok !== true) throw new Error(`${name} did not complete successfully`);
+            for (const key of Object.keys(totals)) totals[key] += Number(body.counts?.[key] ?? 0);
+            for (const item of body.needsReview ?? []) needsReview.push({ window: name, ...item });
+            for (const item of body.failed ?? []) failed.push({ window: name, ...item });
+          }
+          const report = {
+            ok: failed.length === 0,
+            auditedAt: new Date().toISOString(),
+            windows: rows.map(({ name, body }) => ({ name, after: body.after, before: body.before, counts: body.counts })),
+            totals,
+            needsReview,
+            failed,
+          };
+          fs.writeFileSync('full-sent-gmail-profile-link-audit.json', JSON.stringify(report, null, 2));
+          if (failed.length) throw new Error(`${failed.length} Gmail messages failed during the audit.`);
+          NODE
+
+      - name: Re-verify Twin Falls after global repair
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}/api/assistant-import"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/gmail-profile-links/profile/b447c83c-6348-4fab-b850-0db7a5576a83" \
+            > twin-falls-final-mappings.json
+          node <<'NODE'
+          const fs = require('fs');
+          const expected = new Set([
+            '19fcecd42a246598|19fce31d023b574c',
+            '1a03b81260003d6b|1a03b6f9b7b72e83',
+            '1a03b97f6fcb3569|1a03b927824374fd',
+            '1a03f76015409bfa|1a03f6d13a293ebf',
+          ]);
+          const body = JSON.parse(fs.readFileSync('twin-falls-final-mappings.json', 'utf8'));
+          const key = (row) => `${row.messageId ?? row.message_id}|${row.threadId ?? row.thread_id}`;
+          const mappings = Array.isArray(body.mappings) ? body.mappings : [];
+          const actual = new Set(mappings.map(key));
+          const missing = [...expected].filter((value) => !actual.has(value));
+          if (missing.length) throw new Error(`Final Twin Falls verification failed: ${missing.join(', ')}`);
+          fs.writeFileSync('final-live-gmail-profile-link-receipt.json', JSON.stringify({
+            ok: true,
+            verifiedAt: new Date().toISOString(),
+            twinFallsMappedConversationCount: 4,
+            twinFallsMessageThreadKeys: [...expected],
+            fullAudit: JSON.parse(fs.readFileSync('full-sent-gmail-profile-link-audit.json', 'utf8')),
+          }, null, 2));
+          NODE
+
+      - name: Upload sanitized live audit receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-gmail-profile-link-repair-audit
+          path: |
+            twin-falls-four-message-verification.json
+            twin-falls-sweep.json
+            full-sent-gmail-profile-link-audit.json
+            final-live-gmail-profile-link-receipt.json
+          if-no-files-found: ignore
+          retention-days: 2
