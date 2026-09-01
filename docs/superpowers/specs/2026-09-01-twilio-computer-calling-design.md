@@ -142,7 +142,7 @@ Before connecting, the browser posts an organization/contact/phone context to th
 - Creates a short-lived, single-use call intent tied to the authenticated user.
 - Returns only the opaque intent identifier and safe display data.
 
-The browser passes the intent identifier through `Device.connect()`. The TwiML webhook validates and consumes it before dialing. Reuse, expiration, ownership mismatch, or altered context fails closed.
+The browser passes the intent identifier through `Device.connect()`. The TwiML webhook validates it, verifies the browser token identity, binds it to the Twilio `CallSid`, and marks it consumed before dialing. A Twilio retry with the same `CallSid` may receive the same TwiML response; a different `CallSid`, reuse, expiration, identity mismatch, or altered context fails closed.
 
 ### TwiML
 
@@ -172,7 +172,7 @@ Persist provider-neutral technical metadata separately from narrative call notes
 - Duration derived from trusted timestamps.
 - Caller ID used.
 
-Do not persist access tokens, API secrets, microphone labels unless needed for a transient UI, media, recordings, transcripts, or raw webhook payloads.
+Do not persist access tokens, API secrets, media, recordings, transcripts, or raw webhook payloads. Microphone and speaker labels may exist only in transient browser UI state.
 
 The existing saved call activity remains the business record. It may reference the technical session ID so duration and technical result can be included without duplicating narrative notes.
 
@@ -236,8 +236,9 @@ The server status model normalizes provider statuses into:
 - `no-answer`
 - `canceled`
 - `failed`
+- `unknown`
 
-Unknown provider statuses are stored as `failed` with a sanitized diagnostic and logged for review.
+Unknown provider statuses are stored as `unknown` with a sanitized diagnostic and logged for review; they are not misreported as completed or failed.
 
 ## Error Handling
 
