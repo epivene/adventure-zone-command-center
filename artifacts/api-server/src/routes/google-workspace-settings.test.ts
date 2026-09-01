@@ -207,6 +207,20 @@ describe("Google Workspace owner settings routes", () => {
       .expect(400);
   });
 
+  it("accepts a real-world Gmail business scope with more than 500 labels", async () => {
+    const harness = dependencies();
+    const { app, token } = ownerApp(harness.deps);
+    const labelIds = Array.from({ length: 1_100 }, (_, index) => `Label_${index}`);
+
+    await request(app)
+      .put("/google-workspace/scope")
+      .set("authorization", `Bearer ${token}`)
+      .send({ labelIds, calendarIds: ["az"] })
+      .expect(200);
+
+    expect(harness.save).toHaveBeenCalledWith(expect.objectContaining({ labelIds }));
+  });
+
   it("reports missing expected business sources as a conflict", async () => {
     const harness = dependencies();
     harness.save.mockRejectedValue(

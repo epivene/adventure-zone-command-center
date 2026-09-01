@@ -34,7 +34,7 @@ const oauthStartSchema = z.object({
   connectionRole: z.enum(["workspace", "operational_calendar"]).optional(),
 }).strict();
 const scopeSchema = z.object({
-  labelIds: z.array(z.string().trim().min(1).max(256)).min(1).max(500),
+  labelIds: z.array(z.string().trim().min(1).max(256)).min(1).max(10_000),
   calendarIds: z.array(z.string().trim().min(1).max(512)).min(1).max(20),
 }).strict().superRefine((value, context) => {
   if (new Set(value.labelIds).size !== value.labelIds.length) {
