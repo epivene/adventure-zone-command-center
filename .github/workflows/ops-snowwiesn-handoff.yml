@@ -1,4 +1,4 @@
-name: One-time SnowWiesn final verification
+name: One-time SnowWiesn recipient correction
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  verify:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,56 +20,46 @@ jobs:
           ref: ops/snowwiesn-handoff-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify researched live SnowWiesn profile
+      - name: Record current recipient decision
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
-          PROFILE_ID="9957265b-fb03-4ee1-8e37-b19fd751ce7d"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/snowwiesn-final.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/snowwiesn-final.json', 'utf8'));
-          const serialized = JSON.stringify(root);
-          const zach = (root.contacts ?? []).find((item) =>
-            item.name === 'Zachary Smith' &&
-            String(item.email ?? '').toLowerCase() === 'zach.smith@snowbasin.com' &&
-            item.isPrimary === true
-          );
-          const booking = (root.bookings ?? []).find((item) =>
-            item.name === 'SnowWiesn Oktoberfest - 2026' &&
-            item.startsAt === '2026-08-29T17:00:00.000Z' &&
-            item.endsAt === '2026-10-18T17:00:00.000Z' &&
-            item.status === 'possible'
-          );
-          const researchedNotePresent =
-            serialized.includes('Detailed SnowWiesn research and revised reply') &&
-            serialized.includes('no longer asks for general event dates or hours') &&
-            serialized.includes('10-12 attractions with no upfront charge in 2022') &&
-            serialized.includes('current $2M liability coverage');
-          if (root.ok !== true || !zach || !booking || !researchedNotePresent) {
-            throw new Error('Fresh verification did not find the researched SnowWiesn state.');
+          fs.writeFileSync('/tmp/snowwiesn-recipient-note.json', JSON.stringify({
+            organizationId: '9957265b-fb03-4ee1-8e37-b19fd751ce7d',
+            subject: 'SnowWiesn recipient correction - Zach is current contact',
+            body: 'Desiree removed Michael Rueckert from the September 1, 2026 reply because Zachary Smith is now the active SnowWiesn contact. Keep Michael as historical relationship context only; do not automatically copy him on future SnowWiesn drafts. Zach: zach.smith@snowbasin.com.'
+          }));
+          NODE
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/snowwiesn-recipient-note.json             "${BASE_URL}/profile-notes" > /tmp/snowwiesn-recipient-response.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const note = JSON.parse(fs.readFileSync('/tmp/snowwiesn-recipient-response.json', 'utf8'));
+          if (note.ok !== true || note.organizationId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d') {
+            throw new Error('SnowWiesn recipient correction failed.');
           }
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/snowwiesn-final-verification.json', JSON.stringify({
-            verifiedAt: new Date().toISOString(),
+          fs.writeFileSync('.github/ops-results/snowwiesn-recipient-correction.json', JSON.stringify({
+            completedAt: new Date().toISOString(),
             ok: true,
-            profileId: root.profileId,
-            currentContact: zach.email,
-            knownEventWindow: { startsAt: booking.startsAt, endsAt: booking.endsAt },
-            bookingStatus: booking.status,
-            researchedCorrectionPresent: true
+            organizationId: note.organizationId,
+            noteCreated: note.created,
+            activityId: note.activityId
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit final verification
+      - name: Commit correction receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/snowwiesn-final-verification.json
-          git commit -m "ops: verify researched SnowWiesn update"
+          git add .github/ops-results/snowwiesn-recipient-correction.json
+          git commit -m "ops: record SnowWiesn recipient correction"
           git push origin HEAD:ops/snowwiesn-handoff-2026-09-01
