@@ -29,3 +29,5 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Run protected merge route test
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/assistant-profile-merge.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server run build
