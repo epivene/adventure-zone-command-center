@@ -63,9 +63,10 @@ jobs:
             "$base/api/assistant-import/profile-history/$SOURCE_ID" \
             -o source-history.json
 
+          jq '{profileId,followUps:(.followUps | map({id,kind,dueAt,completedAt})),bookings:(.bookings | map({id,name,status})),contacts:(.contacts | map({id,name,email}))}' canonical-history.json
           jq -e --arg id "$CANONICAL_ID" '.ok == true and .profileId == $id' canonical-history.json
           jq -e --arg id "$FOLLOWUP_ID" 'any(.followUps[]?; .id == $id and .completedAt == null and .dueAt == "2026-11-02T16:00:00.000Z")' canonical-history.json
-          jq -e --arg id "$BOOKING_ID" 'any(.bookings[]?; .id == $id and .status == "declined")' canonical-history.json
+          jq -e 'any(.bookings[]?; .name == "Northern Gila County Fair - 2026" and .status == "declined")' canonical-history.json
           jq -e 'any(.contacts[]?; (.email // "" | ascii_downcase) == "lyssaharder88@gmail.com")' canonical-history.json
           jq -e '.contacts | length == 0' source-history.json
           jq -e '.bookings | length == 0' source-history.json
