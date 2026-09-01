@@ -1,0 +1,21 @@
+{
+  "checkedAt": "2026-09-01T21:40:15.272Z",
+  "ok": true,
+  "resultCount": 1,
+  "results": [
+    {
+      "id": "86509cbd-60c8-4ea7-a061-f1a39681448b",
+      "kind": "organization",
+      "label": "Ak-Chin Native American Recognition Day (Maricopa) AZ",
+      "secondaryLabel": null,
+      "city": "Maricopa",
+      "region": "AZ",
+      "status": null,
+      "lastContactAt": null,
+      "bookingCount": 0,
+      "matchedOn": [
+        "name"
+      ]
+    }
+  ]
+}
