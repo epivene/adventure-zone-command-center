@@ -14,7 +14,7 @@ import {
   listActivityRevisionsAction,
   loadTimelinePageAction,
 } from "@/actions/activities";
-import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
+import { createFollowUpAction, deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
@@ -76,6 +76,10 @@ export function EventProfileWorkspace({
   const [selectedContactId, setSelectedContactId] = useState(profile.selectedContactId);
   const [showLocations, setShowLocations] = useState<Record<string, boolean>>({});
   const [followUpItems, setFollowUpItems] = useState(profile.followUps);
+  const [newFollowUpKind, setNewFollowUpKind] = useState("email");
+  const [newFollowUpDueAt, setNewFollowUpDueAt] = useState("");
+  const [newFollowUpSaving, setNewFollowUpSaving] = useState(false);
+  const [newFollowUpError, setNewFollowUpError] = useState("");
   const [membershipDrawer, setMembershipDrawer] = useState<"add-child" | "choose-parent" | null>(null);
   const groupedContacts = useMemo(() => groupEventProfileContacts(profile.contacts), [profile.contacts]);
   const selectedContact = groupedContacts.find(({ id }) => id === selectedContactId) ?? groupedContacts[0] ?? null;
@@ -94,6 +98,27 @@ export function EventProfileWorkspace({
     .join(", ");
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const organizationLike = organizationContext.children.length > 0 || ["company", "association", "city_government", "tribe", "school"].includes(profile.place.placeType);
+
+  async function saveNewFollowUp() {
+    if (!newFollowUpDueAt || newFollowUpSaving) return;
+    setNewFollowUpSaving(true);
+    setNewFollowUpError("");
+    const dueAt = new Date(`${newFollowUpDueAt}T12:00:00`);
+    const result = await createFollowUpAction({
+      organizationId: profile.id,
+      contactId: selectedContact?.contactIds[0] ?? null,
+      bookingId: selectedBooking?.id ?? null,
+      kind: newFollowUpKind,
+      dueAt,
+    });
+    if (result.ok) {
+      setFollowUpItems((items) => [...items, result.followUp]);
+      setNewFollowUpDueAt("");
+    } else {
+      setNewFollowUpError(result.error);
+    }
+    setNewFollowUpSaving(false);
+  }
 
   return (
     <div className="mx-auto grid max-w-7xl gap-6">
@@ -288,6 +313,28 @@ export function EventProfileWorkspace({
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="event-follow-ups-title">
             <h2 className="text-xl font-bold" id="event-follow-ups-title">Follow-up</h2>
+            {context.action === "follow-up" ? (
+              <div className="mt-3 grid gap-3 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="grid gap-1 text-sm font-semibold text-slate-800">
+                    Follow-up type
+                    <select aria-label="Follow-up type" value={newFollowUpKind} onChange={(event) => setNewFollowUpKind(event.target.value)}>
+                      <option value="email">Email</option>
+                      <option value="call">Call</option>
+                      <option value="application">Application check</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-semibold text-slate-800">
+                    Due date
+                    <input aria-label="Due date" type="date" value={newFollowUpDueAt} onChange={(event) => setNewFollowUpDueAt(event.target.value)} />
+                  </label>
+                </div>
+                {newFollowUpError ? <p className="text-sm font-semibold text-red-700" role="alert">{newFollowUpError}</p> : null}
+                <button className="button-primary justify-self-start" disabled={!newFollowUpDueAt || newFollowUpSaving} onClick={() => void saveNewFollowUp()} type="button">
+                  {newFollowUpSaving ? "Saving…" : "Save follow-up"}
+                </button>
+              </div>
+            ) : null}
             {followUpItems.length ? <ul className="mt-3 grid gap-3">
               {followUpItems.map((followUp) => <li className="rounded-lg border border-slate-100 p-3 text-sm" key={followUp.id}>
                 <p className="font-semibold capitalize">{titleCase(followUp.kind)} {followUp.id === context.followUpId ? <span className="ml-2 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-900">Selected follow-up context</span> : null}</p>
