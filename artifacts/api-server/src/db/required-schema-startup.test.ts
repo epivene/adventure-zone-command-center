@@ -3,9 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
-  it("creates required schemas in dependency order before the API listens", async () => {
+  it("creates required schemas and runs guarded maintenance in dependency order before the API listens", async () => {
     const calls: string[] = [];
     let googleReady = false;
+    let dismissalsReady = false;
     const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
       calls.push(name);
       return step();
@@ -23,6 +24,14 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureEventReviewDismissals: async () => {
+        dismissalsReady = true;
+        return true;
+      },
+      cleanupKristyReviews: async () => {
+        expect(dismissalsReady).toBe(true);
+        return { status: "already_current" };
+      },
       ensureOrganizerFeedback: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
@@ -34,6 +43,8 @@ describe("runRequiredSchemaStartup", () => {
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
+      "required event review dismissal schema",
+      "guarded Kristy event review cleanup",
       "required organizer feedback schema",
       "required office coordinator schema",
       "required profile touch schema",
