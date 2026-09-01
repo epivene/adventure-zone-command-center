@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Focused frontend tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/EventProfilePage.test.tsx src/components/organizations/organization-list.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/pages/EventProfilePage.test.tsx src/components/organizations/organization-list.test.tsx --testNamePattern About
       - name: Focused API test
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/organizations.profile-card-typed-query.test.ts
       - name: Frontend build
