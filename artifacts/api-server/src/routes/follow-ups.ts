@@ -22,9 +22,14 @@ type OpportunityFollowUpRepository = {
 type FollowUpActivityWriter = Pick<OpportunityEmailActivityWriter, "recordFollowUpCreated">;
 
 const createSchema = z.object({
-  opportunityId: z.string().uuid(),
+  opportunityId: z.string().uuid().optional(),
+  organizationId: z.string().uuid().optional(),
+  contactId: z.string().uuid().nullable().optional(),
+  bookingId: z.string().uuid().nullable().optional(),
   kind: z.string().trim().min(1),
   dueAt: z.coerce.date().refine((value) => Number.isFinite(value.getTime())),
+}).refine((value) => Boolean(value.opportunityId || value.organizationId), {
+  message: "An Opportunity or organization is required.",
 });
 
 const completionSchema = z.object({
@@ -105,16 +110,18 @@ export function createFollowUpsRouter(
     }
 
     try {
-      const opportunity = await opportunities.get(parsed.data.opportunityId);
-      if (!opportunity) {
+      const opportunity = parsed.data.opportunityId
+        ? await opportunities.get(parsed.data.opportunityId)
+        : null;
+      if (parsed.data.opportunityId && !opportunity) {
         res.status(404).json({ ok: false, error: "Opportunity not found." });
         return;
       }
 
       const result = await service.create({
-        organizationId: opportunity.organizationId,
-        contactId: opportunity.contactId,
-        bookingId: opportunity.bookingId,
+        organizationId: opportunity?.organizationId ?? parsed.data.organizationId!,
+        contactId: opportunity?.contactId ?? parsed.data.contactId ?? null,
+        bookingId: opportunity?.bookingId ?? parsed.data.bookingId ?? null,
         kind: parsed.data.kind,
         dueAt: parsed.data.dueAt,
       });
@@ -123,16 +130,18 @@ export function createFollowUpsRouter(
         return;
       }
 
-      await opportunities.update(opportunity.id, {
-        status: "follow_up",
-        nextActionKind: parsed.data.kind,
-        nextActionDueAt: parsed.data.dueAt,
-      });
-      await activity.recordFollowUpCreated({
-        opportunityId: opportunity.id,
-        followUpId: result.value.id,
-        dueAt: parsed.data.dueAt,
-      });
+      if (opportunity) {
+        await opportunities.update(opportunity.id, {
+          status: "follow_up",
+          nextActionKind: parsed.data.kind,
+          nextActionDueAt: parsed.data.dueAt,
+        });
+        await activity.recordFollowUpCreated({
+          opportunityId: opportunity.id,
+          followUpId: result.value.id,
+          dueAt: parsed.data.dueAt,
+        });
+      }
 
       res.status(201).json({ ok: true, followUp: result.value });
     } catch (error) {

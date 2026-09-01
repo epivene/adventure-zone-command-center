@@ -198,6 +198,26 @@ describe("follow-up owner routes", () => {
     });
   });
 
+  it("creates a follow-up directly from a profile without requiring an Opportunity", async () => {
+    const response = await request(testApp())
+      .post("/api/follow-ups")
+      .set("Authorization", `Bearer ${ownerToken()}`)
+      .send({ organizationId, contactId: null, bookingId: null, kind: "email", dueAt: nextDueAt });
+
+    expect(response.status).toBe(201);
+    expect(response.body).toMatchObject({
+      ok: true,
+      followUp: {
+        organizationId,
+        contactId: null,
+        bookingId: null,
+        kind: "email",
+        dueAt: nextDueAt,
+        completedAt: null,
+      },
+    });
+  });
+
   it("returns the updated follow-up for a valid PATCH", async () => {
     const response = await request(testApp())
       .patch(`/api/follow-ups/${followUpId}`)
