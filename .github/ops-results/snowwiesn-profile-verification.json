@@ -1,0 +1,22 @@
+{
+  "verifiedAt": "2026-09-01T22:00:35.926Z",
+  "ok": true,
+  "profileId": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+  "profileName": "SnowWiesn Oktoberfest",
+  "currentContact": {
+    "name": "Zachary Smith",
+    "role": "Current SnowWiesn contact",
+    "email": "zach.smith@snowbasin.com"
+  },
+  "historicalContactRetained": {
+    "name": "Michael Rueckert",
+    "email": "mrueckert@snowbasin.com"
+  },
+  "bookingPreserved": {
+    "name": "SnowWiesn Oktoberfest - 2026",
+    "status": "possible",
+    "startsAt": "2026-08-29T17:00:00.000Z",
+    "endsAt": "2026-10-18T17:00:00.000Z"
+  },
+  "handoffNotePresent": true
+}
