@@ -6,7 +6,6 @@ describe("runRequiredSchemaStartup", () => {
   it("creates required schemas without reapplying the retired Kristy review cleanup", async () => {
     const calls: string[] = [];
     let googleReady = false;
-    const cleanupKristyReviews = vi.fn(async () => ({ status: "already_current" }));
     const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
       calls.push(name);
       return step();
@@ -25,14 +24,12 @@ describe("runRequiredSchemaStartup", () => {
       },
       ensureLegAssignment: async () => false,
       ensureEventReviewDismissals: async () => false,
-      cleanupKristyReviews,
       ensureOrganizerFeedback: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
     });
 
-    expect(cleanupKristyReviews).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "required paper notes schema",
       "required Google Workspace schema",
