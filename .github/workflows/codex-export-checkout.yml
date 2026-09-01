@@ -1,0 +1,28 @@
+name: Temporary Codex checkout export
+
+on:
+  push:
+    branches:
+      - design/twilio-computer-calling
+    paths:
+      - .github/workflows/codex-export-checkout.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Package authenticated checkout
+        run: tar --exclude=command-center-checkout.tgz -czf command-center-checkout.tgz .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: command-center-checkout
+          path: command-center-checkout.tgz
+          retention-days: 1
+          if-no-files-found: error
