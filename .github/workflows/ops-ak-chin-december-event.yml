@@ -1,4 +1,4 @@
-name: One-time Ak-Chin profile contact audit
+name: One-time Ak-Chin December opportunity update
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ops/ak-chin-december-event-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read exact live profile
+      - name: Add Cecily and December opportunity
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -28,30 +28,60 @@ jobs:
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
           PROFILE_ID="86509cbd-60c8-4ea7-a061-f1a39681448b"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/ak-chin-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/ak-chin-history.json', 'utf8'));
-          if (root.ok !== true || root.profileId !== '86509cbd-60c8-4ea7-a061-f1a39681448b') {
-            throw new Error('The exact Ak-Chin profile could not be verified.');
-          }
+          fs.writeFileSync('/tmp/ak-chin-contact.json', JSON.stringify({
+            event: {
+              id: '86509cbd-60c8-4ea7-a061-f1a39681448b',
+              name: 'Ak-Chin Native American Recognition Day (Maricopa) AZ',
+              city: 'Maricopa',
+              region: 'AZ'
+            },
+            profile: {},
+            contacts: [{
+              name: 'Cecily Peters',
+              role: 'Community Events Manager',
+              email: 'CPeters2@ak-chin.nsn.us',
+              phone: '520-568-1045',
+              primary: true
+            }]
+          }));
+          fs.writeFileSync('/tmp/ak-chin-note.json', JSON.stringify({
+            organizationId: '86509cbd-60c8-4ea7-a061-f1a39681448b',
+            subject: 'December 17-20 winter event opportunity',
+            body: 'On August 31, 2026, Cecily Peters, Community Events Manager for the Ak-Chin Indian Community, invited Adventure Zone to participate in a large free public event scheduled for December 17-20, 2026. Adventure Zone is interested, provided the attractions can be set up indoors with sufficient ceiling height and floor space and the package is prepaid by the event organizer. Public-pay and revenue-share are not available for this winter event. Reply drafted September 1 requesting indoor venue dimensions, ceiling height, and event hours. Cecily: CPeters2@ak-chin.nsn.us; office 520-568-1045; mobile 520-709-1846.'
+          }));
+          NODE
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/ak-chin-contact.json             "${BASE_URL}/event-profiles" > /tmp/ak-chin-contact-response.json
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/ak-chin-note.json             "${BASE_URL}/profile-notes" > /tmp/ak-chin-note-response.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const contact = JSON.parse(fs.readFileSync('/tmp/ak-chin-contact-response.json', 'utf8'));
+          const note = JSON.parse(fs.readFileSync('/tmp/ak-chin-note-response.json', 'utf8'));
+          const expectedId = '86509cbd-60c8-4ea7-a061-f1a39681448b';
+          if (contact.ok !== true || contact.organizationId !== expectedId) throw new Error('Ak-Chin contact update failed.');
+          if (note.ok !== true || note.organizationId !== expectedId) throw new Error('Ak-Chin opportunity note failed.');
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/ak-chin-profile-audit.json', JSON.stringify({
-            checkedAt: new Date().toISOString(),
+          fs.writeFileSync('.github/ops-results/ak-chin-profile-update.json', JSON.stringify({
+            completedAt: new Date().toISOString(),
             ok: true,
-            profileId: root.profileId,
-            place: root.place,
-            contacts: root.contacts,
-            bookings: root.bookings
+            organizationId: expectedId,
+            organizationName: note.organizationName,
+            contactId: contact.contactId,
+            noteCreated: note.created,
+            activityId: note.activityId
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit audit result
+      - name: Commit update receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/ak-chin-profile-audit.json
-          git commit -m "ops: record Ak-Chin contact audit"
+          git add .github/ops-results/ak-chin-profile-update.json
+          git commit -m "ops: record Ak-Chin profile update receipt"
           git push origin HEAD:ops/ak-chin-december-event-2026-09-01
