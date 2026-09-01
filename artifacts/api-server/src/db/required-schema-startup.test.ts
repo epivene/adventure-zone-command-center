@@ -28,6 +28,7 @@ describe("runRequiredSchemaStartup", () => {
         dismissalsReady = true;
         return true;
       },
+      ensureFollowUpDismissals: async () => true,
       cleanupKristyReviews: async () => {
         expect(dismissalsReady).toBe(true);
         return { status: "already_current" };
@@ -44,6 +45,7 @@ describe("runRequiredSchemaStartup", () => {
       "required lead intake schema",
       "required leg assignment schema",
       "required event review dismissal schema",
+      "required follow-up dismissal persistence",
       "guarded Kristy event review cleanup",
       "required organizer feedback schema",
       "required office coordinator schema",
