@@ -26,11 +26,11 @@ const mocks = vi.hoisted(() => ({
         },
         nextUpcoming: {
           id: "meeteetse",
-          name: "Meeteetse Labor Day Celebration",
+          name: "Meeteetse Annual Labor Day Celebration 2026",
           city: "Meeteetse",
           region: "WY",
-          startsAt: "2026-09-05T14:00:00.000Z",
-          endsAt: "2026-09-07T23:00:00.000Z",
+          startsAt: "2026-09-05T17:00:00.000Z",
+          endsAt: "2026-09-07T17:00:00.000Z",
         },
       };
     }
@@ -65,7 +65,7 @@ describe("ManagerEventReviewPage", () => {
     expect(screen.getByText("Miles City, MT")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
 
-    expect(screen.getByText("Meeteetse Labor Day Celebration")).toBeInTheDocument();
+    expect(screen.getByText("Meeteetse Annual Labor Day Celebration 2026")).toBeInTheDocument();
     expect(screen.getByText("Meeteetse, WY")).toBeInTheDocument();
     expect(screen.getByText("Upcoming")).toBeInTheDocument();
 
