@@ -109,7 +109,7 @@ describe("ProfileGoogleEmailPanel", () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
     expect(await screen.findByRole("heading", { name: "Google history" })).toBeInTheDocument();
-    expect(screen.getByText(/historical backfill/i)).toBeInTheDocument();
+    expect(screen.getByText(/relationship history/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair follow up")).toBeInTheDocument();
