@@ -47,6 +47,35 @@ function workspaceClient(options?: {
 }
 
 describe("buildGoogleScopePreview", () => {
+  it("selects the current profile and archived event label trees used by the live mailbox", () => {
+    const mailboxLabels = [
+      { id: "profiles", name: "Z - AdventureZone/Profiles", type: "user" as const },
+      { id: "soda", name: "Z - AdventureZone/Profiles/Soda Springs Fall Festival - Soda Springs ID", type: "user" as const },
+      { id: "archive-shows", name: "ZZ - Amy Archive/SHOWS", type: "user" as const },
+      { id: "caribou", name: "ZZ - Amy Archive/SHOWS/Caribou County Fair - Grace ID", type: "user" as const },
+      { id: "archive-leads", name: "ZZ - Amy Archive/Potential shows", type: "user" as const },
+      { id: "future-fair", name: "ZZ - Amy Archive/Potential shows/Future County Fair", type: "user" as const },
+      { id: "personal", name: "PERSONAL/Flowers & Chocolate", type: "user" as const },
+    ];
+
+    const preview = buildGoogleScopePreview(mailboxLabels, calendars);
+
+    expect(preview.labels.map((label) => label.id)).toEqual([
+      "profiles",
+      "soda",
+      "archive-shows",
+      "caribou",
+      "archive-leads",
+      "future-fair",
+    ]);
+    expect(preview.missingLabelRoots).toEqual([]);
+    expect(preview.labels.find((label) => label.id === "soda")).toMatchObject({
+      rootId: "profiles",
+      rootName: "Z - AdventureZone/Profiles",
+    });
+    expect(preview.labels.some((label) => label.id === "personal")).toBe(false);
+  });
+
   it("selects exact Gmail business roots and descendants while excluding Receipt, Spam, and personal labels", () => {
     const preview = buildGoogleScopePreview(labels, calendars);
 
@@ -88,13 +117,13 @@ describe("buildGoogleScopePreview", () => {
     expect(preview.missingCalendars).toEqual([]);
   });
 
-  it("reports a missing expected root instead of guessing a similar label", () => {
+  it("reports missing event scope instead of guessing a similar label", () => {
     const preview = buildGoogleScopePreview(
-      labels.filter((label) => label.name !== "Associations"),
+      labels.filter((label) => !["Shows", "Shows/2026", "Shows/West", "Off Season Business Opportunities"].includes(label.name)),
       calendars,
     );
 
-    expect(preview.missingLabelRoots).toEqual(["Associations"]);
+    expect(preview.missingLabelRoots).toEqual(["Adventure Zone profile or event labels"]);
   });
 
   it("reports an ambiguous named calendar instead of selecting the first match", () => {
@@ -192,9 +221,7 @@ describe("GoogleScopeService", () => {
 
   it("refuses to save while an expected business source is missing", async () => {
     const replace = vi.fn(async () => undefined);
-    const client = workspaceClient({
-      labels: labels.filter((label) => label.name !== "Associations"),
-    });
+    const client = workspaceClient({ labels: [] });
     const service = new GoogleScopeService({
       connection: {
         getCurrent: async () => ({
