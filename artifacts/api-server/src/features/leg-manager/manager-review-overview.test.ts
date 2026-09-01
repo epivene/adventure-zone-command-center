@@ -6,6 +6,15 @@ const now = new Date("2026-09-01T18:00:00Z");
 
 const bookings = [
   {
+    id: "past-new-lead",
+    name: "Unbooked Past Lead",
+    city: "Somewhere",
+    region: "WY",
+    startsAt: new Date("2026-06-01T14:00:00Z"),
+    endsAt: new Date("2026-06-02T23:00:00Z"),
+    status: "new_lead",
+  },
+  {
     id: "old-a",
     name: "Moorcroft Jubilee Days",
     city: "Moorcroft",
@@ -89,7 +98,7 @@ describe("buildManagerReviewOverview", () => {
     expect(overview.nextUpcoming?.id).toBe("meeteetse");
   });
 
-  it("still returns a real unreviewed, undismissed past event as due", () => {
+  it("returns real managed events as due without pulling unbooked leads into the queue", () => {
     const overview = buildManagerReviewOverview({
       bookings,
       reviews,
