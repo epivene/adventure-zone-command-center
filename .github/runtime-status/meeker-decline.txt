@@ -1,5 +1,5 @@
-status=NOTE_CREATED
+status=NOTE_ALREADY_PRESENT
 profile=Meeker Classic Sheepdog Championship Trials
 subject=Organizer declined - not a fit
-created=true
-completed_at=2026-09-01T04:15:05.836Z
+created=false
+completed_at=2026-09-01T04:15:44.262Z
