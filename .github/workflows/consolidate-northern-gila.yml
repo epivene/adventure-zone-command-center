@@ -37,7 +37,7 @@ jobs:
               jq -e '.ok == true and (.locationId | type == "string")' merge-response.json
               break
             fi
-            if [ "$status" != "404" ] && [ "$status" != "502" ] && [ "$status" != "503" ]; then
+            if [ "$status" != "404" ] && [ "$status" != "500" ] && [ "$status" != "502" ] && [ "$status" != "503" ]; then
               jq . merge-response.json || true
               echo "Unexpected merge response: HTTP $status"
               exit 1
