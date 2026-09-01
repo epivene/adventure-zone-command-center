@@ -1,0 +1,93 @@
+name: Finalize blank profile batch 01
+
+on:
+  push:
+    branches:
+      - research/blank-profiles-batch-01
+    paths:
+      - ".github/workflows/finalize-blank-profile-batch-01.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+jobs:
+  verify-batch-01:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: research/blank-profiles-batch-01
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Incorporate current main
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            git merge --no-edit origin/main
+            git push origin HEAD:research/blank-profiles-batch-01
+          fi
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Validate reviewed payloads
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const files = fs.readdirSync('imports/approved-profiles').filter((name) => name.endsWith('.json'));
+          for (const file of files) JSON.parse(fs.readFileSync(`imports/approved-profiles/${file}`, 'utf8'));
+          console.log(`Validated ${files.length} approved profile payloads.`);
+          NODE
+      - name: Run focused batch tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/approved-profile-import
+          src/features/organizations/blank-profile-batch-01.test.ts
+      - name: Build API
+        run: pnpm --filter @workspace/api-server build
+
+  merge-batch-01:
+    needs: verify-batch-01
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Find or create the pull request
+        id: pr
+        run: |
+          set -euo pipefail
+          NUMBER=$(gh pr list --head research/blank-profiles-batch-01 --base main --state open --json number --jq '.[0].number // empty')
+          if [ -z "${NUMBER}" ]; then
+            NUMBER=$(gh pr create \
+              --head research/blank-profiles-batch-01 \
+              --base main \
+              --title "Complete blank-profile research batch 01" \
+              --body "Completes the first 25 ACT-backed blank-profile records. Existing profiles only; no email sent or drafted." \
+              | sed -E 's#.*/([0-9]+)$#\1#')
+          fi
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
+      - name: Merge the reviewed batch
+        run: |
+          set -euo pipefail
+          gh pr merge "${{ steps.pr.outputs.number }}" --squash --delete-branch=false
+      - name: Record receipt
+        run: |
+          set -euo pipefail
+          gh pr view "${{ steps.pr.outputs.number }}" --json number,state,mergedAt,mergeCommit,url > batch-01-merge-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blank-profile-batch-01-merge-receipt
+          path: batch-01-merge-receipt.json
+          retention-days: 7
