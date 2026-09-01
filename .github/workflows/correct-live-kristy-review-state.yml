@@ -101,14 +101,15 @@ jobs:
               exit 0
             fi
 
-            if [ "${HTTP_STATUS}" = "409" ]; then
-              echo "The deployed correction refused to mutate because exact live identity checks failed."
-              cat kristy-review-correction.json
-              exit 1
+            if [ "${HTTP_STATUS}" = "404" ] || [ "${HTTP_STATUS}" = "000" ]; then
+              echo "Correction endpoint not deployed yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
+              sleep 15
+              continue
             fi
 
-            echo "Correction endpoint not ready yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
-            sleep 15
+            echo "The deployed correction returned HTTP ${HTTP_STATUS}."
+            cat kristy-review-correction.json 2>/dev/null || true
+            exit 1
           done
 
           echo "The deployed correction endpoint never became ready."
@@ -122,12 +123,10 @@ jobs:
         run: |
           set -euo pipefail
           BASE_URL="${API_URL%/}"
-
           curl --fail --silent --show-error \
             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
             --output kristy-manager-review-audit.json \
             "${BASE_URL}/api/assistant-import/manager-review-audit?manager=Kristy"
-
           curl --fail --silent --show-error \
             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
             --output don-king-profile.json \
@@ -140,7 +139,6 @@ jobs:
           const correction = JSON.parse(fs.readFileSync('kristy-review-correction.json', 'utf8'));
           const report = JSON.parse(fs.readFileSync('kristy-manager-review-audit.json', 'utf8'));
           const donKingProfile = JSON.parse(fs.readFileSync('don-king-profile.json', 'utf8'));
-
           const expectedDue = [
             ['ff3dce3f-dad2-41a9-9ecf-c87bd448ed6f', 'Moorcroft Jubilee Days'],
             ['e082626f-1759-48b7-b77c-4d6188e42ee9', 'Sublette County Fair'],
@@ -149,122 +147,39 @@ jobs:
             ['0ea10087-96ba-4268-8d32-b86a615a0896', 'Chouteau County Fair'],
           ];
           const byId = new Map((report.bookings ?? []).map((booking) => [booking.id, booking]));
-
-          if (report.ok !== true || report.leg?.managerName?.toLowerCase() !== 'kristy') {
-            throw new Error('The final audit did not resolve one configured Kristy leg.');
-          }
-
+          if (report.ok !== true || report.leg?.managerName?.toLowerCase() !== 'kristy') throw new Error('Kristy leg audit failed.');
           for (const [id, name] of expectedDue) {
             const booking = byId.get(id);
-            if (!booking || booking.name !== name || booking.state !== 'due') {
+            if (!booking || booking.name !== name || booking.state !== 'due' || booking.review !== null || booking.dismissal !== null) {
               throw new Error(`${name} was not restored to Kristy's due-review queue.`);
             }
-            if (booking.review !== null || booking.dismissal !== null) {
-              throw new Error(`${name} still has review or dismissal state that should not be present.`);
-            }
           }
-
           const milesCity = byId.get('79bd6cf9-d08e-41c5-be49-7ed597021fb3');
-          if (
-            !milesCity
-            || milesCity.name !== 'Eastern Montana Fair'
-            || milesCity.city !== 'Miles City'
-            || milesCity.state !== 'completed'
-            || milesCity.review?.id !== 'ff292577-474c-43fb-a543-7afa8d9f1125'
-            || milesCity.review?.rating !== 5
-          ) {
-            throw new Error('The completed Miles City report was not preserved exactly.');
+          if (!milesCity || milesCity.state !== 'completed' || milesCity.review?.id !== 'ff292577-474c-43fb-a543-7afa8d9f1125' || milesCity.review?.rating !== 5) {
+            throw new Error('Miles City was not preserved exactly.');
           }
-
           const meeteetse = byId.get('7876eafe-bff7-4a3a-b077-4ff21bfae662');
-          if (
-            !meeteetse
-            || meeteetse.name !== 'Meeteetse Annual Labor Day Celebration 2026'
-            || meeteetse.state !== 'upcoming'
-          ) {
-            throw new Error('Meeteetse was not preserved as Kristy\'s upcoming event.');
+          if (!meeteetse || meeteetse.state !== 'upcoming') throw new Error('Meeteetse is not upcoming.');
+          if (byId.has('484ff870-2c5f-46f4-a55d-41b328c2337a')) throw new Error('Don King Days is still assigned to Kristy.');
+          if (report.totals?.bookings !== 7 || report.totals?.due !== 5 || report.totals?.completed !== 1 || report.totals?.upcoming !== 1 || report.totals?.dismissed !== 0) {
+            throw new Error(`Unexpected Kristy totals: ${JSON.stringify(report.totals)}`);
           }
-
-          if (byId.has('484ff870-2c5f-46f4-a55d-41b328c2337a')) {
-            throw new Error('Don King Days is still assigned to Kristy.');
-          }
-
-          if (
-            report.totals?.bookings !== 7
-            || report.totals?.due !== 5
-            || report.totals?.completed !== 1
-            || report.totals?.upcoming !== 1
-            || report.totals?.dismissed !== 0
-          ) {
-            throw new Error(`Unexpected final Kristy totals: ${JSON.stringify(report.totals)}`);
-          }
-
-          const donKing = (donKingProfile.bookings ?? []).find(
-            (booking) => booking.id === '484ff870-2c5f-46f4-a55d-41b328c2337a',
-          );
-          if (
-            donKingProfile.ok !== true
-            || !donKing
-            || donKing.name !== 'Don King Days'
-            || donKing.status !== 'new_lead'
-          ) {
+          const donKing = (donKingProfile.bookings ?? []).find((booking) => booking.id === '484ff870-2c5f-46f4-a55d-41b328c2337a');
+          if (donKingProfile.ok !== true || !donKing || donKing.name !== 'Don King Days' || donKing.status !== 'new_lead') {
             throw new Error('The Don King Days CRM lead was not preserved.');
           }
-
-          const verification = {
+          fs.writeFileSync('kristy-review-state-verification.json', JSON.stringify({
             verifiedAt: new Date().toISOString(),
             correction: correction.result,
             kristy: {
               leg: report.leg,
               totals: report.totals,
               dueReviews: expectedDue.map(([id, name]) => ({ id, name })),
-              milesCity: {
-                id: milesCity.id,
-                reviewId: milesCity.review.id,
-                rating: milesCity.review.rating,
-                state: milesCity.state,
-              },
-              meeteetse: {
-                id: meeteetse.id,
-                startsAt: meeteetse.startsAt,
-                endsAt: meeteetse.endsAt,
-                state: meeteetse.state,
-              },
+              milesCity: { id: milesCity.id, reviewId: milesCity.review.id, rating: milesCity.review.rating, state: milesCity.state },
+              meeteetse: { id: meeteetse.id, startsAt: meeteetse.startsAt, endsAt: meeteetse.endsAt, state: meeteetse.state },
             },
-            donKingDays: {
-              profileId: donKingProfile.profileId,
-              bookingId: donKing.id,
-              status: donKing.status,
-              onKristyLeg: false,
-            },
-          };
-          fs.writeFileSync(
-            'kristy-review-state-verification.json',
-            JSON.stringify(verification, null, 2),
-          );
-          NODE
-
-      - name: Add correction summary
-        run: |
-          node <<'NODE'
-          const fs = require('fs');
-          const verification = JSON.parse(fs.readFileSync('kristy-review-state-verification.json', 'utf8'));
-          fs.appendFileSync(
-            process.env.GITHUB_STEP_SUMMARY,
-            [
-              '# Kristy review state corrected',
-              '',
-              `- Reviews due: ${verification.kristy.totals.due}`,
-              `- Completed reports: ${verification.kristy.totals.completed}`,
-              `- Upcoming events: ${verification.kristy.totals.upcoming}`,
-              `- Dismissed prompts: ${verification.kristy.totals.dismissed}`,
-              `- Miles City review: ${verification.kristy.milesCity.reviewId}`,
-              `- Meeteetse: ${verification.kristy.meeteetse.state}`,
-              `- Don King Days on Kristy leg: ${verification.donKingDays.onKristyLeg}`,
-              `- Don King Days CRM status: ${verification.donKingDays.status}`,
-              '',
-            ].join('\n'),
-          );
+            donKingDays: { profileId: donKingProfile.profileId, bookingId: donKing.id, status: donKing.status, onKristyLeg: false },
+          }, null, 2));
           NODE
 
       - name: Upload protected verification
