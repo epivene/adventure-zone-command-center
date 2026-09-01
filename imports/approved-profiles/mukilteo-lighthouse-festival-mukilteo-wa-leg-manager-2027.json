@@ -1,5 +1,5 @@
 {
-  "importRevision": 5,
+  "importRevision": 6,
   "matchExisting": true,
   "event": {"id": null, "name": "Mukilteo Lighthouse Festival", "city": "Mukilteo", "region": "WA"},
   "profile": {"placeType": "festival_event", "description": "Future opportunity. The Mukilteo Lighthouse Festival president called on September 1, 2026 and asked The Adventure Zone to reconnect in January regarding the 2027 festival. The 2027 festival dates are September 10-12. Mukilteo has previously offered inflatables in its children's area, so position Adventure Zone as a full staffed inflatable-carnival option and keep the tone friendly and non-competitive.", "phone": "425-353-5516", "website": "https://mukfest.com/", "address1": "609 Front Street", "address2": "Lighthouse Park", "postalCode": "98275"},
@@ -11,5 +11,6 @@
     {"subject": "2026/future inflatable-carnival opportunity - Mukilteo Lighthouse Festival", "body": "2026 Mukilteo Lighthouse Festival is Sept. 11-13 at Lighthouse Park, 609 Front Street, Mukilteo WA. Official festival information lists info@mukfest.com / 425-353-5516. The children's area has previously included inflatables. Keep outreach friendly and non-competitive and present The Adventure Zone as a full staffed inflatable carnival for future consideration."},
     {"subject": "Festival president called - contact in January for 2027", "body": "On September 1, 2026, the Mukilteo Lighthouse Festival president called from 425-353-5516. She said the 2027 festival will be September 10, 11, and 12 and asked The Adventure Zone to contact her in January regarding next year's festival."}
   ],
-  "followUps": [{"label": "Call Mukilteo Lighthouse Festival president about 2027", "reason": "The festival president explicitly asked The Adventure Zone to contact her in January regarding the September 10-12, 2027 festival. Call 425-353-5516.", "dueAt": "2027-01-05T16:00:00.000Z"}]
+  "clearFollowUps": true,
+  "followUps": []
 }
