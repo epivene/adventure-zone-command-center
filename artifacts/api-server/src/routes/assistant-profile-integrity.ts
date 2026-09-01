@@ -1,6 +1,9 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod";
 
-import { pool } from "@workspace/db";
+import { db, pool } from "@workspace/db";
+import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
+import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { ProfileIntegrityAuditService } from "@/features/profile-integrity/profile-integrity-audit";
 import { readProfileIntegrityId } from "@/features/profile-integrity/profile-integrity-input";
 import { inspectOrganizationReferenceBlockers } from "@/features/profile-integrity/organization-reference-inspector";
@@ -8,7 +11,44 @@ import { requireAssistantImportToken } from "../middlewares/assistant-import-aut
 
 const router: IRouter = Router();
 
+const profileMergeSchema = z.object({
+  canonicalOrgId: z.string().uuid(),
+  sourceOrgId: z.string().uuid(),
+  label: z.string().trim().min(1).max(240).optional(),
+}).strict().refine(
+  (input) => input.canonicalOrgId !== input.sourceOrgId,
+  { message: "A profile cannot be merged into itself." },
+);
+
 router.use(requireAssistantImportToken);
+
+router.post("/profile-merge", async (req, res): Promise<void> => {
+  const parsed = profileMergeSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Review the profile merge.",
+    });
+    return;
+  }
+
+  try {
+    const result = await addProfileAsLocation(db, parsed.data, new Date());
+    res.json({
+      ok: true,
+      canonicalOrgId: parsed.data.canonicalOrgId,
+      sourceOrgId: parsed.data.sourceOrgId,
+      locationId: result.locationId,
+    });
+  } catch (error) {
+    if (error instanceof OrganizationConflictError) {
+      res.status(409).json({ ok: false, error: error.message });
+      return;
+    }
+    req.log.error({ err: error }, "Failed protected profile merge");
+    res.status(500).json({ ok: false, error: "Profile merge failed." });
+  }
+});
 
 router.get("/profile-integrity-audit", async (req, res): Promise<void> => {
   try {
