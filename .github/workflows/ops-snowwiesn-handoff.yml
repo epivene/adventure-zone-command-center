@@ -1,4 +1,4 @@
-name: One-time SnowWiesn contact audit
+name: One-time SnowWiesn handoff update
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ops/snowwiesn-handoff-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read exact live profile
+      - name: Update current contact and handoff note
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -28,30 +28,59 @@ jobs:
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
           PROFILE_ID="9957265b-fb03-4ee1-8e37-b19fd751ce7d"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/snowwiesn-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/snowwiesn-history.json', 'utf8'));
-          if (root.ok !== true || root.profileId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d') {
-            throw new Error('The exact SnowWiesn profile could not be verified.');
-          }
+          fs.writeFileSync('/tmp/snowwiesn-contact.json', JSON.stringify({
+            event: {
+              id: '9957265b-fb03-4ee1-8e37-b19fd751ce7d',
+              name: 'SnowWiesn Oktoberfest',
+              city: 'Huntsville',
+              region: 'UT'
+            },
+            profile: {},
+            contacts: [{
+              name: 'Zachary Smith',
+              role: 'Current SnowWiesn contact',
+              email: 'zach.smith@snowbasin.com',
+              phone: '',
+              primary: true
+            }]
+          }));
+          fs.writeFileSync('/tmp/snowwiesn-note.json', JSON.stringify({
+            organizationId: '9957265b-fb03-4ee1-8e37-b19fd751ce7d',
+            subject: 'September 1 SnowWiesn handoff to Zach Smith',
+            body: 'Carrie Lindsay, Director of Event Sales at Snowbasin, connected Desiree with Zachary Smith on September 1, 2026. Zach will provide additional information to determine whether Adventure Zone is a good fit for SnowWiesn. Zach: zach.smith@snowbasin.com. Carrie: clindsay@snowbasin.com; office 801-620-1076; cell 801-941-3656. Michael Rueckert remains copied at mrueckert@snowbasin.com. Reply-all draft created requesting the 2026 dates and hours, expected attendance, available attraction space, and whether Snowbasin prefers a prepaid package or pay-for-play/revenue-share arrangement. Original general contact: events@snowbasin.com.'
+          }));
+          NODE
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/snowwiesn-contact.json             "${BASE_URL}/event-profiles" > /tmp/snowwiesn-contact-response.json
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/snowwiesn-note.json             "${BASE_URL}/profile-notes" > /tmp/snowwiesn-note-response.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const contact = JSON.parse(fs.readFileSync('/tmp/snowwiesn-contact-response.json', 'utf8'));
+          const note = JSON.parse(fs.readFileSync('/tmp/snowwiesn-note-response.json', 'utf8'));
+          const expectedId = '9957265b-fb03-4ee1-8e37-b19fd751ce7d';
+          if (contact.ok !== true || contact.profileId !== expectedId || !contact.contactId) throw new Error('SnowWiesn contact update failed.');
+          if (note.ok !== true || note.organizationId !== expectedId) throw new Error('SnowWiesn handoff note failed.');
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/snowwiesn-profile-audit.json', JSON.stringify({
-            checkedAt: new Date().toISOString(),
+          fs.writeFileSync('.github/ops-results/snowwiesn-profile-update.json', JSON.stringify({
+            completedAt: new Date().toISOString(),
             ok: true,
-            profileId: root.profileId,
-            place: root.place,
-            contacts: root.contacts,
-            bookings: root.bookings
+            profileId: contact.profileId,
+            contactId: contact.contactId,
+            noteCreated: note.created,
+            activityId: note.activityId
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit audit result
+      - name: Commit update receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/snowwiesn-profile-audit.json
-          git commit -m "ops: record SnowWiesn contact audit"
+          git add .github/ops-results/snowwiesn-profile-update.json
+          git commit -m "ops: record SnowWiesn handoff update"
           git push origin HEAD:ops/snowwiesn-handoff-2026-09-01
