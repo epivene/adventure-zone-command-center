@@ -3,9 +3,9 @@ import { pool } from "@workspace/db";
 import { isEventReviewDue } from "@/features/leg-manager/event-review-service";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
-const router: IRouter = Router();
+export const managerReviewAuditRouter: IRouter = Router();
 
-router.use(requireAssistantImportToken);
+managerReviewAuditRouter.use(requireAssistantImportToken);
 
 type LegRow = {
   leg_id: string;
@@ -29,13 +29,15 @@ type BookingReviewRow = {
   crew_notes: string | null;
   recommend_return: string | null;
   review_created_at: Date | string | null;
+  dismissal_reason: string | null;
+  dismissed_at: Date | string | null;
 };
 
 function iso(value: Date | string | null) {
   return value == null ? null : new Date(value).toISOString();
 }
 
-router.get("/manager-review-audit", async (req, res): Promise<void> => {
+managerReviewAuditRouter.get("/manager-review-audit", async (req, res): Promise<void> => {
   const managerQuery = typeof req.query.manager === "string" ? req.query.manager.trim() : "";
   if (managerQuery.length < 2) {
     res.status(400).json({ ok: false, error: "Enter at least 2 characters for the manager name." });
@@ -90,7 +92,9 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
               review.organizer_site_notes,
               review.crew_notes,
               review.recommend_return,
-              review.created_at AS review_created_at
+              review.created_at AS review_created_at,
+              dismissal.reason AS dismissal_reason,
+              dismissal.dismissed_at
          FROM bookings booking
          LEFT JOIN organizations organization ON organization.id = booking.organization_id
          LEFT JOIN LATERAL (
@@ -107,6 +111,9 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
             ORDER BY item.created_at DESC, item.id DESC
             LIMIT 1
          ) review ON true
+         LEFT JOIN event_manager_review_dismissals dismissal
+           ON dismissal.booking_id = booking.id
+          AND dismissal.leg_id = booking.travel_leg_id
         WHERE booking.travel_leg_id = $1
         ORDER BY booking.starts_at NULLS LAST, booking.created_at, booking.id`,
       [leg.leg_id],
@@ -117,8 +124,9 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
       const startsAt = row.starts_at == null ? null : new Date(row.starts_at);
       const endsAt = row.ends_at == null ? null : new Date(row.ends_at);
       const hasReview = row.review_id != null;
-      const due = !hasReview && isEventReviewDue({ startsAt, endsAt }, now);
-      const upcoming = !hasReview && !due && (endsAt ?? startsAt) != null;
+      const dismissed = !hasReview && row.dismissed_at != null;
+      const due = !hasReview && !dismissed && isEventReviewDue({ startsAt, endsAt }, now);
+      const upcoming = !hasReview && !dismissed && !due && (endsAt ?? startsAt) != null;
       return {
         id: row.id,
         name: row.name,
@@ -128,7 +136,15 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
         endsAt: iso(row.ends_at),
         status: row.status,
         organizationName: row.organization_name,
-        state: hasReview ? "completed" : due ? "due" : upcoming ? "upcoming" : "undated",
+        state: hasReview
+          ? "completed"
+          : dismissed
+            ? "dismissed"
+            : due
+              ? "due"
+              : upcoming
+                ? "upcoming"
+                : "undated",
         review: hasReview
           ? {
               id: row.review_id,
@@ -138,6 +154,12 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
               crewNotes: row.crew_notes,
               recommendReturn: row.recommend_return,
               createdAt: iso(row.review_created_at),
+            }
+          : null,
+        dismissal: dismissed
+          ? {
+              reason: row.dismissal_reason,
+              dismissedAt: iso(row.dismissed_at),
             }
           : null,
       };
@@ -157,6 +179,7 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
         due: bookings.filter((booking) => booking.state === "due").length,
         completed: bookings.filter((booking) => booking.state === "completed").length,
         upcoming: bookings.filter((booking) => booking.state === "upcoming").length,
+        dismissed: bookings.filter((booking) => booking.state === "dismissed").length,
         undated: bookings.filter((booking) => booking.state === "undated").length,
       },
       bookings,
@@ -167,4 +190,4 @@ router.get("/manager-review-audit", async (req, res): Promise<void> => {
   }
 });
 
-export default router;
+export default managerReviewAuditRouter;
