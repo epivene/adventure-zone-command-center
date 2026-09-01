@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./startup-import";
+import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./startup-config";
 import { runMaintenanceAndStartWorkers } from "./post-listen-startup";
 
 describe("post-listen startup", () => {
