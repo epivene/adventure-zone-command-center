@@ -85,6 +85,23 @@ function mappingsByThread(mappings: GoogleApprovedValidationMapping[]) {
   return grouped;
 }
 
+function conversationYear(conversation: {
+  date: string;
+  internalDateMs: number | null;
+}): number | null {
+  const parsedHeaderDate = Date.parse(conversation.date);
+  if (Number.isFinite(parsedHeaderDate)) {
+    return new Date(parsedHeaderDate).getUTCFullYear();
+  }
+  if (
+    typeof conversation.internalDateMs === "number" &&
+    Number.isFinite(conversation.internalDateMs)
+  ) {
+    return new Date(conversation.internalDateMs).getUTCFullYear();
+  }
+  return null;
+}
+
 export function createGoogleWorkspaceProfileEmailRouter(options?: {
   connection?: ConnectionAccess;
   validationRepository?: ValidationAccess;
@@ -147,7 +164,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           throw failures[0];
         }
 
-        const conversations = successes
+        const allConversations = successes
           .map(({ threadId, threadMappings, thread }) => {
             const latest = thread.messages.at(-1) ?? null;
             return {
@@ -174,13 +191,25 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
               left.threadId.localeCompare(right.threadId),
           );
 
-        res.json({
+        const currentYear = new Date().getUTCFullYear();
+        const conversations = allConversations.filter(
+          (conversation) => conversationYear(conversation) === currentYear,
+        );
+        const historicalConversations = allConversations.filter(
+          (conversation) => conversationYear(conversation) !== currentYear,
+        );
+
+        const response: Record<string, unknown> = {
           validationSampleOnly: false,
           historicalBackfillIncluded: true,
           liveGmail: true,
           unavailableThreadCount: failures.length,
           conversations,
-        });
+        };
+        if (historicalConversations.length) {
+          response.historicalConversations = historicalConversations;
+        }
+        res.json(response);
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });
