@@ -1,4 +1,4 @@
-name: One-time Ak-Chin profile audit
+name: One-time Ak-Chin profile contact audit
 
 on:
   push:
@@ -20,25 +20,30 @@ jobs:
           ref: ops/ak-chin-december-event-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Find exact live profile
+      - name: Read exact live profile
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
-          curl --fail --silent --show-error --get             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --data-urlencode "q=Ak-Chin"             --data-urlencode "limit=20"             "${BASE_URL}/profile-search" > /tmp/ak-chin-search.json
+          PROFILE_ID="86509cbd-60c8-4ea7-a061-f1a39681448b"
+          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/ak-chin-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/ak-chin-search.json', 'utf8'));
-          const results = Array.isArray(root.results) ? root.results : [];
+          const root = JSON.parse(fs.readFileSync('/tmp/ak-chin-history.json', 'utf8'));
+          if (root.ok !== true || root.profileId !== '86509cbd-60c8-4ea7-a061-f1a39681448b') {
+            throw new Error('The exact Ak-Chin profile could not be verified.');
+          }
           fs.mkdirSync('.github/ops-results', { recursive: true });
           fs.writeFileSync('.github/ops-results/ak-chin-profile-audit.json', JSON.stringify({
             checkedAt: new Date().toISOString(),
-            ok: root.ok === true,
-            resultCount: results.length,
-            results
+            ok: true,
+            profileId: root.profileId,
+            place: root.place,
+            contacts: root.contacts,
+            bookings: root.bookings
           }, null, 2) + '\n');
           NODE
 
@@ -48,5 +53,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/ops-results/ak-chin-profile-audit.json
-          git commit -m "ops: record Ak-Chin live profile audit"
+          git commit -m "ops: record Ak-Chin contact audit"
           git push origin HEAD:ops/ak-chin-december-event-2026-09-01
