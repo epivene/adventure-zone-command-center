@@ -1,4 +1,4 @@
-name: One-time SnowWiesn detailed history audit
+name: One-time SnowWiesn research correction
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,41 +20,46 @@ jobs:
           ref: ops/snowwiesn-handoff-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Export relevant live SnowWiesn history
+      - name: Add researched reply correction note
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
         run: |
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
-          PROFILE_ID="9957265b-fb03-4ee1-8e37-b19fd751ce7d"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/snowwiesn-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/snowwiesn-history.json', 'utf8'));
-          if (root.ok !== true || root.profileId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d') {
-            throw new Error('The exact SnowWiesn profile could not be verified.');
+          fs.writeFileSync('/tmp/snowwiesn-correction-note.json', JSON.stringify({
+            organizationId: '9957265b-fb03-4ee1-8e37-b19fd751ce7d',
+            subject: 'Detailed SnowWiesn research and revised reply',
+            body: 'Reviewed the full 2022 SnowWiesn email thread and live profile before finalizing the September 1, 2026 reply. Known details: the 2026 event runs weekends August 29-October 18; the booking is Possible; Michael Rueckert said Snowbasin was open to future consideration and asked about insurance strength, ticket price, and revenue-share percentage; Adventure Zone proposed 10-12 attractions with no upfront charge in 2022; the September 1, 2026 outreach confirmed current $2M liability coverage and offered either pay-for-play/revenue share or prepaid. No later historical answer to Michael was found. The revised reply no longer asks for general event dates or hours. It asks Zach which remaining weekend(s) Snowbasin would consider, the attraction space and power available, expected attendance, and whether they want a current revenue-share proposal or prepaid comparison. Carrie Lindsay and Michael Rueckert remain included on the reply.'
+          }));
+          NODE
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/snowwiesn-correction-note.json             "${BASE_URL}/profile-notes" > /tmp/snowwiesn-correction-response.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const note = JSON.parse(fs.readFileSync('/tmp/snowwiesn-correction-response.json', 'utf8'));
+          if (note.ok !== true || note.organizationId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d') {
+            throw new Error('SnowWiesn correction note failed.');
           }
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/snowwiesn-detailed-history.json', JSON.stringify({
-            checkedAt: new Date().toISOString(),
-            profileId: root.profileId,
-            place: root.place,
-            contacts: root.contacts,
-            bookings: root.bookings,
-            followUps: root.followUps,
-            notes: root.notes,
-            history: root.history,
-            migrationHistory: root.migrationHistory
+          fs.writeFileSync('.github/ops-results/snowwiesn-research-correction.json', JSON.stringify({
+            completedAt: new Date().toISOString(),
+            ok: true,
+            organizationId: note.organizationId,
+            noteCreated: note.created,
+            activityId: note.activityId
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit detailed audit
+      - name: Commit correction receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/snowwiesn-detailed-history.json
-          git commit -m "ops: record detailed SnowWiesn history audit"
+          git add .github/ops-results/snowwiesn-research-correction.json
+          git commit -m "ops: record SnowWiesn research correction"
           git push origin HEAD:ops/snowwiesn-handoff-2026-09-01
