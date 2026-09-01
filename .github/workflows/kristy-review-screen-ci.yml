@@ -8,8 +8,10 @@ on:
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
       - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction.ts"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
   push:
@@ -21,8 +23,10 @@ on:
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
       - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction.ts"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
 
@@ -52,16 +56,15 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/leg-manager/manager-review-overview.test.ts
           src/features/leg-manager/kristy-review-queue-cleanup.test.ts
+          src/features/leg-manager/kristy-review-state-correction.test.ts
           src/db/event-review-dismissal-required-startup.test.ts
           src/db/required-schema-startup.test.ts
       - name: Targeted manager page test
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/pages/ManagerEventReviewPage.test.tsx
-      - name: Guard exact cleanup and route precedence
+      - name: Guard exact review routing
         run: |
-          grep -F 'guarded Kristy event review cleanup' artifacts/api-server/src/db/required-schema-startup.ts
-          grep -F 'KRISTY_STALE_REVIEW_CANDIDATES' artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup.ts
           grep -F 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts
           test "$(grep -n 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts | cut -d: -f1)" -lt "$(grep -n 'app.use("/api", router);' artifacts/api-server/src/app.ts | cut -d: -f1)"
       - name: Production API build
