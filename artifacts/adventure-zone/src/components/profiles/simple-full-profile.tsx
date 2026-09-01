@@ -38,6 +38,7 @@ import {
 } from "@/actions/activities";
 import { getGoogleProfileEmails } from "@/features/google-workspace/google-workspace-client";
 import type { ActivityTimelineItem } from "@/features/activities/activity-types";
+import type { GoogleProfileEmailConversation } from "@/features/google-workspace/google-workspace-client";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -138,7 +139,7 @@ export function SimpleFullProfile({
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
   const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
-  const [emailCount, setEmailCount] = useState(0);
+  const [emailConversations, setEmailConversations] = useState<GoogleProfileEmailConversation[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const isEditing = editing ?? internalEditing;
@@ -153,13 +154,13 @@ export function SimpleFullProfile({
 
   useEffect(() => {
     let active = true;
-    setEmailCount(0);
+    setEmailConversations([]);
     void getGoogleProfileEmails(profile.id)
       .then((result) => {
-        if (active) setEmailCount(result.conversations.length);
+        if (active) setEmailConversations(result.conversations);
       })
       .catch(() => {
-        if (active) setEmailCount(0);
+        if (active) setEmailConversations([]);
       });
     return () => {
       active = false;
@@ -211,6 +212,27 @@ export function SimpleFullProfile({
     paperNoteSource: (note as any).paperNoteSource ?? null,
   }));
   const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
+  const emailCount = emailConversations.length;
+  const recentHistory = [
+    ...activities.map((activity) => ({
+      id: activity.id,
+      kind: activity.kind,
+      body: activity.body,
+      occurredAt: activity.occurredAt,
+    })),
+    ...emailConversations.map((conversation) => ({
+      id: `gmail:${conversation.threadId}`,
+      kind: "email",
+      body: conversation.subject || "(No subject)",
+      occurredAt: new Date(
+        (conversation.internalDateMs ?? Date.parse(conversation.date)) || 0,
+      ),
+    })),
+  ].sort(
+    (left, right) =>
+      new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime() ||
+      left.id.localeCompare(right.id),
+  );
   const normalizedSearch = noteSearch.trim().toLowerCase();
   const filteredActivities = normalizedSearch
     ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
@@ -716,11 +738,11 @@ export function SimpleFullProfile({
                 </button>
               </div>
               <div className="mt-5 grid gap-4">
-                {activities.slice(0, 3).length ? (
-                  activities.slice(0, 3).map((activity) => (
+                {recentHistory.slice(0, 3).length ? (
+                  recentHistory.slice(0, 3).map((activity) => (
                     <article className="flex gap-3" key={activity.id}>
                       <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activity.kind === "call" ? "bg-[#f5e6dc] text-[#a66845]" : "bg-[#e3eee8] text-[#397064]"}`}>
-                        {activity.kind === "call" ? <Phone className="h-4 w-4" /> : <StickyNote className="h-4 w-4" />}
+                        {activity.kind === "call" ? <Phone className="h-4 w-4" /> : activity.kind === "email" ? <Mail className="h-4 w-4" /> : <StickyNote className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0 flex-1 border-b border-[#edf0eb] pb-4 last:border-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">

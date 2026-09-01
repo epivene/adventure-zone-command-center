@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const googleWorkspace = vi.hoisted(() => ({
@@ -65,6 +65,52 @@ const profile = {
 } as any;
 
 describe("SimpleFullProfile Gmail history", () => {
+  it("shows the newest notes and Gmail conversations together in recent history", async () => {
+    googleWorkspace.getGoogleProfileEmails.mockResolvedValueOnce({
+      liveGmail: true,
+      validationSampleOnly: false,
+      historicalBackfillIncluded: true,
+      unavailableThreadCount: 0,
+      conversations: [{
+        threadId: "thread-newer",
+        subject: "Newer Gmail conversation",
+        from: "organizer@example.com",
+        to: "zone@example.com",
+        date: "Tue, 1 Sep 2026 11:00:00 -0600",
+        internalDateMs: new Date("2026-09-01T17:00:00.000Z").getTime(),
+        hasAttachments: false,
+        contactId: null,
+        evidenceCodes: ["exact_contact_email"],
+        originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-newer",
+      }],
+    });
+    const profileWithOlderNote = {
+      ...profile,
+      notes: [{
+        id: "note-older",
+        contactId: null,
+        bookingId: null,
+        kind: "note",
+        body: "Older profile note",
+        occurredAt: new Date("2026-08-31T17:00:00.000Z"),
+        createdAt: new Date("2026-08-31T17:00:00.000Z"),
+        updatedAt: new Date("2026-08-31T17:00:00.000Z"),
+        importedFromAct: false,
+        actSourceType: null,
+      }],
+    } as any;
+
+    render(<SimpleFullProfile profile={profileWithOlderNote} />);
+
+    const recentHistory = screen.getByRole("heading", { name: "Recent history" }).closest("section");
+    expect(recentHistory).not.toBeNull();
+    await waitFor(() => expect(within(recentHistory!).getByText("Newer Gmail conversation")).toBeInTheDocument());
+    const rows = within(recentHistory!).getAllByRole("article");
+    expect(rows[0]).toHaveTextContent("email");
+    expect(rows[0]).toHaveTextContent("Newer Gmail conversation");
+    expect(rows[1]).toHaveTextContent("Older profile note");
+  });
+
   it("gives live Gmail its own summary box and expandable section", async () => {
     render(<SimpleFullProfile profile={profile} />);
 
