@@ -1,4 +1,4 @@
-name: One-time SnowWiesn handoff verification
+name: One-time SnowWiesn detailed history audit
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  verify:
+  audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ops/snowwiesn-handoff-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Verify live SnowWiesn profile state
+      - name: Export relevant live SnowWiesn history
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -28,61 +28,33 @@ jobs:
           set -euo pipefail
           BASE_URL="${API_URL%/}/api/assistant-import"
           PROFILE_ID="9957265b-fb03-4ee1-8e37-b19fd751ce7d"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/snowwiesn-verified.json
+          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/snowwiesn-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/snowwiesn-verified.json', 'utf8'));
-          const serialized = JSON.stringify(root);
-          const zach = (root.contacts ?? []).find((item) =>
-            item.name === 'Zachary Smith' &&
-            String(item.email ?? '').toLowerCase() === 'zach.smith@snowbasin.com' &&
-            item.role === 'Current SnowWiesn contact' &&
-            item.isPrimary === true
-          );
-          const michael = (root.contacts ?? []).find((item) =>
-            item.name === 'Michael Rueckert' &&
-            String(item.email ?? '').toLowerCase() === 'mrueckert@snowbasin.com'
-          );
-          const booking = (root.bookings ?? []).find((item) =>
-            item.name === 'SnowWiesn Oktoberfest - 2026' &&
-            item.status === 'possible' &&
-            item.primaryContactId === zach?.id &&
-            item.startsAt === '2026-08-29T17:00:00.000Z' &&
-            item.endsAt === '2026-10-18T17:00:00.000Z'
-          );
-          const notePresent =
-            serialized.includes('September 1 SnowWiesn handoff to Zach Smith') &&
-            serialized.includes('Carrie Lindsay, Director of Event Sales') &&
-            serialized.includes('801-620-1076') &&
-            serialized.includes('801-941-3656') &&
-            serialized.includes('events@snowbasin.com');
-          if (root.ok !== true || root.profileId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d' || !zach || !michael || !booking || !notePresent) {
-            throw new Error('Fresh live verification did not find the expected SnowWiesn state.');
+          const root = JSON.parse(fs.readFileSync('/tmp/snowwiesn-history.json', 'utf8'));
+          if (root.ok !== true || root.profileId !== '9957265b-fb03-4ee1-8e37-b19fd751ce7d') {
+            throw new Error('The exact SnowWiesn profile could not be verified.');
           }
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/snowwiesn-profile-verification.json', JSON.stringify({
-            verifiedAt: new Date().toISOString(),
-            ok: true,
+          fs.writeFileSync('.github/ops-results/snowwiesn-detailed-history.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
             profileId: root.profileId,
-            profileName: root.place?.name,
-            currentContact: { name: zach.name, role: zach.role, email: zach.email },
-            historicalContactRetained: { name: michael.name, email: michael.email },
-            bookingPreserved: {
-              name: booking.name,
-              status: booking.status,
-              startsAt: booking.startsAt,
-              endsAt: booking.endsAt
-            },
-            handoffNotePresent: true
+            place: root.place,
+            contacts: root.contacts,
+            bookings: root.bookings,
+            followUps: root.followUps,
+            notes: root.notes,
+            history: root.history,
+            migrationHistory: root.migrationHistory
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit verification receipt
+      - name: Commit detailed audit
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/snowwiesn-profile-verification.json
-          git commit -m "ops: verify live SnowWiesn handoff"
+          git add .github/ops-results/snowwiesn-detailed-history.json
+          git commit -m "ops: record detailed SnowWiesn history audit"
           git push origin HEAD:ops/snowwiesn-handoff-2026-09-01
