@@ -23,6 +23,7 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureEventReviewDismissals: async () => false,
       ensureOrganizerFeedback: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
@@ -34,6 +35,7 @@ describe("runRequiredSchemaStartup", () => {
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
+      "required event review dismissal schema",
       "required organizer feedback schema",
       "required office coordinator schema",
       "required profile touch schema",
