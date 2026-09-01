@@ -117,6 +117,30 @@ router.post("/manager-review-dismissals", async (req, res): Promise<void> => {
       return;
     }
 
+    const tableResult = await client.query<{ table_name: string | null }>(
+      "SELECT to_regclass('public.event_wrap_ups')::text AS table_name",
+    );
+    const wrapUpsTablePresent = tableResult.rows[0]?.table_name === "event_wrap_ups";
+    if (wrapUpsTablePresent) {
+      const submittedWrapUps = await client.query<{ booking_id: string }>(
+        `SELECT DISTINCT booking_id
+           FROM event_wrap_ups
+          WHERE leg_id = $1
+            AND booking_id = ANY($2::uuid[])
+            AND status IN ('submitted', 'reviewed')`,
+        [leg.leg_id, parsed.data.bookingIds],
+      );
+      if (submittedWrapUps.rows.length > 0) {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          ok: false,
+          error: "A submitted event wrap-up cannot be dismissed.",
+          submittedBookingIds: submittedWrapUps.rows.map((row) => row.booking_id),
+        });
+        return;
+      }
+    }
+
     const now = new Date();
     const notDue = bookingResult.rows.filter((row) =>
       !isEventReviewDue(
@@ -176,6 +200,41 @@ router.post("/manager-review-dismissals", async (req, res): Promise<void> => {
         error: "The review queue changed during cleanup; no dismissals were applied.",
       });
       return;
+    }
+
+    const finalReviews = await client.query<{ booking_id: string }>(
+      `SELECT DISTINCT booking_id
+         FROM event_manager_reviews
+        WHERE leg_id = $1
+          AND booking_id = ANY($2::uuid[])`,
+      [leg.leg_id, parsed.data.bookingIds],
+    );
+    if (finalReviews.rows.length > 0) {
+      await client.query("ROLLBACK");
+      res.status(409).json({
+        ok: false,
+        error: "A completed report appeared during cleanup; no dismissals were applied.",
+      });
+      return;
+    }
+
+    if (wrapUpsTablePresent) {
+      const finalWrapUps = await client.query<{ booking_id: string }>(
+        `SELECT DISTINCT booking_id
+           FROM event_wrap_ups
+          WHERE leg_id = $1
+            AND booking_id = ANY($2::uuid[])
+            AND status IN ('submitted', 'reviewed')`,
+        [leg.leg_id, parsed.data.bookingIds],
+      );
+      if (finalWrapUps.rows.length > 0) {
+        await client.query("ROLLBACK");
+        res.status(409).json({
+          ok: false,
+          error: "A submitted wrap-up appeared during cleanup; no dismissals were applied.",
+        });
+        return;
+      }
     }
 
     await client.query("COMMIT");
