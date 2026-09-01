@@ -1,0 +1,54 @@
+name: Merge Gmail profile integrity fix after verification
+
+on:
+  push:
+    branches:
+      - fix/gmail-profile-link-integrity
+    paths:
+      - ".github/workflows/merge-gmail-profile-integrity-fix.yml"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  verify-and-merge:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/gmail-profile-link-integrity
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/gmail-profile-integrity.test.ts
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server build
+      - name: Merge the reviewed pull request
+        run: |
+          set -euo pipefail
+          PR_NUMBER=$(gh pr list \
+            --repo epivene/adventure-zone-command-center \
+            --head fix/gmail-profile-link-integrity \
+            --base main \
+            --state open \
+            --json number \
+            --jq '.[0].number')
+          test -n "${PR_NUMBER}" || { echo "Open Gmail integrity PR not found"; exit 1; }
+          gh pr merge "${PR_NUMBER}" \
+            --repo epivene/adventure-zone-command-center \
+            --squash \
+            --delete-branch \
+            --subject "Repair sent Gmail history links and audit profile-linked messages" \
+            --body "Restore the actual Twin Falls sent email, repair deterministic email-to-profile links, reparent retired-profile Gmail references, and add a protected sent-email integrity audit."
