@@ -1,0 +1,112 @@
+name: Log Meeker decline
+
+on:
+  push:
+    branches:
+      - ops/log-meeker-decline-2026-09-01
+    paths:
+      - ".github/workflows/log-meeker-decline.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  log-decline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Resolve exact profile and add decline note
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          mkdir -p .github/runtime-status
+          node <<'NODE'
+          const fs = require("fs");
+
+          const baseUrl = process.env.API_URL.replace(/\/$/, "");
+          const headers = {
+            Authorization: `Bearer ${process.env.ASSISTANT_IMPORT_TOKEN}`,
+            "Content-Type": "application/json",
+          };
+
+          async function readJson(response, label) {
+            const text = await response.text();
+            let body;
+            try {
+              body = JSON.parse(text);
+            } catch {
+              throw new Error(`${label} returned non-JSON (HTTP ${response.status})`);
+            }
+            if (!response.ok || body.ok !== true) {
+              throw new Error(`${label} failed (HTTP ${response.status}): ${body.error || "unknown error"}`);
+            }
+            return body;
+          }
+
+          async function main() {
+            const searchResponse = await fetch(
+              `${baseUrl}/api/assistant-import/profile-search?q=${encodeURIComponent("Mary Cunn")}&limit=20`,
+              { headers: { Authorization: headers.Authorization } },
+            );
+            const search = await readJson(searchResponse, "Profile search");
+            const candidates = search.results.filter((result) =>
+              result.kind === "organization" &&
+              /meeker classic sheepdog/i.test(result.label) &&
+              Array.isArray(result.matchedOn) &&
+              result.matchedOn.includes("contact"),
+            );
+
+            if (candidates.length !== 1) {
+              throw new Error(`Expected one exact Mary/Meeker profile match; found ${candidates.length}.`);
+            }
+
+            const profile = candidates[0];
+            const subject = "Organizer declined - not a fit";
+            const body = "September 1, 2026 — Mary replied by text regarding the Meeker Classic Sheepdog Trials: “Thank you for your inquiry about the Meeker Classic Sheepdog trials. I don’t think we are a match. All the best-” Outcome: declined/not a fit for this opportunity. No follow-up task was created. This is not a Do Not Contact request.";
+
+            const noteResponse = await fetch(`${baseUrl}/api/assistant-import/profile-notes`, {
+              method: "POST",
+              headers,
+              body: JSON.stringify({
+                organizationId: profile.id,
+                subject,
+                body,
+              }),
+            });
+            const note = await readJson(noteResponse, "Profile note");
+
+            const receipt = [
+              `status=${note.created ? "NOTE_CREATED" : "NOTE_ALREADY_PRESENT"}`,
+              `profile=${note.organizationName}`,
+              `subject=${subject}`,
+              `created=${String(note.created)}`,
+              `completed_at=${new Date().toISOString()}`,
+            ].join("\n") + "\n";
+            fs.writeFileSync(".github/runtime-status/meeker-decline.txt", receipt);
+            console.log(`Verified live profile note for ${note.organizationName}: ${note.created ? "created" : "already present"}.`);
+          }
+
+          main().catch((error) => {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exit(1);
+          });
+          NODE
+
+      - name: Persist sanitized receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/runtime-status/meeker-decline.txt
+          git commit -m "Record Meeker decline profile update"
+          git push origin HEAD:ops/log-meeker-decline-2026-09-01
