@@ -1,0 +1,13 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "requireExisting": true,
+  "event": {"id": null, "name": "Mukilteo Lighthouse Festival", "city": "Mukilteo", "region": "WA"},
+  "profile": {},
+  "contacts": [],
+  "booking": {"enabled": false, "name": "", "status": "contact_due", "startsAt": "", "endsAt": "", "nextActionKind": "call", "nextActionDueAt": "2027-01-05T16:00:00.000Z", "travelLegId": null},
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [],
+  "followUps": [{"label": "Call Mukilteo Lighthouse Festival president about 2027", "reason": "The festival president asked The Adventure Zone to contact her in January regarding the September 10-12, 2027 festival. Call 425-353-5516.", "dueAt": "2027-01-05T16:00:00.000Z"}]
+}
