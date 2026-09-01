@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
-  it("creates required schemas and runs guarded maintenance in dependency order before the API listens", async () => {
+  it("creates required schemas without reapplying the retired Kristy review cleanup", async () => {
     const calls: string[] = [];
     let googleReady = false;
-    let dismissalsReady = false;
+    const cleanupKristyReviews = vi.fn(async () => ({ status: "already_current" }));
     const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
       calls.push(name);
       return step();
@@ -24,27 +24,21 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
-      ensureEventReviewDismissals: async () => {
-        dismissalsReady = true;
-        return true;
-      },
-      cleanupKristyReviews: async () => {
-        expect(dismissalsReady).toBe(true);
-        return { status: "already_current" };
-      },
+      ensureEventReviewDismissals: async () => false,
+      cleanupKristyReviews,
       ensureOrganizerFeedback: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
     });
 
+    expect(cleanupKristyReviews).not.toHaveBeenCalled();
     expect(calls).toEqual([
       "required paper notes schema",
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
       "required event review dismissal schema",
-      "guarded Kristy event review cleanup",
       "required organizer feedback schema",
       "required office coordinator schema",
       "required profile touch schema",
