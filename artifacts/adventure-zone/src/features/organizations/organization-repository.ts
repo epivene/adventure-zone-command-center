@@ -29,6 +29,7 @@ export type OrganizationListRecord = {
   phone?: string | null;
   email?: string | null;
   website?: string | null;
+  description?: string | null;
   placeType?: string | null;
   profileImageDataUrl?: string | null;
   ratingAverage?: number | null;
