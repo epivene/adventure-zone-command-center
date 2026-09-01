@@ -74,6 +74,7 @@ function contactDetail(doNotCallAt: string | null) {
 
 function profileApi(path: string, value: any = profile) {
   if (path === `/event-profiles/${organizationId}/photo`) return Promise.resolve({ dataUrl: null });
+  if (path === `/event-profiles/${organizationId}/description`) return Promise.resolve({ description: value.place?.description ?? null });
   if (path.startsWith(`/event-profiles/${organizationId}`)) return Promise.resolve(value);
   if (path === `/event-wrap-up-ratings/organization/${organizationId}`) return Promise.resolve({ average: null, count: 0 });
   return Promise.resolve(contactDetail(null));
@@ -84,6 +85,31 @@ afterEach(() => {
   apiGet.mockReset();
   apiPatch.mockReset();
   setLocation.mockReset();
+});
+
+describe("EventProfilePage About section", () => {
+  it("shows the complete saved event description on the profile page", async () => {
+    const describedProfile = {
+      ...profile,
+      place: {
+        ...profile.place,
+        description: "A full event description that visitors can read without opening Edit.",
+      },
+    };
+    apiGet.mockImplementation((path: string) => profileApi(path, describedProfile));
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("heading", { name: "About" })).toBeVisible();
+    expect(screen.getByText("A full event description that visitors can read without opening Edit.")).toBeVisible();
+  });
+
+  it("does not show an empty About section", async () => {
+    apiGet.mockImplementation((path: string) => profileApi(path));
+    render(<EventProfilePage />);
+
+    expect(await screen.findByText("Prairie Days")).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "About" })).not.toBeInTheDocument();
+  });
 });
 
 describe("EventProfilePage navigation", () => {
