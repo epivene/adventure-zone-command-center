@@ -35,6 +35,7 @@ function exactInspections(overrides?: Partial<ReviewCleanupInspection>): ReviewC
   return KRISTY_STALE_REVIEW_CANDIDATES.map((candidate) => ({
     ...candidate,
     reviewCount: 0,
+    submittedWrapUpCount: 0,
     dismissedAt: null,
     ...overrides,
   }));
@@ -77,7 +78,7 @@ describe("cleanupKristyReviewQueue", () => {
     expect(repository.dismissals).toEqual([]);
   });
 
-  it("refuses cleanup if Kristy is ambiguous, an identity changed, or a report now exists", async () => {
+  it("refuses cleanup if Kristy is ambiguous, an identity changed, or completed work now exists", async () => {
     const ambiguous = new FakeRepository(
       [kristyLeg, { ...kristyLeg, legId: "3c37125f-50e5-4f20-81ff-51322de836b0" }],
       exactInspections(),
@@ -102,6 +103,14 @@ describe("cleanupKristyReviewQueue", () => {
       cleanupKristyReviewQueue(reviewedRepository, new Date("2026-09-01T18:00:00Z")),
     ).resolves.toEqual(expect.objectContaining({ status: "skipped", reason: "completed_report_present" }));
     expect(reviewedRepository.dismissals).toEqual([]);
+
+    const submitted = exactInspections();
+    submitted[3] = { ...submitted[3]!, submittedWrapUpCount: 1 };
+    const submittedRepository = new FakeRepository([kristyLeg], submitted);
+    await expect(
+      cleanupKristyReviewQueue(submittedRepository, new Date("2026-09-01T18:00:00Z")),
+    ).resolves.toEqual(expect.objectContaining({ status: "skipped", reason: "completed_report_present" }));
+    expect(submittedRepository.dismissals).toEqual([]);
   });
 
   it("refuses cleanup before every candidate is actually due", async () => {
