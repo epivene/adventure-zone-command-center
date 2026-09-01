@@ -13,6 +13,8 @@ import assistantTodayFollowUpsRouter from "./routes/assistant-today-followups";
 import assistantProfileNotesRouter from "./routes/assistant-profile-notes";
 import assistantGmailProfileLinksRouter from "./routes/assistant-gmail-profile-links";
 import assistantManagerReviewAuditRouter from "./routes/assistant-manager-review-audit";
+import assistantManagerReviewMaintenanceRouter from "./routes/assistant-manager-review-maintenance";
+import managerReviewOverviewRouter from "./routes/manager-review-overview";
 import organizationFillerRouter from "./routes/organization-filler";
 
 const app: Express = express();
@@ -53,8 +55,10 @@ app.use("/api/assistant-import", assistantTodayFollowUpsRouter);
 app.use("/api/assistant-import", assistantProfileNotesRouter);
 app.use("/api/assistant-import", assistantGmailProfileLinksRouter);
 app.use("/api/assistant-import", assistantManagerReviewAuditRouter);
+app.use("/api/assistant-import", assistantManagerReviewMaintenanceRouter);
 app.use("/api/assistant-import", assistantImportRouter);
 app.use("/api/follow-ups", requireOwnerMiddleware, followUpsRouter);
+app.use("/api", managerReviewOverviewRouter);
 app.use("/api", organizationFillerRouter);
 app.use("/api", router);
 
