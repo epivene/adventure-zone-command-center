@@ -1,23 +1,35 @@
 {
-  "checkedAt": "2026-09-01T21:35:02.004Z",
+  "checkedAt": "2026-09-01T21:36:00.310Z",
   "ok": true,
-  "query": "WYO-131",
-  "resultCount": 1,
-  "results": [
+  "profileId": "47a2421f-efbd-4abe-bc21-3123bb65f40f",
+  "place": {
+    "id": "47a2421f-efbd-4abe-bc21-3123bb65f40f",
+    "name": "WYO-131 Biketoberfest Gravel Race",
+    "placeType": "festival_event",
+    "phone": null,
+    "address1": null,
+    "address2": null,
+    "city": "Lander",
+    "region": "WY",
+    "postalCode": null,
+    "website": "https://www.wyo131.com/",
+    "lastResort": false,
+    "lastResortReason": null,
+    "actRecordId": null
+  },
+  "contacts": [
     {
-      "id": "47a2421f-efbd-4abe-bc21-3123bb65f40f",
-      "kind": "organization",
-      "label": "WYO-131 Biketoberfest Gravel Race",
-      "secondaryLabel": null,
-      "city": "Lander",
-      "region": "WY",
-      "status": "declined",
-      "lastContactAt": null,
-      "bookingCount": 1,
-      "matchedOn": [
-        "name",
-        "booking"
-      ]
+      "id": "6b2ac691-f838-4639-b39d-4969302d3f6f",
+      "name": "Nicki Simon",
+      "role": "Race Director",
+      "isPrimary": true,
+      "phone": "775-901-6917",
+      "email": "wyo131gravel@landercycling.org",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
     }
   ]
 }
