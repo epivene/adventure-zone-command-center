@@ -1,0 +1,59 @@
+name: Kristy review screen CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/kristy-review-screen-ci.yml"
+      - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/routes/manager-review-overview*"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/kristy-review-screen-ci.yml"
+      - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/routes/manager-review-overview*"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
+      - "artifacts/api-server/src/app.ts"
+      - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Targeted API behavior tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/leg-manager/manager-review-overview.test.ts
+          src/db/event-review-dismissal-required-startup.test.ts
+          src/db/required-schema-startup.test.ts
+      - name: Targeted manager page test
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/pages/ManagerEventReviewPage.test.tsx
+      - name: Production API build
+        run: pnpm --filter @workspace/api-server run build
+      - name: Production frontend build
+        run: pnpm --filter @workspace/adventure-zone run build
