@@ -34,11 +34,11 @@ const bookings = [
   },
   {
     id: "meeteetse",
-    name: "Meeteetse Labor Day Celebration",
+    name: "Meeteetse Annual Labor Day Celebration 2026",
     city: "Meeteetse",
     region: "WY",
-    startsAt: new Date("2026-09-05T14:00:00Z"),
-    endsAt: new Date("2026-09-07T23:00:00Z"),
+    startsAt: new Date("2026-09-05T17:00:00Z"),
+    endsAt: new Date("2026-09-07T17:00:00Z"),
     status: "confirmed",
   },
   {
