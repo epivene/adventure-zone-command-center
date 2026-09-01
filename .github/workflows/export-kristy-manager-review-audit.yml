@@ -1,0 +1,90 @@
+name: Export Kristy manager review audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/export-kristy-manager-review-audit.yml"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/app.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for the deployed audit endpoint
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          BASE_URL="${API_URL%/}"
+          rm -f kristy-manager-review-audit.json
+
+          for attempt in $(seq 1 60); do
+            HTTP_STATUS=$(curl --silent --show-error \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --output kristy-manager-review-audit.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/manager-review-audit?manager=Kristy" || true)
+
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('kristy-manager-review-audit.json','utf8')); if(x.ok!==true || !x.leg || !Array.isArray(x.bookings)) process.exit(1)"; then
+              echo "Live Kristy manager review audit exported on attempt ${attempt}."
+              exit 0
+            fi
+
+            echo "Audit endpoint not ready yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "The deployed audit endpoint never returned a valid report."
+          cat kristy-manager-review-audit.json 2>/dev/null || true
+          exit 1
+
+      - name: Add safe audit summary
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('kristy-manager-review-audit.json', 'utf8'));
+          const rows = report.bookings.map((booking) =>
+            `- ${booking.name} | ${booking.state} | ${booking.startsAt ?? 'no date'} | review ${booking.review?.id ?? 'none'}`,
+          );
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              '# Kristy manager review audit',
+              '',
+              `- Leg: ${report.leg.name}`,
+              `- Manager: ${report.leg.managerName ?? 'unnamed'}`,
+              `- Total bookings: ${report.totals.bookings}`,
+              `- Due: ${report.totals.due}`,
+              `- Completed: ${report.totals.completed}`,
+              `- Upcoming: ${report.totals.upcoming}`,
+              '',
+              ...rows,
+              '',
+            ].join('\n'),
+          );
+          NODE
+
+      - name: Upload protected audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: kristy-manager-review-audit
+          path: kristy-manager-review-audit.json
+          retention-days: 7
