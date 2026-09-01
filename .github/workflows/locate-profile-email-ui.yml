@@ -1,0 +1,35 @@
+name: Locate profile email UI
+
+on:
+  push:
+    branches:
+      - fix/profile-email-current-vs-history
+    paths:
+      - ".github/workflows/locate-profile-email-ui.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  locate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find profile Gmail UI source
+        run: |
+          set -euo pipefail
+          mkdir -p ui-context/files
+          rg -l -i "google history|matched gmail conversations|historical backfill|google-workspace/profiles/.*/emails|conversations" artifacts lib \
+            -g '*.ts' -g '*.tsx' -g '*.js' -g '*.jsx' > ui-context/matched-files.txt || true
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            mkdir -p "ui-context/files/$(dirname "$file")"
+            cp "$file" "ui-context/files/$file"
+          done < ui-context/matched-files.txt
+          rg -n -i "google history|matched gmail conversations|historical backfill|google-workspace/profiles/.*/emails" artifacts lib \
+            -g '*.ts' -g '*.tsx' -g '*.js' -g '*.jsx' > ui-context/matches.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: profile-email-ui-context
+          path: ui-context
+          retention-days: 2
