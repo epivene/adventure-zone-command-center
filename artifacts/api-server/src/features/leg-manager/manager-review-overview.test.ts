@@ -33,6 +33,15 @@ const bookings = [
     status: "completed",
   },
   {
+    id: "don-king-days",
+    name: "Don King Days",
+    city: "Sheridan",
+    region: "WY",
+    startsAt: new Date("2026-09-04T17:00:00Z"),
+    endsAt: new Date("2026-09-05T17:00:00Z"),
+    status: "new_lead",
+  },
+  {
     id: "meeteetse",
     name: "Meeteetse Annual Labor Day Celebration 2026",
     city: "Meeteetse",
@@ -66,7 +75,7 @@ const reviews = [
 ];
 
 describe("buildManagerReviewOverview", () => {
-  it("keeps the newest completed report visible, hides dismissed stale prompts, and shows the next event", () => {
+  it("keeps the newest completed report visible, hides dismissed stale prompts, and shows the next confirmed event", () => {
     const overview = buildManagerReviewOverview({
       bookings,
       reviews,
