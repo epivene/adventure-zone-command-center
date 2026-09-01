@@ -1,0 +1,107 @@
+name: Audit live Kristy review event profiles
+
+on:
+  push:
+    branches:
+      - fix/kristy-review-screen
+    paths:
+      - ".github/workflows/audit-live-kristy-review-profiles.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Search live profiles and collect booking identities
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}"
+          test -n "${ASSISTANT_IMPORT_TOKEN}"
+          export BASE_URL="${API_URL%/}/api/assistant-import"
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+
+          const baseUrl = process.env.BASE_URL;
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const queries = [
+            'Moorcroft Jubilee Days',
+            'Sublette County Fair',
+            'Uinta County Fair',
+            'Laramie County Fair',
+            'Chouteau County Fair',
+            'Miles City',
+            'Eastern Montana Fair',
+            'Meeteetse Annual Labor Day Celebration 2026',
+            'Meeteetse',
+            'Don King Days',
+          ];
+
+          async function get(path) {
+            const response = await fetch(`${baseUrl}${path}`, {
+              headers: { authorization: `Bearer ${token}` },
+            });
+            const text = await response.text();
+            let body;
+            try { body = JSON.parse(text); } catch { body = { raw: text }; }
+            if (!response.ok) throw new Error(`${path} returned HTTP ${response.status}: ${text.slice(0, 300)}`);
+            return body;
+          }
+
+          const profileIds = new Set();
+          const searches = [];
+          for (const query of queries) {
+            const data = await get(`/profile-search?q=${encodeURIComponent(query)}&limit=8`);
+            const results = (data.results ?? []).map((result) => ({
+              id: result.id,
+              name: result.name,
+              city: result.city ?? null,
+              region: result.region ?? null,
+              score: result.score ?? null,
+            }));
+            searches.push({ query, results });
+            for (const result of results) if (result.id) profileIds.add(result.id);
+          }
+
+          const profiles = [];
+          for (const profileId of [...profileIds]) {
+            const data = await get(`/profile-history/${encodeURIComponent(profileId)}`);
+            profiles.push({
+              profileId,
+              place: data.place ? {
+                id: data.place.id,
+                name: data.place.name,
+                city: data.place.city ?? null,
+                region: data.place.region ?? null,
+              } : null,
+              bookings: (data.bookings ?? []).map((booking) => ({
+                id: booking.id,
+                name: booking.name,
+                city: booking.city ?? null,
+                region: booking.region ?? null,
+                startsAt: booking.startsAt ?? null,
+                endsAt: booking.endsAt ?? null,
+                status: booking.status ?? null,
+                probability: booking.probability ?? null,
+              })),
+            });
+          }
+
+          fs.writeFileSync('kristy-review-profile-audit.json', JSON.stringify({
+            checkedAt: new Date().toISOString(),
+            searches,
+            profiles,
+          }, null, 2));
+          NODE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kristy-review-profile-audit
+          path: kristy-review-profile-audit.json
+          retention-days: 3
