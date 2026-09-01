@@ -1,22 +1,63 @@
 {
-  "checkedAt": "2026-09-01T21:58:01.537Z",
+  "checkedAt": "2026-09-01T21:58:49.046Z",
   "ok": true,
-  "resultCount": 1,
-  "results": [
+  "profileId": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+  "place": {
+    "id": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+    "name": "SnowWiesn Oktoberfest",
+    "placeType": "festival_event",
+    "phone": "801-620-1075",
+    "address1": null,
+    "address2": null,
+    "city": "Huntsville",
+    "region": "UT",
+    "postalCode": null,
+    "website": "https://www.snowbasin.com/events/snowwiesn-oktoberfest/",
+    "lastResort": false,
+    "lastResortReason": null,
+    "actRecordId": null
+  },
+  "contacts": [
     {
-      "id": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
-      "kind": "organization",
-      "label": "SnowWiesn Oktoberfest",
-      "secondaryLabel": null,
+      "id": "8bd987a2-18e8-436c-ad38-81119923ed6f",
+      "name": "Snowbasin Events Team",
+      "role": "Current official events contact",
+      "isPrimary": true,
+      "phone": "801-620-1075",
+      "email": "events@snowbasin.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    },
+    {
+      "id": "8a1f1712-4124-4e1b-a68d-dfe856e6d84d",
+      "name": "Michael Rueckert",
+      "role": "Historical SnowWiesn contact / copied on current draft",
+      "isPrimary": false,
+      "phone": null,
+      "email": "mrueckert@snowbasin.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    }
+  ],
+  "bookings": [
+    {
+      "id": "f1a65479-a506-4dc5-902f-8a62d76c2340",
+      "name": "SnowWiesn Oktoberfest - 2026",
+      "primaryContactId": "8bd987a2-18e8-436c-ad38-81119923ed6f",
       "city": "Huntsville",
       "region": "UT",
+      "startsAt": "2026-08-29T17:00:00.000Z",
+      "endsAt": "2026-10-18T17:00:00.000Z",
       "status": "possible",
-      "lastContactAt": null,
-      "bookingCount": 1,
-      "matchedOn": [
-        "name",
-        "booking"
-      ]
+      "probability": "possible",
+      "notes": null,
+      "actRecordId": null
     }
   ]
 }
