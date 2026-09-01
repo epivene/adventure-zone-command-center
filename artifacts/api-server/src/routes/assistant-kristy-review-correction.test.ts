@@ -73,4 +73,42 @@ describe("assistant Kristy review correction route", () => {
     expect(response.status).toBe(409);
     expect(response.body).toEqual({ ok: false, result });
   });
+
+  it("returns sanitized PostgreSQL diagnostics behind the protected token", async () => {
+    const databaseError = Object.assign(
+      new Error("column assignment.assigned_leg_id does not exist"),
+      {
+        name: "error",
+        code: "42703",
+        table: "booking_leg_assignments",
+        column: "assigned_leg_id",
+        constraint: null,
+        routine: "errorMissingColumn",
+      },
+    );
+    const correct = vi.fn(async () => {
+      throw databaseError;
+    });
+
+    const response = await request(app(correct))
+      .post("/kristy-review-state-correction")
+      .set("Authorization", "Bearer test-assistant-token")
+      .send({});
+
+    expect(response.status).toBe(500);
+    expect(response.body).toEqual({
+      ok: false,
+      error: "Kristy review state correction failed.",
+      diagnostic: {
+        name: "error",
+        message: "column assignment.assigned_leg_id does not exist",
+        code: "42703",
+        table: "booking_leg_assignments",
+        column: "assigned_leg_id",
+        constraint: null,
+        routine: "errorMissingColumn",
+      },
+    });
+    expect(JSON.stringify(response.body)).not.toContain("stack");
+  });
 });
