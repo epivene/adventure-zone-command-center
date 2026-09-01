@@ -7,6 +7,7 @@ on:
       - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
       - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
@@ -20,6 +21,7 @@ on:
       - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
       - "artifacts/api-server/src/routes/assistant-manager-review-maintenance*"
@@ -51,6 +53,7 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/leg-manager/manager-review-overview.test.ts
+          src/features/leg-manager/kristy-review-queue-cleanup.test.ts
           src/db/event-review-dismissal-required-startup.test.ts
           src/db/required-schema-startup.test.ts
       - name: Targeted manager page test
@@ -62,6 +65,7 @@ jobs:
           grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-manager-review-maintenance.ts
           grep -F 'router.post("/manager-review-dismissals"' artifacts/api-server/src/routes/assistant-manager-review-maintenance.ts
           grep -F 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts
+          grep -F 'guarded Kristy event review cleanup' artifacts/api-server/src/db/required-schema-startup.ts
           test "$(grep -n 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts | cut -d: -f1)" -lt "$(grep -n 'app.use("/api", router);' artifacts/api-server/src/app.ts | cut -d: -f1)"
       - name: Production API build
         run: pnpm --filter @workspace/api-server run build
