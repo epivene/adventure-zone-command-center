@@ -9,6 +9,9 @@ const contactId = "20000000-0000-4000-8000-000000000001";
 const bookingId = "30000000-0000-4000-8000-000000000001";
 
 vi.mock("@/lib/auth-token", () => ({ apiGet, apiPatch }));
+vi.mock("@/features/assistant/assistant-context", () => ({
+  useAssistantContext: () => ({ openAssistant: vi.fn() }),
+}));
 vi.mock("wouter", () => ({
   useParams: () => ({ profileId: organizationId }),
   useSearch: () => `?contactId=${contactId}&bookingId=${bookingId}`,
