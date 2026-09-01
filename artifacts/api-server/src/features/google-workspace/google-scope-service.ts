@@ -14,11 +14,22 @@ import type {
 } from "./google-scope-types";
 
 export const APPROVED_GMAIL_ROOTS = [
+  "Z - AdventureZone/Profiles",
+  "ZZ - Amy Archive/SHOWS",
+  "ZZ - Amy Archive/Potential shows",
   "Shows",
   "Off Season Business Opportunities",
   "Employees",
   "Associations",
 ] as const;
+
+const PROFILE_EVENT_GMAIL_ROOTS = new Set([
+  "z - adventurezone/profiles",
+  "zz - amy archive/shows",
+  "zz - amy archive/potential shows",
+  "shows",
+  "off season business opportunities",
+]);
 
 export const APPROVED_GMAIL_SYSTEM_LABELS = [] as const;
 
@@ -79,6 +90,7 @@ export function buildGoogleScopePreview(
 ): GoogleScopePreview {
   const approvedLabels: GoogleScopeLabel[] = [];
   const missingLabelRoots: string[] = [];
+  let profileEventRootCount = 0;
 
   for (const expectedRoot of APPROVED_GMAIL_ROOTS) {
     const expected = normalized(expectedRoot);
@@ -86,9 +98,9 @@ export function buildGoogleScopePreview(
       (label) => label.type === "user" && normalized(label.name) === expected,
     );
     if (!root) {
-      missingLabelRoots.push(expectedRoot);
       continue;
     }
+    if (PROFILE_EVENT_GMAIL_ROOTS.has(expected)) profileEventRootCount += 1;
 
     for (const label of labels) {
       const name = normalized(label.name);
@@ -104,6 +116,10 @@ export function buildGoogleScopePreview(
         });
       }
     }
+  }
+
+  if (profileEventRootCount === 0) {
+    missingLabelRoots.push("Adventure Zone profile or event labels");
   }
 
   const deduplicatedLabels = approvedLabels.filter(
