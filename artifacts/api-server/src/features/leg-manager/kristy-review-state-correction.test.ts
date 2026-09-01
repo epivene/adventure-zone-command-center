@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   DON_KING_DAYS_BOOKING,
+  DON_KING_UNASSIGNMENT_AUDIT_SQL,
   KRISTY_REVIEW_PROMPT_BOOKINGS,
+  REVIEW_PROMPT_RESTORATION_AUDIT_SQL,
   correctKristyReviewState,
   type DonKingInspection,
   type KristyReviewStateCorrectionRepository,
@@ -162,5 +164,19 @@ describe("correctKristyReviewState", () => {
       expect.objectContaining({ status: "skipped", reason: "don_king_changed" }),
     );
     expect(changedDonKing.applyCalls).toBe(0);
+  });
+
+  it("casts every audit-only parameter so PostgreSQL can resolve variadic JSON values", () => {
+    expect(REVIEW_PROMPT_RESTORATION_AUDIT_SQL).toContain("$1::uuid");
+    expect(REVIEW_PROMPT_RESTORATION_AUDIT_SQL).toContain("$2::uuid[]");
+    expect(REVIEW_PROMPT_RESTORATION_AUDIT_SQL).toContain("$3::text");
+    expect(REVIEW_PROMPT_RESTORATION_AUDIT_SQL).toContain(
+      "AS restored(booking_id)",
+    );
+
+    expect(DON_KING_UNASSIGNMENT_AUDIT_SQL).toContain("$1::uuid");
+    expect(DON_KING_UNASSIGNMENT_AUDIT_SQL).toContain("$2::uuid");
+    expect(DON_KING_UNASSIGNMENT_AUDIT_SQL).toContain("$3::text");
+    expect(DON_KING_UNASSIGNMENT_AUDIT_SQL).toContain("NULL::text");
   });
 });
