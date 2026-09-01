@@ -1,4 +1,4 @@
-name: One-time WYO131 profile audit
+name: One-time WYO131 profile update
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  audit:
+  update:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -20,7 +20,7 @@ jobs:
           ref: ops/wyo131-profile-update-2026-09-01
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Read exact live profile and contacts
+      - name: Add verified contact update note
         env:
           API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
           ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
@@ -29,30 +29,46 @@ jobs:
           test -n "${API_URL}"
           test -n "${ASSISTANT_IMPORT_TOKEN}"
           BASE_URL="${API_URL%/}/api/assistant-import"
-          PROFILE_ID="47a2421f-efbd-4abe-bc21-3123bb65f40f"
-          curl --fail --silent --show-error             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             "${BASE_URL}/profile-history/${PROFILE_ID}" > /tmp/wyo131-history.json
 
           node --input-type=module <<'NODE'
           import fs from 'node:fs';
-          const root = JSON.parse(fs.readFileSync('/tmp/wyo131-history.json', 'utf8'));
-          if (root.ok !== true || root.profileId !== '47a2421f-efbd-4abe-bc21-3123bb65f40f') {
-            throw new Error('The exact WYO131 profile could not be verified.');
+          fs.writeFileSync('/tmp/wyo131-note.json', JSON.stringify({
+            organizationId: '47a2421f-efbd-4abe-bc21-3123bb65f40f',
+            subject: 'Contact update - WYO131 Google Workspace',
+            body: 'September 1, 2026 contact update: WYO131 moved to Google Workspace. The primary shared inbox is WYO131gravel@landercycling.org; messages sent to wyo131gravel@gmail.com are forwarded there. Nicki Simon is the 2026 Race Director. Gwen Robson is the adviser and can be reached at 307-330-3002. Source: automatic reply received September 1, 2026.'
+          }));
+          NODE
+
+          curl --fail --silent --show-error             --request POST             --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}"             --header "Content-Type: application/json"             --data-binary @/tmp/wyo131-note.json             "${BASE_URL}/profile-notes" > /tmp/wyo131-update-response.json
+
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const response = JSON.parse(fs.readFileSync('/tmp/wyo131-update-response.json', 'utf8'));
+          if (response.ok !== true || response.organizationId !== '47a2421f-efbd-4abe-bc21-3123bb65f40f') {
+            throw new Error('The WYO131 profile note was not accepted.');
           }
           fs.mkdirSync('.github/ops-results', { recursive: true });
-          fs.writeFileSync('.github/ops-results/wyo131-profile-audit.json', JSON.stringify({
-            checkedAt: new Date().toISOString(),
+          fs.writeFileSync('.github/ops-results/wyo131-profile-update.json', JSON.stringify({
+            completedAt: new Date().toISOString(),
             ok: true,
-            profileId: root.profileId,
-            place: root.place,
-            contacts: root.contacts,
+            organizationId: response.organizationId,
+            organizationName: response.organizationName,
+            noteCreated: response.created,
+            activityId: response.activityId,
+            primaryContactAlreadyCurrent: {
+              name: 'Nicki Simon',
+              role: 'Race Director',
+              email: 'wyo131gravel@landercycling.org',
+              phone: '775-901-6917'
+            }
           }, null, 2) + '\n');
           NODE
 
-      - name: Commit sanitized audit result
+      - name: Commit update receipt
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/ops-results/wyo131-profile-audit.json
-          git commit -m "ops: record WYO131 contact audit"
+          git add .github/ops-results/wyo131-profile-update.json
+          git commit -m "ops: record WYO131 profile update receipt"
           git push origin HEAD:ops/wyo131-profile-update-2026-09-01
