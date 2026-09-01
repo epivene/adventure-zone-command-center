@@ -1,0 +1,50 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "event": {
+    "id": null,
+    "name": "Meeteetse Annual Labor Day Celebration",
+    "city": "Meeteetse",
+    "region": "WY"
+  },
+  "profile": {
+    "phone": "307-868-2454",
+    "address1": "P.O. Box 238",
+    "postalCode": "82433"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Codi-Brooke",
+      "phone": "307-868-2454",
+      "email": "office@meeteetsewy.com",
+      "role": "Discover Meeteetse / Meeteetse Visitor Center contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "2026-09-02T21:00:00.000Z",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Codi-Brooke — setup arrival coordination (Sept. 1, 2026)",
+      "body": "Codi-Brooke confirmed/clarified that Adventure Zone will begin setup Thursday, Sept. 3. She asked what time the crew expects to arrive and offered to meet the crew on arrival, help get them oriented, and introduce them to the Oasis owner. Reply drafted Sept. 1 confirming Thursday setup without promising an exact arrival hour; we will send a better ETA once travel/setup timing is narrowed down. Current contact: office@meeteetsewy.com, 307-868-2454, Discover Meeteetse / Meeteetse Visitor Center, P.O. Box 238, Meeteetse, WY 82433."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "Send Codi-Brooke Thursday setup ETA",
+      "reason": "Codi-Brooke asked for the crew's expected Thursday arrival time so she can meet them, orient them, and introduce them to the Oasis owner. Confirm timing with Dave/crew first; do not guess an exact arrival hour.",
+      "dueAt": "2026-09-02T21:00:00.000Z"
+    }
+  ]
+}
