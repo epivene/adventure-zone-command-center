@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-09-01T21:58:01.537Z",
+  "ok": true,
+  "resultCount": 1,
+  "results": [
+    {
+      "id": "9957265b-fb03-4ee1-8e37-b19fd751ce7d",
+      "kind": "organization",
+      "label": "SnowWiesn Oktoberfest",
+      "secondaryLabel": null,
+      "city": "Huntsville",
+      "region": "UT",
+      "status": "possible",
+      "lastContactAt": null,
+      "bookingCount": 1,
+      "matchedOn": [
+        "name",
+        "booking"
+      ]
+    }
+  ]
+}
