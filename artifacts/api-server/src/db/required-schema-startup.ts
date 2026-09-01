@@ -1,5 +1,4 @@
 import { runStartupStep } from "../lib/startup-step";
-import { cleanupKristyReviewQueue } from "../features/leg-manager/kristy-review-queue-cleanup";
 import { ensureEventReviewDismissalSchemaBeforeListen } from "./event-review-dismissal-required-startup";
 import { ensureFollowUpDismissalPersistenceBeforeListen } from "./follow-up-dismissal-required-startup";
 import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-required-startup";
@@ -22,7 +21,6 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureLegAssignment?: RequiredStep;
   ensureEventReviewDismissals?: RequiredStep;
   ensureFollowUpDismissals?: RequiredStep;
-  cleanupKristyReviews?: RequiredStep;
   ensureOrganizerFeedback?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
@@ -52,10 +50,6 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required follow-up dismissal persistence",
     dependencies?.ensureFollowUpDismissals ?? ensureFollowUpDismissalPersistenceBeforeListen,
-  );
-  await run(
-    "guarded Kristy event review cleanup",
-    dependencies?.cleanupKristyReviews ?? cleanupKristyReviewQueue,
   );
   await run(
     "required organizer feedback schema",

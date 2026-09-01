@@ -40,8 +40,8 @@ function dueTime(event: ManagerReviewEvent): number {
   return (event.endsAt ?? event.startsAt)?.getTime() ?? Number.NEGATIVE_INFINITY;
 }
 
-function isCancelled(event: ManagerReviewEvent): boolean {
-  return event.status === "cancelled" || event.status === "declined";
+function isManagedEvent(event: ManagerReviewEvent): boolean {
+  return event.status === "confirmed" || event.status === "completed";
 }
 
 export function buildManagerReviewOverview(input: {
@@ -76,13 +76,13 @@ export function buildManagerReviewOverview(input: {
   );
 
   const reviewsDue = unreviewed
-    .filter((event) => !isCancelled(event) && isEventReviewDue(event, now))
+    .filter((event) => isManagedEvent(event) && isEventReviewDue(event, now))
     .sort((left, right) => dueTime(right) - dueTime(left));
 
   const nextUpcoming = unreviewed
     .filter(
       (event) =>
-        !isCancelled(event) &&
+        event.status === "confirmed" &&
         (event.startsAt ?? event.endsAt) !== null &&
         !isEventReviewDue(event, now),
     )
