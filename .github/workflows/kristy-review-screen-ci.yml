@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/kristy-review-screen-ci.yml"
+      - ".github/workflows/correct-live-kristy-review-state.yml"
       - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
-      - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction*"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
   push:
@@ -17,12 +19,14 @@ on:
       - main
     paths:
       - ".github/workflows/kristy-review-screen-ci.yml"
+      - ".github/workflows/correct-live-kristy-review-state.yml"
       - "artifacts/api-server/src/db/event-review-dismissal-required-startup*"
       - "artifacts/api-server/src/db/required-schema-startup*"
       - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
-      - "artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
       - "artifacts/api-server/src/routes/manager-review-overview*"
       - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction*"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/adventure-zone/src/pages/ManagerEventReviewPage*"
 
@@ -51,18 +55,27 @@ jobs:
         run: >-
           pnpm --filter @workspace/api-server exec vitest run
           src/features/leg-manager/manager-review-overview.test.ts
-          src/features/leg-manager/kristy-review-queue-cleanup.test.ts
+          src/features/leg-manager/kristy-review-state-correction.test.ts
+          src/routes/assistant-kristy-review-correction.test.ts
           src/db/event-review-dismissal-required-startup.test.ts
           src/db/required-schema-startup.test.ts
       - name: Targeted manager page test
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
           src/pages/ManagerEventReviewPage.test.tsx
-      - name: Guard exact cleanup and route precedence
+      - name: Guard correction token boundary and route precedence
         run: |
-          grep -F 'guarded Kristy event review cleanup' artifacts/api-server/src/db/required-schema-startup.ts
-          grep -F 'KRISTY_STALE_REVIEW_CANDIDATES' artifacts/api-server/src/features/leg-manager/kristy-review-queue-cleanup.ts
+          grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-kristy-review-correction.ts
+          grep -F 'router.post("/kristy-review-state-correction"' artifacts/api-server/src/routes/assistant-kristy-review-correction.ts
+          grep -F 'assistantKristyReviewCorrectionRouter' artifacts/api-server/src/app.ts
           grep -F 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts
+          grep -F 'POST' .github/workflows/correct-live-kristy-review-state.yml
+          grep -F 'github.event_name != '\''pull_request'\''' .github/workflows/correct-live-kristy-review-state.yml
+          ruby -e "require 'yaml'; YAML.load_file('.github/workflows/correct-live-kristy-review-state.yml')"
+          if grep -R -Fq 'cleanupKristyReviewQueue' artifacts/api-server/src; then
+            echo "The retired review-dismissal cleanup must not be reintroduced."
+            exit 1
+          fi
           test "$(grep -n 'app.use("/api", managerReviewOverviewRouter);' artifacts/api-server/src/app.ts | cut -d: -f1)" -lt "$(grep -n 'app.use("/api", router);' artifacts/api-server/src/app.ts | cut -d: -f1)"
       - name: Production API build
         run: pnpm --filter @workspace/api-server run build

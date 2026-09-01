@@ -6,6 +6,15 @@ const now = new Date("2026-09-01T18:00:00Z");
 
 const bookings = [
   {
+    id: "past-new-lead",
+    name: "Unbooked Past Lead",
+    city: "Somewhere",
+    region: "WY",
+    startsAt: new Date("2026-06-01T14:00:00Z"),
+    endsAt: new Date("2026-06-02T23:00:00Z"),
+    status: "new_lead",
+  },
+  {
     id: "old-a",
     name: "Moorcroft Jubilee Days",
     city: "Moorcroft",
@@ -31,6 +40,15 @@ const bookings = [
     startsAt: new Date("2026-08-20T14:00:00Z"),
     endsAt: new Date("2026-08-23T23:00:00Z"),
     status: "completed",
+  },
+  {
+    id: "don-king-days",
+    name: "Don King Days",
+    city: "Sheridan",
+    region: "WY",
+    startsAt: new Date("2026-09-04T17:00:00Z"),
+    endsAt: new Date("2026-09-05T17:00:00Z"),
+    status: "new_lead",
   },
   {
     id: "meeteetse",
@@ -66,7 +84,7 @@ const reviews = [
 ];
 
 describe("buildManagerReviewOverview", () => {
-  it("keeps the newest completed report visible, hides dismissed stale prompts, and shows the next event", () => {
+  it("keeps the newest completed report visible, hides dismissed stale prompts, and shows the next confirmed event", () => {
     const overview = buildManagerReviewOverview({
       bookings,
       reviews,
@@ -80,7 +98,7 @@ describe("buildManagerReviewOverview", () => {
     expect(overview.nextUpcoming?.id).toBe("meeteetse");
   });
 
-  it("still returns a real unreviewed, undismissed past event as due", () => {
+  it("returns real managed events as due without pulling unbooked leads into the queue", () => {
     const overview = buildManagerReviewOverview({
       bookings,
       reviews,

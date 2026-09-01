@@ -1,0 +1,279 @@
+name: Correct live Kristy review state
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/correct-live-kristy-review-state.yml"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
+      - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction*"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/app.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/correct-live-kristy-review-state.yml"
+      - "artifacts/api-server/src/db/required-schema-startup*"
+      - "artifacts/api-server/src/features/leg-manager/kristy-review-state-correction*"
+      - "artifacts/api-server/src/features/leg-manager/manager-review-overview*"
+      - "artifacts/api-server/src/routes/assistant-kristy-review-correction*"
+      - "artifacts/api-server/src/routes/assistant-manager-review-audit.ts"
+      - "artifacts/api-server/src/app.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify exact correction behavior
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/leg-manager/kristy-review-state-correction.test.ts
+          src/features/leg-manager/manager-review-overview.test.ts
+          src/routes/assistant-kristy-review-correction.test.ts
+          src/db/required-schema-startup.test.ts
+      - name: Build production API
+        run: pnpm --filter @workspace/api-server run build
+      - name: Guard the protected route and retired cleanup
+        run: |
+          grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-kristy-review-correction.ts
+          grep -F 'router.post("/kristy-review-state-correction"' artifacts/api-server/src/routes/assistant-kristy-review-correction.ts
+          grep -F 'assistantKristyReviewCorrectionRouter' artifacts/api-server/src/app.ts
+          if grep -R -Fq 'cleanupKristyReviewQueue' artifacts/api-server/src; then
+            echo "The retired review-dismissal cleanup is still referenced."
+            exit 1
+          fi
+
+  correct:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Wait for deployment and apply the exact correction
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}"
+          rm -f kristy-review-correction.json
+
+          for attempt in $(seq 1 60); do
+            HTTP_STATUS=$(curl --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data '{}' \
+              --output kristy-review-correction.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/kristy-review-state-correction" || true)
+
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('kristy-review-correction.json','utf8')); if(x.ok!==true || !x.result || !['applied','already_current'].includes(x.result.status)) process.exit(1)"; then
+              echo "Kristy review correction applied on attempt ${attempt}."
+              exit 0
+            fi
+
+            if [ "${HTTP_STATUS}" = "409" ]; then
+              echo "The deployed correction refused to mutate because exact live identity checks failed."
+              cat kristy-review-correction.json
+              exit 1
+            fi
+
+            echo "Correction endpoint not ready yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
+            sleep 15
+          done
+
+          echo "The deployed correction endpoint never became ready."
+          cat kristy-review-correction.json 2>/dev/null || true
+          exit 1
+
+      - name: Export final Kristy audit and Don King profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}"
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --output kristy-manager-review-audit.json \
+            "${BASE_URL}/api/assistant-import/manager-review-audit?manager=Kristy"
+
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --output don-king-profile.json \
+            "${BASE_URL}/api/assistant-import/profile-history/ce2b3602-d028-4bfe-ab8b-7d0fcfcc80b1"
+
+      - name: Require the corrected live state
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const correction = JSON.parse(fs.readFileSync('kristy-review-correction.json', 'utf8'));
+          const report = JSON.parse(fs.readFileSync('kristy-manager-review-audit.json', 'utf8'));
+          const donKingProfile = JSON.parse(fs.readFileSync('don-king-profile.json', 'utf8'));
+
+          const expectedDue = [
+            ['ff3dce3f-dad2-41a9-9ecf-c87bd448ed6f', 'Moorcroft Jubilee Days'],
+            ['e082626f-1759-48b7-b77c-4d6188e42ee9', 'Sublette County Fair'],
+            ['21103588-3110-4a60-ac2c-d4f12655d5c5', 'Uinta County Fair'],
+            ['7320b7c9-91bf-4960-bda4-50b0d5b13815', 'Laramie County Fair'],
+            ['0ea10087-96ba-4268-8d32-b86a615a0896', 'Chouteau County Fair'],
+          ];
+          const byId = new Map((report.bookings ?? []).map((booking) => [booking.id, booking]));
+
+          if (report.ok !== true || report.leg?.managerName?.toLowerCase() !== 'kristy') {
+            throw new Error('The final audit did not resolve one configured Kristy leg.');
+          }
+
+          for (const [id, name] of expectedDue) {
+            const booking = byId.get(id);
+            if (!booking || booking.name !== name || booking.state !== 'due') {
+              throw new Error(`${name} was not restored to Kristy's due-review queue.`);
+            }
+            if (booking.review !== null || booking.dismissal !== null) {
+              throw new Error(`${name} still has review or dismissal state that should not be present.`);
+            }
+          }
+
+          const milesCity = byId.get('79bd6cf9-d08e-41c5-be49-7ed597021fb3');
+          if (
+            !milesCity
+            || milesCity.name !== 'Eastern Montana Fair'
+            || milesCity.city !== 'Miles City'
+            || milesCity.state !== 'completed'
+            || milesCity.review?.id !== 'ff292577-474c-43fb-a543-7afa8d9f1125'
+            || milesCity.review?.rating !== 5
+          ) {
+            throw new Error('The completed Miles City report was not preserved exactly.');
+          }
+
+          const meeteetse = byId.get('7876eafe-bff7-4a3a-b077-4ff21bfae662');
+          if (
+            !meeteetse
+            || meeteetse.name !== 'Meeteetse Annual Labor Day Celebration 2026'
+            || meeteetse.state !== 'upcoming'
+          ) {
+            throw new Error('Meeteetse was not preserved as Kristy\'s upcoming event.');
+          }
+
+          if (byId.has('484ff870-2c5f-46f4-a55d-41b328c2337a')) {
+            throw new Error('Don King Days is still assigned to Kristy.');
+          }
+
+          if (
+            report.totals?.bookings !== 7
+            || report.totals?.due !== 5
+            || report.totals?.completed !== 1
+            || report.totals?.upcoming !== 1
+            || report.totals?.dismissed !== 0
+          ) {
+            throw new Error(`Unexpected final Kristy totals: ${JSON.stringify(report.totals)}`);
+          }
+
+          const donKing = (donKingProfile.bookings ?? []).find(
+            (booking) => booking.id === '484ff870-2c5f-46f4-a55d-41b328c2337a',
+          );
+          if (
+            donKingProfile.ok !== true
+            || !donKing
+            || donKing.name !== 'Don King Days'
+            || donKing.status !== 'new_lead'
+          ) {
+            throw new Error('The Don King Days CRM lead was not preserved.');
+          }
+
+          const verification = {
+            verifiedAt: new Date().toISOString(),
+            correction: correction.result,
+            kristy: {
+              leg: report.leg,
+              totals: report.totals,
+              dueReviews: expectedDue.map(([id, name]) => ({ id, name })),
+              milesCity: {
+                id: milesCity.id,
+                reviewId: milesCity.review.id,
+                rating: milesCity.review.rating,
+                state: milesCity.state,
+              },
+              meeteetse: {
+                id: meeteetse.id,
+                startsAt: meeteetse.startsAt,
+                endsAt: meeteetse.endsAt,
+                state: meeteetse.state,
+              },
+            },
+            donKingDays: {
+              profileId: donKingProfile.profileId,
+              bookingId: donKing.id,
+              status: donKing.status,
+              onKristyLeg: false,
+            },
+          };
+          fs.writeFileSync(
+            'kristy-review-state-verification.json',
+            JSON.stringify(verification, null, 2),
+          );
+          NODE
+
+      - name: Add correction summary
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const verification = JSON.parse(fs.readFileSync('kristy-review-state-verification.json', 'utf8'));
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            [
+              '# Kristy review state corrected',
+              '',
+              `- Reviews due: ${verification.kristy.totals.due}`,
+              `- Completed reports: ${verification.kristy.totals.completed}`,
+              `- Upcoming events: ${verification.kristy.totals.upcoming}`,
+              `- Dismissed prompts: ${verification.kristy.totals.dismissed}`,
+              `- Miles City review: ${verification.kristy.milesCity.reviewId}`,
+              `- Meeteetse: ${verification.kristy.meeteetse.state}`,
+              `- Don King Days on Kristy leg: ${verification.donKingDays.onKristyLeg}`,
+              `- Don King Days CRM status: ${verification.donKingDays.status}`,
+              '',
+            ].join('\n'),
+          );
+          NODE
+
+      - name: Upload protected verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: kristy-review-state-correction
+          path: |
+            kristy-review-correction.json
+            kristy-manager-review-audit.json
+            don-king-profile.json
+            kristy-review-state-verification.json
+          retention-days: 7
