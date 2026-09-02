@@ -307,6 +307,40 @@ describe("useComputerCall", () => {
     expect(device.connect).not.toHaveBeenCalled();
   });
 
+  it("waits for microphone permission before constructing the browser voice device", async () => {
+    const microphone = deferred<MediaStream>();
+    const events: string[] = [];
+    const requestMicrophone = vi.fn(async () => {
+      events.push("permission-requested");
+      const stream = await microphone.promise;
+      events.push("permission-granted");
+      return stream;
+    });
+    const { deps, device, stream } = createDependencies({
+      requestMicrophone,
+    });
+    deps.createDevice = vi.fn(() => {
+      events.push("device-constructed");
+      return device;
+    });
+    const { result } = renderHook(() => useComputerCall(deps));
+
+    act(() => void result.current.setup());
+    await waitFor(() => expect(requestMicrophone).toHaveBeenCalledOnce());
+
+    expect(deps.createDevice).not.toHaveBeenCalled();
+
+    await act(async () => microphone.resolve(stream));
+    await waitFor(() => expect(result.current.state.phase).toBe("ready"));
+
+    expect(events).toEqual([
+      "permission-requested",
+      "permission-granted",
+      "device-constructed",
+    ]);
+    expect(stream.getTracks).toHaveBeenCalledOnce();
+  });
+
   it("moves to failed with Phone Link fallback when microphone permission is denied", async () => {
     const { deps, onPhoneLinkFallback } = createDependencies({
       requestMicrophone: vi

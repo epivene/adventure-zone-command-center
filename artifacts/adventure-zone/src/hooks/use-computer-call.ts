@@ -388,6 +388,13 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
     dispatch({ type: "checking" });
     let device: BrowserVoiceDevice | null = null;
     try {
+      if (typeof dependencies.createDevice !== "function")
+        throw new Error("A fresh browser voice device is required.");
+      const microphone = await (
+        dependencies.requestMicrophone ?? defaultMicrophoneRequest
+      )();
+      release(microphone);
+      if (!isCurrent(generation)) return;
       const candidate = dependencies.createDevice();
       if (
         !isBrowserVoiceDevice(candidate) ||
@@ -398,23 +405,10 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
       device = candidate;
       ownedDevicesRef.current.add(device);
       deviceRef.current = device;
-      const microphone = await (
-        dependencies.requestMicrophone ?? defaultMicrophoneRequest
-      )();
-      if (!isCurrent(generation)) {
-        release(microphone);
-        await device.destroy();
-        return;
-      }
-      release(microphone);
       await prepareFreshToken(generation, device);
     } catch (error) {
-      if (!device) {
-        fail("A fresh browser voice device is required.");
-        return;
-      }
       if (!isCurrent(generation)) {
-        await device.destroy();
+        if (device) await device.destroy();
         return;
       }
       const denied =
@@ -424,7 +418,7 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
           ? "Microphone access was denied."
           : message(error, "Computer calling could not be prepared."),
       );
-      await device.destroy();
+      if (device) await device.destroy();
     }
   }, [
     dependencies.createDevice,
