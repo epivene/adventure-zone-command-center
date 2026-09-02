@@ -138,3 +138,4 @@ jobs:
           retention-days: 7
 
 # Triggered after Gmail profile CRM reconciliation on 2026-09-02.
+# Second post-import verification pass.
