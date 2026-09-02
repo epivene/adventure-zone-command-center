@@ -8,6 +8,8 @@ import type { InboundVoicemailService } from "@/features/calls/inbound-voicemail
 const form=z.record(z.string(),z.string());
 const inbound=z.object({CallSid:z.string().regex(/^CA[A-Za-z0-9]{8,}$/),To:z.string(),From:z.string().optional()}).passthrough();
 const dial=z.object({CallSid:z.string(),To:z.string(),DialCallStatus:z.string().max(64),DialCallSid:z.string().optional()}).passthrough();
+const status=z.object({CallSid:z.string().regex(/^CA[A-Za-z0-9]{8,}$/),CallStatus:z.string().min(1).max(64),ParentCallSid:z.string().optional()}).passthrough();
+const voicemail=z.object({CallSid:z.string().regex(/^CA[A-Za-z0-9]{8,}$/),To:z.string()}).passthrough();
 function xml(res:any,value:string){res.type("text/xml").send(value);}
 export function createTwilioInboundVoiceWebhooksRouter(deps:{
  getInboundConfig:()=>InboundCallingConfigResult; isAssistedCallingEnabled:()=>boolean;
@@ -37,6 +39,14 @@ export function createTwilioInboundVoiceWebhooksRouter(deps:{
   const data=form.safeParse(req.body);const c=config();if(!data.success||!c){res.status(403).send();return;}const p=deps.providerForConfig(c.computer);if(!signed(req,p,data.data,c.computer)){res.status(403).send();return;}const f=dial.safeParse(data.data);if(!f.success||f.data.To!==c.inbound.inboundNumber){res.status(400).send();return;}
   const session=await deps.calls.dialResult(f.data.CallSid,f.data.DialCallStatus); if(session?.answeredAt||f.data.DialCallStatus==="completed"){xml(res,"<Response><Hangup/></Response>");return;}
   xml(res,p.createVoicemailTwiml({maxSeconds:c.inbound.maxSeconds,actionUrl:new URL("/api/webhooks/twilio/voice/inbound/voicemail",c.computer.webhookBaseUrl).toString(),recordingStatusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/recording",c.computer.webhookBaseUrl).toString()}));
+ });
+ router.post("/webhooks/twilio/voice/inbound/status",async(req,res)=>{
+  const data=form.safeParse(req.body);const c=config();if(!data.success||!c){res.status(403).send();return;}const p=deps.providerForConfig(c.computer);if(!signed(req,p,data.data,c.computer)){res.status(403).send();return;}
+  if(!status.safeParse(data.data).success){res.status(400).send();return;}res.status(204).send();
+ });
+ router.post("/webhooks/twilio/voice/inbound/voicemail",async(req,res)=>{
+  const data=form.safeParse(req.body);const c=config();if(!data.success||!c){res.status(403).send();return;}const p=deps.providerForConfig(c.computer);if(!signed(req,p,data.data,c.computer)){res.status(403).send();return;}
+  const fields=voicemail.safeParse(data.data);if(!fields.success||fields.data.To!==c.inbound.inboundNumber){res.status(400).send();return;}xml(res,"<Response><Hangup/></Response>");
  });
  router.post("/webhooks/twilio/voice/inbound/recording",async(req,res)=>{
   const data=form.safeParse(req.body); const c=config(); if(!data.success||!c){res.status(403).send();return;} const p=deps.providerForConfig(c.computer); if(!signed(req,p,data.data,c.computer)){res.status(403).send();return;}
