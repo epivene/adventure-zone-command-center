@@ -43,6 +43,8 @@ jobs:
             { name: "Wagon Days", query: "Wagon Days" },
             { name: "Tri County Fair Winnemucca", query: "Tri County Fair" },
             { name: "Poplar Indian Days", query: "Poplar Indian Days" },
+            { name: "Navajo County Fair — Holbrook alias search", query: "Holbrook" },
+            { name: "Tri County Fair — Winnemucca alias search", query: "Winnemucca" },
           ];
           const headers = { Authorization: `Bearer ${token}` };
 
