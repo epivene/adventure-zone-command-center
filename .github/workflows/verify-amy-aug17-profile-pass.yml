@@ -76,18 +76,23 @@ jobs:
               if (attempt < 12) await new Promise((resolve) => setTimeout(resolve, 10000));
             }
             const failures = finalRows.filter((row) => !row.verified);
-            if (failures.length) throw new Error(failures.map((row) => `${row.name}: ${row.error}`).join("; "));
             fs.mkdirSync("imports/receipts", { recursive: true });
             fs.writeFileSync("imports/receipts/2026-09-02-amy-aug17-profile-pass-verification.json", JSON.stringify({
               verifiedAt: new Date().toISOString(),
               sourceCommit: process.env.GITHUB_SHA,
+              verified: failures.length === 0,
               profiles: finalRows,
               emailsSent: false,
             }, null, 2) + "\n");
+            if (failures.length) {
+              console.error(failures.map((row) => `${row.name}: ${row.error}`).join("; "));
+              process.exitCode = 1;
+            }
           })().catch((error) => { console.error(error); process.exit(1); });
           NODE
 
       - name: Commit verification receipt
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
