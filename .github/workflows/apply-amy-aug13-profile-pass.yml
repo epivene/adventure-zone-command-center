@@ -117,7 +117,7 @@ jobs:
                 organizationId: latahId,
                 label: "Call Latah County Fair once",
                 reason: "Call 208-883-5722 and ask whether the existing carnival arrangement leaves room for a supplemental staffed Adventure Zone attraction. Log the outcome; do not send another introductory email.",
-                dueAt: "2026-08-31T16:00:00.000Z",
+                dueAt: "2026-09-02T16:00:00.000Z",
                 preserveExisting: false,
               }),
             });
