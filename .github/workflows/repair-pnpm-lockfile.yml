@@ -50,3 +50,5 @@ jobs:
           fi
           git commit -m "Fix corrupted pnpm lockfile"
           git push origin HEAD:main
+
+# Trigger after workflow creation.
