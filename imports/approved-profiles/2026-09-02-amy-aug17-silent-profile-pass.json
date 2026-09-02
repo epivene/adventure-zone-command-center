@@ -1,0 +1,443 @@
+[
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "United Tribes International Powwow",
+      "UTTC International Powwow",
+      "United Tribes Technical College International Powwow"
+    ],
+    "event": {
+      "id": null,
+      "name": "United Tribes Technical College International Powwow (Bismark) ND",
+      "city": "Bismarck",
+      "region": "ND"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "701-221-1882",
+      "website": "https://unitedtribespowwow.com/",
+      "description": "Active Sept. 11-13, 2026 international powwow at United Tribes Technical College. Current vendor coordination is handled by Judith Red Tomahawk."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Judith Red Tomahawk",
+        "phone": "701-221-1882",
+        "email": "jredtomahawk@uttc.edu",
+        "role": "Powwow vendor coordinator",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "United Tribes International Powwow - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-11",
+      "endsAt": "2026-09-13",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; current vendor coordinator added",
+        "body": "Amy emailed Judith Red Tomahawk at jredtomahawk@uttc.edu on Aug. 17, 2026. The Gmail thread still contains only the sent message, with no reply. The official vendor page confirms Judith is the current vendor coordinator at 701-221-1882. Make one concise phone call asking whether a staffed family attraction can still fit outside the standard food/craft booth layout; log the answer and do not resend the introductory package."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call United Tribes vendor coordinator once",
+        "reason": "Amy's Aug. 17 email has no reply and the event is Sept. 11-13. Call Judith at 701-221-1882 once to ask whether a staffed family attraction can fit outside the standard vendor-booth layout, then log the answer.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Top of Utah Parade of Homes",
+      "Cache Valley Parade of Homes"
+    ],
+    "event": {
+      "id": null,
+      "name": "Top of Utah Parade of Homes (Garden) UT",
+      "city": "Garden City",
+      "region": "UT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "435-792-4441",
+      "website": "https://topofutahparadeofhomes.com/",
+      "description": "Sept. 17-19 and 24-26, 2026 distributed tour of private homes organized by the Cache Valley Home Builders Association. Exhibitor placements occur at individual homes rather than a central festival field."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Cache Valley Home Builders Association",
+        "phone": "435-792-4441",
+        "email": "office@cvhba.com",
+        "role": "Parade of Homes organizer",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Top of Utah Parade of Homes - 2026",
+      "status": "unlikely",
+      "startsAt": "2026-09-17",
+      "endsAt": "2026-09-26",
+      "nextActionKind": "none",
+      "nextActionDueAt": null,
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; format mismatch",
+        "body": "Amy emailed the Top of Utah Parade of Homes on Aug. 17, 2026 and received no reply. Current official information shows this is a distributed tour of private homes, with exhibits placed at participating homes rather than a centralized festival area. That format is not a practical Adventure Zone footprint. Record as unlikely/poor fit and do not create a routine follow-up unless the organizer later adds a centralized family or sponsor activation area."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Springville Art Festival",
+      "Springville Annual Art Festival",
+      "Springville Museum of Art"
+    ],
+    "event": {
+      "id": null,
+      "name": "Springville Art Festival (Springville) UT",
+      "city": "Springville",
+      "region": "UT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "801-489-2727",
+      "website": "https://www.springvilleutah.gov/events/springville-art-festival/",
+      "description": "Active Sept. 11-12, 2026 art festival presented by the Springville Museum of Art at Civic Center Park."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Springville Museum of Art",
+        "phone": "801-489-2727",
+        "email": "smainfo@springville.org",
+        "role": "Art Festival presenter / current general contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Springville Art Festival - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-11",
+      "endsAt": "2026-09-12",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; Museum contact path verified",
+        "body": "Amy emailed smainfo@springville.org on Aug. 17, 2026. The Gmail thread still contains only the sent message, with no reply. Current listings confirm the Sept. 11-12 festival is presented by the Springville Museum of Art; the Museum's general phone is 801-489-2727. Call once to ask whether the site plan has any remaining family-activity space or whether 2027 planning is the realistic path."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Springville Museum about Art Festival fit",
+        "reason": "The Aug. 17 email has no reply and the festival is Sept. 11-12. Call 801-489-2727 once to ask whether family-activity space remains or when 2027 site planning begins, then log the outcome.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "San Luis Valley Potato Festival",
+      "Potato Festival Monte Vista",
+      "Colorado Potato Festival"
+    ],
+    "event": {
+      "id": null,
+      "name": "San Luis Valley Potato Festival",
+      "city": "Monte Vista",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "719-852-3322",
+      "website": "https://www.coloradopotato.org/colorado-potato-news/potatofestival/",
+      "description": "Active Sept. 12, 2026 family festival at Chapman Park in Monte Vista with vendors, agricultural tours, demonstrations and activities."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Jessica Bradshaw",
+        "phone": "719-852-3322",
+        "email": "jessica@coloradopotato.org",
+        "role": "Current Potato Festival contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "San Luis Valley Potato Festival - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-12",
+      "endsAt": "2026-09-12",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; Jessica email corrected",
+        "body": "Amy emailed tara@coloradopotato.org and jessica@coloradopotato.org on Aug. 17, 2026. The Gmail thread still contains only the sent message, with no reply. The live profile held Jessica's outdated jcrowther address; the official festival page now lists jessica@coloradopotato.org and 719-852-3322. Call once to ask whether any family-activity or sponsor space remains, then log the answer."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Jessica about Potato Festival space",
+        "reason": "The Aug. 17 email has no reply and the event is Sept. 12. Call Jessica at 719-852-3322 once to ask whether family-activity or sponsor space remains, then log the answer.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "One Shot Antelope Hunt",
+      "Lander One Shot Antelope Hunt",
+      "One Shot Hunt"
+    ],
+    "event": {
+      "id": null,
+      "name": "One Shot Antelope Hunt",
+      "city": "Lander",
+      "region": "WY"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "307-332-8190",
+      "website": "https://oneshotantelopehunt.com/",
+      "description": "Sept. 16-19, 2026 invitation-based sporting event centered on selected three-person hunting teams, shooting, conservation and member/guest functions."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "One Shot Antelope Hunt Club",
+        "phone": "307-332-8190",
+        "email": "oneshothuntclub@aol.com",
+        "role": "Current hunt club contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "One Shot Antelope Hunt - 2026",
+      "status": "unlikely",
+      "startsAt": "2026-09-16",
+      "endsAt": "2026-09-19",
+      "nextActionKind": "none",
+      "nextActionDueAt": null,
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; poor format fit",
+        "body": "Amy emailed the One Shot Antelope Hunt on Aug. 17, 2026 and received no reply. Current official information describes an invitation-based sporting program for selected hunting teams, spouses and guests, not an open family festival. Adventure Zone is a poor format fit. Record as unlikely and do not schedule routine annual outreach unless the event adds a separate public family celebration."
+      }
+    ],
+    "followUps": []
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Longs Peak Scottish Irish Highland Festival",
+      "Longs Peak Scottish-Irish Highland Festival",
+      "Scottish Irish Highland Festival"
+    ],
+    "event": {
+      "id": null,
+      "name": "Longs Peak Scottish Irish Highland Festival",
+      "city": "Estes Park",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "970-586-6308",
+      "website": "https://scotfest.com/",
+      "description": "Active Sept. 11-13, 2026 50th-anniversary Celtic festival at Festival Field in Estes Park, with continuous entertainment, athletics, cultural programming and youth/educational opportunities."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Longs Peak Festival Office",
+        "phone": "970-586-6308",
+        "email": "info@scotfest.com",
+        "role": "Current general festival contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Longs Peak Scottish Irish Highland Festival - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-11",
+      "endsAt": "2026-09-13",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; wrong program contact corrected",
+        "body": "Amy's Aug. 17 pitch went to a piping-competition contact rather than the general festival office, and the Gmail thread has no reply. Current official information lists 970-586-6308 and a general contact path; the event also identifies youth and educational programming. Call the festival office once and ask who owns family programming or sponsor activations. Do not resend the package to the piping contact."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Longs Peak festival office for correct owner",
+        "reason": "The Aug. 17 email went to a piping contact and received no reply. Call 970-586-6308 once, ask who owns family programming or sponsor activations, and log the correct planning contact.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Logan Pride",
+      "Logan Pride Festival"
+    ],
+    "event": {
+      "id": null,
+      "name": "Logan Pride Festival",
+      "city": "Logan",
+      "region": "UT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": null,
+      "website": "https://loganpride.org/festival/",
+      "description": "Large annual Pride festival in Logan. The official vendor page states all 2026 vendor space was taken by July 25 and directs festival questions to festival@loganpride.org."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Logan Pride Festival Team",
+        "phone": null,
+        "email": "festival@loganpride.org",
+        "role": "Current festival / vendor contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Logan Pride Festival - 2026",
+      "status": "unlikely",
+      "startsAt": null,
+      "endsAt": null,
+      "nextActionKind": "email",
+      "nextActionDueAt": "2027-01-15",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; 2026 space already full",
+        "body": "Amy emailed Logan Pride on Aug. 17, 2026 and received no reply. The official vendor page had already announced on July 25 that all 2026 vendor space was taken, so another current-year chase is not useful. Replace the older Sarah-only route with festival@loganpride.org and set one early-2027 planning reminder rather than treating this as an unexplained cold lead."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Ask Logan Pride about 2027 planning window",
+        "reason": "The official site says 2026 vendor space was already full by July 25. In early 2027, contact festival@loganpride.org once to ask when family-activity/vendor planning opens and whether a staffed attraction could fit.",
+        "dueAt": "2027-01-15T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Harvest Moon Hurrah",
+      "Spanish Fork Harvest Moon Hurrah"
+    ],
+    "event": {
+      "id": null,
+      "name": "Harvest Moon Hurrah",
+      "city": "Spanish Fork",
+      "region": "UT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "801-804-4600",
+      "website": "https://www.spanishfork.org/recreation-parks-and-culture/events-and-festivals/other-events/harvest-moon-hurrah/",
+      "description": "Free, family-friendly community celebration hosted by the Spanish Fork Arts Council at City Park, featuring live music and community activities."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Emily Harryman",
+        "phone": "801-804-4600",
+        "email": "eharryman@spanishfork.org",
+        "role": "Spanish Fork Arts Council / event contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Harvest Moon Hurrah - 2026",
+      "status": "contact_due",
+      "startsAt": null,
+      "endsAt": null,
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 17 outreach — no reply; family-event fit verified",
+        "body": "Amy emailed Emily Harryman on Aug. 17, 2026. The Gmail thread still contains only the sent message, with no reply. Current official information describes Harvest Moon Hurrah as a free, family-friendly Arts Council celebration at City Park. Make one concise call to 801-804-4600 to ask whether the 2026 activity layout is final and, if so, when 2027 planning begins."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Harvest Moon Hurrah once",
+        "reason": "Amy's Aug. 17 email has no reply and the event is family-focused. Call 801-804-4600 once to ask whether the 2026 activity layout is final and, if it is, when 2027 planning begins.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  }
+]
