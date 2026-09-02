@@ -25,6 +25,7 @@ export interface ComputerCallState {
   errorSummary: string | null;
   error: string | null;
   warning: string | null;
+  reconciled: boolean;
 }
 
 export interface UseComputerCallDependencies {
@@ -34,9 +35,21 @@ export interface UseComputerCallDependencies {
   requestMicrophone?: () => Promise<MediaStream>;
   onPhoneLinkFallback?: (message: string) => void;
   now?: () => Date;
+  reconciliationDelay?: (milliseconds: number) => Promise<void>;
 }
 
 const tokenRefreshSkewMilliseconds = 30_000;
+const reconciliationAttempts = 3;
+const reconciliationDelayMilliseconds = 500;
+const terminalStatuses = new Set<ComputerCallStatus>([
+  "completed",
+  "busy",
+  "no-answer",
+  "canceled",
+  "failed",
+]);
+
+type CallAttempt = Promise<void> & { accepted: boolean };
 
 const initialState: ComputerCallState = {
   phase: "idle",
@@ -54,6 +67,7 @@ const initialState: ComputerCallState = {
   errorSummary: null,
   error: null,
   warning: null,
+  reconciled: false,
 };
 
 type Action =
@@ -122,13 +136,13 @@ function reducer(state: ComputerCallState, action: Action): ComputerCallState {
         state.sessionId === action.session.id
         ? {
             ...state,
-            startedAt: action.session.startedAt ?? state.startedAt,
-            answeredAt: action.session.answeredAt ?? state.answeredAt,
-            endedAt: action.session.endedAt ?? state.endedAt,
-            durationSeconds:
-              action.session.durationSeconds ?? state.durationSeconds,
+            startedAt: action.session.startedAt,
+            answeredAt: action.session.answeredAt,
+            endedAt: action.session.endedAt,
+            durationSeconds: action.session.durationSeconds,
             status: action.session.status,
             errorSummary: action.session.errorSummary,
+            reconciled: true,
           }
         : state;
     case "input":
@@ -224,6 +238,20 @@ function isBrowserVoiceDevice(value: unknown): value is BrowserVoiceDevice {
   ].every((method) => typeof candidate[method] === "function");
 }
 
+function isAuthoritativeTerminalSession(session: ComputerCallSession): boolean {
+  const terminalStatus = terminalStatuses.has(session.status) ||
+    (session.status === "unknown" && Boolean(session.endedAt));
+  return terminalStatus && Boolean(session.startedAt && session.endedAt);
+}
+
+function defaultReconciliationDelay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function rejectedAttempt(): CallAttempt {
+  return Object.assign(Promise.resolve(), { accepted: false });
+}
+
 export function useComputerCall(dependencies: UseComputerCallDependencies) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
@@ -231,7 +259,7 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
   const deviceRef = useRef<BrowserVoiceDevice | null>(null);
   const ownedDevicesRef = useRef(new Set<BrowserVoiceDevice>());
   const sessionIdRef = useRef<string | null>(null);
-  const reconciledSessionIdRef = useRef<string | null>(null);
+  const reconcilingSessionIdRef = useRef<string | null>(null);
   const tokenExpiresAtRef = useRef<string | null>(null);
   const generationRef = useRef(0);
   const mountedRef = useRef(true);
@@ -256,7 +284,7 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
     dialingRef.current = false;
     sessionIdRef.current = null;
     tokenExpiresAtRef.current = null;
-    reconciledSessionIdRef.current = null;
+    reconcilingSessionIdRef.current = null;
   }, [invalidateSelections]);
   const fail = useCallback(
     (error: string) => {
@@ -269,21 +297,38 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
 
   const reconcile = useCallback(
     async (generation: number, sessionId: string) => {
-      if (reconciledSessionIdRef.current === sessionId) return;
-      reconciledSessionIdRef.current = sessionId;
+      if (reconcilingSessionIdRef.current === sessionId) return;
+      reconcilingSessionIdRef.current = sessionId;
+      const delay = dependencies.reconciliationDelay ?? defaultReconciliationDelay;
       try {
-        const session = await dependencies.api.getSession(sessionId);
-        if (!isCurrent(generation)) return;
-        dispatch({ type: "reconciled", session });
-      } catch {
-        if (!isCurrent(generation)) return;
-        dispatch({
-          type: "warning",
-          warning: "Call details could not be refreshed.",
-        });
+        for (let attempt = 0; attempt < reconciliationAttempts; attempt += 1) {
+          try {
+            const session = await dependencies.api.getSession(sessionId);
+            if (!isCurrent(generation)) return;
+            if (isAuthoritativeTerminalSession(session)) {
+              dispatch({ type: "reconciled", session });
+              return;
+            }
+          } catch {
+            if (!isCurrent(generation)) return;
+          }
+          if (attempt < reconciliationAttempts - 1) {
+            await delay(reconciliationDelayMilliseconds);
+            if (!isCurrent(generation)) return;
+          }
+        }
+        if (isCurrent(generation)) {
+          dispatch({
+            type: "warning",
+            warning: "Call details are still updating. Refresh technical details or use Phone Link.",
+          });
+        }
+      } finally {
+        if (reconcilingSessionIdRef.current === sessionId)
+          reconcilingSessionIdRef.current = null;
       }
     },
-    [dependencies.api, isCurrent],
+    [dependencies.api, dependencies.reconciliationDelay, isCurrent],
   );
 
   const finish = useCallback(
@@ -390,67 +435,76 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
     prepareFreshToken,
   ]);
 
-  const callNow = useCallback(async () => {
-    if (stateRef.current.phase !== "ready" || dialingRef.current) return;
+  const callNow = useCallback((): CallAttempt => {
+    if (stateRef.current.phase !== "ready" || dialingRef.current)
+      return rejectedAttempt();
     const generation = generationRef.current;
     const device = deviceRef.current;
     if (!device) {
       fail("A fresh browser voice device is required.");
-      return;
+      return rejectedAttempt();
     }
     invalidateSelections();
     dialingRef.current = true;
-    try {
-      if (expiresSoon(tokenExpiresAtRef.current, now())) {
-        if (
-          !(await prepareFreshToken(generation, device)) ||
-          !isCurrent(generation)
-        )
+    const attempt = (async () => {
+      try {
+        if (expiresSoon(tokenExpiresAtRef.current, now())) {
+          if (
+            !(await prepareFreshToken(generation, device)) ||
+            !isCurrent(generation)
+          )
+            return;
+        }
+        if (!isCurrent(generation)) return;
+        dispatch({ type: "requesting" });
+        const intent = await dependencies.api.createIntent(dependencies.context);
+        if (!isCurrent(generation)) return;
+        if (expired(intent.expiresAt, now())) {
+          throw new Error("The call intent has expired.");
+        }
+        sessionIdRef.current = intent.sessionId;
+        reconcilingSessionIdRef.current = null;
+        terminalRef.current = false;
+        dispatch({ type: "connecting", sessionId: intent.sessionId });
+        const call = await device.connect({
+          sessionId: intent.sessionId,
+        });
+        if (!isCurrent(generation)) {
+          call.disconnect();
+          await device.destroy();
           return;
-      }
-      if (!isCurrent(generation)) return;
-      dispatch({ type: "requesting" });
-      const intent = await dependencies.api.createIntent(dependencies.context);
-      if (!isCurrent(generation)) return;
-      if (expired(intent.expiresAt, now())) {
-        throw new Error("The call intent has expired.");
-      }
-      sessionIdRef.current = intent.sessionId;
-      reconciledSessionIdRef.current = null;
-      terminalRef.current = false;
-      dispatch({ type: "connecting", sessionId: intent.sessionId });
-      const call = await device.connect({
-        sessionId: intent.sessionId,
-      });
-      if (!isCurrent(generation)) {
-        call.disconnect();
+        }
+        callRef.current = call;
+        dialingRef.current = false;
+        call.on(
+          "ringing",
+          () => isCurrent(generation) && dispatch({ type: "ringing" }),
+        );
+        call.on(
+          "accept",
+          () =>
+            isCurrent(generation) &&
+            dispatch({ type: "connected", at: now().toISOString() }),
+        );
+        call.on("disconnect", () => finish(generation, device));
+        call.on("cancel", () => finish(generation, device));
+        call.on("error", (error) =>
+          finish(generation, device, message(error, "The call failed.")),
+        );
+      } catch (error) {
+        if (!isCurrent(generation)) return;
+        dialingRef.current = false;
+        const failure = message(error, "The call could not be started.");
+        if (sessionIdRef.current) {
+          finish(generation, device, failure);
+          return;
+        }
+        terminalRef.current = true;
+        fail(failure);
         await device.destroy();
-        return;
       }
-      callRef.current = call;
-      dialingRef.current = false;
-      call.on(
-        "ringing",
-        () => isCurrent(generation) && dispatch({ type: "ringing" }),
-      );
-      call.on(
-        "accept",
-        () =>
-          isCurrent(generation) &&
-          dispatch({ type: "connected", at: now().toISOString() }),
-      );
-      call.on("disconnect", () => finish(generation, device));
-      call.on("cancel", () => finish(generation, device));
-      call.on("error", (error) =>
-        finish(generation, device, message(error, "The call failed.")),
-      );
-    } catch (error) {
-      if (!isCurrent(generation)) return;
-      terminalRef.current = true;
-      dialingRef.current = false;
-      fail(message(error, "The call could not be started."));
-      await device.destroy();
-    }
+    })();
+    return Object.assign(attempt, { accepted: true });
   }, [
     dependencies.api,
     dependencies.context,
@@ -491,6 +545,12 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
     dispatch({ type: "ending" });
     callRef.current.disconnect();
   }, [invalidate, invalidateSelections]);
+
+  const refresh = useCallback(() => {
+    const { phase, sessionId } = stateRef.current;
+    if (!sessionId || (phase !== "completed" && phase !== "failed")) return;
+    void reconcile(generationRef.current, sessionId);
+  }, [reconcile]);
 
   const selectInput = useCallback(
     async (deviceId: string) => {
@@ -610,6 +670,7 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
     hangUp,
     selectInput,
     selectOutput,
+    refresh,
     reset,
   };
 }

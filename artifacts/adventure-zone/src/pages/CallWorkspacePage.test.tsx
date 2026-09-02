@@ -15,13 +15,15 @@ vi.mock("@/actions/activities", () => ({
 }));
 vi.mock("@/actions/calls", () => ({ completeCallAction: vi.fn() }));
 vi.mock("@/components/calls/call-workspace", () => ({
-  CallWorkspace: ({ assistedCallingEnabled, voicemailLauncherUrl }: {
+  CallWorkspace: ({ assistedCallingEnabled, voicemailLauncherUrl, computerCalling }: {
     assistedCallingEnabled: boolean;
     voicemailLauncherUrl: string | null;
+    computerCalling?: { enabled: boolean; reason: string; callerIdDisplay: string | null };
   }) => (
-    <p>
-      workspace:{String(assistedCallingEnabled)}:{voicemailLauncherUrl ?? "none"}
-    </p>
+    <>
+      <p>workspace:{String(assistedCallingEnabled)}:{voicemailLauncherUrl ?? "none"}</p>
+      <p data-testid="computer-calling-capability">{computerCalling ? `${computerCalling.reason}:${computerCalling.callerIdDisplay ?? "none"}` : "absent"}</p>
+    </>
   ),
 }));
 vi.mock("@/components/calls/caller-finder", () => ({
@@ -81,6 +83,20 @@ describe("CallWorkspacePage configuration fallback", () => {
       : Promise.resolve({ context: {}, timeline: [], phones: [] }));
     render(<CallWorkspacePage />);
     expect(await screen.findByText("workspace:true:none")).toBeInTheDocument();
+  });
+
+  it("passes the nested computer-calling capability through without exposing server-only configuration", async () => {
+    mocks.apiGet.mockImplementation((path: string) => path === "/calls/config"
+      ? Promise.resolve({
+        assistedCallingEnabled: true,
+        voicemailLauncherUrl: null,
+        computerCalling: { enabled: true, reason: "available", callerIdDisplay: "(701) 555-0100" },
+      })
+      : Promise.resolve({ context: {}, timeline: [], phones: [] }));
+
+    render(<CallWorkspacePage />);
+
+    expect(await screen.findByTestId("computer-calling-capability")).toHaveTextContent("available:(701) 555-0100");
   });
 
   it("opens a caller finder when Calls is opened without a selected record", async () => {

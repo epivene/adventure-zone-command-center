@@ -8,6 +8,7 @@ import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-
 import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
+import type { ComputerCallingCapability } from "@/components/calls/phone-actions";
 import { QuickAddCaller, type QuickAddCallerSubmission } from "@/components/contacts/quick-add-caller";
 import { GuidedCallScriptOverridesProvider } from "@/features/calls/guided-call-script-settings-context";
 import { apiGet, apiPost } from "@/lib/auth-token";
@@ -28,6 +29,13 @@ function coerceTimeline(items: any[]): any[] {
 type CallingConfig = {
   assistedCallingEnabled: boolean;
   voicemailLauncherUrl: string | null;
+  computerCalling: ComputerCallingCapability;
+};
+
+const disabledComputerCalling: ComputerCallingCapability = {
+  enabled: false,
+  reason: "disabled",
+  callerIdDisplay: null,
 };
 
 type QuickAddResult =
@@ -60,6 +68,7 @@ export default function CallWorkspacePage() {
   const [config, setConfig] = useState<CallingConfig>({
     assistedCallingEnabled: false,
     voicemailLauncherUrl: null,
+    computerCalling: disabledComputerCalling,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +90,7 @@ export default function CallWorkspacePage() {
     apiGet<CallingConfig>("/calls/config").catch(() => ({
         assistedCallingEnabled: false,
         voicemailLauncherUrl: null,
+        computerCalling: disabledComputerCalling,
       }))
       .then(async (callingConfig) => {
         setConfig(callingConfig);
@@ -155,6 +165,7 @@ export default function CallWorkspacePage() {
           booking={booking}
           briefing={data.briefing ?? null}
           contact={contact}
+          computerCalling={config.computerCalling}
           contextSummary={data.contextSummary ?? null}
           createActivity={createActivityAction}
           defaultScriptKind={data.defaultScriptKind}

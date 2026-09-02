@@ -10,6 +10,12 @@ import {
 } from "@/features/calls/phone-launcher";
 import type { CallMethod } from "@/features/calls/call-types";
 
+export type ComputerCallingCapability = {
+  enabled: boolean;
+  reason: "available" | "disabled" | "configuration_incomplete";
+  callerIdDisplay: string | null;
+};
+
 type ClipboardTarget = {
   writeText(value: string): Promise<void> | void;
 };
@@ -18,14 +24,18 @@ export function PhoneActions({
   phone,
   assistedCallingEnabled = false,
   voicemailLauncherUrl,
+  computerCalling,
   clipboard = navigator.clipboard,
   onSelectMethod,
+  onStartComputerCall,
 }: {
   phone: ContactPhoneRecord;
   assistedCallingEnabled?: boolean;
   voicemailLauncherUrl: string | null;
+  computerCalling?: ComputerCallingCapability;
   clipboard?: ClipboardTarget;
   onSelectMethod?: (method: CallMethod) => void;
+  onStartComputerCall?: () => void;
 }) {
   const [status, setStatus] = useState("");
   const suppressed = Boolean(phone.doNotCallAt);
@@ -56,6 +66,20 @@ export function PhoneActions({
 
   const voicemailAvailable =
     assistedCallingEnabled && Boolean(voicemailLauncherUrl);
+  const computerCallingAvailable = Boolean(computerCalling?.enabled && onStartComputerCall);
+  const unavailableMessage = computerCalling
+    ? computerCalling.reason === "configuration_incomplete"
+      ? "Computer calling is not configured."
+      : computerCalling.reason === "disabled"
+        ? "Computer calling is disabled."
+        : null
+    : null;
+
+  const phoneLinkLabel = computerCallingAvailable
+    ? "Call with Phone Link"
+    : phone.type === "office"
+      ? "Call office"
+      : "Call";
 
   return (
     <div className="grid gap-2">
@@ -67,8 +91,13 @@ export function PhoneActions({
       <div className="flex flex-wrap gap-2">
         {!suppressed && phone.type === "office" ? (
           <>
-            <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={() => call("office_call")} type="button">
-              <PhoneCall className="h-4 w-4" /> Call office
+            {computerCallingAvailable ? (
+              <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={onStartComputerCall} type="button">
+                <PhoneCall className="h-4 w-4" /> Call from computer
+              </button>
+            ) : null}
+            <button className={computerCallingAvailable ? "button-secondary inline-flex min-h-11 items-center gap-2" : "button-primary inline-flex min-h-11 items-center gap-2"} onClick={() => call("office_call")} type="button">
+              <PhoneCall className="h-4 w-4" /> {phoneLinkLabel}
             </button>
             {phone.extension ? (
               <button
@@ -82,9 +111,16 @@ export function PhoneActions({
           </>
         ) : null}
         {!suppressed && phone.type !== "office" ? (
-          <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={() => call("standard_call")} type="button">
-            <PhoneCall className="h-4 w-4" /> Call
-          </button>
+          <>
+            {computerCallingAvailable ? (
+              <button className="button-primary inline-flex min-h-11 items-center gap-2" onClick={onStartComputerCall} type="button">
+                <PhoneCall className="h-4 w-4" /> Call from computer
+              </button>
+            ) : null}
+            <button className={computerCallingAvailable ? "button-secondary inline-flex min-h-11 items-center gap-2" : "button-primary inline-flex min-h-11 items-center gap-2"} onClick={() => call("standard_call")} type="button">
+              <PhoneCall className="h-4 w-4" /> {phoneLinkLabel}
+            </button>
+          </>
         ) : null}
         {!suppressed && phone.type !== "office" && voicemailAvailable ? (
           <button className="button-secondary" onClick={() => void voicemail()} type="button">
@@ -104,6 +140,7 @@ export function PhoneActions({
       {phone.type === "unknown" && !suppressed ? (
         <p className="text-xs text-amber-800">May not work for office numbers.</p>
       ) : null}
+      {unavailableMessage && !suppressed ? <p className="text-xs text-slate-600">{unavailableMessage}</p> : null}
       {status ? <p className="text-sm text-slate-600" role="status">{status}</p> : null}
     </div>
   );

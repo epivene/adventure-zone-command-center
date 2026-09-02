@@ -87,7 +87,7 @@ export const completeCallInputSchema = z.object({
   approvedContactUpdates: approvedContactUpdatesSchema.nullable(),
   approvedBookingUpdates: approvedBookingUpdatesSchema.nullable(),
   direction: z.enum(["incoming", "outgoing"]),
-  method: z.enum(["standard_call", "office_call", "individual_voicemail", "mobile_log"]),
+  method: z.enum(["standard_call", "office_call", "individual_voicemail", "mobile_log", "browser_voip"]),
   phoneId: z.string().uuid().nullable(),
   scriptKind: z.enum(["first_outreach", "follow_up", "contract_follow_up", "incoming_inquiry"]),
   doNotCallConfirmed: z.boolean(),

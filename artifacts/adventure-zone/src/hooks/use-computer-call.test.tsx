@@ -408,6 +408,30 @@ describe("useComputerCall", () => {
     });
   });
 
+  it("accepts exactly one call attempt while a near-expiry token refresh is pending", async () => {
+    let currentTime = new Date("2026-09-02T10:00:00.000Z");
+    const freshToken = deferred<{ token: string; expiresAt: string }>();
+    const { deps, api } = createDependencies({ now: () => currentTime });
+    api.requestToken
+      .mockResolvedValueOnce({ token: "initial-token", expiresAt: "2026-09-02T10:00:31.000Z" })
+      .mockReturnValueOnce(freshToken.promise);
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    currentTime = new Date("2026-09-02T10:00:02.000Z");
+
+    const first = result.current.callNow();
+    const second = result.current.callNow();
+
+    expect(first.accepted).toBe(true);
+    expect(second.accepted).toBe(false);
+    expect(api.createIntent).not.toHaveBeenCalled();
+    await act(async () => freshToken.resolve({ token: "refreshed-token", expiresAt: "2026-09-02T10:05:00.000Z" }));
+    await first;
+
+    expect(api.createIntent).toHaveBeenCalledTimes(1);
+    expect(api.createIntent).toHaveBeenCalledWith(deps.context);
+  });
+
   it("does not connect with an intent that is already expired", async () => {
     const { deps, api, device } = createDependencies();
     api.createIntent.mockResolvedValueOnce({
@@ -470,12 +494,68 @@ describe("useComputerCall", () => {
       answeredAt: "2026-09-02T10:00:03.000Z",
       endedAt: "2026-09-02T10:01:03.000Z",
       durationSeconds: 60,
+      reconciled: true,
     });
   });
 
+  it("polls provider status until an authoritative terminal session replaces local completion details", async () => {
+    const delay = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const { deps, api, call } = createDependencies({ reconciliationDelay: delay });
+    api.getSession
+      .mockResolvedValueOnce(session({ status: "in-progress", endedAt: null, durationSeconds: null }))
+      .mockResolvedValueOnce(session({ status: "ringing", endedAt: null, durationSeconds: null }))
+      .mockResolvedValueOnce(session({
+        status: "completed",
+        startedAt: "2026-09-02T10:00:01.000Z",
+        answeredAt: "2026-09-02T10:00:04.000Z",
+        endedAt: "2026-09-02T10:01:05.000Z",
+        durationSeconds: 61,
+      }));
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    await act(() => result.current.callNow());
+
+    act(() => call.emit("disconnect"));
+
+    await waitFor(() => expect(result.current.state.reconciled).toBe(true));
+    expect(api.getSession).toHaveBeenCalledTimes(3);
+    expect(delay).toHaveBeenCalledTimes(2);
+    expect(result.current.state).toMatchObject({
+      startedAt: "2026-09-02T10:00:01.000Z",
+      answeredAt: "2026-09-02T10:00:04.000Z",
+      endedAt: "2026-09-02T10:01:05.000Z",
+      durationSeconds: 61,
+      status: "completed",
+    });
+  });
+
+  it("keeps outcomes unreconciled when provider retries never supply terminal timing", async () => {
+    const delay = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const { deps, api, call } = createDependencies({ reconciliationDelay: delay });
+    api.getSession.mockResolvedValue(session({
+      status: "in-progress",
+      startedAt: null,
+      answeredAt: null,
+      endedAt: null,
+      durationSeconds: null,
+    }));
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    await act(() => result.current.callNow());
+
+    act(() => call.emit("disconnect"));
+
+    await waitFor(() => expect(result.current.state.warning).toMatch(/still updating/i));
+    expect(api.getSession).toHaveBeenCalledTimes(3);
+    expect(result.current.state.reconciled).toBe(false);
+    expect(result.current.state.status).toBeNull();
+  });
+
   it("keeps local completion data and a nonblocking warning when reconciliation fails", async () => {
-    const { deps, call, api } = createDependencies();
-    api.getSession.mockRejectedValueOnce(new Error("offline"));
+    const { deps, call, api } = createDependencies({
+      reconciliationDelay: vi.fn<() => Promise<void>>().mockResolvedValue(),
+    });
+    api.getSession.mockRejectedValue(new Error("offline"));
     const { result } = renderHook(() => useComputerCall(deps));
     await act(() => result.current.setup());
     await act(() => result.current.callNow());
@@ -483,12 +563,70 @@ describe("useComputerCall", () => {
     act(() => call.emit("disconnect"));
     await waitFor(() =>
       expect(result.current.state.warning).toBe(
-        "Call details could not be refreshed.",
+        "Call details are still updating. Refresh technical details or use Phone Link.",
       ),
     );
 
     expect(result.current.state.phase).toBe("completed");
+    expect(result.current.state.reconciled).toBe(false);
     expect(result.current.state.endedAt).toBe("2026-09-02T10:00:00.000Z");
+  });
+
+  it("reconciles a rejected browser connect after the technical session was issued", async () => {
+    const delay = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const { deps, api, device } = createDependencies({ reconciliationDelay: delay });
+    device.connect.mockRejectedValueOnce(new Error("browser transport rejected"));
+    api.getSession
+      .mockResolvedValueOnce(session({ status: "in-progress", endedAt: null, durationSeconds: null }))
+      .mockResolvedValueOnce(session({ status: "ringing", endedAt: null, durationSeconds: null }))
+      .mockResolvedValueOnce(session({ status: "busy", endedAt: "2026-09-02T10:01:00.000Z", durationSeconds: 60 }));
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    await act(() => result.current.callNow());
+
+    await waitFor(() => expect(result.current.state.reconciled).toBe(true));
+    expect(result.current.state).toMatchObject({
+      phase: "failed",
+      sessionId: "1a88fb87-81be-4fcb-bc50-f238de592028",
+      status: "busy",
+      endedAt: "2026-09-02T10:01:00.000Z",
+    });
+    expect(api.getSession).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps a rejected connect session refreshable without overlapping retries or stale reconciliation", async () => {
+    const delay = vi.fn<() => Promise<void>>().mockResolvedValue();
+    const { deps, api, device } = createDependencies({ reconciliationDelay: delay });
+    device.connect.mockRejectedValueOnce(new Error("browser transport rejected"));
+    api.getSession.mockResolvedValue(session({ status: "in-progress", endedAt: null, durationSeconds: null }));
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    await act(() => result.current.callNow());
+
+    await waitFor(() => expect(result.current.state.warning).toMatch(/still updating/i));
+    expect(api.getSession).toHaveBeenCalledTimes(3);
+    act(() => result.current.refresh());
+    act(() => result.current.refresh());
+    await waitFor(() => expect(api.getSession).toHaveBeenCalledTimes(6));
+    expect(result.current.state.reconciled).toBe(false);
+    act(() => result.current.reset());
+    expect(result.current.state.phase).toBe("idle");
+  });
+
+  it("ignores an in-flight rejected-connect reconciliation after reset", async () => {
+    const pendingSession = deferred<ComputerCallSession>();
+    const { deps, api, device } = createDependencies();
+    device.connect.mockRejectedValueOnce(new Error("browser transport rejected"));
+    api.getSession.mockReturnValueOnce(pendingSession.promise);
+    const { result } = renderHook(() => useComputerCall(deps));
+    await act(() => result.current.setup());
+    await act(() => result.current.callNow());
+    await waitFor(() => expect(api.getSession).toHaveBeenCalledOnce());
+
+    act(() => result.current.reset());
+    await act(async () => pendingSession.resolve(session()));
+
+    expect(result.current.state).toMatchObject({ phase: "idle", sessionId: null, reconciled: false });
   });
 
   it("fails safely on provider errors and can retry after reset", async () => {

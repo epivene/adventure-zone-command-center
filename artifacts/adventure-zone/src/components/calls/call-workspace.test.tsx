@@ -1,10 +1,34 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ComputerCallTerminal } from "@/components/calls/computer-call-panel";
 import { buildCallDraftKey } from "@/features/calls/call-draft";
 
 vi.mock("@/components/activities/activity-timeline", () => ({
   ActivityTimeline: () => <p>Timeline content</p>,
+}));
+vi.mock("@/components/calls/computer-call-panel", () => ({
+  ComputerCallPanel: ({ onPhaseChange, onTerminal }: {
+    onPhaseChange?: (active: boolean) => void;
+    onTerminal: (call: ComputerCallTerminal) => void;
+  }) => (
+    <>
+      <button onClick={() => onPhaseChange?.(true)} type="button">Simulate active computer call</button>
+      <button onClick={() => {
+        onPhaseChange?.(false);
+        onTerminal({
+          sessionId: "70000000-0000-4000-8000-000000000007",
+          phoneId: "50000000-0000-4000-8000-000000000001",
+          startedAt: "2026-09-01T10:00:00.000Z",
+          answeredAt: "2026-09-01T10:00:20.000Z",
+          endedAt: "2026-09-01T10:03:15.000Z",
+          durationSeconds: 175,
+          status: "completed",
+          errorSummary: null,
+        });
+      }} type="button">Finish computer call</button>
+    </>
+  ),
 }));
 
 import { CallWorkspace } from "./call-workspace";
@@ -69,6 +93,53 @@ afterEach(() => {
 });
 
 describe("CallWorkspace shared phone actions", () => {
+  it("links a completed browser call to the existing outcome using authoritative technical timestamps", async () => {
+    const { onComplete } = renderWorkspace({
+      computerCalling: { enabled: true, reason: "available", callerIdDisplay: "(701) 555-0100" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Call from computer" }));
+    await screen.findByRole("button", { name: "Finish computer call" });
+    fireEvent.click(screen.getByRole("button", { name: "Finish computer call" }));
+    fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Reached Avery." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+
+    await waitFor(() => expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({
+      requestKey: "70000000-0000-4000-8000-000000000007",
+      method: "browser_voip",
+      startedAt: new Date("2026-09-01T10:00:00.000Z"),
+      endedAt: new Date("2026-09-01T10:03:15.000Z"),
+    })));
+  });
+
+  it("locks phone selection while a computer call is active and preserves its session on outcome retry", async () => {
+    const secondPhone = { ...phoneBase, id: "50000000-0000-4000-8000-000000000002", primary: false, number: "701-555-0101" };
+    const onComplete = vi.fn().mockResolvedValue({ ok: false, error: "Try again" });
+    renderWorkspace({
+      computerCalling: { enabled: true, reason: "available", callerIdDisplay: "(701) 555-0100" },
+      onComplete,
+      phones: [{ ...phoneBase, type: "mobile" }, { ...secondPhone, type: "office" }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Call from computer" }));
+    await screen.findByRole("button", { name: "Simulate active computer call" });
+    expect(screen.getByLabelText("Phone number")).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Simulate active computer call" }));
+    expect(screen.getByLabelText("Phone number")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Finish computer call" }));
+    expect(screen.getByLabelText("Phone number")).not.toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Retry this outcome." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+
+    await screen.findByRole("alert");
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+    await waitFor(() => expect(onComplete).toHaveBeenLastCalledWith(expect.objectContaining({
+      requestKey: "70000000-0000-4000-8000-000000000007",
+      method: "browser_voip",
+      phoneId: phoneBase.id,
+    })));
+  });
+
   it.each([
     {
       type: "mobile",
