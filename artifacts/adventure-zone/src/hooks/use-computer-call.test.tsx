@@ -1248,6 +1248,48 @@ describe("useComputerCall", () => {
 });
 
 describe("TwilioBrowserDevice", () => {
+  it("waits for Twilio to finish discovering microphone devices", async () => {
+    let deviceChangeListener:
+      | ((lostActiveDevices: MediaDeviceInfo[]) => void)
+      | undefined;
+    const availableInputDevices = new Map<string, MediaDeviceInfo>();
+    const rawDevice = {
+      connect: vi.fn(),
+      destroy: vi.fn(),
+      audio: {
+        availableInputDevices,
+        availableOutputDevices: new Map<string, MediaDeviceInfo>(),
+        isOutputSelectionSupported: true,
+        on: vi.fn(
+          (
+            eventName: string,
+            listener: (lostActiveDevices: MediaDeviceInfo[]) => void,
+          ) => {
+            if (eventName === "deviceChange") deviceChangeListener = listener;
+          },
+        ),
+        removeListener: vi.fn(),
+        setInputDevice: vi.fn(),
+        speakerDevices: { set: vi.fn().mockResolvedValue(undefined) },
+        ringtoneDevices: { set: vi.fn().mockResolvedValue(undefined) },
+      },
+    };
+    twilioSdk.Device.mockImplementation(function () {
+      return rawDevice;
+    });
+    const device = new TwilioBrowserDevice();
+
+    await device.prepare("ephemeral-browser-token");
+    const discoveredDevices = device.listAudioDevices();
+    availableInputDevices.set(input.deviceId, input);
+    deviceChangeListener?.([]);
+
+    await expect(discoveredDevices).resolves.toEqual({
+      inputs: [input],
+      outputs: [],
+    });
+  });
+
   it("removes call listeners and destroys Twilio resources during teardown", async () => {
     const rawCall = {
       mute: vi.fn(),
