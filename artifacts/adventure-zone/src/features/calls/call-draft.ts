@@ -133,6 +133,7 @@ export function saveCallDraft(
     savedAt: now.toISOString(),
   });
   if (safe) storage.setItem(key, JSON.stringify(safe));
+  else storage.removeItem(key);
 }
 
 export function clearCallDraft(

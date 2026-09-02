@@ -950,7 +950,7 @@ export const callSessions = pgTable(
     ),
     check(
       "call_sessions_method_valid",
-      sql`${table.method} in ('standard_call', 'office_call', 'individual_voicemail', 'mobile_log')`,
+      sql`${table.method} in ('standard_call', 'office_call', 'individual_voicemail', 'mobile_log', 'browser_voip')`,
     ),
     check(
       "call_sessions_script_kind_valid",
@@ -960,6 +960,64 @@ export const callSessions = pgTable(
       "call_sessions_ended_at_not_before_started",
       sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`,
     ),
+  ],
+);
+
+export const computerCallSessions = pgTable(
+  "computer_call_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id),
+    phoneId: uuid("phone_id").notNull().references(() => contactPhones.id),
+    provider: text("provider").$type<"twilio">().notNull(),
+    providerCallSid: text("provider_call_sid").unique(),
+    direction: text("direction").$type<"outbound">().default("outbound").notNull(),
+    method: text("method").$type<"browser_voip">().default("browser_voip").notNull(),
+    status: text("status").$type<
+      | "created"
+      | "queued"
+      | "ringing"
+      | "in-progress"
+      | "completed"
+      | "busy"
+      | "no-answer"
+      | "canceled"
+      | "failed"
+      | "unknown"
+    >().notNull(),
+    callerIdSnapshot: text("caller_id_snapshot").notNull(),
+    destinationNumberSnapshot: text("destination_number_snapshot").notNull(),
+    intentExpiresAt: timestamp("intent_expires_at", { withTimezone: true }).notNull(),
+    intentConsumedAt: timestamp("intent_consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    durationSeconds: integer("duration_seconds"),
+    errorCode: text("error_code"),
+    errorSummary: text("error_summary"),
+  },
+  (table) => [
+    check("computer_call_sessions_provider_valid", sql`${table.provider} = 'twilio'`),
+    check("computer_call_sessions_direction_valid", sql`${table.direction} = 'outbound'`),
+    check("computer_call_sessions_method_valid", sql`${table.method} = 'browser_voip'`),
+    check(
+      "computer_call_sessions_status_valid",
+      sql`${table.status} in ('created', 'queued', 'ringing', 'in-progress', 'completed', 'busy', 'no-answer', 'canceled', 'failed', 'unknown')`,
+    ),
+    check(
+      "computer_call_sessions_duration_seconds_nonnegative",
+      sql`${table.durationSeconds} is null or ${table.durationSeconds} >= 0`,
+    ),
+    index("computer_call_sessions_owner_created_at_idx").on(
+      table.ownerId,
+      table.createdAt.desc(),
+    ),
+    index("computer_call_sessions_phone_id_idx").on(table.phoneId),
+    index("computer_call_sessions_provider_call_sid_idx").on(table.providerCallSid),
   ],
 );
 

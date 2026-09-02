@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+vi.hoisted(() => {
+  process.env.DATABASE_URL ||=
+    "postgres://postgres:postgres@127.0.0.1:5432/test";
+});
+
 import { runRequiredSchemaStartup } from "./required-schema-startup";
 
 describe("runRequiredSchemaStartup", () => {
@@ -26,6 +31,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureEventReviewDismissals: async () => false,
       ensureFollowUpDismissals: async () => true,
       ensureOrganizerFeedback: async () => false,
+      ensureComputerCalling: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
@@ -39,6 +45,7 @@ describe("runRequiredSchemaStartup", () => {
       "required event review dismissal schema",
       "required follow-up dismissal persistence",
       "required organizer feedback schema",
+      "required computer calling schema",
       "required office coordinator schema",
       "required profile touch schema",
       "required Design Studio schema",
