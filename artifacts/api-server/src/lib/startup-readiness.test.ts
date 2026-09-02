@@ -14,6 +14,7 @@ function createApp() {
   app.use(requireStartupReadiness);
   app.get("/api/healthz", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/protected", (_req, res) => res.json({ status: "ready" }));
+  app.options("/api/protected", (_req, res) => res.status(204).end());
   app.get(
     "/api/assistant-import/profile-search",
     requireAssistantImportToken,
@@ -62,5 +63,16 @@ describe("startup readiness gate", () => {
       .expect(200, { status: "import-ready" });
     await request(app).get("/api/assistant-import/profile-search").expect(401);
     await request(app).get("/api/protected").expect(503);
+  });
+
+  it("allows CORS preflight requests while ordinary business traffic is gated", async () => {
+    markAppStarting();
+
+    await request(createApp())
+      .options("/api/protected")
+      .set("Origin", "https://example.test")
+      .set("Access-Control-Request-Method", "GET")
+      .expect(204);
+    await request(createApp()).get("/api/protected").expect(503);
   });
 });

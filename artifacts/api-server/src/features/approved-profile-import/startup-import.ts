@@ -9,6 +9,9 @@ import {
 import { applyBlankProfileBatch01 } from "../organizations/blank-profile-batch-01";
 import { applyBlankProfileBatch02 } from "../organizations/blank-profile-batch-02";
 import { applyTwinFallsDuplicateCleanup } from "../organizations/twin-falls-duplicate-cleanup";
+import {
+  isApprovedProfileStartupImportEnabled,
+} from "./startup-config";
 
 type StartupImportResult = {
   imported: number;
@@ -352,6 +355,13 @@ async function resolveExistingProfile(input: {
 export async function importApprovedProfilesAtStartup(
   port: number,
 ): Promise<StartupImportResult> {
+  if (!isApprovedProfileStartupImportEnabled()) {
+    logger.info(
+      "Approved profile startup import is disabled; set RUN_APPROVED_PROFILE_STARTUP_IMPORT=true to opt in",
+    );
+    return { imported: 0, skipped: 1, files: [] };
+  }
+
   const token = process.env["ASSISTANT_IMPORT_TOKEN"]?.trim();
   if (!token) {
     logger.warn(

@@ -83,7 +83,9 @@ describe("approved profile startup import", () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     process.env["ASSISTANT_IMPORT_TOKEN"] = "test-token";
+    process.env["RUN_APPROVED_PROFILE_STARTUP_IMPORT"] = "true";
     vi.mocked(readdir).mockResolvedValue(["sample.json"] as never);
     vi.mocked(readFile).mockResolvedValue(JSON.stringify({
       ...basePayload(),
@@ -106,6 +108,7 @@ describe("approved profile startup import", () => {
   afterEach(() => {
     if (originalToken === undefined) delete process.env["ASSISTANT_IMPORT_TOKEN"];
     else process.env["ASSISTANT_IMPORT_TOKEN"] = originalToken;
+    delete process.env["RUN_APPROVED_PROFILE_STARTUP_IMPORT"];
     globalThis.fetch = originalFetch;
     vi.restoreAllMocks();
   });
@@ -149,6 +152,44 @@ describe("approved profile startup import", () => {
         }),
       }),
     );
+  });
+
+  it("skips the historical archive by default even when import authentication is configured", async () => {
+    delete process.env["RUN_APPROVED_PROFILE_STARTUP_IMPORT"];
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toEqual({ imported: 0, skipped: 1, files: [] });
+    expect(readdir).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the historical archive when the startup import opt-in is explicitly false", async () => {
+    process.env["RUN_APPROVED_PROFILE_STARTUP_IMPORT"] = "false";
+    const fetchMock = vi.fn();
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result).toEqual({ imported: 0, skipped: 1, files: [] });
+    expect(readdir).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("imports the historical archive when the startup import opt-in is explicitly true", async () => {
+    process.env["RUN_APPROVED_PROFILE_STARTUP_IMPORT"] = "true";
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ ok: true, profileId: PROFILE_ID }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, created: true }, 201))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, created: true }, 201));
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const result = await importApprovedProfilesAtStartup(5000);
+
+    expect(result.imported).toBe(1);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
   it("can safely target an existing profile before applying a reviewed update", async () => {
