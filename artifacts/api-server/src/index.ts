@@ -72,6 +72,7 @@ import {
   shouldStartActBackgroundWorkers,
   type ActExtractionRuntime,
 } from "./features/act-replacement/runtime";
+import { markAppReady, markAppStarting } from "./lib/startup-readiness";
 
 validateOwnerConfig();
 
@@ -133,29 +134,10 @@ const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
   (err) => logger.error({ err }, "Inbound voicemail retention pass failed"),
 );
 
-await runRequiredSchemaStartup();
-await runStartupStep(
-  "development sample account seed",
-  ensureDevelopmentSampleAccounts,
-);
-
+markAppStarting();
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
-  void runMaintenanceAndStartWorkers({
-    runMaintenance: runPostListenMaintenance,
-    startBackgroundWorkers,
-    onMaintenanceError(err) {
-      logger.error(
-        { err },
-        "Post-listen database maintenance failed; server remains available",
-      );
-    },
-  }).catch((err) => {
-    logger.error(
-      { err },
-      "Background worker startup failed; server remains available",
-    );
-  });
+  void completeRequiredStartup();
 });
 
 server.on("error", (err) => {
@@ -196,6 +178,44 @@ process.once("SIGTERM", () => {
   shutdownRequested = true;
   void shutdown();
 });
+
+async function completeRequiredStartup(): Promise<void> {
+  try {
+    await runRequiredSchemaStartup();
+    await runStartupStep(
+      "development sample account seed",
+      ensureDevelopmentSampleAccounts,
+    );
+  } catch (err) {
+    logger.fatal(
+      { err },
+      "Required startup checks failed; shutting down without serving API traffic",
+    );
+    shutdownRequested = true;
+    await shutdown();
+    process.exit(1);
+  }
+
+  if (shutdownRequested) return;
+  markAppReady();
+  logger.info("Required startup checks completed; API traffic enabled");
+
+  await runMaintenanceAndStartWorkers({
+    runMaintenance: runPostListenMaintenance,
+    startBackgroundWorkers,
+    onMaintenanceError(err) {
+      logger.error(
+        { err },
+        "Post-listen database maintenance failed; server remains available",
+      );
+    },
+  }).catch((err) => {
+    logger.error(
+      { err },
+      "Background worker startup failed; server remains available",
+    );
+  });
+}
 
 async function runPostListenMaintenance() {
   const staleLockRecovery = await runStartupStep(

@@ -15,6 +15,12 @@ describe("API startup order", () => {
     expect(source.indexOf("app.listen(")).toBeLessThan(source.indexOf("runStartupStep("));
   });
 
+  it("keeps API traffic gated until required schema startup completes", () => {
+    expect(source.indexOf("markAppStarting();")).toBeLessThan(source.indexOf("app.listen("));
+    expect(source.indexOf("app.listen(")).toBeLessThan(source.indexOf("runRequiredSchemaStartup();"));
+    expect(source.indexOf("runRequiredSchemaStartup();")).toBeLessThan(source.indexOf("markAppReady();"));
+  });
+
   it("keeps background workers behind post-listen maintenance", () => {
     expect(source.indexOf("runPostListenMaintenance")).toBeLessThan(source.indexOf("leadScoutLoop.start()"));
   });

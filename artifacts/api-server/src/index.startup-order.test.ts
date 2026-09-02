@@ -4,6 +4,17 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("src/index.ts", "utf8");
 
 describe("server startup ordering", () => {
+  it("binds the Render port behind a closed traffic gate before required schema checks", () => {
+    const starting = source.indexOf("markAppStarting();");
+    const listen = source.indexOf("const server = app.listen");
+    const required = source.indexOf("await runRequiredSchemaStartup();");
+    const ready = source.indexOf("markAppReady();");
+    expect(starting).toBeGreaterThanOrEqual(0);
+    expect(starting).toBeLessThan(listen);
+    expect(listen).toBeLessThan(required);
+    expect(required).toBeLessThan(ready);
+  });
+
   it("binds the HTTP server before post-listen maintenance and worker startup", () => {
     const listen = source.indexOf("const server = app.listen");
     const maintenance = source.indexOf("runPostListenMaintenance()", listen);

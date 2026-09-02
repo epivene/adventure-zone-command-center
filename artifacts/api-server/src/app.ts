@@ -16,6 +16,7 @@ import assistantManagerReviewAuditRouter from "./routes/assistant-manager-review
 import assistantKristyReviewCorrectionRouter from "./routes/assistant-kristy-review-correction";
 import managerReviewOverviewRouter from "./routes/manager-review-overview";
 import organizationFillerRouter from "./routes/organization-filler";
+import { requireStartupReadiness } from "./lib/startup-readiness";
 
 const app: Express = express();
 
@@ -38,6 +39,7 @@ app.use(
     },
   }),
 );
+app.use(requireStartupReadiness);
 
 app.use(
   cors({
