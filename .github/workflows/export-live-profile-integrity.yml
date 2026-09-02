@@ -136,3 +136,5 @@ jobs:
             profile-integrity-audit.json
             profile-integrity-issues.csv
           retention-days: 7
+
+# Triggered after Gmail profile CRM reconciliation on 2026-09-02.
