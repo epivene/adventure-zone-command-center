@@ -44,7 +44,7 @@ jobs:
               --write-out "%{http_code}" \
               "${BASE_URL}/api/assistant-import/profile-integrity-audit" || true)
 
-            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('profile-integrity-audit.json','utf8')); if(x.ok!==true || x.mode!=='read_only' || !x.summary || !Array.isArray(x.profiles) || !Array.isArray(x.issues)) process.exit(1)"; then
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('profile-integrity-audit.json','utf8')); if(x.ok!==true || x.mode!=='read_only' || !x.summary || !Array.isArray(x.profiles) || !Array.isArray(x.issues)) process.exit(1); const expected=["Peach Festival","4th of July","Watford City Event","Enumclaw Expo","Art & Living History Festival","Fish Fest","Owyhee County Fair","Forever West Fest","Winter Magic","Moody County Fair","River Town Farmers Market"]; const have=new Set(x.profiles.map(p=>p.name)); if(expected.some(name=>!have.has(name))) process.exit(1)"; then
               echo "Live audit exported on attempt ${attempt}."
               exit 0
             fi
@@ -139,3 +139,4 @@ jobs:
 
 # Triggered after Gmail profile CRM reconciliation on 2026-09-02.
 # Second post-import verification pass.
+# Waits for all Gmail-profile CRM counterparts before exporting.
