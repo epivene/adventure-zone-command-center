@@ -12,7 +12,7 @@ on:
       - "artifacts/api-server/src/app.ts"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   export:
@@ -98,6 +98,35 @@ jobs:
           }
           fs.writeFileSync('profile-integrity-issues.csv', rows.map((row) => row.map(quote).join(',')).join('\n') + '\n');
           NODE
+
+      - name: Commit sanitized CRM profile catalog
+        run: |
+          mkdir -p .audits
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('profile-integrity-audit.json', 'utf8'));
+          const catalog = {
+            generatedAt: report.generatedAt,
+            summary: report.summary,
+            profiles: report.profiles.map((profile) => ({
+              id: profile.id,
+              name: profile.name,
+              city: profile.city,
+              region: profile.region,
+              gmailThreadCount: profile.gmailThreadCount,
+            })),
+          };
+          fs.writeFileSync(
+            '.audits/live-crm-profile-catalog.json',
+            JSON.stringify(catalog, null, 2) + '\n',
+          );
+          NODE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/live-crm-profile-catalog.json
+          git commit -m "audit: refresh sanitized CRM profile catalog" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
 
       - name: Upload complete protected report
         uses: actions/upload-artifact@v4
