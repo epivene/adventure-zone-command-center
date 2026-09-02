@@ -1,6 +1,7 @@
 {
   "importRevision": 2,
   "matchExisting": true,
+  "requireExisting": true,
   "event": {
     "id": null,
     "name": "Bear Lake Harvest Festival",
