@@ -91,11 +91,41 @@ import eventWrapUpAdminRouter from "./event-wrap-up-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import managerAssistantAdminRouter from "./manager-assistant-admin";
+import { createComputerCallingRouter } from "./computer-calling";
+import { createTwilioVoiceWebhooksRouter } from "./twilio-voice-webhooks";
 import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
+import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
+import { readComputerCallingConfig } from "@/features/calls/computer-calling-config";
+import {
+  DefaultComputerCallingService,
+  DrizzleComputerCallingPhoneContextRepository,
+} from "@/features/calls/computer-calling-service";
+import { DrizzleComputerCallRepository } from "@/features/calls/computer-call-repository";
+import { FixedWindowRateLimiter } from "@/features/calls/computer-calling-rate-limit";
+import { TwilioComputerVoiceProvider } from "@/features/calls/twilio-computer-voice-provider";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
+
+const computerCallingConfig = () => readComputerCallingConfig(process.env);
+const computerCallingAvailable = () => {
+  const result = computerCallingConfig();
+  return isAssistedCallingEnabled() && result.enabled
+    ? { enabled: true as const, callerId: result.config.verifiedCallerId }
+    : { enabled: false as const };
+};
+const computerCallingService = new DefaultComputerCallingService(
+  new DrizzleComputerCallRepository(db),
+  new DrizzleComputerCallingPhoneContextRepository(db),
+  computerCallingAvailable,
+);
+const computerCallingProvider = (config: Extract<ReturnType<typeof computerCallingConfig>, { enabled: true }> ["config"]) =>
+  new TwilioComputerVoiceProvider(config);
+const computerCallingLimiter = new FixedWindowRateLimiter({
+  limit: 10,
+  windowMs: 5 * 60 * 1_000,
+});
 
 router.use(healthRouter);
 router.use(authRouter);
@@ -129,6 +159,12 @@ router.use(managerWrapUpsRouter);
 router.use(managerCommunicationsRouter);
 router.use(managerMeetupsRouter);
 router.use(managerAssistantRouter);
+router.use(createTwilioVoiceWebhooksRouter({
+  service: computerCallingService,
+  providerForConfig: computerCallingProvider,
+  getConfig: computerCallingConfig,
+  isAssistedCallingEnabled: isAssistedCallingEnabled,
+}));
 
 router.use(requireOwnerMiddleware);
 router.use(async (req, _res, next) => {
@@ -181,6 +217,13 @@ router.use(tripsRouter);
 router.use(handoffsRouter);
 router.use(activitiesRouter);
 router.use(callsRouter);
+router.use(createComputerCallingRouter({
+  service: computerCallingService,
+  providerForConfig: computerCallingProvider,
+  getConfig: computerCallingConfig,
+  isAssistedCallingEnabled: isAssistedCallingEnabled,
+  limiter: computerCallingLimiter,
+}));
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);
 router.use(eventProfileDescriptionRouter);
