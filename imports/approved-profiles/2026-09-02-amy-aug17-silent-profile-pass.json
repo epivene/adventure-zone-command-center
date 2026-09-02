@@ -92,7 +92,7 @@
       "status": "unlikely",
       "startsAt": "2026-09-17",
       "endsAt": "2026-09-26",
-      "nextActionKind": "none",
+      "nextActionKind": null,
       "nextActionDueAt": null,
       "travelLegId": null
     },
@@ -257,7 +257,7 @@
       "status": "unlikely",
       "startsAt": "2026-09-16",
       "endsAt": "2026-09-19",
-      "nextActionKind": "none",
+      "nextActionKind": null,
       "nextActionDueAt": null,
       "travelLegId": null
     },
