@@ -31,19 +31,27 @@ This project deploys as two Render services sharing a single PostgreSQL database
 
 ### API service (`adventure-zone-api`)
 
-| Variable                      | Value                                                                               |
-| ----------------------------- | ----------------------------------------------------------------------------------- |
-| `RENDER_DATABASE_URL`         | Your Render PostgreSQL **External Database URL** (found in the database's Info tab) |
-| `CLERK_SECRET_KEY`            | Clerk production secret key (`sk_live_...`)                                         |
-| `CLERK_PUBLISHABLE_KEY`       | Clerk production publishable key (`pk_live_...`)                                    |
-| `OWNER_CLERK_USER_ID`         | Your Clerk user ID (`user_2abc...`)                                                 |
-| `ACT_API_BASE_URL`            | `https://apius.act.com/act.web.api` (server-only)                                   |
-| `ACT_DATABASE_NAME`           | Act! database name (server-only secret)                                             |
-| `ACT_USERNAME`                | Act! read-only username (server-only secret)                                        |
-| `ACT_PASSWORD`                | Act! password (server-only secret)                                                  |
-| `ACT_MIGRATION_APPLY_ENABLED` | `false`; Phase 1 is preview/read-only                                               |
-| `ASSISTED_CALLING_ENABLED`    | `false`; enable only after migration and owner smoke gates pass                     |
-| `VOICEMAIL_LAUNCH_URL`        | Optional private launcher URL; leave unset when no launcher is configured           |
+| Variable                      | Value                                                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| `RENDER_DATABASE_URL`         | Your Render PostgreSQL **External Database URL** (found in the database's Info tab)  |
+| `CLERK_SECRET_KEY`            | Clerk production secret key (`sk_live_...`)                                          |
+| `CLERK_PUBLISHABLE_KEY`       | Clerk production publishable key (`pk_live_...`)                                     |
+| `OWNER_CLERK_USER_ID`         | Your Clerk user ID (`user_2abc...`)                                                  |
+| `ACT_API_BASE_URL`            | `https://apius.act.com/act.web.api` (server-only)                                    |
+| `ACT_DATABASE_NAME`           | Act! database name (server-only secret)                                              |
+| `ACT_USERNAME`                | Act! read-only username (server-only secret)                                         |
+| `ACT_PASSWORD`                | Act! password (server-only secret)                                                   |
+| `ACT_MIGRATION_APPLY_ENABLED` | `false`; Phase 1 is preview/read-only                                                |
+| `ASSISTED_CALLING_ENABLED`    | `false`; enable only after migration and owner smoke gates pass                      |
+| `VOICEMAIL_LAUNCH_URL`        | Optional private launcher URL; leave unset when no launcher is configured            |
+| `TWILIO_VOICE_ENABLED`        | `false`; do not enable until the controlled browser-call test succeeds               |
+| `TWILIO_ACCOUNT_SID`          | Twilio Account SID; server-only Render secret                                        |
+| `TWILIO_API_KEY_SID`          | Twilio API Key SID for browser Voice tokens; server-only Render secret               |
+| `TWILIO_API_KEY_SECRET`       | Matching Twilio API Key secret; server-only Render secret                            |
+| `TWILIO_AUTH_TOKEN`           | Twilio Account Auth Token for webhook signature validation; distinct from API secret |
+| `TWILIO_TWIML_APP_SID`        | TwiML App SID used when issuing browser Voice tokens; server-only Render secret      |
+| `TWILIO_VERIFIED_CALLER_ID`   | Existing verified Adventure Zone work number in E.164 form; server-only Render value |
+| `TWILIO_WEBHOOK_BASE_URL`     | Public API HTTPS origin, e.g. `https://adventure-zone-api.onrender.com`              |
 
 ### Frontend static site (`adventure-zone-web`) — build-time vars
 
@@ -149,7 +157,7 @@ pnpm verify:act-preview
 ```
 
 10. Generate the metadata-only report. Keep
-   `ACT_MIGRATION_APPLY_ENABLED=false` throughout report generation:
+    `ACT_MIGRATION_APPLY_ENABLED=false` throughout report generation:
 
 ```bash
 ACT_PREVIEW_BASE_URL=https://adventure-zone-api.onrender.com/api \
@@ -182,6 +190,103 @@ for backfill verification, owner smoke testing, enablement, and rollback.
 `VOICEMAIL_LAUNCH_URL` is optional and server-only. Configure its private value
 in Render rather than committing it; the user-facing action remains **Leave
 voicemail**, and launching it does not record an outcome.
+
+---
+
+## Twilio computer-calling rollout
+
+This is an outbound-only, owner-controlled rollout. It does not receive calls
+in the browser, change the existing work phone or carrier, route callbacks to a
+browser, record calls, create voicemail, transcribe audio, or support emergency
+calling. Keep both `ASSISTED_CALLING_ENABLED=false` and
+`TWILIO_VOICE_ENABLED=false` until the controlled test step below.
+
+### 1. Obtain and keep Twilio credentials server-only
+
+In the Twilio Console, obtain the Account SID, then create a restricted API key
+for browser Voice tokens and retain its SID and secret. Also obtain the Account
+Auth Token used solely to validate signed Twilio webhooks. The API-key secret
+and Account Auth Token are separate values; never substitute one for the other.
+Enter all values only in the Render API service Environment panel. They must not
+be committed, pasted into tickets, exposed through Vite, or returned by the
+configuration endpoint.
+
+### 2. Verify the existing work caller ID
+
+Verify the existing Adventure Zone work number with Twilio as an outbound caller
+ID and enter it in `TWILIO_VERIFIED_CALLER_ID` in E.164 format. Do not port the
+number or alter its carrier forwarding. Incoming calls and callbacks must remain
+on the physical work phone. This release has no inbound-browser route.
+
+### 3. Create the TwiML App and set the public webhook URLs
+
+Create a TwiML App in the same Twilio account and set its Voice Request URL
+(POST) to the exact public API URL:
+
+```text
+https://<api-host>/api/webhooks/twilio/voice/outbound
+```
+
+Set `TWILIO_TWIML_APP_SID` to that app's SID. Set
+`TWILIO_WEBHOOK_BASE_URL` to the HTTPS origin only, with no trailing path, for
+example `https://adventure-zone-api.onrender.com`. The application-generated
+TwiML sends status callbacks to this exact public URL:
+
+```text
+https://<api-host>/api/webhooks/twilio/voice/status
+```
+
+Do not add an incoming-number Voice URL, recording URL, or any browser inbound
+route. The application validates the Twilio signature for both public webhook
+routes using `TWILIO_AUTH_TOKEN` and rejects unsigned requests.
+
+### 4. Deploy disabled and run no-call smoke checks
+
+1. In Render, set the eight variables listed above, but leave
+   `TWILIO_VOICE_ENABLED=false` and `ASSISTED_CALLING_ENABLED=false`.
+2. Deploy the API and run the normal database migration command. Do not create a
+   Twilio account, verify a number, set production secrets, deploy, or place a
+   call merely to follow this document; those are operator actions in an
+   approved release window.
+3. Confirm `GET https://<api-host>/api/calls/config` reports
+   `computerCalling.enabled: false`. It must remain false until the operator
+   deliberately enables both gates and all credentials are complete.
+4. Confirm the existing Phone Link / `tel:` fallback remains available. Confirm
+   that opening a Call Workspace does not initiate a browser call.
+
+### 5. Controlled own-phone test
+
+Only in an approved release window, set both
+`ASSISTED_CALLING_ENABLED=true` and `TWILIO_VOICE_ENABLED=true` for the API
+service. Use an eligible stored test contact and a phone you own or another
+explicitly consenting internal/test recipient. A Twilio trial account may call
+only Twilio-verified recipient numbers. Never use this feature for emergency
+calling.
+
+1. Open the Call Workspace, set up the microphone, and check the displayed
+   destination and the Adventure Zone work caller ID.
+2. Select **Call now** explicitly; do not use a profile page, auto-dial action,
+   or a browser-supplied destination.
+3. Confirm the recipient sees the verified work number. Exercise mute, keypad,
+   microphone/speaker selection where supported, hangup, and the normal outcome
+   and notes workflow. Verify the technical result links to the saved business
+   outcome without persisting browser tokens or device labels.
+4. Call the work number back and confirm the physical work phone rings. A
+   callback must never arrive in the browser.
+5. Verify Twilio call recording is disabled: do not enable Console recording,
+   do not configure a recording webhook, and confirm no recording or
+   transcription was created for the controlled call. Do not test or send a
+   voicemail; voicemail delivery is outside this feature.
+
+### 6. Disable and roll back
+
+Set `TWILIO_VOICE_ENABLED=false` and save/redeploy the API. Confirm
+`GET /api/calls/config` again reports `computerCalling.enabled: false`; retain
+`ASSISTED_CALLING_ENABLED=false` unless a separately approved assisted-calling
+rollout remains active. Leave additive database migrations and existing call
+records in place. Verify Phone Link remains available, capture only safe release
+metadata and request IDs, and do not copy credentials, full phone numbers,
+tokens, webhook bodies, recordings, or call notes into an incident report.
 
 ---
 
