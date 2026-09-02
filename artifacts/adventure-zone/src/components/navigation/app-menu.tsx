@@ -24,6 +24,7 @@ type MenuGroup = { label: string; items: MenuItem[] };
 const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
+  { href: "/calls/voicemail", label: "Voicemail" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/needs-answer", label: "Needs Answer" },
@@ -32,6 +33,7 @@ const bookingItems: MenuItem[] = [
 const bookingToolItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
+  { href: "/calls/voicemail", label: "Voicemail" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/needs-answer", label: "Needs Answer" },

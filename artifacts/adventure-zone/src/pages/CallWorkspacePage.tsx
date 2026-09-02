@@ -59,10 +59,11 @@ export default function CallWorkspacePage() {
   const bookingId = params.get("bookingId") ?? undefined;
   const contactId = params.get("contactId") ?? undefined;
   const organizationId = params.get("organizationId") ?? undefined;
+  const inboundSessionId = params.get("inboundSessionId") ?? undefined;
   const addMode = params.get("mode") === "add";
   const initialPhone = params.get("phone") ?? "";
   const initialQuery = params.get("q") ?? "";
-  const hasContext = Boolean(followUpId || bookingId || contactId || organizationId);
+  const hasContext = Boolean(followUpId || bookingId || contactId || organizationId || inboundSessionId);
 
   const [data, setData] = useState<any>(null);
   const [config, setConfig] = useState<CallingConfig>({
@@ -84,6 +85,7 @@ export default function CallWorkspacePage() {
     if (bookingId) query.set("bookingId", bookingId);
     if (contactId) query.set("contactId", contactId);
     if (organizationId) query.set("organizationId", organizationId);
+    if (inboundSessionId) query.set("inboundSessionId", inboundSessionId);
 
     setLoading(true);
     setError(null);
@@ -169,6 +171,7 @@ export default function CallWorkspacePage() {
           contextSummary={data.contextSummary ?? null}
           createActivity={createActivityAction}
           defaultScriptKind={data.defaultScriptKind}
+          direction={inboundSessionId ? "incoming" : "outgoing"}
           editActivity={editActivityAction}
           followUp={followUp}
           loadRevisions={listActivityRevisionsAction}
@@ -179,6 +182,7 @@ export default function CallWorkspacePage() {
           phones={data.phones ?? []}
           recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
           scriptPrompts={data.scriptPrompts ?? []}
+          inboundSessionId={inboundSessionId}
           timeline={coerceTimeline(data.timeline)}
           voicemailLauncherUrl={config.voicemailLauncherUrl}
         />

@@ -13,6 +13,9 @@ import { rememberProfileOrigin } from "@/lib/profile-navigation";
 import type { OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { apiGet } from "@/lib/auth-token";
 import { adminWorkspaceForPath, readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
+import { IncomingCallingProvider } from "@/features/calls/incoming-calling-context";
+import { IncomingAvailabilityControl } from "@/components/calls/incoming-availability-control";
+import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
 
 type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon };
 
@@ -89,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location]);
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground">
+    <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground">
       <AssistantNavigationContextSync />
       {!immersiveProfile ? (
         <header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block">
@@ -120,6 +123,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </nav>
             ) : null}
             <div className="ml-auto flex items-center gap-1.5">
+              {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
               {workspace === "booking" ? <AddMenu /> : null}
               <AppMenu workspace={workspace} unreadMessages={unreadMessages} />
             </div>
@@ -136,12 +140,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8">
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
+        <IncomingCallPanel />
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
       {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
       {assistantRequested ? <Suspense fallback={null}><AssistantDrawer /></Suspense> : null}
       {!immersiveProfile ? <MobileBottomNav workspace={workspace} /> : null}
-    </div>
+    </div></IncomingCallingProvider>
   );
 }

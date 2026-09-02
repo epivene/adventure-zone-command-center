@@ -19,6 +19,7 @@ describe("runRequiredSchemaStartup", () => {
     await runRequiredSchemaStartup({
       run,
       ensurePaperNotes: async () => false,
+      ensureInboundCalling: async () => false,
       ensureGoogleWorkspace: async () => {
         googleReady = true;
         return true;
@@ -39,6 +40,7 @@ describe("runRequiredSchemaStartup", () => {
 
     expect(calls).toEqual([
       "required paper notes schema",
+      "required inbound calling schema",
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",

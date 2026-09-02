@@ -56,6 +56,11 @@ import {
   systemPaperNoteWorkerLoopScheduler,
 } from "./features/paper-notes/paper-note-worker-loop";
 import { createOpportunityEmailWorkerLoop } from "./features/opportunity-email/opportunity-email-worker-runtime";
+import { readInboundCallingConfig } from "./features/calls/inbound-calling-config";
+import { TwilioComputerVoiceProvider } from "./features/calls/twilio-computer-voice-provider";
+import { readComputerCallingConfig } from "./features/calls/computer-calling-config";
+import { VoicemailRetentionWorker } from "./features/calls/voicemail-retention-worker";
+import { VoicemailRetentionWorkerLoop } from "./features/calls/voicemail-retention-worker-loop";
 import { GoogleSentProfileLinkSweepService } from "./features/google-workspace/google-sent-profile-link-sweep-service";
 import {
   GoogleSentProfileLinkSweepLoop,
@@ -118,6 +123,15 @@ let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
   Awaited<ReturnType<typeof createOpportunityEmailWorkerLoop>> | null = null;
 let shutdownRequested = false;
+const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
+  new VoicemailRetentionWorker(db, () => {
+    const config = readInboundCallingConfig(process.env);
+    if (!config.enabled) throw new Error("Inbound provider unavailable");
+    return new TwilioComputerVoiceProvider(config.config.voiceConfig);
+  }),
+  () => readInboundCallingConfig(process.env).enabled,
+  (err) => logger.error({ err }, "Inbound voicemail retention pass failed"),
+);
 
 await runRequiredSchemaStartup();
 await runStartupStep(
@@ -161,6 +175,7 @@ const shutdown = createActServerShutdown({
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      voicemailRetentionLoop.close(),
     ]);
   },
   closeServer() {
@@ -370,6 +385,7 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  voicemailRetentionLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();

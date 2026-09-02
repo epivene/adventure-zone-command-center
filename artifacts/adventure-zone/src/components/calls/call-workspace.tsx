@@ -154,6 +154,9 @@ type WorkspaceBooking = {
 
 type WorkspaceProps = {
   mode?: CallWorkspaceMode;
+  /** Inbound sessions are never allowed to initiate another outbound call. */
+  direction?: CallDirection;
+  inboundSessionId?: string | null;
   organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
   contact: WorkspaceContact | null;
   booking: WorkspaceBooking | null;
@@ -182,6 +185,8 @@ type WorkspaceProps = {
 
 export function CallWorkspace({
   mode = "full",
+  direction: workspaceDirection = "outgoing",
+  inboundSessionId = null,
   organization,
   contact,
   booking,
@@ -204,14 +209,15 @@ export function CallWorkspace({
   operations = null,
 }: WorkspaceProps) {
   const isMobileLog = mode === "mobile";
+  const isInbound = workspaceDirection === "incoming";
   const primaryPhone = phones.find((phone) => phone.primary) ?? phones[0] ?? null;
   const initialGuidedKind: GuidedCallScriptKind =
     recommendedGuidedScriptKind ??
     (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
-  const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog ? new Date() : null);
-  const [requestKey, setRequestKey] = useState<string | null>(() => isMobileLog ? crypto.randomUUID() : null);
+  const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog || isInbound ? new Date() : null);
+  const [requestKey, setRequestKey] = useState<string | null>(() => inboundSessionId ?? (isMobileLog ? crypto.randomUUID() : null));
   const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
-  const [direction, setDirection] = useState<CallDirection>(isMobileLog ? "incoming" : "outgoing");
+  const [direction, setDirection] = useState<CallDirection>(isInbound || isMobileLog ? "incoming" : "outgoing");
   const [method, setMethod] = useState<CallMethod>(() => methodForPhone(isMobileLog, primaryPhone));
   const [scriptKind, setScriptKind] = useState<CallScriptKind>(() => scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
   const [guidedKind, setGuidedKind] = useState<GuidedCallScriptKind>(initialGuidedKind);
@@ -329,10 +335,10 @@ export function CallWorkspace({
       (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
     setDraftReady(false);
     setActiveDraftKey(null);
-    setStartedAt(isMobileLog ? new Date() : null);
-    setRequestKey(isMobileLog ? crypto.randomUUID() : null);
+    setStartedAt(isMobileLog || isInbound ? new Date() : null);
+    setRequestKey(inboundSessionId ?? (isMobileLog ? crypto.randomUUID() : null));
     setSelectedPhoneId(primaryPhone?.id ?? null);
-    setDirection(isMobileLog ? "incoming" : "outgoing");
+    setDirection(isInbound || isMobileLog ? "incoming" : "outgoing");
     setMethod(methodForPhone(isMobileLog, primaryPhone));
     setScriptKind(scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
     setGuidedKind(nextGuidedKind);
@@ -382,7 +388,7 @@ export function CallWorkspace({
     }
     setActiveDraftKey(draftKey);
     setDraftReady(true);
-  }, [draftKey, isMobileLog, defaultScriptKind, recommendedGuidedScriptKind]);
+  }, [draftKey, isMobileLog, isInbound, inboundSessionId, defaultScriptKind, recommendedGuidedScriptKind]);
 
   useEffect(() => {
     if (!draftReady || activeDraftKey !== draftKey || !startedAt || !requestKey || isSaved) return;
@@ -664,7 +670,7 @@ export function CallWorkspace({
 
       <div className={`grid gap-5 ${twoColumn} lg:items-start`}>
         <div className="grid gap-5">
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="phone-actions-title">
+          {!isInbound ? <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="phone-actions-title">
             <h2 className="text-xl font-bold" id="phone-actions-title">Phone</h2>
             {phones.length ? (
               <div className="mt-3 grid gap-3">
@@ -723,7 +729,7 @@ export function CallWorkspace({
                 No phone is linked to this contact.
               </p>
             )}
-          </section>
+          </section> : null}
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-details-title">
             <h2 className="text-xl font-bold" id="call-details-title">{isMobileLog ? "Call details" : "Record call"}</h2>

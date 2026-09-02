@@ -18,6 +18,15 @@ export interface ComputerCallingCapability {
   callerIdDisplay: string | null;
 }
 
+export interface InboundCallingCapability {
+  enabled: boolean;
+  reason: "available" | "disabled" | "configuration_incomplete";
+  inboundNumberDisplay: string | null;
+  retentionDays: number;
+  maxSeconds: number;
+  missing?: string[];
+}
+
 export interface ComputerCallSession {
   id: string;
   status: ComputerCallStatus;

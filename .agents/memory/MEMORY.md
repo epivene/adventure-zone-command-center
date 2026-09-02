@@ -14,3 +14,4 @@
 - [Role login routing boundary](role-login-routing.md) — broad owner middleware must not intercept Office, Manager, or development login routes.
 - [PostgreSQL prepared DO blocks](postgres-prepared-do-blocks.md) — application parameters are not visible inside dollar-quoted DO bodies; guard optional tables outside PL/pgSQL.
 - [Stale workflow port owners](stale-workflow-port-owners.md) — when a restart builds new code but logs EADDRINUSE, an orphan may still serve the old bundle.
+- [Inbound browser calling safety](inbound-browser-calling-safety.md) — one leased browser may answer; answered calls are never recorded; voicemail media expires after 30 days.

@@ -93,6 +93,8 @@ import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import managerAssistantAdminRouter from "./manager-assistant-admin";
 import { createComputerCallingRouter } from "./computer-calling";
 import { createTwilioVoiceWebhooksRouter } from "./twilio-voice-webhooks";
+import { createInboundComputerCallingRouter } from "./inbound-computer-calling";
+import { createTwilioInboundVoiceWebhooksRouter } from "./twilio-inbound-voice-webhooks";
 import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
 import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
 import { readComputerCallingConfig } from "@/features/calls/computer-calling-config";
@@ -103,6 +105,13 @@ import {
 import { DrizzleComputerCallRepository } from "@/features/calls/computer-call-repository";
 import { FixedWindowRateLimiter } from "@/features/calls/computer-calling-rate-limit";
 import { TwilioComputerVoiceProvider } from "@/features/calls/twilio-computer-voice-provider";
+import { readInboundCallingConfig } from "@/features/calls/inbound-calling-config";
+import { DrizzleIncomingAvailabilityRepository } from "@/features/calls/incoming-availability-repository";
+import { IncomingAvailabilityService } from "@/features/calls/incoming-availability-service";
+import { DrizzleInboundCallRepository } from "@/features/calls/inbound-call-repository";
+import { DrizzleInboundCallerMatcher } from "@/features/calls/inbound-caller-matcher";
+import { InboundCallService } from "@/features/calls/inbound-call-service";
+import { InboundVoicemailService } from "@/features/calls/inbound-voicemail-service";
 import { requireOwnerMiddleware } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -125,6 +134,15 @@ const computerCallingProvider = (config: Extract<ReturnType<typeof computerCalli
 const computerCallingLimiter = new FixedWindowRateLimiter({
   limit: 10,
   windowMs: 5 * 60 * 1_000,
+});
+const inboundAvailabilityService = new IncomingAvailabilityService(
+  new DrizzleIncomingAvailabilityRepository(db),
+);
+const inboundCallService = new InboundCallService(new DrizzleInboundCallRepository(db), new DrizzleInboundCallerMatcher(db));
+const inboundVoicemailService = new InboundVoicemailService(db, () => {
+  const config = readInboundCallingConfig(process.env);
+  if (!config.enabled) throw new Error("Inbound voice provider unavailable");
+  return new TwilioComputerVoiceProvider(config.config.voiceConfig);
 });
 
 router.use(healthRouter);
@@ -164,6 +182,14 @@ router.use(createTwilioVoiceWebhooksRouter({
   providerForConfig: computerCallingProvider,
   getConfig: computerCallingConfig,
   isAssistedCallingEnabled: isAssistedCallingEnabled,
+}));
+router.use(createTwilioInboundVoiceWebhooksRouter({
+  getInboundConfig: () => readInboundCallingConfig(process.env),
+  isAssistedCallingEnabled,
+  providerForConfig: computerCallingProvider,
+  availability: inboundAvailabilityService,
+  calls: inboundCallService,
+  voicemails: inboundVoicemailService,
 }));
 
 router.use(requireOwnerMiddleware);
@@ -223,6 +249,18 @@ router.use(createComputerCallingRouter({
   getConfig: computerCallingConfig,
   isAssistedCallingEnabled: isAssistedCallingEnabled,
   limiter: computerCallingLimiter,
+}));
+router.use(createInboundComputerCallingRouter({
+  service: inboundAvailabilityService,
+  getConfig: () => readInboundCallingConfig(process.env),
+  isAssistedCallingEnabled,
+  providerForConfig: () => {
+    const config = readInboundCallingConfig(process.env);
+    if (!config.enabled) throw new Error("Inbound voice provider unavailable");
+    return new TwilioComputerVoiceProvider(config.config.voiceConfig);
+  },
+  calls: inboundCallService,
+  voicemails: inboundVoicemailService,
 }));
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);

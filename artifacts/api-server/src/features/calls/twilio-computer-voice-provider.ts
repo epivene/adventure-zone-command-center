@@ -3,6 +3,7 @@ import twilio from "twilio";
 import type { ComputerCallingConfig } from "./computer-calling-config";
 import type { ComputerCallStatus } from "./computer-calling-types";
 import type { ComputerVoiceProvider } from "./computer-voice-provider";
+import type { InboundVoiceProvider, ProviderRecordingMedia, SignedWebhookInput } from "./inbound-voice-provider";
 
 const statusMap: Record<string, ComputerCallStatus> = {
   initiated: "queued",
@@ -16,20 +17,18 @@ const statusMap: Record<string, ComputerCallStatus> = {
   failed: "failed",
 };
 
-export class TwilioComputerVoiceProvider implements ComputerVoiceProvider {
+export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, InboundVoiceProvider {
   constructor(private readonly config: ComputerCallingConfig) {}
 
-  createBrowserToken(input: { identity: "owner"; ttlSeconds: number }): string {
-    const token = new twilio.jwt.AccessToken(
-      this.config.accountSid,
-      this.config.apiKeySid,
-      this.config.apiKeySecret,
-      { identity: input.identity, ttl: input.ttlSeconds },
-    );
-    token.addGrant(new twilio.jwt.AccessToken.VoiceGrant({
-      outgoingApplicationSid: this.config.twimlAppSid,
-    }));
-    return token.toJwt();
+  createBrowserToken(input: { identity: "owner"; ttlSeconds: number }): string;
+  createBrowserToken(input: { identity: string; ttlSeconds: number; allowIncoming: boolean }): Promise<{ token: string; expiresAt: Date }>;
+  createBrowserToken(input: { identity: "owner"; ttlSeconds: number } | { identity: string; ttlSeconds: number; allowIncoming: boolean }): string | Promise<{ token: string; expiresAt: Date }> {
+    const token = new twilio.jwt.AccessToken(this.config.accountSid, this.config.apiKeySid, this.config.apiKeySecret, { identity: input.identity, ttl: input.ttlSeconds });
+    token.addGrant(new twilio.jwt.AccessToken.VoiceGrant({ outgoingApplicationSid: this.config.twimlAppSid, incomingAllow: "allowIncoming" in input && input.allowIncoming }));
+    const value = token.toJwt();
+    return "allowIncoming" in input
+      ? Promise.resolve({ token: value, expiresAt: new Date(Date.now() + input.ttlSeconds * 1000) })
+      : value;
   }
 
   validateWebhook(input: {
@@ -61,5 +60,27 @@ export class TwilioComputerVoiceProvider implements ComputerVoiceProvider {
 
   normalizeStatus(status: string): ComputerCallStatus {
     return statusMap[status] ?? "unknown";
+  }
+  createClientDialTwiml(input: { identity: string; actionUrl: string; statusCallbackUrl: string }): string {
+    const response = new twilio.twiml.VoiceResponse();
+    response.dial({ action: input.actionUrl, method: "POST", answerOnBridge: true }).client({ statusCallback: input.statusCallbackUrl, statusCallbackEvent: ["initiated", "answered", "completed"] }, input.identity);
+    return response.toString();
+  }
+  createVoicemailTwiml(input: { actionUrl: string; recordingStatusCallbackUrl: string; maxSeconds: number }): string {
+    const response = new twilio.twiml.VoiceResponse();
+    response.say("You've reached The Adventure Zone. We can't answer right now. Please leave your name, event, phone number, and a brief message after the beep.");
+    response.record({ action: input.actionUrl, method: "POST", recordingStatusCallback: input.recordingStatusCallbackUrl, recordingStatusCallbackEvent: ["completed"], maxLength: input.maxSeconds, playBeep: true, transcribe: false });
+    response.say("Thank you. Goodbye.");
+    return response.toString();
+  }
+  createUnavailableTwiml(): string { const response = new twilio.twiml.VoiceResponse(); response.say("The Adventure Zone cannot answer due to a temporary technical problem. Please try again later."); response.hangup(); return response.toString(); }
+  async getRecordingMedia(recordingSid: string): Promise<ProviderRecordingMedia> {
+    const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });
+    const response = await (client.httpClient.request as any)({ method: "GET", uri: `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Recordings/${recordingSid}.mp3` });
+    return { body: response.body as NodeJS.ReadableStream, contentType: "audio/mpeg" };
+  }
+  async deleteRecording(recordingSid: string): Promise<"deleted" | "already_absent"> {
+    const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });
+    try { await client.recordings(recordingSid).remove(); return "deleted"; } catch (error: any) { if (error?.status === 404) return "already_absent"; throw error; }
   }
 }

@@ -40,6 +40,9 @@ export interface ComputerCallIntentContext {
 
 export interface BrowserVoiceDevice {
   prepare(token: string): Promise<void>;
+  register(): Promise<void>;
+  unregister(): Promise<void>;
+  updateToken(token: string): Promise<void>;
   connect(params: { sessionId: string }): Promise<BrowserVoiceCall>;
   listAudioDevices(): Promise<{
     inputs: MediaDeviceInfo[];
@@ -48,6 +51,10 @@ export interface BrowserVoiceDevice {
   selectInput(deviceId: string): Promise<void>;
   selectOutput(deviceId: string): Promise<boolean>;
   destroy(): Promise<void>;
+  on(
+    event: "registered" | "unregistered" | "tokenWillExpire" | "incoming" | "error",
+    listener: (...args: unknown[]) => void,
+  ): void;
 }
 
 export interface BrowserVoiceCall {
@@ -56,6 +63,20 @@ export interface BrowserVoiceCall {
   disconnect(): void;
   on(
     event: "ringing" | "accept" | "disconnect" | "cancel" | "error",
+    listener: (...args: unknown[]) => void,
+  ): void;
+}
+
+/** An inbound SDK call. Its parameters are untrusted except for the session ID. */
+export interface BrowserIncomingCall {
+  parameters: Readonly<Record<string, string>>;
+  accept(): Promise<void>;
+  reject(): void;
+  disconnect(): void;
+  mute(value: boolean): void;
+  sendDigits(value: string): void;
+  on(
+    event: "accept" | "disconnect" | "cancel" | "error",
     listener: (...args: unknown[]) => void,
   ): void;
 }

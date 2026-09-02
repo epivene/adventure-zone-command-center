@@ -45,9 +45,7 @@ function unavailable(reason: "disabled" | "configuration_incomplete"): ComputerC
   };
 }
 
-export function readComputerCallingConfig(env: Environment): ComputerCallingConfigResult {
-  if (env.TWILIO_VOICE_ENABLED !== "true") return unavailable("disabled");
-
+export function readTwilioVoiceConfig(env: Environment): ComputerCallingConfig | null {
   const accountSid = requiredValue(env, "TWILIO_ACCOUNT_SID");
   const apiKeySid = requiredValue(env, "TWILIO_API_KEY_SID");
   const apiKeySecret = requiredValue(env, "TWILIO_API_KEY_SECRET");
@@ -61,24 +59,32 @@ export function readComputerCallingConfig(env: Environment): ComputerCallingConf
     || !webhookBaseUrl || !e164Pattern.test(verifiedCallerId)
     || !validWebhookBaseUrl(webhookBaseUrl, env.NODE_ENV)
   ) {
-    return unavailable("configuration_incomplete");
+    return null;
   }
 
   return {
+    accountSid,
+    apiKeySid,
+    apiKeySecret,
+    authToken,
+    twimlAppSid,
+    verifiedCallerId,
+    webhookBaseUrl,
+  };
+}
+
+export function readComputerCallingConfig(env: Environment): ComputerCallingConfigResult {
+  if (env.TWILIO_VOICE_ENABLED !== "true") return unavailable("disabled");
+  const config = readTwilioVoiceConfig(env);
+  if (!config) return unavailable("configuration_incomplete");
+
+  return {
     enabled: true,
-    config: {
-      accountSid,
-      apiKeySid,
-      apiKeySecret,
-      authToken,
-      twimlAppSid,
-      verifiedCallerId,
-      webhookBaseUrl,
-    },
+    config,
     capability: {
       enabled: true,
       reason: "available",
-      callerIdDisplay: verifiedCallerId,
+      callerIdDisplay: config.verifiedCallerId,
     },
   };
 }

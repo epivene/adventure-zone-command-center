@@ -64,6 +64,7 @@ const SchedulePage = lazy(() => import("@/pages/SchedulePage"));
 const LegManagementPage = lazy(() => import("@/pages/RoutesPage").then(({ LegManagementPage }) => ({ default: LegManagementPage })));
 const TripDetailPage = lazy(() => import("@/pages/TripDetailPage"));
 const CallWorkspacePage = lazy(() => import("@/pages/CallWorkspacePage"));
+const VoicemailInboxPage = lazy(() => import("@/pages/VoicemailInboxPage"));
 const MobileCallLogPage = lazy(() => import("@/pages/MobileCallLogPage")) as LazyExoticComponent<ComponentType<any>>;
 const NeedsAnswerPage = lazy(() => import("@/pages/NeedsAnswerPage"));
 const EventProfilePage = lazy(() => import("@/pages/EventProfilePage"));
@@ -310,6 +311,7 @@ function AdminProtectedApp() {
           <Route path="/calls/new"><CallsRedirect /></Route>
           <Route path="/calls/log" component={MobileCallLogPage} />
           <Route path="/calls/workspace" component={CallWorkspacePage} />
+          <Route path="/calls/voicemail" component={VoicemailInboxPage} />
           <Route path="/calls/mobile"><CallLogRedirect /></Route>
           <Route path="/needs-answer" component={NeedsAnswerPage} />
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
