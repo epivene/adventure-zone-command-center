@@ -1,0 +1,420 @@
+[
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Peach Festival",
+      "city": "Palisade",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Peach Festival - Palisade CO\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Peach Festival - Palisade CO\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "4th of July",
+      "city": "Mandan",
+      "region": "ND"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/4th of July - Mandan ND\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/4th of July - Mandan ND\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Watford City Event",
+      "city": "Watford City",
+      "region": "ND"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Watford City Event - Watford City ND\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Watford City Event - Watford City ND\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Enumclaw Expo",
+      "city": "Enumclaw",
+      "region": "WA"
+    },
+    "profile": {
+      "placeType": "venue",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Enumclaw Expo - Enumclaw WA\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Enumclaw Expo - Enumclaw WA\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Art & Living History Festival",
+      "city": "Fillmore",
+      "region": "UT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Art & Living History Festival - Fillmore UT\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Art & Living History Festival - Fillmore UT\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Fish Fest",
+      "city": "Whitefish",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Fish Fest - Whitefish MT\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Fish Fest - Whitefish MT\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Owyhee County Fair",
+      "city": "Homedale",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Owyhee County Fair - Homedale ID\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Owyhee County Fair - Homedale ID\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Forever West Fest",
+      "city": "Cheyenne",
+      "region": "WY"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Forever West Fest - Cheyenne WY\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Forever West Fest - Cheyenne WY\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Winter Magic",
+      "city": "Augusta",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Winter Magic - Augusta MT\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Winter Magic - Augusta MT\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "Moody County Fair",
+      "city": "Flandreau",
+      "region": "SD"
+    },
+    "profile": {
+      "placeType": "fair",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/Moody County Fair - Flandreau SD\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/Moody County Fair - Flandreau SD\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "event": {
+      "id": null,
+      "name": "River Town Farmers Market",
+      "city": "Drummond",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "description": "Created to provide a CRM counterpart for Gmail profile label \"Z - AdventureZone/Profiles/River Town Farmers Market - Drummond MT\".",
+      "phone": "",
+      "website": "",
+      "address1": "",
+      "address2": "",
+      "postalCode": ""
+    },
+    "contacts": [],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "new_lead",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Gmail profile label link",
+        "body": "This CRM profile was created on 2026-09-02 to match the existing Gmail profile label \"Z - AdventureZone/Profiles/River Town Farmers Market - Drummond MT\". Contact and booking details should be filled from the linked email history when reviewed."
+      }
+    ]
+  }
+]
