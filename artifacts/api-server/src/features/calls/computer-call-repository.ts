@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, notInArray, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, lte, notInArray, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { computerCallSessions } from "@/db/schema";
@@ -58,6 +58,19 @@ const terminalStatuses: ComputerCallStatus[] = [
 function isTerminal(status: ComputerCallStatus): boolean {
   return terminalStatuses.includes(status);
 }
+
+const statusRank: Record<ComputerCallStatus, number> = {
+  created: 0,
+  unknown: 4,
+  queued: 1,
+  ringing: 2,
+  "in-progress": 3,
+  completed: 4,
+  busy: 4,
+  "no-answer": 4,
+  canceled: 4,
+  failed: 4,
+};
 
 function isUniqueViolation(error: unknown): boolean {
   const seen = new Set<unknown>();
@@ -166,26 +179,61 @@ export class DrizzleComputerCallRepository implements ComputerCallRepository {
     input: ProviderStatusUpdate,
   ): Promise<ComputerCallSessionRecord | null> {
     const terminal = isTerminal(input.status);
+    const providerDuration = input.durationSeconds === null
+      || input.durationSeconds === undefined
+      || !Number.isFinite(input.durationSeconds)
+      ? null
+      : Math.max(0, Math.floor(input.durationSeconds));
+    const currentStatusRank = sql<number>`case ${computerCallSessions.status}
+      when 'unknown' then case
+        when ${computerCallSessions.answeredAt} is not null then 3
+        when ${computerCallSessions.startedAt} is not null then 2
+        else 1
+      end
+      when 'queued' then 1
+      when 'ringing' then 2
+      when 'in-progress' then 3
+      when 'completed' then 4
+      when 'busy' then 4
+      when 'no-answer' then 4
+      when 'canceled' then 4
+      when 'failed' then 4
+      else 0
+    end`;
     const [updated] = await this.database
       .update(computerCallSessions)
       .set({
         status: input.status,
-        startedAt: input.status === "queued" || input.status === "ringing"
-          || input.status === "in-progress"
-          ? sql`coalesce(${computerCallSessions.startedAt}, ${input.occurredAt})`
+        startedAt: input.status !== "created" && input.status !== "unknown"
+          ? sql`coalesce(
+              ${computerCallSessions.startedAt},
+              ${computerCallSessions.intentConsumedAt},
+              ${computerCallSessions.createdAt}
+            )`
           : undefined,
         answeredAt: input.status === "in-progress"
           ? sql`coalesce(${computerCallSessions.answeredAt}, ${input.occurredAt})`
           : undefined,
         endedAt: terminal ? input.occurredAt : undefined,
         updatedAt: input.occurredAt,
-        durationSeconds: input.durationSeconds,
+        durationSeconds: terminal
+          ? providerDuration ?? sql`case
+              when ${computerCallSessions.answeredAt} is null then 0
+              else greatest(
+                0,
+                floor(extract(epoch from (
+                  ${input.occurredAt} - ${computerCallSessions.answeredAt}
+                )))::integer
+              )
+            end`
+          : undefined,
         errorCode: input.errorCode,
         errorSummary: input.errorSummary,
       })
       .where(and(
         eq(computerCallSessions.providerCallSid, input.providerCallSid),
         notInArray(computerCallSessions.status, terminalStatuses),
+        lte(currentStatusRank, statusRank[input.status]),
       ))
       .returning();
 

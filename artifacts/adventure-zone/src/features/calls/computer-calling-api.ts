@@ -86,14 +86,39 @@ async function body(response: Response): Promise<unknown> {
   return response.json().catch(invalidShape);
 }
 
+const recoveryMessages: Record<string, string> = {
+  calling_suppressed:
+    "This number is marked Do Not Call. Choose another approved number or use Phone Link.",
+  phone_invalid:
+    "This phone number cannot be called from the workspace. Verify the number or use Phone Link.",
+  rate_limited:
+    "Computer calling is temporarily busy. Wait a moment, then try again or use Phone Link.",
+  configuration_incomplete:
+    "Computer calling is not configured. Use Phone Link or contact an administrator.",
+  configuration_missing:
+    "Computer calling is not configured. Use Phone Link or contact an administrator.",
+  calling_disabled:
+    "Computer calling is unavailable. Use Phone Link or contact an administrator.",
+  token_unavailable:
+    "Computer calling could not start. Try again or use Phone Link.",
+  intent_unavailable:
+    "Computer calling could not start. Try again or use Phone Link.",
+};
+
+function recoveryMessage(error: string | null) {
+  const normalized = error?.trim().toLowerCase() ?? "";
+  return recoveryMessages[normalized]
+    ?? "Computer calling could not be completed. Try again or use Phone Link.";
+}
+
 async function checked(response: Response): Promise<unknown> {
-  const result = await body(response);
-  if (response.ok) return result;
+  if (response.ok) return body(response);
+  const result = await response.json().catch(() => null);
   const error =
     isRecord(result) && isString(result.error)
       ? result.error
-      : `API ${response.status}`;
-  throw new ComputerCallingApiError(error, response.status);
+      : null;
+  throw new ComputerCallingApiError(recoveryMessage(error), response.status);
 }
 
 function tokenResponse(value: unknown): { token: string; expiresAt: string } {

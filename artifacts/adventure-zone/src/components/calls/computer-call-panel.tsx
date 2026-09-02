@@ -25,7 +25,10 @@ type ComputerCallPanelProps = {
   callerIdDisplay: string;
   onTerminal?: (call: ComputerCallTerminal) => void;
   onPhaseChange?: (active: boolean) => void;
+  onLivePhaseChange?: (active: boolean) => void;
+  onTechnicalPendingChange?: (pending: boolean) => void;
   onReset?: () => void;
+  onClose?: () => void;
 };
 
 function phaseLabel(phase: ReturnType<typeof useComputerCall>["state"]["phase"]) {
@@ -78,7 +81,10 @@ export function ComputerCallPanel({
   callerIdDisplay,
   onTerminal,
   onPhaseChange,
+  onLivePhaseChange,
+  onTechnicalPendingChange,
   onReset,
+  onClose,
 }: ComputerCallPanelProps) {
   const context = useMemo(() => ({ organizationId, contactId: contact.id, phoneId: phone.id }), [organizationId, contact.id, phone.id]);
   const createDevice = useCallback(() => new TwilioBrowserDevice(), []);
@@ -122,6 +128,7 @@ export function ComputerCallPanel({
   }, [state.endedAt, state.phase, state.startedAt]);
 
   const active = state.phase === "connecting" || state.phase === "ringing" || state.phase === "connected" || state.phase === "ending";
+  const live = state.phase === "requesting-intent" || active;
   const terminal = state.phase === "completed" || state.phase === "failed";
   const selectionLocked = attemptPending || state.phase === "requesting-intent" || active ||
     (terminal && Boolean(state.sessionId) && !state.reconciled);
@@ -132,6 +139,14 @@ export function ComputerCallPanel({
   useEffect(() => {
     onPhaseChange?.(selectionLocked);
   }, [onPhaseChange, selectionLocked]);
+
+  useEffect(() => {
+    onLivePhaseChange?.(live);
+  }, [live, onLivePhaseChange]);
+
+  useEffect(() => {
+    onTechnicalPendingChange?.(Boolean(state.sessionId) && !state.reconciled);
+  }, [onTechnicalPendingChange, state.reconciled, state.sessionId]);
 
   useEffect(() => {
     if (state.phase === "failed" && !state.sessionId) {
@@ -149,6 +164,14 @@ export function ComputerCallPanel({
     attemptPhoneIdRef.current = null;
     setAttemptPending(false);
     onReset?.();
+  }
+
+  function close() {
+    computerCall.reset();
+    emittedSessionRef.current = null;
+    attemptPhoneIdRef.current = null;
+    setAttemptPending(false);
+    onClose?.();
   }
 
   function callNow() {
@@ -202,6 +225,7 @@ export function ComputerCallPanel({
         {state.phase === "connected" ? <button className="button-secondary" onClick={() => computerCall.mute(!state.muted)} type="button">{state.muted ? "Unmute microphone" : "Mute microphone"}</button> : null}
         {active ? <button className="button-secondary" onClick={computerCall.hangUp} type="button">Hang up</button> : null}
         {terminal ? <button className="button-secondary" onClick={reset} type="button">Set up another call</button> : null}
+        <button className="button-secondary" onClick={close} type="button">Cancel computer call</button>
       </div>
 
       {terminal && state.sessionId && !state.reconciled ? (

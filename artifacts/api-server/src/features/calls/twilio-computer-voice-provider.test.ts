@@ -108,7 +108,7 @@ describe("TwilioComputerVoiceProvider", () => {
   });
 
   it.each<[string, ComputerCallStatus]>([
-    ["initiated", "created"],
+    ["initiated", "queued"],
     ["queued", "queued"],
     ["ringing", "ringing"],
     ["in-progress", "in-progress"],

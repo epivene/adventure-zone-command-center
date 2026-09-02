@@ -70,4 +70,36 @@ describe("call draft storage", () => {
       savedAt: "2026-08-02T00:00:00.000Z",
     });
   });
+
+  it("rejects a tampered browser-VoIP draft instead of restoring its technical linkage", () => {
+    const key = buildCallDraftKey(context);
+    localStorage.setItem(key, JSON.stringify({ ...draft, method: "browser_voip" }));
+
+    expect(loadCallDraft(key, new Date("2026-08-02T00:00:00.000Z"))).toBeNull();
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("never persists browser-VoIP request linkage into a resumable draft", () => {
+    const key = buildCallDraftKey(context);
+    saveCallDraft(
+      key,
+      { ...draft, method: "browser_voip", requestKey: "technical-session-id" },
+      new Date("2026-08-02T00:00:00.000Z"),
+    );
+
+    expect(localStorage.getItem(key)).toBeNull();
+  });
+
+  it("removes an existing Phone Link draft when browser-VoIP linkage is rejected", () => {
+    const key = buildCallDraftKey(context);
+    saveCallDraft(key, draft, new Date("2026-08-02T00:00:00.000Z"));
+
+    saveCallDraft(
+      key,
+      { ...draft, method: "browser_voip", requestKey: "technical-session-id" },
+      new Date("2026-08-02T00:00:01.000Z"),
+    );
+
+    expect(localStorage.getItem(key)).toBeNull();
+  });
 });

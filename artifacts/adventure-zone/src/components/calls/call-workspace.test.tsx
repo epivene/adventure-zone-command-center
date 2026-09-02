@@ -127,7 +127,7 @@ describe("CallWorkspace shared phone actions", () => {
     fireEvent.click(screen.getByRole("button", { name: "Simulate active computer call" }));
     expect(screen.getByLabelText("Phone number")).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Finish computer call" }));
-    expect(screen.getByLabelText("Phone number")).not.toBeDisabled();
+    expect(screen.getByLabelText("Phone number")).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Call note"), { target: { value: "Retry this outcome." } });
     fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
 

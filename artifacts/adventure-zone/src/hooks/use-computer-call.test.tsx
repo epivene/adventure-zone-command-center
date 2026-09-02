@@ -241,6 +241,35 @@ describe("useComputerCall", () => {
     );
   });
 
+  it.each([
+    ["calling_suppressed", "This number is marked Do Not Call. Choose another approved number or use Phone Link."],
+    ["phone_invalid", "This phone number cannot be called from the workspace. Verify the number or use Phone Link."],
+    ["rate_limited", "Computer calling is temporarily busy. Wait a moment, then try again or use Phone Link."],
+    ["configuration_incomplete", "Computer calling is not configured. Use Phone Link or contact an administrator."],
+  ])("translates %s into a plain-language recovery message", async (code, expected) => {
+    apiFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: code }), { status: 400, headers: { "Content-Type": "application/json" } }),
+    );
+
+    await expect(computerCallingApi.requestToken()).rejects.toEqual(
+      new ComputerCallingApiError(expected, 400),
+    );
+  });
+
+  it.each([
+    [new Response(null, { status: 500 }), "a missing error body"],
+    [new Response(JSON.stringify({ error: "provider exploded" }), { status: 500 }), "an unrecognized error"],
+  ])("uses generic recovery guidance for %s", async (response) => {
+    apiFetch.mockResolvedValueOnce(response);
+
+    await expect(computerCallingApi.requestToken()).rejects.toEqual(
+      new ComputerCallingApiError(
+        "Computer calling could not be completed. Try again or use Phone Link.",
+        500,
+      ),
+    );
+  });
+
   it("rejects an intent response with a non-UUID session ID", async () => {
     apiFetch.mockResolvedValue(
       new Response(

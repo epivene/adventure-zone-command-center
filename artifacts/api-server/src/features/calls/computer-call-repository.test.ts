@@ -311,4 +311,314 @@ describe("DrizzleComputerCallRepository", () => {
     }));
     expect(duplicate).toEqual(completed);
   });
+
+  it.each([
+    ["busy", null, 0],
+    ["no-answer", undefined, 0],
+    ["failed", -5, 0],
+    ["completed", 17, 17],
+  ] as const)(
+    "persists complete timing for direct %s terminal status",
+    async (status, durationSeconds, expectedDuration) => {
+      const created = await repository.createIntent(intentInput());
+      await repository.consumeIntent({
+        id: created.id,
+        providerCallSid: `CA-direct-${status}`,
+        callerIdentity: "owner",
+        now: NOW,
+      });
+      const endedAt = new Date("2026-09-02T12:00:30.000Z");
+
+      const terminal = await repository.updateProviderStatus({
+        providerCallSid: `CA-direct-${status}`,
+        status,
+        occurredAt: endedAt,
+        durationSeconds,
+      });
+
+      expect(terminal).toEqual(expect.objectContaining({
+        status,
+        startedAt: NOW,
+        answeredAt: null,
+        endedAt,
+        durationSeconds: expectedDuration,
+      }));
+    },
+  );
+
+  it("preserves authoritative timestamps across the normal provider lifecycle", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-lifecycle",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-lifecycle",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:00:05.000Z"),
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-lifecycle",
+      status: "ringing",
+      occurredAt: new Date("2026-09-02T12:00:10.000Z"),
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-lifecycle",
+      status: "in-progress",
+      occurredAt: new Date("2026-09-02T12:00:15.000Z"),
+    });
+
+    const completed = await repository.updateProviderStatus({
+      providerCallSid: "CA-lifecycle",
+      status: "completed",
+      occurredAt: new Date("2026-09-02T12:00:45.000Z"),
+      durationSeconds: 30,
+    });
+
+    expect(completed).toEqual(expect.objectContaining({
+      status: "completed",
+      startedAt: NOW,
+      answeredAt: new Date("2026-09-02T12:00:15.000Z"),
+      endedAt: new Date("2026-09-02T12:00:45.000Z"),
+      durationSeconds: 30,
+    }));
+  });
+
+  it("ignores out-of-order active and late callbacks", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-out-of-order",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    const connected = await repository.updateProviderStatus({
+      providerCallSid: "CA-out-of-order",
+      status: "in-progress",
+      occurredAt: new Date("2026-09-02T12:00:20.000Z"),
+    });
+    const lateRinging = await repository.updateProviderStatus({
+      providerCallSid: "CA-out-of-order",
+      status: "ringing",
+      occurredAt: new Date("2026-09-02T12:00:25.000Z"),
+    });
+
+    expect(lateRinging).toEqual(connected);
+
+    const completed = await repository.updateProviderStatus({
+      providerCallSid: "CA-out-of-order",
+      status: "completed",
+      occurredAt: new Date("2026-09-02T12:01:00.000Z"),
+    });
+    const lateQueued = await repository.updateProviderStatus({
+      providerCallSid: "CA-out-of-order",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:01:05.000Z"),
+    });
+
+    expect(completed).toEqual(expect.objectContaining({
+      status: "completed",
+      startedAt: NOW,
+      answeredAt: new Date("2026-09-02T12:00:20.000Z"),
+      endedAt: new Date("2026-09-02T12:01:00.000Z"),
+      durationSeconds: 40,
+    }));
+    expect(lateQueued).toEqual(completed);
+  });
+
+  it("stores an unknown status for review without locking out a later known status", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-unknown-recovery",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-recovery",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:00:05.000Z"),
+    });
+
+    const unknown = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-recovery",
+      status: "unknown",
+      occurredAt: new Date("2026-09-02T12:00:06.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    });
+
+    expect(unknown).toEqual(expect.objectContaining({
+      status: "unknown",
+      startedAt: NOW,
+      errorSummary: "Unknown provider status: future-state",
+    }));
+
+    const ringing = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-recovery",
+      status: "ringing",
+      occurredAt: new Date("2026-09-02T12:00:07.000Z"),
+      errorSummary: null,
+    });
+    expect(ringing).toEqual(expect.objectContaining({
+      status: "ringing",
+      startedAt: NOW,
+      errorSummary: null,
+    }));
+  });
+
+  it("does not regress an answered call after an intervening unknown status", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-unknown-after-answer",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-answer",
+      status: "in-progress",
+      occurredAt: new Date("2026-09-02T12:00:10.000Z"),
+    });
+    const unknown = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-answer",
+      status: "unknown",
+      occurredAt: new Date("2026-09-02T12:00:11.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    });
+
+    const delayedQueued = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-answer",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:00:12.000Z"),
+    });
+
+    expect(unknown).toEqual(expect.objectContaining({
+      status: "unknown",
+      startedAt: NOW,
+      answeredAt: new Date("2026-09-02T12:00:10.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    }));
+    expect(delayedQueued).toEqual(unknown);
+  });
+
+  it("does not regress a started call to created after an intervening unknown status", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-unknown-after-queued",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-queued",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:00:05.000Z"),
+    });
+    const unknown = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-queued",
+      status: "unknown",
+      occurredAt: new Date("2026-09-02T12:00:06.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    });
+
+    const delayedCreated = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-queued",
+      status: "created",
+      occurredAt: new Date("2026-09-02T12:00:07.000Z"),
+    });
+
+    expect(delayedCreated).toEqual(unknown);
+    expect(delayedCreated).toEqual(expect.objectContaining({
+      status: "unknown",
+      startedAt: NOW,
+    }));
+  });
+
+  it("does not regress a ringing call after an intervening unknown status", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-unknown-after-ringing",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-ringing",
+      status: "ringing",
+      occurredAt: new Date("2026-09-02T12:00:05.000Z"),
+    });
+    const unknown = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-ringing",
+      status: "unknown",
+      occurredAt: new Date("2026-09-02T12:00:06.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    });
+
+    const delayedQueued = await repository.updateProviderStatus({
+      providerCallSid: "CA-unknown-after-ringing",
+      status: "queued",
+      occurredAt: new Date("2026-09-02T12:00:07.000Z"),
+    });
+
+    expect(delayedQueued).toEqual(unknown);
+    expect(delayedQueued).toEqual(expect.objectContaining({
+      status: "unknown",
+      startedAt: NOW,
+    }));
+  });
+
+  it("reports a direct unknown without inventing lifecycle timing and still accepts a terminal outcome", async () => {
+    const created = await repository.createIntent(intentInput());
+    await repository.consumeIntent({
+      id: created.id,
+      providerCallSid: "CA-direct-unknown",
+      callerIdentity: "owner",
+      now: NOW,
+    });
+    const unknown = await repository.updateProviderStatus({
+      providerCallSid: "CA-direct-unknown",
+      status: "unknown",
+      occurredAt: new Date("2026-09-02T12:00:05.000Z"),
+      errorSummary: "Unknown provider status: future-state",
+    });
+
+    const lateCreated = await repository.updateProviderStatus({
+      providerCallSid: "CA-direct-unknown",
+      status: "created",
+      occurredAt: new Date("2026-09-02T12:00:06.000Z"),
+    });
+    expect(lateCreated).toEqual(unknown);
+    expect(unknown).toEqual(expect.objectContaining({
+      status: "unknown",
+      startedAt: null,
+      answeredAt: null,
+      errorSummary: "Unknown provider status: future-state",
+    }));
+
+    const failed = await repository.updateProviderStatus({
+      providerCallSid: "CA-direct-unknown",
+      status: "failed",
+      occurredAt: new Date("2026-09-02T12:00:30.000Z"),
+      errorCode: "provider-failure",
+      errorSummary: "Provider rejected the call",
+    });
+    const lateCompleted = await repository.updateProviderStatus({
+      providerCallSid: "CA-direct-unknown",
+      status: "completed",
+      occurredAt: new Date("2026-09-02T12:00:40.000Z"),
+      durationSeconds: 35,
+    });
+
+    expect(failed).toEqual(expect.objectContaining({
+      status: "failed",
+      startedAt: NOW,
+      answeredAt: null,
+      endedAt: new Date("2026-09-02T12:00:30.000Z"),
+      durationSeconds: 0,
+      errorCode: "provider-failure",
+    }));
+    expect(lateCompleted).toEqual(failed);
+  });
 });

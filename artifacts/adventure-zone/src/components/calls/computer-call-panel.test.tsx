@@ -340,6 +340,24 @@ describe("ComputerCallPanel", () => {
     expect(hook.refresh).toHaveBeenCalledOnce();
   });
 
+  it("lets a user cancel computer calling and return to the Phone Link fallback", () => {
+    hook.state = { ...hook.state, phase: "failed", error: "Microphone access was denied." };
+    const onClose = vi.fn();
+    render(
+      <ComputerCallPanel
+        callerIdDisplay="(701) 555-0100"
+        contact={contact}
+        onClose={onClose}
+        organizationId="10000000-0000-4000-000000000001"
+        phone={phone}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel computer call" }));
+    expect(hook.reset).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+  });
+
   it("focuses the confirmation heading and separates the live status from its timer", () => {
     hook.state = { ...hook.state, phase: "connected", startedAt: "2026-09-01T10:00:00.000Z" };
     render(

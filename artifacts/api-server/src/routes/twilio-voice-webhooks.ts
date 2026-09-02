@@ -97,7 +97,7 @@ export function createTwilioVoiceWebhooksRouter(
       const statusCallbackUrl = new URL("/api/webhooks/twilio/voice/status", config.webhookBaseUrl).toString();
       res.type("text/xml").send(provider.createOutboundTwiml({
         destination: consumed.destination,
-        callerId: config.verifiedCallerId,
+        callerId: consumed.callerId,
         statusCallbackUrl,
       }));
     } catch (error) {

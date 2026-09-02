@@ -5,7 +5,7 @@ import type { ComputerCallStatus } from "./computer-calling-types";
 import type { ComputerVoiceProvider } from "./computer-voice-provider";
 
 const statusMap: Record<string, ComputerCallStatus> = {
-  initiated: "created",
+  initiated: "queued",
   queued: "queued",
   ringing: "ringing",
   "in-progress": "in-progress",

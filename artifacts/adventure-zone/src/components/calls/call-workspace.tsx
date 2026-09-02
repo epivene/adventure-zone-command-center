@@ -235,7 +235,9 @@ export function CallWorkspace({
   const [computerPanelOpen, setComputerPanelOpen] = useState(false);
   const [computerCall, setComputerCall] = useState<ComputerCallTerminal | null>(null);
   const [computerCallActive, setComputerCallActive] = useState(false);
-  const awaitingComputerReconciliation = computerPanelOpen && !computerCall;
+  const [computerCallLive, setComputerCallLive] = useState(false);
+  const [computerTechnicalPending, setComputerTechnicalPending] = useState(false);
+  const awaitingComputerReconciliation = computerPanelOpen && !computerCall && (computerCallActive || computerTechnicalPending);
 
   const draftKey = useMemo(() => buildCallDraftKey({
     organizationId: organization?.id ?? null,
@@ -253,6 +255,65 @@ export function CallWorkspace({
         doNotCallReason: "Marked Do Not Call during this call.",
       }
     : selectedPhoneRecord;
+
+  useEffect(() => {
+    if (!computerCallLive) return;
+
+    const message = "A computer call is still in progress. Leave this page?";
+    const workspaceUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const workspaceHistoryState = window.history.state;
+    let armed = true;
+    const confirmBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const cleanup = () => {
+      if (!armed) return;
+      armed = false;
+      window.removeEventListener("beforeunload", confirmBeforeUnload);
+      window.removeEventListener("popstate", confirmHistoryNavigation);
+      document.removeEventListener("click", confirmInternalNavigation, true);
+    };
+    const confirmInternalNavigation = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) return;
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLAnchorElement>("a[href]")
+        : null;
+      if (!target || target.target === "_blank" || target.hasAttribute("download")) return;
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      cleanup();
+    };
+    const confirmHistoryNavigation = () => {
+      if (!armed) return;
+      if (window.confirm(message)) {
+        cleanup();
+        return;
+      }
+
+      // A popstate event fires after traversal. Add the captured workspace back
+      // at the current end of history so Wouter sees the original URL/state
+      // again without a compensating history.go() loop.
+      window.history.pushState(workspaceHistoryState, "", workspaceUrl);
+    };
+
+    window.addEventListener("beforeunload", confirmBeforeUnload);
+    window.addEventListener("popstate", confirmHistoryNavigation);
+    document.addEventListener("click", confirmInternalNavigation, true);
+    return cleanup;
+  }, [computerCallLive]);
 
   const guidedRenderContext: GuidedCallRenderContext = {
     contactName: contact?.name ?? null,
@@ -293,6 +354,8 @@ export function CallWorkspace({
     setComputerPanelOpen(false);
     setComputerCall(null);
     setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
 
     const draft = loadCallDraft(draftKey);
     if (draft) {
@@ -377,6 +440,8 @@ export function CallWorkspace({
     setError("");
     setComputerCall(null);
     setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
     setComputerPanelOpen(false);
     if (!isMobileLog) {
       setMethod(methodForPhone(false, selectedPhone));
@@ -404,20 +469,39 @@ export function CallWorkspace({
 
   const startComputerCall = useCallback(() => {
     setComputerPanelOpen(true);
+    setComputerTechnicalPending(true);
     setError("");
   }, []);
 
   const completeComputerCall = useCallback((call: ComputerCallTerminal) => {
+    clearCallDraft(draftKey);
+    setDraftRestored(false);
     setComputerCall(call);
     setStartedAt(new Date(call.startedAt));
     setRequestKey(call.sessionId);
     setMethod("browser_voip");
     setDirection("outgoing");
-  }, []);
+  }, [draftKey]);
 
   const resetComputerCall = useCallback(() => {
+    setComputerPanelOpen(false);
     setComputerCall(null);
     setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
+    if (!isMobileLog) {
+      setStartedAt(null);
+      setRequestKey(null);
+      setMethod(methodForPhone(false, selectedPhone));
+    }
+  }, [isMobileLog, selectedPhone]);
+
+  const cancelComputerCall = useCallback(() => {
+    setComputerPanelOpen(false);
+    setComputerCall(null);
+    setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
     if (!isMobileLog) {
       setStartedAt(null);
       setRequestKey(null);
@@ -444,6 +528,10 @@ export function CallWorkspace({
     event.preventDefault();
     if (!startedAt || !requestKey) {
       setError("Start the call note before saving.");
+      return;
+    }
+    if (method === "browser_voip" && !computerCall) {
+      setError("Computer call details need to be verified before recording this outcome.");
       return;
     }
     const dueAt = nextActionDueAt ? parseBusinessDate(nextActionDueAt) : null;
@@ -508,6 +596,14 @@ export function CallWorkspace({
         clearCallDraft(draftKey);
         if (disposition === "do_not_call" && selectedPhone) {
           setLocallySuppressedPhoneIds((ids) => new Set(ids).add(selectedPhone.id));
+        }
+        if (computerCall) {
+          setComputerPanelOpen(false);
+          setComputerCall(null);
+          setComputerCallActive(false);
+          setComputerCallLive(false);
+          setComputerTechnicalPending(false);
+          if (!isMobileLog) setMethod(methodForPhone(false, selectedPhone));
         }
         setIsSaved(true);
       }
@@ -575,8 +671,9 @@ export function CallWorkspace({
                 <label className="grid gap-1.5 font-medium">
                   Phone number
                   <select
-                    disabled={computerCallActive}
+                    disabled={computerCallActive || Boolean(computerCall)}
                     onChange={(event) => {
+                      if (computerCallActive || computerCall) return;
                       const nextPhoneId = event.target.value;
                       const nextPhone = phones.find((phone) => phone.id === nextPhoneId) ?? null;
                       setSelectedPhoneId(nextPhoneId);
@@ -610,6 +707,9 @@ export function CallWorkspace({
                       callerIdDisplay={computerCalling.callerIdDisplay}
                       contact={contact}
                       onPhaseChange={setComputerCallActive}
+                      onLivePhaseChange={setComputerCallLive}
+                      onTechnicalPendingChange={setComputerTechnicalPending}
+                      onClose={cancelComputerCall}
                       onReset={resetComputerCall}
                       onTerminal={completeComputerCall}
                       organizationId={organization.id}

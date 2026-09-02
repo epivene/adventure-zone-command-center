@@ -24,7 +24,7 @@ function enabledConfig() {
 }
 
 function harness(overrides: Record<string, unknown> = {}) {
-  const { mountPath = "", ...dependencyOverrides } = overrides;
+  const { mountPath = "", provider: providedProvider, ...dependencyOverrides } = overrides;
   const service = {
     consumeIntent: vi.fn().mockResolvedValue({
       sessionId: SESSION_ID,
@@ -34,7 +34,7 @@ function harness(overrides: Record<string, unknown> = {}) {
     }),
     applyProviderStatus: vi.fn().mockResolvedValue(undefined),
   };
-  const provider = {
+  const provider: any = providedProvider ?? {
     validateWebhook: vi.fn().mockReturnValue(true),
     createOutboundTwiml: vi.fn().mockReturnValue("<?xml version=\"1.0\"?><Response><Dial/></Response>"),
     normalizeStatus: vi.fn().mockImplementation((status: string) => status === "in-progress" ? "in-progress" : "unknown"),
@@ -164,6 +164,36 @@ describe("Twilio voice webhooks", () => {
     const retry = await signed(request(app).post("/webhooks/twilio/voice/outbound")).type("form").send(body).expect(200);
 
     expect(retry.text).toBe(first.text);
+  });
+
+  it("uses the consumed caller-ID snapshot across retries after configuration changes", async () => {
+    const firstConfig = enabledConfig();
+    const secondConfig = enabledConfig();
+    secondConfig.config.verifiedCallerId = "+15559876543";
+    const createOutboundTwiml = vi.fn((input: { callerId: string }) => `<Response>${input.callerId}</Response>`);
+    const { app, service, provider } = harness({
+      getConfig: vi.fn().mockReturnValueOnce(firstConfig).mockReturnValueOnce(secondConfig),
+      provider: {
+        validateWebhook: vi.fn().mockReturnValue(true),
+        createOutboundTwiml,
+        normalizeStatus: vi.fn(),
+      },
+    });
+    service.consumeIntent.mockResolvedValue({
+      sessionId: SESSION_ID,
+      providerCallSid: "CA123",
+      destination: "+15557654321",
+      callerId: "+15550001111",
+    });
+    const body = { CallSid: "CA123", sessionId: SESSION_ID, From: "client:owner" };
+
+    const first = await signed(request(app).post("/webhooks/twilio/voice/outbound")).type("form").send(body).expect(200);
+    const retry = await signed(request(app).post("/webhooks/twilio/voice/outbound")).type("form").send(body).expect(200);
+
+    expect(first.text).toBe("<Response>+15550001111</Response>");
+    expect(retry.text).toBe(first.text);
+    expect(provider.createOutboundTwiml).toHaveBeenNthCalledWith(1, expect.objectContaining({ callerId: "+15550001111" }));
+    expect(provider.createOutboundTwiml).toHaveBeenNthCalledWith(2, expect.objectContaining({ callerId: "+15550001111" }));
   });
 
   it("persists a Number child callback against its bound parent CallSid", async () => {
