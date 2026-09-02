@@ -5,6 +5,25 @@ import type {
   BrowserVoiceDevice,
 } from "./computer-calling-types";
 
+const audioDeviceDiscoveryTimeoutMilliseconds = 1_000;
+
+type AudioDeviceHelper = NonNullable<Device["audio"]> & {
+  removeListener?: (
+    eventName: "deviceChange",
+    listener: (lostActiveDevices: MediaDeviceInfo[]) => void,
+  ) => unknown;
+};
+
+function snapshotAudioDevices(audio: AudioDeviceHelper): {
+  inputs: MediaDeviceInfo[];
+  outputs: MediaDeviceInfo[];
+} {
+  return {
+    inputs: [...audio.availableInputDevices.values()],
+    outputs: [...audio.availableOutputDevices.values()],
+  };
+}
+
 class TwilioBrowserVoiceCall implements BrowserVoiceCall {
   constructor(private readonly call: Call) {}
 
@@ -93,12 +112,31 @@ export class TwilioBrowserDevice implements BrowserVoiceDevice {
     inputs: MediaDeviceInfo[];
     outputs: MediaDeviceInfo[];
   }> {
-    const audio = this.requireDevice().audio;
+    const audio = this.requireDevice().audio as AudioDeviceHelper | null;
     if (!audio) return { inputs: [], outputs: [] };
-    return {
-      inputs: [...audio.availableInputDevices.values()],
-      outputs: [...audio.availableOutputDevices.values()],
-    };
+    const discovered = snapshotAudioDevices(audio);
+    if (discovered.inputs.length) return discovered;
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      const onDeviceChange = () => finish();
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (timeout !== undefined) clearTimeout(timeout);
+        audio.removeListener?.("deviceChange", onDeviceChange);
+        resolve(snapshotAudioDevices(audio));
+      };
+
+      audio.on("deviceChange", onDeviceChange);
+      if (settled) return;
+      if (audio.availableInputDevices.size) {
+        finish();
+        return;
+      }
+      timeout = setTimeout(finish, audioDeviceDiscoveryTimeoutMilliseconds);
+    });
   }
 
   async selectInput(deviceId: string): Promise<void> {
