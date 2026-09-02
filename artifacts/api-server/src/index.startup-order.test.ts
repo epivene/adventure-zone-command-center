@@ -24,6 +24,13 @@ describe("server startup ordering", () => {
     expect(workers).toBeGreaterThan(maintenance);
   });
 
+  it("opens readiness only after post-listen maintenance is settled", () => {
+    const maintenance = source.indexOf("runMaintenanceAndStartWorkers({");
+    const ready = source.indexOf("markAppReady();");
+    expect(maintenance).toBeGreaterThanOrEqual(0);
+    expect(ready).toBeGreaterThan(maintenance);
+  });
+
   it("starts one Paper Notes loop after maintenance and closes it during shutdown", () => {
     expect(source).toContain("paperNoteLoop.start();");
     expect(source).toContain("paperNoteLoop.close(),");

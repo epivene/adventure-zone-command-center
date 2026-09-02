@@ -197,9 +197,6 @@ async function completeRequiredStartup(): Promise<void> {
   }
 
   if (shutdownRequested) return;
-  markAppReady();
-  logger.info("Required startup checks completed; API traffic enabled");
-
   await runMaintenanceAndStartWorkers({
     runMaintenance: runPostListenMaintenance,
     startBackgroundWorkers,
@@ -207,6 +204,13 @@ async function completeRequiredStartup(): Promise<void> {
       logger.error(
         { err },
         "Post-listen database maintenance failed; server remains available",
+      );
+    },
+    onMaintenanceSettled() {
+      if (shutdownRequested) return;
+      markAppReady();
+      logger.info(
+        "Post-listen database maintenance settled; API traffic enabled",
       );
     },
   }).catch((err) => {

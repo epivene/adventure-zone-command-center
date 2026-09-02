@@ -2,6 +2,7 @@ type PostListenStartupInput = {
   runMaintenance: () => Promise<void>;
   startBackgroundWorkers: () => Promise<void>;
   onMaintenanceError: (error: unknown) => void;
+  onMaintenanceSettled: () => void | Promise<void>;
 };
 
 export async function runMaintenanceAndStartWorkers(
@@ -11,7 +12,7 @@ export async function runMaintenanceAndStartWorkers(
     await input.runMaintenance();
   } catch (error) {
     input.onMaintenanceError(error);
-  } finally {
-    await input.startBackgroundWorkers();
   }
+  await input.onMaintenanceSettled();
+  await input.startBackgroundWorkers();
 }
