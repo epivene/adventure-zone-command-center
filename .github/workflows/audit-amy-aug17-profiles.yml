@@ -1,0 +1,90 @@
+name: Audit Amy Aug 17 profiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/audit-amy-aug17-profiles.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Export matching live profiles
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const targets = [
+            { name: "United Tribes International Powwow", queries: ["United Tribes", "UTTC Powwow", "International Powwow"] },
+            { name: "Top of Utah Parade of Homes", queries: ["Top of Utah Parade of Homes", "Cache Valley Parade of Homes"] },
+            { name: "Timpanogos Storytelling Festival", queries: ["Timpanogos Storytelling"] },
+            { name: "Springville Art Festival", queries: ["Springville Art Festival", "Springville Museum of Art"] },
+            { name: "Silverton Arts Festival", queries: ["Silverton Arts Festival", "Silverton Creates"] },
+            { name: "San Luis Valley Potato Festival", queries: ["San Luis Valley Potato Festival", "Potato Festival Monte Vista"] },
+            { name: "Rist Canyon Mountain Festival", queries: ["Rist Canyon"] },
+            { name: "Orofino Lumberjack Days", queries: ["Orofino Lumberjack Days", "Lumberjack Days Orofino"] },
+            { name: "One Shot Antelope Hunt", queries: ["One Shot Antelope Hunt", "One Shot Hunt"] },
+            { name: "Longs Peak Scottish Irish Highland Festival", queries: ["Longs Peak Scottish", "Scottish Irish Highland"] },
+            { name: "Logan Pride Festival", queries: ["Logan Pride Festival", "Logan Pride"] },
+            { name: "Harvest Moon Hurrah", queries: ["Harvest Moon Hurrah", "Spanish Fork Arts Council"] },
+          ];
+          const headers = { Authorization: `Bearer ${token}` };
+
+          async function get(path) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, { headers });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 300)}`);
+            return JSON.parse(text);
+          }
+
+          (async () => {
+            const audit = { generatedAt: new Date().toISOString(), targets: [] };
+            for (const target of targets) {
+              const byId = new Map();
+              const searches = [];
+              for (const query of target.queries) {
+                const search = await get(`profile-search?q=${encodeURIComponent(query)}&limit=20`);
+                searches.push({ query, results: search.results ?? [] });
+                for (const item of search.results ?? []) if (item.kind === "organization" && item.id) byId.set(item.id, item);
+              }
+              const histories = [];
+              for (const profile of byId.values()) histories.push(await get(`profile-history/${profile.id}`));
+              audit.targets.push({ ...target, searches, histories });
+            }
+            fs.writeFileSync("amy-aug17-profile-audit.json", JSON.stringify(audit, null, 2));
+            const lines = ["# Amy Aug. 17 live-profile audit", ""];
+            for (const target of audit.targets) lines.push(`- ${target.name}: ${target.histories.length} candidate live profile(s)`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload protected audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: amy-aug17-profile-audit
+          path: amy-aug17-profile-audit.json
+          retention-days: 2
