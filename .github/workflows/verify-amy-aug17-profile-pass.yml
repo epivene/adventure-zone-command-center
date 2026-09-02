@@ -1,0 +1,96 @@
+name: Verify Amy Aug 17 profile pass
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/verify-amy-aug17-profile-pass.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify live profile state
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          if (!base || !token) throw new Error("Protected live configuration is missing");
+          const targets = [
+            { name: "United Tribes International Powwow", id: "b8270382-7766-4a3f-91bc-afa4c5863b77", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z", email: "jredtomahawk@uttc.edu", status: "contact_due" },
+            { name: "Top of Utah Parade of Homes", id: "936e3f41-23ab-4e23-94fc-ff1da5a7f499", followUps: 0, email: "office@cvhba.com", status: "unlikely" },
+            { name: "Springville Art Festival", id: "ad559769-c4aa-40dc-9045-15dd48c8701d", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z", email: "smainfo@springville.org", status: "contact_due" },
+            { name: "San Luis Valley Potato Festival", id: "62c7f89a-d0a7-42ee-8881-3392d17b3373", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z", email: "jessica@coloradopotato.org", status: "contact_due" },
+            { name: "One Shot Antelope Hunt", id: "0a09625f-8196-4d18-a326-c43729ad481a", followUps: 0, email: "oneshothuntclub@aol.com", status: "unlikely" },
+            { name: "Longs Peak Scottish Irish Highland Festival", id: "2eb4c604-efa9-4c31-9815-d0848d5ca1b5", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z", email: "info@scotfest.com", status: "contact_due" },
+            { name: "Logan Pride Festival", id: "affe8873-3a77-4aad-b951-6cbb5802c69c", followUps: 1, dueAt: "2027-01-15T16:00:00.000Z", email: "festival@loganpride.org", status: "unlikely" },
+            { name: "Harvest Moon Hurrah", id: "d2669014-a661-49e0-8193-2e82589ef4ce", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z", email: "eharryman@spanishfork.org", status: "contact_due" },
+            { name: "Orofino Lumberjack Days", id: "ae80fdd6-02ba-48d2-a87b-5db9683c0a1b", followUps: 1, dueAt: "2026-09-02T16:00:00.000Z" },
+          ];
+          const headers = { Authorization: `Bearer ${token}` };
+          async function getHistory(id) {
+            const response = await fetch(`${base}/api/assistant-import/profile-history/${id}`, { headers });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`profile-history/${id}: HTTP ${response.status} ${text.slice(0, 300)}`);
+            return JSON.parse(text);
+          }
+          function check(target, history) {
+            const open = history.followUps.filter((item) => !item.completedAt);
+            if (open.length !== target.followUps) return `expected ${target.followUps} open follow-up(s), found ${open.length}`;
+            if (target.dueAt && new Date(open[0].dueAt).toISOString() !== new Date(target.dueAt).toISOString()) return "follow-up due date mismatch";
+            if (target.email && !history.contacts.some((item) => String(item.email || "").toLowerCase() === target.email)) return `missing current contact ${target.email}`;
+            if (target.status && !history.bookings.some((item) => item.status === target.status)) return `missing booking status ${target.status}`;
+            return null;
+          }
+          (async () => {
+            let finalRows = [];
+            for (let attempt = 1; attempt <= 12; attempt++) {
+              finalRows = [];
+              for (const target of targets) {
+                const history = await getHistory(target.id);
+                const error = check(target, history);
+                finalRows.push({
+                  name: target.name,
+                  profileId: target.id,
+                  verified: !error,
+                  error,
+                  openFollowUps: history.followUps.filter((item) => !item.completedAt).map((item) => ({ label: item.label, dueAt: item.dueAt })),
+                  currentContactPresent: target.email ? history.contacts.some((item) => String(item.email || "").toLowerCase() === target.email) : true,
+                  expectedBookingStatus: target.status ?? null,
+                  bookingStatusPresent: target.status ? history.bookings.some((item) => item.status === target.status) : true,
+                });
+              }
+              if (finalRows.every((row) => row.verified)) break;
+              if (attempt < 12) await new Promise((resolve) => setTimeout(resolve, 10000));
+            }
+            const failures = finalRows.filter((row) => !row.verified);
+            if (failures.length) throw new Error(failures.map((row) => `${row.name}: ${row.error}`).join("; "));
+            fs.mkdirSync("imports/receipts", { recursive: true });
+            fs.writeFileSync("imports/receipts/2026-09-02-amy-aug17-profile-pass-verification.json", JSON.stringify({
+              verifiedAt: new Date().toISOString(),
+              sourceCommit: process.env.GITHUB_SHA,
+              profiles: finalRows,
+              emailsSent: false,
+            }, null, 2) + "\n");
+          })().catch((error) => { console.error(error); process.exit(1); });
+          NODE
+
+      - name: Commit verification receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/receipts/2026-09-02-amy-aug17-profile-pass-verification.json
+          git commit -m "Record verified Amy Aug 17 profile pass"
+          git push
