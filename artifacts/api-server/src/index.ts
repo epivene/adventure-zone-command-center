@@ -14,6 +14,8 @@ import {
   cleanupKnownEmptyTestProfiles,
   enrichKnownBlankProfiles,
 } from "./features/organizations/known-empty-test-profile-cleanup";
+import { applyWyo131DuplicateCleanup } from "./features/organizations/wyo131-duplicate-cleanup";
+import { PostgresWyo131DuplicateRepository } from "./features/organizations/wyo131-duplicate-postgres";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
@@ -278,6 +280,25 @@ async function runPostListenMaintenance() {
     logger.error(
       { err },
       "Known blank profile enrichment deferred; startup will continue",
+    );
+  }
+  try {
+    const wyo131Cleanup = await runStartupStep(
+      "reviewed WYO131 duplicate cleanup",
+      () => applyWyo131DuplicateCleanup(
+        new PostgresWyo131DuplicateRepository(),
+      ),
+    );
+    logger.info(
+      wyo131Cleanup,
+      wyo131Cleanup.outcome === "merged"
+        ? "Merged the reviewed WYO131 duplicate profiles"
+        : "Reviewed WYO131 duplicate profiles were already merged or safely skipped",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Reviewed WYO131 duplicate cleanup deferred; startup will continue",
     );
   }
   await runStartupStep(
