@@ -4,18 +4,15 @@ import { contactSyncStateValues } from "@/features/contacts/contact-types";
 
 export const requiredContactTextSchema = z.string().trim().min(1);
 export const nullableContactTextSchema = z
-  .string()
-  .trim()
-  .transform((value) => value || null);
+  .union([z.string(), z.null()])
+  .transform((value) => value?.trim() || null);
 export const nullableContactEmailSchema = z
-  .string()
-  .trim()
-  .toLowerCase()
+  .union([z.string(), z.null()])
+  .transform((value) => value?.trim().toLowerCase() || null)
   .refine(
-    (value) => value.length === 0 || z.email().safeParse(value).success,
+    (value) => value === null || z.string().email().safeParse(value).success,
     "Enter a valid email address.",
-  )
-  .transform((value) => value || null);
+  );
 
 export const contactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),

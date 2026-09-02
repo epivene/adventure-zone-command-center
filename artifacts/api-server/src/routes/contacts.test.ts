@@ -3,6 +3,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const contactId = "11111111-1111-4111-8111-111111111111";
+const createContact = vi.hoisted(() => vi.fn());
 const updateContact = vi.hoisted(() => vi.fn());
 const atomicContact = vi.hoisted(() => ({ firstName: "Ada" }));
 const phoneRepository = vi.hoisted(() => {
@@ -56,6 +57,9 @@ vi.mock("@workspace/db", () => ({ db: { transaction: async (callback: (transacti
 } } }));
 vi.mock("@/features/contacts/contact-repository", () => ({
   DrizzleContactRepository: class {
+    async createContact(input: unknown) {
+      return createContact(input);
+    }
     updateContact = updateContact;
     async getContactDetail(id: string) {
       if (id !== contactId) return null;
@@ -109,6 +113,7 @@ describe("contact phone routes", () => {
     phoneRepository.reset();
     phoneRepository.listForContact.mockClear();
     phoneRepository.replaceForContact.mockClear();
+    createContact.mockReset().mockResolvedValue("22222222-2222-4222-8222-222222222222");
     atomicContact.firstName = "Ada";
     updateContact.mockReset().mockImplementation(async (_id: string, input: { firstName: string }) => {
       atomicContact.firstName = input.firstName;
@@ -122,6 +127,79 @@ describe("contact phone routes", () => {
     expect(response.body.phones).toEqual([
       expect.objectContaining({ type: "mobile", primary: true, number: "701-555-0199" }),
     ]);
+  });
+
+  it("creates a contact when blank optional fields arrive as null", async () => {
+    const response = await request(app).post("/contacts").send({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      organizationName: null,
+      jobTitle: null,
+      email: "ada@example.com",
+      phone: "701-555-0199",
+      address1: "123 Analytical Engine Way",
+      address2: null,
+      city: "London",
+      region: "LDN",
+      postalCode: "NW1 6XE",
+    });
+    expect(response.status).toBe(201);
+
+    expect(response.body).toEqual({
+      ok: true,
+      contactId: "22222222-2222-4222-8222-222222222222",
+    });
+    expect(createContact).toHaveBeenCalledWith({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      organizationName: null,
+      jobTitle: null,
+      email: "ada@example.com",
+      phone: "701-555-0199",
+      address1: "123 Analytical Engine Way",
+      address2: null,
+      city: "London",
+      region: "LDN",
+      postalCode: "NW1 6XE",
+    });
+  });
+
+  it("continues to require a nonblank first name", async () => {
+    const response = await request(app).post("/contacts").send({
+      firstName: " ",
+      lastName: "Lovelace",
+      organizationName: null,
+      jobTitle: null,
+      email: null,
+      phone: null,
+      address1: null,
+      address2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+    }).expect(400);
+
+    expect(response.body.error).toMatch(/too small|at least 1 character/i);
+    expect(createContact).not.toHaveBeenCalled();
+  });
+
+  it("continues to reject a nonblank invalid email address", async () => {
+    const response = await request(app).post("/contacts").send({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      organizationName: null,
+      jobTitle: null,
+      email: "not-an-email",
+      phone: null,
+      address1: null,
+      address2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+    }).expect(400);
+
+    expect(response.body.error).toBe("Enter a valid email address.");
+    expect(createContact).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid replacement without changing existing phone rows", async () => {
