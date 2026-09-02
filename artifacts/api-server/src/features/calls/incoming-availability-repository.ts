@@ -1,4 +1,4 @@
-import { and, eq, gt, isNull, or } from "drizzle-orm";
+import { and, eq, gt, isNull, lte } from "drizzle-orm";
 import type { db as Database } from "@/db/client";
 import { incomingCallAvailabilityLeases } from "@/db/schema";
 import type { LeaseMutation, ResolvedLease } from "./incoming-availability-types";
@@ -15,7 +15,7 @@ const resolved = (row: typeof incomingCallAvailabilityLeases.$inferSelect): Reso
 export class DrizzleIncomingAvailabilityRepository implements IncomingAvailabilityRepository {
  constructor(private database: DB) {}
  async acquire(input: LeaseMutation, now: Date, takeover: boolean): Promise<boolean> {
-  const changed = await this.database.update(incomingCallAvailabilityLeases).set({ id:input.leaseId, clientIdentity:input.clientIdentity, leaseTokenHash:input.leaseTokenHash, browserSessionId:input.browserSessionId, expiresAt:input.expiresAt, heartbeatAt:now, updatedAt:now }).where(and(eq(incomingCallAvailabilityLeases.ownerId,input.ownerId), or(isNull(incomingCallAvailabilityLeases.activeInboundSessionId), gt(incomingCallAvailabilityLeases.expiresAt, now)), takeover ? undefined : gt(incomingCallAvailabilityLeases.expiresAt, now))).returning();
+  const changed = await this.database.update(incomingCallAvailabilityLeases).set({ id:input.leaseId, clientIdentity:input.clientIdentity, leaseTokenHash:input.leaseTokenHash, browserSessionId:input.browserSessionId, expiresAt:input.expiresAt, heartbeatAt:now, updatedAt:now }).where(and(eq(incomingCallAvailabilityLeases.ownerId,input.ownerId), isNull(incomingCallAvailabilityLeases.activeInboundSessionId), takeover ? undefined : lte(incomingCallAvailabilityLeases.expiresAt, now))).returning();
   if (changed[0]) return true;
   try { const made = await this.database.insert(incomingCallAvailabilityLeases).values({ id:input.leaseId, ownerId:input.ownerId, clientIdentity:input.clientIdentity, leaseTokenHash:input.leaseTokenHash, browserSessionId:input.browserSessionId, expiresAt:input.expiresAt, heartbeatAt:now, createdAt:now, updatedAt:now }).onConflictDoNothing().returning(); return Boolean(made[0]); } catch { return false; }
  }
