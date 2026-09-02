@@ -366,8 +366,6 @@ export function useComputerCall(dependencies: UseComputerCallDependencies) {
         await device.destroy();
         return false;
       }
-      if (!devices.inputs.length)
-        throw new Error("No microphone is available.");
       tokenExpiresAtRef.current = token.expiresAt;
       dispatch({ type: "ready", ...devices });
       return true;
