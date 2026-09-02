@@ -360,25 +360,7 @@ describe("useComputerCall", () => {
     );
   });
 
-  it("moves to failed when no microphone is available", async () => {
-    const { deps } = createDependencies({
-      device: Object.assign(new FakeDevice(), {
-        listAudioDevices: vi
-          .fn()
-          .mockResolvedValue({ inputs: [], outputs: [output] }),
-      }),
-    });
-    const { result } = renderHook(() => useComputerCall(deps));
-
-    await act(() => result.current.setup());
-
-    expect(result.current.state).toMatchObject({
-      phase: "failed",
-      error: "No microphone is available.",
-    });
-  });
-
-  it("destroys a partially prepared device when device discovery finds no microphone", async () => {
+  it("uses the browser-approved default microphone when Twilio device discovery is empty", async () => {
     const device = new FakeDevice();
     device.listAudioDevices.mockResolvedValue({
       inputs: [],
@@ -389,7 +371,13 @@ describe("useComputerCall", () => {
 
     await act(() => result.current.setup());
 
-    expect(device.destroy).toHaveBeenCalledOnce();
+    expect(result.current.state).toMatchObject({
+      phase: "ready",
+      inputs: [],
+      outputs: [output],
+      error: null,
+    });
+    expect(device.destroy).not.toHaveBeenCalled();
   });
 
   it("does not continue setup after unmount while microphone permission is pending", async () => {
