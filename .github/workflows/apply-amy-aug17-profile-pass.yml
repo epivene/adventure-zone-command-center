@@ -40,6 +40,16 @@ jobs:
           const payloads = JSON.parse(fs.readFileSync(source, "utf8"));
           const headers = { Authorization: `Bearer ${token}` };
           const normalize = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const fixedProfileIds = {
+            "United Tribes Technical College International Powwow (Bismark) ND": "b8270382-7766-4a3f-91bc-afa4c5863b77",
+            "Top of Utah Parade of Homes (Garden) UT": "936e3f41-23ab-4e23-94fc-ff1da5a7f499",
+            "Springville Art Festival (Springville) UT": "ad559769-c4aa-40dc-9045-15dd48c8701d",
+            "San Luis Valley Potato Festival": "62c7f89a-d0a7-42ee-8881-3392d17b3373",
+            "One Shot Antelope Hunt": "0a09625f-8196-4d18-a326-c43729ad481a",
+            "Longs Peak Scottish Irish Highland Festival": "2eb4c604-efa9-4c31-9815-d0848d5ca1b5",
+            "Logan Pride Festival": "affe8873-3a77-4aad-b951-6cbb5802c69c",
+            "Harvest Moon Hurrah": "d2669014-a661-49e0-8193-2e82589ef4ce",
+          };
 
           async function request(path, options = {}) {
             const response = await fetch(`${base}/api/assistant-import/${path}`, {
@@ -83,7 +93,7 @@ jobs:
           (async () => {
             const receipt = { appliedAt: new Date().toISOString(), profiles: [], orofino: null };
             for (const payload of payloads) {
-              const profileId = await resolve(payload);
+              const profileId = fixedProfileIds[payload.event.name] ?? await resolve(payload);
               const eventPayload = { ...payload, event: { ...payload.event, id: profileId } };
               const upsert = await request("event-profiles", { method: "POST", body: JSON.stringify(eventPayload) });
               const notes = [];
