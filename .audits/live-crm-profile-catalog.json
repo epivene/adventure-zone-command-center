@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-09-02T18:49:35.845Z",
+  "generatedAt": "2026-09-02T19:02:07.382Z",
   "summary": {
-    "profileCount": 1961,
+    "profileCount": 1962,
     "profileWithActSourceCount": 1743,
-    "profileWithoutActSourceCount": 218,
+    "profileWithoutActSourceCount": 219,
     "profileWithGmailCount": 1171,
     "profileWithCalendarCount": 20,
-    "issueCount": 220,
+    "issueCount": 221,
     "errorCount": 14,
     "warningCount": 16,
     "autoFixableCount": 9,
-    "reviewRequiredCount": 211,
+    "reviewRequiredCount": 212,
     "duplicateAppearanceGroupCount": 0,
     "duplicateContactGroupCount": 0,
     "pendingGmailReviewCount": 2317,
@@ -12342,6 +12342,13 @@
       "name": "Territory Days Festival (Colorado Springs) CO",
       "city": "Broomfield",
       "region": "CO",
+      "gmailThreadCount": 0
+    },
+    {
+      "id": "4fdc11c6-8ce3-440d-a019-1df1181ed1ff",
+      "name": "Test",
+      "city": null,
+      "region": null,
       "gmailThreadCount": 0
     },
     {
