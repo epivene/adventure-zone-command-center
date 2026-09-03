@@ -48,7 +48,7 @@ function appFor() {
   app.use(express.json());
   app.use(createAssistantGmailProfileLinksRouter({
     sweep: { run },
-    validation: { listApprovedForOrganization, upsertRows } as any,
+    validation: { listApprovedForOrganization, upsertRows },
   }));
   return { app, run, listApprovedForOrganization, upsertRows };
 }
