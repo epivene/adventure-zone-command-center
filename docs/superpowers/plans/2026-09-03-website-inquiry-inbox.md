@@ -272,7 +272,7 @@ Allow canReviewWebsiteInquiries in createSchema and patchSchema. New accounts de
 - Create: artifacts/api-server/src/features/website-inquiries/public-security.ts
 - Create: artifacts/api-server/src/features/website-inquiries/public-security.test.ts
 
-- [ ] **Step 1: Write failing contract tests**
+- [x] **Step 1: Write failing contract tests**
 
 Define validInput once and cover:
 
@@ -301,7 +301,7 @@ type WebsiteInquirySubmission = {
 };
 ~~~
 
-- [ ] **Step 2: Write failing security tests**
+- [x] **Step 2: Write failing security tests**
 
 Test readAllowedOrigins and FixedWindowInquiryRateLimiter:
 
@@ -313,13 +313,13 @@ Test readAllowedOrigins and FixedWindowInquiryRateLimiter:
 - another key remains allowed;
 - the in-memory map key is a 43-character base64url HMAC digest and never contains the raw IP.
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/public-contract.test.ts src/features/website-inquiries/public-security.test.ts
 
 Expected: FAIL because the modules do not exist.
 
-- [ ] **Step 4: Implement the contract and security primitives**
+- [x] **Step 4: Implement the contract and security primitives**
 
 Export:
 
@@ -342,7 +342,7 @@ export class FixedWindowInquiryRateLimiter {
 
 Use createHmac("sha256", secret), prune expired windows on consume, and expose no method that returns raw keys.
 
-- [ ] **Step 5: Rerun and commit**
+- [x] **Step 5: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/public-contract.test.ts src/features/website-inquiries/public-security.test.ts
     git add artifacts/api-server/src/features/website-inquiries
