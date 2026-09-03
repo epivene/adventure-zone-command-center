@@ -3,11 +3,11 @@ import { Link } from "wouter";
 
 import { readBookingReturnPath } from "@/lib/admin-workspace";
 
-const futureAreas = [
-  { title: "Email campaigns", description: "Promotional email runs.", icon: Mail },
-  { title: "Brochures & promos", description: "Brochures, promos, and mailed-date tracking.", icon: FileText },
-  { title: "Audiences & lists", description: "Reusable groups from shared profiles and contacts.", icon: UsersRound },
-  { title: "Campaign history", description: "Completed campaigns and results.", icon: Megaphone },
+const campaignAreas = [
+  { title: "Email campaigns", description: "Build and save reviewed promotional email campaigns.", icon: Mail, href: "/marketing/campaigns?area=email" },
+  { title: "Brochures & promos", description: "Keep brochures, promos, and reusable marketing pieces organized.", icon: FileText, href: "/marketing/campaigns?area=promos" },
+  { title: "Audiences & lists", description: "Build reusable groups from the same shared profiles and contacts.", icon: UsersRound, href: "/marketing/campaigns?area=audiences" },
+  { title: "Campaign history", description: "Review campaign drafts, sent dates, audiences, and saved copy.", icon: Megaphone, href: "/marketing/campaigns?area=history" },
 ] as const;
 
 export default function MarketingHomePage() {
@@ -40,10 +40,10 @@ export default function MarketingHomePage() {
       <section aria-labelledby="marketing-organized" className="grid gap-3">
         <div><h2 className="text-xl font-bold" id="marketing-organized">Campaigns</h2></div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {futureAreas.map(({ title, description, icon: Icon }) => (
-            <article className="rounded-xl border border-dashed border-border bg-card p-4 text-card-foreground" key={title}>
+          {campaignAreas.map(({ title, description, icon: Icon, href }) => (
+            <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:border-primary/50 hover:bg-primary/5" href={href} key={title}>
               <div className="flex items-start gap-3"><span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"><Icon className="h-5 w-5" /></span><div><h3 className="font-bold">{title}</h3><p className="mt-1 text-sm text-muted-foreground">{description}</p></div></div>
-            </article>
+            </Link>
           ))}
         </div>
       </section>
