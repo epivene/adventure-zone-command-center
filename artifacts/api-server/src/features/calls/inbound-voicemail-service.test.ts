@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   contacts,
+  contactPhones,
   inboundCallSessions,
   inboundVoicemails,
 } from "@/db/schema";
@@ -26,6 +27,11 @@ beforeEach(async () => {
       organization_id uuid,
       first_name text not null,
       last_name text not null
+    );
+    create table contact_phones (
+      id uuid primary key,
+      contact_id uuid not null,
+      normalized_number text
     );
     create table inbound_call_sessions (
       id uuid primary key,
@@ -58,6 +64,8 @@ beforeEach(async () => {
     );
     insert into contacts (id, organization_id, first_name, last_name)
       values ('${CONTACT_ID}', '${ORGANIZATION_ID}', 'Avery', 'Lee');
+    insert into contact_phones (id, contact_id, normalized_number)
+      values ('${PHONE_ID}', '${CONTACT_ID}', '+13035550101');
     insert into inbound_call_sessions (
       id, owner_id, caller_number_snapshot, organization_id, contact_id, phone_id
     ) values (
@@ -72,7 +80,7 @@ beforeEach(async () => {
     );
   `);
   const database = drizzle(client, {
-    schema: { contacts, inboundCallSessions, inboundVoicemails },
+    schema: { contacts, contactPhones, inboundCallSessions, inboundVoicemails },
   });
   service = new InboundVoicemailService(database as never, () => ({
     getRecordingMedia: vi.fn(),
@@ -98,5 +106,50 @@ describe("InboundVoicemailService", () => {
         canLink: false,
       }),
     ]);
+  });
+
+  it("recovers a unique stored-phone match for an older unmatched session", async () => {
+    await client.exec(`
+      update inbound_call_sessions
+      set organization_id = null, contact_id = null, phone_id = null
+      where id = '${SESSION_ID}'
+    `);
+
+    const result = await service.list("owner");
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      callerDisplay: "Avery Lee",
+      matched: true,
+      organizationId: ORGANIZATION_ID,
+      contactId: CONTACT_ID,
+      phoneId: PHONE_ID,
+      canLink: false,
+    }));
+  });
+
+  it("does not guess when a caller number belongs to more than one contact", async () => {
+    await client.exec(`
+      update inbound_call_sessions
+      set organization_id = null, contact_id = null, phone_id = null
+      where id = '${SESSION_ID}';
+      insert into contacts (id, organization_id, first_name, last_name)
+        values ('60000000-0000-4000-8000-000000000001', null, 'Another', 'Caller');
+      insert into contact_phones (id, contact_id, normalized_number)
+        values (
+          '70000000-0000-4000-8000-000000000001',
+          '60000000-0000-4000-8000-000000000001',
+          '+13035550101'
+        );
+    `);
+
+    const result = await service.list("owner");
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      matched: false,
+      organizationId: null,
+      contactId: null,
+      phoneId: null,
+      canLink: true,
+    }));
   });
 });

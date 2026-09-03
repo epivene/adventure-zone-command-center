@@ -17,15 +17,29 @@ export class InboundVoicemailService {
       matched: Boolean(row.phoneId), contactId: row.contactId, organizationId: row.organizationId, phoneId: row.phoneId,
       durationSeconds: row.durationSeconds, canCallBack: false, callbackReason: row.phoneId ? "Stored phone must be validated before callback" : "Link a stored callable phone first", canLink: !row.phoneId };
   }
-  private hydrated(row: any) {
+  private async hydrated(row: any) {
+    const hasStoredMatch = row.voicemail.phoneId ?? row.sessionPhoneId;
+    const recoveredMatches = !hasStoredMatch && row.callerNumberSnapshot
+      ? await this.database.select({
+          organizationId: contacts.organizationId,
+          contactId: contacts.id,
+          phoneId: contactPhones.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        }).from(contactPhones)
+          .innerJoin(contacts, eq(contactPhones.contactId, contacts.id))
+          .where(eq(contactPhones.normalizedNumber, row.callerNumberSnapshot))
+          .limit(2)
+      : [];
+    const recovered = recoveredMatches.length === 1 ? recoveredMatches[0] : undefined;
     return {
       ...row.voicemail,
       callerNumberSnapshot: row.callerNumberSnapshot,
-      organizationId: row.voicemail.organizationId ?? row.sessionOrganizationId ?? row.callerOrganizationId,
-      contactId: row.voicemail.contactId ?? row.sessionContactId,
-      phoneId: row.voicemail.phoneId ?? row.sessionPhoneId,
-      callerFirstName: row.callerFirstName,
-      callerLastName: row.callerLastName,
+      organizationId: row.voicemail.organizationId ?? row.sessionOrganizationId ?? row.callerOrganizationId ?? recovered?.organizationId ?? null,
+      contactId: row.voicemail.contactId ?? row.sessionContactId ?? recovered?.contactId ?? null,
+      phoneId: row.voicemail.phoneId ?? row.sessionPhoneId ?? recovered?.phoneId ?? null,
+      callerFirstName: row.callerFirstName ?? recovered?.firstName,
+      callerLastName: row.callerLastName ?? recovered?.lastName,
     };
   }
   private select() {
@@ -45,13 +59,13 @@ export class InboundVoicemailService {
   async list(ownerId: string, cursor?: string) {
     const rows = await this.select()
       .where(and(eq(inboundCallSessions.ownerId, ownerId), cursor ? lt(inboundVoicemails.id, cursor) : undefined)).orderBy(asc(inboundVoicemails.createdAt)).limit(51);
-    const items = rows.slice(0, 50).map((row) => this.view(this.hydrated(row)));
+    const items = await Promise.all(rows.slice(0, 50).map(async (row) => this.view(await this.hydrated(row))));
     return { items, nextCursor: rows.length > 50 ? items.at(-1)?.id ?? null : null, newCount: items.filter(x => x.status === "available").length, handledCount: items.filter(x => x.status === "handled").length };
   }
   async get(ownerId: string, id: string) {
     const [row] = await this.select()
       .where(and(eq(inboundVoicemails.id, id), eq(inboundCallSessions.ownerId, ownerId))).limit(1);
-    return row ? { row: row.voicemail, view: this.view(this.hydrated(row)) } : null;
+    return row ? { row: row.voicemail, view: this.view(await this.hydrated(row)) } : null;
   }
   async markHandled(ownerId: string, id: string) {
     const found = await this.get(ownerId, id); if (!found) return false;

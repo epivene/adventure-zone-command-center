@@ -6,6 +6,7 @@ export function PrivateAudioPlayer({ voicemailId, available }: { voicemailId: st
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   async function play() {
     try {
+      setError("");
       const response = await apiFetch(`/calls/voicemail/${encodeURIComponent(voicemailId)}/audio`, { cache: "no-store" });
       if (!response.ok) throw new Error();
       const next = URL.createObjectURL(await response.blob());
