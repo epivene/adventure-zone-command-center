@@ -363,7 +363,7 @@ Use createHmac("sha256", secret), prune expired windows on consume, and expose n
 - Modify: artifacts/api-server/src/routes/index.ts
 - Modify: artifacts/api-server/src/routes/routes-index-imports.test.ts
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Use an in-memory fake implementing:
 
@@ -390,13 +390,13 @@ Assert that createInquiry:
 - calls create exactly once;
 - never receives a CRM repository dependency.
 
-- [ ] **Step 2: Run service tests and confirm red**
+- [x] **Step 2: Run service tests and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-service.test.ts
 
 Expected: FAIL because repository and service are absent.
 
-- [ ] **Step 3: Implement repository and service**
+- [x] **Step 3: Implement repository and service**
 
 The service result is:
 
@@ -413,7 +413,7 @@ type CreateInquiryResult = WebsiteInquiryReceipt & {
 
 Handle PostgreSQL unique violation 23505 by re-reading submissionId, so concurrent retry requests return one success. If the collision is only the generated reference code, generate another code and retry at most three times. Log only inquiryId/referenceCode/error category; never log the full request body or message.
 
-- [ ] **Step 4: Write failing route security and response tests**
+- [x] **Step 4: Write failing route security and response tests**
 
 With Supertest, assert:
 
@@ -427,7 +427,7 @@ With Supertest, assert:
 - a repository exception returns generic JSON 503;
 - no owner token is required for only this route.
 
-- [ ] **Step 5: Add path-specific parsing and CORS**
+- [x] **Step 5: Add path-specific parsing and CORS**
 
 Before the global 1mb JSON parser in app.ts, mount:
 
@@ -442,14 +442,14 @@ app.use(
 
 Mount publicWebsiteInquiriesRouter in routes/index.ts before requireOwnerMiddleware. The route obtains req.ip, runs the HMAC limiter, validates Origin and pageUrl, parses Zod, and calls the service. Configure app.set("trust proxy", 1) so req.ip reflects Render's first trusted proxy hop.
 
-- [ ] **Step 6: Run route and regression tests**
+- [x] **Step 6: Run route and regression tests**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-service.test.ts src/routes/public-website-inquiries.test.ts src/routes/routes-index-imports.test.ts
     pnpm --filter @workspace/api-server typecheck
 
 Expected: PASS. Confirm the existing owner and Office route mounts are unchanged.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
     git add artifacts/api-server/src/app.ts artifacts/api-server/src/routes artifacts/api-server/src/features/website-inquiries
     git commit -m "feat: accept website inquiries into a review queue"
