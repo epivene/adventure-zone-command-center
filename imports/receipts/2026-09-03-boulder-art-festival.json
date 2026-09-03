@@ -1,29 +1,40 @@
 {
-  "appliedAt": "2026-09-03T18:24:03.135Z",
+  "appliedAt": "2026-09-03T19:09:28.765Z",
   "profileId": "c68d7ed7-097e-4205-b78e-6e65318e78e5",
   "profileName": "Boulder Art Festival (Boulder) CO",
-  "action": "created",
+  "action": "updated",
   "familyId": "0adeaee7-81ff-40c8-ae82-c8e03f3320c6",
   "familyName": "ColoradoEvents.org",
   "familyAttached": true,
   "organizerContactLinked": true,
-  "organizerContactReused": true,
+  "organizerContactReused": false,
+  "contactEmail": "coloradoevents@gmail.com",
+  "gmailMappingCount": 1,
+  "gmailMappingError": null,
+  "gmailNewsletterLinked": true,
+  "gmailNewsletterMessageId": "1a0683a8fcaeda83",
+  "outreachStatusNote": {
+    "created": true,
+    "activityId": "111fbd7e-a821-4685-b024-7daee6ddd8bc"
+  },
+  "emailTimelineCount": 0,
+  "emailTimelineSubjects": [],
   "notes": [
     {
-      "created": true,
+      "created": false,
       "activityId": "8419e042-921a-478c-ade5-871ecd442b44"
     },
     {
-      "created": true,
+      "created": false,
       "activityId": "4bb9f20d-2347-4cf6-a663-a3b13a71bf8d"
     },
     {
-      "created": true,
+      "created": false,
       "activityId": "1b0292c0-3f5f-4a38-bba0-a222280eb463"
     }
   ],
   "followUp": {
-    "created": true,
+    "created": false,
     "followUpId": "76d61666-7598-4b7c-9238-c685987caf69",
     "dueAt": "2026-09-14T15:00:00.000Z",
     "label": "Contact for 2027 multi-event Mini Zone partnership"
