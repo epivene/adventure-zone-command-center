@@ -115,6 +115,19 @@ jobs:
               request(`profile-history/${profileId}`),
               search("coloradoevents@gmail.com"),
             ]);
+            let gmailMappingCount = null;
+            let gmailMappingError = null;
+            try {
+              const gmailLinks = await request(`gmail-profile-links/profile/${profileId}`);
+              gmailMappingCount = (gmailLinks.mappings ?? []).length;
+            } catch (error) {
+              gmailMappingError = error instanceof Error ? error.message : String(error);
+            }
+            const timelineActivities = [...(history.notes ?? []), ...(history.history ?? [])];
+            const emailTimeline = timelineActivities.filter((item) =>
+              /email|gmail|mail/i.test(String(item.kind ?? ""))
+              || /email|gmail|mail/i.test(String(item.actSourceType ?? "")),
+            );
             const exactProfile = (after.results ?? []).find(
               (item) => item.kind === "organization" && item.id === profileId,
             );
@@ -152,6 +165,11 @@ jobs:
               familyAttached: true,
               organizerContactLinked: true,
               organizerContactReused: matchingContacts.length === 1,
+              contactEmail: (history.contacts ?? []).find((item) => item.isPrimary)?.email ?? null,
+              gmailMappingCount,
+              gmailMappingError,
+              emailTimelineCount: emailTimeline.length,
+              emailTimelineSubjects: emailTimeline.map((item) => item.subject).filter(Boolean).slice(0, 20),
               notes: noteReceipts.map((item) => ({ created: item.created, activityId: item.activityId })),
               followUp: {
                 created: followUpReceipt.created,
@@ -172,6 +190,8 @@ jobs:
               `- Action: ${receipt.action}`,
               `- Event family: ${receipt.familyName} (verified)`,
               `- Organizer contact: linked and verified`,
+              `- Gmail approved mappings: ${receipt.gmailMappingCount ?? "unavailable"}`,
+              `- Email timeline items: ${receipt.emailTimelineCount}`,
               `- Research notes: ${receipt.notes.length} verified`,
               `- Follow-up: ${receipt.followUp.label} — ${receipt.followUp.dueAt}`,
             ].join("\n") + "\n");
