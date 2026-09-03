@@ -1,3 +1,4 @@
+import cors from "cors";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +8,7 @@ vi.mock("@workspace/db", () => ({ db: {} }));
 
 import {
   createPublicWebsiteInquiriesRouter,
+  createWebsiteInquiryCorsMiddleware,
   websiteInquiryBodyErrorHandler,
   websiteInquiryJsonParser,
 } from "./public-website-inquiries";
@@ -46,6 +48,24 @@ beforeEach(() => {
 });
 
 describe("public website inquiry route", () => {
+  it("blocks a disallowed preflight before the app-wide CORS middleware can allow it", async () => {
+    const instance = express();
+    instance.use(
+      "/api/public/website-inquiries",
+      createWebsiteInquiryCorsMiddleware(allowedOrigins),
+    );
+    instance.use(cors({ origin: true }));
+
+    const response = await request(instance)
+      .options("/api/public/website-inquiries")
+      .set("Origin", "https://evil.example")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type");
+
+    expect(response.status).toBe(403);
+    expect(response.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
   it("accepts an allowed visitor without owner authentication", async () => {
     const response = await request(app())
       .post("/public/website-inquiries")
