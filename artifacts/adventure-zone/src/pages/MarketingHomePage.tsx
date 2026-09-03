@@ -1,17 +1,22 @@
 import { ArrowLeft, FileText, Mail, Megaphone, Settings2, UsersRound } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useSearch } from "wouter";
 
 import { readBookingReturnPath } from "@/lib/admin-workspace";
+import MarketingCampaignsPage from "@/pages/MarketingCampaignsPage";
 
 const campaignAreas = [
-  { title: "Email campaigns", description: "Build and save reviewed promotional email campaigns.", icon: Mail, href: "/marketing/campaigns?area=email" },
-  { title: "Brochures & promos", description: "Keep brochures, promos, and reusable marketing pieces organized.", icon: FileText, href: "/marketing/campaigns?area=promos" },
-  { title: "Audiences & lists", description: "Build reusable groups from the same shared profiles and contacts.", icon: UsersRound, href: "/marketing/campaigns?area=audiences" },
-  { title: "Campaign history", description: "Review campaign drafts, sent dates, audiences, and saved copy.", icon: Megaphone, href: "/marketing/campaigns?area=history" },
+  { title: "Email campaigns", description: "Build and save reviewed promotional email campaigns.", icon: Mail, href: "/marketing?area=email" },
+  { title: "Brochures & promos", description: "Keep brochures, promos, and reusable marketing pieces organized.", icon: FileText, href: "/marketing?area=promos" },
+  { title: "Audiences & lists", description: "Build reusable groups from the same shared profiles and contacts.", icon: UsersRound, href: "/marketing?area=audiences" },
+  { title: "Campaign history", description: "Review campaign drafts, sent dates, audiences, and saved copy.", icon: Megaphone, href: "/marketing?area=history" },
 ] as const;
 
 export default function MarketingHomePage() {
+  const search = useSearch();
+  const campaignArea = new URLSearchParams(search).get("area");
   const bookingReturnPath = readBookingReturnPath();
+
+  if (campaignArea) return <MarketingCampaignsPage />;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
