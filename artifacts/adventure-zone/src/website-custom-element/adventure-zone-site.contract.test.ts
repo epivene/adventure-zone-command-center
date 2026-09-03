@@ -59,6 +59,32 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(customElements.get("adventure-zone-site")).toBeTypeOf("function");
   });
 
+  it("keeps the hero height independent from the Wix iframe viewport", () => {
+    const element = document.createElement("adventure-zone-site") as HTMLElement;
+    document.body.append(element);
+    const embeddedStyles = element.shadowRoot?.querySelector("style")?.textContent;
+    expect(embeddedStyles).toBeTruthy();
+
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = embeddedStyles ?? "";
+    document.body.append(stylesheet);
+
+    const heroMinHeights: string[] = [];
+    const visitRules = (rules: CSSRuleList) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSStyleRule && rule.selectorText.split(",").some((selector) => selector.trim() === ".hero")) {
+          if (rule.style.minHeight) heroMinHeights.push(rule.style.minHeight);
+        }
+        const nestedRules = (rule as CSSRule & { cssRules?: CSSRuleList }).cssRules;
+        if (nestedRules) visitRules(nestedRules);
+      }
+    };
+    visitRules(stylesheet.sheet!.cssRules);
+
+    expect(heroMinHeights).not.toHaveLength(0);
+    expect(heroMinHeights.join(" ")).not.toMatch(/\b\d*\.?\d+(?:s|d|l)?vh\b/i);
+  });
+
   it("posts every form field, the honeypot, page URL, and one submission ID", async () => {
     const randomUUID = vi.fn(() => "10000000-0000-4000-8000-000000000001");
     Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: randomUUID });
