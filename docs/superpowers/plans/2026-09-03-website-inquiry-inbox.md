@@ -785,7 +785,7 @@ Map schema errors to 400, missing selected records to 404, invalid status to 409
 - Modify: artifacts/adventure-zone/src/App.tsx
 - Modify: artifacts/adventure-zone/src/App.office-routing.test.tsx
 
-- [ ] **Step 1: Write failing list/detail tests**
+- [x] **Step 1: Write failing list/detail tests**
 
 Using Testing Library and a fake WebsiteInquiryApi, cover:
 
@@ -798,17 +798,17 @@ Using Testing Library and a fake WebsiteInquiryApi, cover:
 - converted detail links to contact, profile, and booking;
 - controls have visible labels, keyboard focus, and aria-live success/error feedback.
 
-- [ ] **Step 2: Write failing conversion-dialog tests**
+- [x] **Step 2: Write failing conversion-dialog tests**
 
 Cover suggestion selection, manual search result selection, create-new contact/profile fields, required city and two-letter state, prefilled inquiry data, editable due time, confirmation summary, submission disabling, server failure retention, and success links.
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
     pnpm --filter @workspace/adventure-zone exec vitest run src/features/website-inquiries/website-inquiry-inbox.test.tsx src/features/website-inquiries/website-inquiry-detail.test.tsx src/features/website-inquiries/website-inquiry-convert-dialog.test.tsx src/App.office-routing.test.tsx
 
 Expected: FAIL because components and routes are absent.
 
-- [ ] **Step 4: Implement one shared UI with auth adapters**
+- [x] **Step 4: Implement one shared UI with auth adapters**
 
 Define:
 
@@ -824,7 +824,7 @@ WebsiteInquiriesPage adapts apiGet/apiPatch/apiPost. OfficeWebsiteInquiriesPage 
 
 Use TanStack Query keys ["website-inquiries", status], ["website-inquiry", id], ["website-inquiry-matches", id], and ["website-inquiry-count"]. Invalidate all four after a state mutation or conversion.
 
-- [ ] **Step 5: Add routes**
+- [x] **Step 5: Add routes**
 
 Lazy-load and register:
 
@@ -835,7 +835,7 @@ Lazy-load and register:
 
 The Office route may render only when OfficeIdentity.canReviewWebsiteInquiries is true; otherwise redirect to /office. The API remains the security boundary.
 
-- [ ] **Step 6: Rerun and commit**
+- [x] **Step 6: Rerun and commit**
 
     pnpm --filter @workspace/adventure-zone exec vitest run src/features/website-inquiries/website-inquiry-inbox.test.tsx src/features/website-inquiries/website-inquiry-detail.test.tsx src/features/website-inquiries/website-inquiry-convert-dialog.test.tsx src/App.office-routing.test.tsx
     pnpm --filter @workspace/adventure-zone typecheck

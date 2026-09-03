@@ -41,7 +41,12 @@ export const officePost = <T,>(path: string, body: unknown) => officeFetch(path,
 export const officePatch = <T,>(path: string, body: unknown) => officeFetch(path, { method: "PATCH", body: JSON.stringify(body) }).then(json<T>);
 export const officePut = <T,>(path: string, body: unknown) => officeFetch(path, { method: "PUT", body: JSON.stringify(body) }).then(json<T>);
 
-export type OfficeIdentity = { accountId: string; displayName: string; role: "office_coordinator" };
+export type OfficeIdentity = {
+  accountId: string;
+  displayName: string;
+  role: "office_coordinator";
+  canReviewWebsiteInquiries: boolean;
+};
 type State = {
   office: OfficeIdentity | null;
   loading: boolean;
@@ -78,9 +83,9 @@ export function OfficeAuthProvider({ children }: { children: ReactNode }) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
         return { ok: false as const, error: payload.error ?? "Incorrect username or password" };
       }
-      const data = await response.json() as { token: string; office: { id: string; displayName: string; role: "office_coordinator" } };
+      const data = await response.json() as { token: string; office: { id: string; displayName: string; role: "office_coordinator"; canReviewWebsiteInquiries: boolean } };
       setToken(data.token);
-      setOffice({ accountId: data.office.id, displayName: data.office.displayName, role: data.office.role });
+      setOffice({ accountId: data.office.id, displayName: data.office.displayName, role: data.office.role, canReviewWebsiteInquiries: data.office.canReviewWebsiteInquiries });
       return { ok: true as const };
     } catch {
       return { ok: false as const, error: "Could not reach the server. Try again." };
@@ -93,9 +98,9 @@ export function OfficeAuthProvider({ children }: { children: ReactNode }) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
         return { ok: false as const, error: payload.error ?? "Demo sign-in is unavailable" };
       }
-      const data = await response.json() as { token: string; office: { id: string; displayName: string; role: "office_coordinator" } };
+      const data = await response.json() as { token: string; office: { id: string; displayName: string; role: "office_coordinator"; canReviewWebsiteInquiries: boolean } };
       setToken(data.token);
-      setOffice({ accountId: data.office.id, displayName: data.office.displayName, role: data.office.role });
+      setOffice({ accountId: data.office.id, displayName: data.office.displayName, role: data.office.role, canReviewWebsiteInquiries: data.office.canReviewWebsiteInquiries });
       return { ok: true as const };
     } catch {
       return { ok: false as const, error: "Could not reach the server. Try again." };
