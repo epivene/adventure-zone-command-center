@@ -8,6 +8,7 @@ import {
 import {
   PostgresGoogleValidationRepository,
   type GoogleApprovedValidationMapping,
+  type GoogleValidationMappingInput,
 } from "@/features/google-workspace/google-validation-repository";
 import { requireAssistantImportToken } from "../middlewares/assistant-import-auth";
 
@@ -18,6 +19,10 @@ const sweepInputSchema = z.object({
 }).strict();
 
 const profileIdSchema = z.string().uuid();
+const gmailIdSchema = z.string().trim().min(1).max(256).regex(/^[A-Za-z0-9_-]+$/);
+const linkInputSchema = z.object({
+  threadId: gmailIdSchema,
+}).strict();
 
 type SweepAccess = {
   run(input: {
@@ -28,6 +33,7 @@ type SweepAccess = {
 };
 
 type ValidationAccess = {
+  upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   listApprovedForOrganization(
     organizationId: string,
   ): Promise<GoogleApprovedValidationMapping[]>;
@@ -96,6 +102,47 @@ export function createAssistantGmailProfileLinksRouter(options?: {
       });
     }
   });
+
+  router.put(
+    "/gmail-profile-links/profile/:organizationId/messages/:messageId",
+    async (req, res): Promise<void> => {
+      const profileId = profileIdSchema.safeParse(req.params.organizationId);
+      const messageId = gmailIdSchema.safeParse(req.params.messageId);
+      const input = linkInputSchema.safeParse(req.body);
+      if (!profileId.success || !messageId.success || !input.success) {
+        res.status(400).json({
+          ok: false,
+          error: "GOOGLE_WORKSPACE_PROFILE_LINK_INPUT_INVALID",
+        });
+        return;
+      }
+
+      try {
+        await validation.upsertRows([{
+          messageId: messageId.data,
+          threadId: input.data.threadId,
+          organizationId: profileId.data,
+          contactId: null,
+          evidenceCodes: ["assistant_approved_gmail_profile_link"],
+        }]);
+        res.json({
+          ok: true,
+          organizationId: profileId.data,
+          messageId: messageId.data,
+          threadId: input.data.threadId,
+        });
+      } catch (error) {
+        req.log?.error?.(
+          { err: error, organizationId: profileId.data, messageId: messageId.data },
+          "Gmail message could not be linked to profile",
+        );
+        res.status(statusFor(error)).json({
+          ok: false,
+          error: publicError(error),
+        });
+      }
+    },
+  );
 
   router.get(
     "/gmail-profile-links/profile/:organizationId",
