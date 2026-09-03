@@ -904,11 +904,11 @@ Thread the permission through stored Office login identity and /office/auth/me r
 - Modify: render.yaml
 - Create: docs/website-inquiry-inbox-runbook.md
 
-- [ ] **Step 1: Copy the approved visual implementation into the static public tree**
+- [x] **Step 1: Copy the approved visual implementation into the static public tree**
 
 Use the current workspace file ../adventure-zone-site.js as the source of the visual markup, styles, images, sections, video URL, resize signaling, and responsive behavior. The repository copy under artifacts/adventure-zone/public becomes canonical. Do not redesign or omit sections during this task.
 
-- [ ] **Step 2: Write failing jsdom contract tests**
+- [x] **Step 2: Write failing jsdom contract tests**
 
 Load public/adventure-zone-site.js in jsdom and test:
 
@@ -922,13 +922,13 @@ Load public/adventure-zone-site.js in jsdom and test:
 - failure never assigns window.location.href;
 - source contains neither replit.app nor secret-like DATABASE_URL, SESSION_SECRET, SMTP password, or recipient configuration strings.
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
     pnpm --filter @workspace/adventure-zone exec vitest run src/website-custom-element/adventure-zone-site.contract.test.ts
 
 Expected: FAIL because the hosted copy still has the mail-client-only submit behavior or is absent.
 
-- [ ] **Step 4: Implement bounded asynchronous submission**
+- [x] **Step 4: Implement bounded asynchronous submission**
 
 In the custom element:
 
@@ -942,7 +942,7 @@ Make submitInquiry async. Generate this.pendingSubmissionId only when absent, us
 
 Keep the adventure-zone-inquiry custom event as a non-cancelable informational event after a successful API save; do not let a missing Wix listener bypass the API.
 
-- [ ] **Step 5: Add Render configuration and runbook**
+- [x] **Step 5: Add Render configuration and runbook**
 
 Under the existing API service envVars in render.yaml add:
 
@@ -966,7 +966,7 @@ The runbook must include:
 7. Rollback: restore the previous Wix custom element source while leaving saved inquiries intact.
 8. Stop Replit only after Render and Wix production are verified.
 
-- [ ] **Step 6: Run full automated verification**
+- [x] **Step 6: Run full automated verification**
 
 Run:
 
@@ -981,7 +981,9 @@ Run:
 
 Expected: every command exits 0.
 
-- [ ] **Step 7: Perform a security and placeholder review**
+Verification note: the database build, 108 focused API tests, 36 focused web tests, both production builds, and `git diff --check` pass. The repository's existing package-wide typecheck baselines remain nonzero (167 API and 115 web TypeScript error lines); filtering to every inquiry, auth, administration, navigation, and custom-element file changed by this plan reports zero errors.
+
+- [x] **Step 7: Perform a security and placeholder review**
 
 Run:
 
@@ -991,7 +993,7 @@ Run:
 
 Expected: no TODO/TBD/FIXME, no Replit runtime URL, no secret in public JS, and only intended files changed. Server source may mention environment variable names; values must remain server-side.
 
-- [ ] **Step 8: Commit the verified implementation**
+- [x] **Step 8: Commit the verified implementation**
 
     git add artifacts/adventure-zone/public/adventure-zone-site.js artifacts/adventure-zone/src/website-custom-element render.yaml docs/website-inquiry-inbox-runbook.md
     git commit -m "feat: host Wix site and connect inquiry inbox"

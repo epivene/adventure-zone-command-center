@@ -35,7 +35,7 @@ describe("website inquiry public contract", () => {
     [{ ...validInput, website: "spam.example" }, "honeypot"],
     [{ ...validInput, role: "owner" }, "unknown field"],
     [{ ...validInput, message: "x".repeat(5001) }, "length"],
-  ])("rejects invalid input: %s (%s)", (input) => {
+  ])("rejects invalid input: %s (%s)", (input, _reason) => {
     expect(websiteInquirySubmissionSchema.safeParse(input).success).toBe(false);
   });
 });
