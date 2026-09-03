@@ -1,0 +1,59 @@
+{
+  "event": {
+    "id": null,
+    "name": "Boulder Art Festival (Boulder) CO",
+    "city": "Boulder",
+    "region": "CO"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Labor Day weekend outdoor juried art and craft festival presented by Colorado Events on all four blocks of Pearl Street Mall in downtown Boulder. Free admission, 90+ artists and live music. Strong 2027 prospect for a compact Adventure Zone Mini Zone or dedicated family attraction. A full 10-attraction package would likely require an adjacent plaza, closed street or nearby lot because the mall festival footprint is dense.",
+    "phone": "720-272-7467",
+    "website": "https://www.coloradoevents.org/boulderartfestival",
+    "address1": "Pearl Street Mall",
+    "address2": "",
+    "postalCode": "80302"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Colorado Events",
+      "phone": "720-272-7467",
+      "email": "coloradoevents@gmail.com",
+      "role": "Event Organizer",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "researching",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "2026 Boulder Art Festival research",
+      "body": "Verified event details: September 5–6, 2026 on all four blocks of the Pearl Street Mall in downtown Boulder. Public hours are Saturday 11:00 AM–7:00 PM and Sunday 11:00 AM–6:00 PM. Admission is free. The event advertises more than 90 artists plus live music. Colorado Events describes its shows as drawing thousands, but no trustworthy event-specific attendance total was published. The 2026 festival is sold out. Official event page: https://www.coloradoevents.org/boulderartfestival"
+    },
+    {
+      "subject": "Adventure Zone opportunity strategy",
+      "body": "Promising 2027 lead, best approached as part of a multi-event Colorado Events relationship. Pitch a compact Mini Zone or official family-fun area using the guarantee arrangement first. The normal 10-attraction Adventure Zone package is probably too large for the occupied Pearl Street footprint unless the organizer can secure an adjacent plaza, closed side street, or nearby lot. Regular juried booths are limited to handmade art vendors, so Adventure Zone would need a custom sponsor/entertainment agreement. Published Pearl Street sponsorship pricing begins at $550 per event day with a two-day minimum ($1,100), but that appears booth-scale and does not guarantee inflatable space. Ask about a dedicated family area, usable footprint, power, anchoring, permits, 2027 dates, verified attendance, and a multi-event arrangement."
+    },
+    {
+      "subject": "Organizer and venue details",
+      "body": "Organizer: Colorado Events. General contact: coloradoevents@gmail.com, 720-272-7467. Mailing address: 2525 Arapahoe Ave, E4-720, Boulder, CO 80302. Venue: Pearl Street Mall, Boulder, CO 80302. Boulder requires advance approval and licensing for amusements plus event insurance; published general requirement is $1 million per occurrence and $2 million aggregate. City reference: https://bouldercolorado.gov/guide/special-events"
+    }
+  ],
+  "followUp": {
+    "label": "Contact for 2027 multi-event Mini Zone partnership",
+    "reason": "Contact Colorado Events after the 2026 Boulder Art Festival while results are fresh. Ask for the 2027 festival calendar and discuss a guarantee-first, multi-event Mini Zone/family attraction partnership. Confirm attendance, available off-mall or adjacent space, power, anchoring, permits, and whether one agreement could cover several Colorado Events festivals.",
+    "dueAt": "2026-09-14T15:00:00.000Z",
+    "preserveExisting": false
+  }
+}
