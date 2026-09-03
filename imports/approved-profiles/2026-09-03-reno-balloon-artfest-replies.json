@@ -35,7 +35,7 @@
       "startsAt": "2026-09-10",
       "endsAt": "2026-09-13",
       "nextActionKind": "email",
-      "nextActionDueAt": "",
+      "nextActionDueAt": "2027-01-04T16:00:00.000Z",
       "travelLegId": null
     },
     "familyId": null,
