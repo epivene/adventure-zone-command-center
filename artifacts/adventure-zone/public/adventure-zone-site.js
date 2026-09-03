@@ -431,50 +431,50 @@
       .site-header { padding: 20px 0; }
       .site-header.scrolled { padding: 12px 0; }
       .menu-toggle { width: 48px; height: 48px; }
-      .hero { min-height: clamp(780px, 75vw, 960px); padding: 96px 32px 80px; }
+      .hero { min-height: clamp(620px, 60vw, 760px); padding: 72px 32px 60px; }
       .hero-content { align-items: flex-start; }
-      .eyebrow { margin-bottom: 32px; padding: 8px 20px; font-size: 16px; }
+      .eyebrow { margin-bottom: 24px; padding: 8px 20px; font-size: 14px; }
       .eyebrow .az-icon { width: 20px; height: 20px; }
-      .hero h1 { font-size: clamp(5rem, 12vw, 9rem); text-align: left; }
-      .hero h1 .yellow { margin-top: 16px; }
+      .hero h1 { font-size: clamp(4rem, 9vw, 6.75rem); text-align: left; }
+      .hero h1 .yellow { margin-top: 12px; }
       .hero h1 .yellow::after { display: block; }
-      .hero-copy { margin-bottom: 48px; font-size: 30px; text-align: left; }
-      .section { padding: 96px 32px; }
-      .section h2 { font-size: clamp(4rem, 8vw, 7rem); }
-      .body-large { font-size: 24px; }
+      .hero-copy { margin-bottom: 36px; font-size: 24px; text-align: left; }
+      .section { padding: 72px 32px; }
+      .section h2 { font-size: clamp(3rem, 6vw, 5.25rem); }
+      .body-large { font-size: 20px; }
       .about-layout { grid-template-columns: 1.1fr .9fr; gap: 48px; }
-      .about-bottom { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 48px; padding-top: 32px; }
+      .about-bottom { flex-direction: row; align-items: center; justify-content: space-between; margin-top: 36px; padding-top: 24px; }
       .about-bottom p { font-size: 18px; }
-      .scale-card { padding: 48px; }
-      .scale-card .az-icon { width: 64px; height: 64px; }
-      .experience-layout { grid-template-columns: 1fr 1.2fr; gap: 64px; }
-      .experience-copy h3 { font-size: 50px; }
-      .experience-copy > p { font-size: 20px; }
+      .scale-card { padding: 36px; }
+      .scale-card .az-icon { width: 52px; height: 52px; }
+      .experience-layout { grid-template-columns: 1fr 1.2fr; gap: 48px; }
+      .experience-copy h3 { font-size: 40px; }
+      .experience-copy > p { font-size: 18px; }
       .feature-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .packages { padding-top: 128px; padding-bottom: 128px; }
-      .packages-intro { margin-bottom: 80px; font-size: 24px; }
+      .packages { padding-top: 96px; padding-bottom: 96px; }
+      .packages-intro { margin-bottom: 60px; font-size: 20px; }
       .package-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .package-image { height: 288px; }
-      .how-layout { grid-template-columns: 1fr 2fr; gap: 64px; }
-      .how-copy p { font-size: 24px; }
+      .package-image { height: 240px; }
+      .how-layout { grid-template-columns: 1fr 2fr; gap: 48px; }
+      .how-copy p { font-size: 20px; }
       .step-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
-      .safety-copy { font-size: 24px; }
-      .safety-grid { grid-template-columns: repeat(3, minmax(0,1fr)); margin-top: 56px; }
+      .safety-copy { font-size: 20px; }
+      .safety-grid { grid-template-columns: repeat(3, minmax(0,1fr)); margin-top: 42px; }
       .safety-card { padding: 28px; }
-      .booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 48px; }
-      .booking-card { padding: 56px; }
+      .booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 36px; }
+      .booking-card { padding: 42px; }
       .gallery-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 32px; }
       .gallery-frame:nth-child(2) { transform: translateY(48px); }
-      .faq-item summary { padding: 20px 24px; font-size: 24px; }
+      .faq-item summary { padding: 18px 22px; font-size: 20px; }
       .faq-answer { padding: 24px; font-size: 18px; }
-      .contact { padding-top: 128px; padding-bottom: 128px; }
-      .contact-panel { padding: 64px; }
-      .contact-form { padding: 40px; }
+      .contact { padding-top: 96px; padding-bottom: 96px; }
+      .contact-panel { padding: 48px; }
+      .contact-form { padding: 32px; }
       .form-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .footer-inner { flex-direction: row; justify-content: space-between; }
     }
 
-    @media (min-width: 1024px) {
+    @media (min-width: 960px) {
       .desktop-nav, .desktop-book { display: flex; }
       .menu-toggle { display: none; }
       .mobile-nav { display: none !important; }
