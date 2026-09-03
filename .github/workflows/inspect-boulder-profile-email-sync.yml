@@ -1,0 +1,75 @@
+name: Inspect Boulder profile email sync
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/inspect-boulder-profile-email-sync.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect live email linkage
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const profileId = "c68d7ed7-097e-4205-b78e-6e65318e78e5";
+          async function request(path) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            const text = await response.text();
+            if (!response.ok) return { ok: false, status: response.status, error: text.slice(0, 300) };
+            return JSON.parse(text);
+          }
+          (async () => {
+            const history = await request(`profile-history/${profileId}`);
+            if (!history.ok) throw new Error(`History lookup failed: ${history.status} ${history.error}`);
+            const gmail = await request(`gmail-profile-links/profile/${profileId}`);
+            const contact = (history.contacts ?? []).find((item) => item.isPrimary) ?? history.contacts?.[0] ?? null;
+            const timeline = [...(history.notes ?? []), ...(history.history ?? [])];
+            const emails = timeline.filter((item) =>
+              /email|gmail|mail/i.test(String(item.kind ?? ""))
+              || /email|gmail|mail/i.test(String(item.actSourceType ?? "")),
+            );
+            const receipt = {
+              inspectedAt: new Date().toISOString(),
+              profileId,
+              contactLinked: Boolean(contact),
+              contactEmail: contact?.email ?? null,
+              contactSource: contact?.source ?? null,
+              gmailLookupOk: gmail.ok === true,
+              gmailApprovedMappingCount: gmail.ok === true ? (gmail.mappings ?? []).length : null,
+              gmailLookupStatus: gmail.ok === true ? 200 : gmail.status,
+              gmailLookupError: gmail.ok === true ? null : gmail.error,
+              emailTimelineCount: emails.length,
+              emailTimelineSubjects: emails.map((item) => item.subject).filter(Boolean).slice(0, 20),
+            };
+            fs.mkdirSync("imports/inspection-receipts", { recursive: true });
+            fs.writeFileSync("imports/inspection-receipts/boulder-profile-email-sync.json", JSON.stringify(receipt, null, 2));
+            console.log(JSON.stringify(receipt, null, 2));
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+      - name: Commit inspection receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/inspection-receipts/boulder-profile-email-sync.json
+          git commit -m "Record Boulder profile email sync inspection"
+          git push
