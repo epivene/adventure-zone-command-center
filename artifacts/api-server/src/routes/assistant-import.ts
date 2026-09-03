@@ -31,8 +31,9 @@ function splitName(name: string) {
 router.use(requireAssistantImportToken);
 router.use((req, res, next) => {
   const isEventProfileImport = req.method === "POST" && req.path === "/event-profiles";
+  const isProfileContactUpsert = req.method === "POST" && req.path === "/profile-contacts";
   const isProfileSearch = req.method === "GET" && req.path === "/profile-search";
-  if (!isEventProfileImport && !isProfileSearch) {
+  if (!isEventProfileImport && !isProfileContactUpsert && !isProfileSearch) {
     res.status(404).json({ error: "Not found" });
     return;
   }
@@ -56,6 +57,125 @@ router.get("/profile-search", async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ err: error, query }, "Failed assistant-import profile search");
     res.status(500).json({ ok: false, error: "Profile search failed." });
+  }
+});
+
+router.post("/profile-contacts", async (req, res): Promise<void> => {
+  const organizationId = typeof req.body?.organizationId === "string" ? req.body.organizationId.trim() : "";
+  const input = req.body?.contact ?? {};
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const email = typeof input.email === "string" ? input.email.trim().toLowerCase() : "";
+  const phone = typeof input.phone === "string" ? input.phone.trim() : "";
+  const role = typeof input.role === "string" ? input.role.trim() : "";
+  const requestedContactId = typeof input.id === "string" && uuidPattern.test(input.id.trim()) ? input.id.trim() : null;
+  const makePrimary = Boolean(input.primary);
+
+  if (!uuidPattern.test(organizationId) || !name || (email && !email.includes("@"))) {
+    res.status(400).json({ ok: false, error: "Review the profile and contact details." });
+    return;
+  }
+
+  try {
+    const now = new Date();
+    const result = await db.transaction(async (transaction) => {
+      const [organization] = await transaction
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(and(eq(organizations.id, organizationId), sql`${organizations.consolidatedIntoId} is null`))
+        .limit(1);
+      if (!organization) return null;
+
+      let existingContact: { id: string } | undefined;
+      if (requestedContactId) {
+        [existingContact] = await transaction
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.id, requestedContactId))
+          .limit(1);
+      } else if (email) {
+        [existingContact] = await transaction
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(sql`lower(trim(coalesce(${contacts.email}, ''))) = ${email}`)
+          .orderBy(asc(contacts.createdAt), asc(contacts.id))
+          .limit(1);
+      }
+
+      const split = splitName(name);
+      let contactId: string;
+      if (existingContact) {
+        contactId = existingContact.id;
+        await transaction
+          .update(contacts)
+          .set({
+            firstName: split.firstName,
+            lastName: split.lastName,
+            email: email || null,
+            phone: phone || null,
+            normalizedPhone: normalizedPhone(phone),
+            jobTitle: role || null,
+            updatedAt: now,
+          })
+          .where(eq(contacts.id, contactId));
+      } else {
+        const [created] = await transaction
+          .insert(contacts)
+          .values({
+            firstName: split.firstName,
+            lastName: split.lastName,
+            email: email || null,
+            phone: phone || null,
+            normalizedPhone: normalizedPhone(phone),
+            jobTitle: role || null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning({ id: contacts.id });
+        if (!created) throw new Error("CONTACT_CREATE_FAILED");
+        contactId = created.id;
+      }
+
+      if (makePrimary) {
+        await transaction
+          .update(organizationContacts)
+          .set({ isPrimary: false, updatedAt: now })
+          .where(and(eq(organizationContacts.organizationId, organizationId), eq(organizationContacts.active, true)));
+      }
+
+      const [relationship] = await transaction
+        .select({ id: organizationContacts.id })
+        .from(organizationContacts)
+        .where(and(eq(organizationContacts.organizationId, organizationId), eq(organizationContacts.contactId, contactId)))
+        .limit(1);
+      if (relationship) {
+        await transaction
+          .update(organizationContacts)
+          .set({ role: role || null, isPrimary: makePrimary, active: true, updatedAt: now })
+          .where(eq(organizationContacts.id, relationship.id));
+      } else {
+        await transaction.insert(organizationContacts).values({
+          organizationId,
+          contactId,
+          role: role || null,
+          isPrimary: makePrimary,
+          active: true,
+          source: "local",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+
+      return { contactId, created: !existingContact };
+    });
+
+    if (!result) {
+      res.status(404).json({ ok: false, error: "Profile not found." });
+      return;
+    }
+    res.status(result.created ? 201 : 200).json({ ok: true, organizationId, ...result, primary: makePrimary });
+  } catch (error) {
+    req.log.error({ err: error, organizationId }, "Failed assistant profile contact upsert");
+    res.status(500).json({ ok: false, error: "The profile contact could not be saved." });
   }
 });
 
