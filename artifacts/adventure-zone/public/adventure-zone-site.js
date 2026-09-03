@@ -142,7 +142,7 @@
     }
 
     *, *::before, *::after { box-sizing: border-box; }
-    .az-site { min-height: 100vh; width: 100%; overflow: hidden; background: var(--az-cream); }
+    .az-site { width: 100%; overflow: hidden; background: var(--az-cream); }
     .az-icon { display: inline-block; width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
     .display { font-family: "Bricolage Grotesque", Impact, "Arial Black", sans-serif; letter-spacing: -.045em; }
     .uppercase { text-transform: uppercase; }
