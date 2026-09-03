@@ -30,17 +30,8 @@ const bookingItems: MenuItem[] = [
   { href: "/needs-answer", label: "Needs Answer" },
 ];
 
-const bookingToolItems: MenuItem[] = [
-  { href: "/profiles", label: "Profiles" },
-  { href: "/calls/workspace", label: "Calls" },
-  { href: "/calls/voicemail", label: "Voicemail" },
-  { href: "/research-sources", label: "Research Sources" },
-  { href: "/office-coordinator", label: "Office Coordinator" },
-  { href: "/needs-answer", label: "Needs Answer" },
-];
-
 const bookingToolsGroups: MenuGroup[] = [
-  { label: "Booking tools", items: bookingToolItems },
+  { label: "Booking tools", items: bookingItems },
 ];
 
 const operationsGroups: MenuGroup[] = [

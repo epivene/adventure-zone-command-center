@@ -1,14 +1,7 @@
-import { ArrowLeft, FileText, Mail, Megaphone, Settings2, UsersRound } from "lucide-react";
+import { ArrowLeft, Settings2 } from "lucide-react";
 import { Link } from "wouter";
 
 import { readBookingReturnPath } from "@/lib/admin-workspace";
-
-const futureAreas = [
-  { title: "Email campaigns", description: "Promotional email runs.", icon: Mail },
-  { title: "Brochures & promos", description: "Brochures, promos, and mailed-date tracking.", icon: FileText },
-  { title: "Audiences & lists", description: "Reusable groups from shared profiles and contacts.", icon: UsersRound },
-  { title: "Campaign history", description: "Completed campaigns and results.", icon: Megaphone },
-] as const;
 
 export default function MarketingHomePage() {
   const bookingReturnPath = readBookingReturnPath();
@@ -28,23 +21,12 @@ export default function MarketingHomePage() {
       </header>
 
       <section aria-labelledby="marketing-now" className="grid gap-3">
-        <div><h2 className="text-xl font-bold" id="marketing-now">Use now</h2></div>
+        <div><h2 className="text-xl font-bold" id="marketing-now">Marketing tools</h2></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/profiles"><h3 className="font-bold">Profiles</h3><p className="mt-1 text-sm text-muted-foreground">Event families, contacts, and cities.</p></Link>
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/office-coordinator"><h3 className="font-bold">Office Coordinator</h3><p className="mt-1 text-sm text-muted-foreground">Brochures, mail, and submitted outreach.</p></Link>
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/research-sources"><h3 className="font-bold">Research</h3><p className="mt-1 text-sm text-muted-foreground">Lead and event research.</p></Link>
           <Link className="rounded-xl border border-primary/40 bg-primary/5 p-4 text-card-foreground shadow-sm hover:border-primary" data-testid="link-design-studio" href="/design-studio"><h3 className="font-bold">Design Studio</h3><p className="mt-1 text-sm text-muted-foreground">Create flyers, emails, contracts, and more.</p></Link>
-        </div>
-      </section>
-
-      <section aria-labelledby="marketing-organized" className="grid gap-3">
-        <div><h2 className="text-xl font-bold" id="marketing-organized">Campaigns</h2></div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {futureAreas.map(({ title, description, icon: Icon }) => (
-            <article className="rounded-xl border border-dashed border-border bg-card p-4 text-card-foreground" key={title}>
-              <div className="flex items-start gap-3"><span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"><Icon className="h-5 w-5" /></span><div><h3 className="font-bold">{title}</h3><p className="mt-1 text-sm text-muted-foreground">{description}</p></div></div>
-            </article>
-          ))}
         </div>
       </section>
 
