@@ -1,25 +1,81 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, FileText, Mail, Megaphone, Plus, Trash2, UsersRound } from "lucide-react";
+import { ArrowLeft, FileText, Mail, Megaphone, Plus, Search, Trash2, UsersRound } from "lucide-react";
 import { Link, useSearch } from "wouter";
 
 import { apiGet } from "@/lib/auth-token";
 
 type Area = "email" | "promos" | "audiences" | "history";
-type Audience = { id: string; name: string; q: string; region: string; placeType: string; estimatedCount: number; createdAt: string };
+type AudienceMember = { id: string; name: string; email: string };
+type SmartAudience = {
+  id: string;
+  kind: "smart";
+  name: string;
+  q: string;
+  region: string;
+  placeType: string;
+  estimatedCount: number;
+  createdAt: string;
+};
+type ManualAudience = {
+  id: string;
+  kind: "manual";
+  name: string;
+  q: "";
+  region: "";
+  placeType: "";
+  estimatedCount: number;
+  profileIds: string[];
+  profiles: AudienceMember[];
+  createdAt: string;
+};
+type Audience = SmartAudience | ManualAudience;
 type Promo = { id: string; title: string; kind: string; notes: string; createdAt: string };
 type Campaign = { id: string; name: string; subject: string; body: string; audienceId: string | null; audienceName: string; recipientCount: number; status: "draft" | "sent"; createdAt: string; sentAt: string | null };
 type MarketingState = { audiences: Audience[]; promos: Promo[]; campaigns: Campaign[] };
-
-type OrganizationListPage = { total: number };
+type OrganizationRecord = { id: string; name: string; email?: string | null; city?: string | null; region?: string | null; placeType?: string | null };
+type OrganizationListPage = { total: number; records?: OrganizationRecord[] };
 
 const STORAGE_KEY = "adventure-zone-marketing-campaigns-v1";
 const emptyState: MarketingState = { audiences: [], promos: [], campaigns: [] };
+
+function normalizeAudience(value: any): Audience | null {
+  if (!value || typeof value !== "object" || typeof value.id !== "string" || typeof value.name !== "string") return null;
+  if (value.kind === "manual") {
+    const profiles = Array.isArray(value.profiles)
+      ? value.profiles.filter((item: any) => item && typeof item.id === "string" && typeof item.name === "string" && typeof item.email === "string" && item.email.trim())
+      : [];
+    const profileIds = Array.isArray(value.profileIds) ? value.profileIds.filter((id: unknown): id is string => typeof id === "string") : profiles.map((item: AudienceMember) => item.id);
+    return {
+      id: value.id,
+      kind: "manual",
+      name: value.name,
+      q: "",
+      region: "",
+      placeType: "",
+      estimatedCount: profileIds.length,
+      profileIds,
+      profiles,
+      createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
+    };
+  }
+  return {
+    id: value.id,
+    kind: "smart",
+    name: value.name,
+    q: typeof value.q === "string" ? value.q : "",
+    region: typeof value.region === "string" ? value.region : "",
+    placeType: typeof value.placeType === "string" ? value.placeType : "",
+    estimatedCount: typeof value.estimatedCount === "number" ? value.estimatedCount : 0,
+    createdAt: typeof value.createdAt === "string" ? value.createdAt : new Date().toISOString(),
+  };
+}
 
 function readState(): MarketingState {
   if (typeof window === "undefined") return emptyState;
   try {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null");
-    return parsed && Array.isArray(parsed.audiences) && Array.isArray(parsed.promos) && Array.isArray(parsed.campaigns) ? parsed : emptyState;
+    if (!parsed || !Array.isArray(parsed.audiences) || !Array.isArray(parsed.promos) || !Array.isArray(parsed.campaigns)) return emptyState;
+    return { ...parsed, audiences: parsed.audiences.map(normalizeAudience).filter((item: Audience | null): item is Audience => Boolean(item)) };
   } catch {
     return emptyState;
   }
@@ -30,13 +86,17 @@ function areaFromSearch(search: string): Area {
   return value === "promos" || value === "audiences" || value === "history" ? value : "email";
 }
 
-function audienceHref(audience: Audience) {
+function audienceHref(audience: SmartAudience) {
   const params = new URLSearchParams();
   if (audience.q) params.set("q", audience.q);
   if (audience.region) params.set("region", audience.region);
   if (audience.placeType) params.set("type", audience.placeType);
   params.set("hasEmail", "yes");
   return `/profiles?${params.toString()}`;
+}
+
+function audienceRecipientCount(item: Audience) {
+  return item.kind === "manual" ? item.profileIds.length : item.estimatedCount;
 }
 
 export default function MarketingCampaignsPage() {
@@ -68,7 +128,7 @@ export default function MarketingCampaignsPage() {
 
       <nav aria-label="Campaign sections" className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {tabs.map(([key, label, Icon]) => (
-          <Link className={`flex items-center gap-2 rounded-xl border p-3 font-semibold transition-colors ${area === key ? "border-primary bg-primary/5 text-foreground" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"}`} href={`/marketing/campaigns?area=${key}`} key={key}>
+          <Link className={`flex items-center gap-2 rounded-xl border p-3 font-semibold transition-colors ${area === key ? "border-primary bg-primary/5 text-foreground" : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground"}`} href={`/marketing?area=${key}`} key={key}>
             <Icon className="h-4 w-4" />{label}
           </Link>
         ))}
@@ -85,13 +145,19 @@ export default function MarketingCampaignsPage() {
 }
 
 function Audiences({ state, setState, setNotice }: { state: MarketingState; setState: React.Dispatch<React.SetStateAction<MarketingState>>; setNotice: (value: string | null) => void }) {
+  const [mode, setMode] = useState<"smart" | "manual">("smart");
   const [name, setName] = useState("");
   const [q, setQ] = useState("");
   const [region, setRegion] = useState("");
   const [placeType, setPlaceType] = useState("");
   const [saving, setSaving] = useState(false);
+  const [manualSearch, setManualSearch] = useState("");
+  const [manualResults, setManualResults] = useState<AudienceMember[]>([]);
+  const [selectedProfiles, setSelectedProfiles] = useState<AudienceMember[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  async function addAudience() {
+  async function addSmartAudience() {
     if (!name.trim() || saving) return;
     setSaving(true);
     const params = new URLSearchParams({ hasEmail: "yes", pageSize: "1" });
@@ -100,28 +166,120 @@ function Audiences({ state, setState, setNotice }: { state: MarketingState; setS
     if (placeType.trim()) params.set("type", placeType.trim());
     let estimatedCount = 0;
     try { estimatedCount = (await apiGet<OrganizationListPage>(`/organizations?${params.toString()}`)).total ?? 0; } catch { estimatedCount = 0; }
-    const item: Audience = { id: crypto.randomUUID(), name: name.trim(), q: q.trim(), region: region.trim(), placeType: placeType.trim(), estimatedCount, createdAt: new Date().toISOString() };
+    const item: SmartAudience = { id: crypto.randomUUID(), kind: "smart", name: name.trim(), q: q.trim(), region: region.trim(), placeType: placeType.trim(), estimatedCount, createdAt: new Date().toISOString() };
     setState((current) => ({ ...current, audiences: [item, ...current.audiences] }));
-    setName(""); setQ(""); setRegion(""); setPlaceType(""); setSaving(false); setNotice(`Saved audience “${item.name}” with about ${estimatedCount} email-ready profiles.`);
+    setName(""); setQ(""); setRegion(""); setPlaceType(""); setSaving(false); setNotice(`Saved smart list “${item.name}” with about ${estimatedCount} email-ready profiles.`);
   }
 
-  return <section className="grid gap-4 lg:grid-cols-[360px_1fr]">
-    <div className="rounded-xl border border-border bg-card p-4">
-      <h2 className="text-lg font-bold">Create audience</h2>
-      <p className="mt-1 text-sm text-muted-foreground">Saved lists use the same profile filters as Booking. Email-ready profiles are counted automatically.</p>
-      <div className="mt-4 grid gap-3">
-        <label className="grid gap-1 text-sm font-semibold">List name<input value={name} onChange={(e)=>setName(e.target.value)} placeholder="2027 county fairs" /></label>
-        <label className="grid gap-1 text-sm font-semibold">Search words<input value={q} onChange={(e)=>setQ(e.target.value)} placeholder="fair, festival…" /></label>
-        <label className="grid gap-1 text-sm font-semibold">Region<input value={region} onChange={(e)=>setRegion(e.target.value)} placeholder="UT, ND, OR…" /></label>
-        <label className="grid gap-1 text-sm font-semibold">Profile type<input value={placeType} onChange={(e)=>setPlaceType(e.target.value)} placeholder="Optional profile type" /></label>
-        <button className="button-primary inline-flex items-center justify-center gap-2" disabled={!name.trim() || saving} onClick={()=>void addAudience()}><Plus className="h-4 w-4" />{saving ? "Counting…" : "Save audience"}</button>
-      </div>
+  async function searchManualProfiles() {
+    setSearching(true);
+    const params = new URLSearchParams({ hasEmail: "yes", pageSize: "50" });
+    if (manualSearch.trim()) params.set("q", manualSearch.trim());
+    try {
+      const response = await apiGet<OrganizationListPage>(`/organizations?${params.toString()}`);
+      const results = (response.records ?? [])
+        .filter((profile) => typeof profile.email === "string" && profile.email.trim())
+        .map((profile) => ({ id: profile.id, name: profile.name, email: profile.email!.trim() }));
+      setManualResults(results);
+    } catch {
+      setManualResults([]);
+      setNotice("Could not load email-ready profiles. Try the search again.");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function toggleManualProfile(profile: AudienceMember) {
+    setSelectedProfiles((current) => current.some((item) => item.id === profile.id) ? current.filter((item) => item.id !== profile.id) : [...current, profile]);
+  }
+
+  function saveManualAudience() {
+    if (!name.trim() || selectedProfiles.length === 0) return;
+    const profileIds = selectedProfiles.map((profile) => profile.id);
+    if (editingId) {
+      setState((current) => ({
+        ...current,
+        audiences: current.audiences.map((item) => item.id === editingId ? {
+          id: item.id,
+          kind: "manual",
+          name: name.trim(),
+          q: "",
+          region: "",
+          placeType: "",
+          estimatedCount: profileIds.length,
+          profileIds,
+          profiles: selectedProfiles,
+          createdAt: item.createdAt,
+        } : item),
+      }));
+      setNotice(`Updated manual list “${name.trim()}” with ${profileIds.length} email-ready profiles.`);
+    } else {
+      const item: ManualAudience = { id: crypto.randomUUID(), kind: "manual", name: name.trim(), q: "", region: "", placeType: "", estimatedCount: profileIds.length, profileIds, profiles: selectedProfiles, createdAt: new Date().toISOString() };
+      setState((current) => ({ ...current, audiences: [item, ...current.audiences] }));
+      setNotice(`Saved manual list “${item.name}” with ${profileIds.length} email-ready profiles.`);
+    }
+    resetManualForm();
+  }
+
+  function resetManualForm() {
+    setName("");
+    setManualSearch("");
+    setManualResults([]);
+    setSelectedProfiles([]);
+    setEditingId(null);
+  }
+
+  function editManualAudience(audience: ManualAudience) {
+    setMode("manual");
+    setEditingId(audience.id);
+    setName(audience.name);
+    setSelectedProfiles(audience.profiles);
+    setManualResults([]);
+    setManualSearch("");
+  }
+
+  return <section className="grid gap-4">
+    <div className="flex flex-wrap gap-2">
+      <button className={mode === "smart" ? "button-primary" : "button-secondary"} onClick={() => { setMode("smart"); resetManualForm(); }}>Smart list</button>
+      <button className={mode === "manual" ? "button-primary" : "button-secondary"} onClick={() => { setMode("manual"); setName(""); }}>Manual list</button>
     </div>
-    <div className="grid content-start gap-3">
-      {state.audiences.length === 0 ? <Empty title="No audiences yet" body="Create a reusable list here, then select it when you build an email campaign." /> : state.audiences.map((audience)=><article className="rounded-xl border border-border bg-card p-4" key={audience.id}>
-        <div className="flex items-start justify-between gap-3"><div><h3 className="font-bold">{audience.name}</h3><p className="mt-1 text-sm text-muted-foreground">About {audience.estimatedCount} profiles with email{audience.region ? ` · ${audience.region}` : ""}{audience.q ? ` · “${audience.q}”` : ""}</p></div><button aria-label={`Delete ${audience.name}`} className="button-secondary p-2" onClick={()=>setState((current)=>({...current,audiences:current.audiences.filter((item)=>item.id!==audience.id)}))}><Trash2 className="h-4 w-4" /></button></div>
-        <Link className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline" href={audienceHref(audience)}>Open matching profiles →</Link>
-      </article>)}
+
+    <div className="grid gap-4 lg:grid-cols-[380px_1fr]">
+      {mode === "smart" ? <div className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-lg font-bold">Create smart list</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Build a reusable list from Booking profile filters. Only profiles with an email address are counted.</p>
+        <div className="mt-4 grid gap-3">
+          <label className="grid gap-1 text-sm font-semibold">List name<input value={name} onChange={(e)=>setName(e.target.value)} placeholder="2027 county fairs" /></label>
+          <label className="grid gap-1 text-sm font-semibold">Search words<input value={q} onChange={(e)=>setQ(e.target.value)} placeholder="fair, festival…" /></label>
+          <label className="grid gap-1 text-sm font-semibold">Region<input value={region} onChange={(e)=>setRegion(e.target.value)} placeholder="UT, ND, OR…" /></label>
+          <label className="grid gap-1 text-sm font-semibold">Profile type<input value={placeType} onChange={(e)=>setPlaceType(e.target.value)} placeholder="Optional profile type" /></label>
+          <button className="button-primary inline-flex items-center justify-center gap-2" disabled={!name.trim() || saving} onClick={()=>void addSmartAudience()}><Plus className="h-4 w-4" />{saving ? "Counting…" : "Save smart list"}</button>
+        </div>
+      </div> : <div className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-lg font-bold">{editingId ? "Edit manual list" : "Create manual list"}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Pick exact profiles instead of using filters. Only profiles with an email address can be added.</p>
+        <div className="mt-4 grid gap-3">
+          <label className="grid gap-1 text-sm font-semibold">List name<input value={name} onChange={(e)=>setName(e.target.value)} placeholder="Hulk leg prospects" /></label>
+          <div className="grid gap-1">
+            <span className="text-sm font-semibold">Find profiles</span>
+            <div className="flex gap-2"><input value={manualSearch} onChange={(e)=>setManualSearch(e.target.value)} onKeyDown={(event)=>{ if(event.key === "Enter") void searchManualProfiles(); }} placeholder="Search event or city…" /><button className="button-secondary inline-flex items-center gap-2" onClick={()=>void searchManualProfiles()} disabled={searching}><Search className="h-4 w-4" />{searching ? "Searching…" : "Search"}</button></div>
+          </div>
+          {selectedProfiles.length > 0 ? <div className="rounded-lg border border-border bg-muted/30 p-3"><p className="text-sm font-bold">Selected · {selectedProfiles.length}</p><div className="mt-2 grid gap-1">{selectedProfiles.map((profile)=><button className="flex items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-sm hover:bg-background" key={profile.id} onClick={()=>toggleManualProfile(profile)}><span><span className="font-semibold">{profile.name}</span><span className="ml-2 text-muted-foreground">{profile.email}</span></span><span className="text-xs text-destructive">Remove</span></button>)}</div></div> : null}
+          <button className="button-primary" disabled={!name.trim() || selectedProfiles.length === 0} onClick={saveManualAudience}>{editingId ? `Save changes · ${selectedProfiles.length}` : `Save manual list · ${selectedProfiles.length}`}</button>
+          {editingId ? <button className="button-secondary" onClick={resetManualForm}>Cancel editing</button> : null}
+        </div>
+      </div>}
+
+      <div className="grid content-start gap-3">
+        {mode === "manual" && manualResults.length > 0 ? <div className="rounded-xl border border-border bg-card p-4"><h3 className="font-bold">Email-ready profiles</h3><p className="mt-1 text-sm text-muted-foreground">Check the exact profiles you want on this list.</p><div className="mt-3 grid max-h-[360px] gap-2 overflow-y-auto">{manualResults.map((profile)=>{ const selected = selectedProfiles.some((item)=>item.id===profile.id); return <label className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 ${selected ? "border-primary bg-primary/5" : "border-border"}`} key={profile.id}><input checked={selected} onChange={()=>toggleManualProfile(profile)} type="checkbox" /><span className="min-w-0"><span className="block font-semibold">{profile.name}</span><span className="block truncate text-sm text-muted-foreground">{profile.email}</span></span></label>; })}</div></div> : null}
+
+        <div className="grid gap-3">
+          {state.audiences.length === 0 ? <Empty title="No audiences yet" body="Create a smart list or hand-pick a manual list, then select it when you build an email campaign." /> : state.audiences.map((audience)=><article className="rounded-xl border border-border bg-card p-4" key={audience.id}>
+            <div className="flex items-start justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2"><h3 className="font-bold">{audience.name}</h3><span className="rounded-full bg-muted px-2 py-0.5 text-xs font-bold uppercase tracking-wide">{audience.kind === "manual" ? "Manual" : "Smart"}</span></div><p className="mt-1 text-sm text-muted-foreground">{audience.kind === "manual" ? `${audience.profileIds.length} selected profiles with email` : `About ${audience.estimatedCount} profiles with email${audience.region ? ` · ${audience.region}` : ""}${audience.q ? ` · “${audience.q}”` : ""}`}</p></div><button aria-label={`Delete ${audience.name}`} className="button-secondary p-2" onClick={()=>setState((current)=>({...current,audiences:current.audiences.filter((item)=>item.id!==audience.id)}))}><Trash2 className="h-4 w-4" /></button></div>
+            {audience.kind === "smart" ? <Link className="mt-3 inline-flex text-sm font-semibold text-primary hover:underline" href={audienceHref(audience)}>Open matching profiles →</Link> : <div className="mt-3"><div className="flex flex-wrap gap-2">{audience.profiles.slice(0,5).map((profile)=><Link className="rounded-full border border-border px-2 py-1 text-xs font-semibold hover:border-primary/40" href={`/profiles/${profile.id}`} key={profile.id}>{profile.name}</Link>)}{audience.profiles.length > 5 ? <span className="px-2 py-1 text-xs text-muted-foreground">+{audience.profiles.length - 5} more</span> : null}</div><button className="mt-3 text-sm font-semibold text-primary hover:underline" onClick={()=>editManualAudience(audience)}>Edit members →</button></div>}
+          </article>)}
+        </div>
+      </div>
     </div>
   </section>;
 }
@@ -138,8 +296,8 @@ function Promos({ state, setState, setNotice }: { state: MarketingState; setStat
 function EmailCampaigns({ state, setState, setNotice }: { state: MarketingState; setState: React.Dispatch<React.SetStateAction<MarketingState>>; setNotice: (value: string | null) => void }) {
   const [name,setName]=useState(""); const [subject,setSubject]=useState(""); const [body,setBody]=useState(""); const [audienceId,setAudienceId]=useState("");
   const audience = useMemo(()=>state.audiences.find((item)=>item.id===audienceId) ?? null,[audienceId,state.audiences]);
-  function saveCampaign(){ if(!name.trim()||!subject.trim()) return; const item: Campaign={id:crypto.randomUUID(),name:name.trim(),subject:subject.trim(),body:body.trim(),audienceId:audience?.id??null,audienceName:audience?.name??"No audience selected",recipientCount:audience?.estimatedCount??0,status:"draft",createdAt:new Date().toISOString(),sentAt:null}; setState((current)=>({...current,campaigns:[item,...current.campaigns]})); setName("");setSubject("");setBody("");setAudienceId("");setNotice(`Saved campaign draft “${item.name}”. Review it before sending.`); }
-  return <section className="grid gap-4 lg:grid-cols-[1fr_320px]"><div className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Prepare email campaign</h2><p className="mt-1 text-sm text-muted-foreground">This prepares the campaign record and copy. Sending stays a reviewed action in your connected email workflow rather than a blind mass-send button.</p><div className="mt-4 grid gap-3"><label className="grid gap-1 text-sm font-semibold">Campaign name<input value={name} onChange={(e)=>setName(e.target.value)} placeholder="2027 early booking outreach" /></label><label className="grid gap-1 text-sm font-semibold">Audience<select value={audienceId} onChange={(e)=>setAudienceId(e.target.value)}><option value="">Choose a saved audience</option>{state.audiences.map((item)=><option key={item.id} value={item.id}>{item.name} · ~{item.estimatedCount}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Subject<input value={subject} onChange={(e)=>setSubject(e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Email copy<textarea rows={10} value={body} onChange={(e)=>setBody(e.target.value)} placeholder="Draft the campaign email here…" /></label><button className="button-primary" disabled={!name.trim()||!subject.trim()} onClick={saveCampaign}>Save campaign draft</button></div></div><aside className="grid content-start gap-3"><div className="rounded-xl border border-border bg-card p-4"><h3 className="font-bold">Email workflow</h3><p className="mt-1 text-sm text-muted-foreground">Use the saved campaign as your reviewed source, then create/send the actual messages through the connected Booking email workspace.</p><Link className="button-secondary mt-3 block text-center" href="/office-coordinator">Office Coordinator</Link><Link className="button-secondary mt-2 block text-center" href="/office/emails">Email drafts</Link></div>{state.audiences.length===0?<div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Create an audience first if you want recipient counts and a reusable target list.</div>:null}</aside></section>;
+  function saveCampaign(){ if(!name.trim()||!subject.trim()) return; const item: Campaign={id:crypto.randomUUID(),name:name.trim(),subject:subject.trim(),body:body.trim(),audienceId:audience?.id??null,audienceName:audience?.name??"No audience selected",recipientCount:audience ? audienceRecipientCount(audience) : 0,status:"draft",createdAt:new Date().toISOString(),sentAt:null}; setState((current)=>({...current,campaigns:[item,...current.campaigns]})); setName("");setSubject("");setBody("");setAudienceId("");setNotice(`Saved campaign draft “${item.name}”. Review it before sending.`); }
+  return <section className="grid gap-4 lg:grid-cols-[1fr_320px]"><div className="rounded-xl border border-border bg-card p-4"><h2 className="text-lg font-bold">Prepare email campaign</h2><p className="mt-1 text-sm text-muted-foreground">This prepares the campaign record and copy. Sending stays a reviewed action in your connected email workflow rather than a blind mass-send button.</p><div className="mt-4 grid gap-3"><label className="grid gap-1 text-sm font-semibold">Campaign name<input value={name} onChange={(e)=>setName(e.target.value)} placeholder="2027 early booking outreach" /></label><label className="grid gap-1 text-sm font-semibold">Audience<select value={audienceId} onChange={(e)=>setAudienceId(e.target.value)}><option value="">Choose a saved audience</option>{state.audiences.map((item)=><option key={item.id} value={item.id}>{item.name} · {item.kind === "manual" ? "Manual" : "Smart"} · {audienceRecipientCount(item)}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Subject<input value={subject} onChange={(e)=>setSubject(e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Email copy<textarea rows={10} value={body} onChange={(e)=>setBody(e.target.value)} placeholder="Draft the campaign email here…" /></label><button className="button-primary" disabled={!name.trim()||!subject.trim()} onClick={saveCampaign}>Save campaign draft</button></div></div><aside className="grid content-start gap-3"><div className="rounded-xl border border-border bg-card p-4"><h3 className="font-bold">Email workflow</h3><p className="mt-1 text-sm text-muted-foreground">Use the saved campaign as your reviewed source, then create/send the actual messages through the connected Booking email workspace.</p><Link className="button-secondary mt-3 block text-center" href="/office-coordinator">Office Coordinator</Link><Link className="button-secondary mt-2 block text-center" href="/office/emails">Email drafts</Link></div>{state.audiences.length===0?<div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">Create an audience first if you want recipient counts and a reusable target list.</div>:null}</aside></section>;
 }
 
 function History({ state, setState }: { state: MarketingState; setState: React.Dispatch<React.SetStateAction<MarketingState>> }) {
