@@ -5,6 +5,7 @@ import express, {
   Router,
   type ErrorRequestHandler,
   type IRouter,
+  type RequestHandler,
 } from "express";
 import { db } from "@workspace/db";
 
@@ -65,14 +66,21 @@ export const websiteInquiryBodyErrorHandler: ErrorRequestHandler = (
 
 export function createWebsiteInquiryCorsMiddleware(
   allowedOrigins: ReadonlySet<string> = defaultAllowedOrigins(),
-) {
-  return cors({
-    origin(origin, callback) {
-      callback(null, Boolean(origin && allowedOrigins.has(origin)));
-    },
+): RequestHandler {
+  const corsMiddleware = cors({
+    origin: true,
     allowedHeaders: ["Content-Type"],
     methods: ["POST", "OPTIONS"],
   });
+
+  return (req, res, next) => {
+    const origin = req.get("Origin");
+    if (!origin || !allowedOrigins.has(origin)) {
+      res.status(403).json({ error: "This form cannot be submitted here." });
+      return;
+    }
+    corsMiddleware(req, res, next);
+  };
 }
 
 export function createPublicWebsiteInquiriesRouter(dependencies?: {
