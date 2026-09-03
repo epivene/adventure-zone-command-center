@@ -90,6 +90,50 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(measuredMinHeights.join(" ")).not.toMatch(/\b\d*\.?\d+(?:s|d|l)?vh\b/i);
   });
 
+  it("uses a compact desktop treatment at Wix's 980px canvas width", () => {
+    const element = document.createElement("adventure-zone-site") as HTMLElement;
+    document.body.append(element);
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = element.shadowRoot?.querySelector("style")?.textContent ?? "";
+    document.body.append(stylesheet);
+
+    const canvasWidth = 980;
+    const applicableRules: CSSStyleRule[] = [];
+    const visitRules = (rules: CSSRuleList, applies = true) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
+        if (rule instanceof CSSMediaRule) {
+          const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
+          visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
+        }
+      }
+    };
+    visitRules(stylesheet.sheet!.cssRules);
+
+    const finalStyle = (selector: string, property: keyof CSSStyleDeclaration) => {
+      const rule = applicableRules
+        .filter((candidate) => candidate.selectorText.split(",").some((part) => part.trim() === selector))
+        .at(-1);
+      return rule?.style[property] as string | undefined;
+    };
+    const toPixels = (token: string) => {
+      const value = Number.parseFloat(token);
+      if (token.endsWith("rem")) return value * 16;
+      if (token.endsWith("vw")) return value * canvasWidth / 100;
+      return value;
+    };
+    const resolveClamp = (value: string | undefined) => {
+      const parts = /^clamp\(([^,]+),\s*([^,]+),\s*([^\)]+)\)$/.exec(value ?? "");
+      expect(parts, `Expected a clamp() value, received ${value}`).not.toBeNull();
+      return Math.max(toPixels(parts![1]!), Math.min(toPixels(parts![2]!), toPixels(parts![3]!)));
+    };
+
+    expect(resolveClamp(finalStyle(".hero h1", "fontSize"))).toBeLessThanOrEqual(90);
+    expect(resolveClamp(finalStyle(".section h2", "fontSize"))).toBeLessThanOrEqual(60);
+    expect(resolveClamp(finalStyle(".hero", "minHeight"))).toBeLessThanOrEqual(660);
+    expect(finalStyle(".desktop-nav", "display")).toBe("flex");
+  });
+
   it("posts every form field, the honeypot, page URL, and one submission ID", async () => {
     const randomUUID = vi.fn(() => "10000000-0000-4000-8000-000000000001");
     Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: randomUUID });
