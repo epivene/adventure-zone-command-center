@@ -212,7 +212,7 @@
     .team-role { display: block; margin-top: 4px; font-size: 8px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 
     .hero {
-      position: relative; display: flex; align-items: center; min-height: 92svh;
+      position: relative; display: flex; align-items: center; min-height: clamp(700px, 92vw, 900px);
       padding: 80px 16px 48px; overflow: hidden; color: var(--az-cream);
       background: var(--az-navy); border-bottom: 8px solid var(--az-navy);
     }
@@ -431,7 +431,7 @@
       .site-header { padding: 20px 0; }
       .site-header.scrolled { padding: 12px 0; }
       .menu-toggle { width: 48px; height: 48px; }
-      .hero { min-height: 100svh; padding: 96px 32px 80px; }
+      .hero { min-height: clamp(780px, 75vw, 960px); padding: 96px 32px 80px; }
       .hero-content { align-items: flex-start; }
       .eyebrow { margin-bottom: 32px; padding: 8px 20px; font-size: 16px; }
       .eyebrow .az-icon { width: 20px; height: 20px; }
