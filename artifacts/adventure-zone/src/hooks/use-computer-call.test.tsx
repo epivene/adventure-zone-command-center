@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  BrowserIncomingCall,
   BrowserVoiceCall,
   BrowserVoiceDevice,
   ComputerCallingApi,
@@ -1236,6 +1237,36 @@ describe("useComputerCall", () => {
 });
 
 describe("TwilioBrowserDevice", () => {
+  it("exposes Twilio custom parameters on incoming browser calls", async () => {
+    let incomingListener: ((call: unknown) => void) | undefined;
+    const rawDevice = {
+      destroy: vi.fn(),
+      on: vi.fn((eventName: string, listener: (call: unknown) => void) => {
+        if (eventName === "incoming") incomingListener = listener;
+      }),
+    };
+    twilioSdk.Device.mockImplementation(function () {
+      return rawDevice;
+    });
+    const device = new TwilioBrowserDevice();
+    let received: Readonly<Record<string, string>> | undefined;
+
+    await device.prepare("ephemeral-browser-token");
+    device.on("incoming", (call) => {
+      received = (call as BrowserIncomingCall).parameters;
+    });
+    incomingListener?.({
+      parameters: { CallSid: "CA123", From: "+15551234567" },
+      customParameters: new Map([["inboundSessionId", "session-123"]]),
+    });
+
+    expect(received).toEqual({
+      CallSid: "CA123",
+      From: "+15551234567",
+      inboundSessionId: "session-123",
+    });
+  });
+
   it("waits for Twilio to finish discovering microphone devices", async () => {
     let deviceChangeListener:
       | ((lostActiveDevices: MediaDeviceInfo[]) => void)

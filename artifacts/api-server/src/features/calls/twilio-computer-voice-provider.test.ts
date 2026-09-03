@@ -107,6 +107,19 @@ describe("TwilioComputerVoiceProvider", () => {
     expect(twiml).toContain("value=&lt;&amp;&quot;'");
   });
 
+  it("passes the inbound session ID to the browser call", () => {
+    const twiml = new TwilioComputerVoiceProvider(config).createClientDialTwiml({
+      identity: "inbound_browser",
+      sessionId: "session-123",
+      actionUrl: "https://calls.example.test/inbound/dial-result",
+      statusCallbackUrl: "https://calls.example.test/inbound/status",
+    });
+
+    expect(twiml).toContain(
+      '<Parameter name="inboundSessionId" value="session-123"/>',
+    );
+  });
+
   it.each<[string, ComputerCallStatus]>([
     ["initiated", "queued"],
     ["queued", "queued"],

@@ -54,7 +54,10 @@ class TwilioBrowserVoiceCall implements BrowserVoiceCall {
 class TwilioBrowserIncomingCall implements BrowserIncomingCall {
   constructor(private readonly call: Call) {}
   get parameters(): Readonly<Record<string, string>> {
-    return { ...(this.call.parameters as Record<string, string>) };
+    return {
+      ...(this.call.parameters as Record<string, string>),
+      ...Object.fromEntries(this.call.customParameters),
+    };
   }
   async accept(): Promise<void> { await this.call.accept(); }
   reject(): void { this.call.reject(); }

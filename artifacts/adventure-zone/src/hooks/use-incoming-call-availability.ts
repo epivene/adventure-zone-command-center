@@ -3,13 +3,17 @@ import type { BrowserIncomingCall, BrowserVoiceDevice } from "@/features/calls/c
 import { incomingCallingApi, type IncomingCallingCapability } from "@/features/calls/incoming-calling-api";
 
 export type IncomingAvailabilityState = "off" | "checking-media" | "registering" | "ready" | "reconnecting" | "unavailable";
+const leaseHeartbeatMilliseconds = 20_000;
 export function useIncomingCallAvailability(createDevice: () => BrowserVoiceDevice, capability: IncomingCallingCapability | null, onIncoming?: (call: BrowserIncomingCall) => void) {
   const [state, setState] = useState<IncomingAvailabilityState>("off");
   const device = useRef<BrowserVoiceDevice | null>(null);
   const lease = useRef<{ leaseId: string; secret: string } | null>(null);
+  const heartbeat = useRef<ReturnType<typeof setInterval> | null>(null);
   const epoch = useRef(0);
   const turnOff = useCallback(async () => {
     const current = ++epoch.current;
+    if (heartbeat.current) clearInterval(heartbeat.current);
+    heartbeat.current = null;
     const currentDevice = device.current; device.current = null;
     const currentLease = lease.current; lease.current = null;
     await currentDevice?.unregister().catch(() => undefined);
@@ -20,6 +24,8 @@ export function useIncomingCallAvailability(createDevice: () => BrowserVoiceDevi
   const turnOn = useCallback(async (takeover = false) => {
     if (!capability?.enabled) { setState("unavailable"); return; }
     const current = ++epoch.current;
+    if (heartbeat.current) clearInterval(heartbeat.current);
+    heartbeat.current = null;
     try {
       setState("checking-media");
       await navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => stream.getTracks().forEach((track) => track.stop()));
@@ -37,7 +43,16 @@ export function useIncomingCallAvailability(createDevice: () => BrowserVoiceDevi
       });
       next.on("unregistered", () => setState("reconnecting"));
       next.on("error", () => setState("unavailable"));
-      if (current === epoch.current) setState("ready");
+      if (current === epoch.current) {
+        heartbeat.current = setInterval(() => {
+          void incomingCallingApi.renewLease(acquired.leaseId, acquired.secret).catch(() => {
+            if (heartbeat.current) clearInterval(heartbeat.current);
+            heartbeat.current = null;
+            if (current === epoch.current) setState("unavailable");
+          });
+        }, leaseHeartbeatMilliseconds);
+        setState("ready");
+      }
     } catch {
       if (current === epoch.current) setState("unavailable");
     }

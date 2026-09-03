@@ -61,9 +61,10 @@ export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, Inbou
   normalizeStatus(status: string): ComputerCallStatus {
     return statusMap[status] ?? "unknown";
   }
-  createClientDialTwiml(input: { identity: string; actionUrl: string; statusCallbackUrl: string }): string {
+  createClientDialTwiml(input: { identity: string; sessionId: string; actionUrl: string; statusCallbackUrl: string }): string {
     const response = new twilio.twiml.VoiceResponse();
-    response.dial({ action: input.actionUrl, method: "POST", answerOnBridge: true }).client({ statusCallback: input.statusCallbackUrl, statusCallbackEvent: ["initiated", "answered", "completed"] }, input.identity);
+    const client = response.dial({ action: input.actionUrl, method: "POST", answerOnBridge: true }).client({ statusCallback: input.statusCallbackUrl, statusCallbackEvent: ["initiated", "answered", "completed"] }, input.identity);
+    client.parameter({ name: "inboundSessionId", value: input.sessionId });
     return response.toString();
   }
   createVoicemailTwiml(input: { actionUrl: string; recordingStatusCallbackUrl: string; maxSeconds: number }): string {

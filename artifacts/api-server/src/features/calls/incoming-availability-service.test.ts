@@ -105,6 +105,24 @@ class MemoryAvailabilityRepository implements IncomingAvailabilityRepository {
 describe("IncomingAvailabilityService", () => {
   const now = new Date("2026-09-02T12:00:00.000Z");
 
+  it("normalizes generated client identities to Twilio's allowed character set", async () => {
+    const repository = new MemoryAvailabilityRepository();
+    const service = new IncomingAvailabilityService(
+      repository,
+      () => now,
+      () => "r0_CtRD1SA_IUfxwmwJJ_QMeszf2ukkqNs0bEyxU-XM",
+    );
+
+    const lease = await service.acquire({
+      ownerId: "owner",
+      browserSessionId: "browser-session-a",
+    });
+
+    expect(lease.clientIdentity).toBe(
+      "inbound_r0_CtRD1SA_IUfxwmwJJ_QMeszf2ukkqNs0bEyxU_XM",
+    );
+  });
+
   it("authorizes only the current hashed lease secret", async () => {
     const repository = new MemoryAvailabilityRepository();
     const service = new IncomingAvailabilityService(
