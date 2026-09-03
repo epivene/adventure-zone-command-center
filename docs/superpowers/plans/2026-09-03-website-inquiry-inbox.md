@@ -163,7 +163,7 @@ Expected: PASS.
 - Modify: artifacts/api-server/src/db/required-schema-startup.ts
 - Modify: artifacts/api-server/src/db/required-schema-startup.test.ts
 
-- [ ] **Step 1: Write the failing lock-and-registration tests**
+- [x] **Step 1: Write the failing lock-and-registration tests**
 
 Copy the dependency-injected structure used by office-coordinator-required-startup.test.ts. Assert that:
 
@@ -172,13 +172,13 @@ Copy the dependency-injected structure used by office-coordinator-required-start
 - the client is unlocked and released on success and failure;
 - runRequiredSchemaStartup invokes a step named required website inquiry schema.
 
-- [ ] **Step 2: Run the tests and confirm the red state**
+- [x] **Step 2: Run the tests and confirm the red state**
 
     pnpm --filter @workspace/api-server test -- src/db/website-inquiry-required-startup.test.ts src/db/required-schema-startup.test.ts
 
 Expected: FAIL because the new startup modules and dependency are absent.
 
-- [ ] **Step 3: Implement the idempotent startup migration**
+- [x] **Step 3: Implement the idempotent startup migration**
 
 In website-inquiry-startup-migration.ts, export:
 
@@ -192,11 +192,11 @@ Execute the same additive SQL as the migration. Return true after a final marker
 
 In website-inquiry-required-startup.ts, follow the existing office coordinator lock wrapper exactly, using pg_try_advisory_lock and a finally block that unlocks and releases.
 
-- [ ] **Step 4: Register the required startup step**
+- [x] **Step 4: Register the required startup step**
 
 Add ensureWebsiteInquiries?: RequiredStep to the dependency type and invoke it immediately after the Office Coordinator schema step. This ordering ensures office_accounts exists before its permission column is checked.
 
-- [ ] **Step 5: Rerun and commit**
+- [x] **Step 5: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/db/website-inquiry-required-startup.test.ts src/db/required-schema-startup.test.ts
     pnpm --filter @workspace/api-server typecheck
