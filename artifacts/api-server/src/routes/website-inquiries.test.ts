@@ -5,6 +5,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@workspace/db", () => ({ db: {} }));
 
 import {
+  WebsiteInquiryConversionNotFoundError,
+  WebsiteInquiryConversionStatusError,
+} from "../features/website-inquiries/website-inquiry-conversion";
+import {
   WebsiteInquiryNotFoundError,
   WebsiteInquiryTransitionError,
 } from "../features/website-inquiries/website-inquiry-review-service";
@@ -18,6 +22,7 @@ const mocks = {
   changeStatus: vi.fn(),
   matches: vi.fn(),
   search: vi.fn(),
+  convert: vi.fn(),
 };
 
 function app() {
@@ -47,6 +52,14 @@ beforeEach(() => {
   mocks.changeStatus.mockResolvedValue({ id: inquiryId, status: "reviewing" });
   mocks.matches.mockResolvedValue({ contacts: [], organizations: [], parsedLocation: null });
   mocks.search.mockResolvedValue([]);
+  mocks.convert.mockResolvedValue({
+    inquiryId,
+    contactId: "10000000-0000-4000-8000-000000000001",
+    organizationId: "30000000-0000-4000-8000-000000000001",
+    bookingId: "40000000-0000-4000-8000-000000000001",
+    followUpId: "50000000-0000-4000-8000-000000000001",
+    alreadyConverted: false,
+  });
 });
 
 describe("website inquiry review routes", () => {
@@ -105,6 +118,77 @@ describe("website inquiry review routes", () => {
     ["bad search entity", "/website-inquiries/search?entity=booking&q=festival"],
   ])("returns 400 for %s", async (_label, path) => {
     expect((await request(app()).get(path)).status).toBe(400);
+  });
+
+  it("converts a validated inquiry with the authorized actor", async () => {
+    const conversion = {
+      contact: { mode: "existing", id: "10000000-0000-4000-8000-000000000001" },
+      organization: { mode: "existing", id: "30000000-0000-4000-8000-000000000001" },
+      booking: { name: "Summer Festival", city: "Denver", region: "CO" },
+      nextAction: { kind: "call" },
+    };
+    const response = await request(app())
+      .post(`/website-inquiries/${inquiryId}/convert`)
+      .send(conversion);
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(
+      expect.objectContaining({ inquiryId, alreadyConverted: false }),
+    );
+    expect(mocks.convert).toHaveBeenCalledWith({
+      inquiryId,
+      input: conversion,
+      actor: { kind: "owner", id: "owner", name: "Owner" },
+    });
+  });
+
+  it("rejects conversion without explicit booking city and state", async () => {
+    const response = await request(app())
+      .post(`/website-inquiries/${inquiryId}/convert`)
+      .send({
+        contact: { mode: "existing", id: "10000000-0000-4000-8000-000000000001" },
+        organization: { mode: "existing", id: "30000000-0000-4000-8000-000000000001" },
+        booking: { name: "Summer Festival" },
+        nextAction: { kind: "call" },
+      });
+    expect(response.status).toBe(400);
+    expect(mocks.convert).not.toHaveBeenCalled();
+  });
+
+  it("maps missing selections to 404, invalid status to 409, and hides unexpected failures", async () => {
+    const body = {
+      contact: { mode: "existing", id: "10000000-0000-4000-8000-000000000001" },
+      organization: { mode: "existing", id: "30000000-0000-4000-8000-000000000001" },
+      booking: { name: "Summer Festival", city: "Denver", region: "CO" },
+      nextAction: { kind: "call" },
+    };
+    mocks.convert.mockRejectedValueOnce(
+      new WebsiteInquiryConversionNotFoundError(),
+    );
+    expect(
+      (
+        await request(app())
+          .post(`/website-inquiries/${inquiryId}/convert`)
+          .send(body)
+      ).status,
+    ).toBe(404);
+
+    mocks.convert.mockRejectedValueOnce(new WebsiteInquiryConversionStatusError());
+    expect(
+      (
+        await request(app())
+          .post(`/website-inquiries/${inquiryId}/convert`)
+          .send(body)
+      ).status,
+    ).toBe(409);
+
+    mocks.convert.mockRejectedValueOnce(
+      new Error("database failure with partial booking 4000-secret"),
+    );
+    const failed = await request(app())
+      .post(`/website-inquiries/${inquiryId}/convert`)
+      .send(body);
+    expect(failed.status).toBe(500);
+    expect(JSON.stringify(failed.body)).not.toMatch(/4000-secret|database failure/);
   });
 
   it.each([

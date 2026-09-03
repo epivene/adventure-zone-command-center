@@ -671,11 +671,11 @@ Add GET /website-inquiries/:inquiryId/matches and GET /website-inquiries/search?
 - Modify: artifacts/api-server/src/routes/website-inquiries.ts
 - Modify: artifacts/api-server/src/routes/website-inquiries.test.ts
 
-- [ ] **Step 1: Write failing Denver reminder tests**
+- [x] **Step 1: Write failing Denver reminder tests**
 
 Implement test cases for Thursday -> Friday 9:00, Friday -> Monday 9:00, Saturday -> Monday 9:00, and dates on each side of the US daylight-saving transitions. Assert resulting UTC instants while the wall time remains 09:00 America/Denver.
 
-- [ ] **Step 2: Write failing conversion contract tests**
+- [x] **Step 2: Write failing conversion contract tests**
 
 Use a strict discriminated request schema:
 
@@ -701,7 +701,7 @@ Use a strict discriminated request schema:
 
 Reject missing booking city/region even when the inquiry location could not be parsed.
 
-- [ ] **Step 3: Write failing transactional behavior tests**
+- [x] **Step 3: Write failing transactional behavior tests**
 
 Assert the service:
 
@@ -720,13 +720,13 @@ Assert the service:
 
 The PGlite test launches two concurrent conversions for the same inquiry and asserts one contact (when create was selected), one organization, one booking, one follow-up, and the same response IDs.
 
-- [ ] **Step 4: Run and confirm red**
+- [x] **Step 4: Run and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/next-business-day.test.ts src/features/website-inquiries/website-inquiry-conversion.test.ts src/features/website-inquiries/website-inquiry-conversion.pglite.test.ts
 
 Expected: FAIL because conversion modules are absent.
 
-- [ ] **Step 5: Implement transaction ordering carefully**
+- [x] **Step 5: Implement transaction ordering carefully**
 
 Inside database.transaction:
 
@@ -742,7 +742,7 @@ Inside database.transaction:
 
 This ordering respects the existing composite relationship foreign keys.
 
-- [ ] **Step 6: Add route and response**
+- [x] **Step 6: Add route and response**
 
 Add POST /website-inquiries/:inquiryId/convert. Return 200 with:
 
@@ -759,7 +759,7 @@ Add POST /website-inquiries/:inquiryId/convert. Return 200 with:
 
 Map schema errors to 400, missing selected records to 404, invalid status to 409, and unexpected transaction failures to a generic 500 without partial IDs.
 
-- [ ] **Step 7: Rerun and commit**
+- [x] **Step 7: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/next-business-day.test.ts src/features/website-inquiries/website-inquiry-conversion.test.ts src/features/website-inquiries/website-inquiry-conversion.pglite.test.ts src/routes/website-inquiries.test.ts
     pnpm --filter @workspace/api-server typecheck

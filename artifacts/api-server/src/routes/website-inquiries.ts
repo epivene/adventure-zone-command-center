@@ -3,6 +3,13 @@ import { z } from "zod";
 
 import { db } from "@workspace/db";
 import { createWebsiteInquiryAuthorization } from "../features/website-inquiries/website-inquiry-authorization";
+import {
+  DrizzleWebsiteInquiryConversionRepository,
+  WebsiteInquiryConversionNotFoundError,
+  websiteInquiryConversionSchema,
+  WebsiteInquiryConversionService,
+  WebsiteInquiryConversionStatusError,
+} from "../features/website-inquiries/website-inquiry-conversion";
 import { DrizzleWebsiteInquiryMatchRepository } from "../features/website-inquiries/website-inquiry-match-repository";
 import { WebsiteInquiryMatchingService } from "../features/website-inquiries/website-inquiry-matching";
 import { DrizzleWebsiteInquiryRepository } from "../features/website-inquiries/website-inquiry-repository";
@@ -47,14 +54,21 @@ type ReviewService = Pick<
   WebsiteInquiryReviewService,
   "list" | "count" | "detail" | "changeStatus"
 > &
-  Pick<WebsiteInquiryMatchingService, "matches" | "search">;
+  Pick<WebsiteInquiryMatchingService, "matches" | "search"> &
+  Pick<WebsiteInquiryConversionService, "convert">;
 
 function routeError(error: unknown, res: Parameters<RequestHandler>[1]): void {
-  if (error instanceof WebsiteInquiryNotFoundError) {
+  if (
+    error instanceof WebsiteInquiryNotFoundError ||
+    error instanceof WebsiteInquiryConversionNotFoundError
+  ) {
     res.status(404).json({ error: error.message });
     return;
   }
-  if (error instanceof WebsiteInquiryTransitionError) {
+  if (
+    error instanceof WebsiteInquiryTransitionError ||
+    error instanceof WebsiteInquiryConversionStatusError
+  ) {
     res.status(409).json({ error: error.message });
     return;
   }
@@ -120,6 +134,26 @@ export function createWebsiteInquiriesRouter(input: {
     }
   });
 
+  router.post("/website-inquiries/:inquiryId/convert", async (req, res) => {
+    const parsedId = inquiryIdSchema.safeParse(req.params.inquiryId);
+    const parsedBody = websiteInquiryConversionSchema.safeParse(req.body);
+    if (!parsedId.success || !parsedBody.success) {
+      res.status(400).json({ error: "Invalid inquiry conversion request." });
+      return;
+    }
+    try {
+      res.json(
+        await input.service.convert({
+          inquiryId: parsedId.data,
+          input: parsedBody.data,
+          actor: req.websiteInquiryActor!,
+        }),
+      );
+    } catch (error) {
+      routeError(error, res);
+    }
+  });
+
   router.get("/website-inquiries/:inquiryId", async (req, res) => {
     const parsed = inquiryIdSchema.safeParse(req.params.inquiryId);
     if (!parsed.success) {
@@ -161,6 +195,9 @@ const reviewService = new WebsiteInquiryReviewService({ repository });
 const matchingService = new WebsiteInquiryMatchingService(
   new DrizzleWebsiteInquiryMatchRepository(db),
 );
+const conversionService = new WebsiteInquiryConversionService({
+  repository: new DrizzleWebsiteInquiryConversionRepository(db),
+});
 const router = createWebsiteInquiriesRouter({
   authorize: createWebsiteInquiryAuthorization(),
   service: {
@@ -170,6 +207,7 @@ const router = createWebsiteInquiriesRouter({
     changeStatus: (input) => reviewService.changeStatus(input),
     matches: (inquiryId) => matchingService.matches(inquiryId),
     search: (input) => matchingService.search(input),
+    convert: (input) => conversionService.convert(input),
   },
 });
 
