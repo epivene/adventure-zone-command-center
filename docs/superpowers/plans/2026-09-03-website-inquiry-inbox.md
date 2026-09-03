@@ -38,7 +38,7 @@
 - Modify: lib/db/package.json
 - Modify: artifacts/api-server/src/db/schema.ts
 
-- [ ] **Step 1: Write the failing schema contract test**
+- [x] **Step 1: Write the failing schema contract test**
 
 Create lib/db/src/website-inquiry-schema.test.ts. Use drizzle-orm getTableName and drizzle-orm/pg-core getTableConfig to assert:
 
@@ -62,7 +62,7 @@ expect(officeAccounts.canReviewWebsiteInquiries.name)
   .toBe("can_review_website_inquiries");
 ~~~
 
-- [ ] **Step 2: Run the test and confirm the red state**
+- [x] **Step 2: Run the test and confirm the red state**
 
 Run:
 
@@ -70,7 +70,7 @@ Run:
 
 Expected: FAIL because website-inquiry-schema.ts and canReviewWebsiteInquiries do not exist.
 
-- [ ] **Step 3: Define the Drizzle schema**
+- [x] **Step 3: Define the Drizzle schema**
 
 Create websiteInquiryStatusValues and websiteInquiryAlertStateValues as the exact arrays above. Define websiteInquiries with these columns:
 
@@ -112,7 +112,7 @@ updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(
 
 Add unique indexes for submissionId and referenceCode, checks for both enums, a nullable owner/office reviewer kind, converted-status identifier consistency, and nonnegative alert attempts, plus the four indexes asserted by the test. Add canReviewWebsiteInquiries: boolean("can_review_website_inquiries").default(false).notNull() to officeAccounts.
 
-- [ ] **Step 4: Add the idempotent SQL migration**
+- [x] **Step 4: Add the idempotent SQL migration**
 
 Create 20260903_website_inquiry_inbox.sql with CREATE TABLE IF NOT EXISTS, ALTER TABLE office_accounts ADD COLUMN IF NOT EXISTS, named checks, foreign keys, and CREATE INDEX IF NOT EXISTS matching the Drizzle declaration. Use a DO block for constraints that PostgreSQL cannot add conditionally. Do not drop or rewrite existing data.
 
@@ -129,7 +129,7 @@ SELECT
   ) AS ready
 ~~~
 
-- [ ] **Step 5: Export and register the schema**
+- [x] **Step 5: Export and register the schema**
 
 Import the new module into the schema object in lib/db/src/index.ts, export it from that file and artifacts/api-server/src/db/schema.ts, and add:
 
@@ -137,7 +137,7 @@ Import the new module into the schema object in lib/db/src/index.ts, export it f
 
 to lib/db/package.json exports.
 
-- [ ] **Step 6: Run focused and package verification**
+- [x] **Step 6: Run focused and package verification**
 
 Run:
 
@@ -146,7 +146,7 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
     git add lib/db artifacts/api-server/src/db/schema.ts
     git commit -m "feat: add website inquiry persistence schema"

@@ -410,6 +410,17 @@ const migrationFiles = [
           'territory_exception_approved'
         )`,
   },
+  {
+    name: "20260903_website_inquiry_inbox.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.website_inquiries') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'office_accounts'
+          AND column_name = 'can_review_website_inquiries'
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
