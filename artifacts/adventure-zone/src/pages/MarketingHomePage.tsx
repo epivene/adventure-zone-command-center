@@ -1,5 +1,6 @@
 import { ArrowLeft, FileText, Mail, Megaphone, Settings2, UsersRound } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
+import type { MouseEvent } from "react";
 
 import { readBookingReturnPath } from "@/lib/admin-workspace";
 import MarketingCampaignsPage from "@/pages/MarketingCampaignsPage";
@@ -13,10 +14,22 @@ const campaignAreas = [
 
 export default function MarketingHomePage() {
   const search = useSearch();
+  const [, setLocation] = useLocation();
   const campaignArea = new URLSearchParams(search).get("area");
   const bookingReturnPath = readBookingReturnPath();
 
-  if (campaignArea) return <MarketingCampaignsPage />;
+  function keepCampaignNavigationOnMarketing(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    const anchor = target.closest("a");
+    if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+    const marker = "/marketing/campaigns?area=";
+    if (!href.includes(marker)) return;
+    event.preventDefault();
+    setLocation(`/marketing?area=${href.split(marker)[1] ?? "email"}`);
+  }
+
+  if (campaignArea) return <div onClickCapture={keepCampaignNavigationOnMarketing}><MarketingCampaignsPage /></div>;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
