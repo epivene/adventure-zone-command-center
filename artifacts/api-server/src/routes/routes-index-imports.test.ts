@@ -24,4 +24,11 @@ describe("route index local imports", () => {
     expect(indexSource).toContain('from "./manager-travel-admin"');
     expect(indexSource).not.toContain('from "./leg-manager-travel-admin"');
   });
+
+  it("mounts anonymous inquiry intake before the owner-only gate", () => {
+    const intakeAt = indexSource.indexOf("router.use(publicWebsiteInquiriesRouter)");
+    const ownerAt = indexSource.indexOf("router.use(requireOwnerMiddleware)");
+    expect(intakeAt).toBeGreaterThan(-1);
+    expect(intakeAt).toBeLessThan(ownerAt);
+  });
 });

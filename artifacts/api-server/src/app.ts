@@ -17,8 +17,14 @@ import assistantKristyReviewCorrectionRouter from "./routes/assistant-kristy-rev
 import managerReviewOverviewRouter from "./routes/manager-review-overview";
 import organizationFillerRouter from "./routes/organization-filler";
 import { requireStartupReadiness } from "./lib/startup-readiness";
+import {
+  createWebsiteInquiryCorsMiddleware,
+  websiteInquiryBodyErrorHandler,
+  websiteInquiryJsonParser,
+} from "./routes/public-website-inquiries";
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -40,6 +46,13 @@ app.use(
   }),
 );
 app.use(requireStartupReadiness);
+
+app.use(
+  "/api/public/website-inquiries",
+  createWebsiteInquiryCorsMiddleware(),
+  websiteInquiryJsonParser,
+  websiteInquiryBodyErrorHandler,
+);
 
 app.use(
   cors({

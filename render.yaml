@@ -23,6 +23,13 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # Public Wix inquiry intake. Keep alert recipients in Render only.
+      - key: WEBSITE_INQUIRY_ALLOWED_ORIGINS
+        value: https://the-adventure-zone.com,https://www.the-adventure-zone.com
+      - key: WEBSITE_INQUIRY_ALERT_RECIPIENTS
+        sync: false
+      - key: WEBSITE_INQUIRY_INBOX_BASE_URL
+        value: https://adventure-zone-command-center-1.onrender.com
       # Owner-authorized outbound email. These stay server-only; Office users
       # never receive SMTP credentials and never have a send endpoint.
       - key: OFFICE_MAIL_SMTP_HOST
