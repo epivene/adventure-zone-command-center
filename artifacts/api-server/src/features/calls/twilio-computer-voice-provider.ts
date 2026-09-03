@@ -1,4 +1,5 @@
 import twilio from "twilio";
+import { Readable } from "node:stream";
 
 import type { ComputerCallingConfig } from "./computer-calling-config";
 import type { ComputerCallStatus } from "./computer-calling-types";
@@ -21,7 +22,7 @@ const voicemailGreetingUrl =
   "https://adventure-zone-command-center-1.onrender.com/audio/voicemail-greeting.mp3";
 
 export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, InboundVoiceProvider {
-  constructor(private readonly config: ComputerCallingConfig) {}
+  constructor(private readonly config: ComputerCallingConfig, private readonly fetcher: typeof fetch = fetch) {}
 
   createBrowserToken(input: { identity: "owner"; ttlSeconds: number }): string;
   createBrowserToken(input: { identity: string; ttlSeconds: number; allowIncoming: boolean }): Promise<{ token: string; expiresAt: Date }>;
@@ -82,9 +83,12 @@ export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, Inbou
   }
   createUnavailableTwiml(): string { const response = new twilio.twiml.VoiceResponse(); response.say("The Adventure Zone cannot answer due to a temporary technical problem. Please try again later."); response.hangup(); return response.toString(); }
   async getRecordingMedia(recordingSid: string): Promise<ProviderRecordingMedia> {
-    const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });
-    const response = await (client.httpClient.request as any)({ method: "GET", uri: `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Recordings/${recordingSid}.mp3` });
-    return { body: response.body as NodeJS.ReadableStream, contentType: "audio/mpeg" };
+    const response = await this.fetcher(
+      `https://api.twilio.com/2010-04-01/Accounts/${this.config.accountSid}/Recordings/${recordingSid}.mp3`,
+      { headers: { Authorization: `Basic ${Buffer.from(`${this.config.apiKeySid}:${this.config.apiKeySecret}`).toString("base64")}` } },
+    );
+    if (!response.ok) throw new Error(`Twilio recording download failed with status ${response.status}`);
+    return { body: Readable.from(Buffer.from(await response.arrayBuffer())), contentType: response.headers.get("content-type") ?? "audio/mpeg" };
   }
   async deleteRecording(recordingSid: string): Promise<"deleted" | "already_absent"> {
     const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });
