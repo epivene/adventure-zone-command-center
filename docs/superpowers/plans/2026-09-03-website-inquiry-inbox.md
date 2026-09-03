@@ -603,7 +603,7 @@ The PATCH body is strict { action: "begin_review" | "archive" | "spam" | "restor
 - Modify: artifacts/api-server/src/routes/website-inquiries.ts
 - Modify: artifacts/api-server/src/routes/website-inquiries.test.ts
 
-- [ ] **Step 1: Write deterministic failing unit tests**
+- [x] **Step 1: Write deterministic failing unit tests**
 
 Reuse normalizeMatchingText and normalizeMatchingEmail from features/act-migration/matching-normalization.ts. Test:
 
@@ -634,23 +634,23 @@ type WebsiteInquiryMatches = {
 };
 ~~~
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-matching.test.ts src/routes/website-inquiries.test.ts
 
 Expected: FAIL because matching does not exist.
 
-- [ ] **Step 3: Implement candidate retrieval and scoring**
+- [x] **Step 3: Implement candidate retrieval and scoring**
 
 The repository retrieves exact normalized email candidates plus bounded name-token candidates, related organization names, organization city/region, and bookings within 60 days of the submitted date. Cap raw candidates at 100 per entity and returned suggestions at 10.
 
 Score contact evidence as exact email 100, normalized name equality 70, fuzzy name up to 60, relationship 15. Score organization evidence as normalized name equality 80, fuzzy name up to 65, city/region 20, date proximity up to 20, matched-contact relationship 15. Include a plain-English reason for every nonzero component.
 
-- [ ] **Step 4: Add the protected endpoints**
+- [x] **Step 4: Add the protected endpoints**
 
 Add GET /website-inquiries/:inquiryId/matches and GET /website-inquiries/search?entity=contact|organization&q={text} under the same dual-auth middleware. Search requires at least two trimmed characters, returns at most 20 MatchCandidate rows, and exposes only names, email/location context, and record IDs needed for selection. Return no suggested candidate if its only evidence is below threshold, and never update CRM data from either endpoint.
 
-- [ ] **Step 5: Rerun and commit**
+- [x] **Step 5: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-matching.test.ts src/routes/website-inquiries.test.ts
     pnpm --filter @workspace/api-server typecheck

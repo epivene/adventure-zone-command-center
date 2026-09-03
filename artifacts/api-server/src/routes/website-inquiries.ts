@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { db } from "@workspace/db";
 import { createWebsiteInquiryAuthorization } from "../features/website-inquiries/website-inquiry-authorization";
+import { DrizzleWebsiteInquiryMatchRepository } from "../features/website-inquiries/website-inquiry-match-repository";
+import { WebsiteInquiryMatchingService } from "../features/website-inquiries/website-inquiry-matching";
 import { DrizzleWebsiteInquiryRepository } from "../features/website-inquiries/website-inquiry-repository";
 import {
   parseWebsiteInquiryCursor,
@@ -34,11 +36,18 @@ const statusActionSchema = z
     action: z.enum(["begin_review", "archive", "spam", "restore"]),
   })
   .strict();
+const searchSchema = z
+  .object({
+    entity: z.enum(["contact", "organization"]),
+    q: z.string().trim().min(2).max(160),
+  })
+  .strict();
 
 type ReviewService = Pick<
   WebsiteInquiryReviewService,
   "list" | "count" | "detail" | "changeStatus"
->;
+> &
+  Pick<WebsiteInquiryMatchingService, "matches" | "search">;
 
 function routeError(error: unknown, res: Parameters<RequestHandler>[1]): void {
   if (error instanceof WebsiteInquiryNotFoundError) {
@@ -75,6 +84,37 @@ export function createWebsiteInquiriesRouter(input: {
     }
     try {
       res.json(await input.service.list(parsed.data));
+    } catch (error) {
+      routeError(error, res);
+    }
+  });
+
+  router.get("/website-inquiries/search", async (req, res) => {
+    const parsed = searchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid inquiry search request." });
+      return;
+    }
+    try {
+      res.json(
+        await input.service.search({
+          entity: parsed.data.entity,
+          query: parsed.data.q,
+        }),
+      );
+    } catch (error) {
+      routeError(error, res);
+    }
+  });
+
+  router.get("/website-inquiries/:inquiryId/matches", async (req, res) => {
+    const parsed = inquiryIdSchema.safeParse(req.params.inquiryId);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid inquiry ID." });
+      return;
+    }
+    try {
+      res.json(await input.service.matches(parsed.data));
     } catch (error) {
       routeError(error, res);
     }
@@ -117,9 +157,20 @@ export function createWebsiteInquiriesRouter(input: {
 }
 
 const repository = new DrizzleWebsiteInquiryRepository(db);
+const reviewService = new WebsiteInquiryReviewService({ repository });
+const matchingService = new WebsiteInquiryMatchingService(
+  new DrizzleWebsiteInquiryMatchRepository(db),
+);
 const router = createWebsiteInquiriesRouter({
   authorize: createWebsiteInquiryAuthorization(),
-  service: new WebsiteInquiryReviewService({ repository }),
+  service: {
+    list: (input) => reviewService.list(input),
+    count: () => reviewService.count(),
+    detail: (inquiryId) => reviewService.detail(inquiryId),
+    changeStatus: (input) => reviewService.changeStatus(input),
+    matches: (inquiryId) => matchingService.matches(inquiryId),
+    search: (input) => matchingService.search(input),
+  },
 });
 
 export default router;

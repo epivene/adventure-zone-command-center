@@ -16,6 +16,8 @@ const mocks = {
   count: vi.fn(),
   detail: vi.fn(),
   changeStatus: vi.fn(),
+  matches: vi.fn(),
+  search: vi.fn(),
 };
 
 function app() {
@@ -43,6 +45,8 @@ beforeEach(() => {
   mocks.count.mockResolvedValue({ newCount: 2 });
   mocks.detail.mockResolvedValue({ inquiry: { id: inquiryId }, auditHistory: [] });
   mocks.changeStatus.mockResolvedValue({ id: inquiryId, status: "reviewing" });
+  mocks.matches.mockResolvedValue({ contacts: [], organizations: [], parsedLocation: null });
+  mocks.search.mockResolvedValue([]);
 });
 
 describe("website inquiry review routes", () => {
@@ -77,6 +81,30 @@ describe("website inquiry review routes", () => {
       action: "archive",
       actor: { kind: "owner", id: "owner", name: "Owner" },
     });
+  });
+
+  it("returns protected suggestions and bounded manual search results", async () => {
+    const matches = await request(app()).get(
+      `/website-inquiries/${inquiryId}/matches`,
+    );
+    expect(matches.status).toBe(200);
+    expect(mocks.matches).toHaveBeenCalledWith(inquiryId);
+
+    const search = await request(app()).get(
+      "/website-inquiries/search?entity=contact&q=desie",
+    );
+    expect(search.status).toBe(200);
+    expect(mocks.search).toHaveBeenCalledWith({
+      entity: "contact",
+      query: "desie",
+    });
+  });
+
+  it.each([
+    ["short search", "/website-inquiries/search?entity=contact&q=d"],
+    ["bad search entity", "/website-inquiries/search?entity=booking&q=festival"],
+  ])("returns 400 for %s", async (_label, path) => {
+    expect((await request(app()).get(path)).status).toBe(400);
   });
 
   it.each([
