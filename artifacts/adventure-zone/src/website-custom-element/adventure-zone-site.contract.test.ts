@@ -134,6 +134,46 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(finalStyle(".desktop-nav", "display")).toBe("flex");
   });
 
+  it("keeps the rotated promo banner below the fixed header on Wix's desktop canvas", () => {
+    const element = document.createElement("adventure-zone-site") as HTMLElement;
+    document.body.append(element);
+    const stylesheet = document.createElement("style");
+    stylesheet.textContent = element.shadowRoot?.querySelector("style")?.textContent ?? "";
+    document.body.append(stylesheet);
+
+    const canvasWidth = 980;
+    const applicableRules: CSSStyleRule[] = [];
+    const visitRules = (rules: CSSRuleList, applies = true) => {
+      for (const rule of Array.from(rules)) {
+        if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
+        if (rule instanceof CSSMediaRule) {
+          const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
+          visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
+        }
+      }
+    };
+    visitRules(stylesheet.sheet!.cssRules);
+
+    const heroRule = applicableRules
+      .filter((candidate) => candidate.selectorText.split(",").some((part) => part.trim() === ".hero"))
+      .at(-1);
+    const padding = heroRule?.style.padding.split(/\s+/).map(Number.parseFloat);
+    expect(padding).toHaveLength(3);
+
+    const [paddingTop, , paddingBottom] = padding!;
+    const heroHeight = 620;
+    const heroContentHeight = 404.72;
+    const rotatedBannerRise = 10.96;
+    const fixedHeaderHeight = 122;
+    const requiredClearance = 8;
+    const centeredContentTop = paddingTop! + (
+      heroHeight - paddingTop! - paddingBottom! - heroContentHeight
+    ) / 2;
+    const promoBannerTop = centeredContentTop - rotatedBannerRise;
+
+    expect(promoBannerTop - fixedHeaderHeight).toBeGreaterThanOrEqual(requiredClearance);
+  });
+
   it("posts every form field, the honeypot, page URL, and one submission ID", async () => {
     const randomUUID = vi.fn(() => "10000000-0000-4000-8000-000000000001");
     Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: randomUUID });

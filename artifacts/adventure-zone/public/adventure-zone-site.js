@@ -431,7 +431,7 @@
       .site-header { padding: 20px 0; }
       .site-header.scrolled { padding: 12px 0; }
       .menu-toggle { width: 48px; height: 48px; }
-      .hero { min-height: clamp(620px, 60vw, 760px); padding: 72px 32px 60px; }
+      .hero { min-height: clamp(620px, 60vw, 760px); padding: 136px 32px 48px; }
       .hero-content { align-items: flex-start; }
       .eyebrow { margin-bottom: 24px; padding: 8px 20px; font-size: 14px; }
       .eyebrow .az-icon { width: 20px; height: 20px; }
