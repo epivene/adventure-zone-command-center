@@ -1,0 +1,134 @@
+name: Inspect Colorado Events family history
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/inspect-2026-09-03-colorado-events-family.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inspect all family member profiles
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+
+          async function request(path) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, { headers });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 700)}`);
+            return JSON.parse(text);
+          }
+
+          const textOf = (item) => [
+            item.kind,
+            item.actSourceType,
+            item.subject,
+            item.body,
+            item.notes,
+            item.description,
+          ].filter(Boolean).join(" ");
+          const callPattern = /\b(call|called|calling|phone|voicemail|voice mail|spoke|spoken|talked|left (?:a )?message)\b/i;
+
+          (async () => {
+            const search = await request("profile-search?q=ColoradoEvents.org&limit=20");
+            const family = (search.results ?? []).find(
+              (item) => item.kind === "event_family" && item.label === "ColoradoEvents.org",
+            );
+            if (!family) throw new Error("ColoradoEvents.org family was not found.");
+
+            const memberResults = (search.results ?? []).filter(
+              (item) => item.kind === "organization" && (item.matchedOn ?? []).includes("family"),
+            );
+            if (!memberResults.length) throw new Error("No ColoradoEvents.org family members were returned.");
+
+            const profiles = [];
+            for (const member of memberResults) {
+              const history = await request(`profile-history/${member.id}`);
+              let gmailMappings = [];
+              let gmailError = null;
+              try {
+                const gmail = await request(`gmail-profile-links/profile/${member.id}`);
+                gmailMappings = gmail.mappings ?? [];
+              } catch (error) {
+                gmailError = error instanceof Error ? error.message : String(error);
+              }
+              const activities = [...(history.notes ?? []), ...(history.history ?? [])];
+              profiles.push({
+                id: member.id,
+                name: member.label,
+                city: member.city ?? null,
+                region: member.region ?? null,
+                contacts: history.contacts ?? [],
+                bookings: history.bookings ?? [],
+                followUps: history.followUps ?? [],
+                notes: history.notes ?? [],
+                history: history.history ?? [],
+                callRelatedItems: activities.filter((item) => callPattern.test(textOf(item))),
+                gmailMappings,
+                gmailError,
+              });
+            }
+
+            profiles.sort((a, b) => a.name.localeCompare(b.name));
+            const receipt = {
+              inspectedAt: new Date().toISOString(),
+              family: { id: family.id, name: family.label },
+              memberCount: profiles.length,
+              summary: {
+                contacts: profiles.reduce((n, p) => n + p.contacts.length, 0),
+                bookings: profiles.reduce((n, p) => n + p.bookings.length, 0),
+                followUps: profiles.reduce((n, p) => n + p.followUps.length, 0),
+                notes: profiles.reduce((n, p) => n + p.notes.length, 0),
+                historyItems: profiles.reduce((n, p) => n + p.history.length, 0),
+                callRelatedItems: profiles.reduce((n, p) => n + p.callRelatedItems.length, 0),
+                gmailMappings: profiles.reduce((n, p) => n + p.gmailMappings.length, 0),
+              },
+              profiles,
+            };
+
+            fs.mkdirSync("imports/receipts", { recursive: true });
+            fs.writeFileSync(
+              "imports/receipts/2026-09-03-colorado-events-family-audit.json",
+              JSON.stringify(receipt, null, 2),
+            );
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+              "# Colorado Events family audit",
+              "",
+              `- Family members: ${receipt.memberCount}`,
+              `- Notes: ${receipt.summary.notes}`,
+              `- History items: ${receipt.summary.historyItems}`,
+              `- Call-related items: ${receipt.summary.callRelatedItems}`,
+              `- Gmail mappings: ${receipt.summary.gmailMappings}`,
+            ].join("\n") + "\n");
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Commit family audit receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/receipts/2026-09-03-colorado-events-family-audit.json
+          git commit -m "Audit Colorado Events family history"
+          git push
