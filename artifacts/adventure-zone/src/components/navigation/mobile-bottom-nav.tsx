@@ -34,7 +34,7 @@ function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   return [{ href: "/command", label: "Panel", icon: LayoutGrid }];
 }
 
-export function MobileBottomNav({ workspace }: { workspace: AdminWorkspace }) {
+export function MobileBottomNav({ workspace, websiteInquiryCount = 0 }: { workspace: AdminWorkspace; websiteInquiryCount?: number }) {
   const [location] = useLocation();
   const primaryItems = itemsForWorkspace(workspace);
 
@@ -64,7 +64,7 @@ export function MobileBottomNav({ workspace }: { workspace: AdminWorkspace }) {
             </Link>
           );
         })}
-        <AppMenu workspace={workspace} mobile />
+        <AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} />
       </div>
     </nav>
   );

@@ -35,7 +35,12 @@ router.post("/office/auth/login", async (req, res): Promise<void> => {
     }
     res.json({
       ...issued,
-      office: { id: account.id, displayName: account.displayName, role: account.role },
+      office: {
+        id: account.id,
+        displayName: account.displayName,
+        role: account.role,
+        canReviewWebsiteInquiries: account.canReviewWebsiteInquiries,
+      },
     });
   } catch (error) {
     req.log.error({ err: error }, "Failed to sign in office account");
@@ -61,7 +66,12 @@ router.post("/office/auth/demo-login", async (req, res): Promise<void> => {
     }
     res.json({
       ...issued,
-      office: { id: account.id, displayName: account.displayName, role: account.role },
+      office: {
+        id: account.id,
+        displayName: account.displayName,
+        role: account.role,
+        canReviewWebsiteInquiries: account.canReviewWebsiteInquiries,
+      },
     });
   } catch (error) {
     req.log.error({ err: error }, "Failed to sign in development office sample");

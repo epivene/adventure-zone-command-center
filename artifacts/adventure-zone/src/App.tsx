@@ -92,8 +92,10 @@ const OfficeProfilePage = lazy(() => import("@/pages/OfficeProfilePage"));
 const OfficeMailPage = lazy(() => import("@/pages/OfficeMailPage"));
 const OfficeEmailDraftsPage = lazy(() => import("@/pages/OfficeEmailDraftsPage"));
 const OfficeMessagesPage = lazy(() => import("@/pages/OfficeMessagesPage"));
+const OfficeWebsiteInquiriesPage = lazy(() => import("@/pages/OfficeWebsiteInquiriesPage"));
 const OfficeCoordinatorAdminPage = lazy(() => import("@/pages/OfficeCoordinatorAdminPage"));
 const OfficeShell = lazy(() => import("@/components/office/office-shell").then(({ OfficeShell }) => ({ default: OfficeShell })));
+const WebsiteInquiriesPage = lazy(() => import("@/pages/WebsiteInquiriesPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -267,6 +269,9 @@ function OfficeProtectedApp() {
   return (
     <OfficeShell>
       <Switch>
+        <Route path="/office/website-inquiries">
+          {office.canReviewWebsiteInquiries ? <OfficeWebsiteInquiriesPage /> : <Redirect to="/office" />}
+        </Route>
         <Route path="/office/profiles/:profileId">{(params)=><OfficeProfilePage profileId={params.profileId}/>}</Route>
         <Route path="/office/profiles" component={OfficeProfilesPage} />
         <Route path="/office/mail" component={OfficeMailPage} />
@@ -289,6 +294,7 @@ function AdminProtectedApp() {
           <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
           <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
+          <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>

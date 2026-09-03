@@ -3,7 +3,7 @@ import { Link, useSearch } from "wouter";
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/auth-token";
 
 type Tab = "tasks" | "emails" | "mail" | "messages" | "account";
-type Account = { id: string; loginName: string; displayName: string; role: string; enabled: boolean; sessionVersion: number };
+type Account = { id: string; loginName: string; displayName: string; role: string; enabled: boolean; sessionVersion: number; canReviewWebsiteInquiries: boolean };
 type Task = {
   id: string;
   officeAccountId: string;
@@ -227,10 +227,67 @@ function AccountPanel({ accounts, selected, onChanged }: { accounts: Account[]; 
   const [password, setPassword] = useState("");
   const [resetPassword, setResetPassword] = useState("");
   const [error, setError] = useState("");
+  const [permissionBusy, setPermissionBusy] = useState(false);
   async function create() {
     setError("");
     try { await apiPost("/office-admin/accounts", { loginName, displayName, password }); setLoginName(""); setDisplayName(""); setPassword(""); await onChanged("Office Coordinator account created."); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not create account."); }
   }
-  return <div className="grid gap-5">{error ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}{!accounts.length ? <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm"><h2 className="text-xl font-bold">Create Office Coordinator login</h2><p className="text-sm text-slate-600">Create the username and temporary password you want to give the coordinator.</p><label className="grid gap-1 text-sm font-semibold">Name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Username<input value={loginName} onChange={(e) => setLoginName(e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Temporary password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label><button className="button-primary w-fit" disabled={!displayName.trim() || !loginName.trim() || password.length < 8} type="button" onClick={() => void create()}>Create Account</button></section> : null}{selected ? <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm"><div><h2 className="text-xl font-bold">{selected.displayName}</h2><p className="text-sm text-slate-600">Username: {selected.loginName} · {selected.enabled ? "Enabled" : "Disabled"}</p></div><div className="flex flex-wrap gap-2"><button className="button-secondary" type="button" onClick={async () => { await apiPatch(`/office-admin/accounts/${selected.id}`, { enabled: !selected.enabled }); await onChanged(selected.enabled ? "Account disabled." : "Account enabled."); }}>{selected.enabled ? "Disable Account" : "Enable Account"}</button><button className="button-secondary" type="button" onClick={async () => { await apiPost(`/office-admin/accounts/${selected.id}/sign-out-all`, {}); await onChanged("All Office Coordinator sessions signed out."); }}>Sign Out All</button></div><div className="grid gap-2 border-t pt-3"><label className="grid gap-1 text-sm font-semibold">Reset password<input type="password" placeholder="New password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} /></label><button className="button-primary w-fit" disabled={resetPassword.length < 8} type="button" onClick={async () => { await apiPut(`/office-admin/accounts/${selected.id}/password`, { password: resetPassword }); setResetPassword(""); await onChanged("Password reset. Existing sessions were signed out."); }}>Reset Password</button></div></section> : null}</div>;
+  return (
+    <div className="grid gap-5">
+      {error ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}
+      {!accounts.length ? (
+        <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm">
+          <h2 className="text-xl font-bold">Create Office Coordinator login</h2>
+          <p className="text-sm text-slate-600">Create the username and temporary password you want to give the coordinator.</p>
+          <label className="grid gap-1 text-sm font-semibold">Name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} /></label>
+          <label className="grid gap-1 text-sm font-semibold">Username<input value={loginName} onChange={(e) => setLoginName(e.target.value)} /></label>
+          <label className="grid gap-1 text-sm font-semibold">Temporary password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          <button className="button-primary w-fit" disabled={!displayName.trim() || !loginName.trim() || password.length < 8} type="button" onClick={() => void create()}>Create Account</button>
+        </section>
+      ) : null}
+      {selected ? (
+        <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm">
+          <div><h2 className="text-xl font-bold">{selected.displayName}</h2><p className="text-sm text-slate-600">Username: {selected.loginName} · {selected.enabled ? "Enabled" : "Disabled"}</p></div>
+          <div className="flex flex-wrap gap-2">
+            <button className="button-secondary" type="button" onClick={async () => { await apiPatch(`/office-admin/accounts/${selected.id}`, { enabled: !selected.enabled }); await onChanged(selected.enabled ? "Account disabled." : "Account enabled."); }}>{selected.enabled ? "Disable Account" : "Enable Account"}</button>
+            <button className="button-secondary" type="button" onClick={async () => { await apiPost(`/office-admin/accounts/${selected.id}/sign-out-all`, {}); await onChanged("All Office Coordinator sessions signed out."); }}>Sign Out All</button>
+          </div>
+          <div className="border-t pt-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <label className="font-semibold" htmlFor={`website-inquiries-${selected.id}`}>Website inquiries</label>
+                <p className="mt-1 max-w-xl text-sm text-slate-600" id={`website-inquiries-help-${selected.id}`}>Allows this account to see public contact details and convert reviewed inquiries into CRM leads.</p>
+              </div>
+              <input
+                aria-describedby={`website-inquiries-help-${selected.id}`}
+                aria-label="Website inquiries"
+                checked={selected.canReviewWebsiteInquiries}
+                disabled={permissionBusy}
+                id={`website-inquiries-${selected.id}`}
+                onChange={async (event) => {
+                  setPermissionBusy(true);
+                  setError("");
+                  try {
+                    await apiPatch(`/office-admin/accounts/${selected.id}`, { canReviewWebsiteInquiries: event.target.checked });
+                    await onChanged(event.target.checked ? "Website inquiry access granted." : "Website inquiry access removed.");
+                  } catch (cause) {
+                    setError(cause instanceof Error ? cause.message : "Could not update website inquiry access.");
+                  } finally {
+                    setPermissionBusy(false);
+                  }
+                }}
+                role="switch"
+                type="checkbox"
+              />
+            </div>
+          </div>
+          <div className="grid gap-2 border-t pt-3">
+            <label className="grid gap-1 text-sm font-semibold">Reset password<input type="password" placeholder="New password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} /></label>
+            <button className="button-primary w-fit" disabled={resetPassword.length < 8} type="button" onClick={async () => { await apiPut(`/office-admin/accounts/${selected.id}/password`, { password: resetPassword }); setResetPassword(""); await onChanged("Password reset. Existing sessions were signed out."); }}>Reset Password</button>
+          </div>
+        </section>
+      ) : null}
+    </div>
+  );
 }

@@ -25,6 +25,7 @@ const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
+  { href: "/website-inquiries", label: "Website Inquiries" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/needs-answer", label: "Needs Answer" },
@@ -34,6 +35,7 @@ const bookingToolItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
+  { href: "/website-inquiries", label: "Website Inquiries" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/office-coordinator", label: "Office Coordinator" },
   { href: "/needs-answer", label: "Needs Answer" },
@@ -140,17 +142,23 @@ export function AddMenu() {
   );
 }
 
-function MenuLink({ item, workspace, location }: { item: MenuItem; workspace: AdminWorkspace; location: string }) {
+function MenuLink({ item, workspace, location, websiteInquiryCount = 0 }: { item: MenuItem; workspace: AdminWorkspace; location: string; websiteInquiryCount?: number }) {
   const active = location === item.href || location.startsWith(`${item.href}/`);
   return (
     <DropdownMenuItem asChild className={cn(active && "bg-secondary font-semibold text-secondary-foreground")}>
       <Link
+        aria-label={item.href === "/website-inquiries" && websiteInquiryCount > 0 ? `Website Inquiries, ${websiteInquiryCount} new` : undefined}
         href={item.href}
         onClick={() => {
           if (item.rememberBookingBeforeOpen && workspace === "booking") saveBookingReturnPath(location);
         }}
       >
-        {item.label}
+        <span className="flex-1">{item.label}</span>
+        {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
+          <span className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+            {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
+          </span>
+        ) : null}
       </Link>
     </DropdownMenuItem>
   );
@@ -162,12 +170,14 @@ function MenuSubmenu({
   workspace,
   location,
   nestedGroups = false,
+  websiteInquiryCount = 0,
 }: {
   label: string;
   groups: MenuGroup[];
   workspace: AdminWorkspace;
   location: string;
   nestedGroups?: boolean;
+  websiteInquiryCount?: number;
 }) {
   return (
     <DropdownMenuSub>
@@ -187,6 +197,7 @@ function MenuSubmenu({
                     item={item}
                     workspace={workspace}
                     location={location}
+                    websiteInquiryCount={websiteInquiryCount}
                     key={`${group.label}:${item.href}:${item.label}`}
                   />
                 ))}
@@ -198,6 +209,7 @@ function MenuSubmenu({
                 item={item}
                 workspace={workspace}
                 location={location}
+                websiteInquiryCount={websiteInquiryCount}
                 key={`${group.label}:${item.href}:${item.label}`}
               />
             ))
@@ -236,10 +248,12 @@ export function AppMenu({
   workspace,
   mobile = false,
   unreadMessages = 0,
+  websiteInquiryCount = 0,
 }: {
   workspace: AdminWorkspace;
   mobile?: boolean;
   unreadMessages?: number;
+  websiteInquiryCount?: number;
 }) {
   const { signOut } = useAuth();
   const { openAssistant } = useAssistantContext();
@@ -283,6 +297,7 @@ export function AppMenu({
                 groups={bookingToolsGroups}
                 workspace={workspace}
                 location={location}
+                websiteInquiryCount={websiteInquiryCount}
               />
             ) : null}
             <DropdownMenuItem asChild className="rounded-md px-2 py-2">
@@ -313,7 +328,7 @@ export function AppMenu({
         ) : null}
         {mobile && workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
-            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${item.href}:${item.label}`} />)}
+            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} key={`${item.href}:${item.label}`} />)}
           </div>
         ) : null}
         {mobile
@@ -334,7 +349,7 @@ export function AppMenu({
                   </button>
                   {expanded ? (
                     <div className="grid gap-0.5 pb-1 pl-2">
-                      {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} key={`${group.label}:${item.href}:${item.label}`} />)}
+                      {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} key={`${group.label}:${item.href}:${item.label}`} />)}
                     </div>
                   ) : null}
                 </div>
@@ -348,6 +363,7 @@ export function AppMenu({
                     groups={[group]}
                     workspace={workspace}
                     location={location}
+                    websiteInquiryCount={websiteInquiryCount}
                   />
                 ) : null}
               </div>
@@ -360,6 +376,7 @@ export function AppMenu({
             workspace={workspace}
             location={location}
             nestedGroups
+            websiteInquiryCount={websiteInquiryCount}
           />
         ) : null}
         <DropdownMenuSeparator />

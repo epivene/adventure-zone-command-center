@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, House, MapPinned, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CalendarDays, House, Inbox, MapPinned, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -29,6 +29,7 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
       { href: "/today", label: "Today", icon: House },
       { href: "/profiles", label: "Profiles", icon: UsersRound },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
+      { href: "/website-inquiries", label: "Website Inquiries", icon: Inbox },
     ];
   }
   if (workspace === "operations") {
@@ -56,6 +57,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
   const [assistantRequested, setAssistantRequested] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [websiteInquiryCount, setWebsiteInquiryCount] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
@@ -73,6 +75,17 @@ export function AppShell({ children }: { children: ReactNode }) {
     const id = window.setInterval(refresh, 15000);
     return () => { active = false; window.clearInterval(id); };
   }, [location]);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () =>
+      apiGet<{ newCount: number }>("/website-inquiries/count")
+        .then((data) => { if (active) setWebsiteInquiryCount(data.newCount ?? 0); })
+        .catch(() => {});
+    void refresh();
+    const id = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(id); };
+  }, []);
 
   useEffect(() => {
     if (!immersiveProfile) rememberProfileOrigin(location);
@@ -107,7 +120,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition lg:px-3",
+                        "relative inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition lg:px-3",
                         active
                           ? "bg-secondary text-secondary-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -117,6 +130,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                     >
                       <Icon className="h-4 w-4" />
                       <span className="hidden lg:inline">{item.label}</span>
+                      {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
+                        <span aria-label={`${websiteInquiryCount} new inquiries`} className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                          {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
+                        </span>
+                      ) : null}
                     </Link>
                   );
                 })}
@@ -125,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <div className="ml-auto flex items-center gap-1.5">
               {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
               {workspace === "booking" ? <AddMenu /> : null}
-              <AppMenu workspace={workspace} unreadMessages={unreadMessages} />
+              <AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} />
             </div>
           </div>
         </header>
@@ -146,7 +164,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
       {assistantRequested ? <Suspense fallback={null}><AssistantDrawer /></Suspense> : null}
-      {!immersiveProfile ? <MobileBottomNav workspace={workspace} /> : null}
+      {!immersiveProfile ? <MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} /> : null}
     </div></IncomingCallingProvider>
   );
 }

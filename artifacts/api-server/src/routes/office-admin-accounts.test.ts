@@ -38,6 +38,7 @@ const account = {
   displayName: "Amy",
   role: "office_coordinator",
   enabled: true,
+  canReviewWebsiteInquiries: false,
   sessionVersion: 1,
 };
 
@@ -87,5 +88,16 @@ describe("office account administration", () => {
     const response = await request(app()).patch(`/office-admin/accounts/${account.id}`).send({ role: "owner" });
     expect(response.status).toBe(400);
     expect(mocks.updateAccount).not.toHaveBeenCalled();
+  });
+
+  it("grants website inquiry review through an explicit permission", async () => {
+    const response = await request(app())
+      .patch(`/office-admin/accounts/${account.id}`)
+      .send({ canReviewWebsiteInquiries: true });
+
+    expect(response.status).toBe(200);
+    expect(mocks.updateAccount).toHaveBeenCalledWith(account.id, {
+      canReviewWebsiteInquiries: true,
+    });
   });
 });

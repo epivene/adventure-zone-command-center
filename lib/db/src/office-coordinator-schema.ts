@@ -53,6 +53,9 @@ export const officeAccounts = pgTable("office_accounts", {
   passwordHash: text("password_hash").notNull(),
   passwordSalt: text("password_salt").notNull(),
   enabled: boolean("enabled").default(true).notNull(),
+  canReviewWebsiteInquiries: boolean("can_review_website_inquiries")
+    .default(false)
+    .notNull(),
   sessionVersion: bigint("session_version", { mode: "number" }).default(1).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),

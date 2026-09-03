@@ -72,6 +72,12 @@ import {
   shouldStartActBackgroundWorkers,
   type ActExtractionRuntime,
 } from "./features/act-replacement/runtime";
+import { DrizzleWebsiteInquiryRepository } from "./features/website-inquiries/website-inquiry-repository";
+import { WebsiteInquiryAlertWorker } from "./features/website-inquiries/website-inquiry-alert-worker";
+import {
+  WebsiteInquiryAlertWorkerLoop,
+  systemWebsiteInquiryAlertWorkerLoopScheduler,
+} from "./features/website-inquiries/website-inquiry-alert-worker-loop";
 import { markAppReady, markAppStarting } from "./lib/startup-readiness";
 
 validateOwnerConfig();
@@ -93,6 +99,15 @@ const scoutAlertLoop = new ScoutAlertWorkerLoop({
   workerId: `scout-alert-${randomUUID()}`,
   clock: { now: () => new Date() },
   scheduler: systemScoutAlertWorkerLoopScheduler,
+});
+
+const websiteInquiryAlertLoop = new WebsiteInquiryAlertWorkerLoop({
+  worker: new WebsiteInquiryAlertWorker({
+    repository: new DrizzleWebsiteInquiryRepository(db),
+  }),
+  workerId: `website-inquiry-alert-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemWebsiteInquiryAlertWorkerLoopScheduler,
 });
 
 const assistantJobLoop = new AssistantJobWorkerLoop({
@@ -154,6 +169,7 @@ const shutdown = createActServerShutdown({
       opportunityEmailLoop?.close(),
       leadScoutLoop.close(),
       scoutAlertLoop.close(),
+      websiteInquiryAlertLoop.close(),
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
@@ -406,6 +422,7 @@ async function startBackgroundWorkers() {
   if (shutdownRequested) return;
   leadScoutLoop.start();
   scoutAlertLoop.start();
+  websiteInquiryAlertLoop.start();
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
