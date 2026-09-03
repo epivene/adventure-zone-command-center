@@ -219,7 +219,7 @@ Expected: tests and typecheck PASS.
 - Modify: artifacts/api-server/src/routes/office-admin-accounts.ts
 - Modify: artifacts/api-server/src/routes/office-admin-accounts.test.ts
 
-- [ ] **Step 1: Add failing permission propagation tests**
+- [x] **Step 1: Add failing permission propagation tests**
 
 Extend the account fixture with canReviewWebsiteInquiries: false. Add tests proving:
 
@@ -236,25 +236,25 @@ expect(mocks.updateAccount).toHaveBeenCalledWith(account.id, {
 
 Also keep the unknown role field rejection test.
 
-- [ ] **Step 2: Run and observe failure**
+- [x] **Step 2: Run and observe failure**
 
     pnpm --filter @workspace/api-server test -- src/features/office/office-auth.test.ts src/routes/office-auth.test.ts src/routes/office-admin-accounts.test.ts
 
 Expected: FAIL because repository/session/route types omit the permission.
 
-- [ ] **Step 3: Thread the boolean through repository records**
+- [x] **Step 3: Thread the boolean through repository records**
 
 Add canReviewWebsiteInquiries: boolean to credential/session records, every select and returning map, createAccount input with default false, and updateAccount input. When permission changes, increment sessionVersion so an already-issued token immediately reloads authority.
 
-- [ ] **Step 4: Thread the permission through auth**
+- [x] **Step 4: Thread the permission through auth**
 
 Add the boolean to OfficeSessionRepository, OfficeRequestContext, resolveOfficeSession, login, demo-login, and /office/auth/me responses. Keep the token claims unchanged; authority comes from the current database row, not a stale token claim.
 
-- [ ] **Step 5: Add the owner administration field**
+- [x] **Step 5: Add the owner administration field**
 
 Allow canReviewWebsiteInquiries in createSchema and patchSchema. New accounts default false unless the owner explicitly checks the field. This is the only path used later to grant Amy access; do not match on the name Amy in production code.
 
-- [ ] **Step 6: Rerun and commit**
+- [x] **Step 6: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/office/office-auth.test.ts src/routes/office-auth.test.ts src/routes/office-admin-accounts.test.ts
     pnpm --filter @workspace/api-server typecheck

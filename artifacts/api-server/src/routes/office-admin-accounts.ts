@@ -13,12 +13,14 @@ const createSchema = z.object({
   loginName: z.string().trim().min(1).max(120),
   displayName: z.string().trim().min(1).max(160),
   password: passwordSchema,
+  canReviewWebsiteInquiries: z.boolean().optional(),
 }).strict();
 
 const patchSchema = z.object({
   loginName: z.string().trim().min(1).max(120).optional(),
   displayName: z.string().trim().min(1).max(160).optional(),
   enabled: z.boolean().optional(),
+  canReviewWebsiteInquiries: z.boolean().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, { message: "No account changes provided." });
 
 function routeId(value: string | string[] | undefined) {
@@ -46,6 +48,7 @@ router.post("/office-admin/accounts", async (req, res): Promise<void> => {
       displayName: parsed.data.displayName,
       passwordHash: credential.hash,
       passwordSalt: credential.salt,
+      canReviewWebsiteInquiries: parsed.data.canReviewWebsiteInquiries ?? false,
     });
     res.status(201).json({ account });
   } catch (error) {

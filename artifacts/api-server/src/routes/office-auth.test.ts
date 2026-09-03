@@ -34,6 +34,7 @@ const account = {
   passwordHash: "hash",
   passwordSalt: "salt",
   enabled: true,
+  canReviewWebsiteInquiries: true,
   sessionVersion: 3,
 };
 
@@ -51,7 +52,12 @@ describe("office auth routes", () => {
     expect(response.status).toBe(200);
     expect(mocks.findByLogin).toHaveBeenCalledWith("Amy");
     expect(response.body.token).toMatch(/^office\./);
-    expect(response.body.office).toEqual({ id: account.id, displayName: "Amy", role: "office_coordinator" });
+    expect(response.body.office).toEqual({
+      id: account.id,
+      displayName: "Amy",
+      role: "office_coordinator",
+      canReviewWebsiteInquiries: true,
+    });
     expect(response.body.office).not.toHaveProperty("passwordHash");
   });
 
