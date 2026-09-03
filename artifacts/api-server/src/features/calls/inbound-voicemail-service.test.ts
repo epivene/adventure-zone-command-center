@@ -152,4 +152,29 @@ describe("InboundVoicemailService", () => {
       canLink: true,
     }));
   });
+
+  it("returns only new messages for the new filter while keeping both badge counts", async () => {
+    await client.exec(`
+      insert into inbound_call_sessions (
+        id, owner_id, caller_number_snapshot, organization_id, contact_id, phone_id
+      ) values (
+        '80000000-0000-4000-8000-000000000001', 'owner', '+13035550101',
+        '${ORGANIZATION_ID}', '${CONTACT_ID}', '${PHONE_ID}'
+      );
+      insert into inbound_voicemails (
+        id, inbound_session_id, recording_sid, status, duration_seconds,
+        deletion_attempts, created_at, updated_at
+      ) values (
+        '90000000-0000-4000-8000-000000000001',
+        '80000000-0000-4000-8000-000000000001', 'RE456', 'handled', 8,
+        0, '2026-09-03T18:05:00Z', '2026-09-03T18:05:00Z'
+      );
+    `);
+
+    const result = await (service.list as any)("owner", undefined, "new");
+
+    expect(result.items.map(({ id }: { id: string }) => id)).toEqual([VOICEMAIL_ID]);
+    expect(result.newCount).toBe(1);
+    expect(result.handledCount).toBe(1);
+  });
 });

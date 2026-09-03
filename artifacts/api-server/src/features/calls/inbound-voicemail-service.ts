@@ -1,4 +1,4 @@
-import { and, asc, eq, lt, sql } from "drizzle-orm";
+import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
 import type { db as Database } from "@/db/client";
 import { contacts, contactPhones, inboundCallSessions, inboundVoicemails, organizationContacts } from "@/db/schema";
 import type { InboundVoiceProvider } from "./inbound-voice-provider";
@@ -56,11 +56,23 @@ export class InboundVoicemailService {
       .innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
       .leftJoin(contacts, eq(contacts.id, sql`coalesce(${inboundVoicemails.contactId}, ${inboundCallSessions.contactId})`));
   }
-  async list(ownerId: string, cursor?: string) {
-    const rows = await this.select()
-      .where(and(eq(inboundCallSessions.ownerId, ownerId), cursor ? lt(inboundVoicemails.id, cursor) : undefined)).orderBy(asc(inboundVoicemails.createdAt)).limit(51);
+  async list(ownerId: string, cursor?: string, filter?: "new" | "handled") {
+    const [rows, [counts]] = await Promise.all([
+      this.select()
+        .where(and(
+          eq(inboundCallSessions.ownerId, ownerId),
+          cursor ? lt(inboundVoicemails.id, cursor) : undefined,
+          filter === "handled" ? eq(inboundVoicemails.status, "handled") : filter === "new" ? ne(inboundVoicemails.status, "handled") : undefined,
+        )).orderBy(asc(inboundVoicemails.createdAt)).limit(51),
+      this.database.select({
+        newCount: sql<number>`count(*) filter (where ${inboundVoicemails.status} <> 'handled')`.mapWith(Number),
+        handledCount: sql<number>`count(*) filter (where ${inboundVoicemails.status} = 'handled')`.mapWith(Number),
+      }).from(inboundVoicemails)
+        .innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
+        .where(eq(inboundCallSessions.ownerId, ownerId)),
+    ]);
     const items = await Promise.all(rows.slice(0, 50).map(async (row) => this.view(await this.hydrated(row))));
-    return { items, nextCursor: rows.length > 50 ? items.at(-1)?.id ?? null : null, newCount: items.filter(x => x.status === "available").length, handledCount: items.filter(x => x.status === "handled").length };
+    return { items, nextCursor: rows.length > 50 ? items.at(-1)?.id ?? null : null, newCount: counts?.newCount ?? 0, handledCount: counts?.handledCount ?? 0 };
   }
   async get(ownerId: string, id: string) {
     const [row] = await this.select()

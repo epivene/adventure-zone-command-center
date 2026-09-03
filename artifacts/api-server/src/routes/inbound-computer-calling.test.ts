@@ -77,4 +77,26 @@ describe("inbound computer calling controls", () => {
       twiml: "<Response><Say>Leave a message.</Say></Response>",
     }]);
   });
+
+  it("passes the requested inbox filter to the voicemail service", async () => {
+    const list = vi.fn().mockResolvedValue({
+      items: [],
+      nextCursor: null,
+      newCount: 0,
+      handledCount: 5,
+    });
+    const app = express();
+    app.use(express.json());
+    app.use("/api", createInboundComputerCallingRouter({
+      service: {} as never,
+      getConfig: () => ({ enabled: true }) as never,
+      isAssistedCallingEnabled: () => true,
+      providerForConfig: () => ({}) as never,
+      voicemails: { list } as never,
+    }));
+
+    await request(app).get("/api/calls/voicemail?status=new").expect(200);
+
+    expect(list).toHaveBeenCalledWith("owner", undefined, "new");
+  });
 });
