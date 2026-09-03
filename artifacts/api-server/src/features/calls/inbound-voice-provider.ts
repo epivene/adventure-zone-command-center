@@ -3,7 +3,7 @@ export interface ProviderRecordingMedia { body: NodeJS.ReadableStream; contentTy
 export interface InboundVoiceProvider {
   createBrowserToken(input: { identity: string; ttlSeconds: number; allowIncoming: boolean }): Promise<{ token: string; expiresAt: Date }>;
   validateWebhook(input: SignedWebhookInput): boolean;
-  createClientDialTwiml(input: { identity: string; actionUrl: string; statusCallbackUrl: string }): string;
+  createClientDialTwiml(input: { identity: string; sessionId: string; actionUrl: string; statusCallbackUrl: string }): string;
   createVoicemailTwiml(input: { actionUrl: string; recordingStatusCallbackUrl: string; maxSeconds: number }): string;
   createUnavailableTwiml(): string;
   getRecordingMedia(recordingSid: string): Promise<ProviderRecordingMedia>;

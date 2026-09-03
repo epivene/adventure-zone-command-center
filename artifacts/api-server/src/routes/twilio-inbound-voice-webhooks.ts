@@ -32,7 +32,7 @@ export function createTwilioInboundVoiceWebhooksRouter(deps:{
   const fields=inbound.safeParse(data.data);if(!fields.success||fields.data.To!==c.inbound.inboundNumber){res.status(400).send();return;}
   try { const lease=await deps.availability.resolveCurrent("owner"); const session=await deps.calls.begin({ownerId:lease?.ownerId??"owner",parentSid:fields.data.CallSid,ingressNumber:c.inbound.inboundNumber,from:fields.data.From});
    if(!lease) {xml(res,provider.createVoicemailTwiml({maxSeconds:c.inbound.maxSeconds,actionUrl:new URL("/api/webhooks/twilio/voice/inbound/voicemail",c.computer.webhookBaseUrl).toString(),recordingStatusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/recording",c.computer.webhookBaseUrl).toString()}));return;}
-   xml(res,provider.createClientDialTwiml({identity:lease.clientIdentity,actionUrl:new URL(`/api/webhooks/twilio/voice/inbound/dial-result?sessionId=${session.id}`,c.computer.webhookBaseUrl).toString(),statusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/status",c.computer.webhookBaseUrl).toString()}));
+   xml(res,provider.createClientDialTwiml({identity:lease.clientIdentity,sessionId:session.id,actionUrl:new URL(`/api/webhooks/twilio/voice/inbound/dial-result?sessionId=${session.id}`,c.computer.webhookBaseUrl).toString(),statusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/status",c.computer.webhookBaseUrl).toString()}));
   } catch { xml(res,provider.createUnavailableTwiml()); }
  });
  router.post("/webhooks/twilio/voice/inbound/dial-result",async(req,res)=>{
