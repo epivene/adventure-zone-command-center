@@ -468,7 +468,7 @@ Expected: PASS. Confirm the existing owner and Office route mounts are unchanged
 - Modify: artifacts/api-server/src/features/website-inquiries/website-inquiry-service.test.ts
 - Modify: artifacts/api-server/src/index.ts
 
-- [ ] **Step 1: Write failing alert worker tests**
+- [x] **Step 1: Write failing alert worker tests**
 
 Use a fake repository and MailDelivery. Cover:
 
@@ -482,17 +482,17 @@ Use a fake repository and MailDelivery. Cover:
 - missing recipient configuration marks failed without affecting the saved inquiry;
 - an active lease prevents a second worker from claiming the same alert.
 
-- [ ] **Step 2: Run and confirm red**
+- [x] **Step 2: Run and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-alert-worker.test.ts src/features/website-inquiries/website-inquiry-alert-worker-loop.test.ts
 
 Expected: FAIL because worker modules do not exist.
 
-- [ ] **Step 3: Implement repository leasing**
+- [x] **Step 3: Implement repository leasing**
 
 Add claimNextAlert, recordRecipientDelivered, completeAlert, and failAlert. claimNextAlert must use one transaction, FOR UPDATE SKIP LOCKED, and a five-minute lease. Due states are pending and retry; expired sending leases are reclaimable.
 
-- [ ] **Step 4: Implement worker and loop**
+- [x] **Step 4: Implement worker and loop**
 
 Parse WEBSITE_INQUIRY_ALERT_RECIPIENTS as trimmed, case-insensitively deduplicated comma-separated email addresses. Use createMailDeliveryFromEnv from features/office/mail-delivery.ts. Read the deep-link base from WEBSITE_INQUIRY_INBOX_BASE_URL. Include both authenticated paths so either authorized workspace can open the same record:
 
@@ -509,11 +509,11 @@ loop.close(): Promise<void>
 
 Schedule immediate work after progress, 30 seconds after idle, and 60 seconds after an unexpected worker error.
 
-- [ ] **Step 5: Register lifecycle**
+- [x] **Step 5: Register lifecycle**
 
 Instantiate the loop in index.ts, start it in startBackgroundWorkers, and close it in the shutdown Promise.all. Worker startup failure must be logged without preventing the API from serving already-saved inquiries.
 
-- [ ] **Step 6: Rerun and commit**
+- [x] **Step 6: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-alert-worker.test.ts src/features/website-inquiries/website-inquiry-alert-worker-loop.test.ts src/features/website-inquiries/website-inquiry-service.test.ts
     pnpm --filter @workspace/api-server typecheck
