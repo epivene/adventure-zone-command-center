@@ -17,6 +17,9 @@ const statusMap: Record<string, ComputerCallStatus> = {
   failed: "failed",
 };
 
+const voicemailGreetingUrl =
+  "https://adventure-zone-command-center-1.onrender.com/audio/voicemail-greeting.mp3";
+
 export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, InboundVoiceProvider {
   constructor(private readonly config: ComputerCallingConfig) {}
 
@@ -69,9 +72,8 @@ export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, Inbou
   }
   createVoicemailTwiml(input: { actionUrl: string; recordingStatusCallbackUrl: string; maxSeconds: number }): string {
     const response = new twilio.twiml.VoiceResponse();
-    response.say("You've reached The Adventure Zone. We can't answer right now. Please leave your name, event, phone number, and a brief message after the beep.");
+    response.play(voicemailGreetingUrl);
     response.record({ action: input.actionUrl, method: "POST", recordingStatusCallback: input.recordingStatusCallbackUrl, recordingStatusCallbackEvent: ["completed"], maxLength: input.maxSeconds, playBeep: true, transcribe: false });
-    response.say("Thank you. Goodbye.");
     return response.toString();
   }
   async redirectCallToVoicemail(input: { callSid: string; twiml: string }): Promise<void> {

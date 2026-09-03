@@ -120,6 +120,19 @@ describe("TwilioComputerVoiceProvider", () => {
     );
   });
 
+  it("plays the recorded greeting before recording a voicemail", () => {
+    const twiml = new TwilioComputerVoiceProvider(config).createVoicemailTwiml({
+      actionUrl: "https://calls.example.test/voicemail",
+      recordingStatusCallbackUrl: "https://calls.example.test/recording",
+      maxSeconds: 120,
+    });
+
+    expect(twiml).toContain(
+      "<Play>https://adventure-zone-command-center-1.onrender.com/audio/voicemail-greeting.mp3</Play><Record",
+    );
+    expect(twiml).not.toContain("<Say>");
+  });
+
   it.each<[string, ComputerCallStatus]>([
     ["initiated", "queued"],
     ["queued", "queued"],
