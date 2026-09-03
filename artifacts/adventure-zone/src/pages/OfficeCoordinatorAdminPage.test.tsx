@@ -1,9 +1,21 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const api = vi.hoisted(() => ({ get: vi.fn(), patch: vi.fn(), post: vi.fn(), put: vi.fn() }));
+vi.mock("@/lib/auth-token", () => ({ apiGet: api.get, apiPatch: api.patch, apiPost: api.post, apiPut: api.put }));
+vi.mock("wouter", () => ({
+  Link: ({ href, children, ...props }: React.ComponentProps<"a">) => <a href={href} {...props}>{children}</a>,
+  useSearch: () => "",
+}));
+
+import OfficeCoordinatorAdminPage from "./OfficeCoordinatorAdminPage";
 
 const source=readFileSync("src/pages/OfficeCoordinatorAdminPage.tsx","utf8");
 const menu=readFileSync("src/components/navigation/app-menu.tsx","utf8");
+
+afterEach(cleanup);
 
 describe("owner Office Coordinator controls",()=>{
   it("provides the complete owner workflow",()=>{
@@ -18,5 +30,23 @@ describe("owner Office Coordinator controls",()=>{
   it("keeps Office Coordinator in the booking workspace",()=>{
     const bookingItems=menu.slice(menu.indexOf("const bookingItems"),menu.indexOf("const bookingGroups"));
     expect(bookingItems).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
+  });
+  it("lets the owner grant website inquiry access explicitly", async () => {
+    api.get.mockImplementation((path: string) => {
+      if (path === "/office-admin/accounts") return Promise.resolve({ accounts: [{ id: "amy", loginName: "amy", displayName: "Amy", role: "office_coordinator", enabled: true, sessionVersion: 1, canReviewWebsiteInquiries: false }] });
+      if (path.includes("/tasks")) return Promise.resolve({ tasks: [] });
+      if (path.includes("/mail")) return Promise.resolve({ mail: [] });
+      if (path.includes("/messages/")) return Promise.resolve({ messages: [] });
+      return Promise.resolve({ drafts: [] });
+    });
+    api.patch.mockResolvedValue({});
+    api.post.mockResolvedValue({});
+    render(<OfficeCoordinatorAdminPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Account" }));
+    const permission = await screen.findByRole("switch", { name: /website inquiries/i });
+    expect(permission).not.toBeChecked();
+    fireEvent.click(permission);
+    await waitFor(() => expect(api.patch).toHaveBeenCalledWith("/office-admin/accounts/amy", { canReviewWebsiteInquiries: true }));
+    expect(screen.getByText(/public contact details and convert/i)).toBeInTheDocument();
   });
 });

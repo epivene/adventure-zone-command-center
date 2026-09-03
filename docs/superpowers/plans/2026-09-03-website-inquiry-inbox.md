@@ -858,13 +858,13 @@ The Office route may render only when OfficeIdentity.canReviewWebsiteInquiries i
 - Modify: artifacts/adventure-zone/src/pages/OfficeCoordinatorAdminPage.tsx
 - Modify: artifacts/adventure-zone/src/pages/OfficeCoordinatorAdminPage.test.tsx
 
-- [ ] **Step 1: Write failing identity/navigation tests**
+- [x] **Step 1: Write failing identity/navigation tests**
 
 Assert OfficeIdentity includes canReviewWebsiteInquiries. With permission true, Office navigation contains Website Inquiries and polls /website-inquiries/count; with false, it has neither link nor count request. Show a badge only when newCount > 0 and cap display at 99+.
 
 For owner navigation, assert the booking workspace link is visible on desktop and in the More/mobile menu, and the new-count badge updates on the existing 15-second polling cadence.
 
-- [ ] **Step 2: Write failing account-admin test**
+- [x] **Step 2: Write failing account-admin test**
 
 Extend OfficeCoordinatorAdminPage.test.tsx or replace its source-only assertion with a focused render test. Assert the Account panel contains a Website inquiries switch, reflects the account value, and PATCHes:
 
@@ -874,19 +874,19 @@ Extend OfficeCoordinatorAdminPage.test.tsx or replace its source-only assertion 
 
 The label explains that the permission reveals public contact details and permits conversion.
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
     pnpm --filter @workspace/adventure-zone exec vitest run src/components/office/office-shell.test.tsx src/components/navigation/app-shell.test.tsx src/components/navigation/app-menu.test.tsx src/pages/OfficeCoordinatorAdminPage.test.tsx
 
 Expected: FAIL because identity, navigation, badges, and toggle are absent.
 
-- [ ] **Step 4: Implement navigation and admin control**
+- [x] **Step 4: Implement navigation and admin control**
 
 Add Inbox to lucide icons. Keep the current messages badge. Fetch inquiry count independently so one failed badge request does not clear the other. On Office mobile, use a horizontally scrollable nav or responsive grid sized from visible items so adding a permission-only item does not overflow.
 
 Thread the permission through stored Office login identity and /office/auth/me refresh. Do not infer permission from displayName.
 
-- [ ] **Step 5: Rerun and commit**
+- [x] **Step 5: Rerun and commit**
 
     pnpm --filter @workspace/adventure-zone exec vitest run src/components/office/office-shell.test.tsx src/components/navigation/app-shell.test.tsx src/components/navigation/app-menu.test.tsx src/pages/OfficeCoordinatorAdminPage.test.tsx
     pnpm --filter @workspace/adventure-zone typecheck
