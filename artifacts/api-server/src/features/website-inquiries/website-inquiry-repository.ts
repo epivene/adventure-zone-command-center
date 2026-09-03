@@ -1,8 +1,21 @@
-import { and, asc, desc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/db/schema";
-import { websiteInquiries } from "@/db/schema";
+import { auditEntries, websiteInquiries } from "@/db/schema";
+import { recordAuditEntry } from "../audit/audit-service";
 import type {
   NewWebsiteInquiry,
   WebsiteInquiryIntakeRepository,
@@ -12,6 +25,12 @@ import type {
   WebsiteInquiryAlertClaim,
   WebsiteInquiryAlertRepository,
 } from "./website-inquiry-alert-worker";
+import type {
+  WebsiteInquiryListItem,
+  WebsiteInquiryReviewRecord,
+  WebsiteInquiryReviewRepository,
+  WebsiteInquiryStatusTransaction,
+} from "./website-inquiry-review-service";
 
 const receiptSelection = {
   inquiryId: websiteInquiries.id,
@@ -19,8 +38,58 @@ const receiptSelection = {
   createdAt: websiteInquiries.createdAt,
 };
 
+const reviewSelection = {
+  id: websiteInquiries.id,
+  submissionId: websiteInquiries.submissionId,
+  referenceCode: websiteInquiries.referenceCode,
+  status: websiteInquiries.status,
+  name: websiteInquiries.name,
+  email: websiteInquiries.email,
+  eventName: websiteInquiries.eventName,
+  eventDate: websiteInquiries.eventDate,
+  eventLocation: websiteInquiries.eventLocation,
+  packageInterest: websiteInquiries.packageInterest,
+  message: websiteInquiries.message,
+  pageUrl: websiteInquiries.pageUrl,
+  sourceOrigin: websiteInquiries.sourceOrigin,
+  reviewedByKind: websiteInquiries.reviewedByKind,
+  reviewedById: websiteInquiries.reviewedById,
+  reviewedByName: websiteInquiries.reviewedByName,
+  reviewedAt: websiteInquiries.reviewedAt,
+  convertedContactId: websiteInquiries.convertedContactId,
+  convertedOrganizationId: websiteInquiries.convertedOrganizationId,
+  convertedBookingId: websiteInquiries.convertedBookingId,
+  convertedAt: websiteInquiries.convertedAt,
+  alertState: websiteInquiries.alertState,
+  alertAttemptCount: websiteInquiries.alertAttemptCount,
+  alertLastAttemptAt: websiteInquiries.alertLastAttemptAt,
+  alertFailureReason: websiteInquiries.alertFailureReason,
+  alertDeliveredRecipients: websiteInquiries.alertDeliveredRecipients,
+  createdAt: websiteInquiries.createdAt,
+  updatedAt: websiteInquiries.updatedAt,
+};
+
+function listItem(record: WebsiteInquiryReviewRecord): WebsiteInquiryListItem {
+  const {
+    submissionId: _submissionId,
+    message: _message,
+    pageUrl: _pageUrl,
+    sourceOrigin: _sourceOrigin,
+    alertDeliveredRecipients: _alertDeliveredRecipients,
+    ...item
+  } = record;
+  return item;
+}
+
+function cursorFor(record: { createdAt: Date; id: string }): string {
+  return `${record.createdAt.toISOString()},${record.id}`;
+}
+
 export class DrizzleWebsiteInquiryRepository
-  implements WebsiteInquiryIntakeRepository, WebsiteInquiryAlertRepository
+  implements
+    WebsiteInquiryIntakeRepository,
+    WebsiteInquiryAlertRepository,
+    WebsiteInquiryReviewRepository
 {
   constructor(private readonly database: NodePgDatabase<typeof schema>) {}
 
@@ -236,5 +305,111 @@ export class DrizzleWebsiteInquiryRepository
           eq(websiteInquiries.alertLeaseOwner, input.leaseOwner),
         ),
       );
+  }
+
+  async list(input: {
+    status?: WebsiteInquiryReviewRecord["status"];
+    before: { createdAt: Date; id: string } | null;
+    limit: number;
+  }): Promise<{ items: WebsiteInquiryListItem[]; nextCursor: string | null }> {
+    const filters = [];
+    if (input.status) filters.push(eq(websiteInquiries.status, input.status));
+    if (input.before) {
+      filters.push(
+        or(
+          lt(websiteInquiries.createdAt, input.before.createdAt),
+          and(
+            eq(websiteInquiries.createdAt, input.before.createdAt),
+            lt(websiteInquiries.id, input.before.id),
+          ),
+        )!,
+      );
+    }
+    const rows = await this.database
+      .select(reviewSelection)
+      .from(websiteInquiries)
+      .where(filters.length > 0 ? and(...filters) : undefined)
+      .orderBy(desc(websiteInquiries.createdAt), desc(websiteInquiries.id))
+      .limit(input.limit + 1);
+    const page = rows.slice(0, input.limit);
+    return {
+      items: page.map(listItem),
+      nextCursor:
+        rows.length > input.limit && page.length > 0
+          ? cursorFor(page[page.length - 1]!)
+          : null,
+    };
+  }
+
+  async countNew(): Promise<number> {
+    const [result] = await this.database
+      .select({ value: count() })
+      .from(websiteInquiries)
+      .where(eq(websiteInquiries.status, "new"));
+    return Number(result?.value ?? 0);
+  }
+
+  async getDetail(id: string) {
+    const [inquiry] = await this.database
+      .select(reviewSelection)
+      .from(websiteInquiries)
+      .where(eq(websiteInquiries.id, id))
+      .limit(1);
+    if (!inquiry) return null;
+    const auditHistory = await this.database
+      .select({
+        id: auditEntries.id,
+        entityType: auditEntries.entityType,
+        entityId: auditEntries.entityId,
+        action: auditEntries.action,
+        before: auditEntries.before,
+        after: auditEntries.after,
+        reversesEntryId: auditEntries.reversesEntryId,
+        createdAt: auditEntries.createdAt,
+      })
+      .from(auditEntries)
+      .where(
+        and(
+          eq(auditEntries.entityType, "website_inquiry"),
+          eq(auditEntries.entityId, id),
+        ),
+      )
+      .orderBy(desc(auditEntries.createdAt));
+    return { inquiry, auditHistory };
+  }
+
+  async runStatusTransaction<T>(
+    operation: (transaction: WebsiteInquiryStatusTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.transaction(async (transaction) =>
+      operation({
+        getForUpdate: async (id) => {
+          const [inquiry] = await transaction
+            .select(reviewSelection)
+            .from(websiteInquiries)
+            .where(eq(websiteInquiries.id, id))
+            .limit(1)
+            .for("update");
+          return inquiry ?? null;
+        },
+        updateStatus: async (input) => {
+          const [updated] = await transaction
+            .update(websiteInquiries)
+            .set({
+              status: input.status,
+              reviewedByKind: input.actor.kind,
+              reviewedById: input.actor.id,
+              reviewedByName: input.actor.name,
+              reviewedAt: input.now,
+              updatedAt: input.now,
+            })
+            .where(eq(websiteInquiries.id, input.id))
+            .returning(reviewSelection);
+          if (!updated) throw new Error("Website inquiry status was not saved.");
+          return updated;
+        },
+        recordAuditEntry: (change) => recordAuditEntry(transaction, change),
+      }),
+    );
   }
 }

@@ -535,7 +535,7 @@ Instantiate the loop in index.ts, start it in startBackgroundWorkers, and close 
 - Modify: artifacts/api-server/src/features/website-inquiries/website-inquiry-repository.ts
 - Modify: artifacts/api-server/src/routes/index.ts
 
-- [ ] **Step 1: Write failing authorization tests**
+- [x] **Step 1: Write failing authorization tests**
 
 Define:
 
@@ -547,7 +547,7 @@ type WebsiteInquiryActor =
 
 Assert owner token succeeds; enabled Office token with permission succeeds; Office without permission gets 403; disabled/expired/invalid/no token gets 401; manager tokens do not gain access.
 
-- [ ] **Step 2: Write failing review-service tests**
+- [x] **Step 2: Write failing review-service tests**
 
 Cover newest-first list pagination, status filter, count of only new, detail with audit history, and transition rules:
 
@@ -561,17 +561,17 @@ converted -> no status mutation
 
 Each successful action calls recordAuditEntry with entityType website_inquiry, the inquiry UUID, the action name, before/after status, and actor kind/id/name inside the after snapshot.
 
-- [ ] **Step 3: Run and confirm red**
+- [x] **Step 3: Run and confirm red**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-authorization.test.ts src/features/website-inquiries/website-inquiry-review-service.test.ts src/routes/website-inquiries.test.ts
 
 Expected: FAIL because authorization, service, and routes are absent.
 
-- [ ] **Step 4: Implement dual authorization**
+- [x] **Step 4: Implement dual authorization**
 
 Try verifyToken first. Otherwise resolve the Office session through DrizzleOfficeAccountRepository. Set req.websiteInquiryActor only after checking canReviewWebsiteInquiries. Extend the Express Request declaration in the authorization module.
 
-- [ ] **Step 5: Implement routes**
+- [x] **Step 5: Implement routes**
 
 Mount before requireOwnerMiddleware:
 
@@ -584,7 +584,7 @@ PATCH /website-inquiries/:inquiryId/status
 
 The PATCH body is strict { action: "begin_review" | "archive" | "spam" | "restore" }. Return 409 for invalid transitions and 404 for unknown IDs.
 
-- [ ] **Step 6: Rerun and commit**
+- [x] **Step 6: Rerun and commit**
 
     pnpm --filter @workspace/api-server test -- src/features/website-inquiries/website-inquiry-authorization.test.ts src/features/website-inquiries/website-inquiry-review-service.test.ts src/routes/website-inquiries.test.ts
     pnpm --filter @workspace/api-server typecheck
