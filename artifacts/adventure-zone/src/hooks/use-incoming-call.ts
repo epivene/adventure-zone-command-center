@@ -18,7 +18,7 @@ export function useIncomingCall() {
     next.on("disconnect", () => finish("ended")); next.on("cancel", () => finish("ended")); next.on("error", () => finish("failed"));
   }, []);
   const answer = useCallback(async () => { if (!call.current || state !== "ringing") return false; setState("accepting"); try { await call.current.accept(); answered.current = true; setState("connected"); return true; } catch { setState("failed"); return false; } }, [state]);
-  const voicemail = useCallback(async () => { const id = session?.id; const currentCall = call.current; if (!currentCall || !id || answered.current || state !== "ringing") return false; setState("sending-to-voicemail"); try { await incomingCallingApi.sendToVoicemail(id); if (!answered.current) currentCall.reject(); if (call.current === currentCall) call.current = null; answered.current = false; setState("ended"); return true; } catch { setState("ringing"); return false; } }, [session?.id, state]);
+  const voicemail = useCallback(async () => { const id = session?.id; const currentCall = call.current; if (!currentCall || !id || answered.current || state !== "ringing") return false; setState("sending-to-voicemail"); try { await incomingCallingApi.sendToVoicemail(id); if (call.current === currentCall) call.current = null; answered.current = false; setState("ended"); return true; } catch { setState("ringing"); return false; } }, [session?.id, state]);
   const hangUp = useCallback(() => { if (!call.current || state !== "connected") return; setState("ending"); call.current.disconnect(); }, [state]);
   return { state, session, receive, answer, voicemail, hangUp, call: call.current };
 }

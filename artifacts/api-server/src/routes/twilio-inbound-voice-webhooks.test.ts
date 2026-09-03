@@ -16,6 +16,7 @@ const voiceConfig = {
 };
 
 function harness() {
+  const record = vi.fn().mockResolvedValue(true);
   const provider = {
     validateWebhook: vi.fn().mockReturnValue(true),
     createBrowserToken: vi.fn(),
@@ -48,9 +49,9 @@ function harness() {
     providerForConfig: () => provider,
     availability: {} as never,
     calls: {} as never,
-    voicemails: {} as never,
+    voicemails: { record } as never,
   }));
-  return { app, provider };
+  return { app, provider, record };
 }
 
 function signed(builder: request.Test) {
@@ -97,6 +98,26 @@ describe("Twilio inbound callback endpoints", () => {
       signature: "valid-signature",
       url: "https://calls.example.test/api/webhooks/twilio/voice/inbound/status",
       params: body,
+    });
+  });
+
+  it("accepts Twilio's recording callback without a To field and saves the recording", async () => {
+    const { app, record } = harness();
+
+    await signed(
+      request(app).post("/api/webhooks/twilio/voice/inbound/recording"),
+    ).type("form").send({
+      CallSid: "CA12345678",
+      RecordingSid: "RE12345678",
+      RecordingStatus: "completed",
+      RecordingDuration: "12",
+    }).expect(204);
+
+    expect(record).toHaveBeenCalledWith({
+      parentSid: "CA12345678",
+      recordingSid: "RE12345678",
+      duration: 12,
+      retentionDays: 30,
     });
   });
 

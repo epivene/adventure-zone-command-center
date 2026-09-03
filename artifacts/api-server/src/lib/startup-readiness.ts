@@ -11,14 +11,12 @@ export function markAppReady(): void {
 }
 
 export const requireStartupReadiness: RequestHandler = (req, res, next) => {
-  const isLiveness = req.method === "GET" && req.path === "/api/healthz";
   const isCorsPreflight = req.method === "OPTIONS";
   const isAuthenticatedImportRoute =
     req.path === "/api/assistant-import" ||
     req.path.startsWith("/api/assistant-import/");
   if (
     startupReady ||
-    isLiveness ||
     isCorsPreflight ||
     isAuthenticatedImportRoute
   ) {

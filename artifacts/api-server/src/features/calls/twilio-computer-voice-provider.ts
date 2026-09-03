@@ -74,6 +74,10 @@ export class TwilioComputerVoiceProvider implements ComputerVoiceProvider, Inbou
     response.say("Thank you. Goodbye.");
     return response.toString();
   }
+  async redirectCallToVoicemail(input: { callSid: string; twiml: string }): Promise<void> {
+    const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });
+    await client.calls(input.callSid).update({ twiml: input.twiml });
+  }
   createUnavailableTwiml(): string { const response = new twilio.twiml.VoiceResponse(); response.say("The Adventure Zone cannot answer due to a temporary technical problem. Please try again later."); response.hangup(); return response.toString(); }
   async getRecordingMedia(recordingSid: string): Promise<ProviderRecordingMedia> {
     const client = twilio(this.config.apiKeySid, this.config.apiKeySecret, { accountSid: this.config.accountSid });

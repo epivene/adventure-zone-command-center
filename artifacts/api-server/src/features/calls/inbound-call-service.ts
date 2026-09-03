@@ -4,7 +4,7 @@ export interface InboundCallRepository {
  begin(input:{ownerId:string;providerParentCallSid:string;ingressNumber:string;caller:InboundCallerMatch;now:Date}):Promise<InboundSession>;
  setDialResult(input:{parentSid:string;status:string;now:Date}):Promise<InboundSession|null>;
  find(input:{id:string;ownerId:string}):Promise<InboundSession|null>;
- requestVoicemail(input:{id:string;ownerId:string;now:Date}):Promise<boolean>;
+ requestVoicemail(input:{id:string;ownerId:string;now:Date}):Promise<InboundSession|null>;
 }
 export class InboundCallService {
  constructor(private repository:InboundCallRepository, private matcher:InboundCallerMatcher, private clock=()=>new Date()) {}

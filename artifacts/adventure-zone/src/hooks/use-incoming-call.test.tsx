@@ -74,4 +74,17 @@ describe("useIncomingCall", () => {
     expect(result.current.state).toBe("ringing");
     expect(result.current.session?.id).toBe("second-session");
   });
+
+  it("lets the server redirect the live call instead of rejecting only the browser leg", async () => {
+    const incoming = incomingCall("voicemail-session");
+    const { result } = renderHook(() => useIncomingCall());
+
+    await act(async () => result.current.receive(incoming.call));
+    await act(async () => {
+      expect(await result.current.voicemail()).toBe(true);
+    });
+
+    expect(incoming.call.reject).not.toHaveBeenCalled();
+    expect(result.current.state).toBe("ended");
+  });
 });
