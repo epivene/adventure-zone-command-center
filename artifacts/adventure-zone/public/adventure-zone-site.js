@@ -138,7 +138,7 @@
     ["Who can participate?", "The commercial-grade attractions are designed for a wide range of ages, including adults. Bounce houses and jump-and-slide combos are generally aimed at ages 2–12, while obstacle courses and action attractions tend to appeal to older children, teens, and adults. Giant slides and water games can work across age groups."],
     ["Can we choose individual rides a la carte?", "Packages are planned as complete units rather than individual ride rentals. That keeps the traveling inventory and logistics workable across the western states. Submit the form with your event details and the team can recommend the best unit."],
     ["What is included in each package?", "Adventure Zone includes 10 attractions. Pirate's Rebellion is the water-and-pirate package. Warrior's Playground includes the Action Pursuit Gaming Arena with Paintball, AirSoft, or Orbeez, four additional attractions, and carnival games. The package cards above show the current pricing and core identities."],
-    ["What does pricing look like?", "The current package rates shown above are $9,000 for Adventure Zone and $7,500 for Pirate's Rebellion or Warrior's Playground, each for 1–4 days. Final booking details depend on the event, site, dates, and selected package."],
+    ["What does pricing look like?", "For 1–4 days, Adventure Zone is $9,000 and Pirate's Rebellion or Warrior's Playground is $7,500. For 5–8 days, Adventure Zone is $18,000 and Pirate's Rebellion or Warrior's Playground is $15,000. Final booking details depend on the event, site, dates, and selected package."],
     ["Is a contract required?", "Yes. The current booking policy requires a signed contract for each engagement, including returning customers."],
     ["What if our question is not listed?", "Use the inquiry form below and include your event date, location, and questions. The booking team can confirm the site-specific requirements before anything is finalized."],
   ];
@@ -395,6 +395,7 @@
     .price-label { margin-bottom: 8px; color: var(--az-pink); font-size: 12px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
     .price { margin-bottom: 4px; font-size: 48px; line-height: .95; }
     .price-days { color: var(--az-muted); font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .extended-rate { display: inline-block; margin-top: 12px; padding: 7px 10px; color: var(--az-navy); background: var(--az-yellow); border: 2px solid var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .06em; line-height: 1.2; text-transform: uppercase; }
 
     .how { background: var(--az-yellow); }
     .how-layout { display: grid; gap: 40px; }
@@ -756,7 +757,7 @@
     }).join("")}</div></div></details>`;
   }
 
-  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
+  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, extendedRate, ammo, lineup }) {
     return `<article class="package-card">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
       <div class="package-image"><img src="${image}" alt="${alt}" loading="lazy"></div>
@@ -766,7 +767,7 @@
         <ul class="package-features">${features.map((item) => `<li>${icon("check")}${item}</li>`).join("")}</ul>
         ${ammo ? `<span class="ammo">${ammo}</span>` : ""}
         ${lineup || ""}
-        <div class="package-price"><div class="price-label">Flat Rate</div><div class="price display">${price}</div><div class="price-days">For 1–4 Days</div></div>
+        <div class="package-price"><div class="price-label">Flat Rate</div><div class="price display">${price}</div><div class="price-days">For 1–4 Days</div>${extendedRate ? `<div class="extended-rate">5–8 Days: ${extendedRate}</div>` : ""}</div>
       </div>
     </article>`;
   }
@@ -872,9 +873,9 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event. Every package comes fully staffed for 1 to 4 days.</p></div>
         <div class="package-grid">
-          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$7,500", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
-          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$7,500", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
+          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$7,500", extendedRate: "$15,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", extendedRate: "$18,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
+          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$7,500", extendedRate: "$15,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>
 
