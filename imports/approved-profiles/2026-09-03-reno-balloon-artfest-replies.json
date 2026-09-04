@@ -1,6 +1,6 @@
 [
   {
-    "importRevision": 1,
+    "importRevision": 2,
     "matchExisting": true,
     "aliases": [
       "Great Reno Balloon Race Reno NV",
@@ -16,7 +16,7 @@
     "profile": {
       "placeType": "festival_event",
       "website": "https://renoballoon.com/",
-      "description": "Annual Reno hot-air-balloon event. The 2026 event runs Sept. 10-13. The organizer said vending was already full when Adventure Zone reached out on Sept. 1, 2026; treat this as a timing issue and approach earlier for 2027."
+      "description": "Annual Reno hot-air-balloon event. The 2026 event runs Sept. 10-13. The organizer said vending was already full for 2026 and confirmed on Sept. 4, 2026 that applications open in spring 2027. Treat this as a timing issue and reconnect at the beginning of March so Adventure Zone is ready before the application window opens."
     },
     "contacts": [
       {
@@ -35,7 +35,7 @@
       "startsAt": "2026-09-10",
       "endsAt": "2026-09-13",
       "nextActionKind": "email",
-      "nextActionDueAt": "2027-01-04T16:00:00.000Z",
+      "nextActionDueAt": "2027-03-01T16:00:00.000Z",
       "travelLegId": null
     },
     "familyId": null,
@@ -48,15 +48,20 @@
       {
         "subject": "UNSENT REPLY DRAFT — thank you and ask about 2027 timing",
         "body": "Hello,\n\nThank you for letting me know! I completely understand. When would be the best time for me to reach out about the 2027 Great Reno Balloon Race before vending fills up?\n\nIf anything opens up unexpectedly for this year, please feel free to keep us in mind.\n\nBest,\nDesiree\nThe Adventure Zone"
+      },
+      {
+        "subject": "Sept. 4, 2026 reply — applications open spring 2027",
+        "body": "GRBR Admin confirmed that applications for the 2027 Great Reno Balloon Race open in spring 2027. Replace the earlier January placeholder with a real early-spring outreach task. Contact admin@renoballoon.com at the beginning of March to ask for the application opening date and be ready to apply promptly."
       }
     ],
     "followUps": [
       {
-        "label": "2027 Great Reno Balloon Race early outreach",
-        "reason": "The 2026 event was already full on vending when Adventure Zone contacted GRBR. Reconnect early for 2027, or adjust this date if the organizer replies with a specific planning window.",
-        "dueAt": "2027-01-04T16:00:00.000Z"
+        "label": "2027 Great Reno Balloon Race application follow-up",
+        "reason": "GRBR Admin confirmed applications open in spring 2027. Contact admin@renoballoon.com at the beginning of March to confirm the opening date and submit early before vending fills.",
+        "dueAt": "2027-03-01T16:00:00.000Z"
       }
-    ]
+    ],
+    "requireExisting": true
   },
   {
     "importRevision": 2,
