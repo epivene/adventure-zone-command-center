@@ -1,0 +1,46 @@
+name: Snapshot full live CRM integrity Sept 4
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/snapshot-full-live-crm-integrity-2026-09-04.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch current read-only integrity report
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            "${BASE_URL}/api/assistant-import/profile-integrity-audit" > full-live-profile-integrity-2026-09-04.json
+          node <<'NODE'
+          const fs=require("node:fs");
+          const x=JSON.parse(fs.readFileSync("full-live-profile-integrity-2026-09-04.json","utf8"));
+          if(!x.ok||x.mode!=="read_only"||!x.summary) throw new Error("Invalid integrity report");
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            "# Full live CRM integrity snapshot\n\n"+
+            "- Profiles: "+x.summary.profileCount+"\n"+
+            "- Profiles with ACT source: "+x.summary.profileWithActSourceCount+"\n"+
+            "- Profiles with Gmail: "+x.summary.profileWithGmailCount+"\n"+
+            "- Errors: "+x.summary.errorCount+"\n"+
+            "- Warnings: "+x.summary.warningCount+"\n"+
+            "- Review required: "+x.summary.reviewRequiredCount+"\n");
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: full-live-profile-integrity-2026-09-04
+          path: full-live-profile-integrity-2026-09-04.json
+          retention-days: 7
