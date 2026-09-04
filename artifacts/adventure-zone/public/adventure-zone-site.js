@@ -64,9 +64,9 @@
 
   const teamMembers = [
     ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 2%;"],
-    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 10.5%;"],
+    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 11%;"],
     ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(16px, 5vw, 48px); right: auto; top: 19%;"],
-    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(120px, 30vw, 300px); top: 27.5%;"],
+    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(120px, 30vw, 300px); top: 27.7%;"],
     ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 36%;"],
     ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(120px, 27vw, 270px); top: 44.5%;"],
     ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(16px, 6vw, 52px); right: auto; top: 53%;"],
