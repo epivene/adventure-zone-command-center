@@ -63,17 +63,17 @@
   ];
 
   const teamMembers = [
-    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: 12px; top: 10%;"],
-    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: 6%; top: 25%;"],
-    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: 6%; top: 25%;"],
-    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: 12px; top: 70%;"],
-    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: 5%; top: 84%;"],
-    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "right: 7%; top: 40%;"],
-    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "right: 12px; top: 70%;"],
-    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "right: 7%; top: 55%;"],
-    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "right: 8px; top: 40%;"],
-    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "right: 5%; top: 84%;"],
-    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "right: 4%; top: 10%;"],
+    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 2%;"],
+    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(12px, 19vw, 190px); top: 10.5%;"],
+    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(16px, 5vw, 48px); right: auto; top: 19%;"],
+    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(12px, 16vw, 170px); top: 27.5%;"],
+    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 36%;"],
+    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(12px, 21vw, 210px); top: 44.5%;"],
+    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(16px, 6vw, 52px); right: auto; top: 53%;"],
+    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(12px, 18vw, 185px); top: 61.5%;"],
+    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(12px, 4vw, 38px); right: auto; top: 70%;"],
+    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(12px, 20vw, 200px); top: 78.5%;"],
+    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(16px, 5vw, 46px); right: auto; top: 87%;"],
   ];
 
   const adventureAttractionCategories = [
@@ -95,29 +95,6 @@
     ["", "Obstacle Courses", "Challenge Yourself & Your Friends", "Challenge yourself, your friend, or a group of friends. Everyone wins, but you can come in first!", ["Adrenaline Rush", "Super Obstacle Course", "Everest", "Radical Run", "Boot Camp Challenge", "Jungle Trek Xtreme"]],
     ["Adrenaline · Eliminator · 2/20", "Pure Adrenaline", "You're in Control", "Tantalizing fun as you race, jump, duck, and get knocked off your feet!", ["Bungee Run", "Eliminator", "Wrecking Ball"]],
     ["Games · Ring Toss · 2/10", "Carnival-Style Games", "Exciting Games for Great Prizes", "We bring at least 3 carnival-style games operated on a pay-for-play basis. Keep playing to win even bigger prizes. Our games are geared toward younger children, with one game that guarantees every player is a winner!", ["Balloon Darts", "Ring Toss", "Basket Toss", "Bean Bag Toss", "Fish Pond", "Mystery Bag"]],
-  ];
-
-  const teamWaves = [
-    [0, 2, 5],
-    [1, 3, 6],
-    [4, 7],
-    [8, 10, 9],
-    [0, 5, 8],
-    [2, 3, 7],
-  ];
-
-  const previewTeamPositions = [
-    { left: "64px", right: "auto", top: "6%" },
-    { left: "64px", right: "auto", top: "22%" },
-    { left: "64px", right: "auto", top: "38%" },
-    { left: "64px", right: "auto", top: "54%" },
-    { left: "64px", right: "auto", top: "70%" },
-    { left: "auto", right: "116px", top: "6%" },
-    { left: "auto", right: "116px", top: "22%" },
-    { left: "auto", right: "116px", top: "38%" },
-    { left: "auto", right: "116px", top: "54%" },
-    { left: "auto", right: "116px", top: "70%" },
-    { left: "auto", right: "116px", top: "86%" },
   ];
 
   const faqItems = [
@@ -180,7 +157,7 @@
     }
 
     *, *::before, *::after { box-sizing: border-box; }
-    .az-site { width: 100%; overflow: hidden; background: var(--az-cream); }
+    .az-site { position: relative; width: 100%; overflow: hidden; background: var(--az-cream); }
     .az-icon { display: inline-block; width: 1.25rem; height: 1.25rem; flex: 0 0 auto; }
     .display { font-family: "Bricolage Grotesque", Impact, "Arial Black", sans-serif; letter-spacing: -.045em; }
     .uppercase { text-transform: uppercase; }
@@ -240,7 +217,7 @@
     .mobile-nav a:last-child { border-top: 4px solid var(--az-navy); border-bottom: 0; background: var(--az-yellow); }
     .mobile-nav a:hover { background: var(--az-yellow); }
 
-    .team-float { display: block; pointer-events: none; position: fixed; inset: 80px 0 0; z-index: 35; }
+    .team-float { display: block; pointer-events: none; position: absolute; top: 760px; right: 0; bottom: 760px; left: 0; z-index: 35; }
     .team-bubble { position: absolute; width: 56px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
     .team-bubble.visible { opacity: .9; transform: scale(1); }
     .team-bubble-inner { position: relative; animation: bubble-float 3.8s ease-in-out infinite; }
@@ -493,7 +470,6 @@
 
     @media (min-width: 640px) {
       .container { width: min(1400px, calc(100% - 64px)); }
-      .team-float { top: 96px; }
       .team-bubble { width: 64px; }
       .team-photo { width: 64px; height: 64px; }
       .tube-man-position { right: 12px; bottom: -14px; width: 116px; }
@@ -588,9 +564,6 @@
       .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
 
-    .az-site.wix-preview-frame { position: relative; }
-    .az-site.wix-preview-frame .team-float { position: absolute; top: 620px; right: 0; bottom: auto; left: 0; height: 1500px; }
-    .az-site.wix-preview-frame .team-bubble[style*='right:'] { right: 116px !important; }
     .az-site.wix-preview-frame .tube-man-position { position: absolute; top: 280px; right: 116px; bottom: auto; }
 
     @media (min-width: 960px) {
@@ -778,9 +751,7 @@
       this.attachShadow({ mode: "open" });
       this.heroIndex = 0;
       this.galleryIndex = 0;
-      this.teamWave = 0;
       this.menuOpen = false;
-      this.pastHero = false;
       this.timers = [];
       this.abortController = null;
       this.inquiryAbortController = null;
@@ -792,15 +763,6 @@
       this.shadowRoot.innerHTML = `<style>${styles}</style>${pageMarkup()}`;
       this.isWixPreviewFrame = /CustomElementPreviewIframe/i.test(window.location.pathname);
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
-      if (this.isWixPreviewFrame) {
-        this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble, index) => {
-          const position = previewTeamPositions[index];
-          if (!position) return;
-          bubble.style.left = position.left;
-          bubble.style.right = position.right;
-          bubble.style.top = position.top;
-        });
-      }
       this.abortController = new AbortController();
       this.bindInteractions();
       this.setupResizeEvents();
@@ -892,22 +854,14 @@
 
     updateScrollState() {
       const header = this.shadowRoot?.querySelector(".site-header");
-      const hero = this.shadowRoot?.querySelector("#hero");
-      if (!header || !hero) return;
+      if (!header) return;
       header.classList.toggle("scrolled", window.scrollY > 20);
-      const passed = this.isWixPreviewFrame || hero.getBoundingClientRect().bottom <= 96;
-      this.pastHero = passed;
-      const heroHeight = hero.offsetHeight || window.innerHeight;
-      this.teamWave = this.isWixPreviewFrame ? 0 : Math.floor(Math.max(0, window.scrollY - heroHeight) / Math.max(window.innerHeight * .75, 560));
       this.updateTeamVisibility();
     }
 
     updateTeamVisibility() {
-      const active = this.pastHero
-        ? (this.isWixPreviewFrame ? teamMembers.map((_, index) => index) : teamWaves[this.teamWave % teamWaves.length])
-        : [];
-      this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble, index) => {
-        bubble.classList.toggle("visible", active.includes(index));
+      this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble) => {
+        bubble.classList.add("visible");
       });
     }
 

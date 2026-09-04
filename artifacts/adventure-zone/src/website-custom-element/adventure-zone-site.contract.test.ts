@@ -166,42 +166,47 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".menu-toggle", 1280).display).toBe("none");
   });
 
-  it("shows every crew member without overlap below the hero in Wix's iframe preview", () => {
+  it("staggers every crew member on alternating sides throughout Wix's full page", () => {
     window.history.replaceState({}, "", "/CustomElementPreviewIframe.preview.html");
     const { root } = mountSite();
     const shell = root.querySelector<HTMLElement>(".az-site")!;
-    const teamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-float");
-    const rightTeamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-bubble[style*='right:']");
+    const teamStyle = applicableStyle(root, ".team-float");
     const previewHeaderStyle = applicableStyle(root, ".az-site.wix-preview-frame .site-header .container", 980);
     const visibleBubbles = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"));
     const visibleTeamIndexes = visibleBubbles.map((bubble) => bubble.dataset.teamIndex);
     const visiblePositions = visibleBubbles.map((bubble) => `${bubble.style.left}|${bubble.style.right}|${bubble.style.top}`);
+    const sides = visibleBubbles.map((bubble) => bubble.style.left && bubble.style.left !== "auto" ? "left" : "right");
+    const verticalPositions = visibleBubbles.map((bubble) => Number.parseFloat(bubble.style.top));
 
     expect(shell).toHaveClass("wix-preview-frame");
     expect(teamStyle.position).toBe("absolute");
-    expect(Number.parseFloat(teamStyle.top)).toBeGreaterThanOrEqual(620);
-    expect(Number.parseFloat(rightTeamStyle.right)).toBeGreaterThanOrEqual(100);
+    expect(Number.parseFloat(teamStyle.top)).toBeGreaterThanOrEqual(700);
+    expect(Number.parseFloat(teamStyle.bottom)).toBeGreaterThanOrEqual(600);
+    expect(teamStyle.height).toBe("");
     expect(previewHeaderStyle.width).toBe("calc(100% - 144px)");
     expect(visibleTeamIndexes).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
     expect(new Set(visiblePositions).size).toBe(11);
+    expect(sides).toEqual(["left", "right", "left", "right", "left", "right", "left", "right", "left", "right", "left"]);
+    expect(verticalPositions[0]).toBeLessThanOrEqual(5);
+    expect(verticalPositions.at(-1)).toBeGreaterThanOrEqual(85);
+    expect(verticalPositions.slice(1).every((position, index) => position - verticalPositions[index] >= 8)).toBe(true);
   });
 
-  it("reveals team bubbles in waves only after scrolling below the hero", () => {
+  it("keeps every crew member document-anchored instead of recycling viewport waves", () => {
     const { root } = mountSite();
-    const hero = root.querySelector<HTMLElement>("#hero")!;
-    let heroBottom = 700;
-    hero.getBoundingClientRect = () => ({ bottom: heroBottom }) as DOMRect;
-    Object.defineProperty(hero, "offsetHeight", { configurable: true, value: 700 });
+    const positionOf = (bubble: HTMLElement) => `${bubble.style.left}|${bubble.style.right}|${bubble.style.top}`;
+    const positionsBeforeScroll = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble"), positionOf);
+
     Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
-
     window.dispatchEvent(new Event("scroll"));
-    expect(root.querySelectorAll(".team-bubble.visible")).toHaveLength(0);
+    expect(root.querySelectorAll(".team-bubble.visible")).toHaveLength(11);
 
-    heroBottom = 80;
-    Object.defineProperty(window, "scrollY", { configurable: true, value: 800 });
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 5000 });
     window.dispatchEvent(new Event("scroll"));
-    expect(Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible")).map((bubble) => bubble.dataset.teamIndex))
-      .toEqual(["0", "2", "5"]);
+    const bubblesAfterScroll = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"));
+
+    expect(bubblesAfterScroll).toHaveLength(11);
+    expect(bubblesAfterScroll.map(positionOf)).toEqual(positionsBeforeScroll);
   });
 
   it("renders collapsed package-specific attraction lineups", () => {
