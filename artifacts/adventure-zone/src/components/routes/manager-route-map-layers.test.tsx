@@ -64,6 +64,7 @@ const event: MapEvent & { planningEmphasis: "primary" | "dimmed" } = {
   mappingState: "mapped_city",
   seasonYear: 2026,
   planningEmphasis: "primary",
+  routeStopNumber: 1,
 };
 
 const handoff: EquipmentHandoffView = {
@@ -126,6 +127,8 @@ describe("ManagerRouteMapLayers", () => {
     const eventIconCall = mocks.divIcon.mock.calls.find(([options]) => String(options.html).includes("az-route-pin"));
     expect(eventIconCall?.[0].html).toContain("#ef4444");
     expect(eventIconCall?.[0].html).toContain("az-route-pin--focused");
+    expect(eventIconCall?.[0].html).toContain("az-route-pin__stop-number");
+    expect(eventIconCall?.[0].html).toContain(">1<");
     const handoffIconCall = mocks.divIcon.mock.calls.find(([options]) => String(options.html).includes("az-handoff-marker"));
     expect(handoffIconCall?.[0].html).toContain("az-handoff-marker--suggested");
 
@@ -133,6 +136,22 @@ describe("ManagerRouteMapLayers", () => {
     expect(popup).toContain("Directions to event");
     expect(popup).toContain("google.com/maps/dir/");
     expect(popup).not.toContain("key=");
+  });
+
+  it("renders potential events as smaller context markers without stop numbers", () => {
+    render(
+      <ManagerRouteMapLayers
+        events={[{ ...event, id: "possible", routeBucket: "potential", routeStopNumber: null }]}
+        handoffs={[]}
+        focusedEventId={null}
+        managerMode="planning"
+      />,
+    );
+
+    const contextIconCall = mocks.divIcon.mock.calls.find(([options]) => String(options.html).includes("az-route-pin--context"));
+    expect(contextIconCall?.[0].html).toContain("az-route-pin__dot");
+    expect(contextIconCall?.[0].html).not.toContain("az-route-pin__stop-number");
+    expect(contextIconCall?.[0].iconSize).toEqual([20, 24]);
   });
 
   it("draws planning route lines and focused trip points in stored order", () => {
