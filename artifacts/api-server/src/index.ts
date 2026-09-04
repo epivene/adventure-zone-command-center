@@ -74,6 +74,8 @@ import {
 } from "./features/act-replacement/runtime";
 import { DrizzleWebsiteInquiryRepository } from "./features/website-inquiries/website-inquiry-repository";
 import { WebsiteInquiryAlertWorker } from "./features/website-inquiries/website-inquiry-alert-worker";
+import { createGoogleWorkspaceMailDelivery } from "./features/website-inquiries/google-workspace-mail-delivery";
+import { PostgresGoogleConnectionRepository } from "./features/google-workspace/google-connection-repository";
 import {
   WebsiteInquiryAlertWorkerLoop,
   systemWebsiteInquiryAlertWorkerLoopScheduler,
@@ -104,6 +106,9 @@ const scoutAlertLoop = new ScoutAlertWorkerLoop({
 const websiteInquiryAlertLoop = new WebsiteInquiryAlertWorkerLoop({
   worker: new WebsiteInquiryAlertWorker({
     repository: new DrizzleWebsiteInquiryRepository(db),
+    createMailDelivery: () => createGoogleWorkspaceMailDelivery(
+      new PostgresGoogleConnectionRepository(),
+    ),
   }),
   workerId: `website-inquiry-alert-${randomUUID()}`,
   clock: { now: () => new Date() },
