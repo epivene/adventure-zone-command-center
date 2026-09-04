@@ -461,6 +461,15 @@ describe("adventure-zone-site inquiry contract", () => {
     expect([...assetUrls, ...posterUrls].every((url) => url?.startsWith("https://"))).toBe(true);
   });
 
+  it("labels every navigation link to the booking card as Booking Structures", () => {
+    const { root } = mountSite();
+    const bookingLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>('a[href="#partnerships"]'));
+
+    expect(bookingLinks).toHaveLength(2);
+    expect(bookingLinks.every((link) => link.textContent?.includes("Booking Structures"))).toBe(true);
+    expect(bookingLinks.every((link) => !link.textContent?.includes("Partnerships"))).toBe(true);
+  });
+
   it("presents the family mission and invites children and parents to play together", () => {
     const { root } = mountSite();
     const mission = root.querySelector("#mission")!;
