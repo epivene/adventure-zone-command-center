@@ -561,6 +561,9 @@ a {
 .az-route-marker-wrap,.az-handoff-marker-wrap,.az-trip-stop-wrap{background:transparent;border:0}
 .az-route-pin{--az-pin-color:hsl(var(--muted-foreground));display:block;width:30px;height:38px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--az-pin-color);border:3px solid hsl(var(--card));box-shadow:0 2px 8px rgba(15,23,42,.35)}
 .az-route-pin__dot{display:block;width:10px;height:10px;border-radius:999px;background:hsl(var(--card));margin:7px;transform:rotate(45deg)}
+.az-route-pin__stop-number{display:flex;width:100%;height:100%;align-items:center;justify-content:center;transform:rotate(45deg);color:hsl(var(--card));font-size:13px;font-weight:900;line-height:1}
+.az-route-pin--context{width:18px;height:22px;border-width:2px}
+.az-route-pin--context .az-route-pin__dot{width:6px;height:6px;margin:4px}
 .az-route-pin--focused{outline:4px solid hsl(var(--foreground));outline-offset:2px}
 .az-route-pin--dimmed{opacity:.38}
 .az-handoff-marker{display:flex;width:30px;height:30px;align-items:center;justify-content:center;border-radius:999px;border:3px solid hsl(var(--card));font-weight:900;color:hsl(var(--card));box-shadow:0 2px 7px rgba(15,23,42,.3)}
