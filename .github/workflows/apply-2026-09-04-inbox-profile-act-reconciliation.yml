@@ -69,6 +69,33 @@ jobs:
             for(const payload of payloads){
               let profileId=payload.organizationId||null;
               let upsert=null;
+              if(profileId){
+                const before=await request("profile-history/"+profileId);
+                const notesReady=(payload.notes||[]).every(note=>(before.notes||[]).some(x=>x.subject===note.subject));
+                const openBefore=(before.followUps||[]).filter(x=>!x.completedAt);
+                const followReady=(payload.followUps||[]).every(f=>openBefore.some(x=>
+                  x.kind===f.label && new Date(x.dueAt).toISOString()===new Date(f.dueAt).toISOString()))
+                  && (!payload.replaceOpenFollowUps || openBefore.length===(payload.followUps||[]).length);
+                const bookingReady=!payload.eventProfile?.booking?.enabled || (before.bookings||[]).some(x=>
+                  x.name===payload.eventProfile.booking.name && x.status===payload.eventProfile.booking.status);
+                const contactsReady=(payload.profileContacts||[]).every(contact=>{
+                  const email=String(contact.email||"").toLowerCase();
+                  const phone=String(contact.phone||"").replace(/\\D/g,"");
+                  return (before.contacts||[]).some(x=>(email&&String(x.email||"").toLowerCase()===email)
+                    ||(phone&&String(x.phone||"").replace(/\\D/g,"")===phone));
+                });
+                if(notesReady&&followReady&&bookingReady&&contactsReady){
+                  receipt.profiles.push({
+                    name:before.place?.name||payload.event?.name||payload.eventProfile?.event?.name,
+                    profileId,action:"already_verified",
+                    notes:(payload.notes||[]).map(x=>x.subject),
+                    openFollowUps:openBefore.map(x=>({kind:x.kind,dueAt:x.dueAt})),
+                    bookingStatuses:(before.bookings||[]).map(x=>({name:x.name,status:x.status,startsAt:x.startsAt,endsAt:x.endsAt})),
+                    actHistoryCount:(before.history||[]).filter(x=>x.importedFromAct).length
+                  });
+                  continue;
+                }
+              }
               if(payload.eventProfile){
                 if(!profileId) profileId=await resolve(payload.eventProfile.event);
                 const eventPayload={
