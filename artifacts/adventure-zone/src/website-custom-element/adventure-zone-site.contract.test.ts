@@ -92,7 +92,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(customElements.get("adventure-zone-site")).toBeTypeOf("function");
   });
 
-  it("renders one complete hosted tube-man mascot without crop styling", () => {
+  it("renders complete hosted tube-man mascots for the pinned desktop and inline mobile layouts", () => {
     const mascot = document.createElement("adventure-zone-mascot") as HTMLElement;
     document.body.append(mascot);
     const root = mascot.shadowRoot!;
@@ -112,7 +112,12 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".mascot-shell")?.transform).toBe("translateY(3px)");
     expect(applicableStyle(root, ":host")?.position).toBe("fixed");
     expect(applicableStyle(root, ":host")?.bottom).toBe("0px");
-    expect(siteRoot.querySelectorAll(".tube-man-image")).toHaveLength(0);
+    const inlineMascots = siteRoot.querySelectorAll<HTMLImageElement>(".tube-man-position .tube-man-image");
+    expect(inlineMascots).toHaveLength(1);
+    expect(inlineMascots[0]?.getAttribute("src")).toBe(
+      "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mascot.png",
+    );
+    expect(siteRoot.querySelector(".tube-man-position")?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it.each([
