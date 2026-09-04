@@ -93,18 +93,23 @@ describe("adventure-zone-site inquiry contract", () => {
   });
 
   it("renders one complete hosted tube-man mascot without crop styling", () => {
-    const { root } = mountSite();
+    const mascot = document.createElement("adventure-zone-mascot") as HTMLElement;
+    document.body.append(mascot);
+    const root = mascot.shadowRoot!;
     const mascots = root.querySelectorAll<HTMLImageElement>(".tube-man-image");
+    const { root: siteRoot } = mountSite();
 
     expect(mascots).toHaveLength(1);
     expect(mascots[0]?.getAttribute("src")).toBe(
       "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mascot.png",
     );
     expect(applicableStyle(root, ".tube-man-image")?.width).toBe("100%");
-    expect(applicableStyle(root, ".tube-man-image")?.height).toBe("auto");
+    expect(applicableStyle(root, ".tube-man-image")?.height).toBe("100%");
+    expect(applicableStyle(root, ".tube-man-image")?.objectFit).toBe("contain");
     expect(applicableStyle(root, ".tube-man-image")?.clipPath).toBe("");
     expect(applicableStyle(root, ".tube-man-image")?.mask).toBe("");
-    expect(applicableStyle(root, ".tube-man-position")?.overflow).not.toBe("hidden");
+    expect(applicableStyle(root, ".mascot-shell")?.overflow).not.toBe("hidden");
+    expect(siteRoot.querySelectorAll(".tube-man-image")).toHaveLength(0);
   });
 
   it.each([
@@ -158,27 +163,24 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".menu-toggle", 1280).display).toBe("none");
   });
 
-  it("shows the mascot and first crew wave below the hero in Wix's iframe preview", () => {
+  it("shows every crew member without overlap below the hero in Wix's iframe preview", () => {
     window.history.replaceState({}, "", "/CustomElementPreviewIframe.preview.html");
     const { root } = mountSite();
     const shell = root.querySelector<HTMLElement>(".az-site")!;
-    const mascotStyle = applicableStyle(root, ".az-site.wix-preview-frame .tube-man-position");
     const teamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-float");
     const rightTeamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-bubble[style*='right:']");
     const previewHeaderStyle = applicableStyle(root, ".az-site.wix-preview-frame .site-header .container", 980);
-    const visibleTeamIndexes = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"))
-      .map((bubble) => bubble.dataset.teamIndex);
+    const visibleBubbles = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"));
+    const visibleTeamIndexes = visibleBubbles.map((bubble) => bubble.dataset.teamIndex);
+    const visiblePositions = visibleBubbles.map((bubble) => `${bubble.style.left}|${bubble.style.right}|${bubble.style.top}`);
 
     expect(shell).toHaveClass("wix-preview-frame");
-    expect(mascotStyle.position).toBe("absolute");
-    expect(Number.parseFloat(mascotStyle.top)).toBeGreaterThan(200);
-    expect(Number.parseFloat(mascotStyle.top)).toBeLessThan(620);
-    expect(Number.parseFloat(mascotStyle.right)).toBeGreaterThanOrEqual(100);
     expect(teamStyle.position).toBe("absolute");
     expect(Number.parseFloat(teamStyle.top)).toBeGreaterThanOrEqual(620);
     expect(Number.parseFloat(rightTeamStyle.right)).toBeGreaterThanOrEqual(100);
     expect(previewHeaderStyle.width).toBe("calc(100% - 144px)");
-    expect(visibleTeamIndexes).toEqual(["0", "2", "5"]);
+    expect(visibleTeamIndexes).toEqual(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
+    expect(new Set(visiblePositions).size).toBe(11);
   });
 
   it("reveals team bubbles in waves only after scrolling below the hero", () => {
