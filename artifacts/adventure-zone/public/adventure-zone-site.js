@@ -106,6 +106,20 @@
     [2, 3, 7],
   ];
 
+  const previewTeamPositions = [
+    { left: "64px", right: "auto", top: "6%" },
+    { left: "64px", right: "auto", top: "22%" },
+    { left: "64px", right: "auto", top: "38%" },
+    { left: "64px", right: "auto", top: "54%" },
+    { left: "64px", right: "auto", top: "70%" },
+    { left: "auto", right: "116px", top: "6%" },
+    { left: "auto", right: "116px", top: "22%" },
+    { left: "auto", right: "116px", top: "38%" },
+    { left: "auto", right: "116px", top: "54%" },
+    { left: "auto", right: "116px", top: "70%" },
+    { left: "auto", right: "116px", top: "86%" },
+  ];
+
   const faqItems = [
     ["Are you a drop-off inflatable rental company?", "No. The Adventure Zone is a staffed event company. Our packages are priced for the event and dates, and our team operates the attractions instead of simply delivering individual inflatables."],
     ["How much space should we plan for?", "As a starting point, Adventure Zone prefers about 10,000 square feet and can sometimes fit in approximately 7,000. Pirate's Rebellion prefers about 7,000 square feet and can sometimes fit in approximately 5,000. Warrior's Playground prefers about 15,000 square feet and can sometimes fit in approximately 12,000. The booking team will confirm the final footprint for your event."],
@@ -672,7 +686,6 @@
       </header>
 
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
-      <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
 
       <section class="hero" id="hero">
         <div class="hero-backdrop"><video class="hero-video" src="${IMAGE.heroVideo}" poster="${IMAGE.hero}" autoplay loop muted playsinline preload="metadata" aria-hidden="true"></video></div>
@@ -779,6 +792,15 @@
       this.shadowRoot.innerHTML = `<style>${styles}</style>${pageMarkup()}`;
       this.isWixPreviewFrame = /CustomElementPreviewIframe/i.test(window.location.pathname);
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
+      if (this.isWixPreviewFrame) {
+        this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble, index) => {
+          const position = previewTeamPositions[index];
+          if (!position) return;
+          bubble.style.left = position.left;
+          bubble.style.right = position.right;
+          bubble.style.top = position.top;
+        });
+      }
       this.abortController = new AbortController();
       this.bindInteractions();
       this.setupResizeEvents();
@@ -881,7 +903,9 @@
     }
 
     updateTeamVisibility() {
-      const active = this.pastHero ? teamWaves[this.teamWave % teamWaves.length] : [];
+      const active = this.pastHero
+        ? (this.isWixPreviewFrame ? teamMembers.map((_, index) => index) : teamWaves[this.teamWave % teamWaves.length])
+        : [];
       this.shadowRoot.querySelectorAll(".team-bubble").forEach((bubble, index) => {
         bubble.classList.toggle("visible", active.includes(index));
       });
@@ -1015,7 +1039,48 @@
     }
   }
 
+  const mascotStyles = `
+    :host { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    *, *::before, *::after { box-sizing: border-box; }
+    .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; }
+    .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
+    .tube-man-sway { width: 100%; height: 100%; animation: mascot-wave 2.23s ease-in-out infinite; }
+    .tube-man-wobble { width: 100%; height: 100%; animation: mascot-wobble 1.37s ease-in-out infinite; }
+    .tube-man-image { display: block; width: 100%; height: 100%; object-fit: contain; object-position: center bottom; }
+    @keyframes mascot-wave {
+      0%, 100% { transform: rotate(-4deg) skewX(-2deg) translateX(0); }
+      18% { transform: rotate(5deg) skewX(4deg) translateX(2px); }
+      37% { transform: rotate(9deg) skewX(7deg) translateX(4px); }
+      55% { transform: rotate(-5deg) skewX(-5deg) translateX(-2px); }
+      74% { transform: rotate(-9deg) skewX(-7deg) translateX(-4px); }
+      88% { transform: rotate(3deg) skewX(3deg) translateX(1px); }
+    }
+    @keyframes mascot-wobble {
+      0%, 100% { transform: translateY(0) scaleX(1) scaleY(1); }
+      28% { transform: translateY(-4px) scaleX(.965) scaleY(1.045) skewX(1deg); }
+      51% { transform: translateY(2px) scaleX(1.035) scaleY(.975) skewX(-2deg); }
+      77% { transform: translateY(-3px) scaleX(.98) scaleY(1.035) skewX(2deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .tube-man-sway, .tube-man-wobble { animation: none; }
+    }
+  `;
+
+  class AdventureZoneMascot extends HTMLElement {
+    constructor() {
+      super();
+      this.attachShadow({ mode: "open" });
+    }
+
+    connectedCallback() {
+      this.shadowRoot.innerHTML = `<style>${mascotStyles}</style><div class="mascot-shell"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt="The Adventure Zone inflatable tube-man mascot"></div></div></div>`;
+    }
+  }
+
   if (!customElements.get("adventure-zone-site")) {
     customElements.define("adventure-zone-site", AdventureZoneSite);
+  }
+  if (!customElements.get("adventure-zone-mascot")) {
+    customElements.define("adventure-zone-mascot", AdventureZoneMascot);
   }
 })();
