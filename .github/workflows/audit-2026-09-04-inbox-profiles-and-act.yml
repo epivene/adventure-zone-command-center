@@ -54,7 +54,10 @@ jobs:
             ["Stone Age Stampede canonical","b453e452-4665-44a1-80b5-3d1c8a96d2f2"],
             ["Stone Age Stampede legacy","5f15c7f2-38e2-4b95-98cc-c277c389abd8"],
             ["Helper Arts Festival","3cb429e6-adae-4fc6-9481-cb7276c11679"],
-            ["Blanding City Fall Festival","e00c8d3e-1265-4d0a-b80b-acc38abbae0f"]
+            ["Blanding City Fall Festival","e00c8d3e-1265-4d0a-b80b-acc38abbae0f"],
+            ["Magic Valley Dairy Days legacy candidate","5f89f8f1-6d4e-4b36-a492-6acd1ec31667"],
+            ["Wendell Dairy Days candidate","cbb16f6c-b7ee-46cf-bfa3-1124a15e5e05"],
+            ["White Sulphur Springs Rodeo legacy candidate","426902d9-b922-45c1-9dec-6a4c88f71678"]
           ];
           const searches = [
             "Great Reno Balloon Race","Boulder Art Festival","Green River Melon Days",
