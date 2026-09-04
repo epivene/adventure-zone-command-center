@@ -289,6 +289,7 @@
     .body-large { color: var(--az-muted); font-size: 19px; font-weight: 800; line-height: 1.42; }
     .body-large p { margin: 0 0 16px; }
     .stats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .stats .member-badge { grid-column: 1 / -1; justify-self: center; margin-top: 8px; }
     .stat-card { min-height: 132px; padding: 16px; border: 4px solid var(--az-navy); background: var(--az-white); }
     .stat-card.yellow { background: var(--az-yellow); }
     .stat-card.navy { color: var(--az-white); background: var(--az-navy); box-shadow: 8px 8px 0 var(--az-white); }
@@ -610,16 +611,16 @@
       .desktop-book .button { min-height: 40px; padding: 7px 10px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); font-size: 8px; letter-spacing: .1em; }
       .menu-toggle { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
       .button { min-height: 40px; padding: 9px 12px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 10px; letter-spacing: .1em; }
-      .hero { min-height: 500px; padding: 86px 14px 34px; }
-      .hero-video { transform: scale(1.18); transform-origin: center; }
+      .hero { min-height: 450px; padding: 70px 14px 22px; }
+      .hero-video { transform: none; }
       .hero-content { align-items: flex-start; }
-      .eyebrow { margin-bottom: 16px; padding: 5px 9px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 9px; }
+      .eyebrow { margin-bottom: 12px; padding: 4px 8px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 8px; }
       .eyebrow .az-icon { width: 12px; height: 12px; }
-      .hero h1 { max-width: 560px; margin-bottom: 14px; font-size: clamp(2.6rem, 11.5vw, 4rem); line-height: .88; text-align: left; }
+      .hero h1 { max-width: 560px; margin-bottom: 10px; font-size: clamp(2.35rem, 10vw, 3.5rem); line-height: .88; text-align: left; }
       .hero h1 .yellow::after { display: block; bottom: -8px; height: 4px; border-bottom-width: 4px; }
-      .hero-copy { max-width: 560px; margin-bottom: 22px; font-size: 13px; line-height: 1.3; text-align: left; }
+      .hero-copy { max-width: 560px; margin-bottom: 16px; font-size: 12px; line-height: 1.3; text-align: left; }
       .hero-actions { flex-direction: row; align-items: stretch; gap: 10px; width: auto; }
-      .hero-actions .button { width: auto; }
+      .hero-actions .button { width: auto; min-height: 36px; padding: 7px 10px; font-size: 9px; }
       .marquee { padding: 10px 0; }
       .marquee-item { gap: 10px; margin: 0 18px; font-size: 11px; }
       .section { padding: 36px 14px; }
@@ -847,15 +848,16 @@
             <div class="stat-card navy shadow-white"><div class="stat-number display">500+</div><div class="stat-label">Events Attended</div></div>
             <div class="stat-card shadow">${icon("shield")}<div class="stat-label">NAARSO-Certified Inspector On Staff</div></div>
             <div class="stat-card shadow">${icon("pin")}<div class="stat-label">Regional Inspection Experience</div></div>
+            <div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div>
           </div>
         </div>
-        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
+        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p></div>
       </div></section>
 
       <section class="section mission" id="mission"><div class="container"><div class="mission-card">
         <div class="tag">${icon("star")}From Our Family To Yours</div>
-        <h2 class="display">Our Mission</h2>
-        <p>Our mission is to bring children and parents together through active play, laughter, and shared adventure. We believe fun is better when the whole family joins in. As a family-run operation, we’re proud to work with families and communities to create memorable experiences—from our family to yours.</p>
+        <h2 class="display">Built For Big Events. Run Like Family.</h2>
+        <p>Our mission is to help fairs, festivals, rodeos, and community events create unforgettable experiences that bring families together. As a family owned and operated traveling inflatable carnival, we provide the scale, professional staffing, safety, and reliable execution event coordinators need. From our family to yours.</p>
       </div></div></section>
 
       <section class="section experience" id="experience"><div class="container experience-layout">
