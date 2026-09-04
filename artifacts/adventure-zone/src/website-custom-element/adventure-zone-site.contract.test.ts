@@ -714,6 +714,97 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(promoBannerTop - fixedHeaderHeight).toBeGreaterThanOrEqual(requiredClearance);
   });
 
+  it("shows the approved welcome only for the exact convention query", () => {
+    window.history.replaceState({}, "", "/?welcome=convention");
+    const { root } = mountSite();
+    const welcome = root.querySelector<HTMLElement>(".convention-welcome");
+    const dialog = welcome?.querySelector<HTMLElement>(".convention-dialog");
+
+    expect(welcome).not.toHaveAttribute("hidden");
+    expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
+    expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
+    expect(dialog).toHaveTextContent("Welcome, Convention Guests!");
+    expect(dialog).toHaveTextContent("Convention attendees may qualify for exclusive booking savings.");
+    expect(dialog?.textContent).not.toMatch(/12%|7 days|15 days/i);
+    expect(root.querySelector("[data-convention-close]")).toHaveAttribute("aria-label", "Close convention welcome");
+    expect(root.activeElement).toBe(root.querySelector("[data-convention-claim]"));
+  });
+
+  it.each(["/", "/?welcome=Convention", "/?welcome=conventions", "/?section=contact"])(
+    "does not show the convention welcome for %s",
+    (url) => {
+      window.history.replaceState({}, "", url);
+      const { root } = mountSite();
+
+      expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
+      expect(document.body.style.overflow).toBe("");
+    },
+  );
+
+  it("closes the welcome and scrolls to Contact from the primary action", () => {
+    window.history.replaceState({}, "", "/?welcome=convention");
+    const { root } = mountSite();
+    const contact = root.querySelector<HTMLElement>("#contact")!;
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(contact, "scrollIntoView", { configurable: true, value: scrollIntoView });
+
+    root.querySelector<HTMLButtonElement>("[data-convention-claim]")!.click();
+
+    expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
+    expect(document.body.style.overflow).toBe("");
+  });
+
+  it.each(["[data-convention-explore]", "[data-convention-close]", "[data-convention-backdrop]"])(
+    "dismisses without scrolling from %s",
+    (selector) => {
+      window.history.replaceState({}, "", "/?welcome=convention");
+      const scrollIntoView = vi.fn();
+      Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: scrollIntoView });
+      const { root } = mountSite();
+
+      root.querySelector<HTMLButtonElement>(selector)!.click();
+
+      expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
+      expect(scrollIntoView).not.toHaveBeenCalled();
+    },
+  );
+
+  it("dismisses on Escape and keeps Tab focus inside the dialog", () => {
+    window.history.replaceState({}, "", "/?welcome=convention");
+    const { root } = mountSite();
+    const claim = root.querySelector<HTMLButtonElement>("[data-convention-claim]")!;
+    const close = root.querySelector<HTMLButtonElement>("[data-convention-close]")!;
+
+    close.focus();
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    expect(root.activeElement).toBe(claim);
+
+    claim.focus();
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    expect(root.activeElement).toBe(close);
+
+    root.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
+  });
+
+  it("locks background scroll, restores it on disconnect, and fits narrow screens", () => {
+    window.history.replaceState({}, "", "/?welcome=convention");
+    const { element, root } = mountSite();
+
+    expect(document.body.style.overflow).toBe("hidden");
+    const dialogWidth = applicableStyle(root, ".convention-dialog", 320).width;
+    expect(dialogWidth).toContain("min(560px");
+    expect(dialogWidth).toContain("100vw");
+    expect(dialogWidth).toContain("32px");
+    expect(applicableStyle(root, ".convention-actions", 320).gridTemplateColumns).toBe("minmax(0, 1fr)");
+
+    element.remove();
+    expect(document.body.style.overflow).toBe("");
+  });
+
   it("posts every form field, the honeypot, page URL, and one submission ID", async () => {
     const randomUUID = vi.fn(() => "10000000-0000-4000-8000-000000000001");
     Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: randomUUID });

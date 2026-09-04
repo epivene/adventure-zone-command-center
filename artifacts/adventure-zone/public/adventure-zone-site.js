@@ -485,6 +485,22 @@
     .field textarea { min-height: 150px; resize: vertical; }
     .field input::placeholder, .field textarea::placeholder { color: var(--az-muted); opacity: .8; }
     .field input:focus, .field select:focus, .field textarea:focus { outline: 4px solid var(--az-pink); outline-offset: 0; }
+
+    .convention-welcome { position: fixed; z-index: 10000; inset: 0; display: grid; place-items: center; padding: 16px; opacity: 0; transition: opacity .2s ease; }
+    .convention-welcome[hidden] { display: none; }
+    .convention-welcome.open { opacity: 1; }
+    .convention-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: rgba(7, 17, 38, .82); cursor: pointer; }
+    .convention-dialog { position: relative; z-index: 1; width: min(560px, calc(100vw - 32px)); max-width: 100%; max-height: calc(100dvh - 32px); overflow-x: hidden; overflow-y: auto; padding: clamp(28px, 6vw, 52px); color: var(--az-navy); background: var(--az-cream); border: 5px solid var(--az-navy); box-shadow: 10px 10px 0 var(--az-pink); text-align: center; transform: scale(.97); transition: transform .2s ease; }
+    .convention-welcome.open .convention-dialog { transform: scale(1); }
+    .convention-dialog .tag { color: var(--az-navy); background: var(--az-yellow); transform: rotate(-2deg); }
+    .convention-dialog h2 { max-width: 440px; margin: 22px auto 18px; font-size: clamp(2rem, 8vw, 4rem); line-height: .94; }
+    .convention-dialog p { max-width: 460px; margin: 0 auto 16px; font-size: clamp(15px, 2.5vw, 18px); font-weight: 800; line-height: 1.55; }
+    .convention-dialog .convention-offer { margin-top: 20px; padding: 16px; background: var(--az-white); border-left: 5px solid var(--az-pink); }
+    .convention-close { position: absolute; top: 10px; right: 10px; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--az-cream); background: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
+    .convention-close .az-icon { width: 22px; height: 22px; }
+    .convention-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
+    .convention-actions .button { width: 100%; min-height: 48px; padding: 12px 14px; }
+    .convention-actions .outline { color: var(--az-navy); background: var(--az-cream); border-color: var(--az-navy); }
     .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .form-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; margin-top: 28px; }
     .form-helper { max-width: 520px; margin: 0; color: var(--az-muted); font-size: 13px; font-weight: 800; }
@@ -713,6 +729,9 @@
       .step-card { min-width: 0; padding: 12px; overflow: hidden; }
       .step-card h4 { font-size: 16px; overflow-wrap: anywhere; }
       .step-card p { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+      .convention-dialog { width: min(560px, calc(100vw - 32px)); padding: 52px 20px 24px; box-shadow: 6px 6px 0 var(--az-pink); }
+      .convention-dialog h2 { font-size: clamp(2rem, 11vw, 3rem); }
+      .convention-actions { grid-template-columns: minmax(0, 1fr); }
     }
 
     @media (min-width: 480px) and (max-width: 767px) {
@@ -743,6 +762,7 @@
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
       .marquee-track { animation: none; }
       .tube-man-sway, .tube-man-wobble { animation: none; }
+      .convention-welcome, .convention-dialog { transition: none; }
     }
   `;
 
@@ -812,6 +832,23 @@
       <div class="form-bottom"><p class="form-helper">Your message goes directly to our booking team. We'll follow up using the email address you provide.</p><button class="button" type="submit">Send Inquiry ${icon("send")}</button></div>
       <div class="status-slot"></div>
     </form>`;
+  }
+
+  function conventionWelcomeMarkup() {
+    return `<div class="convention-welcome" hidden>
+      <button class="convention-backdrop" type="button" data-convention-backdrop aria-label="Close convention welcome"></button>
+      <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title">
+        <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
+        <div class="tag">CONVENTION EXCLUSIVE</div>
+        <h2 class="display" id="convention-welcome-title">Welcome, Convention Guests!</h2>
+        <p>Thanks for stopping by The Adventure Zone. We bring a fully staffed traveling inflatable carnival to fairs, festivals, rodeos, and major community events.</p>
+        <p class="convention-offer">Convention attendees may qualify for exclusive booking savings. Tell us about your event to receive your convention offer.</p>
+        <div class="convention-actions">
+          <button class="button" type="button" data-convention-claim>Claim Your Convention Offer</button>
+          <button class="button outline" type="button" data-convention-explore>Explore the Site</button>
+        </div>
+      </section>
+    </div>`;
   }
 
   function pageMarkup() {
@@ -916,6 +953,7 @@
 
       <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
+      ${conventionWelcomeMarkup()}
     </div>`;
   }
 
@@ -932,6 +970,8 @@
       this.pendingSubmissionId = null;
       this.resizeObserver = null;
       this.teamLayoutTimer = null;
+      this.conventionOpen = false;
+      this.previousBodyOverflow = "";
     }
 
     connectedCallback() {
@@ -940,6 +980,7 @@
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
       this.abortController = new AbortController();
       this.bindInteractions();
+      if (this.isConventionVisit()) this.openConventionWelcome();
       this.updateScrollState();
       this.setupResizeEvents();
       this.teamLayoutTimer = window.setTimeout(() => {
@@ -960,6 +1001,7 @@
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
+      if (this.conventionOpen) document.body.style.overflow = this.previousBodyOverflow;
     }
 
     bindInteractions() {
@@ -978,6 +1020,11 @@
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
+      root.querySelector("[data-convention-claim]").addEventListener("click", () => this.closeConventionWelcome({ scrollToContact: true }), { signal });
+      root.querySelector("[data-convention-explore]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
+      root.querySelector("[data-convention-close]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
+      root.querySelector("[data-convention-backdrop]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
+      root.addEventListener("keydown", (event) => this.handleConventionKeydown(event), { signal });
       root.querySelectorAll(".faq-item, .attraction-lineup").forEach((item) => item.addEventListener("toggle", () => {
         window.requestAnimationFrame(() => {
           this.layoutTeamBubbles();
@@ -1032,6 +1079,52 @@
       button.setAttribute("aria-label", "Open menu");
       button.innerHTML = icon("menu");
       this.shadowRoot.querySelector(".mobile-nav").classList.remove("open");
+    }
+
+    isConventionVisit() {
+      return new URLSearchParams(window.location.search).get("welcome") === "convention";
+    }
+
+    openConventionWelcome() {
+      const welcome = this.shadowRoot.querySelector(".convention-welcome");
+      if (!welcome || this.conventionOpen) return;
+      this.conventionOpen = true;
+      this.previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      welcome.hidden = false;
+      window.requestAnimationFrame(() => {
+        welcome.classList.add("open");
+        welcome.querySelector("[data-convention-claim]")?.focus();
+      });
+    }
+
+    closeConventionWelcome({ scrollToContact = false } = {}) {
+      const welcome = this.shadowRoot.querySelector(".convention-welcome");
+      if (!welcome || !this.conventionOpen) return;
+      this.conventionOpen = false;
+      welcome.classList.remove("open");
+      welcome.hidden = true;
+      document.body.style.overflow = this.previousBodyOverflow;
+      if (scrollToContact) this.scrollToId("contact");
+    }
+
+    handleConventionKeydown(event) {
+      if (!this.conventionOpen) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        this.closeConventionWelcome();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = this.shadowRoot.querySelector(".convention-dialog");
+      const focusable = Array.from(dialog.querySelectorAll("button:not([disabled])"));
+      if (!focusable.length) return;
+      event.preventDefault();
+      const currentIndex = focusable.indexOf(this.shadowRoot.activeElement);
+      const nextIndex = event.shiftKey
+        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+        : (currentIndex + 1) % focusable.length;
+      focusable[nextIndex].focus();
     }
 
     scrollToId(id) {
