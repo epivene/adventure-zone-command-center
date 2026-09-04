@@ -63,17 +63,17 @@
   ];
 
   const teamMembers = [
-    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(24px, 3vw, 30px); right: auto; top: 2%;"],
-    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 11%;"],
-    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(24px, 5vw, 48px); right: auto; top: 19%;"],
-    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(120px, 30vw, 300px); top: 27.7%;"],
-    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(24px, 3vw, 30px); right: auto; top: 36%;"],
-    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(120px, 27vw, 270px); top: 44.5%;"],
-    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(24px, 6vw, 52px); right: auto; top: 53%;"],
-    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(120px, 29vw, 290px); top: 61.5%;"],
-    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(24px, 4vw, 38px); right: auto; top: 70%;"],
-    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 78.5%;"],
-    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(24px, 5vw, 46px); right: auto; top: 87%;"],
+    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(22px, 3vw, 36px); right: auto; top: 2%;"],
+    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(34px, 5vw, 64px); top: 11%;"],
+    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(32px, 5vw, 58px); right: auto; top: 19%;"],
+    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(22px, 4vw, 48px); top: 27.7%;"],
+    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(44px, 6vw, 72px); right: auto; top: 36%;"],
+    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(42px, 7vw, 86px); top: 44.5%;"],
+    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(26px, 4vw, 48px); right: auto; top: 53%;"],
+    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(28px, 5vw, 58px); top: 61.5%;"],
+    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(38px, 7vw, 82px); right: auto; top: 70%;"],
+    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(36px, 6vw, 72px); top: 78.5%;"],
+    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(30px, 5vw, 62px); right: auto; top: 87%;"],
   ];
 
   const teamContentSelector = [
@@ -108,7 +108,7 @@
 
   const faqItems = [
     ["Are you a drop-off inflatable rental company?", "No. The Adventure Zone is a staffed event company. Our packages are priced for the event and dates, and our team operates the attractions instead of simply delivering individual inflatables."],
-    ["How much space should we plan for?", "As a starting point, Adventure Zone prefers about 10,000 square feet and can sometimes fit in approximately 7,000. Pirate's Rebellion prefers about 7,000 square feet and can sometimes fit in approximately 5,000. Warrior's Playground prefers about 15,000 square feet and can sometimes fit in approximately 12,000. The booking team will confirm the final footprint for your event."],
+    ["How much space should we plan for?", "Plan for an area about 100 feet by 100 feet—roughly 10,000 square feet—for the Adventure Zone package. It can sometimes fit in approximately 7,000 square feet. Pirate's Rebellion prefers about 7,000 square feet and can sometimes fit in approximately 5,000. Warrior's Playground prefers about 15,000 square feet and can sometimes fit in approximately 12,000. The booking team will confirm the final footprint for your event."],
     ["What electrical access is needed?", "Adventure Zone needs either three 50-amp/220-volt outlets, eighteen 110-volt outlets, or a 50 KW generator within 75 feet of the area. Pirate's Rebellion needs either one 50-amp/220-volt outlet, six 15-amp/110-volt outlets, or a 50 KW generator. Warrior's Playground needs either two 50-amp/220-volt outlets, twelve 15-amp/110-volt outlets, or a 25 KW generator. For Idaho events, an electrician may also hardwire the required breakers with approval."],
     ["Do the water attractions need a water hookup?", "Water is optional for Adventure Zone, but a faucet or hose within 75 feet is needed for wet attractions. Pirate's Rebellion uses a pool and needs water to fill and refresh it, with a closer dedicated supply helping the setup move faster. Warrior's Playground does not need water for the rides, but a faucet or hose within 75 feet is preferred for daily cleaning."],
     ["How early do you set up and when do you tear down?", "The team needs permission to set up two days before the event and one day after the event for tear-down. The event holder provides a forklift or loader for loading the equipment back onto the trailer. If one is not available, the current FAQ lists a $500 equipment-rental fee."],
@@ -230,13 +230,13 @@
     .mobile-nav a:hover { background: var(--az-yellow); }
 
     .team-float { display: block; pointer-events: none; position: absolute; top: 760px; right: 0; bottom: 760px; left: 0; z-index: 35; }
-    .team-bubble { position: absolute; width: 44px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
+    .team-bubble { position: absolute; width: 38px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
     .team-bubble.visible { opacity: .9; transform: scale(1); }
     .team-bubble-inner { position: relative; animation: bubble-float 3.8s ease-in-out infinite; }
-    .team-photo { width: 44px; height: 44px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
-    .team-label { position: absolute; left: 50%; bottom: -20px; display: block; width: 88px; transform: translateX(-50%); padding: 4px 6px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
-    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 9px; font-weight: 900; line-height: 1; text-transform: uppercase; }
-    .team-role { display: block; margin-top: 3px; font-size: 6px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+    .team-photo { width: 38px; height: 38px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
+    .team-label { position: absolute; left: 50%; bottom: -18px; display: block; width: 80px; transform: translateX(-50%); padding: 4px 5px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
+    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 8px; font-weight: 900; line-height: 1; text-transform: uppercase; }
+    .team-role { display: block; margin-top: 3px; font-size: 5.5px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 
     .tube-man-position { position: fixed; right: 6px; bottom: -12px; z-index: 50; width: 82px; pointer-events: none; }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
@@ -482,11 +482,11 @@
 
     @media (min-width: 640px) {
       .container { width: min(1400px, calc(100% - 64px)); }
-      .team-bubble { width: 64px; }
-      .team-photo { width: 64px; height: 64px; }
-      .team-label { bottom: -24px; width: 112px; padding: 6px 8px; }
-      .team-name { font-size: 10px; }
-      .team-role { margin-top: 4px; font-size: 7px; }
+      .team-bubble { width: 52px; }
+      .team-photo { width: 52px; height: 52px; }
+      .team-label { bottom: -22px; width: 96px; padding: 5px 7px; }
+      .team-name { font-size: 9px; }
+      .team-role { margin-top: 4px; font-size: 6px; }
       .tube-man-position { right: 12px; bottom: -14px; width: 116px; }
       .hero-actions { flex-direction: row; justify-content: flex-start; width: auto; }
       .hero-actions .button { width: auto; }
@@ -570,12 +570,12 @@
       .logo { width: 256px; }
       .desktop-nav { gap: 32px; font-size: 14px; }
       .desktop-book .button { padding: 14px 24px; font-size: 14px; }
-      .team-bubble { width: 112px; }
+      .team-bubble { width: 96px; }
       .team-bubble.visible { opacity: .95; }
-      .team-photo { width: 96px; height: 96px; }
-      .team-label { bottom: -29px; }
-      .team-name { font-size: 11px; }
-      .team-role { font-size: 8px; }
+      .team-photo { width: 80px; height: 80px; }
+      .team-label { bottom: -26px; width: 100px; }
+      .team-name { font-size: 10px; }
+      .team-role { font-size: 7px; }
       .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
 

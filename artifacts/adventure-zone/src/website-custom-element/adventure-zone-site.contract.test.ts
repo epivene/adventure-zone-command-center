@@ -172,13 +172,22 @@ describe("adventure-zone-site inquiry contract", () => {
       const edgeOffset = resolveClamp(anchoredLeft ? bubble.style.left : bubble.style.right);
       const labelOverhang = (labelWidth - photoWidth) / 2;
       return anchoredLeft
-        ? { left: edgeOffset - labelOverhang, right: edgeOffset + photoWidth + labelOverhang }
-        : { left: canvasWidth - edgeOffset - photoWidth - labelOverhang, right: canvasWidth - edgeOffset + labelOverhang };
+        ? { side: "left", left: edgeOffset - labelOverhang, right: edgeOffset + photoWidth + labelOverhang }
+        : { side: "right", left: canvasWidth - edgeOffset - photoWidth - labelOverhang, right: canvasWidth - edgeOffset + labelOverhang };
     });
+    const leftEdgeGaps = bubbleBounds.filter(({ side }) => side === "left").map(({ left }) => Math.round(left));
+    const rightEdgeGaps = bubbleBounds.filter(({ side }) => side === "right").map(({ right }) => Math.round(canvasWidth - right));
+    const desktopPhotoWidth = Number.parseFloat(applicableStyle(root, ".team-photo", 1280).width);
+    const desktopLabelWidth = Number.parseFloat(applicableStyle(root, ".team-label", 1280).width);
 
-    expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.15);
-    expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.3);
+    expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.125);
+    expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.26);
+    expect(desktopPhotoWidth / 1280).toBeLessThanOrEqual(0.07);
+    expect(desktopLabelWidth / 1280).toBeLessThanOrEqual(0.085);
     expect(bubbleBounds.every(({ left, right }) => left >= 0 && right <= canvasWidth)).toBe(true);
+    expect(Math.max(...leftEdgeGaps, ...rightEdgeGaps)).toBeLessThanOrEqual(28);
+    expect(new Set(leftEdgeGaps).size).toBeGreaterThanOrEqual(4);
+    expect(new Set(rightEdgeGaps).size).toBeGreaterThanOrEqual(3);
     expect(hostStyle.width).toBe("100%");
     expect(hostStyle.maxWidth).toBe("100%");
     expect(hostStyle.overflowX).toBe("hidden");
@@ -334,6 +343,15 @@ describe("adventure-zone-site inquiry contract", () => {
         .toEqual(expectedLineups.get(title));
     }
     expect(cards[0]?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
+  });
+
+  it("explains the Adventure Zone footprint in familiar dimensions", () => {
+    const { root } = mountSite();
+    const faqCopy = root.querySelector("#faq")?.textContent ?? "";
+
+    expect(faqCopy).toContain(
+      "Plan for an area about 100 feet by 100 feet—roughly 10,000 square feet—for the Adventure Zone package.",
+    );
   });
 
   it("renders the booking arrangements and hosted Proud Members logos", () => {
