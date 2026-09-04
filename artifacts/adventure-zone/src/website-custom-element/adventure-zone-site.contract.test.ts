@@ -676,8 +676,22 @@ describe("adventure-zone-site inquiry contract", () => {
 
     expect(resolveClamp(finalStyle(".hero h1", "fontSize"))).toBeLessThanOrEqual(90);
     expect(resolveClamp(finalStyle(".section h2", "fontSize"))).toBeLessThanOrEqual(60);
-    expect(resolveClamp(finalStyle(".hero", "minHeight"))).toBeLessThanOrEqual(660);
+    expect(resolveClamp(finalStyle(".hero", "minHeight"))).toBeLessThanOrEqual(580);
     expect(finalStyle(".desktop-nav", "display")).toBe("none");
+  });
+
+  it("opens a requested homepage section from the legacy redirect query", async () => {
+    window.history.replaceState({}, "", "/?section=packages");
+    const scrollIntoView = vi.fn();
+    Object.defineProperty(Element.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    });
+
+    mountSite();
+    await flush();
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
   });
 
   it("keeps the rotated promo banner below the fixed header on Wix's desktop canvas", () => {
