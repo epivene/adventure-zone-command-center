@@ -350,6 +350,17 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(cards[0]?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
   });
 
+  it("opens lineup and FAQ panels without growing beyond Wix's fixed custom-element frame", () => {
+    const { root } = mountSite();
+    const lineupPanel = applicableStyle(root, ".attraction-lineup-content", 320);
+    const faqPanel = applicableStyle(root, ".faq-answer", 320);
+
+    expect(lineupPanel?.position).toBe("absolute");
+    expect(lineupPanel?.overflowY).toBe("auto");
+    expect(faqPanel?.position).toBe("absolute");
+    expect(faqPanel?.overflowY).toBe("auto");
+  });
+
   it("explains the Adventure Zone footprint in familiar dimensions", () => {
     const { root } = mountSite();
     const faqCopy = root.querySelector("#faq")?.textContent ?? "";
