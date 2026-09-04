@@ -276,12 +276,17 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".stat-label", canvasWidth).overflowWrap).toBe("anywhere");
   });
 
-  it("crops the portrait hero footage more tightly on mobile", () => {
+  it("uses a shorter mobile hero instead of zooming the background video", () => {
     const { root } = mountSite();
+    const heroStyle = applicableStyle(root, ".hero", 320);
     const videoStyle = applicableStyle(root, ".hero-video", 320);
+    const headingStyle = applicableStyle(root, ".hero h1", 320);
 
-    expect(videoStyle.transform).toBe("scale(1.18)");
-    expect(videoStyle.transformOrigin).toBe("center");
+    expect(videoStyle.transform).toBe("none");
+    expect(Number.parseFloat(heroStyle.minHeight)).toBeLessThanOrEqual(460);
+    expect(Number.parseFloat(heroStyle.paddingTop)).toBeLessThanOrEqual(72);
+    expect(Number.parseFloat(heroStyle.paddingBottom)).toBeLessThanOrEqual(24);
+    expect(headingStyle.fontSize).toBe("clamp(2.35rem, 10vw, 3.5rem)");
   });
 
   it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
@@ -490,13 +495,26 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(bookingLinks.every((link) => !link.textContent?.includes("Partnerships"))).toBe(true);
   });
 
-  it("presents the family mission and invites children and parents to play together", () => {
+  it("presents the family-owned mission to large-event decision makers without dash punctuation", () => {
     const { root } = mountSite();
     const mission = root.querySelector("#mission")!;
 
-    expect(mission.querySelector("h2")).toHaveTextContent("Our Mission");
-    expect(mission).toHaveTextContent("bring children and parents together through active play");
+    expect(mission.querySelector("h2")).toHaveTextContent("Built For Big Events. Run Like Family.");
+    expect(mission).toHaveTextContent("fairs, festivals, rodeos, and community events");
+    expect(mission).toHaveTextContent("event coordinators need");
     expect(mission).toHaveTextContent(/from our family to yours/i);
+    expect(mission.textContent).not.toMatch(/[—–-]/);
+  });
+
+  it("uses the open space beneath the four stat cards for the Proud Members badge", () => {
+    const { root } = mountSite();
+    const stats = root.querySelector(".stats")!;
+    const directStatCards = Array.from(stats.children).filter((child) => child.classList.contains("stat-card"));
+    const directMemberBadge = Array.from(stats.children).find((child) => child.classList.contains("member-badge"));
+
+    expect(directStatCards).toHaveLength(4);
+    expect(directMemberBadge).toHaveTextContent("Proud Members");
+    expect(root.querySelector(".about-bottom .member-badge")).toBeNull();
   });
 
   it("highlights Pay-For-Play as a fundraising opportunity", () => {
