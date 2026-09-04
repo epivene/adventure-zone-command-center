@@ -486,8 +486,10 @@ function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScout
   }
 }
 
+const PROFILE_ACTIVITY_LIMIT = 100;
+
 function splitProfileActivities(records: EventProfileActivityRecord[]) {
-  const activities = dedupeImportedActActivities(records);
+  const activities = dedupeImportedActActivities(records).slice(0, PROFILE_ACTIVITY_LIMIT);
   const scoutNotes = activities
     .map(parseScoutNote)
     .filter((note): note is EventProfileScoutNote => Boolean(note));
@@ -688,7 +690,8 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         importedFromAct: isNotNull(activities.sourceRecordId),
         actSourceType: activities.sourceType,
       }).from(activities).where(and(profileCondition, isNull(activities.deletedAt)))
-        .orderBy(desc(activities.timelineSortAt), desc(activities.id)),
+        .orderBy(desc(activities.timelineSortAt), desc(activities.id))
+        .limit(PROFILE_ACTIVITY_LIMIT),
       this.database.select({
         id: followUps.id,
         contactId: followUps.contactId,
