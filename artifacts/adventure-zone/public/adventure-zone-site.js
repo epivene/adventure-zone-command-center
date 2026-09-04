@@ -325,13 +325,6 @@
     .member-logo.waf { width: 80px; height: 80px; object-fit: contain; }
     .member-label { margin-top: 8px; color: var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 
-    .mission { position: relative; overflow: hidden; background: var(--az-pink); }
-    .mission::before { position: absolute; inset: 0; content: ""; opacity: .18; background-size: 32px 32px; background-image: radial-gradient(rgba(255,255,255,.75) 2px, transparent 2px); }
-    .mission-card { position: relative; z-index: 1; padding: 28px; color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
-    .mission-card .tag { color: var(--az-navy); background: var(--az-yellow); }
-    .mission-card h2 { margin-bottom: 20px; }
-    .mission-card p { max-width: 980px; margin: 0; color: var(--az-muted); font-size: clamp(1.18rem, 4.8vw, 2rem); font-weight: 900; line-height: 1.3; }
-
     .experience { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
     .scale-wrap { position: relative; }
     .scale-wrap::before { display: none; content: ""; position: absolute; inset: -16px; background: var(--az-yellow); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); transform: rotate(-1deg); }
@@ -355,7 +348,7 @@
     .fleet-label { display: flex; align-items: center; justify-content: center; gap: 16px; margin-bottom: 20px; color: var(--az-yellow); font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
     .fleet-label::before, .fleet-label::after { width: 32px; height: 4px; content: ""; background: var(--az-yellow); }
     .packages-intro { max-width: 760px; margin: 0 auto 48px; color: rgba(255,255,255,.7); font-size: 19px; font-weight: 600; text-align: center; }
-    .package-grid { display: grid; gap: 40px; }
+    .package-grid { display: grid; align-items: start; gap: 40px; }
     .package-card { position: relative; display: flex; flex-direction: column; color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-white); transition: transform .24s cubic-bezier(.22,1,.36,1), box-shadow .24s ease; }
     .package-card:hover { transform: translateY(-8px) rotate(-.6deg); box-shadow: 10px 12px 0 var(--az-white); }
     .package-card:nth-child(2):hover { transform: translateY(-8px) rotate(.6deg); }
@@ -663,9 +656,6 @@
       .member-logo.rmaf { width: 74px; height: 42px; }
       .member-logo.waf { width: 40px; height: 40px; }
       .member-label { margin-top: 4px; font-size: 8px; }
-      .mission-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
-      .mission-card h2 { margin-bottom: 12px; font-size: 24px; line-height: 1; overflow-wrap: anywhere; }
-      .mission-card p { font-size: 14px; }
       .experience-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; align-items: center; }
       .scale-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
       .scale-card .az-icon { width: 32px; height: 32px; margin-bottom: 12px; }
@@ -863,7 +853,7 @@
 
       <section class="section about" id="about"><div class="container">
         <div class="about-layout">
-          <div><div class="tag">${icon("star")}About The Adventure Zone</div><h2 class="display">Built For The<br><span class="pink">Big Day.</span></h2><div class="body-large"><p>The Adventure Zone is a traveling inflatable carnival built for fairs, festivals, rodeos, and community events across the West.</p><p>With nearly three decades in the amusement business and experience at more than 500 events, our crew knows how to bring a full attraction footprint to the field and run it with care.</p></div></div>
+          <div><div class="tag">${icon("star")}About The Adventure Zone</div><h2 class="display">Built For The<br><span class="pink">Big Day.</span></h2><div class="body-large"><p>The Adventure Zone is a traveling inflatable carnival built for fairs, festivals, rodeos, and community events across the West.</p><p>With nearly three decades in the amusement business and experience at more than 500 events, our crew knows how to bring a full attraction footprint to the field and run it with care.</p><p>Family owned and operated, The Adventure Zone combines personal service with professional standards, experienced staffing, and reliable execution to help make your event safe, successful, and unforgettable.</p></div></div>
           <div class="stats">
             <div class="stat-card yellow shadow"><div class="stat-number display">25+</div><div class="stat-label">Years Of Fun</div></div>
             <div class="stat-card navy shadow-white"><div class="stat-number display">500+</div><div class="stat-label">Events Attended</div></div>
@@ -873,12 +863,6 @@
         </div>
         <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
       </div></section>
-
-      <section class="section mission" id="mission"><div class="container"><div class="mission-card">
-        <div class="tag">${icon("star")}From Our Family To Yours</div>
-        <h2 class="display">Built For Big Events. Run Like Family.</h2>
-        <p>Our mission is to help fairs, festivals, rodeos, and community events create unforgettable experiences that bring families together. As a family owned and operated traveling inflatable carnival, we provide the scale, professional staffing, safety, and reliable execution event coordinators need. From our family to yours.</p>
-      </div></div></section>
 
       <section class="section experience" id="experience"><div class="container experience-layout">
         <div class="scale-wrap"><div class="scale-card">${icon("star")}<h2 class="display">Scale<br>Matters.</h2><p>We are an event company, not a backyard rental drop-off.</p></div></div>
@@ -1277,7 +1261,7 @@
   }
 
   const mascotStyles = `
-    :host { position: fixed; right: 0; bottom: 0; left: 0; display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    :host { position: fixed; right: 0; bottom: 0; left: auto; display: block; width: 130px; height: 230px; overflow: visible; pointer-events: none; }
     *, *::before, *::after { box-sizing: border-box; }
     .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; transform: translateY(3px); }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
@@ -1297,6 +1281,9 @@
       28% { transform: translateY(-4px) scaleX(.965) scaleY(1.045) skewX(1deg); }
       51% { transform: translateY(2px) scaleX(1.035) scaleY(.975) skewX(-2deg); }
       77% { transform: translateY(-3px) scaleX(.98) scaleY(1.035) skewX(2deg); }
+    }
+    @media (max-width: 767px) {
+      :host { right: 0; bottom: 0; left: 0; width: 100%; height: 100%; }
     }
     @media (prefers-reduced-motion: reduce) {
       .tube-man-sway, .tube-man-wobble { animation: none; }
