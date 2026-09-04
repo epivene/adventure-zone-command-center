@@ -321,20 +321,38 @@
       "event": {
         "name": "Jefferson County Fair (Boulder) MT",
         "city": "Boulder",
-        "region": "MT"
+        "region": "MT",
+        "id": null
       },
       "profile": {
         "placeType": "festival_event",
-        "description": "Jefferson County Fair in Boulder, Montana. Adventure Zone sent one outreach email on Aug. 3, 2026 for the Aug. 20–23 event and received no reply."
+        "description": "Jefferson County Fair in Boulder, Montana. Adventure Zone sent one outreach email on Aug. 3, 2026 for the Aug. 20–23 event and received no reply.",
+        "phone": "",
+        "website": "",
+        "address1": "",
+        "address2": "",
+        "postalCode": ""
       },
       "contacts": [
         {
+          "id": null,
           "name": "Susan Boyer",
+          "phone": "",
           "email": "susank.mt@gmail.com",
           "role": "2026 outreach contact",
           "primary": true
         }
-      ]
+      ],
+      "booking": {
+        "enabled": false,
+        "name": "",
+        "status": "contact_due",
+        "startsAt": "",
+        "endsAt": "",
+        "nextActionKind": "review",
+        "nextActionDueAt": "2027-01-15",
+        "travelLegId": null
+      }
     },
     "notes": [
       {
