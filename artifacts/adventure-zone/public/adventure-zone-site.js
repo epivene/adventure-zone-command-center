@@ -63,17 +63,17 @@
   ];
 
   const teamMembers = [
-    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 2%;"],
+    ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(24px, 3vw, 30px); right: auto; top: 2%;"],
     ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 11%;"],
-    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(16px, 5vw, 48px); right: auto; top: 19%;"],
+    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(24px, 5vw, 48px); right: auto; top: 19%;"],
     ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(120px, 30vw, 300px); top: 27.7%;"],
-    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 36%;"],
+    ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(24px, 3vw, 30px); right: auto; top: 36%;"],
     ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(120px, 27vw, 270px); top: 44.5%;"],
-    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(16px, 6vw, 52px); right: auto; top: 53%;"],
+    ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(24px, 6vw, 52px); right: auto; top: 53%;"],
     ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(120px, 29vw, 290px); top: 61.5%;"],
-    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(12px, 4vw, 38px); right: auto; top: 70%;"],
+    ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(24px, 4vw, 38px); right: auto; top: 70%;"],
     ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 78.5%;"],
-    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(16px, 5vw, 46px); right: auto; top: 87%;"],
+    ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(24px, 5vw, 46px); right: auto; top: 87%;"],
   ];
 
   const teamContentSelector = [
