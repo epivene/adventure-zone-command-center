@@ -122,6 +122,7 @@ function EventList({
   focusedEventId = null,
   onRetry,
   onFocus,
+  groupByLeg = false,
 }: {
   events: PlanningEvent[];
   title: string;
