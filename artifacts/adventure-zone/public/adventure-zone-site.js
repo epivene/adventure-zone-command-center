@@ -9,6 +9,9 @@
     logo: "https://static.wixstatic.com/media/0e6e2c_1517bd8d12f94f3194787c7f4f972079~mv2.png",
     hero: "https://static.wixstatic.com/media/0e6e2c_75b98554c5144f7b92b240e09b4ec936~mv2.jpg",
     heroVideo: "https://video.wixstatic.com/video/0e6e2c_6a14af0e46c242a5b8899f03b1b6f38f/1080p/mp4/file.mp4",
+    mascot: "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mascot.png",
+    rmaf: "https://adventure-zone-command-center-1.onrender.com/assets/rmaf-logo.png",
+    waf: "https://adventure-zone-command-center-1.onrender.com/assets/waf-logo.png",
     adventure: "https://static.wixstatic.com/media/0e6e2c_d18d32eac9704b44a2dc9a1c28f9158b~mv2.jpg",
     pirate: "https://static.wixstatic.com/media/0e6e2c_72073183a12b4dbbaf229cc6301aef72~mv2.png",
     warrior: "https://static.wixstatic.com/media/0e6e2c_a25608d697b146ac981ab5b6f074664c~mv2.jpg",
@@ -71,6 +74,27 @@
     ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "right: 8px; top: 40%;"],
     ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "right: 5%; top: 84%;"],
     ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "right: 4%; top: 10%;"],
+  ];
+
+  const adventureAttractionCategories = [
+    ["Bounce Houses & Combos", "Perfect for smaller kids, with jump-and-slide combos that keep the fun moving.", ["Princess Palace", "Castle Fortress", "SpongeBob Ahoy", "Under the Sea Grotto"]],
+    ["Slides", "Fun-size 10 ft, Super-size 18 ft, and Awesome-size 24 ft+ slides.", ["Blue Wave", "Island Tropics", "Athletes & Sports", "Polar Bear", "Jungle Tiger", "Mountain Top", "Dual & Single Lane", "1/2 Pipe", "Take Me Out to the Ball Game", "Screamer"]],
+    ["Intense Interactives", "Exhilarating to play and compelling to watch.", ["Boulder Dash", "Jousting Arena", "Gladiator Pit", "The Gauntlet"]],
+    ["Obstacle Courses", "Challenge yourself, your friends, or a whole group.", ["Adrenaline Rush", "Super Obstacle Course", "Everest", "Radical Run", "Boot Camp Challenge", "Jungle Trek Xtreme"]],
+    ["Pure Adrenaline", "Race, jump, duck, and hang on.", ["Bungee Run", "Eliminator", "Wrecking Ball"]],
+    ["Carnival-Style Games", "At least 3 pay-for-play games, including a guaranteed winner for younger players.", ["Balloon Darts", "Ring Toss", "Basket Toss", "Bean Bag Toss", "Fish Pond", "Mystery Bag"]],
+  ];
+
+  const pirateAttractionCategories = [
+    ["Interactive · Bumper Boats · 2/2", "Water Pool", "Battleship on a Personal Level", "A great place for your inner pirate to attack opponents on the high seas. Armed with sponges and squirt guns, you must take them down before they take you out.", ["2,500 sq ft Pool", "6 Pedal-Style Bumper Boats", "Hundreds of Sponges"]],
+    ["Wet · Single Super Screamer · 2/4", "Super Slide", "Slippery Wet Fun", "Climb to new heights, then slide down. Plan to get wet!", ["Over 25' Tall"]],
+    ["Combo · Pirate 1 + Pirate 2 · 2/2", "Bouncy Combo", "Pirate Themed Bouncers with Slide", "Fun for every age: climb in to bounce and splash, then slide out and start again.", ["Bounce House with Attached Slide"]],
+  ];
+
+  const warriorAttractionCategories = [
+    ["", "Obstacle Courses", "Challenge Yourself & Your Friends", "Challenge yourself, your friend, or a group of friends. Everyone wins, but you can come in first!", ["Adrenaline Rush", "Super Obstacle Course", "Everest", "Radical Run", "Boot Camp Challenge", "Jungle Trek Xtreme"]],
+    ["Adrenaline · Eliminator · 2/20", "Pure Adrenaline", "You're in Control", "Tantalizing fun as you race, jump, duck, and get knocked off your feet!", ["Bungee Run", "Eliminator", "Wrecking Ball"]],
+    ["Games · Ring Toss · 2/10", "Carnival-Style Games", "Exciting Games for Great Prizes", "We bring at least 3 carnival-style games operated on a pay-for-play basis. Keep playing to win even bigger prizes. Our games are geared toward younger children, with one game that guarantees every player is a winner!", ["Balloon Darts", "Ring Toss", "Basket Toss", "Bean Bag Toss", "Fish Pond", "Mystery Bag"]],
   ];
 
   const teamWaves = [
@@ -202,14 +226,20 @@
     .mobile-nav a:last-child { border-top: 4px solid var(--az-navy); border-bottom: 0; background: var(--az-yellow); }
     .mobile-nav a:hover { background: var(--az-yellow); }
 
-    .team-float { display: none; pointer-events: none; position: fixed; inset: 96px 0 0; z-index: 35; }
-    .team-bubble { position: absolute; width: 64px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
-    .team-bubble.visible { opacity: .95; transform: scale(1); }
+    .team-float { display: block; pointer-events: none; position: fixed; inset: 80px 0 0; z-index: 35; }
+    .team-bubble { position: absolute; width: 56px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
+    .team-bubble.visible { opacity: .9; transform: scale(1); }
     .team-bubble-inner { position: relative; animation: bubble-float 3.8s ease-in-out infinite; }
-    .team-photo { width: 64px; height: 64px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
-    .team-label { position: absolute; left: 50%; bottom: -29px; display: none; width: 112px; transform: translateX(-50%); padding: 6px 8px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
-    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 11px; font-weight: 900; line-height: 1; text-transform: uppercase; }
-    .team-role { display: block; margin-top: 4px; font-size: 8px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+    .team-photo { width: 56px; height: 56px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
+    .team-label { position: absolute; left: 50%; bottom: -24px; display: block; width: 112px; transform: translateX(-50%); padding: 6px 8px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
+    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 10px; font-weight: 900; line-height: 1; text-transform: uppercase; }
+    .team-role { display: block; margin-top: 4px; font-size: 7px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+
+    .tube-man-position { position: fixed; right: 6px; bottom: -12px; z-index: 50; width: 82px; pointer-events: none; }
+    .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
+    .tube-man-sway { animation: tube-man-wave 2.23s ease-in-out infinite; }
+    .tube-man-wobble { animation: tube-man-wobble 1.37s ease-in-out infinite; }
+    .tube-man-image { display: block; width: 100%; height: auto; }
 
     .hero {
       position: relative; display: flex; align-items: center; min-height: clamp(700px, 92vw, 900px);
@@ -264,7 +294,11 @@
     .stat-card .az-icon { width: 34px; height: 34px; margin-bottom: 12px; color: var(--az-pink); }
     .about-bottom { display: flex; flex-direction: column; gap: 20px; margin-top: 32px; padding-top: 24px; border-top: 4px solid var(--az-navy); }
     .about-bottom p { max-width: 760px; margin: 0; color: var(--az-muted); font-size: 16px; font-weight: 800; }
-    .member-badge { align-self: flex-start; padding: 12px 16px; color: var(--az-cream); background: var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+    .member-badge { align-self: flex-start; min-width: 248px; padding: 12px; color: var(--az-navy); background: var(--az-white); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .member-logos { display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .member-logo.rmaf { width: 144px; height: 78px; object-fit: contain; }
+    .member-logo.waf { width: 80px; height: 80px; object-fit: contain; }
+    .member-label { margin-top: 8px; color: var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 
     .experience { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
     .scale-wrap { position: relative; }
@@ -308,6 +342,23 @@
     .package-features { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; font-size: 16px; font-weight: 800; }
     .package-features li { display: flex; align-items: flex-start; gap: 12px; }
     .package-features .az-icon { width: 22px; height: 22px; flex: 0 0 22px; color: var(--az-pink); }
+    .package-title-copy { min-width: 0; }
+    .package-title-copy p { margin: 4px 0 0; color: var(--az-muted); font-size: 13px; font-weight: 800; line-height: 1.2; }
+    .attraction-lineup { margin-top: 24px; border-top: 2px solid rgba(15,23,41,.2); }
+    .attraction-lineup summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 12px 0; color: var(--az-pink); cursor: pointer; font-size: 13px; font-weight: 900; letter-spacing: .12em; list-style: none; text-transform: uppercase; }
+    .attraction-lineup summary::-webkit-details-marker { display: none; }
+    .attraction-lineup summary::after { content: "+"; color: var(--az-navy); font-size: 20px; line-height: 1; }
+    .attraction-lineup[open] summary::after { content: "−"; }
+    .attraction-lineup-content { padding: 4px 0 8px; }
+    .attraction-lineup-intro { margin: 0 0 16px; color: var(--az-muted); font-size: 13px; font-weight: 800; }
+    .attraction-lineup-grid { display: grid; gap: 16px; }
+    .attraction-lineup-category { padding-top: 12px; border-top: 2px solid rgba(15,23,41,.12); }
+    .attraction-lineup-category h4 { margin: 0 0 6px; font-size: 16px; line-height: 1; text-transform: uppercase; }
+    .attraction-lineup-kicker { margin-bottom: 7px; color: var(--az-pink); font-size: 10px; font-weight: 900; letter-spacing: .1em; line-height: 1.2; text-transform: uppercase; }
+    .attraction-lineup-category > p { margin: 0 0 10px; color: var(--az-muted); font-size: 12px; font-weight: 700; line-height: 1.35; }
+    .attraction-lineup-category > .attraction-lineup-detail { margin-bottom: 12px; color: var(--az-muted); font-size: 11px; font-weight: 600; line-height: 1.4; }
+    .attraction-chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .attraction-chip-list span { padding: 4px 7px; color: var(--az-navy); background: rgba(15,23,41,.08); font-size: 11px; font-weight: 800; line-height: 1.2; }
     .ammo { display: inline-block; margin-top: 20px; padding: 4px 12px; color: var(--az-pink); background: rgba(255,10,149,.1); font-size: 12px; font-weight: 800; text-transform: uppercase; }
     .package-price { margin: 24px -24px -24px; padding: 24px; border-top: 4px dashed var(--az-navy); background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
     .price-label { margin-bottom: 8px; color: var(--az-pink); font-size: 12px; font-weight: 900; letter-spacing: .14em; text-transform: uppercase; }
@@ -411,9 +462,27 @@
     @keyframes soft-bounce { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-5px); } }
     @keyframes bubble-float { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-5px); } }
     @keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+    @keyframes tube-man-wave {
+      0%, 100% { transform: rotate(-4deg) skewX(-2deg) translateX(0); }
+      18% { transform: rotate(5deg) skewX(4deg) translateX(2px); }
+      37% { transform: rotate(9deg) skewX(7deg) translateX(4px); }
+      55% { transform: rotate(-5deg) skewX(-5deg) translateX(-2px); }
+      74% { transform: rotate(-9deg) skewX(-7deg) translateX(-4px); }
+      88% { transform: rotate(3deg) skewX(3deg) translateX(1px); }
+    }
+    @keyframes tube-man-wobble {
+      0%, 100% { transform: translateY(0) scaleX(1) scaleY(1); }
+      28% { transform: translateY(-4px) scaleX(.965) scaleY(1.045) skewX(1deg); }
+      51% { transform: translateY(2px) scaleX(1.035) scaleY(.975) skewX(-2deg); }
+      77% { transform: translateY(-3px) scaleX(.98) scaleY(1.035) skewX(2deg); }
+    }
 
     @media (min-width: 640px) {
       .container { width: min(1400px, calc(100% - 64px)); }
+      .team-float { top: 96px; }
+      .team-bubble { width: 64px; }
+      .team-photo { width: 64px; height: 64px; }
+      .tube-man-position { right: 12px; bottom: -14px; width: 116px; }
       .hero-actions { flex-direction: row; justify-content: flex-start; width: auto; }
       .hero-actions .button { width: auto; }
       .stats { gap: 20px; }
@@ -455,6 +524,7 @@
       .packages-intro { margin-bottom: 60px; font-size: 20px; }
       .package-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .package-image { height: 240px; }
+      .attraction-lineup-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .how-layout { grid-template-columns: 1fr 2fr; gap: 48px; }
       .how-copy p { font-size: 20px; }
       .step-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -484,18 +554,19 @@
     }
 
     @media (min-width: 1280px) {
-      .team-bubble { width: 96px; }
-      .team-photo { width: 80px; height: 80px; }
-      .team-label { display: block; }
-    }
-
-    @media (min-width: 1700px) {
-      .team-float { display: block; }
+      .team-bubble { width: 112px; }
+      .team-bubble.visible { opacity: .95; }
+      .team-photo { width: 96px; height: 96px; }
+      .team-label { bottom: -29px; }
+      .team-name { font-size: 11px; }
+      .team-role { font-size: 8px; }
+      .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
       .marquee-track { animation: none; }
+      .tube-man-sway, .tube-man-wobble { animation: none; }
     }
   `;
 
@@ -503,15 +574,25 @@
     return `<div class="feature"><div class="feature-icon ${color}">${icon(iconName)}</div><div><h4 class="display">${title}</h4><p>${copy}</p></div></div>`;
   }
 
-  function packageCard({ flag, image, alt, iconName, title, copy, features, price, ammo }) {
+  function attractionLineupMarkup(categories) {
+    return `<details class="attraction-lineup"><summary>View Attraction Lineup</summary><div class="attraction-lineup-content"><p class="attraction-lineup-intro">Here are our possible attractions. Packages include a curated selection; attractions are not available a la carte.</p><div class="attraction-lineup-grid">${categories.map((category) => {
+      const [kicker, title, description, detail, items] = category.length === 3
+        ? ["", category[0], category[1], "", category[2]]
+        : category;
+      return `<div class="attraction-lineup-category">${kicker ? `<div class="attraction-lineup-kicker">${kicker}</div>` : ""}<h4 class="display">${title}</h4>${description ? `<p>${description}</p>` : ""}${detail ? `<p class="attraction-lineup-detail">${detail}</p>` : ""}<div class="attraction-chip-list">${items.map((item) => `<span>${item}</span>`).join("")}</div></div>`;
+    }).join("")}</div></div></details>`;
+  }
+
+  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
     return `<article class="package-card">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
       <div class="package-image"><img src="${image}" alt="${alt}" loading="lazy"></div>
       <div class="package-content">
-        <div class="package-title">${icon(iconName)}<h3 class="display">${title}</h3></div>
+        <div class="package-title">${icon(iconName)}<div class="package-title-copy"><h3 class="display">${title}</h3>${subtitle ? `<p>${subtitle}</p>` : ""}</div></div>
         <p class="package-copy">${copy}</p>
         <ul class="package-features">${features.map((item) => `<li>${icon("check")}${item}</li>`).join("")}</ul>
         ${ammo ? `<span class="ammo">${ammo}</span>` : ""}
+        ${lineup || ""}
         <div class="package-price"><div class="price-label">Flat Rate</div><div class="price display">${price}</div><div class="price-days">For 1–4 Days</div></div>
       </div>
     </article>`;
@@ -571,6 +652,7 @@
       </header>
 
       <aside class="team-float" aria-label="Meet the Adventure Zone team">${teamMarkup()}</aside>
+      <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
 
       <section class="hero" id="hero">
         <div class="hero-backdrop"><video class="hero-video" src="${IMAGE.heroVideo}" poster="${IMAGE.hero}" autoplay loop muted playsinline preload="metadata" aria-hidden="true"></video></div>
@@ -604,7 +686,7 @@
             <div class="stat-card shadow">${icon("pin")}<div class="stat-label">Regional Inspection Experience</div></div>
           </div>
         </div>
-        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><span class="member-badge">RMAF + WAF Members</span></div>
+        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
       </div></section>
 
       <section class="section experience" id="experience"><div class="container experience-layout">
@@ -615,9 +697,9 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event. Every package comes fully staffed for 1 to 4 days.</p></div>
         <div class="package-grid">
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000" })}
-          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$7,500" })}
-          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$7,500", ammo: "*Ammo sold separately" })}
+          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
+          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$7,500", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$7,500", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>
 
@@ -638,7 +720,7 @@
 
       <section class="section partnerships" id="partnerships"><div class="container">
         <div class="section-heading"><h2 class="display">Booking Structures</h2></div>
-        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We bring the attractions at no upfront charge to the event. We charge the public to play directly, and pay the event a percentage of our ticket box sales.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"])}</div>
+        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"])}</div>
       </div></section>
 
       <section class="section gallery" id="gallery"><div class="container"><h2 class="display">The Spectacle</h2><div class="gallery-grid">${galleryMarkup()}</div></div></section>
@@ -708,7 +790,7 @@
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
-      root.querySelectorAll(".faq-item").forEach((item) => item.addEventListener("toggle", () => this.emitResize(), { signal }));
+      root.querySelectorAll(".faq-item, .attraction-lineup").forEach((item) => item.addEventListener("toggle", () => this.emitResize(), { signal }));
     }
 
     setupResizeEvents() {
