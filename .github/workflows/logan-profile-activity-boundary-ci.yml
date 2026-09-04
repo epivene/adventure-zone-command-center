@@ -28,6 +28,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Profile activity boundary regression
         run: pnpm --filter @workspace/api-server exec vitest run src/features/event-profiles/event-profile-activity-classification.test.ts
+      - name: Build API type declarations
+        run: pnpm --filter @workspace/db run build
       - name: API typecheck
         run: pnpm --filter @workspace/api-server run typecheck
       - name: Production API build
