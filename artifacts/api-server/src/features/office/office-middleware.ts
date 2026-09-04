@@ -5,6 +5,7 @@ export type OfficeRequestContext = {
   accountId: string;
   displayName: string;
   role: "office_coordinator";
+  canReviewWebsiteInquiries: boolean;
 };
 
 export interface OfficeSessionRepository {
@@ -14,6 +15,7 @@ export interface OfficeSessionRepository {
     role: "office_coordinator";
     enabled: boolean;
     sessionVersion: number;
+    canReviewWebsiteInquiries: boolean;
   } | null>;
 }
 
@@ -31,7 +33,12 @@ export async function resolveOfficeSession(token: string, repository: OfficeSess
   const account = await repository.getActiveSession(claims.accountId);
   if (!account || !account.enabled || account.id !== claims.accountId || account.sessionVersion !== claims.sessionVersion) return null;
   if (account.role !== "office_coordinator") return null;
-  return { accountId: account.id, displayName: account.displayName, role: account.role };
+  return {
+    accountId: account.id,
+    displayName: account.displayName,
+    role: account.role,
+    canReviewWebsiteInquiries: account.canReviewWebsiteInquiries,
+  };
 }
 
 export function createRequireOfficeMiddleware(repository: OfficeSessionRepository) {

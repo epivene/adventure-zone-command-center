@@ -107,6 +107,32 @@ describe("TwilioComputerVoiceProvider", () => {
     expect(twiml).toContain("value=&lt;&amp;&quot;'");
   });
 
+  it("passes the inbound session ID to the browser call", () => {
+    const twiml = new TwilioComputerVoiceProvider(config).createClientDialTwiml({
+      identity: "inbound_browser",
+      sessionId: "session-123",
+      actionUrl: "https://calls.example.test/inbound/dial-result",
+      statusCallbackUrl: "https://calls.example.test/inbound/status",
+    });
+
+    expect(twiml).toContain(
+      '<Parameter name="inboundSessionId" value="session-123"/>',
+    );
+  });
+
+  it("plays the recorded greeting before recording a voicemail", () => {
+    const twiml = new TwilioComputerVoiceProvider(config).createVoicemailTwiml({
+      actionUrl: "https://calls.example.test/voicemail",
+      recordingStatusCallbackUrl: "https://calls.example.test/recording",
+      maxSeconds: 120,
+    });
+
+    expect(twiml).toContain(
+      "<Play>https://adventure-zone-command-center-1.onrender.com/audio/voicemail-greeting.mp3</Play><Record",
+    );
+    expect(twiml).not.toContain("<Say>");
+  });
+
   it.each<[string, ComputerCallStatus]>([
     ["initiated", "queued"],
     ["queued", "queued"],

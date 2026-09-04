@@ -47,8 +47,22 @@ export function createInboundComputerCallingRouter(deps: {
   } catch { res.status(409).json({error:"stale_lease"}); }
  });
  router.get("/calls/incoming/sessions/:id", async(req,res)=>{if(!enabled())return unavailable(res); const session=await deps.calls?.get(req.params.id,ownerId); if(!session){res.status(404).json({error:"not_found"});return;}res.json({id:session.id,status:session.status,caller:{displayName:session.caller.callerNumber?"Caller":"Unknown caller",matched:Boolean(session.caller.phoneId),organizationId:session.caller.organizationId,contactId:session.caller.contactId,phoneId:session.caller.phoneId},startedAt:null,answeredAt:session.answeredAt?.toISOString()??null,endedAt:null});});
- router.post("/calls/incoming/sessions/:id/voicemail",async(req,res)=>{if(!enabled())return unavailable(res);if(!await deps.calls?.voicemail(req.params.id,ownerId)){res.status(409).json({error:"not_available"});return;}res.status(204).send();});
- router.get("/calls/voicemail",async(req,res)=>{ if(!enabled())return unavailable(res); const cursor=typeof req.query.cursor==="string"&&z.string().uuid().safeParse(req.query.cursor).success?req.query.cursor:undefined; res.json(await deps.voicemails?.list(ownerId,cursor) ?? {items:[],nextCursor:null,newCount:0,handledCount:0}); });
+ router.post("/calls/incoming/sessions/:id/voicemail",async(req,res)=>{
+  const config=deps.getConfig();
+  if(!deps.isAssistedCallingEnabled()||!config.enabled)return unavailable(res);
+  const session=await deps.calls?.voicemail(req.params.id,ownerId);
+  if(!session){res.status(409).json({error:"not_available"});return;}
+  const provider=deps.providerForConfig();
+  const twiml=provider.createVoicemailTwiml({
+   maxSeconds:config.config.maxSeconds,
+   actionUrl:new URL("/api/webhooks/twilio/voice/inbound/voicemail",config.config.voiceConfig.webhookBaseUrl).toString(),
+   recordingStatusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/recording",config.config.voiceConfig.webhookBaseUrl).toString(),
+  });
+  try { await provider.redirectCallToVoicemail({callSid:session.providerParentCallSid,twiml}); }
+  catch { res.status(502).json({error:"voicemail_redirect_failed"});return; }
+  res.status(204).send();
+ });
+ router.get("/calls/voicemail",async(req,res)=>{ if(!enabled())return unavailable(res); const cursor=typeof req.query.cursor==="string"&&z.string().uuid().safeParse(req.query.cursor).success?req.query.cursor:undefined; const parsedStatus=z.enum(["new","handled"]).safeParse(req.query.status); const status=parsedStatus.success?parsedStatus.data:undefined; res.json(await deps.voicemails?.list(ownerId,cursor,status) ?? {items:[],nextCursor:null,newCount:0,handledCount:0}); });
  router.post("/calls/voicemail/:id/handled",async(req,res)=>{if(!enabled())return unavailable(res); if(!z.string().uuid().safeParse(req.params.id).success){res.status(400).json({error:"invalid_request"});return;} if(!await deps.voicemails?.markHandled(ownerId,req.params.id)){res.status(404).json({error:"not_found"});return;}res.status(204).send();});
  router.patch("/calls/voicemail/:id/link",async(req,res)=>{const body=z.object({organizationId:z.string().uuid(),contactId:z.string().uuid(),phoneId:z.string().uuid()}).strict().safeParse(req.body);if(!enabled())return unavailable(res);if(!body.success||!z.string().uuid().safeParse(req.params.id).success){res.status(400).json({error:"invalid_request"});return;}if(!await deps.voicemails?.link(ownerId,req.params.id,body.data)){res.status(404).json({error:"not_found"});return;}res.status(204).send();});
  router.delete("/calls/voicemail/:id/audio",async(req,res)=>{if(!enabled())return unavailable(res);if(!z.string().uuid().safeParse(req.params.id).success){res.status(400).json({error:"invalid_request"});return;}if(!await deps.voicemails?.deleteAudio(ownerId,req.params.id)){res.status(409).json({error:"not_available"});return;}res.status(204).send();});

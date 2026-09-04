@@ -1,0 +1,102 @@
+name: Label retained ACT legacy profiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/label-retained-act-legacy-profiles.yml"
+      - "artifacts/api-server/src/routes/assistant-import.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for deployment, rename, and verify
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require("node:fs");
+          const base=process.env.API_URL.replace(/\/$/,"")+"/api/assistant-import";
+          const token=process.env.ASSISTANT_IMPORT_TOKEN;
+          const targets=[
+            {
+              id:"5f15c7f2-38e2-4b95-98cc-c277c389abd8",
+              name:"Dinosaur Stone Age Stampede (Dinosaur) CO (Act! Record)",
+              city:"Dinosaur",region:"CO",actCount:11,
+              activeProfile:"Stone Age Stampede"
+            },
+            {
+              id:"5f89f8f1-6d4e-4b36-a492-6acd1ec31667",
+              name:"Magic Valley Dairy Days (Wendell) ID (Act! Record)",
+              city:"Wendell",region:"ID",actCount:1,
+              activeProfile:"Wendell Dairy Days"
+            }
+          ];
+          async function call(path,options={}){
+            const response=await fetch(base+"/"+path,{
+              ...options,
+              headers:{Authorization:"Bearer "+token,...(options.body?{"Content-Type":"application/json"}:{})}
+            });
+            const text=await response.text();
+            let body; try{body=JSON.parse(text)}catch{body={raw:text}}
+            return {ok:response.ok,status:response.status,body};
+          }
+          (async()=>{
+            const receipt={appliedAt:new Date().toISOString(),profiles:[]};
+            for(const target of targets){
+              let verified=null;
+              for(let attempt=1;attempt<=50;attempt++){
+                const update=await call("event-profiles",{
+                  method:"POST",
+                  body:JSON.stringify({
+                    event:{id:target.id,name:target.name,city:target.city,region:target.region},
+                    renameExisting:true
+                  })
+                });
+                if(update.ok){
+                  const read=await call("profile-history/"+target.id);
+                  if(read.ok&&read.body.place?.name===target.name){
+                    verified=read.body;
+                    break;
+                  }
+                }
+                await new Promise(r=>setTimeout(r,15000));
+              }
+              if(!verified) throw new Error("Rename did not deploy or verify for "+target.id);
+              const noteSubject="Retained legacy ACT profile — not the active booking profile";
+              const noteBody="This record is intentionally retained because it contains "+target.actCount+" imported ACT! history entr"+(target.actCount===1?"y":"ies")+". The active/current profile is '"+target.activeProfile+"'. The '(Act! Record)' suffix distinguishes this historical record until a reviewed merge can preserve every linked activity.";
+              const note=await call("profile-notes",{method:"POST",body:JSON.stringify({organizationId:target.id,subject:noteSubject,body:noteBody})});
+              if(!note.ok) throw new Error("Note failed for "+target.id+": HTTP "+note.status);
+              const finalRead=await call("profile-history/"+target.id);
+              if(!finalRead.ok||finalRead.body.place?.name!==target.name
+                ||!(finalRead.body.notes||[]).some(x=>x.subject===noteSubject)
+                ||(finalRead.body.history||[]).filter(x=>x.importedFromAct).length<target.actCount){
+                throw new Error("Final verification failed for "+target.id);
+              }
+              receipt.profiles.push({
+                profileId:target.id,
+                name:finalRead.body.place.name,
+                activeProfile:target.activeProfile,
+                actHistoryCount:(finalRead.body.history||[]).filter(x=>x.importedFromAct).length
+              });
+            }
+            fs.writeFileSync("act-legacy-profile-label-receipt.json",JSON.stringify(receipt,null,2));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "# Retained ACT legacy profiles labeled\n\n"+
+              receipt.profiles.map(x=>"- "+x.name+": "+x.actHistoryCount+" ACT history record(s) preserved").join("\n")+"\n");
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: act-legacy-profile-label-receipt
+          path: act-legacy-profile-label-receipt.json
+          retention-days: 7

@@ -8,7 +8,7 @@ describe("post-listen startup", () => {
     expect(APPROVED_PROFILE_STARTUP_TIMEOUT_MS).toBe(15 * 60_000);
   });
 
-  it("starts background workers after maintenance fails", async () => {
+  it("opens readiness before maintenance and starts workers after maintenance fails", async () => {
     const maintenanceError = new Error("maintenance failed");
     const onMaintenanceError = vi.fn();
     const events: string[] = [];
@@ -22,21 +22,21 @@ describe("post-listen startup", () => {
         throw maintenanceError;
       },
       onMaintenanceError,
-      onMaintenanceSettled: () => {
+      onReady: () => {
         events.push("ready");
       },
       startBackgroundWorkers,
     });
 
     expect(onMaintenanceError).toHaveBeenCalledWith(maintenanceError);
-    expect(events).toEqual(["maintenance", "ready", "workers"]);
+    expect(events).toEqual(["ready", "maintenance", "workers"]);
     expect(startBackgroundWorkers).toHaveBeenCalledTimes(1);
     expect(events.indexOf("ready")).toBeLessThan(
       events.indexOf("workers"),
     );
   });
 
-  it("opens readiness after successful maintenance and before workers start", async () => {
+  it("opens readiness before successful maintenance and workers", async () => {
     const events: string[] = [];
 
     await runMaintenanceAndStartWorkers({
@@ -44,7 +44,7 @@ describe("post-listen startup", () => {
         events.push("maintenance");
       },
       onMaintenanceError: vi.fn(),
-      onMaintenanceSettled: () => {
+      onReady: () => {
         events.push("ready");
       },
       startBackgroundWorkers: async () => {
@@ -52,6 +52,6 @@ describe("post-listen startup", () => {
       },
     });
 
-    expect(events).toEqual(["maintenance", "ready", "workers"]);
+    expect(events).toEqual(["ready", "maintenance", "workers"]);
   });
 });

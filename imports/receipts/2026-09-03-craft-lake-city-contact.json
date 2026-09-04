@@ -1,0 +1,94 @@
+{
+  "appliedAt": "2026-09-03T23:45:28.604Z",
+  "profileId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+  "profileReceipt": {
+    "ok": true,
+    "action": "updated",
+    "profileId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+    "bookingId": null,
+    "contactId": null
+  },
+  "contactReceipt": {
+    "ok": true,
+    "organizationId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+    "contactId": "09192e97-345e-4496-b1cc-a6fc156c91a6",
+    "created": true,
+    "primary": true
+  },
+  "noteReceipt": {
+    "ok": true,
+    "created": true,
+    "activityId": "67a00a2e-fdc2-4d96-8ad5-d4d7d5727d65",
+    "organizationId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+    "organizationName": "DIY Craft Fest (SLC) UT"
+  },
+  "followUpReceipt": {
+    "ok": true,
+    "created": true,
+    "preservedExisting": false,
+    "followUpId": "f102d8d6-325d-42ee-b96a-1a2a5241c698",
+    "organizationId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+    "organizationName": "DIY Craft Fest (SLC) UT",
+    "label": "Email Tiana about 2027 DIY Festival partnership",
+    "reason": "Contact Tiana Young now, while the 2026 festival is recent, about a guarantee-first 2027 family-attraction partnership. Ask who handles sponsorship/entertainment partnerships, available footprint, attendance, power, anchoring, insurance, and planning timeline. Use artisancoordinator@craftlakecity.com as a fallback if needed.",
+    "dueAt": "2026-09-10T16:00:00.000Z"
+  },
+  "verified": {
+    "tianaPrimary": true,
+    "genericContactPreserved": true,
+    "historicalLizPreserved": true,
+    "notePresent": true,
+    "followUpDueAt": "2026-09-10T16:00:00.000Z"
+  },
+  "contacts": [
+    {
+      "id": "09192e97-345e-4496-b1cc-a6fc156c91a6",
+      "name": "Tiana Young",
+      "role": "Artisan & Programs Manager",
+      "isPrimary": true,
+      "phone": "801-906-8521",
+      "email": "tiana@craftlakecity.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    },
+    {
+      "id": "c5e73f33-f770-40c1-8667-526038e9d3c7",
+      "name": "Liz Vowles",
+      "role": null,
+      "isPrimary": false,
+      "phone": null,
+      "email": "liz@craftlakecity.com",
+      "source": "act_recovery",
+      "actRecordId": "8188f904-6951-49a9-958b-5c0237519726",
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    },
+    {
+      "id": "d106ee40-669b-40ef-8679-0ea5ca01ad93",
+      "name": "Craft Lake City",
+      "role": "Current organization contact",
+      "isPrimary": false,
+      "phone": "801-906-8521",
+      "email": "info@craftlakecity.com",
+      "source": "local",
+      "actRecordId": null,
+      "locationName": null,
+      "locationCity": null,
+      "locationRegion": null
+    }
+  ],
+  "openFollowUps": [
+    {
+      "id": "f102d8d6-325d-42ee-b96a-1a2a5241c698",
+      "contactId": null,
+      "bookingId": null,
+      "kind": "Email Tiana about 2027 DIY Festival partnership",
+      "dueAt": "2026-09-10T16:00:00.000Z",
+      "completedAt": null
+    }
+  ]
+}

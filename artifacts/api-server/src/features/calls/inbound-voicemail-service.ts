@@ -1,6 +1,6 @@
-import { and, asc, eq, lt } from "drizzle-orm";
+import { and, asc, eq, lt, ne, sql } from "drizzle-orm";
 import type { db as Database } from "@/db/client";
-import { contactPhones, inboundCallSessions, inboundVoicemails, organizationContacts } from "@/db/schema";
+import { contacts, contactPhones, inboundCallSessions, inboundVoicemails, organizationContacts } from "@/db/schema";
 import type { InboundVoiceProvider } from "./inbound-voice-provider";
 
 export type VoicemailView = {
@@ -12,22 +12,72 @@ export class InboundVoicemailService {
   constructor(private readonly database: typeof Database, private readonly provider: () => InboundVoiceProvider, private readonly clock = () => new Date()) {}
   private view(row: any): VoicemailView {
     const status = row.status === "deletion_pending" ? "deleting" : row.status === "audio_deleted" ? "audio-deleted" : row.status;
-    return { id: row.id, status, receivedAt: row.createdAt.toISOString(), callerDisplay: row.callerNumberSnapshot ? "Caller" : "Unknown caller",
+    const callerName = [row.callerFirstName, row.callerLastName].filter(Boolean).join(" ");
+    return { id: row.id, status, receivedAt: row.createdAt.toISOString(), callerDisplay: callerName || (row.callerNumberSnapshot ? "Caller" : "Unknown caller"),
       matched: Boolean(row.phoneId), contactId: row.contactId, organizationId: row.organizationId, phoneId: row.phoneId,
       durationSeconds: row.durationSeconds, canCallBack: false, callbackReason: row.phoneId ? "Stored phone must be validated before callback" : "Link a stored callable phone first", canLink: !row.phoneId };
   }
-  async list(ownerId: string, cursor?: string) {
-    const rows = await this.database.select({ voicemail: inboundVoicemails, callerNumberSnapshot: inboundCallSessions.callerNumberSnapshot })
-      .from(inboundVoicemails).innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
-      .where(and(eq(inboundCallSessions.ownerId, ownerId), cursor ? lt(inboundVoicemails.id, cursor) : undefined)).orderBy(asc(inboundVoicemails.createdAt)).limit(51);
-    const items = rows.slice(0, 50).map((row) => this.view({ ...row.voicemail, callerNumberSnapshot: row.callerNumberSnapshot }));
-    return { items, nextCursor: rows.length > 50 ? items.at(-1)?.id ?? null : null, newCount: items.filter(x => x.status === "available").length, handledCount: items.filter(x => x.status === "handled").length };
+  private async hydrated(row: any) {
+    const hasStoredMatch = row.voicemail.phoneId ?? row.sessionPhoneId;
+    const recoveredMatches = !hasStoredMatch && row.callerNumberSnapshot
+      ? await this.database.select({
+          organizationId: contacts.organizationId,
+          contactId: contacts.id,
+          phoneId: contactPhones.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+        }).from(contactPhones)
+          .innerJoin(contacts, eq(contactPhones.contactId, contacts.id))
+          .where(eq(contactPhones.normalizedNumber, row.callerNumberSnapshot))
+          .limit(2)
+      : [];
+    const recovered = recoveredMatches.length === 1 ? recoveredMatches[0] : undefined;
+    return {
+      ...row.voicemail,
+      callerNumberSnapshot: row.callerNumberSnapshot,
+      organizationId: row.voicemail.organizationId ?? row.sessionOrganizationId ?? row.callerOrganizationId ?? recovered?.organizationId ?? null,
+      contactId: row.voicemail.contactId ?? row.sessionContactId ?? recovered?.contactId ?? null,
+      phoneId: row.voicemail.phoneId ?? row.sessionPhoneId ?? recovered?.phoneId ?? null,
+      callerFirstName: row.callerFirstName ?? recovered?.firstName,
+      callerLastName: row.callerLastName ?? recovered?.lastName,
+    };
+  }
+  private select() {
+    return this.database.select({
+      voicemail: inboundVoicemails,
+      callerNumberSnapshot: inboundCallSessions.callerNumberSnapshot,
+      sessionOrganizationId: inboundCallSessions.organizationId,
+      sessionContactId: inboundCallSessions.contactId,
+      sessionPhoneId: inboundCallSessions.phoneId,
+      callerOrganizationId: contacts.organizationId,
+      callerFirstName: contacts.firstName,
+      callerLastName: contacts.lastName,
+    }).from(inboundVoicemails)
+      .innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
+      .leftJoin(contacts, eq(contacts.id, sql`coalesce(${inboundVoicemails.contactId}, ${inboundCallSessions.contactId})`));
+  }
+  async list(ownerId: string, cursor?: string, filter?: "new" | "handled") {
+    const [rows, [counts]] = await Promise.all([
+      this.select()
+        .where(and(
+          eq(inboundCallSessions.ownerId, ownerId),
+          cursor ? lt(inboundVoicemails.id, cursor) : undefined,
+          filter === "handled" ? eq(inboundVoicemails.status, "handled") : filter === "new" ? ne(inboundVoicemails.status, "handled") : undefined,
+        )).orderBy(asc(inboundVoicemails.createdAt)).limit(51),
+      this.database.select({
+        newCount: sql<number>`count(*) filter (where ${inboundVoicemails.status} <> 'handled')`.mapWith(Number),
+        handledCount: sql<number>`count(*) filter (where ${inboundVoicemails.status} = 'handled')`.mapWith(Number),
+      }).from(inboundVoicemails)
+        .innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
+        .where(eq(inboundCallSessions.ownerId, ownerId)),
+    ]);
+    const items = await Promise.all(rows.slice(0, 50).map(async (row) => this.view(await this.hydrated(row))));
+    return { items, nextCursor: rows.length > 50 ? items.at(-1)?.id ?? null : null, newCount: counts?.newCount ?? 0, handledCount: counts?.handledCount ?? 0 };
   }
   async get(ownerId: string, id: string) {
-    const [row] = await this.database.select({ voicemail: inboundVoicemails, callerNumberSnapshot: inboundCallSessions.callerNumberSnapshot })
-      .from(inboundVoicemails).innerJoin(inboundCallSessions, eq(inboundVoicemails.inboundSessionId, inboundCallSessions.id))
+    const [row] = await this.select()
       .where(and(eq(inboundVoicemails.id, id), eq(inboundCallSessions.ownerId, ownerId))).limit(1);
-    return row ? { row: row.voicemail, view: this.view({ ...row.voicemail, callerNumberSnapshot: row.callerNumberSnapshot }) } : null;
+    return row ? { row: row.voicemail, view: this.view(await this.hydrated(row)) } : null;
   }
   async markHandled(ownerId: string, id: string) {
     const found = await this.get(ownerId, id); if (!found) return false;

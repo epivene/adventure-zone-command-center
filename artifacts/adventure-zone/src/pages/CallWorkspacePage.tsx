@@ -11,6 +11,7 @@ import { CallWorkspace } from "@/components/calls/call-workspace";
 import type { ComputerCallingCapability } from "@/components/calls/phone-actions";
 import { QuickAddCaller, type QuickAddCallerSubmission } from "@/components/contacts/quick-add-caller";
 import { GuidedCallScriptOverridesProvider } from "@/features/calls/guided-call-script-settings-context";
+import type { InboundSession } from "@/features/calls/incoming-calling-api";
 import { apiGet, apiPost } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
@@ -100,6 +101,14 @@ export default function CallWorkspacePage() {
           setData(null);
           setLoading(false);
           return;
+        }
+        if (inboundSessionId) {
+          const session = await apiGet<InboundSession>(
+            `/calls/incoming/sessions/${encodeURIComponent(inboundSessionId)}`,
+          );
+          query.delete("inboundSessionId");
+          if (session.caller.contactId) query.set("contactId", session.caller.contactId);
+          else if (session.caller.organizationId) query.set("organizationId", session.caller.organizationId);
         }
         const workspace = await apiGet<any>(`/calls/workspace?${query.toString()}`);
         setData(workspace);

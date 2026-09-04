@@ -140,3 +140,5 @@ jobs:
 # Triggered after Gmail profile CRM reconciliation on 2026-09-02.
 # Second post-import verification pass.
 # Waits for all Gmail-profile CRM counterparts before exporting.
+
+# Refreshed for Sept. 4 inbox reconciliation.

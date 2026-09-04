@@ -8,7 +8,7 @@ const menuSource = readFileSync("src/components/navigation/app-menu.tsx", "utf8"
 const switcherSource = readFileSync("src/components/navigation/workspace-switcher.tsx", "utf8");
 
 describe("workspace-aware Admin shell", () => {
-  it("keeps only the three core Booking destinations in the desktop top bar", () => {
+  it("keeps the core Booking destinations and inquiry inbox in the desktop top bar", () => {
     const bookingStart = shellSource.indexOf('if (workspace === "booking")');
     const operationsStart = shellSource.indexOf('if (workspace === "operations")');
     const bookingPrimary = shellSource.slice(bookingStart, operationsStart);
@@ -17,11 +17,20 @@ describe("workspace-aware Admin shell", () => {
       ["/today", "Today"],
       ["/profiles", "Profiles"],
       ["/schedule", "Schedule"],
+      ["/website-inquiries", "Website Inquiries"],
     ]) expect(bookingPrimary).toContain(`{ href: "${href}", label: "${label}"`);
     for (const href of ["/bookings", "/calls/workspace", "/research-sources"]) {
       expect(bookingPrimary).not.toContain(`href: "${href}"`);
     }
     expect(bookingPrimary).not.toContain('label: "Marketing"');
+  });
+
+  it("polls the inquiry count independently on the existing cadence", () => {
+    expect(shellSource).toContain('apiGet<{ newCount: number }>("/website-inquiries/count")');
+    expect(shellSource).toContain("setWebsiteInquiryCount");
+    expect(shellSource).toContain("15000");
+    expect(shellSource).toContain("websiteInquiryCount > 99");
+    expect(shellSource).toContain("<MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount}");
   });
 
   it("uses the workspace identity as the single workspace switcher", () => {
@@ -74,7 +83,7 @@ describe("workspace-aware Admin shell", () => {
 
   it("keeps mobile workspace access compact", () => {
     expect(mobileSource).toContain('{ href: "/command", label: "Panel"');
-    expect(mobileSource).toContain("<AppMenu workspace={workspace} mobile />");
+    expect(mobileSource).toContain("<AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} />");
   });
 
   it("restores a saved Booking destination from Marketing", () => {
@@ -84,7 +93,7 @@ describe("workspace-aware Admin shell", () => {
   });
 
   it("keeps Messages and Assistant in the desktop overflow with accessible state", () => {
-    expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} />");
+    expect(shellSource).toContain("<AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} />");
     expect(menuSource).toContain('href="/manager-communications"');
     expect(menuSource).toContain("unreadMessages > 0");
     expect(menuSource).toContain('aria-label={unreadMessages ? `Messages, ${unreadMessages} unread` : "Messages"}');

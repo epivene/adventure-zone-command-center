@@ -11,6 +11,7 @@ export type OfficeAccountCredentialRecord = {
   passwordHash: string;
   passwordSalt: string;
   enabled: boolean;
+  canReviewWebsiteInquiries: boolean;
   sessionVersion: number;
 };
 
@@ -29,6 +30,7 @@ export class DrizzleOfficeAccountRepository {
         passwordHash: officeAccounts.passwordHash,
         passwordSalt: officeAccounts.passwordSalt,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       })
       .from(officeAccounts)
@@ -45,6 +47,7 @@ export class DrizzleOfficeAccountRepository {
         displayName: officeAccounts.displayName,
         role: officeAccounts.role,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       })
       .from(officeAccounts)
@@ -62,6 +65,7 @@ export class DrizzleOfficeAccountRepository {
         displayName: officeAccounts.displayName,
         role: officeAccounts.role,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       })
       .from(officeAccounts)
@@ -73,6 +77,7 @@ export class DrizzleOfficeAccountRepository {
     displayName: string;
     passwordHash: string;
     passwordSalt: string;
+    canReviewWebsiteInquiries?: boolean;
   }): Promise<OfficeAccountSessionRecord> {
     const [created] = await this.database
       .insert(officeAccounts)
@@ -83,6 +88,7 @@ export class DrizzleOfficeAccountRepository {
         passwordHash: input.passwordHash,
         passwordSalt: input.passwordSalt,
         enabled: true,
+        canReviewWebsiteInquiries: input.canReviewWebsiteInquiries ?? false,
         sessionVersion: 1,
       })
       .returning({
@@ -91,6 +97,7 @@ export class DrizzleOfficeAccountRepository {
         displayName: officeAccounts.displayName,
         role: officeAccounts.role,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       });
     if (!created) throw new Error("Office account could not be created.");
@@ -101,6 +108,7 @@ export class DrizzleOfficeAccountRepository {
     loginName?: string;
     displayName?: string;
     enabled?: boolean;
+    canReviewWebsiteInquiries?: boolean;
   }): Promise<OfficeAccountSessionRecord | null> {
     const set: Record<string, unknown> = { updatedAt: new Date() };
     if (input.loginName !== undefined) set.loginName = input.loginName.trim();
@@ -108,6 +116,10 @@ export class DrizzleOfficeAccountRepository {
     if (input.enabled !== undefined) {
       set.enabled = input.enabled;
       if (!input.enabled) set.sessionVersion = sql`${officeAccounts.sessionVersion} + 1`;
+    }
+    if (input.canReviewWebsiteInquiries !== undefined) {
+      set.canReviewWebsiteInquiries = input.canReviewWebsiteInquiries;
+      set.sessionVersion = sql`${officeAccounts.sessionVersion} + 1`;
     }
     const [updated] = await this.database
       .update(officeAccounts)
@@ -119,6 +131,7 @@ export class DrizzleOfficeAccountRepository {
         displayName: officeAccounts.displayName,
         role: officeAccounts.role,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       });
     return updated ?? null;
@@ -140,6 +153,7 @@ export class DrizzleOfficeAccountRepository {
         displayName: officeAccounts.displayName,
         role: officeAccounts.role,
         enabled: officeAccounts.enabled,
+        canReviewWebsiteInquiries: officeAccounts.canReviewWebsiteInquiries,
         sessionVersion: officeAccounts.sessionVersion,
       });
     return updated ?? null;

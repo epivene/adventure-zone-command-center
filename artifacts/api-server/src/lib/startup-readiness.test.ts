@@ -29,11 +29,11 @@ afterEach(() => {
 });
 
 describe("startup readiness gate", () => {
-  it("opens the liveness route but rejects business traffic during required startup", async () => {
+  it("keeps the deployment health check unhealthy until required startup completes", async () => {
     markAppStarting();
     const app = createApp();
 
-    await request(app).get("/api/healthz").expect(200, { status: "ok" });
+    await request(app).get("/api/healthz").expect(503);
     const response = await request(app).get("/api/protected").expect(503);
 
     expect(response.headers["retry-after"]).toBe("5");

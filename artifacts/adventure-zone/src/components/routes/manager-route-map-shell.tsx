@@ -93,7 +93,7 @@ export function ManagerRouteMapShell({
 
   return (
     <MapContext.Provider value={map}>
-      <div className="relative h-[24rem] min-h-80 w-full bg-slate-100 sm:h-[34rem]">
+      <div className="relative h-[32rem] min-h-[28rem] w-full bg-slate-100 sm:h-[38rem]">
         <div aria-label="Adventure Zone route map" className="absolute inset-0" ref={containerRef} role="img" />
         {children}
       </div>

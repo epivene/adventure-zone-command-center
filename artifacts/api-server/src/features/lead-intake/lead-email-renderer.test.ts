@@ -93,11 +93,36 @@ describe("renderLeadEmail", () => {
     expect(preview.body).toContain("We represent The Adventure Zone -- America's Best Inflatable Carnival!");
     expect(preview.body).toContain("Our Adventure Zone units feature 10 amazing inflatable attractions");
     expect(preview.body).toContain("For the teenage crowd and thrill seekers");
+    expect(preview.body).toContain("available for $8,000 (for 1-4 days)");
+    expect(preview.body).not.toContain("available for $7,500");
     expect(preview.body).not.toContain("Release your inner Pirate");
     expect(preview.body).not.toContain("Mini Zone");
     expect(preview.body).not.toMatch(/no[ -]?upfront|ticket sales|guarantee|discount/i);
     expect(preview.body).toContain("Don’t forget, with every unit, we provide:");
     expect(preview.body).toContain("EMAIL: TheAdventureZone12@gmail.com");
+  });
+
+  it("quotes Pirate's Rebellion at the current $8,000 price", () => {
+    const preview = renderLeadEmail({
+      profileName: "Example Fair",
+      eventName: "Example Fair",
+      eventCity: "Example City",
+      eventRegion: "CO",
+      startDate: "2026-09-29",
+      endDate: "2026-09-29",
+      firstName: "Jamie",
+      packageAvailability: {
+        ...availability,
+        packages: availability.packages.map((item) => ({
+          ...item,
+          availableQuantity: item.packageKey === "pirates_rebellion" ? 1 : 0,
+        })),
+      },
+    });
+
+    expect(preview.body).toContain("Release your inner Pirate");
+    expect(preview.body).toContain("available for $8,000 (for 1-4 days)");
+    expect(preview.body).not.toContain("available for $7,500");
   });
 
   it("uses a safe organization greeting and event-based closing when person or city is absent", () => {

@@ -32,7 +32,7 @@ export function createTwilioInboundVoiceWebhooksRouter(deps:{
   const fields=inbound.safeParse(data.data);if(!fields.success||fields.data.To!==c.inbound.inboundNumber){res.status(400).send();return;}
   try { const lease=await deps.availability.resolveCurrent("owner"); const session=await deps.calls.begin({ownerId:lease?.ownerId??"owner",parentSid:fields.data.CallSid,ingressNumber:c.inbound.inboundNumber,from:fields.data.From});
    if(!lease) {xml(res,provider.createVoicemailTwiml({maxSeconds:c.inbound.maxSeconds,actionUrl:new URL("/api/webhooks/twilio/voice/inbound/voicemail",c.computer.webhookBaseUrl).toString(),recordingStatusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/recording",c.computer.webhookBaseUrl).toString()}));return;}
-   xml(res,provider.createClientDialTwiml({identity:lease.clientIdentity,actionUrl:new URL(`/api/webhooks/twilio/voice/inbound/dial-result?sessionId=${session.id}`,c.computer.webhookBaseUrl).toString(),statusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/status",c.computer.webhookBaseUrl).toString()}));
+   xml(res,provider.createClientDialTwiml({identity:lease.clientIdentity,sessionId:session.id,actionUrl:new URL(`/api/webhooks/twilio/voice/inbound/dial-result?sessionId=${session.id}`,c.computer.webhookBaseUrl).toString(),statusCallbackUrl:new URL("/api/webhooks/twilio/voice/inbound/status",c.computer.webhookBaseUrl).toString()}));
   } catch { xml(res,provider.createUnavailableTwiml()); }
  });
  router.post("/webhooks/twilio/voice/inbound/dial-result",async(req,res)=>{
@@ -50,8 +50,8 @@ export function createTwilioInboundVoiceWebhooksRouter(deps:{
  });
  router.post("/webhooks/twilio/voice/inbound/recording",async(req,res)=>{
   const data=form.safeParse(req.body); const c=config(); if(!data.success||!c){res.status(403).send();return;} const p=deps.providerForConfig(c.computer); if(!signed(req,p,data.data,c.computer)){res.status(403).send();return;}
-  const fields=z.object({CallSid:z.string().regex(/^CA[A-Za-z0-9]{8,}$/),To:z.string(),RecordingSid:z.string().regex(/^RE[A-Za-z0-9]{8,}$/),RecordingDuration:z.string().regex(/^\d+$/).optional()}).safeParse(data.data);
-  if(!fields.success||fields.data.To!==c.inbound.inboundNumber){res.status(400).send();return;}
+  const fields=z.object({CallSid:z.string().regex(/^CA[A-Za-z0-9]{8,}$/),RecordingSid:z.string().regex(/^RE[A-Za-z0-9]{8,}$/),RecordingDuration:z.string().regex(/^\d+$/).optional()}).passthrough().safeParse(data.data);
+  if(!fields.success){res.status(400).send();return;}
   await deps.voicemails.record({parentSid:fields.data.CallSid,recordingSid:fields.data.RecordingSid,duration:fields.data.RecordingDuration?Number(fields.data.RecordingDuration):undefined,retentionDays:c.inbound.retentionDays}); res.status(204).send();
  });
  return router;

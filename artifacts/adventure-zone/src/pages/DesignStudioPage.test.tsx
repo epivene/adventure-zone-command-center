@@ -40,4 +40,11 @@ describe("DesignStudioPage starter creation", () => {
     );
     expect(setLocation).toHaveBeenCalledWith("/design-studio/project-1");
   });
+
+  it("shows the current $8,000 Pirate and Warrior prices in the package preview", async () => {
+    render(<DesignStudioPage />);
+
+    expect((await screen.findAllByText("$8,000"))).toHaveLength(2);
+    expect(screen.queryByText("$7,500")).not.toBeInTheDocument();
+  });
 });

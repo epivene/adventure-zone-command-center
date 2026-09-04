@@ -1,0 +1,172 @@
+name: Apply Sept 4 inbox profile and ACT reconciliation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-2026-09-04-inbox-profile-act-reconciliation.yml"
+      - "imports/approved-profiles/2026-09-04-inbox-profile-act-reconciliation.json"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply and verify profile reconciliation
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const source = "imports/approved-profiles/2026-09-04-inbox-profile-act-reconciliation.json";
+          const payloads = JSON.parse(fs.readFileSync(source,"utf8"));
+          const normalize = value => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+          async function request(path, options={}) {
+            let lastResponse, lastText;
+            for (let attempt=1; attempt<=12; attempt++) {
+              lastResponse = await fetch(base+"/api/assistant-import/"+path,{
+                ...options,
+                headers:{
+                  Authorization:"Bearer "+token,
+                  ...(options.body?{"Content-Type":"application/json"}:{}),
+                  ...(options.headers||{})
+                }
+              });
+              lastText = await lastResponse.text();
+              if (lastResponse.ok) {
+                try { return JSON.parse(lastText); } catch { throw new Error(path+": invalid JSON"); }
+              }
+              if (![502,503].includes(lastResponse.status)) break;
+              await new Promise(r=>setTimeout(r,10000));
+            }
+            throw new Error(path+": HTTP "+lastResponse?.status+" "+String(lastText).slice(0,500));
+          }
+          async function resolve(event) {
+            const search = await request("profile-search?q="+encodeURIComponent(event.name)+"&limit=20");
+            const matches = (search.results||[]).filter(x=>x.kind==="organization")
+              .filter(x=>(!event.city||!x.city||normalize(x.city)===normalize(event.city))
+                &&(!event.region||!x.region||normalize(x.region)===normalize(event.region)))
+              .filter(x=>normalize(x.label)===normalize(event.name)
+                || normalize(x.label).includes(normalize(event.name))
+                || normalize(event.name).includes(normalize(x.label)));
+            const ids=[...new Set(matches.map(x=>x.id))];
+            if(ids.length>1) throw new Error(event.name+": ambiguous live matches "+ids.join(","));
+            return ids[0]||null;
+          }
+          (async()=>{
+            const receipt={appliedAt:new Date().toISOString(),source,profiles:[]};
+            for(const payload of payloads){
+              let profileId=payload.organizationId||null;
+              let upsert=null;
+              if(profileId){
+                const before=await request("profile-history/"+profileId);
+                const notesReady=(payload.notes||[]).every(note=>(before.notes||[]).some(x=>x.subject===note.subject));
+                const openBefore=(before.followUps||[]).filter(x=>!x.completedAt);
+                const followReady=(payload.followUps||[]).every(f=>openBefore.some(x=>
+                  x.kind===f.label && new Date(x.dueAt).toISOString()===new Date(f.dueAt).toISOString()))
+                  && (!payload.replaceOpenFollowUps || openBefore.length===(payload.followUps||[]).length);
+                const bookingReady=!payload.eventProfile?.booking?.enabled || (before.bookings||[]).some(x=>
+                  x.name===payload.eventProfile.booking.name && x.status===payload.eventProfile.booking.status);
+                const contactsReady=(payload.profileContacts||[]).every(contact=>{
+                  const email=String(contact.email||"").toLowerCase();
+                  const phone=String(contact.phone||"").replace(/\\D/g,"");
+                  return (before.contacts||[]).some(x=>(email&&String(x.email||"").toLowerCase()===email)
+                    ||(phone&&String(x.phone||"").replace(/\\D/g,"")===phone));
+                });
+                if(notesReady&&followReady&&bookingReady&&contactsReady){
+                  receipt.profiles.push({
+                    name:before.place?.name||payload.event?.name||payload.eventProfile?.event?.name,
+                    profileId,action:"already_verified",
+                    notes:(payload.notes||[]).map(x=>x.subject),
+                    openFollowUps:openBefore.map(x=>({kind:x.kind,dueAt:x.dueAt})),
+                    bookingStatuses:(before.bookings||[]).map(x=>({name:x.name,status:x.status,startsAt:x.startsAt,endsAt:x.endsAt})),
+                    actHistoryCount:(before.history||[]).filter(x=>x.importedFromAct).length
+                  });
+                  continue;
+                }
+              }
+              if(payload.eventProfile){
+                if(!profileId) profileId=await resolve(payload.eventProfile.event);
+                const eventPayload={
+                  importRevision:1,
+                  matchExisting:true,
+                  requireExisting:Boolean(payload.organizationId),
+                  ...payload.eventProfile,
+                  event:{...payload.eventProfile.event,...(profileId?{id:profileId}:{})}
+                };
+                upsert=await request("event-profiles",{method:"POST",body:JSON.stringify(eventPayload)});
+                profileId=profileId||upsert.profileId;
+              }
+              if(!profileId) throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": profile ID unavailable");
+              const contactResults=[];
+              for(const contact of payload.profileContacts||[]){
+                contactResults.push(await request("profile-contacts",{method:"POST",body:JSON.stringify({organizationId:profileId,contact})}));
+              }
+              const noteResults=[];
+              for(const note of payload.notes||[]){
+                noteResults.push(await request("profile-notes",{method:"POST",body:JSON.stringify({organizationId:profileId,...note})}));
+              }
+              const followResults=[];
+              for(const followUp of payload.followUps||[]){
+                followResults.push(await request("today-followups",{method:"POST",body:JSON.stringify({
+                  organizationId:profileId,...followUp,preserveExisting:!payload.replaceOpenFollowUps
+                })}));
+              }
+              const history=await request("profile-history/"+profileId);
+              for(const note of payload.notes||[]){
+                if(!(history.notes||[]).some(x=>x.subject===note.subject)) throw new Error(payload.event?.name+": missing note "+note.subject);
+              }
+              const open=(history.followUps||[]).filter(x=>!x.completedAt);
+              for(const followUp of payload.followUps||[]){
+                const match=open.find(x=>x.kind===followUp.label);
+                if(!match||new Date(match.dueAt).toISOString()!==new Date(followUp.dueAt).toISOString()){
+                  throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": follow-up verification failed "+followUp.label);
+                }
+              }
+              for(const contact of payload.profileContacts||[]){
+                const email=String(contact.email||"").toLowerCase();
+                const phone=String(contact.phone||"").replace(/\D/g,"");
+                const found=(history.contacts||[]).some(x=>
+                  (email && String(x.email||"").toLowerCase()===email)
+                  || (phone && String(x.phone||"").replace(/\D/g,"")===phone));
+                if(!found) throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": contact verification failed "+contact.name);
+              }
+              if(payload.eventProfile?.booking?.enabled){
+                const wanted=payload.eventProfile.booking;
+                const booking=(history.bookings||[]).find(x=>x.name===wanted.name);
+                if(!booking||booking.status!==wanted.status) throw new Error(wanted.name+": booking verification failed");
+              }
+              receipt.profiles.push({
+                name:history.place?.name||payload.event?.name||payload.eventProfile?.event?.name,
+                profileId,
+                action:upsert?.action||"history_only",
+                notes:(payload.notes||[]).map(x=>x.subject),
+                openFollowUps:open.map(x=>({kind:x.kind,dueAt:x.dueAt})),
+                bookingStatuses:(history.bookings||[]).map(x=>({name:x.name,status:x.status,startsAt:x.startsAt,endsAt:x.endsAt})),
+                actHistoryCount:(history.history||[]).filter(x=>x.importedFromAct).length
+              });
+            }
+            fs.writeFileSync("sept-4-profile-act-reconciliation-receipt.json",JSON.stringify(receipt,null,2));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "# Sept. 4 profile reconciliation\n\n"+
+              "- Profiles updated and verified: "+receipt.profiles.length+"\n"+
+              "- Existing ACT history preserved: "+receipt.profiles.reduce((n,x)=>n+x.actHistoryCount,0)+" records visible across updated profiles\n");
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - name: Upload protected receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: sept-4-profile-act-reconciliation-receipt
+          path: sept-4-profile-act-reconciliation-receipt.json
+          retention-days: 7

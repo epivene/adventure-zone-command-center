@@ -247,7 +247,7 @@ describe("LeadEmailPreviewRepository transactional contract", () => {
       const repository = new LeadEmailPreviewRepository(db as never);
 
       const state = await repository.load("30000000-0000-4000-8000-000000000001", 4);
-      expect(state.approvedTemplate).toMatchObject({ version: "2026-prepaid-v1", sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf" });
+      expect(state.approvedTemplate).toMatchObject({ version: "2026-prepaid-v2", sourceFilename: "ADVENTURE ZONE STICKY NOTES.docx.pdf" });
       expect(state.lead.firstName).toBe("Avery");
       expect(buildLeadEmailPreview(state)).toMatchObject({
         rowVersion: 4,

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { verifyLegManagerToken } from "@/features/leg-manager/leg-manager-auth";
 import { issueOfficeToken, verifyOfficeToken } from "./office-auth";
+import { resolveOfficeSession } from "./office-middleware";
 
 const accountId = "10000000-0000-4000-8000-000000000001";
 
@@ -41,5 +42,24 @@ describe("office authentication token", () => {
     delete process.env.SESSION_SECRET;
     expect(issueOfficeToken({ accountId, sessionVersion: 1 })).toBeNull();
     expect(verifyOfficeToken("office.anything")).toBeNull();
+  });
+
+  it("loads current website-inquiry permission from the account record", async () => {
+    const issued = issueOfficeToken({ accountId, sessionVersion: 7 });
+    const session = await resolveOfficeSession(issued!.token, {
+      getActiveSession: async () => ({
+        id: accountId,
+        displayName: "Amy",
+        role: "office_coordinator",
+        enabled: true,
+        sessionVersion: 7,
+        canReviewWebsiteInquiries: true,
+      }),
+    });
+
+    expect(session).toMatchObject({
+      accountId,
+      canReviewWebsiteInquiries: true,
+    });
   });
 });

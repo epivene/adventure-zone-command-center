@@ -85,6 +85,39 @@ describe("CallWorkspacePage configuration fallback", () => {
     expect(await screen.findByText("workspace:true:none")).toBeInTheDocument();
   });
 
+  it("loads a matched inbound caller through the session's contact", async () => {
+    mocks.search = "?inboundSessionId=3fcbd087-c5bf-400e-986a-5b3206ecde4d";
+    mocks.apiGet.mockImplementation((path: string) => {
+      if (path === "/calls/config") {
+        return Promise.resolve({ assistedCallingEnabled: true, voicemailLauncherUrl: null });
+      }
+      if (path === "/calls/incoming/sessions/3fcbd087-c5bf-400e-986a-5b3206ecde4d") {
+        return Promise.resolve({
+          id: "3fcbd087-c5bf-400e-986a-5b3206ecde4d",
+          status: "in-progress",
+          caller: {
+            displayName: "Caller",
+            matched: true,
+            organizationId: null,
+            contactId: "20000000-0000-4000-8000-000000000001",
+            phoneId: "40000000-0000-4000-8000-000000000001",
+          },
+          startedAt: null,
+          answeredAt: null,
+          endedAt: null,
+        });
+      }
+      if (path === "/calls/workspace?contactId=20000000-0000-4000-8000-000000000001") {
+        return Promise.resolve({ context: {}, timeline: [], phones: [] });
+      }
+      return Promise.reject(new Error("API 404"));
+    });
+
+    render(<CallWorkspacePage />);
+
+    expect(await screen.findByText("workspace:true:none")).toBeInTheDocument();
+  });
+
   it("passes the nested computer-calling capability through without exposing server-only configuration", async () => {
     mocks.apiGet.mockImplementation((path: string) => path === "/calls/config"
       ? Promise.resolve({

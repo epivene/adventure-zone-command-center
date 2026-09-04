@@ -1,0 +1,159 @@
+name: Apply Craft Lake City current contact
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/apply-2026-09-03-craft-lake-city-contact.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Update and verify Craft Lake City profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+          const profileId = "30029d95-556e-4f23-9f91-c6b76a3c8835";
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, {
+              ...options,
+              headers: {
+                ...headers,
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+                ...(options.headers ?? {}),
+              },
+            });
+            const body = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${body.slice(0, 700)}`);
+            return JSON.parse(body);
+          }
+
+          async function waitForContactEndpoint() {
+            let lastError = null;
+            for (let attempt = 1; attempt <= 60; attempt += 1) {
+              try {
+                return await request("profile-contacts", {
+                  method: "POST",
+                  body: JSON.stringify({
+                    organizationId: profileId,
+                    contact: {
+                      name: "Tiana Young",
+                      email: "tiana@craftlakecity.com",
+                      phone: "801-906-8521",
+                      role: "Artisan & Programs Manager",
+                      primary: true
+                    }
+                  })
+                });
+              } catch (error) {
+                lastError = error;
+                if (!String(error).includes("HTTP 404")) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 10000));
+              }
+            }
+            throw lastError ?? new Error("Profile contact endpoint did not become available.");
+          }
+
+          (async () => {
+            const profileReceipt = await request("event-profiles", {
+              method: "POST",
+              body: JSON.stringify({
+                event: { id: profileId, name: "DIY Craft Fest (SLC) UT", city: "Salt Lake City", region: "UT" },
+                profile: {
+                  placeType: "festival_event",
+                  description: "Craft Lake City's annual DIY Festival at the Utah State Fairpark: a three-day celebration of Utah makers, food, performance, science and technology. The 2026 event drew an advertised 20,000+ attendees and 500+ creatives. Adventure Zone would require a custom partnership, sponsorship or family-attraction arrangement rather than the Utah-resident artisan exhibitor application.",
+                  phone: "801-906-8521",
+                  website: "https://craftlakecity.com/diy-festival/",
+                  address1: "155 N 1000 W",
+                  address2: "",
+                  postalCode: "84116"
+                },
+                contacts: [],
+                booking: { enabled: false, name: "", status: "researching", startsAt: "", endsAt: "", nextActionKind: "", nextActionDueAt: "", travelLegId: null }
+              })
+            });
+
+            const contactReceipt = await waitForContactEndpoint();
+
+            const noteSubject = "2026 contact verification and 2027 outreach timing";
+            const noteBody = "Verified September 3, 2026: Tiana Young is still publicly identified in current 2026 Craft Lake City materials as Artisan & Programs Manager. Use tiana@craftlakecity.com as the primary person and artisancoordinator@craftlakecity.com as the role-based fallback. Liz Amato/Vowles is historical and should not be contacted. The 18th Annual DIY Festival already took place August 7–9, 2026 at Utah State Fairpark, so outreach now is for a custom 2027 partnership/family-attraction discussion. This is not a standard artisan booth fit: the exhibitor rules focus on Utah-based creators, while Adventure Zone needs a direct partnership or sponsorship arrangement. Official sources reviewed: https://craftlakecity.com/diy-festival/ ; https://craftlakecity.com/press/apply-now-for-the-third-annual-craft-lake-city-makers-mart-at-millcreek-common/ ; https://craftlakecity.com/diy-festival-exhibitor-prospectus/";
+            const noteReceipt = await request("profile-notes", {
+              method: "POST",
+              body: JSON.stringify({ organizationId: profileId, subject: noteSubject, body: noteBody })
+            });
+
+            const followUp = {
+              label: "Email Tiana about 2027 DIY Festival partnership",
+              reason: "Contact Tiana Young now, while the 2026 festival is recent, about a guarantee-first 2027 family-attraction partnership. Ask who handles sponsorship/entertainment partnerships, available footprint, attendance, power, anchoring, insurance, and planning timeline. Use artisancoordinator@craftlakecity.com as a fallback if needed.",
+              dueAt: "2026-09-10T16:00:00.000Z",
+              preserveExisting: false
+            };
+            const followUpReceipt = await request("today-followups", {
+              method: "POST",
+              body: JSON.stringify({ organizationId: profileId, ...followUp })
+            });
+
+            const history = await request(`profile-history/${profileId}`);
+            const tiana = (history.contacts ?? []).find((item) => item.email === "tiana@craftlakecity.com");
+            const generic = (history.contacts ?? []).find((item) => item.email === "info@craftlakecity.com");
+            const historicalLiz = (history.contacts ?? []).some((item) => /liz/i.test(item.name ?? ""));
+            const noteVerified = (history.notes ?? []).some((item) => item.subject === noteSubject);
+            const openFollowUp = (history.followUps ?? []).find((item) => !item.completedAt && item.kind === followUp.label);
+            if (!tiana || !tiana.isPrimary) throw new Error("Tiana was not verified as the primary current contact.");
+            if (!generic) throw new Error("Generic Craft Lake City contact was not preserved.");
+            if (!historicalLiz) throw new Error("Historical Liz contact was not preserved.");
+            if (!noteVerified) throw new Error("Research note verification failed.");
+            if (!openFollowUp || new Date(openFollowUp.dueAt).toISOString() !== followUp.dueAt) throw new Error("Follow-up verification failed.");
+
+            const receipt = {
+              appliedAt: new Date().toISOString(),
+              profileId,
+              profileReceipt,
+              contactReceipt,
+              noteReceipt,
+              followUpReceipt,
+              verified: {
+                tianaPrimary: true,
+                genericContactPreserved: true,
+                historicalLizPreserved: true,
+                notePresent: true,
+                followUpDueAt: followUp.dueAt
+              },
+              contacts: history.contacts,
+              openFollowUps: (history.followUps ?? []).filter((item) => !item.completedAt)
+            };
+            fs.mkdirSync("imports/receipts", { recursive: true });
+            fs.writeFileSync("imports/receipts/2026-09-03-craft-lake-city-contact.json", JSON.stringify(receipt, null, 2));
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Commit verified receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/receipts/2026-09-03-craft-lake-city-contact.json
+          if git diff --cached --quiet; then
+            echo "Receipt unchanged"
+          else
+            git commit -m "Verify Craft Lake City current contact"
+            git push
+          fi

@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Check, ClipboardList, ContactRound, House, Mail, MessageCircle, Moon, Palette, Send, Sun } from "lucide-react";
+import { Check, ClipboardList, ContactRound, House, Inbox, Mail, MessageCircle, Moon, Palette, Send, Sun, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import {
   DropdownMenu,
@@ -13,25 +13,29 @@ import {
 import { officeGet, useOfficeAuth } from "@/lib/office-auth-context";
 import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 
-const items = [
-  ["/office", "Today", House],
-  ["/office/profiles", "Profiles", ContactRound],
-  ["/office/mail", "Brochures", Mail],
-  ["/office/emails", "Emails", Send],
-  ["/office/tasks", "Tasks", ClipboardList],
-  ["/office/messages", "Messages", MessageCircle],
-] as const;
+type OfficeNavItem = { href: string; label: string; icon: LucideIcon };
+
+const items: OfficeNavItem[] = [
+  { href: "/office", label: "Today", icon: House },
+  { href: "/office/profiles", label: "Profiles", icon: ContactRound },
+  { href: "/office/mail", label: "Brochures", icon: Mail },
+  { href: "/office/emails", label: "Emails", icon: Send },
+  { href: "/office/tasks", label: "Tasks", icon: ClipboardList },
+  { href: "/office/messages", label: "Messages", icon: MessageCircle },
+];
+const inquiryItem: OfficeNavItem = { href: "/office/website-inquiries", label: "Website Inquiries", icon: Inbox };
 
 const appearanceOptions = [
   { value: "light" as const, label: "Light", icon: Sun },
   { value: "dark" as const, label: "Dark", icon: Moon },
 ];
 
-function Nav({ mobile = false, unread = 0 }: { mobile?: boolean; unread?: number }) {
+function Nav({ mobile = false, unread = 0, canReviewWebsiteInquiries = false, websiteInquiryCount = 0 }: { mobile?: boolean; unread?: number; canReviewWebsiteInquiries?: boolean; websiteInquiryCount?: number }) {
   const [location] = useLocation();
+  const visibleItems = canReviewWebsiteInquiries ? [items[0]!, inquiryItem, ...items.slice(1)] : items;
   return (
-    <nav aria-label="Office Coordinator navigation" className={mobile ? "grid grid-cols-6 gap-1" : "flex items-center gap-1"}>
-      {items.map(([href, label, Icon]) => {
+    <nav aria-label="Office Coordinator navigation" className={mobile ? "flex gap-1 overflow-x-auto" : "flex items-center gap-1"}>
+      {visibleItems.map(({ href, label, icon: Icon }) => {
         const active = href === "/office" ? location === href : location.startsWith(href);
         return (
           <Link
@@ -41,7 +45,7 @@ function Nav({ mobile = false, unread = 0 }: { mobile?: boolean; unread?: number
               "relative",
               mobile
                 ? cn(
-                    "flex min-h-14 flex-col items-center justify-center rounded-lg px-1 text-[10px] font-semibold",
+                    "relative flex min-h-14 min-w-[4.25rem] flex-1 flex-col items-center justify-center rounded-lg px-1 text-[10px] font-semibold",
                     active ? "bg-secondary text-secondary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )
                 : cn(
@@ -55,6 +59,11 @@ function Nav({ mobile = false, unread = 0 }: { mobile?: boolean; unread?: number
             {label === "Messages" && unread > 0 ? (
               <span className="absolute right-1 top-1 rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                 {unread > 9 ? "9+" : unread}
+              </span>
+            ) : null}
+            {label === "Website Inquiries" && websiteInquiryCount > 0 ? (
+              <span className="absolute right-1 top-1 rounded-full bg-orange-600 px-1 text-[9px] font-bold text-white">
+                {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
               </span>
             ) : null}
           </Link>
@@ -107,6 +116,7 @@ export function OfficeShell({ children }: { children: ReactNode }) {
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const [unread, setUnread] = useState(0);
+  const [websiteInquiryCount, setWebsiteInquiryCount] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -118,6 +128,21 @@ export function OfficeShell({ children }: { children: ReactNode }) {
     const id = window.setInterval(load, 15000);
     return () => { active = false; window.clearInterval(id); };
   }, []);
+
+  useEffect(() => {
+    if (!office?.canReviewWebsiteInquiries) {
+      setWebsiteInquiryCount(0);
+      return;
+    }
+    let active = true;
+    const load = () =>
+      officeGet<{ newCount: number }>("/website-inquiries/count")
+        .then((data) => { if (active) setWebsiteInquiryCount(data.newCount ?? 0); })
+        .catch(() => {});
+    void load();
+    const id = window.setInterval(load, 15000);
+    return () => { active = false; window.clearInterval(id); };
+  }, [office?.canReviewWebsiteInquiries]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -134,7 +159,7 @@ export function OfficeShell({ children }: { children: ReactNode }) {
               Adventure Zone{" "}
               <span className="ml-1 text-sm font-semibold text-primary">Office Coordinator</span>
             </Link>
-            <div className="ml-auto hidden xl:block"><Nav unread={unread} /></div>
+            <div className="ml-auto hidden xl:block"><Nav unread={unread} canReviewWebsiteInquiries={office?.canReviewWebsiteInquiries} websiteInquiryCount={websiteInquiryCount} /></div>
             <OfficeAppearanceMenu onSignOut={signOut} />
             <button className="button-secondary hidden shrink-0 px-2.5 py-1.5 text-xs sm:inline-flex" type="button" onClick={signOut}>
               Sign out
@@ -155,7 +180,7 @@ export function OfficeShell({ children }: { children: ReactNode }) {
       </header>
       <main className="mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-7 xl:pb-8">{children}</main>
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden">
-        <Nav mobile unread={unread} />
+        <Nav mobile unread={unread} canReviewWebsiteInquiries={office?.canReviewWebsiteInquiries} websiteInquiryCount={websiteInquiryCount} />
       </div>
     </div>
   );

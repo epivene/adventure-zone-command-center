@@ -1,0 +1,267 @@
+name: Apply Boulder Art Festival profile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/apply-2026-09-03-boulder-art-festival.yml"
+      - "imports/approved-profiles/2026-09-03-boulder-art-festival.json"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Create, attach, document, and verify profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const source = "imports/approved-profiles/2026-09-03-boulder-art-festival.json";
+          const payload = JSON.parse(fs.readFileSync(source, "utf8"));
+          const headers = { Authorization: `Bearer ${token}` };
+          const normalize = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, {
+              ...options,
+              headers: {
+                ...headers,
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+                ...(options.headers ?? {}),
+              },
+            });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 700)}`);
+            return JSON.parse(text);
+          }
+
+          async function search(q) {
+            return request(`profile-search?q=${encodeURIComponent(q)}&limit=20`);
+          }
+
+          async function linkBoulderNewsletter(profileId) {
+            let lastError = null;
+            for (let attempt = 1; attempt <= 60; attempt += 1) {
+              try {
+                return await request(`gmail-profile-links/profile/${profileId}/messages/1a0683a8fcaeda83`, {
+                  method: "PUT",
+                  body: JSON.stringify({ threadId: "1a0683a8fcaeda83" }),
+                });
+              } catch (error) {
+                lastError = error;
+                if (!String(error).includes("HTTP 404")) throw error;
+                await new Promise((resolve) => setTimeout(resolve, 10000));
+              }
+            }
+            throw lastError ?? new Error("Boulder Gmail link endpoint did not become available.");
+          }
+
+          (async () => {
+            const before = await search(payload.event.name);
+            const existingProfiles = (before.results ?? []).filter(
+              (item) => item.kind === "organization" && normalize(item.label) === normalize(payload.event.name),
+            );
+            if (existingProfiles.length > 1) throw new Error("Multiple exact Boulder Art Festival profiles already exist.");
+
+            const familySearch = await search("ColoradoEvents.org");
+            const family = (familySearch.results ?? []).find(
+              (item) => item.kind === "event_family" && normalize(item.label) === normalize("ColoradoEvents.org"),
+            );
+            if (!family) throw new Error("ColoradoEvents.org family was not found.");
+
+            const contactSearch = await search("coloradoevents@gmail.com");
+            const matchingContacts = (contactSearch.results ?? []).filter(
+              (item) => item.kind === "contact" && normalize(item.secondaryLabel) === normalize("Colorado Events"),
+            );
+            if (matchingContacts.length > 1) throw new Error("More than one Colorado Events contact matched the organizer email.");
+            if (matchingContacts.length === 1) {
+              payload.contacts[0].id = matchingContacts[0].id;
+              payload.contacts[0].name = matchingContacts[0].label;
+            }
+
+            payload.event.id = existingProfiles[0]?.id ?? null;
+            payload.familyId = family.id;
+
+            const notes = payload.notes;
+            const followUp = payload.followUp;
+            delete payload.notes;
+            delete payload.followUp;
+
+            const upsert = await request("event-profiles", {
+              method: "POST",
+              body: JSON.stringify(payload),
+            });
+            const profileId = payload.event.id ?? upsert.profileId;
+            if (!profileId) throw new Error("Profile ID missing after Boulder Art Festival upsert.");
+
+            const gmailLinkReceipt = await linkBoulderNewsletter(profileId);
+
+            const noteReceipts = [];
+            for (const note of notes) {
+              noteReceipts.push(await request("profile-notes", {
+                method: "POST",
+                body: JSON.stringify({ organizationId: profileId, ...note }),
+              }));
+            }
+            const outreachStatusNote = {
+              subject: "Colorado Events outreach and reply status - 2026-09-03",
+              body: "Gmail and all 16 ColoradoEvents.org family profiles were reviewed on September 3, 2026. Gmail contains four separate 2026 outreach messages to coloradoevents@gmail.com covering Pets on the Plaza, Handmade in Colorado Estes Park, Canon City Art Festival, ARTumn Festival, and Handmade in Colorado Glenwood Springs; the Aug. 27 message covered the last two events together. None of those four threads contains a reply. Two earlier Mile High Global Bazaar messages to coloradoeventspostings@gmail.com also have no reply. Across 130 imported history items and 12 notes in the family, no phone call, voicemail, or spoken-contact record was found. The Sept. 3 Boulder Art Festival email is an automated Wix promotional newsletter, not a human response.",
+            };
+            const outreachStatusNoteReceipt = await request("profile-notes", {
+              method: "POST",
+              body: JSON.stringify({ organizationId: profileId, ...outreachStatusNote }),
+            });
+
+            const followUpReceipt = await request("today-followups", {
+              method: "POST",
+              body: JSON.stringify({ organizationId: profileId, ...followUp }),
+            });
+
+            const [after, history, contactAfter] = await Promise.all([
+              search(payload.event.name),
+              request(`profile-history/${profileId}`),
+              search("coloradoevents@gmail.com"),
+            ]);
+            let gmailMappingCount = null;
+            let gmailMappingError = null;
+            try {
+              const gmailLinks = await request(`gmail-profile-links/profile/${profileId}`);
+              gmailMappingCount = (gmailLinks.mappings ?? []).length;
+            } catch (error) {
+              gmailMappingError = error instanceof Error ? error.message : String(error);
+            }
+            const timelineActivities = [...(history.notes ?? []), ...(history.history ?? [])];
+            const emailTimeline = timelineActivities.filter((item) =>
+              /email|gmail|mail/i.test(String(item.kind ?? ""))
+              || /email|gmail|mail/i.test(String(item.actSourceType ?? "")),
+            );
+            const linkedNewsletter = gmailMappingCount != null
+              && (await request(`gmail-profile-links/profile/${profileId}`)).mappings?.some(
+                (item) => item.messageId === "1a0683a8fcaeda83"
+                  && item.threadId === "1a0683a8fcaeda83",
+              );
+            if (!linkedNewsletter) throw new Error("Boulder newsletter Gmail mapping verification failed.");
+            if (!(history.notes ?? []).some((item) => item.subject === outreachStatusNote.subject)) {
+              throw new Error("Colorado Events outreach-status note verification failed.");
+            }
+
+            const exactProfile = (after.results ?? []).find(
+              (item) => item.kind === "organization" && item.id === profileId,
+            );
+            if (!exactProfile) throw new Error("Boulder Art Festival profile verification failed.");
+
+            const attachedFamily = (after.results ?? []).find(
+              (item) => item.kind === "event_family" && item.id === family.id,
+            );
+            if (!attachedFamily) throw new Error("ColoradoEvents.org family membership verification failed.");
+
+            const linkedThroughContact = (contactAfter.results ?? []).some(
+              (item) => item.kind === "organization" && item.id === profileId,
+            );
+            if (!linkedThroughContact) throw new Error("Organizer contact linkage verification failed.");
+
+            for (const note of notes) {
+              if (!(history.notes ?? []).some((item) => item.subject === note.subject)) {
+                throw new Error(`Note verification failed: ${note.subject}`);
+              }
+            }
+            const openFollowUp = (history.followUps ?? []).find(
+              (item) => !item.completedAt && item.kind === followUp.label,
+            );
+            if (!openFollowUp || new Date(openFollowUp.dueAt).toISOString() !== new Date(followUp.dueAt).toISOString()) {
+              throw new Error("2027 partnership follow-up verification failed.");
+            }
+
+            const receipt = {
+              appliedAt: new Date().toISOString(),
+              profileId,
+              profileName: exactProfile.label,
+              action: payload.event.id ? "updated" : "created",
+              familyId: family.id,
+              familyName: family.label,
+              familyAttached: true,
+              organizerContactLinked: true,
+              organizerContactReused: matchingContacts.length === 1,
+              contactEmail: (history.contacts ?? []).find((item) => item.isPrimary)?.email ?? null,
+              gmailMappingCount,
+              gmailMappingError,
+              gmailNewsletterLinked: true,
+              gmailNewsletterMessageId: gmailLinkReceipt.messageId,
+              outreachStatusNote: {
+                created: outreachStatusNoteReceipt.created,
+                activityId: outreachStatusNoteReceipt.activityId,
+              },
+              emailTimelineCount: emailTimeline.length,
+              emailTimelineSubjects: emailTimeline.map((item) => item.subject).filter(Boolean).slice(0, 20),
+              notes: noteReceipts.map((item) => ({ created: item.created, activityId: item.activityId })),
+              followUp: {
+                created: followUpReceipt.created,
+                followUpId: followUpReceipt.followUpId,
+                dueAt: followUpReceipt.dueAt,
+                label: followUp.label,
+              },
+            };
+            fs.mkdirSync("imports/receipts", { recursive: true });
+            fs.writeFileSync(
+              "imports/receipts/2026-09-03-boulder-art-festival.json",
+              JSON.stringify(receipt, null, 2),
+            );
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+              "# Boulder Art Festival profile",
+              "",
+              `- Profile: ${receipt.profileName}`,
+              `- Action: ${receipt.action}`,
+              `- Event family: ${receipt.familyName} (verified)`,
+              `- Organizer contact: linked and verified`,
+              `- Gmail approved mappings: ${receipt.gmailMappingCount ?? "unavailable"}`,
+              `- Boulder promotional newsletter linked: ${receipt.gmailNewsletterLinked ? "yes" : "no"}`,
+              "- Human replies found: 0",
+              "- Logged calls found across family: 0",
+              `- Email timeline items: ${receipt.emailTimelineCount}`,
+              `- Research notes: ${receipt.notes.length} verified`,
+              `- Follow-up: ${receipt.followUp.label} — ${receipt.followUp.dueAt}`,
+            ].join("\n") + "\n");
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Commit verified receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/receipts/2026-09-03-boulder-art-festival.json
+          if git diff --cached --quiet; then
+            echo "Receipt unchanged"
+          else
+            git commit -m "Verify Boulder Art Festival live profile"
+            git push
+          fi
+
+      - name: Upload protected receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: boulder-art-festival-profile-receipt
+          path: imports/receipts/2026-09-03-boulder-art-festival.json
+          retention-days: 7

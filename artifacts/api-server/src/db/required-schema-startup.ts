@@ -5,6 +5,7 @@ import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-requ
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 import { ensureLegAssignmentSchemaBeforeListen } from "./leg-assignment-required-startup";
 import { ensureOfficeCoordinatorSchemaBeforeListen } from "./office-coordinator-required-startup";
+import { ensureWebsiteInquirySchemaBeforeListen } from "./website-inquiry-required-startup";
 import { ensureOrganizerFeedbackSchemaBeforeListen } from "./organizer-feedback-required-startup";
 import { ensureComputerCallingSchemaBeforeListen } from "./computer-calling-required-startup";
 import { ensureInboundCallingSchemaBeforeListen } from "./inbound-calling-required-startup";
@@ -27,6 +28,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureComputerCalling?: RequiredStep;
   ensureInboundCalling?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
+  ensureWebsiteInquiries?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
 }): Promise<void> {
@@ -67,6 +69,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required office coordinator schema",
     dependencies?.ensureOfficeCoordinator ?? ensureOfficeCoordinatorSchemaBeforeListen,
+  );
+  await run(
+    "required website inquiry schema",
+    dependencies?.ensureWebsiteInquiries ?? ensureWebsiteInquirySchemaBeforeListen,
   );
   await run(
     "required profile touch schema",

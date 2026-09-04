@@ -1,0 +1,101 @@
+name: Merge White Sulphur Springs duplicate
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/merge-white-sulphur-springs-duplicate.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preflight, merge, and verify
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require("node:fs");
+          const root=process.env.API_URL.replace(/\/$/,"");
+          const token=process.env.ASSISTANT_IMPORT_TOKEN;
+          const canonicalId="a7e364d7-b320-42ac-8306-f89ebf452ddd";
+          const sourceId="426902d9-b922-45c1-9dec-6a4c88f71678";
+          async function call(path,options={}){
+            const response=await fetch(root+path,{
+              ...options,
+              headers:{Authorization:"Bearer "+token,...(options.body?{"Content-Type":"application/json"}:{})}
+            });
+            const text=await response.text();
+            let body; try{body=JSON.parse(text)}catch{body={raw:text.slice(0,2000)}}
+            return {ok:response.ok,status:response.status,body};
+          }
+          (async()=>{
+            const preCanonical=await call("/api/assistant-import/profile-history/"+canonicalId);
+            const preSource=await call("/api/assistant-import/profile-history/"+sourceId);
+            const preCanonicalRefs=await call("/api/assistant-import/profile-integrity-references/"+canonicalId);
+            const preSourceRefs=await call("/api/assistant-import/profile-integrity-references/"+sourceId);
+            if(!preCanonical.ok||!preSource.ok) throw new Error("Could not read both profiles");
+            const source=preSource.body;
+            if(source.place?.actRecordId!=="fec2abe4-40af-484a-8ae9-f332a123fef6") throw new Error("Unexpected ACT source identity");
+            for(const field of ["contacts","bookings","followUps","notes","history"]){
+              if((source[field]||[]).length!==0) throw new Error("Source gained "+field+"; manual review required");
+            }
+            if((preCanonical.body.followUps||[]).filter(x=>!x.completedAt).length!==1) throw new Error("Canonical follow-up state changed");
+            const merge=await call("/api/assistant-import/profile-merge",{
+              method:"POST",
+              body:JSON.stringify({canonicalOrgId:canonicalId,sourceOrgId:sourceId,label:"White Sulphur Springs, MT (ACT legacy record)"})
+            });
+            if(!merge.ok) throw new Error("Merge failed HTTP "+merge.status+": "+JSON.stringify(merge.body));
+            const postCanonical=await call("/api/assistant-import/profile-history/"+canonicalId);
+            const postSource=await call("/api/assistant-import/profile-history/"+sourceId);
+            const postCanonicalRefs=await call("/api/assistant-import/profile-integrity-references/"+canonicalId);
+            const postSourceRefs=await call("/api/assistant-import/profile-integrity-references/"+sourceId);
+            const search=await call("/api/assistant-import/profile-search?q="+encodeURIComponent("White Sulphur Springs Rodeo")+"&limit=20");
+            if(!postCanonical.ok) throw new Error("Canonical profile unreadable after merge");
+            if((postCanonical.body.bookings||[]).length<1) throw new Error("Canonical booking missing after merge");
+            if((postCanonical.body.followUps||[]).filter(x=>!x.completedAt).length!==1) throw new Error("Canonical open follow-up missing after merge");
+            if(!(postCanonical.body.contacts||[]).some(x=>x.email==="labordayrodeo@gmail.com")) throw new Error("Canonical organizer contact missing after merge");
+            const receipt={
+              mergedAt:new Date().toISOString(),
+              canonicalId,sourceId,
+              sourcePreservedAsLocationId:merge.body.locationId,
+              sourceActRecordId:source.place.actRecordId,
+              sourceAddress2:source.place.address2,
+              sourcePostalCode:source.place.postalCode,
+              sourcePhone:source.place.phone,
+              preCanonicalRefs:preCanonicalRefs.body,
+              preSourceRefs:preSourceRefs.body,
+              postCanonicalRefs:postCanonicalRefs.body,
+              postSourceRefs:postSourceRefs.body,
+              postSourceStatus:postSource.status,
+              search:search.body,
+              verified:{
+                organizerContact:true,
+                bookingCount:postCanonical.body.bookings.length,
+                openFollowUpCount:postCanonical.body.followUps.filter(x=>!x.completedAt).length
+              }
+            };
+            fs.writeFileSync("white-sulphur-springs-merge-receipt.json",JSON.stringify(receipt,null,2));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+              "# White Sulphur Springs duplicate merged\n\n"+
+              "- Canonical profile: "+canonicalId+"\n"+
+              "- Retired source: "+sourceId+"\n"+
+              "- Preserved ACT/location record: "+merge.body.locationId+"\n"+
+              "- Canonical booking, organizer, and one open 2027 follow-up verified\n");
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: white-sulphur-springs-merge-receipt
+          path: white-sulphur-springs-merge-receipt.json
+          retention-days: 7
+
+# Triggered after workflow registration.
