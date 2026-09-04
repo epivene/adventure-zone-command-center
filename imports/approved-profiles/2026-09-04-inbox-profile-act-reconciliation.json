@@ -74,17 +74,9 @@
         "region": "SD"
       },
       "profile": {
-        "placeType": "municipality",
+        "placeType": "festival_event",
         "description": "Town of Langford requested a direct Pirate's Rebellion quote for a tentative July 23–25, 2027 summer event after seeing the bumper boats in Forman, North Dakota."
-      },
-      "contacts": [
-        {
-          "name": "Town of Langford Finance Office",
-          "email": "townoflangford@venturecomm.net",
-          "role": "Quote requester",
-          "primary": true
-        }
-      ]
+      }
     },
     "notes": [
       {
@@ -103,7 +95,15 @@
         "dueAt": "2026-09-04T16:00:00.000Z"
       }
     ],
-    "replaceOpenFollowUps": true
+    "replaceOpenFollowUps": true,
+    "profileContacts": [
+      {
+        "name": "Town of Langford Finance Office",
+        "email": "townoflangford@venturecomm.net",
+        "role": "Quote requester",
+        "primary": true
+      }
+    ]
   },
   {
     "organizationId": "a7e364d7-b320-42ac-8306-f89ebf452ddd",
@@ -135,21 +135,6 @@
         "city": "Dinosaur",
         "region": "CO"
       },
-      "contacts": [
-        {
-          "name": "Town of Dinosaur Finance",
-          "email": "finance@townofdinosaur.org",
-          "phone": "970-374-2286",
-          "role": "COI receiving office",
-          "primary": true
-        },
-        {
-          "name": "Julie",
-          "phone": "801-598-9699",
-          "role": "Local Stone Age Stampede committee contact",
-          "primary": false
-        }
-      ],
       "booking": {
         "enabled": true,
         "name": "Stone Age Stampede",
@@ -177,7 +162,22 @@
         "dueAt": "2026-09-04T17:00:00.000Z"
       }
     ],
-    "replaceOpenFollowUps": true
+    "replaceOpenFollowUps": true,
+    "profileContacts": [
+      {
+        "name": "Town of Dinosaur Finance",
+        "email": "finance@townofdinosaur.org",
+        "phone": "970-374-2286",
+        "role": "COI receiving office",
+        "primary": true
+      },
+      {
+        "name": "Julie",
+        "phone": "801-598-9699",
+        "role": "Local Stone Age Stampede committee contact",
+        "primary": false
+      }
+    ]
   },
   {
     "organizationId": "3cb429e6-adae-4fc6-9481-cb7276c11679",
