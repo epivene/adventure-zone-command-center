@@ -474,6 +474,8 @@
     .contact-heading { text-align: center; }
     .contact-heading .tag { color: var(--az-cream); background: var(--az-navy); }
     .contact-intro { margin: 0 auto 32px; color: var(--az-muted); font-size: 19px; font-weight: 800; }
+    .urgent-contact { max-width: 760px; margin: -12px auto 28px; padding: 14px 16px; color: var(--az-navy); background: rgba(255,255,255,.78); border-left: 4px solid var(--az-pink); font-size: 14px; font-weight: 800; line-height: 1.5; text-align: center; }
+    .urgent-contact a { color: var(--az-navy); text-decoration: underline; text-decoration-color: var(--az-pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
     .contact-form { padding: 20px; background: var(--az-white); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
     .form-grid { display: grid; gap: 24px; }
     .field { display: flex; flex-direction: column; }
@@ -908,6 +910,7 @@
 
       <section class="section contact" id="contact"><div class="container"><div class="contact-panel">
         <div class="contact-heading"><div class="tag">${icon("calendar")}Book For Your Season</div><h2 class="display">Secure Your Dates</h2><p class="contact-intro">Tell us about your event and the booking team will follow up with the next steps.</p></div>
+        <p class="urgent-contact">Need to reach us urgently? Call <a href="tel:+14357605583">(435) 760-5583</a> for booking and marketing, or <a href="tel:+14352324281">(435) 232-4281</a> to reach the owner Dave.</p>
         ${formMarkup()}
       </div></div></section>
 
