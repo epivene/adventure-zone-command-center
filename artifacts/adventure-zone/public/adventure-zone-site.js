@@ -64,17 +64,26 @@
 
   const teamMembers = [
     ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 2%;"],
-    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(12px, 19vw, 190px); top: 10.5%;"],
+    ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 10.5%;"],
     ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(16px, 5vw, 48px); right: auto; top: 19%;"],
-    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(12px, 16vw, 170px); top: 27.5%;"],
+    ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(120px, 30vw, 300px); top: 27.5%;"],
     ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(12px, 3vw, 30px); right: auto; top: 36%;"],
-    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(12px, 21vw, 210px); top: 44.5%;"],
+    ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(120px, 27vw, 270px); top: 44.5%;"],
     ["Sheera", "Team Leader", IMAGE.sheera, "Sheera from The Adventure Zone", "left: clamp(16px, 6vw, 52px); right: auto; top: 53%;"],
-    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(12px, 18vw, 185px); top: 61.5%;"],
+    ["Mikey", "Team Leader", IMAGE.mikey, "Mikey from The Adventure Zone", "left: auto; right: clamp(120px, 29vw, 290px); top: 61.5%;"],
     ["Angelo", "Team Leader", IMAGE.angelo, "Angelo from The Adventure Zone", "left: clamp(12px, 4vw, 38px); right: auto; top: 70%;"],
-    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(12px, 20vw, 200px); top: 78.5%;"],
+    ["Mouth", "Team Leader", IMAGE.mouth, "Mouth from The Adventure Zone", "left: auto; right: clamp(120px, 28vw, 280px); top: 78.5%;"],
     ["Desiree", "Marketing & Booking", IMAGE.desiree, "Desiree from The Adventure Zone", "left: clamp(16px, 5vw, 46px); right: auto; top: 87%;"],
   ];
+
+  const teamContentSelector = [
+    "h1", "h2", "h3", "h4", "p", "a", "button", "summary", "li", "label",
+    "input", "select", "textarea", ".eyebrow", ".marquee-item", ".stat-number", ".stat-label",
+    ".member-label", ".fleet-label", ".package-flag", ".ammo", ".price-label", ".price",
+    ".price-days", ".step-number", ".faq-answer", ".attraction-chip-list span",
+  ].join(",");
+  const teamTextClearance = 20;
+  const teamSearchStep = 16;
 
   const adventureAttractionCategories = [
     ["Bounce Houses & Combos", "Perfect for smaller kids, with jump-and-slide combos that keep the fun moving.", ["Princess Palace", "Castle Fortress", "SpongeBob Ahoy", "Under the Sea Grotto"]],
@@ -614,7 +623,10 @@
   }
 
   function teamMarkup() {
-    return teamMembers.map(([name, role, image, alt, position], index) => `<div class="team-bubble" data-team-index="${index}" style="${position}; transition-delay:${index * 45}ms"><div class="team-bubble-inner" style="animation-delay:${index * 180}ms"><img class="team-photo" src="${image}" alt="${alt}" loading="lazy"><span class="team-label"><span class="team-name">${name}</span><span class="team-role">${role}</span></span></div></div>`).join("");
+    return teamMembers.map(([name, role, image, alt, position], index) => {
+      const targetTop = /top:\s*([^;]+)/.exec(position)?.[1] || "0%";
+      return `<div class="team-bubble" data-team-index="${index}" data-team-target-top="${targetTop}" style="${position}; transition-delay:${index * 45}ms"><div class="team-bubble-inner" style="animation-delay:${index * 180}ms"><img class="team-photo" src="${image}" alt="${alt}" loading="lazy"><span class="team-label"><span class="team-name">${name}</span><span class="team-role">${role}</span></span></div></div>`;
+    }).join("");
   }
 
   function galleryMarkup() {
@@ -757,6 +769,7 @@
       this.inquiryAbortController = null;
       this.pendingSubmissionId = null;
       this.resizeObserver = null;
+      this.teamLayoutTimer = null;
     }
 
     connectedCallback() {
@@ -765,8 +778,12 @@
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
       this.abortController = new AbortController();
       this.bindInteractions();
-      this.setupResizeEvents();
       this.updateScrollState();
+      this.setupResizeEvents();
+      this.teamLayoutTimer = window.setTimeout(() => {
+        this.layoutTeamBubbles();
+        this.emitResize();
+      }, 800);
       this.startRotations();
       const hash = window.location.hash.slice(1);
       if (hash) window.requestAnimationFrame(() => this.scrollToId(hash));
@@ -778,6 +795,7 @@
       this.abortController?.abort();
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
+      window.clearTimeout(this.teamLayoutTimer);
     }
 
     bindInteractions() {
@@ -796,16 +814,27 @@
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
-      root.querySelectorAll(".faq-item, .attraction-lineup").forEach((item) => item.addEventListener("toggle", () => this.emitResize(), { signal }));
+      root.querySelectorAll(".faq-item, .attraction-lineup").forEach((item) => item.addEventListener("toggle", () => {
+        window.requestAnimationFrame(() => {
+          this.layoutTeamBubbles();
+          this.emitResize();
+        });
+      }, { signal }));
     }
 
     setupResizeEvents() {
       const shell = this.shadowRoot.querySelector(".az-site");
       if ("ResizeObserver" in window) {
-        this.resizeObserver = new ResizeObserver(() => this.emitResize());
+        this.resizeObserver = new ResizeObserver(() => {
+          this.layoutTeamBubbles();
+          this.emitResize();
+        });
         this.resizeObserver.observe(shell);
       }
-      window.requestAnimationFrame(() => this.emitResize());
+      window.requestAnimationFrame(() => {
+        this.layoutTeamBubbles();
+        this.emitResize();
+      });
     }
 
     emitResize() {
@@ -849,7 +878,85 @@
 
     updateResizeLayout() {
       if (window.innerWidth >= 1024) this.closeMenu();
+      this.layoutTeamBubbles();
       this.emitResize();
+    }
+
+    layoutTeamBubbles() {
+      const root = this.shadowRoot;
+      const layer = root?.querySelector(".team-float");
+      if (!layer) return;
+      const layerRect = layer.getBoundingClientRect();
+      if (layerRect.width <= 0 || layerRect.height <= 0) return;
+
+      const overlaps = (first, second) => first.left < second.right
+        && first.right > second.left
+        && first.top < second.bottom
+        && first.bottom > second.top;
+      const obstacles = Array.from(root.querySelectorAll(teamContentSelector)).flatMap((node) => {
+        if (node.closest(".team-float")) return [];
+        const style = getComputedStyle(node);
+        const hasContent = /^(INPUT|SELECT|TEXTAREA)$/.test(node.tagName) || node.textContent.trim();
+        if (!hasContent || style.display === "none" || style.visibility === "hidden") return [];
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0 ? [rect] : [];
+      });
+      const placed = [];
+
+      root.querySelectorAll(".team-bubble").forEach((bubble) => {
+        const targetValue = bubble.dataset.teamTargetTop || bubble.style.top || "0%";
+        const targetTop = targetValue.endsWith("%")
+          ? layerRect.height * Number.parseFloat(targetValue) / 100
+          : Number.parseFloat(targetValue);
+        const visualRects = [bubble.querySelector(".team-photo"), bubble.querySelector(".team-label")]
+          .filter(Boolean)
+          .map((node) => node.getBoundingClientRect())
+          .filter((rect) => rect.width > 0 && rect.height > 0);
+        if (!visualRects.length || !Number.isFinite(targetTop)) return;
+
+        const visualLeft = Math.min(...visualRects.map((rect) => rect.left));
+        const visualRight = Math.max(...visualRects.map((rect) => rect.right));
+        const visualTop = Math.min(...visualRects.map((rect) => rect.top));
+        const visualBottom = Math.max(...visualRects.map((rect) => rect.bottom));
+        const visualTopOffset = visualTop - (layerRect.top + bubble.offsetTop);
+        const visualHeight = visualBottom - visualTop;
+        const minTop = Math.max(0, -visualTopOffset);
+        const maxTop = Math.max(minTop, layerRect.height - visualTopOffset - visualHeight);
+        const boundedTarget = Math.min(maxTop, Math.max(minTop, targetTop));
+        const rectAt = (top) => ({
+          left: visualLeft - teamTextClearance,
+          right: visualRight + teamTextClearance,
+          top: layerRect.top + top + visualTopOffset - teamTextClearance,
+          bottom: layerRect.top + top + visualTopOffset + visualHeight + teamTextClearance,
+        });
+        const isClear = (top) => {
+          const candidate = rectAt(top);
+          return !obstacles.some((obstacle) => overlaps(candidate, obstacle))
+            && !placed.some((otherBubble) => overlaps(candidate, otherBubble));
+        };
+
+        let selectedTop = boundedTarget;
+        const checked = new Set();
+        const maximumSteps = Math.ceil((maxTop - minTop) / teamSearchStep);
+        for (let step = 0; step <= maximumSteps; step += 1) {
+          const distance = step * teamSearchStep;
+          const candidates = step === 0 ? [boundedTarget] : [boundedTarget + distance, boundedTarget - distance];
+          const clearTop = candidates.find((candidate) => {
+            const bounded = Math.min(maxTop, Math.max(minTop, candidate));
+            const key = Math.round(bounded * 100) / 100;
+            if (checked.has(key)) return false;
+            checked.add(key);
+            return isClear(bounded);
+          });
+          if (clearTop !== undefined) {
+            selectedTop = Math.min(maxTop, Math.max(minTop, clearTop));
+            break;
+          }
+        }
+
+        bubble.style.top = `${Math.round(selectedTop)}px`;
+        placed.push(rectAt(selectedTop));
+      });
     }
 
     updateScrollState() {
