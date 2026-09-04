@@ -109,6 +109,8 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".tube-man-image")?.clipPath).toBe("");
     expect(applicableStyle(root, ".tube-man-image")?.mask).toBe("");
     expect(applicableStyle(root, ".mascot-shell")?.overflow).not.toBe("hidden");
+    expect(applicableStyle(root, ":host")?.position).toBe("fixed");
+    expect(applicableStyle(root, ":host")?.bottom).toBe("0px");
     expect(siteRoot.querySelectorAll(".tube-man-image")).toHaveLength(0);
   });
 

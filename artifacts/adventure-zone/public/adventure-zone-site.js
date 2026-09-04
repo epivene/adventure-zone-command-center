@@ -1040,7 +1040,7 @@
   }
 
   const mascotStyles = `
-    :host { display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+    :host { position: fixed; right: 0; bottom: 0; left: 0; display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     *, *::before, *::after { box-sizing: border-box; }
     .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
