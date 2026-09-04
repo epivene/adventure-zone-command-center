@@ -97,3 +97,5 @@ jobs:
           name: white-sulphur-springs-merge-receipt
           path: white-sulphur-springs-merge-receipt.json
           retention-days: 7
+
+# Triggered after workflow registration.
