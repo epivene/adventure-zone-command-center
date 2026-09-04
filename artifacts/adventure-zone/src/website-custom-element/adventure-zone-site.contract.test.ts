@@ -283,9 +283,9 @@ describe("adventure-zone-site inquiry contract", () => {
     const headingStyle = applicableStyle(root, ".hero h1", 320);
 
     expect(videoStyle.transform).toBe("none");
-    expect(Number.parseFloat(heroStyle.minHeight)).toBeLessThanOrEqual(460);
-    expect(Number.parseFloat(heroStyle.paddingTop)).toBeLessThanOrEqual(72);
-    expect(Number.parseFloat(heroStyle.paddingBottom)).toBeLessThanOrEqual(24);
+    expect(Number.parseFloat(heroStyle.minHeight)).toBeLessThanOrEqual(410);
+    expect(Number.parseFloat(heroStyle.paddingTop)).toBeLessThanOrEqual(62);
+    expect(Number.parseFloat(heroStyle.paddingBottom)).toBeLessThanOrEqual(18);
     expect(headingStyle.fontSize).toBe("clamp(2.35rem, 10vw, 3.5rem)");
   });
 
@@ -504,6 +504,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(mission).toHaveTextContent("event coordinators need");
     expect(mission).toHaveTextContent(/from our family to yours/i);
     expect(mission.textContent).not.toMatch(/[—–-]/);
+    expect(applicableStyle(root, ".mission-card h2", 320).fontSize).toBe("24px");
   });
 
   it("uses the open space beneath the four stat cards for the Proud Members badge", () => {
