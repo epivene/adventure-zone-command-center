@@ -611,7 +611,7 @@
       .desktop-book .button { min-height: 40px; padding: 7px 10px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); font-size: 8px; letter-spacing: .1em; }
       .menu-toggle { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
       .button { min-height: 40px; padding: 9px 12px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 10px; letter-spacing: .1em; }
-      .hero { min-height: 450px; padding: 70px 14px 22px; }
+      .hero { min-height: 400px; padding: 60px 14px 16px; }
       .hero-video { transform: none; }
       .hero-content { align-items: flex-start; }
       .eyebrow { margin-bottom: 12px; padding: 4px 8px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 8px; }
@@ -643,7 +643,7 @@
       .member-logo.waf { width: 40px; height: 40px; }
       .member-label { margin-top: 4px; font-size: 8px; }
       .mission-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
-      .mission-card h2 { margin-bottom: 12px; }
+      .mission-card h2 { margin-bottom: 12px; font-size: 24px; line-height: 1; overflow-wrap: anywhere; }
       .mission-card p { font-size: 14px; }
       .experience-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; align-items: center; }
       .scale-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
