@@ -303,6 +303,13 @@
     .member-logo.waf { width: 80px; height: 80px; object-fit: contain; }
     .member-label { margin-top: 8px; color: var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
 
+    .mission { position: relative; overflow: hidden; background: var(--az-pink); }
+    .mission::before { position: absolute; inset: 0; content: ""; opacity: .18; background-size: 32px 32px; background-image: radial-gradient(rgba(255,255,255,.75) 2px, transparent 2px); }
+    .mission-card { position: relative; z-index: 1; padding: 28px; color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .mission-card .tag { color: var(--az-navy); background: var(--az-yellow); }
+    .mission-card h2 { margin-bottom: 20px; }
+    .mission-card p { max-width: 980px; margin: 0; color: var(--az-muted); font-size: clamp(1.18rem, 4.8vw, 2rem); font-weight: 900; line-height: 1.3; }
+
     .experience { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
     .scale-wrap { position: relative; }
     .scale-wrap::before { display: none; content: ""; position: absolute; inset: -16px; background: var(--az-yellow); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); transform: rotate(-1deg); }
@@ -415,6 +422,7 @@
     .booking-list li { display: flex; align-items: flex-start; gap: 12px; }
     .booking-list .az-icon { width: 22px; height: 22px; margin: 0; color: var(--az-yellow); }
     .booking-card.pink .booking-list .az-icon { color: var(--az-navy); }
+    .fundraising-highlight { position: relative; z-index: 1; display: inline-flex; width: fit-content; margin: -4px 0 20px; padding: 8px 12px; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); box-shadow: 5px 5px 0 var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .08em; line-height: 1.1; text-transform: uppercase; }
 
     .gallery { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
     .gallery-grid { display: grid; gap: 16px; }
@@ -644,8 +652,8 @@
     </article>`;
   }
 
-  function bookingCard(className, iconName, title, copy, items) {
-    return `<article class="booking-card ${className}">${icon(iconName)}<h3 class="display">${title}</h3><p>${copy}</p><ul class="booking-list">${items.map((item) => `<li>${icon("check")}${item}</li>`).join("")}</ul></article>`;
+  function bookingCard(className, iconName, title, copy, items, highlight = "") {
+    return `<article class="booking-card ${className}">${icon(iconName)}<h3 class="display">${title}</h3>${highlight ? `<div class="fundraising-highlight">${highlight}</div>` : ""}<p>${copy}</p><ul class="booking-list">${items.map((item) => `<li>${icon("check")}${item}</li>`).join("")}</ul></article>`;
   }
 
   function stepCard(number, iconName, title, copy) {
@@ -737,6 +745,12 @@
         <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
       </div></section>
 
+      <section class="section mission" id="mission"><div class="container"><div class="mission-card">
+        <div class="tag">${icon("star")}From Our Family To Yours</div>
+        <h2 class="display">Our Mission</h2>
+        <p>Our mission is to bring children and parents together through active play, laughter, and shared adventure. We believe fun is better when the whole family joins in. As a family-run operation, we’re proud to work with families and communities to create memorable experiences—from our family to yours.</p>
+      </div></div></section>
+
       <section class="section experience" id="experience"><div class="container experience-layout">
         <div class="scale-wrap"><div class="scale-card">${icon("star")}<h2 class="display">Scale<br>Matters.</h2><p>We are an event company, not a backyard rental drop-off.</p></div></div>
         <div class="experience-copy"><h3 class="display">Commercial-Grade Attractions. Professional Execution.</h3><p>When you book The Adventure Zone, you're securing a massive, high-throughput footprint designed to process lines safely and deliver an unforgettable spectacle. We bring the crew, the gear, and the experience so you can focus on the rest of your event.</p><div class="feature-grid">${feature("shield", "Inspection Ready", "Rigorous safety protocols and commercial-grade units built for crowds.", "pink")}${feature("zap", "Turnkey Operation", "We handle the heavy lifting. You don't have to provide volunteers to watch the slides.", "yellow")}</div></div>
@@ -768,7 +782,7 @@
 
       <section class="section partnerships" id="partnerships"><div class="container">
         <div class="section-heading"><h2 class="display">Booking Structures</h2></div>
-        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"])}</div>
+        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
       </div></section>
 
       <section class="section gallery" id="gallery"><div class="container"><h2 class="display">The Spectacle</h2><div class="gallery-grid">${galleryMarkup()}</div></div></section>

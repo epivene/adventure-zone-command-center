@@ -395,6 +395,24 @@ describe("adventure-zone-site inquiry contract", () => {
     expect([...assetUrls, ...posterUrls].every((url) => url?.startsWith("https://"))).toBe(true);
   });
 
+  it("presents the family mission and invites children and parents to play together", () => {
+    const { root } = mountSite();
+    const mission = root.querySelector("#mission")!;
+
+    expect(mission.querySelector("h2")).toHaveTextContent("Our Mission");
+    expect(mission).toHaveTextContent("bring children and parents together through active play");
+    expect(mission).toHaveTextContent(/from our family to yours/i);
+  });
+
+  it("highlights Pay-For-Play as a fundraising opportunity", () => {
+    const { root } = mountSite();
+    const payForPlayCard = Array.from(root.querySelectorAll(".booking-card"))
+      .find((card) => card.querySelector("h3")?.textContent?.includes("Pay-For-Play"));
+
+    expect(payForPlayCard?.querySelector(".fundraising-highlight"))
+      .toHaveTextContent("A Fun Fundraising Opportunity");
+  });
+
   it("keeps measured page heights independent from the Wix iframe viewport", () => {
     const element = document.createElement("adventure-zone-site") as HTMLElement;
     document.body.append(element);
