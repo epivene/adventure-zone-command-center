@@ -156,6 +156,9 @@
       --az-soft: #ebe8e0;
       display: block;
       width: 100%;
+      max-width: 100%;
+      min-width: 0;
+      overflow-x: hidden;
       color: var(--az-navy);
       background: var(--az-cream);
       font-family: "Plus Jakarta Sans", "Avenir Next", Arial, sans-serif;
@@ -227,13 +230,13 @@
     .mobile-nav a:hover { background: var(--az-yellow); }
 
     .team-float { display: block; pointer-events: none; position: absolute; top: 760px; right: 0; bottom: 760px; left: 0; z-index: 35; }
-    .team-bubble { position: absolute; width: 56px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
+    .team-bubble { position: absolute; width: 44px; opacity: 0; transform: scale(0); transition: opacity .7s cubic-bezier(.34,1.56,.64,1), transform .7s cubic-bezier(.34,1.56,.64,1); }
     .team-bubble.visible { opacity: .9; transform: scale(1); }
     .team-bubble-inner { position: relative; animation: bubble-float 3.8s ease-in-out infinite; }
-    .team-photo { width: 56px; height: 56px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
-    .team-label { position: absolute; left: 50%; bottom: -24px; display: block; width: 112px; transform: translateX(-50%); padding: 6px 8px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
-    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 10px; font-weight: 900; line-height: 1; text-transform: uppercase; }
-    .team-role { display: block; margin-top: 4px; font-size: 7px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
+    .team-photo { width: 44px; height: 44px; object-fit: cover; border: 3px solid rgba(255,255,255,.8); border-radius: 50%; opacity: .8; filter: saturate(.85); background: rgba(255,255,255,.2); box-shadow: 0 10px 32px rgba(13,20,42,.28); outline: 2px solid rgba(15,23,41,.7); }
+    .team-label { position: absolute; left: 50%; bottom: -20px; display: block; width: 88px; transform: translateX(-50%); padding: 4px 6px; text-align: center; color: var(--az-navy); background: rgba(248,246,241,.75); border: 2px solid rgba(255,255,255,.8); border-radius: 16px; outline: 2px solid rgba(15,23,41,.7); box-shadow: 0 8px 24px rgba(15,23,41,.22); backdrop-filter: blur(10px); }
+    .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 9px; font-weight: 900; line-height: 1; text-transform: uppercase; }
+    .team-role { display: block; margin-top: 3px; font-size: 6px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 
     .tube-man-position { position: fixed; right: 6px; bottom: -12px; z-index: 50; width: 82px; pointer-events: none; }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
@@ -481,6 +484,9 @@
       .container { width: min(1400px, calc(100% - 64px)); }
       .team-bubble { width: 64px; }
       .team-photo { width: 64px; height: 64px; }
+      .team-label { bottom: -24px; width: 112px; padding: 6px 8px; }
+      .team-name { font-size: 10px; }
+      .team-role { margin-top: 4px; font-size: 7px; }
       .tube-man-position { right: 12px; bottom: -14px; width: 116px; }
       .hero-actions { flex-direction: row; justify-content: flex-start; width: auto; }
       .hero-actions .button { width: auto; }

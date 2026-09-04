@@ -153,6 +153,20 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".team-label")?.display).toBe("block");
   });
 
+  it("keeps crew bubbles compact and the site shell full-width on a 320px mobile canvas", () => {
+    const { root } = mountSite();
+    const canvasWidth = 320;
+    const hostStyle = applicableStyle(root, ":host", canvasWidth);
+    const photoWidth = Number.parseFloat(applicableStyle(root, ".team-photo", canvasWidth).width);
+    const labelWidth = Number.parseFloat(applicableStyle(root, ".team-label", canvasWidth).width);
+
+    expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.15);
+    expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.3);
+    expect(hostStyle.width).toBe("100%");
+    expect(hostStyle.maxWidth).toBe("100%");
+    expect(hostStyle.overflowX).toBe("hidden");
+  });
+
   it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
     const { root } = mountSite();
 
