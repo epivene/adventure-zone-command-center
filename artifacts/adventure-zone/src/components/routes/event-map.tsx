@@ -123,6 +123,7 @@ function EventList({
   onRetry,
   onFocus,
   groupByLeg = false,
+  legOrderById,
 }: {
   events: PlanningEvent[];
   title: string;
@@ -132,11 +133,13 @@ function EventList({
   onRetry?: (event: PlanningEvent) => void;
   onFocus?: (event: PlanningEvent) => void;
   groupByLeg?: boolean;
+  legOrderById?: ReadonlyMap<string, number>;
 }) {
   const groups = groupByLeg
     ? [...events.reduce((byLeg, event) => {
         const key = event.travelLegId || "unassigned";
         const current = byLeg.get(key) ?? {
+          id: key,
           name: event.travelLegName || "Unassigned",
           color: event.travelLegColor || "#64748b",
           events: [] as PlanningEvent[],
@@ -144,8 +147,11 @@ function EventList({
         current.events.push(event);
         byLeg.set(key, current);
         return byLeg;
-      }, new Map<string, { name: string; color: string; events: PlanningEvent[] }>()).values()]
-        .sort((a, b) => a.name.localeCompare(b.name))
+      }, new Map<string, { id: string; name: string; color: string; events: PlanningEvent[] }>()).values()]
+        .sort((a, b) => (
+          (legOrderById?.get(a.id) ?? Number.MAX_SAFE_INTEGER) -
+          (legOrderById?.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+        ) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
         .map((group) => ({ ...group, events: [...group.events].sort(compareRouteStops) }))
     : [{ name: null, color: null, events }];
 
@@ -351,6 +357,10 @@ export function EventMap({
   const focusedLegName = focusedLegId
     ? travelLegs.find((leg) => leg.id === focusedLegId)?.name ?? null
     : null;
+  const legOrderById = useMemo(
+    () => new Map(travelLegs.map((leg) => [leg.id, leg.sortOrder])),
+    [travelLegs],
+  );
   const scopeSummary = routeScopeSummary({
     mode,
     seasonYear,
@@ -359,6 +369,12 @@ export function EventMap({
     dateFrom: filters.dateFrom,
     dateTo: filters.dateTo,
   });
+
+  function focusLeg(legId: string | null) {
+    setFocusedLegId(legId);
+    setFocusedEventId(null);
+    if (focusedTripCoordinates) onClearTripFocus?.();
+  }
 
   function resetScope() {
     setFilters(initialFilters);
@@ -411,7 +427,7 @@ export function EventMap({
     }
     const features: RouteLineCollection["features"] = [];
     for (const [legId, group] of groups) {
-      group.sort((a, b) => (a.startsAt?.getTime() ?? 0) - (b.startsAt?.getTime() ?? 0));
+      group.sort(compareRouteStops);
       for (let index = 0; index < group.length - 1; index += 1) {
         const from = group[index]!;
         const to = group[index + 1]!;
@@ -507,7 +523,7 @@ export function EventMap({
             </label>
             <label className="grid gap-1 text-sm font-semibold">
               Leg focus
-              <select onChange={(event) => { setFocusedLegId(event.target.value || null); setFocusedEventId(null); }} value={focusedLegId ?? ""}>
+              <select onChange={(event) => focusLeg(event.target.value || null)} value={focusedLegId ?? ""}>
                 <option value="">All legs</option>
                 {travelLegs.filter((leg) => !leg.archivedAt).map((leg) => (
                   <option key={leg.id} value={leg.id}>{leg.name}</option>
@@ -557,7 +573,7 @@ export function EventMap({
             <button
               aria-pressed={focusedLegId === null}
               className="shrink-0 rounded-full border-2 bg-white px-3 py-2 text-sm font-bold text-slate-900"
-              onClick={() => { setFocusedLegId(null); setFocusedEventId(null); }}
+              onClick={() => focusLeg(null)}
               style={{ borderColor: "#0f172a", boxShadow: focusedLegId === null ? "0 0 0 2px #0f172a" : undefined }}
               type="button"
             >
@@ -568,12 +584,13 @@ export function EventMap({
                 aria-pressed={focusedLegId === leg.id}
                 className="inline-flex shrink-0 items-center gap-2 rounded-full border-2 bg-white px-3 py-2 text-sm font-bold text-slate-900"
                 key={leg.id}
-                onClick={() => { setFocusedLegId(leg.id); setFocusedEventId(null); }}
+                onClick={() => focusLeg(leg.id)}
                 style={{ borderColor: leg.color, boxShadow: focusedLegId === leg.id ? `0 0 0 2px ${leg.color}` : undefined }}
                 type="button"
               >
                 <span className="size-3 rounded-full" style={{ backgroundColor: leg.color }} />
                 {leg.name} route
+                {focusedLegId === leg.id ? <span aria-hidden="true">✓</span> : null}
               </button>
             ))}
           </div>
@@ -607,7 +624,7 @@ export function EventMap({
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />
+        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"
