@@ -31,6 +31,38 @@ function submit(form: HTMLFormElement) {
   form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 }
 
+function mountSite() {
+  const element = document.createElement("adventure-zone-site") as HTMLElement;
+  document.body.append(element);
+  return { element, root: element.shadowRoot! };
+}
+
+function applicableStyle(root: ShadowRoot, selector: string, canvasWidth = 980) {
+  const stylesheet = document.createElement("style");
+  stylesheet.textContent = root.querySelector("style")?.textContent ?? "";
+  document.body.append(stylesheet);
+  const applicableRules: CSSStyleRule[] = [];
+  const visitRules = (rules: CSSRuleList, applies = true) => {
+    for (const rule of Array.from(rules)) {
+      if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
+      if (rule instanceof CSSMediaRule) {
+        const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
+        visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
+      }
+    }
+  };
+  visitRules(stylesheet.sheet!.cssRules);
+  const cascaded = document.createElement("div").style;
+  applicableRules
+    .filter((rule) => rule.selectorText.split(",").some((part) => part.trim() === selector))
+    .forEach((rule) => {
+      for (const property of Array.from(rule.style)) {
+        cascaded.setProperty(property, rule.style.getPropertyValue(property), rule.style.getPropertyPriority(property));
+      }
+    });
+  return cascaded;
+}
+
 beforeAll(() => {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -57,6 +89,140 @@ afterAll(() => {
 describe("adventure-zone-site inquiry contract", () => {
   it("registers the Wix custom element", () => {
     expect(customElements.get("adventure-zone-site")).toBeTypeOf("function");
+  });
+
+  it("renders one complete hosted tube-man mascot without crop styling", () => {
+    const { root } = mountSite();
+    const mascots = root.querySelectorAll<HTMLImageElement>(".tube-man-image");
+
+    expect(mascots).toHaveLength(1);
+    expect(mascots[0]?.getAttribute("src")).toBe(
+      "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mascot.png",
+    );
+    expect(applicableStyle(root, ".tube-man-image")?.width).toBe("100%");
+    expect(applicableStyle(root, ".tube-man-image")?.height).toBe("auto");
+    expect(applicableStyle(root, ".tube-man-image")?.clipPath).toBe("");
+    expect(applicableStyle(root, ".tube-man-image")?.mask).toBe("");
+    expect(applicableStyle(root, ".tube-man-position")?.overflow).not.toBe("hidden");
+  });
+
+  it.each([
+    ["adventure-zone-mascot.png", 408, 612],
+    ["rmaf-logo.png", 492, 274],
+    ["waf-logo.png", 1197, 1197],
+  ])("ships the complete hosted PNG asset %s", (filename, expectedWidth, expectedHeight) => {
+    const png = readFileSync(`public/assets/${filename}`);
+
+    expect(png.subarray(0, 8).toString("hex")).toBe("89504e470d0a1a0a");
+    expect(png.readUInt32BE(16)).toBe(expectedWidth);
+    expect(png.readUInt32BE(20)).toBe(expectedHeight);
+  });
+
+  it("shows the current crew with names and roles on Wix's desktop canvas", () => {
+    const { root } = mountSite();
+    const bubbles = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble"));
+    const names = bubbles.map((bubble) => bubble.querySelector(".team-name")?.textContent?.trim());
+
+    expect(names).toEqual([
+      "Dave",
+      "Amy",
+      "The Toy Guy & Queen La-La",
+      "Spaz",
+      "Hulk",
+      "Junior",
+      "Sheera",
+      "Mikey",
+      "Angelo",
+      "Mouth",
+      "Desiree",
+    ]);
+    expect(root.textContent).not.toContain("Tristan");
+    expect(bubbles.find((bubble) => bubble.querySelector(".team-name")?.textContent === "Desiree")?.querySelector(".team-role"))
+      .toHaveTextContent("Marketing & Booking");
+    expect(bubbles.every((bubble) => bubble.querySelector(".team-name + .team-role"))).toBe(true);
+    expect(applicableStyle(root, ".team-float")?.display).toBe("block");
+    expect(applicableStyle(root, ".team-label")?.display).toBe("block");
+  });
+
+  it("reveals team bubbles in waves only after scrolling below the hero", () => {
+    const { root } = mountSite();
+    const hero = root.querySelector<HTMLElement>("#hero")!;
+    let heroBottom = 700;
+    hero.getBoundingClientRect = () => ({ bottom: heroBottom }) as DOMRect;
+    Object.defineProperty(hero, "offsetHeight", { configurable: true, value: 700 });
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 0 });
+
+    window.dispatchEvent(new Event("scroll"));
+    expect(root.querySelectorAll(".team-bubble.visible")).toHaveLength(0);
+
+    heroBottom = 80;
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 800 });
+    window.dispatchEvent(new Event("scroll"));
+    expect(Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible")).map((bubble) => bubble.dataset.teamIndex))
+      .toEqual(["0", "2", "5"]);
+  });
+
+  it("renders collapsed package-specific attraction lineups", () => {
+    const { root } = mountSite();
+    const expectedLineups = new Map<string, string[]>([
+      ["Adventure Zone", [
+        "Princess Palace", "Castle Fortress", "SpongeBob Ahoy", "Under the Sea Grotto",
+        "Blue Wave", "Island Tropics", "Athletes & Sports", "Polar Bear", "Jungle Tiger", "Mountain Top",
+        "Dual & Single Lane", "1/2 Pipe", "Take Me Out to the Ball Game", "Screamer",
+        "Boulder Dash", "Jousting Arena", "Gladiator Pit", "The Gauntlet",
+        "Adrenaline Rush", "Super Obstacle Course", "Everest", "Radical Run", "Boot Camp Challenge", "Jungle Trek Xtreme",
+        "Bungee Run", "Eliminator", "Wrecking Ball",
+        "Balloon Darts", "Ring Toss", "Basket Toss", "Bean Bag Toss", "Fish Pond", "Mystery Bag",
+      ]],
+      ["Pirate's Rebellion", [
+        "2,500 sq ft Pool", "6 Pedal-Style Bumper Boats", "Hundreds of Sponges", "Over 25' Tall", "Bounce House with Attached Slide",
+      ]],
+      ["Warrior's Playground", [
+        "Adrenaline Rush", "Super Obstacle Course", "Everest", "Radical Run", "Boot Camp Challenge", "Jungle Trek Xtreme",
+        "Bungee Run", "Eliminator", "Wrecking Ball",
+        "Balloon Darts", "Ring Toss", "Basket Toss", "Bean Bag Toss", "Fish Pond", "Mystery Bag",
+      ]],
+    ]);
+    const cards = Array.from(root.querySelectorAll<HTMLElement>(".package-card"));
+
+    expect(cards).toHaveLength(3);
+    for (const card of cards) {
+      const title = card.querySelector("h3")?.textContent?.trim() ?? "";
+      const lineup = card.querySelector<HTMLDetailsElement>("details.attraction-lineup")!;
+      expect(lineup).not.toHaveAttribute("open");
+      expect(lineup.querySelector("summary")).toHaveTextContent("View Attraction Lineup");
+      expect(lineup.querySelector(".attraction-lineup-intro")).toHaveTextContent(
+        "Packages include a curated selection; attractions are not available a la carte.",
+      );
+      expect(Array.from(lineup.querySelectorAll(".attraction-chip-list span")).map((chip) => chip.textContent?.trim()))
+        .toEqual(expectedLineups.get(title));
+    }
+    expect(cards[0]?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
+  });
+
+  it("renders the booking arrangements and hosted Proud Members logos", () => {
+    const { root } = mountSite();
+    const bookingCopy = root.querySelector("#partnerships")?.textContent ?? "";
+    const memberBadge = root.querySelector(".member-badge")!;
+    const memberImages = Array.from(memberBadge.querySelectorAll<HTMLImageElement>("img"));
+
+    expect(bookingCopy).toContain("percentage-of-sales");
+    expect(bookingCopy).toContain("guaranteed-payment arrangements");
+    expect(memberBadge).toHaveTextContent("Proud Members");
+    expect(memberImages.map((image) => image.getAttribute("src"))).toEqual([
+      "https://adventure-zone-command-center-1.onrender.com/assets/rmaf-logo.png",
+      "https://adventure-zone-command-center-1.onrender.com/assets/waf-logo.png",
+    ]);
+    expect(memberImages.map((image) => image.alt)).toEqual([
+      "Rocky Mountain Association of Fairs logo",
+      "Western Fairs Association logo",
+    ]);
+
+    const assetUrls = Array.from(root.querySelectorAll<HTMLImageElement | HTMLVideoElement>("img[src], video[src]"))
+      .map((element) => element.getAttribute("src"));
+    const posterUrls = Array.from(root.querySelectorAll<HTMLVideoElement>("video[poster]"))
+      .map((element) => element.getAttribute("poster"));
+    expect([...assetUrls, ...posterUrls].every((url) => url?.startsWith("https://"))).toBe(true);
   });
 
   it("keeps measured page heights independent from the Wix iframe viewport", () => {
