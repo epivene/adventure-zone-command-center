@@ -895,6 +895,8 @@
         && first.bottom > second.top;
       const obstacles = Array.from(root.querySelectorAll(teamContentSelector)).flatMap((node) => {
         if (node.closest(".team-float")) return [];
+        const closedDetails = node.closest("details:not([open])");
+        if (closedDetails && node !== closedDetails.querySelector("summary")) return [];
         const style = getComputedStyle(node);
         const hasContent = /^(INPUT|SELECT|TEXTAREA)$/.test(node.tagName) || node.textContent.trim();
         if (!hasContent || style.display === "none" || style.visibility === "hidden") return [];

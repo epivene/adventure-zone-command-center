@@ -217,6 +217,7 @@ describe("adventure-zone-site inquiry contract", () => {
     const label = bubble.querySelector<HTMLElement>(".team-label")!;
     const obstacle = root.querySelector<HTMLElement>(".about h2")!;
     const details = root.querySelector<HTMLDetailsElement>(".attraction-lineup")!;
+    const hiddenLineupChip = details.querySelector<HTMLElement>(".attraction-chip-list span")!;
     const layerTop = 760;
     const layerHeight = 3000;
     let obstacleTop = 790;
@@ -240,6 +241,7 @@ describe("adventure-zone-site inquiry contract", () => {
     photo.getBoundingClientRect = () => domRect(8, layerTop + bubbleTop(), 104, layerTop + bubbleTop() + 96);
     label.getBoundingClientRect = () => domRect(0, layerTop + bubbleTop() + 78, 112, layerTop + bubbleTop() + 140);
     obstacle.getBoundingClientRect = () => domRect(0, obstacleTop, 160, obstacleTop + 200);
+    hiddenLineupChip.getBoundingClientRect = () => domRect(0, layerTop + 40, 160, layerTop + 180);
 
     window.dispatchEvent(new Event("resize"));
     const clearedTop = Number.parseFloat(bubble.style.top);
