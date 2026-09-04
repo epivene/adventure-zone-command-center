@@ -264,6 +264,26 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(packageImageHeight).toBeLessThanOrEqual(170);
   });
 
+  it.each([320, 412])("keeps nested mobile card headings inside their cards at %ipx", (canvasWidth) => {
+    const { root } = mountSite();
+
+    expect(applicableStyle(root, ".how-layout", canvasWidth).gridTemplateColumns).toBe("minmax(0, 1fr)");
+    expect(Number.parseFloat(applicableStyle(root, ".step-card h4", canvasWidth).fontSize)).toBeLessThanOrEqual(16);
+    expect(Number.parseFloat(applicableStyle(root, ".step-card p", canvasWidth).fontSize)).toBeLessThanOrEqual(11);
+    expect(Number.parseFloat(applicableStyle(root, ".scale-card h2", canvasWidth).fontSize)).toBeLessThanOrEqual(22);
+    expect(applicableStyle(root, ".scale-card h2", canvasWidth).overflowWrap).toBe("anywhere");
+    expect(Number.parseFloat(applicableStyle(root, ".stat-number", canvasWidth).fontSize)).toBeLessThanOrEqual(20);
+    expect(applicableStyle(root, ".stat-label", canvasWidth).overflowWrap).toBe("anywhere");
+  });
+
+  it("crops the portrait hero footage more tightly on mobile", () => {
+    const { root } = mountSite();
+    const videoStyle = applicableStyle(root, ".hero-video", 320);
+
+    expect(videoStyle.transform).toBe("scale(1.18)");
+    expect(videoStyle.transformOrigin).toBe("center");
+  });
+
   it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
     const { root } = mountSite();
 
