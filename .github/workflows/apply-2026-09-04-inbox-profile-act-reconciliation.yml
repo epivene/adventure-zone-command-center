@@ -82,6 +82,10 @@ jobs:
                 profileId=profileId||upsert.profileId;
               }
               if(!profileId) throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": profile ID unavailable");
+              const contactResults=[];
+              for(const contact of payload.profileContacts||[]){
+                contactResults.push(await request("profile-contacts",{method:"POST",body:JSON.stringify({organizationId:profileId,contact})}));
+              }
               const noteResults=[];
               for(const note of payload.notes||[]){
                 noteResults.push(await request("profile-notes",{method:"POST",body:JSON.stringify({organizationId:profileId,...note})}));
@@ -102,6 +106,14 @@ jobs:
                 if(!match||new Date(match.dueAt).toISOString()!==new Date(followUp.dueAt).toISOString()){
                   throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": follow-up verification failed "+followUp.label);
                 }
+              }
+              for(const contact of payload.profileContacts||[]){
+                const email=String(contact.email||"").toLowerCase();
+                const phone=String(contact.phone||"").replace(/\D/g,"");
+                const found=(history.contacts||[]).some(x=>
+                  (email && String(x.email||"").toLowerCase()===email)
+                  || (phone && String(x.phone||"").replace(/\D/g,"")===phone));
+                if(!found) throw new Error((payload.event?.name||payload.eventProfile?.event?.name)+": contact verification failed "+contact.name);
               }
               if(payload.eventProfile?.booking?.enabled){
                 const wanted=payload.eventProfile.booking;
