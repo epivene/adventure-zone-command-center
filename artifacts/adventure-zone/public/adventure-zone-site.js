@@ -508,7 +508,7 @@
       .team-label { bottom: -19px; width: 82px; padding: 4px 6px; }
       .team-name { font-size: 8px; }
       .team-role { margin-top: 3px; font-size: 5.5px; }
-      .tube-man-position { right: 12px; bottom: -14px; width: 116px; }
+      .tube-man-position { display: none; right: 12px; bottom: -14px; width: 116px; }
       .hero-actions { flex-direction: row; justify-content: flex-start; width: auto; }
       .hero-actions .button { width: auto; }
       .stats { gap: 20px; }

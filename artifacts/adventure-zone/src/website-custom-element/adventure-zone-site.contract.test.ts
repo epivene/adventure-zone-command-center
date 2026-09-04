@@ -120,6 +120,13 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(siteRoot.querySelector(".tube-man-position")?.getAttribute("aria-hidden")).toBe("true");
   });
 
+  it("hides the embedded mascot on desktop while preserving it on mobile", () => {
+    const { root } = mountSite();
+
+    expect(applicableStyle(root, ".tube-man-position", 1280).display).toBe("none");
+    expect(applicableStyle(root, ".tube-man-position", 320).display).not.toBe("none");
+  });
+
   it.each([
     ["adventure-zone-mascot.png", 408, 612],
     ["rmaf-logo.png", 492, 274],
