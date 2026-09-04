@@ -20,7 +20,10 @@ export type PlanningRouteLine = {
   emphasis: "primary" | "dimmed";
 };
 
-type RenderEvent = MapEvent & { planningEmphasis?: "primary" | "dimmed" };
+type RenderEvent = MapEvent & {
+  planningEmphasis?: "primary" | "dimmed";
+  routeStopNumber?: number | null;
+};
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;" })[char]!);
@@ -28,17 +31,23 @@ function escapeHtml(value: string) {
 
 function eventIcon(event: RenderEvent, focused: boolean) {
   const color = event.travelLegColor || "#64748b";
-  const isPotential = event.routeBucket !== "confirmed";
-  const isDimmed = isPotential || event.planningEmphasis === "dimmed";
-  const classes = ["az-route-pin", focused ? "az-route-pin--focused" : "", event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : ""]
-    .filter(Boolean)
-    .join(" ");
+  const isContext = event.routeBucket !== "confirmed" || event.routeStopNumber == null;
+  const isDimmed = isContext || event.planningEmphasis === "dimmed";
+  const classes = [
+    "az-route-pin",
+    isContext ? "az-route-pin--context" : "",
+    focused ? "az-route-pin--focused" : "",
+    event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : "",
+  ].filter(Boolean).join(" ");
+  const contents = isContext
+    ? '<span class="az-route-pin__dot"></span>'
+    : `<span class="az-route-pin__stop-number">${event.routeStopNumber}</span>`;
   return L.divIcon({
     className: "az-route-marker-wrap",
-    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};width:22px;height:22px;opacity:${isDimmed ? "0.62" : "1"}"><span class="az-route-pin__dot"></span></span>`,
-    iconSize: [26, 32],
-    iconAnchor: [13, 30],
-    popupAnchor: [0, -28],
+    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};opacity:${isDimmed ? "0.62" : "1"}">${contents}</span>`,
+    iconSize: isContext ? [20, 24] : [30, 38],
+    iconAnchor: isContext ? [10, 22] : [15, 36],
+    popupAnchor: isContext ? [0, -20] : [0, -34],
   });
 }
 
@@ -72,7 +81,7 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
     <strong>${escapeHtml(event.name)}</strong>
     <div>${escapeHtml([event.city, event.region].filter(Boolean).join(", "))}</div>
     <div>${escapeHtml(dates)}</div>
-    <div>${escapeHtml(assignmentLabel)}: ${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
+    <div>${event.routeStopNumber ? `Stop ${event.routeStopNumber} · ` : ""}${escapeHtml(assignmentLabel)}: ${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
     ${warning ? `<div><strong>${escapeHtml(warning)}</strong></div>` : ""}
     ${event.legAssignmentExplanation ? `<div>${escapeHtml(event.legAssignmentExplanation)}</div>` : ""}
     <div class="az-route-popup__actions">
