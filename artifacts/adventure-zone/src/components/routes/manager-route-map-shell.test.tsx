@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -58,6 +58,11 @@ describe("applyLeafletViewport", () => {
 });
 
 describe("ManagerRouteMapShell lifecycle", () => {
+  it("gives the route map enough vertical room on a phone", () => {
+    render(<ManagerRouteMapShell viewport={{ kind: "none" }} />);
+    expect(screen.getByRole("img", { name: "Adventure Zone route map" }).parentElement).toHaveClass("h-[32rem]");
+  });
+
   it("does not recreate the Leaflet map when the tile-error callback identity changes", () => {
     mocks.map.mockClear();
     mocks.mapObject.remove.mockClear();
