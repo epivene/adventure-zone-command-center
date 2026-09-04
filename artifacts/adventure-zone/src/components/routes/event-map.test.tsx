@@ -83,6 +83,16 @@ const secondConfirmedMapped: MapEvent = {
   endsAt: new Date("2026-08-25T20:00:00Z"),
 };
 
+const undatedConfirmedMapped: MapEvent = {
+  ...confirmedMapped,
+  id: "confirmed-undated",
+  name: "Undated Confirmed Stop",
+  latitude: 44.5,
+  longitude: -107,
+  startsAt: null,
+  endsAt: null,
+};
+
 const potentialMapped: MapEvent = {
   ...confirmedMapped,
   id: "potential-mapped",
@@ -138,6 +148,21 @@ describe("EventMap unresolved locations", () => {
     });
   });
 
+  it("uses the same dated-first order for stop numbers and route lines", () => {
+    render(<EventMap events={[secondConfirmedMapped, undatedConfirmedMapped, confirmedMapped]} travelLegs={[leg]} />);
+
+    const lastLayerProps = mocks.layers.mock.calls.at(-1)?.[0];
+    expect(lastLayerProps.events.map((event: MapEvent & { routeStopNumber: number | null }) => [event.id, event.routeStopNumber])).toEqual([
+      ["confirmed-mapped-2", 2],
+      ["confirmed-undated", 3],
+      ["confirmed-mapped", 1],
+    ]);
+    expect(lastLayerProps.routeLines.map((line: { coordinates: [number, number][] }) => line.coordinates)).toEqual([
+      [[-105.8, 46.4], [-106, 45]],
+      [[-106, 45], [-107, 44.5]],
+    ]);
+  });
+
   it("shows potential events by default while drawing the operating route only through confirmed stops", () => {
     render(<EventMap events={[confirmedMapped, potentialMapped, secondConfirmedMapped]} travelLegs={[leg, hulkLeg]} />);
 
@@ -151,9 +176,9 @@ describe("EventMap unresolved locations", () => {
       "potential-mapped",
       "confirmed-mapped-2",
     ]));
-    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "confirmed-mapped")?.routeStopNumber).toBe(1);
-    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "confirmed-mapped-2")?.routeStopNumber).toBe(2);
-    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "potential-mapped")?.routeStopNumber).toBeNull();
+    expect(lastLayerProps.events.find((event: MapEvent & { routeStopNumber: number | null }) => event.id === "confirmed-mapped")?.routeStopNumber).toBe(1);
+    expect(lastLayerProps.events.find((event: MapEvent & { routeStopNumber: number | null }) => event.id === "confirmed-mapped-2")?.routeStopNumber).toBe(2);
+    expect(lastLayerProps.events.find((event: MapEvent & { routeStopNumber: number | null }) => event.id === "potential-mapped")?.routeStopNumber).toBeNull();
     expect(lastLayerProps.routeLines).toHaveLength(1);
     expect(lastLayerProps.routeLines[0].coordinates).toEqual([
       [-105.8, 46.4],
