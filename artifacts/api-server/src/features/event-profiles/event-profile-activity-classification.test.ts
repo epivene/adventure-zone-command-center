@@ -140,4 +140,26 @@ describe("event profile timeline classification", () => {
     expect(profile.scoutNotes).toEqual([]);
     expect(profile.notes.map((item) => item.body)).toEqual(["not valid JSON"]);
   });
+
+  it("bounds the combined profile timeline to the 100 newest activities", () => {
+    const input = records();
+    const template = input.activities[0]!;
+    input.activities = Array.from({ length: 101 }, (_, index) => {
+      const timestamp = new Date(Date.UTC(2026, 0, 1, 0, 0, 0, index));
+      return {
+        ...template,
+        id: `50000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
+        body: `Activity ${index}`,
+        occurredAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+    });
+
+    const profile = buildEventProfile(input);
+
+    expect(profile.notes).toHaveLength(100);
+    expect(profile.notes[0]?.body).toBe("Activity 100");
+    expect(profile.notes.some((activity) => activity.body === "Activity 0")).toBe(false);
+  });
 });
