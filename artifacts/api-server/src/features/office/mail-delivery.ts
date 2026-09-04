@@ -114,7 +114,11 @@ export function createMailDeliveryFromEnv(factory: SmtpTransportFactory = (confi
     throw new MailConfigurationError("Outbound email is not configured. Set the Office mail SMTP host, port, and From address.");
   }
   const user = process.env.OFFICE_MAIL_SMTP_USER?.trim() || null;
-  const password = process.env.OFFICE_MAIL_SMTP_PASSWORD || null;
+  // Google displays app passwords in four groups separated by spaces. Accept
+  // that copy/paste format while still passing the 16-character credential to
+  // SMTP. Other providers' passwords are left unchanged unless they contain
+  // whitespace.
+  const password = process.env.OFFICE_MAIL_SMTP_PASSWORD?.replace(/\s/g, "") || null;
   if (Boolean(user) !== Boolean(password)) throw new MailConfigurationError("SMTP username and password must either both be set or both be omitted.");
   const secure = (process.env.OFFICE_MAIL_SMTP_SECURE ?? "false").toLowerCase() === "true";
   const transport = factory({ host, port, secure, user, password });

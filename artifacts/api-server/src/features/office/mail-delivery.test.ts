@@ -26,4 +26,18 @@ describe("owner mail delivery", () => {
     expect(factory).toHaveBeenCalledWith(expect.objectContaining({ host: "smtp.example.com", port: 587, secure: false, user: "mailer@example.com", password: "secret" }));
     expect(send).toHaveBeenCalledWith({ from: "Adventure Zone <bookings@example.com>", to: "fair@example.org", subject: "Hello", text: "Email body" });
   });
+
+  it("normalizes spaces from a copied Google app password", () => {
+    process.env.OFFICE_MAIL_SMTP_HOST = "smtp.gmail.com";
+    process.env.OFFICE_MAIL_SMTP_PORT = "465";
+    process.env.OFFICE_MAIL_SMTP_SECURE = "true";
+    process.env.OFFICE_MAIL_SMTP_USER = "mailer@example.com";
+    process.env.OFFICE_MAIL_SMTP_PASSWORD = "abcd efgh ijkl mnop";
+    process.env.OFFICE_MAIL_FROM = "Adventure Zone <mailer@example.com>";
+
+    const factory: SmtpTransportFactory = vi.fn(() => ({ send: vi.fn() }));
+    createMailDeliveryFromEnv(factory);
+
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ password: "abcdefghijklmnop" }));
+  });
 });
