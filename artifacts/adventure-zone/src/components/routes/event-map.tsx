@@ -161,7 +161,7 @@ function EventList({
       {events.length ? (
         <div className="mt-3 grid gap-4">
           {groups.map((group) => (
-            <section key={group.name ?? "events"}>
+            <section key={group.id ?? "events"}>
               {group.name ? (
                 <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-700">
                   <span className="size-3 rounded-full border border-slate-900" style={{ backgroundColor: group.color ?? undefined }} />
