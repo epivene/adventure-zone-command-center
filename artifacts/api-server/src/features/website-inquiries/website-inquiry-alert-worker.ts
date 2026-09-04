@@ -2,6 +2,7 @@ import {
   createMailDeliveryFromEnv,
   type MailDelivery,
 } from "../office/mail-delivery";
+import { logger } from "@/lib/logger";
 
 const RETRY_DELAYS_MS = [
   60_000,
@@ -188,6 +189,18 @@ export class WebsiteInquiryAlertWorker {
       }
       await this.repository.completeAlert(lease);
     } catch (error) {
+      logger.warn(
+        {
+          inquiryId: claimed.id,
+          errorCode:
+            error && typeof error === "object" && "code" in error
+              ? String((error as { code?: unknown }).code)
+              : error instanceof Error
+                ? error.message
+                : "unknown",
+        },
+        "Website inquiry email delivery attempt failed",
+      );
       const delayMs = RETRY_DELAYS_MS[claimed.alertAttemptCount - 1];
       const terminal = claimed.alertAttemptCount >= 6 || delayMs === undefined;
       await this.repository.failAlert({
