@@ -347,12 +347,18 @@
     .package-features .az-icon { width: 22px; height: 22px; flex: 0 0 22px; color: var(--az-pink); }
     .package-title-copy { min-width: 0; }
     .package-title-copy p { margin: 4px 0 0; color: var(--az-muted); font-size: 13px; font-weight: 800; line-height: 1.2; }
-    .attraction-lineup { margin-top: 24px; border-top: 2px solid rgba(15,23,41,.2); }
+    .attraction-lineup { position: relative; margin-top: 24px; border-top: 2px solid rgba(15,23,41,.2); }
+    .package-card:has(.attraction-lineup[open]), .attraction-lineup[open] { z-index: 60; }
     .attraction-lineup summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 12px 0; color: var(--az-pink); cursor: pointer; font-size: 13px; font-weight: 900; letter-spacing: .12em; list-style: none; text-transform: uppercase; }
     .attraction-lineup summary::-webkit-details-marker { display: none; }
     .attraction-lineup summary::after { content: "+"; color: var(--az-navy); font-size: 20px; line-height: 1; }
     .attraction-lineup[open] summary::after { content: "−"; }
-    .attraction-lineup-content { padding: 4px 0 8px; }
+    .attraction-lineup-content {
+      position: absolute; top: 100%; right: -12px; left: -12px; z-index: 70;
+      max-height: min(62vh, 520px); overflow-y: auto; overscroll-behavior: contain;
+      padding: 16px; background: var(--az-cream); border: 4px solid var(--az-navy);
+      box-shadow: 8px 8px 0 var(--az-navy);
+    }
     .attraction-lineup-intro { margin: 0 0 16px; color: var(--az-muted); font-size: 13px; font-weight: 800; }
     .attraction-lineup-grid { display: grid; gap: 16px; }
     .attraction-lineup-category { padding-top: 12px; border-top: 2px solid rgba(15,23,41,.12); }
@@ -424,12 +430,19 @@
     .faq-heading .tag { color: var(--az-navy); background: var(--az-yellow); }
     .faq-intro { max-width: 760px; margin: 0 auto 40px; color: rgba(255,255,255,.75); font-size: 19px; font-weight: 800; text-align: center; }
     .faq-list { display: grid; gap: 16px; max-width: 1100px; margin: 0 auto; }
-    .faq-item { color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .faq-item { position: relative; color: var(--az-navy); background: var(--az-cream); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .faq-item[open] { z-index: 60; }
     .faq-item summary { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; cursor: pointer; list-style: none; font-size: 18px; line-height: 1.15; text-transform: uppercase; }
     .faq-item summary::-webkit-details-marker { display: none; }
     .faq-item summary .plus { flex: 0 0 auto; color: var(--az-pink); font-family: Arial, sans-serif; font-size: 32px; line-height: 1; transition: transform .2s ease; }
     .faq-item[open] summary .plus { transform: rotate(45deg); }
-    .faq-answer { padding: 20px 16px; border-top: 4px solid var(--az-navy); color: var(--az-muted); font-size: 15px; font-weight: 800; line-height: 1.6; }
+    .faq-answer {
+      position: absolute; top: 100%; right: -4px; left: -4px; z-index: 70;
+      max-height: min(52vh, 360px); overflow-y: auto; overscroll-behavior: contain;
+      padding: 20px 16px; color: var(--az-muted); background: var(--az-cream);
+      border: 4px solid var(--az-navy); border-top: 0; box-shadow: 8px 8px 0 var(--az-navy);
+      font-size: 15px; font-weight: 800; line-height: 1.6;
+    }
 
     .contact { position: relative; overflow: hidden; background: var(--az-yellow); }
     .contact::before { position: absolute; inset: 0; content: ""; pointer-events: none; opacity: .1; background: repeating-linear-gradient(45deg, var(--az-yellow), var(--az-yellow) 20px, var(--az-pink) 20px, var(--az-pink) 40px); }
