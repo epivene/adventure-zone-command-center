@@ -477,6 +477,9 @@
     .urgent-contact { max-width: 760px; margin: -12px auto 28px; padding: 14px 16px; color: var(--az-navy); background: rgba(255,255,255,.78); border-left: 4px solid var(--az-pink); font-size: 14px; font-weight: 800; line-height: 1.5; text-align: center; }
     .urgent-contact a { color: var(--az-navy); text-decoration: underline; text-decoration-color: var(--az-pink); text-decoration-thickness: 2px; text-underline-offset: 3px; }
     .contact-form { padding: 20px; background: var(--az-white); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .convention-form-note { margin: 0 0 24px; padding: 14px 16px; color: var(--az-navy); background: var(--az-yellow); border-left: 5px solid var(--az-pink); font-size: 14px; font-weight: 800; line-height: 1.45; }
+    .convention-form-note[hidden] { display: none; }
+    .convention-form-note strong { display: block; margin-bottom: 3px; font-size: 12px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; }
     .form-grid { display: grid; gap: 24px; }
     .field { display: flex; flex-direction: column; }
     .field.full { grid-column: 1 / -1; }
@@ -819,6 +822,7 @@
 
   function formMarkup() {
     return `<form class="contact-form" novalidate>
+      <div class="convention-form-note" hidden><strong>Convention Guest</strong>Your convention visit will automatically be included with your inquiry.</div>
       <div class="form-grid">
         <div class="field"><label for="az-name">Your Name *</label><input id="az-name" name="name" required maxlength="120" placeholder="Jane Smith"></div>
         <div class="field"><label for="az-email">Email Address *</label><input id="az-email" name="email" type="email" required maxlength="254" placeholder="jane@example.com"></div>
@@ -840,11 +844,11 @@
       <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
-        <h2 class="display" id="convention-welcome-title">Welcome, Convention Guests!</h2>
-        <p>Thanks for stopping by The Adventure Zone. We bring a fully staffed traveling inflatable carnival to fairs, festivals, rodeos, and major community events.</p>
-        <p class="convention-offer">Convention attendees may qualify for exclusive booking savings. Tell us about your event to receive your convention offer.</p>
+        <h2 class="display" id="convention-welcome-title">It’s So Nice to See You Again!</h2>
+        <p>Thank you for taking a moment to reconnect with The Adventure Zone after the convention. We’re genuinely glad you’re here.</p>
+        <p class="convention-offer">As a convention guest, you may qualify for special booking savings. Tell us a little about your event and we’ll help you explore the best fit.</p>
         <div class="convention-actions">
-          <button class="button" type="button" data-convention-claim>Claim Your Convention Offer</button>
+          <button class="button" type="button" data-convention-claim>Tell Us About Your Event</button>
           <button class="button outline" type="button" data-convention-explore>Explore the Site</button>
         </div>
       </section>
@@ -980,7 +984,10 @@
       this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
       this.abortController = new AbortController();
       this.bindInteractions();
-      if (this.isConventionVisit()) this.openConventionWelcome();
+      if (this.isConventionVisit()) {
+        this.shadowRoot.querySelector(".convention-form-note")?.removeAttribute("hidden");
+        this.openConventionWelcome();
+      }
       this.updateScrollState();
       this.setupResizeEvents();
       this.teamLayoutTimer = window.setTimeout(() => {

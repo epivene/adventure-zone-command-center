@@ -725,8 +725,13 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
-    expect(dialog).toHaveTextContent("Welcome, Convention Guests!");
-    expect(dialog).toHaveTextContent("Convention attendees may qualify for exclusive booking savings.");
+    expect(dialog).toHaveTextContent("It’s So Nice to See You Again!");
+    expect(dialog).toHaveTextContent("Thank you for taking a moment to reconnect with The Adventure Zone after the convention.");
+    expect(dialog).toHaveTextContent("As a convention guest, you may qualify for special booking savings.");
+    expect(dialog).not.toHaveTextContent("Welcome, Convention Guests!");
+    expect(root.querySelector("[data-convention-claim]")).toHaveTextContent("Tell Us About Your Event");
+    expect(root.querySelector(".convention-form-note")).not.toHaveAttribute("hidden");
+    expect(root.querySelector(".convention-form-note")).toHaveTextContent("Your convention visit will automatically be included with your inquiry.");
     expect(dialog?.textContent).not.toMatch(/12%|7 days|15 days/i);
     expect(root.querySelector("[data-convention-close]")).toHaveAttribute("aria-label", "Close convention welcome");
     expect(root.activeElement).toBe(root.querySelector("[data-convention-claim]"));
@@ -739,6 +744,7 @@ describe("adventure-zone-site inquiry contract", () => {
       const { root } = mountSite();
 
       expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
+      expect(root.querySelector(".convention-form-note")).toHaveAttribute("hidden");
       expect(document.body.style.overflow).toBe("");
     },
   );
