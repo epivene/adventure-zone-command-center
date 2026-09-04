@@ -87,7 +87,7 @@
   const teamMembers = [
     ["Dave", "Big Boss Team Lead", IMAGE.dave, "Dave and Tonya from The Adventure Zone", "left: clamp(22px, 3vw, 36px); right: auto; top: 2%;"],
     ["Amy", "Office Manager & Booking Agent", IMAGE.amy, "Amy from The Adventure Zone", "left: auto; right: clamp(34px, 5vw, 64px); top: 11%;"],
-    ["The Toy Guy & Queen La-La", "Cotton Candy Team Leaders", IMAGE.queenLala, "The Toy Guy and Queen La-La from The Adventure Zone", "left: clamp(32px, 5vw, 58px); right: auto; top: 19%;"],
+    ["Mr. Nine & Lady Love", "Cotton Candy Team Leaders", IMAGE.queenLala, "Mr. Nine and Lady Love from The Adventure Zone", "left: clamp(32px, 5vw, 58px); right: auto; top: 19%;"],
     ["Spaz", "Team Leader", IMAGE.spaz, "Spaz from The Adventure Zone", "left: auto; right: clamp(22px, 4vw, 48px); top: 27.7%;"],
     ["Hulk", "Team Leader", IMAGE.hulk, "Hulk from The Adventure Zone", "left: clamp(44px, 6vw, 72px); right: auto; top: 36%;"],
     ["Junior", "Team Leader", IMAGE.junior, "Junior from The Adventure Zone", "left: auto; right: clamp(42px, 7vw, 86px); top: 44.5%;"],
@@ -829,11 +829,11 @@
           <nav class="desktop-nav" aria-label="Primary navigation">
             <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
           </nav>
-          <div class="desktop-book"><a class="button" href="#contact">Book Now ${icon("arrow")}</a></div>
+          <div class="desktop-book"><a class="button" href="#contact">Contact ${icon("arrow")}</a></div>
           <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
-          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Book Now ${icon("chevron")}</a>
+          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
         </nav>
       </header>
 
@@ -888,8 +888,8 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event. Every package comes fully staffed for 1 to 4 days.</p></div>
         <div class="package-grid">
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
           ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$7,500", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
           ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$7,500", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>

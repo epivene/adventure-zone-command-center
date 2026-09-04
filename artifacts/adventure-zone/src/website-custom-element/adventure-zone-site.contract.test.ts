@@ -185,7 +185,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(names).toEqual([
       "Dave",
       "Amy",
-      "The Toy Guy & Queen La-La",
+      "Mr. Nine & Lady Love",
       "Spaz",
       "Hulk",
       "Junior",
@@ -201,6 +201,24 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(bubbles.every((bubble) => bubble.querySelector(".team-name + .team-role"))).toBe(true);
     expect(applicableStyle(root, ".team-float")?.display).toBe("block");
     expect(applicableStyle(root, ".team-label")?.display).toBe("block");
+  });
+
+  it("labels both header contact links as Contact", () => {
+    const { root } = mountSite();
+    const headerContactLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>('.site-header a[href="#contact"]'));
+
+    expect(headerContactLinks).toHaveLength(2);
+    expect(headerContactLinks.map((link) => link.textContent?.trim().replace(/\s+/g, " "))).toEqual([
+      "Contact",
+      "Contact",
+    ]);
+  });
+
+  it("places the flagship Adventure Zone package between the other packages", () => {
+    const { root } = mountSite();
+    const titles = Array.from(root.querySelectorAll<HTMLElement>(".package-card h3"), (heading) => heading.textContent?.trim());
+
+    expect(titles).toEqual(["Pirate's Rebellion", "Adventure Zone", "Warrior's Playground"]);
   });
 
   it("keeps crew bubbles small and the site shell full-width on mobile and desktop canvases", () => {
@@ -438,7 +456,8 @@ describe("adventure-zone-site inquiry contract", () => {
       expect(Array.from(lineup.querySelectorAll(".attraction-chip-list span")).map((chip) => chip.textContent?.trim()))
         .toEqual(expectedLineups.get(title));
     }
-    expect(cards[0]?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
+    const adventureCard = cards.find((card) => card.querySelector("h3")?.textContent?.trim() === "Adventure Zone");
+    expect(adventureCard?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
   });
 
   it("opens lineup and FAQ panels without growing beyond Wix's fixed custom-element frame", () => {
