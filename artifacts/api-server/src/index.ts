@@ -222,11 +222,11 @@ async function completeRequiredStartup(): Promise<void> {
         "Post-listen database maintenance failed; server remains available",
       );
     },
-    onMaintenanceSettled() {
+    onReady() {
       if (shutdownRequested) return;
       markAppReady();
       logger.info(
-        "Post-listen database maintenance settled; API traffic enabled",
+        "Required database startup settled; API traffic enabled",
       );
     },
   }).catch((err) => {
