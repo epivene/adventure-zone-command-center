@@ -611,6 +611,7 @@
       .menu-toggle { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
       .button { min-height: 40px; padding: 9px 12px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 10px; letter-spacing: .1em; }
       .hero { min-height: 500px; padding: 86px 14px 34px; }
+      .hero-video { transform: scale(1.18); transform-origin: center; }
       .hero-content { align-items: flex-start; }
       .eyebrow { margin-bottom: 16px; padding: 5px 9px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 9px; }
       .eyebrow .az-icon { width: 12px; height: 12px; }
@@ -681,6 +682,22 @@
       .faq-answer { padding: 16px; font-size: 13px; }
       .contact-panel, .contact-form { padding: 18px; }
       .footer-inner { gap: 14px; }
+    }
+
+    @media (max-width: 479px) {
+      .about-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 12px; }
+      .stat-card { padding: 8px; overflow: hidden; }
+      .stat-number { font-size: 18px; letter-spacing: -.04em; }
+      .stat-label { font-size: 7px; line-height: 1.15; letter-spacing: 0; overflow-wrap: anywhere; }
+      .stat-card .az-icon { width: 20px; height: 20px; }
+      .experience-layout { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .scale-card { padding: 12px; overflow: hidden; }
+      .scale-card h2 { font-size: 22px; overflow-wrap: anywhere; }
+      .how-layout { grid-template-columns: minmax(0, 1fr); gap: 22px; }
+      .how-copy p { max-width: 220px; }
+      .step-card { min-width: 0; padding: 12px; overflow: hidden; }
+      .step-card h4 { font-size: 16px; overflow-wrap: anywhere; }
+      .step-card p { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
     }
 
     @media (min-width: 480px) and (max-width: 767px) {
