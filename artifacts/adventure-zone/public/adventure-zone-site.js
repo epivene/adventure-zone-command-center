@@ -600,6 +600,94 @@
       .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
 
+    @media (max-width: 767px) {
+      :host { font-size: 13px; }
+      .container { width: calc(100% - 24px); }
+      .site-header, .site-header.scrolled { padding: 8px 0; }
+      .header-row { gap: 10px; }
+      .logo { width: 84px; max-height: 44px; }
+      .desktop-book { display: flex; margin-left: auto; }
+      .desktop-book .button { min-height: 40px; padding: 7px 10px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); font-size: 8px; letter-spacing: .1em; }
+      .menu-toggle { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
+      .button { min-height: 40px; padding: 9px 12px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 10px; letter-spacing: .1em; }
+      .hero { min-height: 500px; padding: 86px 14px 34px; }
+      .hero-content { align-items: flex-start; }
+      .eyebrow { margin-bottom: 16px; padding: 5px 9px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 9px; }
+      .eyebrow .az-icon { width: 12px; height: 12px; }
+      .hero h1 { max-width: 560px; margin-bottom: 14px; font-size: clamp(2.6rem, 11.5vw, 4rem); line-height: .88; text-align: left; }
+      .hero h1 .yellow::after { display: block; bottom: -8px; height: 4px; border-bottom-width: 4px; }
+      .hero-copy { max-width: 560px; margin-bottom: 22px; font-size: 13px; line-height: 1.3; text-align: left; }
+      .hero-actions { flex-direction: row; align-items: stretch; gap: 10px; width: auto; }
+      .hero-actions .button { width: auto; }
+      .marquee { padding: 10px 0; }
+      .marquee-item { gap: 10px; margin: 0 18px; font-size: 11px; }
+      .section { padding: 36px 14px; }
+      .about-layout { grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr); gap: 16px; align-items: start; }
+      .section h2 { margin-bottom: 14px; font-size: clamp(1.75rem, 7.5vw, 2.65rem); }
+      .tag { gap: 5px; margin-bottom: 14px; padding: 5px 9px; font-size: 9px; letter-spacing: .1em; }
+      .tag .az-icon { width: 12px; height: 12px; }
+      .body-large { font-size: 12px; line-height: 1.4; }
+      .body-large p { margin-bottom: 10px; }
+      .stats { gap: 8px; }
+      .stat-card { min-height: 96px; padding: 10px; border-width: 3px; }
+      .stat-number { font-size: 28px; }
+      .stat-label { margin-top: 5px; font-size: 8px; letter-spacing: .08em; }
+      .stat-card .az-icon { width: 24px; height: 24px; margin-bottom: 7px; }
+      .about-bottom { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; margin-top: 20px; padding-top: 16px; }
+      .about-bottom p { font-size: 11px; }
+      .member-badge { min-width: 0; width: 138px; padding: 7px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
+      .member-logos { gap: 6px; }
+      .member-logo.rmaf { width: 74px; height: 42px; }
+      .member-logo.waf { width: 40px; height: 40px; }
+      .member-label { margin-top: 4px; font-size: 8px; }
+      .mission-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
+      .mission-card h2 { margin-bottom: 12px; }
+      .mission-card p { font-size: 14px; }
+      .experience-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; align-items: center; }
+      .scale-card { padding: 16px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
+      .scale-card .az-icon { width: 32px; height: 32px; margin-bottom: 12px; }
+      .scale-card h2 { margin-bottom: 12px; }
+      .scale-card p { font-size: 11px; }
+      .experience-copy h3 { margin-bottom: 14px; font-size: clamp(1.35rem, 5.8vw, 2rem); }
+      .experience-copy > p { margin-bottom: 18px; font-size: 11px; }
+      .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+      .feature { gap: 7px; }
+      .feature-icon { flex-basis: 30px; width: 30px; height: 30px; border-width: 3px; }
+      .feature-icon .az-icon { width: 14px; height: 14px; }
+      .feature h4 { margin-bottom: 4px; font-size: 11px; }
+      .feature p { font-size: 9px; }
+      .packages-intro { margin-bottom: 34px; font-size: 13px; }
+      .package-grid { gap: 24px; }
+      .package-card { border-width: 3px; box-shadow: 5px 5px 0 var(--az-white); }
+      .package-flag { top: -17px; padding: 5px 12px; border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); font-size: 8px; }
+      .package-image { height: 160px; border-bottom-width: 3px; }
+      .package-content { padding: 16px; }
+      .package-title { gap: 8px; margin-bottom: 12px; }
+      .package-title .az-icon { width: 24px; height: 24px; }
+      .package-title h3 { font-size: 23px; }
+      .package-copy, .package-features { font-size: 12px; }
+      .package-copy { margin-bottom: 16px; }
+      .package-price { margin: 16px -16px -16px; padding: 16px; }
+      .price { font-size: 34px; }
+      .how-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
+      .how-copy p, .safety-copy { font-size: 12px; }
+      .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .step-card, .safety-card, .booking-card { padding: 16px; }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .gallery-frame:nth-child(2) { transform: translateY(18px); }
+      .faq-item summary { padding: 13px 15px; font-size: 14px; }
+      .faq-answer { padding: 16px; font-size: 13px; }
+      .contact-panel, .contact-form { padding: 18px; }
+      .footer-inner { gap: 14px; }
+    }
+
+    @media (min-width: 480px) and (max-width: 767px) {
+      .package-grid, .booking-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+      .package-title h3 { font-size: 18px; }
+      .package-image { height: 138px; }
+      .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
     .az-site.wix-preview-frame .tube-man-position { display: none; }
 
     @media (max-width: 639px) {

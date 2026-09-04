@@ -38,16 +38,54 @@ function mountSite() {
 }
 
 function applicableStyle(root: ShadowRoot, selector: string, canvasWidth = 980) {
+  const filterMediaRules = (css: string): string => {
+    let output = "";
+    let cursor = 0;
+    while (cursor < css.length) {
+      const mediaStart = css.indexOf("@media", cursor);
+      if (mediaStart === -1) return output + css.slice(cursor);
+      output += css.slice(cursor, mediaStart);
+      const openBrace = css.indexOf("{", mediaStart);
+      if (openBrace === -1) return output + css.slice(mediaStart);
+      let depth = 1;
+      let closeBrace = openBrace + 1;
+      while (closeBrace < css.length && depth > 0) {
+        if (css[closeBrace] === "{") depth += 1;
+        if (css[closeBrace] === "}") depth -= 1;
+        closeBrace += 1;
+      }
+      const condition = css.slice(mediaStart + 6, openBrace);
+      const minWidth = /min-width:\s*(\d+)px/.exec(condition)?.[1];
+      const maxWidth = /max-width:\s*(\d+)px/.exec(condition)?.[1];
+      const applies = (!minWidth || Number(minWidth) <= canvasWidth)
+        && (!maxWidth || Number(maxWidth) >= canvasWidth);
+      if (applies) output += filterMediaRules(css.slice(openBrace + 1, closeBrace - 1));
+      cursor = closeBrace;
+    }
+    return output;
+  };
   const stylesheet = document.createElement("style");
-  stylesheet.textContent = root.querySelector("style")?.textContent ?? "";
+  const rawStyles = root.querySelector("style")?.textContent ?? "";
+  const filteredStyles = filterMediaRules(rawStyles);
+  stylesheet.textContent = filteredStyles;
   document.body.append(stylesheet);
   const applicableRules: CSSStyleRule[] = [];
   const visitRules = (rules: CSSRuleList, applies = true) => {
     for (const rule of Array.from(rules)) {
       if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
       if (rule instanceof CSSMediaRule) {
-        const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
-        visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
+        const mediaText = rule.conditionText
+          || rule.media?.mediaText
+          || /^@media\s*([^\{]+)/.exec(rule.cssText)?.[1]
+          || "";
+        const minWidth = /min-width:\s*(\d+)px/.exec(mediaText)?.[1];
+        const maxWidth = /max-width:\s*(\d+)px/.exec(mediaText)?.[1];
+        visitRules(
+          rule.cssRules,
+          applies
+            && (!minWidth || Number(minWidth) <= canvasWidth)
+            && (!maxWidth || Number(maxWidth) >= canvasWidth),
+        );
       }
     }
   };
@@ -203,6 +241,25 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(hostStyle.width).toBe("100%");
     expect(hostStyle.maxWidth).toBe("100%");
     expect(hostStyle.overflowX).toBe("hidden");
+  });
+
+  it.each([320, 412, 600])("keeps the full mobile site compact at %ipx", (canvasWidth) => {
+    const { root } = mountSite();
+    const heroHeight = Number.parseFloat(applicableStyle(root, ".hero", canvasWidth).minHeight);
+    const sectionPadding = Number.parseFloat(applicableStyle(root, ".section", canvasWidth).paddingTop);
+    const statHeight = Number.parseFloat(applicableStyle(root, ".stat-card", canvasWidth).minHeight);
+    const packageImageHeight = Number.parseFloat(applicableStyle(root, ".package-image", canvasWidth).height);
+
+    expect(applicableStyle(root, ".desktop-book", canvasWidth).display).toBe("flex");
+    expect(applicableStyle(root, ".hero-content", canvasWidth).alignItems).toBe("flex-start");
+    expect(applicableStyle(root, ".hero-actions", canvasWidth).flexDirection).toBe("row");
+    expect(applicableStyle(root, ".about-layout", canvasWidth).gridTemplateColumns).not.toBe("");
+    expect(applicableStyle(root, ".experience-layout", canvasWidth).gridTemplateColumns).not.toBe("");
+    expect(applicableStyle(root, ".feature-grid", canvasWidth).gridTemplateColumns).not.toBe("");
+    expect(heroHeight).toBeLessThanOrEqual(560);
+    expect(sectionPadding).toBeLessThanOrEqual(40);
+    expect(statHeight).toBeLessThanOrEqual(104);
+    expect(packageImageHeight).toBeLessThanOrEqual(170);
   });
 
   it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
@@ -452,30 +509,10 @@ describe("adventure-zone-site inquiry contract", () => {
   });
 
   it("uses a compact desktop treatment at Wix's 980px canvas width", () => {
-    const element = document.createElement("adventure-zone-site") as HTMLElement;
-    document.body.append(element);
-    const stylesheet = document.createElement("style");
-    stylesheet.textContent = element.shadowRoot?.querySelector("style")?.textContent ?? "";
-    document.body.append(stylesheet);
-
+    const { root } = mountSite();
     const canvasWidth = 980;
-    const applicableRules: CSSStyleRule[] = [];
-    const visitRules = (rules: CSSRuleList, applies = true) => {
-      for (const rule of Array.from(rules)) {
-        if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
-        if (rule instanceof CSSMediaRule) {
-          const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
-          visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
-        }
-      }
-    };
-    visitRules(stylesheet.sheet!.cssRules);
-
     const finalStyle = (selector: string, property: keyof CSSStyleDeclaration) => {
-      const rule = applicableRules
-        .filter((candidate) => candidate.selectorText.split(",").some((part) => part.trim() === selector))
-        .at(-1);
-      return rule?.style[property] as string | undefined;
+      return applicableStyle(root, selector, canvasWidth)[property] as string | undefined;
     };
     const toPixels = (token: string) => {
       const value = Number.parseFloat(token);
@@ -496,29 +533,9 @@ describe("adventure-zone-site inquiry contract", () => {
   });
 
   it("keeps the rotated promo banner below the fixed header on Wix's desktop canvas", () => {
-    const element = document.createElement("adventure-zone-site") as HTMLElement;
-    document.body.append(element);
-    const stylesheet = document.createElement("style");
-    stylesheet.textContent = element.shadowRoot?.querySelector("style")?.textContent ?? "";
-    document.body.append(stylesheet);
-
+    const { root } = mountSite();
     const canvasWidth = 980;
-    const applicableRules: CSSStyleRule[] = [];
-    const visitRules = (rules: CSSRuleList, applies = true) => {
-      for (const rule of Array.from(rules)) {
-        if (rule instanceof CSSStyleRule && applies) applicableRules.push(rule);
-        if (rule instanceof CSSMediaRule) {
-          const minWidth = /min-width:\s*(\d+)px/.exec(rule.conditionText)?.[1];
-          visitRules(rule.cssRules, applies && (!minWidth || Number(minWidth) <= canvasWidth));
-        }
-      }
-    };
-    visitRules(stylesheet.sheet!.cssRules);
-
-    const heroRule = applicableRules
-      .filter((candidate) => candidate.selectorText.split(",").some((part) => part.trim() === ".hero"))
-      .at(-1);
-    const padding = heroRule?.style.padding.split(/\s+/).map(Number.parseFloat);
+    const padding = applicableStyle(root, ".hero", canvasWidth).padding.split(/\s+/).map(Number.parseFloat);
     expect(padding).toHaveLength(3);
 
     const [paddingTop, , paddingBottom] = padding!;
