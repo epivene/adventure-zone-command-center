@@ -56,8 +56,8 @@ function handoffIcon(handoff: EquipmentHandoffView) {
   return L.divIcon({
     className: "az-handoff-marker-wrap",
     html: `<span class="az-handoff-marker ${approved ? "az-handoff-marker--approved" : "az-handoff-marker--suggested"}">↔</span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
 }
 
