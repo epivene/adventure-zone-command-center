@@ -57,3 +57,5 @@ jobs:
           name: stone-age-coi-profile-receipt
           path: stone-age-coi-profile-receipt.json
           retention-days: 7
+
+# Registered workflow trigger.
