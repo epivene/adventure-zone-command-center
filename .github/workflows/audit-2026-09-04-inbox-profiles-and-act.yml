@@ -29,6 +29,9 @@ jobs:
           const base = process.env.API_URL.replace(/\/$/, "");
           const token = process.env.ASSISTANT_IMPORT_TOKEN;
           const targets = [
+            ["Great Reno Balloon Race","6237a215-ead1-4794-be45-05cc2ceef761"],
+            ["Boulder Art Festival","c68d7ed7-097e-4205-b78e-6e65318e78e5"],
+            ["Country Jam Colorado","f1099a2a-b9d9-4cfd-a251-f6569715d9ca"],
             ["Castle Rock Artfest","08a64711-ef24-4e42-865b-bcf5bc525665"],
             ["International Arts & Crafts Festival","1f474081-dfb5-4565-8ca5-e371f0805d23"],
             ["WYO-131 Biketoberfest Gravel Race","47a2421f-efbd-4abe-bc21-3123bb65f40f"],
@@ -55,7 +58,7 @@ jobs:
           ];
           const searches = [
             "Great Reno Balloon Race","Boulder Art Festival","Green River Melon Days",
-            "Jefferson County Fair Boulder Montana","San Juan County Fair",
+            "Jefferson County Fair Boulder Montana","Jefferson County Fair Boulder","Boulder Montana Fair","San Juan County Fair","Monticello Utah Fair","Melon Days",
             "Country Jam Colorado","Old South Gaylord"
           ];
           async function request(path, auth = true) {
