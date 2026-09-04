@@ -151,6 +151,9 @@ describe("EventMap unresolved locations", () => {
       "potential-mapped",
       "confirmed-mapped-2",
     ]));
+    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "confirmed-mapped")?.routeStopNumber).toBe(1);
+    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "confirmed-mapped-2")?.routeStopNumber).toBe(2);
+    expect(lastLayerProps.events.find((event: MapEvent) => event.id === "potential-mapped")?.routeStopNumber).toBeNull();
     expect(lastLayerProps.routeLines).toHaveLength(1);
     expect(lastLayerProps.routeLines[0].coordinates).toEqual([
       [-105.8, 46.4],
