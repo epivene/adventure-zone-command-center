@@ -148,12 +148,10 @@ describe("adventure-zone-site inquiry contract", () => {
   it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
     const { root } = mountSite();
 
-    expect(applicableStyle(root, ".desktop-nav", 980).display).toBe("flex");
+    expect(applicableStyle(root, ".desktop-nav", 980).display).toBe("none");
     expect(applicableStyle(root, ".desktop-book", 980).display).toBe("flex");
-    expect(applicableStyle(root, ".menu-toggle", 980).display).toBe("none");
+    expect(applicableStyle(root, ".menu-toggle", 980).display).toBe("inline-flex");
     expect(Number.parseFloat(applicableStyle(root, ".logo", 980).width)).toBeLessThanOrEqual(180);
-    expect(Number.parseFloat(applicableStyle(root, ".desktop-nav", 980).gap)).toBeLessThanOrEqual(14);
-    expect(Number.parseFloat(applicableStyle(root, ".desktop-nav", 980).fontSize)).toBeLessThanOrEqual(11);
     expect(applicableStyle(root, ".desktop-book .button", 980).padding).toBe("10px 14px");
     expect(Number.parseFloat(applicableStyle(root, ".desktop-book .button", 980).fontSize)).toBeLessThanOrEqual(11);
     expect(applicableStyle(root, ".desktop-nav", 1280).display).toBe("flex");
@@ -166,6 +164,8 @@ describe("adventure-zone-site inquiry contract", () => {
     const shell = root.querySelector<HTMLElement>(".az-site")!;
     const mascotStyle = applicableStyle(root, ".az-site.wix-preview-frame .tube-man-position");
     const teamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-float");
+    const rightTeamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-bubble[style*='right:']");
+    const previewHeaderStyle = applicableStyle(root, ".az-site.wix-preview-frame .site-header .container", 980);
     const visibleTeamIndexes = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"))
       .map((bubble) => bubble.dataset.teamIndex);
 
@@ -173,8 +173,11 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(mascotStyle.position).toBe("absolute");
     expect(Number.parseFloat(mascotStyle.top)).toBeGreaterThan(200);
     expect(Number.parseFloat(mascotStyle.top)).toBeLessThan(620);
+    expect(Number.parseFloat(mascotStyle.right)).toBeGreaterThanOrEqual(100);
     expect(teamStyle.position).toBe("absolute");
     expect(Number.parseFloat(teamStyle.top)).toBeGreaterThanOrEqual(620);
+    expect(Number.parseFloat(rightTeamStyle.right)).toBeGreaterThanOrEqual(100);
+    expect(previewHeaderStyle.width).toBe("calc(100% - 144px)");
     expect(visibleTeamIndexes).toEqual(["0", "2", "5"]);
   });
 
@@ -331,7 +334,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(resolveClamp(finalStyle(".hero h1", "fontSize"))).toBeLessThanOrEqual(90);
     expect(resolveClamp(finalStyle(".section h2", "fontSize"))).toBeLessThanOrEqual(60);
     expect(resolveClamp(finalStyle(".hero", "minHeight"))).toBeLessThanOrEqual(660);
-    expect(finalStyle(".desktop-nav", "display")).toBe("flex");
+    expect(finalStyle(".desktop-nav", "display")).toBe("none");
   });
 
   it("keeps the rotated promo banner below the fixed header on Wix's desktop canvas", () => {
