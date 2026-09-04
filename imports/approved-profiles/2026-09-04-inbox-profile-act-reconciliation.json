@@ -1,0 +1,354 @@
+[
+  {
+    "organizationId": "47a2421f-efbd-4abe-bc21-3123bb65f40f",
+    "event": {
+      "name": "WYO-131 Biketoberfest Gravel Race",
+      "city": "Lander",
+      "region": "WY"
+    },
+    "notes": [
+      {
+        "subject": "Sept. 1, 2026 reply sent — guarantee-first 2027 option",
+        "body": "Desiree replied to Nicki Simon at wyo131gravel@landercycling.org on Sept. 1, 2026. The reply acknowledged the tight budget and proposed reconnecting early next year. It led with a guaranteed-pay structure: a reduced upfront cost with an agreed minimum, while attendee ticket sales help offset that amount. Nicki was asked for her preferred contact timing. Gmail message 1a05d45067fedfbb."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 WYO-131 guarantee-first follow-up",
+        "reason": "Reconnect with Nicki early for 2027. Lead with the guaranteed-pay structure; mention other commercial structures only if circumstances warrant.",
+        "dueAt": "2027-02-01T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "d7d3b5f5-1b32-4ced-a243-a82cc5c3989f",
+    "event": {
+      "name": "Celebrate South Salt Lake",
+      "city": "South Salt Lake",
+      "region": "UT"
+    },
+    "notes": [
+      {
+        "subject": "2027 vendor-form follow-up rescheduled",
+        "body": "The prior Sept. 1 task was a placeholder and is now moved to the appropriate 2027 planning window. Jenny Diersen said 2026 vendor needs were full and directed Adventure Zone to the vendor form for future South Salt Lake opportunities."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Complete South Salt Lake vendor form for 2027",
+        "reason": "Use the future-opportunities vendor form and reconnect before 2027 vendor needs are filled.",
+        "dueAt": "2027-01-04T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "0be0ba16-c148-4a7b-8bc9-0704d4515b62",
+    "event": {
+      "name": "Wagon Days (Ketchum) ID",
+      "city": "Ketchum",
+      "region": "ID"
+    },
+    "notes": [
+      {
+        "subject": "2026 outreach closed — use corrected Wagon Days contact for 2027",
+        "body": "The Aug. 13, 2026 outreach received no reply and the old Eryn address was no longer the right route. Preserve participate@ketchumidaho.org as the current general participation contact and approach early for the 2027 planning cycle."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 Wagon Days early outreach",
+        "reason": "Ask the participation team for the correct decision-maker and 2027 planning deadline.",
+        "dueAt": "2027-01-11T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "7a678287-6c31-41fb-bc1d-1754298a0581",
+    "eventProfile": {
+      "event": {
+        "name": "Town of Langford",
+        "city": "Langford",
+        "region": "SD"
+      },
+      "profile": {
+        "placeType": "municipality",
+        "description": "Town of Langford requested a direct Pirate's Rebellion quote for a tentative July 23–25, 2027 summer event after seeing the bumper boats in Forman, North Dakota."
+      },
+      "contacts": [
+        {
+          "name": "Town of Langford Finance Office",
+          "email": "townoflangford@venturecomm.net",
+          "role": "Quote requester",
+          "primary": true
+        }
+      ]
+    },
+    "notes": [
+      {
+        "subject": "Aug. 6, 2026 inbound quote request — Pirate's Rebellion for July 23–25, 2027",
+        "body": "The Town of Langford Finance Office asked for a quote for Pirate's Rebellion for tentative dates July 23–25, 2027. They saw the bumper boat setup in Forman, ND and said it appeared to be a hit. This is a warm inbound lead and needs a direct reply. Gmail message/thread 19fd83502c1a9820."
+      },
+      {
+        "subject": "UNSENT EMAIL DRAFT — Langford Pirate's Rebellion quote",
+        "body": "Hello,\n\nThank you for reaching out—and I’m so glad you had a chance to see Pirate’s Rebellion in Forman!\n\nFor your tentative July 23–25, 2027 dates, Pirate’s Rebellion is $7,500 for up to four days. We provide the attractions, complete setup and teardown, staffing and supervision throughout the event, and the required certificate of insurance.\n\nThose dates are tentative on your end, so please let me know what information you need from us to continue planning. We would love to bring Pirate’s Rebellion to Langford next summer.\n\nTake care,\nDesiree\nThe Adventure Zone"
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Send Langford 2027 Pirate's Rebellion quote",
+        "reason": "Warm inbound quote request has not received a reply. Send the prepared quote and confirm tentative July 23–25, 2027 dates.",
+        "dueAt": "2026-09-04T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "a7e364d7-b320-42ac-8306-f89ebf452ddd",
+    "event": {
+      "name": "White Sulphur Springs Labor Day Rodeo",
+      "city": "White Sulphur Springs",
+      "region": "MT"
+    },
+    "notes": [
+      {
+        "subject": "Duplicate 2027 quote reminders consolidated",
+        "body": "The live profile had two reminders for the same 2027 quote request. They were consolidated into one early-January follow-up. Organizer explicitly asked Adventure Zone to send a quote before next year's event."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Quote 2027 White Sulphur Springs Labor Day Rodeo",
+        "reason": "Organizer asked for a quote before the 2027 event; contact early enough to fit the budget and schedule.",
+        "dueAt": "2027-01-12T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "b453e452-4665-44a1-80b5-3d1c8a96d2f2",
+    "eventProfile": {
+      "event": {
+        "name": "Stone Age Stampede",
+        "city": "Dinosaur",
+        "region": "CO"
+      },
+      "contacts": [
+        {
+          "name": "Town of Dinosaur Finance",
+          "email": "finance@townofdinosaur.org",
+          "phone": "970-374-2286",
+          "role": "COI receiving office",
+          "primary": true
+        },
+        {
+          "name": "Julie",
+          "phone": "801-598-9699",
+          "role": "Local Stone Age Stampede committee contact",
+          "primary": false
+        }
+      ],
+      "booking": {
+        "enabled": true,
+        "name": "Stone Age Stampede",
+        "status": "confirmed",
+        "startsAt": "2026-09-11",
+        "endsAt": "2026-09-12",
+        "nextActionKind": "operations",
+        "nextActionDueAt": "2026-09-04"
+      }
+    },
+    "notes": [
+      {
+        "subject": "Sept. 2, 2026 operational status — updated COI requested and still must be filed",
+        "body": "Town of Dinosaur Finance said they look forward to receiving the updated Certificate of Insurance at Town Hall before the event so setup can go smoothly. Adventure Zone told them the updated COI had been requested from the insurance agency. The current booking is confirmed for Sept. 11–12, 2026; do not mark the insurance task complete until the updated certificate has actually been forwarded/filed. Gmail thread 1a041514745b7e44."
+      },
+      {
+        "subject": "ACT history retained on legacy Dinosaur profile",
+        "body": "The older profile 'Dinosaur Stone Age Stampede (Dinosaur) CO' contains imported ACT history. The current confirmed booking is on this canonical 'Stone Age Stampede' profile. Do not delete or merge either record without a reviewed profile-merge decision."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Confirm Stone Age Stampede COI filed at Town Hall",
+        "reason": "Updated COI was requested, but the Town requires it on file before Sept. 11 setup. Verify receipt and forward it if still outstanding.",
+        "dueAt": "2026-09-04T17:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "3cb429e6-adae-4fc6-9481-cb7276c11679",
+    "event": {
+      "name": "Helper Arts Festival",
+      "city": "Helper",
+      "region": "UT"
+    },
+    "notes": [
+      {
+        "subject": "Future fit option — Mini Zone for smaller footprint",
+        "body": "The 2026 rejection was specifically about the full Adventure Zone footprint. For a future year, offer the Mini Zone instead: five attractions in roughly 3,000–5,000 square feet. Only pursue if the organizer is open to a compact family area; do not repeat the full-zone pitch."
+      },
+      {
+        "subject": "UNSENT EMAIL DRAFT — Helper Arts Festival Mini Zone",
+        "body": "Hi,\n\nThank you for letting us know. I completely understand that the full Adventure Zone setup is too large for your festival area.\n\nFor future events, we do have a smaller Mini Zone option with five attractions that can fit in roughly 3,000–5,000 square feet. If that smaller footprint might work with a future layout, I’d love to reconnect early next year and see whether there is a good fit.\n\nI hope this year’s festival went wonderfully!\n\nTake care,\nDesiree\nThe Adventure Zone"
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 Helper Arts Festival Mini Zone follow-up",
+        "reason": "Reconnect only with the compact five-attraction Mini Zone as the solution to their space objection.",
+        "dueAt": "2027-01-11T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "e00c8d3e-1265-4d0a-b80b-acc38abbae0f",
+    "eventProfile": {
+      "event": {
+        "name": "Blanding City Fall Festival (Blanding) UT",
+        "city": "Blanding",
+        "region": "UT"
+      },
+      "booking": {
+        "enabled": true,
+        "name": "Blanding City Fall Festival - 2026",
+        "status": "confirmed",
+        "startsAt": "2026-09-12",
+        "endsAt": "2026-09-12",
+        "nextActionKind": "payment_check",
+        "nextActionDueAt": "2026-09-08"
+      }
+    },
+    "notes": [
+      {
+        "subject": "Aug. 18–25, 2026 — invoice sent and payment process initiated",
+        "body": "Shauna Sherrow said San Juan Counseling was initiating payment for the Sept. 12, 2026 Blanding Fall Festival and asked that the invoice be sent to Alyn Mitchell. Amy sent the invoice. Alyn's latest Aug. 25 response was 'Perfect! Thanks.' This confirms the current conversation is handled, but it does not by itself prove payment has cleared. Gmail thread 19d214e0a6d3f255."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Confirm Blanding payment and arrival details",
+        "reason": "Invoice was sent and payment was being initiated; verify cleared payment and final arrival/setup details before Sept. 12.",
+        "dueAt": "2026-09-08T15:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "organizationId": "1f474081-dfb5-4565-8ca5-e371f0805d23",
+    "event": {
+      "name": "International Arts & Crafts Festival (Draper) UT",
+      "city": "Draper",
+      "region": "UT"
+    },
+    "notes": [
+      {
+        "subject": "Sept. 1, 2026 acknowledgment sent to David Wilks",
+        "body": "Desiree thanked David Wilks for the update, said Adventure Zone would check back after the 2026 festival as Draper begins planning for 2027, and wished the Sept. 12 event well. The Oct. 1, 2026 follow-up remains the correct post-event planning touchpoint."
+      }
+    ]
+  },
+  {
+    "organizationId": "b427a3c6-04dd-4908-b37b-aef2e105847b",
+    "event": {
+      "name": "Silverton Arts Festival Silverton Creates! (Silverton) CO",
+      "city": "Silverton",
+      "region": "CO"
+    },
+    "notes": [
+      {
+        "subject": "Sept. 1, 2026 reply sent — asked for 2027 planning timing",
+        "body": "Adventure Zone thanked Silverton Creative District for keeping the company in mind and asked when would be the best time to reconnect for 2027. The existing Feb. 15, 2027 reminder remains appropriate unless the organizer provides a different planning window."
+      }
+    ]
+  },
+  {
+    "organizationId": "09da8d99-b383-4328-b42b-7c057a65ea27",
+    "event": {
+      "name": "Rist Canyon Mountain Festival (Bellvue) CO",
+      "city": "Bellvue",
+      "region": "CO"
+    },
+    "notes": [
+      {
+        "subject": "Sept. 3, 2026 closing acknowledgment — no further action",
+        "body": "Debbie Benson replied 'Thank you Desiree' after the final response. The footprint and free-kids-area constraints remain structural. No annual follow-up should be scheduled unless the event changes."
+      }
+    ]
+  },
+  {
+    "organizationId": "f8c3b2a1-5e7f-4db6-8663-6a5114d222fe",
+    "event": {
+      "name": "Timpanogos Storytelling Festival (Lehi) UT",
+      "city": "Lehi",
+      "region": "UT"
+    },
+    "notes": [
+      {
+        "subject": "Sept. 1, 2026 courteous close sent — fit mismatch",
+        "body": "Adventure Zone replied courteously after the festival said it was not that kind of event. The existing unlikely/no-follow-up disposition remains correct."
+      }
+    ]
+  },
+  {
+    "organizationId": "d28c20ed-8d50-4829-8cc5-80556418fa2b",
+    "event": {
+      "name": "County Fair - San Juan (Monticello) UT",
+      "city": "Monticello",
+      "region": "UT"
+    },
+    "notes": [
+      {
+        "subject": "2026 outreach status — no reply located",
+        "body": "The latest located outreach was a Sept. 25, 2025 email about returning for the 2026 San Juan County Fair in Monticello. No newer organizer reply was located in the current Gmail review. Keep the historical profile and try once early for the 2027 planning cycle."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 San Juan County Fair early outreach",
+        "reason": "Confirm the correct organizer and whether Adventure Zone can return in 2027.",
+        "dueAt": "2027-01-15T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  },
+  {
+    "eventProfile": {
+      "event": {
+        "name": "Jefferson County Fair (Boulder) MT",
+        "city": "Boulder",
+        "region": "MT"
+      },
+      "profile": {
+        "placeType": "festival_event",
+        "description": "Jefferson County Fair in Boulder, Montana. Adventure Zone sent one outreach email on Aug. 3, 2026 for the Aug. 20–23 event and received no reply."
+      },
+      "contacts": [
+        {
+          "name": "Susan Boyer",
+          "email": "susank.mt@gmail.com",
+          "role": "2026 outreach contact",
+          "primary": true
+        }
+      ]
+    },
+    "notes": [
+      {
+        "subject": "Aug. 3, 2026 outreach — no reply",
+        "body": "Amy emailed Susan Boyer about bringing Adventure Zone to the Aug. 20–23, 2026 Jefferson County Fair in Boulder, Montana. No reply was located. Preserve this as a separate profile from Jefferson County Fair in Rigby, Idaho. Gmail message 19fc96b039ee3417."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 Jefferson County Fair Boulder early outreach",
+        "reason": "Contact Susan early for 2027 and verify the decision-maker and available family-area footprint.",
+        "dueAt": "2027-01-15T16:00:00.000Z"
+      }
+    ],
+    "replaceOpenFollowUps": true
+  }
+]
