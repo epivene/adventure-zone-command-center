@@ -159,9 +159,26 @@ describe("adventure-zone-site inquiry contract", () => {
     const hostStyle = applicableStyle(root, ":host", canvasWidth);
     const photoWidth = Number.parseFloat(applicableStyle(root, ".team-photo", canvasWidth).width);
     const labelWidth = Number.parseFloat(applicableStyle(root, ".team-label", canvasWidth).width);
+    const toPixels = (token: string) => token.endsWith("vw")
+      ? Number.parseFloat(token) * canvasWidth / 100
+      : Number.parseFloat(token);
+    const resolveClamp = (value: string) => {
+      const parts = /^clamp\(([^,]+),\s*([^,]+),\s*([^\)]+)\)$/.exec(value);
+      expect(parts, `Expected a clamp() value, received ${value}`).not.toBeNull();
+      return Math.max(toPixels(parts![1]!), Math.min(toPixels(parts![2]!), toPixels(parts![3]!)));
+    };
+    const bubbleBounds = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble")).map((bubble) => {
+      const anchoredLeft = bubble.style.left !== "auto";
+      const edgeOffset = resolveClamp(anchoredLeft ? bubble.style.left : bubble.style.right);
+      const labelOverhang = (labelWidth - photoWidth) / 2;
+      return anchoredLeft
+        ? { left: edgeOffset - labelOverhang, right: edgeOffset + photoWidth + labelOverhang }
+        : { left: canvasWidth - edgeOffset - photoWidth - labelOverhang, right: canvasWidth - edgeOffset + labelOverhang };
+    });
 
     expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.15);
     expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.3);
+    expect(bubbleBounds.every(({ left, right }) => left >= 0 && right <= canvasWidth)).toBe(true);
     expect(hostStyle.width).toBe("100%");
     expect(hostStyle.maxWidth).toBe("100%");
     expect(hostStyle.overflowX).toBe("hidden");
