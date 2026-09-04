@@ -541,14 +541,14 @@
       .site-header { padding: 20px 0; }
       .site-header.scrolled { padding: 12px 0; }
       .menu-toggle { width: 48px; height: 48px; }
-      .hero { min-height: clamp(620px, 60vw, 760px); padding: 136px 32px 48px; }
+      .hero { min-height: clamp(560px, 58vw, 640px); padding: 140px 32px 32px; }
       .hero-content { align-items: flex-start; }
       .eyebrow { margin-bottom: 24px; padding: 8px 20px; font-size: 14px; }
       .eyebrow .az-icon { width: 20px; height: 20px; }
-      .hero h1 { font-size: clamp(4rem, 9vw, 6.75rem); text-align: left; }
+      .hero h1 { font-size: clamp(3.5rem, 8vw, 5.75rem); text-align: left; }
       .hero h1 .yellow { margin-top: 12px; }
       .hero h1 .yellow::after { display: block; }
-      .hero-copy { margin-bottom: 36px; font-size: 24px; text-align: left; }
+      .hero-copy { margin-bottom: 28px; font-size: 20px; text-align: left; }
       .section { padding: 72px 32px; }
       .section h2 { font-size: clamp(3rem, 6vw, 5.25rem); }
       .body-large { font-size: 20px; }
@@ -944,7 +944,9 @@
       }, 800);
       this.startRotations();
       const hash = window.location.hash.slice(1);
-      if (hash) window.requestAnimationFrame(() => this.scrollToId(hash));
+      const redirectedSection = new URLSearchParams(window.location.search).get("section") || "";
+      const initialSection = hash || redirectedSection;
+      if (initialSection) window.requestAnimationFrame(() => this.scrollToId(initialSection));
     }
 
     disconnectedCallback() {
