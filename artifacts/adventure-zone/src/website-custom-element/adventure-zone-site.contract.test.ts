@@ -149,7 +149,14 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".mascot-shell")?.overflow).not.toBe("hidden");
     expect(applicableStyle(root, ".mascot-shell")?.transform).toBe("translateY(3px)");
     expect(applicableStyle(root, ":host")?.position).toBe("fixed");
+    expect(applicableStyle(root, ":host")?.right).toBe("0px");
     expect(applicableStyle(root, ":host")?.bottom).toBe("0px");
+    expect(applicableStyle(root, ":host")?.left).toBe("auto");
+    expect(applicableStyle(root, ":host")?.width).toBe("130px");
+    expect(applicableStyle(root, ":host")?.height).toBe("230px");
+    expect(applicableStyle(root, ":host", 320)?.left).toBe("0px");
+    expect(applicableStyle(root, ":host", 320)?.width).toBe("100%");
+    expect(applicableStyle(root, ":host", 320)?.height).toBe("100%");
     const inlineMascots = siteRoot.querySelectorAll<HTMLImageElement>(".tube-man-position .tube-man-image");
     expect(inlineMascots).toHaveLength(1);
     expect(inlineMascots[0]?.getAttribute("src")).toBe(
@@ -219,6 +226,26 @@ describe("adventure-zone-site inquiry contract", () => {
     const titles = Array.from(root.querySelectorAll<HTMLElement>(".package-card h3"), (heading) => heading.textContent?.trim());
 
     expect(titles).toEqual(["Pirate's Rebellion", "Adventure Zone", "Warrior's Playground"]);
+  });
+
+  it("keeps the family-owned mission inside About instead of a separate card", () => {
+    const { root } = mountSite();
+    const about = root.querySelector("#about");
+
+    expect(root.querySelector("#mission")).toBeNull();
+    expect(about).toHaveTextContent(
+      "Family owned and operated, The Adventure Zone combines personal service with professional standards, experienced staffing, and reliable execution to help make your event safe, successful, and unforgettable.",
+    );
+  });
+
+  it("keeps unopened package cards compact when one lineup opens", () => {
+    const { root } = mountSite();
+    const lineups = Array.from(root.querySelectorAll<HTMLDetailsElement>(".attraction-lineup"));
+
+    lineups[1]!.open = true;
+
+    expect(lineups.map((lineup) => lineup.open)).toEqual([false, true, false]);
+    expect(applicableStyle(root, ".package-grid", 980).alignItems).toBe("start");
   });
 
   it("keeps crew bubbles small and the site shell full-width on mobile and desktop canvases", () => {
@@ -514,16 +541,17 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(bookingLinks.every((link) => !link.textContent?.includes("Partnerships"))).toBe(true);
   });
 
-  it("presents the family-owned mission to large-event decision makers without dash punctuation", () => {
+  it("presents the family-owned message to large-event decision makers inside About", () => {
     const { root } = mountSite();
-    const mission = root.querySelector("#mission")!;
+    const mission = root.querySelector("#about")!;
 
-    expect(mission.querySelector("h2")).toHaveTextContent("Built For Big Events. Run Like Family.");
+    expect(mission.querySelector("h2")?.textContent).toMatch(/Built For The\s*Big Day\./);
     expect(mission).toHaveTextContent("fairs, festivals, rodeos, and community events");
-    expect(mission).toHaveTextContent("event coordinators need");
-    expect(mission).toHaveTextContent(/from our family to yours/i);
-    expect(mission.textContent).not.toMatch(/[—–-]/);
-    expect(applicableStyle(root, ".mission-card h2", 320).fontSize).toBe("24px");
+    expect(mission).toHaveTextContent("professional standards, experienced staffing, and reliable execution");
+    expect(mission).toHaveTextContent(/family owned and operated/i);
+    const familyParagraph = Array.from(mission.querySelectorAll("p"))
+      .find((paragraph) => paragraph.textContent?.includes("Family owned and operated"));
+    expect(familyParagraph?.textContent).not.toMatch(/[—–-]/);
   });
 
   it("keeps the Proud Members badge in the original standards row", () => {
