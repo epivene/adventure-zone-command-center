@@ -209,6 +209,49 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(bubblesAfterScroll.map(positionOf)).toEqual(positionsBeforeScroll);
   });
 
+  it("moves a crew bubble into clear space when nearby wording changes", () => {
+    const { root } = mountSite();
+    const layer = root.querySelector<HTMLElement>(".team-float")!;
+    const bubble = root.querySelector<HTMLElement>('.team-bubble[data-team-index="0"]')!;
+    const photo = bubble.querySelector<HTMLElement>(".team-photo")!;
+    const label = bubble.querySelector<HTMLElement>(".team-label")!;
+    const obstacle = root.querySelector<HTMLElement>(".about h2")!;
+    const details = root.querySelector<HTMLDetailsElement>(".attraction-lineup")!;
+    const layerTop = 760;
+    const layerHeight = 3000;
+    let obstacleTop = 790;
+    const domRect = (left: number, top: number, right: number, bottom: number) => ({
+      x: left,
+      y: top,
+      left,
+      top,
+      right,
+      bottom,
+      width: right - left,
+      height: bottom - top,
+      toJSON() { return this; },
+    }) as DOMRect;
+    const bubbleTop = () => bubble.style.top.endsWith("%")
+      ? layerHeight * Number.parseFloat(bubble.style.top) / 100
+      : Number.parseFloat(bubble.style.top);
+
+    layer.getBoundingClientRect = () => domRect(0, layerTop, 980, layerTop + layerHeight);
+    Object.defineProperty(bubble, "offsetTop", { configurable: true, get: bubbleTop });
+    photo.getBoundingClientRect = () => domRect(8, layerTop + bubbleTop(), 104, layerTop + bubbleTop() + 96);
+    label.getBoundingClientRect = () => domRect(0, layerTop + bubbleTop() + 78, 112, layerTop + bubbleTop() + 140);
+    obstacle.getBoundingClientRect = () => domRect(0, obstacleTop, 160, obstacleTop + 200);
+
+    window.dispatchEvent(new Event("resize"));
+    const clearedTop = Number.parseFloat(bubble.style.top);
+
+    expect(clearedTop).toBeGreaterThanOrEqual(250);
+
+    obstacleTop = layerTop + clearedTop - 10;
+    details.dispatchEvent(new Event("toggle"));
+
+    expect(bubble.style.top).toBe("60px");
+  });
+
   it("renders collapsed package-specific attraction lineups", () => {
     const { root } = mountSite();
     const expectedLineups = new Map<string, string[]>([
