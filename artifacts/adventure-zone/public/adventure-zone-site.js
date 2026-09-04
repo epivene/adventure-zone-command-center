@@ -579,7 +579,18 @@
       .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
 
-    .az-site.wix-preview-frame .tube-man-position { position: absolute; top: 280px; right: 116px; bottom: auto; }
+    .az-site.wix-preview-frame .tube-man-position { display: none; }
+
+    @media (max-width: 639px) {
+      .az-site.wix-preview-frame .tube-man-position {
+        display: block;
+        position: absolute;
+        top: auto;
+        right: 6px;
+        bottom: 0;
+        width: 82px;
+      }
+    }
 
     @media (min-width: 960px) {
       .az-site.wix-preview-frame .site-header .container { width: calc(100% - 144px); margin-left: 32px; margin-right: auto; }
@@ -760,6 +771,7 @@
       </div></div></section>
 
       <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
+      <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
     </div>`;
   }
 
