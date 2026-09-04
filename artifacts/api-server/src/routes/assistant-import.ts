@@ -238,8 +238,9 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
     const now = new Date();
 
     const result = await db.transaction(async (transaction) => {
+      const renameExisting = requestedProfileId && req.body?.renameExisting === true;
       const organizationValues: Record<string, unknown> = {
-        ...(requestedProfileId ? {} : { name }),
+        ...(requestedProfileId && !renameExisting ? {} : { name }),
         city: city || existingProfile.city || null,
         region: region || existingProfile.region || null,
         updatedAt: now,
