@@ -262,7 +262,7 @@ describe("adventure-zone-site inquiry contract", () => {
         ? animationSafeTop - obstacleBottom
         : -1;
 
-    expect(verticalGap).toBeGreaterThanOrEqual(32);
+    expect(verticalGap).toBeGreaterThanOrEqual(48);
   });
 
   it("renders collapsed package-specific attraction lineups", () => {
