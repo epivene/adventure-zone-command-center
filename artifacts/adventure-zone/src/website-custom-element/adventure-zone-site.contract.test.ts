@@ -722,6 +722,7 @@ describe("adventure-zone-site inquiry contract", () => {
 
     expect(welcome).not.toHaveAttribute("hidden");
     expect(dialog).toHaveAttribute("role", "dialog");
+    expect(dialog).toHaveAttribute("tabindex", "-1");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
@@ -734,7 +735,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(root.querySelector(".convention-form-note")).toHaveTextContent("Your convention visit will automatically be included with your inquiry.");
     expect(dialog?.textContent).not.toMatch(/12%|7 days|15 days/i);
     expect(root.querySelector("[data-convention-close]")).toHaveAttribute("aria-label", "Close convention welcome");
-    expect(root.activeElement).toBe(root.querySelector("[data-convention-claim]"));
+    expect(root.activeElement).toBe(dialog);
   });
 
   it.each(["/", "/?welcome=Convention", "/?welcome=conventions", "/?section=contact"])(

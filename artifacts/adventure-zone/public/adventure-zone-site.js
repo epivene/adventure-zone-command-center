@@ -841,7 +841,7 @@
   function conventionWelcomeMarkup() {
     return `<div class="convention-welcome" hidden>
       <button class="convention-backdrop" type="button" data-convention-backdrop aria-label="Close convention welcome"></button>
-      <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title">
+      <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title" tabindex="-1">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
         <h2 class="display" id="convention-welcome-title">It’s So Nice to See You Again!</h2>
@@ -1101,7 +1101,7 @@
       welcome.hidden = false;
       window.requestAnimationFrame(() => {
         welcome.classList.add("open");
-        welcome.querySelector("[data-convention-claim]")?.focus();
+        welcome.querySelector(".convention-dialog")?.focus({ preventScroll: true });
       });
     }
 
