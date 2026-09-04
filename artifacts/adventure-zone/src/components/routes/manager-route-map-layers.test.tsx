@@ -44,7 +44,7 @@ vi.mock("./manager-route-map-shell", () => ({
 
 import { ManagerRouteMapLayers, ManagerTripNavigationActions } from "./manager-route-map-layers";
 
-const event: MapEvent & { planningEmphasis: "primary" | "dimmed" } = {
+const event: MapEvent & { planningEmphasis: "primary" | "dimmed"; routeStopNumber: number | null } = {
   id: "miles",
   name: "Eastern Montana Fair",
   city: "Miles City",
