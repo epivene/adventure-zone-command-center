@@ -805,6 +805,23 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
+  it("marks a convention QR inquiry in the existing message payload", async () => {
+    window.history.replaceState({}, "", "/?welcome=convention");
+    Object.defineProperty(window.crypto, "randomUUID", {
+      configurable: true,
+      value: () => "10000000-0000-4000-8000-000000000000",
+    });
+    globalThis.fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ referenceCode: "AZI-CONVENTION", message: "Saved." }), { status: 201, headers: { "Content-Type": "application/json" } }));
+    const { form } = mountForm();
+
+    submit(form);
+    await flush();
+
+    const body = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls[0]![1]!.body));
+    expect(body.message).toBe("Please bring the full Adventure Zone.\n\nLead source: Convention QR");
+    expect(body.pageUrl).toContain("welcome=convention");
+  });
+
   it("posts every form field, the honeypot, page URL, and one submission ID", async () => {
     const randomUUID = vi.fn(() => "10000000-0000-4000-8000-000000000001");
     Object.defineProperty(window.crypto, "randomUUID", { configurable: true, value: randomUUID });

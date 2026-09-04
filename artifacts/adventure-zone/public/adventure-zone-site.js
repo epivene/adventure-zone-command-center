@@ -1275,6 +1275,14 @@
       };
     }
 
+    withInquiryAttribution(values) {
+      if (!this.isConventionVisit()) return values;
+      return {
+        ...values,
+        message: `${values.message}\n\nLead source: Convention QR`,
+      };
+    }
+
     async submitInquiry(event) {
       event.preventDefault();
       const form = event.currentTarget;
@@ -1284,7 +1292,7 @@
         form.reportValidity();
         return;
       }
-      const values = this.collectFormValues(form);
+      const values = this.withInquiryAttribution(this.collectFormValues(form));
       const submitButton = form.querySelector('button[type="submit"]');
       const originalButtonMarkup = submitButton.innerHTML;
       if (!this.pendingSubmissionId) this.pendingSubmissionId = crypto.randomUUID();
