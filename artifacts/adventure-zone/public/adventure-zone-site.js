@@ -13,7 +13,7 @@
     rmaf: "https://adventure-zone-command-center-1.onrender.com/assets/rmaf-logo.png",
     waf: "https://adventure-zone-command-center-1.onrender.com/assets/waf-logo.png",
     adventure: "https://static.wixstatic.com/media/0e6e2c_d18d32eac9704b44a2dc9a1c28f9158b~mv2.jpg",
-    pirate: "https://static.wixstatic.com/media/0e6e2c_72073183a12b4dbbaf229cc6301aef72~mv2.png",
+    pirate: "https://adventure-zone-command-center-1.onrender.com/assets/pirates-rebellion-paddle-boats.jpg",
     warrior: "https://static.wixstatic.com/media/0e6e2c_a25608d697b146ac981ab5b6f074664c~mv2.jpg",
     spectacle01: "https://static.wixstatic.com/media/0e6e2c_2581795bc5464c6aabcb11f1ef326fd6~mv2.jpg",
     spectacle02: "https://static.wixstatic.com/media/0e6e2c_e5c8e9a8fde248a5a4d6be992aa40b6d~mv2.jpg",
@@ -27,6 +27,15 @@
     spectacle10: "https://static.wixstatic.com/media/0e6e2c_b7ac73deca70498ca998c007fcda96b7~mv2.png",
     spectacle11: "https://static.wixstatic.com/media/0e6e2c_30f8504527164df69482d7116b904e39~mv2.png",
     spectacle12: "https://static.wixstatic.com/media/0e6e2c_24c32d54c5234d269b728142992633e9~mv2.jpg",
+    galleryFamilyPlay: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-family-play-zone.jpg",
+    galleryRules: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-adventure-rules.jpg",
+    galleryPurpleObstacle: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-purple-obstacle-course.jpg",
+    galleryPirateFlag: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-pirate-flag.jpg",
+    galleryRedYellowSlide: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-red-yellow-obstacle-slide.jpg",
+    galleryWreckingBall: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-wrecking-ball-obstacle.jpg",
+    galleryActionArena: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-action-arena.jpg",
+    galleryRainbowSlide: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-rainbow-slide.jpg",
+    galleryBungeeRun: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-bungee-run.jpg",
     desiree: "https://static.wixstatic.com/media/0e6e2c_572447e3c82b41de9a3b2c6506085740~mv2.jpg",
     dave: "https://static.wixstatic.com/media/0e6e2c_0dfe30764eb14fbb901bcced2d089f8e~mv2.jpg",
     amy: "https://static.wixstatic.com/media/0e6e2c_8e5ec8576eef4d7eb8866eb3b49f0ee2~mv2.jpg",
@@ -60,6 +69,19 @@
     [IMAGE.spectacle10, "Guests enjoying a vibrant inflatable attraction"],
     [IMAGE.spectacle11, "Large-scale inflatable entertainment setup"],
     [IMAGE.spectacle12, "Colorful inflatable attractions filling an event space"],
+    [IMAGE.hero, "Adventure Zone attractions filling a large outdoor event"],
+    [IMAGE.adventure, "Adventure Zone inflatable carnival package"],
+    [IMAGE.pirate, "Pirate's Rebellion paddle boats and event display"],
+    [IMAGE.warrior, "Warrior's Playground action attraction"],
+    [IMAGE.galleryFamilyPlay, "Families enjoying a colorful play zone and inflatable attractions"],
+    [IMAGE.galleryRules, "Adventure Zone safety rules display beside the attractions"],
+    [IMAGE.galleryPurpleObstacle, "Child playing on a purple inflatable obstacle course"],
+    [IMAGE.galleryPirateFlag, "Pirate flag and skeleton decorating the paddle boat attraction"],
+    [IMAGE.galleryRedYellowSlide, "Red and yellow inflatable obstacle slide"],
+    [IMAGE.galleryWreckingBall, "Guests navigating the inflatable wrecking ball obstacle course"],
+    [IMAGE.galleryActionArena, "Players competing in the colorful action arena"],
+    [IMAGE.galleryRainbowSlide, "Child sliding down a rainbow-themed inflatable"],
+    [IMAGE.galleryBungeeRun, "Guests playing inside the red and yellow bungee run"],
   ];
 
   const teamMembers = [
@@ -289,7 +311,6 @@
     .body-large { color: var(--az-muted); font-size: 19px; font-weight: 800; line-height: 1.42; }
     .body-large p { margin: 0 0 16px; }
     .stats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
-    .stats .member-badge { grid-column: 1 / -1; justify-self: center; margin-top: 8px; }
     .stat-card { min-height: 132px; padding: 16px; border: 4px solid var(--az-navy); background: var(--az-white); }
     .stat-card.yellow { background: var(--az-yellow); }
     .stat-card.navy { color: var(--az-white); background: var(--az-navy); box-shadow: 8px 8px 0 var(--az-white); }
@@ -560,7 +581,7 @@
       .safety-card { padding: 28px; }
       .booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 36px; }
       .booking-card { padding: 42px; }
-      .gallery-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 32px; }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
       .gallery-frame:nth-child(2) { transform: translateY(48px); }
       .faq-item summary { padding: 18px 22px; font-size: 20px; }
       .faq-answer { padding: 24px; font-size: 18px; }
@@ -677,7 +698,7 @@
       .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .step-card, .safety-card, .booking-card { padding: 16px; }
       .step-number { font-size: 32px; }
-      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .gallery-frame:nth-child(2) { transform: translateY(18px); }
       .faq-item summary { padding: 13px 15px; font-size: 14px; }
       .faq-answer { padding: 16px; font-size: 13px; }
@@ -848,10 +869,9 @@
             <div class="stat-card navy shadow-white"><div class="stat-number display">500+</div><div class="stat-label">Events Attended</div></div>
             <div class="stat-card shadow">${icon("shield")}<div class="stat-label">NAARSO-Certified Inspector On Staff</div></div>
             <div class="stat-card shadow">${icon("pin")}<div class="stat-label">Regional Inspection Experience</div></div>
-            <div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div>
           </div>
         </div>
-        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p></div>
+        <div class="about-bottom"><p>The team works with commercial inflatable operating standards, ASTM practices, and inspection programs in Colorado, New Mexico, and Arizona.</p><div class="member-badge" aria-label="Proud members of RMAF and WAF"><div class="member-logos"><img class="member-logo rmaf" src="${IMAGE.rmaf}" alt="Rocky Mountain Association of Fairs logo"><img class="member-logo waf" src="${IMAGE.waf}" alt="Western Fairs Association logo"></div><div class="member-label">Proud Members</div></div></div>
       </div></section>
 
       <section class="section mission" id="mission"><div class="container"><div class="mission-card">
