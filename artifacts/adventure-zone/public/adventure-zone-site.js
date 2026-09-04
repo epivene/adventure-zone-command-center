@@ -82,7 +82,7 @@
     ".member-label", ".fleet-label", ".package-flag", ".ammo", ".price-label", ".price",
     ".price-days", ".step-number", ".faq-answer", ".attraction-chip-list span",
   ].join(",");
-  const teamTextClearance = 20;
+  const teamTextClearance = 32;
   const teamSearchStep = 16;
 
   const adventureAttractionCategories = [

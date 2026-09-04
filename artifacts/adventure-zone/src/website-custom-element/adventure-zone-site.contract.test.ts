@@ -250,6 +250,19 @@ describe("adventure-zone-site inquiry contract", () => {
     details.dispatchEvent(new Event("toggle"));
 
     expect(bubble.style.top).toBe("60px");
+
+    obstacleTop = 985;
+    window.dispatchEvent(new Event("resize"));
+    const animationSafeTop = layerTop + Number.parseFloat(bubble.style.top);
+    const animationSafeBottom = animationSafeTop + 140;
+    const obstacleBottom = obstacleTop + 200;
+    const verticalGap = animationSafeBottom <= obstacleTop
+      ? obstacleTop - animationSafeBottom
+      : animationSafeTop >= obstacleBottom
+        ? animationSafeTop - obstacleBottom
+        : -1;
+
+    expect(verticalGap).toBeGreaterThanOrEqual(32);
   });
 
   it("renders collapsed package-specific attraction lineups", () => {
