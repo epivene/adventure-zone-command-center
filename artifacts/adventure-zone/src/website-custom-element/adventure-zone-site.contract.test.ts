@@ -165,11 +165,17 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(siteRoot.querySelector(".tube-man-position")?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("hides the embedded mascot on desktop while preserving it on mobile", () => {
+  it("keeps one embedded mascot on the right for phone and foldable widths, then hides it on desktop", () => {
     const { root } = mountSite();
 
-    expect(applicableStyle(root, ".tube-man-position", 1280).display).toBe("none");
     expect(applicableStyle(root, ".tube-man-position", 320).display).not.toBe("none");
+    expect(applicableStyle(root, ".tube-man-position", 320).right).toBe("6px");
+    expect(applicableStyle(root, ".tube-man-position", 320).left).toBe("auto");
+    expect(applicableStyle(root, ".tube-man-position", 720).display).not.toBe("none");
+    expect(applicableStyle(root, ".tube-man-position", 720).right).toBe("12px");
+    expect(applicableStyle(root, ".tube-man-position", 720).left).toBe("auto");
+    expect(applicableStyle(root, ".tube-man-position", 768).display).toBe("none");
+    expect(applicableStyle(root, ".tube-man-position", 1280).display).toBe("none");
   });
 
   it.each([

@@ -260,7 +260,7 @@
     .team-name { display: block; font-family: "Bricolage Grotesque", Impact, sans-serif; font-size: 7px; font-weight: 900; line-height: 1; text-transform: uppercase; }
     .team-role { display: block; margin-top: 2px; font-size: 5px; font-weight: 900; line-height: 1.1; letter-spacing: .06em; text-transform: uppercase; opacity: .75; }
 
-    .tube-man-position { position: fixed; right: 6px; bottom: -12px; z-index: 50; width: 82px; pointer-events: none; }
+    .tube-man-position { position: fixed; right: 6px; bottom: -12px; left: auto; z-index: 50; width: 82px; pointer-events: none; }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
     .tube-man-sway { animation: tube-man-wave 2.23s ease-in-out infinite; }
     .tube-man-wobble { animation: tube-man-wobble 1.37s ease-in-out infinite; }
@@ -545,7 +545,7 @@
       .team-label { bottom: -19px; width: 82px; padding: 4px 6px; }
       .team-name { font-size: 8px; }
       .team-role { margin-top: 3px; font-size: 5.5px; }
-      .tube-man-position { display: none; right: 12px; bottom: -14px; width: 116px; }
+      .tube-man-position { display: block; right: 12px; bottom: -14px; width: 116px; }
       .hero-actions { flex-direction: row; justify-content: flex-start; width: auto; }
       .hero-actions .button { width: auto; }
       .stats { gap: 20px; }
@@ -559,6 +559,7 @@
     }
 
     @media (min-width: 768px) {
+      .tube-man-position { display: none; }
       .logo { width: 256px; max-height: 64px; }
       .site-header { padding: 20px 0; }
       .site-header.scrolled { padding: 12px 0; }
