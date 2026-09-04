@@ -545,7 +545,10 @@
     }
 
     @media (min-width: 960px) {
-      .desktop-nav, .desktop-book { display: flex; }
+      .logo { width: 180px; max-height: 56px; }
+      .desktop-nav { display: flex; gap: 14px; font-size: 11px; letter-spacing: .02em; }
+      .desktop-book { display: flex; }
+      .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
       .menu-toggle { display: none; }
       .mobile-nav { display: none !important; }
       .package-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 32px; }
@@ -553,7 +556,16 @@
       .gallery-frame:nth-child(2) { transform: none; }
     }
 
+    @media (min-width: 1180px) {
+      .logo { width: 224px; max-height: 64px; }
+      .desktop-nav { gap: 20px; font-size: 13px; letter-spacing: .04em; }
+      .desktop-book .button { padding: 14px 20px; font-size: 13px; box-shadow: 8px 8px 0 var(--az-navy); }
+    }
+
     @media (min-width: 1280px) {
+      .logo { width: 256px; }
+      .desktop-nav { gap: 32px; font-size: 14px; }
+      .desktop-book .button { padding: 14px 24px; font-size: 14px; }
       .team-bubble { width: 112px; }
       .team-bubble.visible { opacity: .95; }
       .team-photo { width: 96px; height: 96px; }
@@ -562,6 +574,10 @@
       .team-role { font-size: 8px; }
       .tube-man-position { right: 20px; bottom: -16px; width: 150px; }
     }
+
+    .az-site.wix-preview-frame { position: relative; }
+    .az-site.wix-preview-frame .team-float { position: absolute; top: 620px; right: 0; bottom: auto; left: 0; height: 1500px; }
+    .az-site.wix-preview-frame .tube-man-position { position: absolute; top: 280px; right: 12px; bottom: auto; }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
@@ -757,6 +773,8 @@
 
     connectedCallback() {
       this.shadowRoot.innerHTML = `<style>${styles}</style>${pageMarkup()}`;
+      this.isWixPreviewFrame = /CustomElementPreviewIframe/i.test(window.location.pathname);
+      this.shadowRoot.querySelector(".az-site").classList.toggle("wix-preview-frame", this.isWixPreviewFrame);
       this.abortController = new AbortController();
       this.bindInteractions();
       this.setupResizeEvents();
@@ -851,10 +869,10 @@
       const hero = this.shadowRoot?.querySelector("#hero");
       if (!header || !hero) return;
       header.classList.toggle("scrolled", window.scrollY > 20);
-      const passed = hero.getBoundingClientRect().bottom <= 96;
+      const passed = this.isWixPreviewFrame || hero.getBoundingClientRect().bottom <= 96;
       this.pastHero = passed;
       const heroHeight = hero.offsetHeight || window.innerHeight;
-      this.teamWave = Math.floor(Math.max(0, window.scrollY - heroHeight) / Math.max(window.innerHeight * .75, 560));
+      this.teamWave = this.isWixPreviewFrame ? 0 : Math.floor(Math.max(0, window.scrollY - heroHeight) / Math.max(window.innerHeight * .75, 560));
       this.updateTeamVisibility();
     }
 

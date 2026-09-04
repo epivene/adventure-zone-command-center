@@ -78,6 +78,7 @@ beforeAll(() => {
 
 afterEach(() => {
   document.body.replaceChildren();
+  window.history.replaceState({}, "", "/");
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -142,6 +143,39 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(bubbles.every((bubble) => bubble.querySelector(".team-name + .team-role"))).toBe(true);
     expect(applicableStyle(root, ".team-float")?.display).toBe("block");
     expect(applicableStyle(root, ".team-label")?.display).toBe("block");
+  });
+
+  it("keeps the booking action and menu available without overflowing Wix's 980px canvas", () => {
+    const { root } = mountSite();
+
+    expect(applicableStyle(root, ".desktop-nav", 980).display).toBe("flex");
+    expect(applicableStyle(root, ".desktop-book", 980).display).toBe("flex");
+    expect(applicableStyle(root, ".menu-toggle", 980).display).toBe("none");
+    expect(Number.parseFloat(applicableStyle(root, ".logo", 980).width)).toBeLessThanOrEqual(180);
+    expect(Number.parseFloat(applicableStyle(root, ".desktop-nav", 980).gap)).toBeLessThanOrEqual(14);
+    expect(Number.parseFloat(applicableStyle(root, ".desktop-nav", 980).fontSize)).toBeLessThanOrEqual(11);
+    expect(applicableStyle(root, ".desktop-book .button", 980).padding).toBe("10px 14px");
+    expect(Number.parseFloat(applicableStyle(root, ".desktop-book .button", 980).fontSize)).toBeLessThanOrEqual(11);
+    expect(applicableStyle(root, ".desktop-nav", 1280).display).toBe("flex");
+    expect(applicableStyle(root, ".menu-toggle", 1280).display).toBe("none");
+  });
+
+  it("shows the mascot and first crew wave below the hero in Wix's iframe preview", () => {
+    window.history.replaceState({}, "", "/CustomElementPreviewIframe.preview.html");
+    const { root } = mountSite();
+    const shell = root.querySelector<HTMLElement>(".az-site")!;
+    const mascotStyle = applicableStyle(root, ".az-site.wix-preview-frame .tube-man-position");
+    const teamStyle = applicableStyle(root, ".az-site.wix-preview-frame .team-float");
+    const visibleTeamIndexes = Array.from(root.querySelectorAll<HTMLElement>(".team-bubble.visible"))
+      .map((bubble) => bubble.dataset.teamIndex);
+
+    expect(shell).toHaveClass("wix-preview-frame");
+    expect(mascotStyle.position).toBe("absolute");
+    expect(Number.parseFloat(mascotStyle.top)).toBeGreaterThan(200);
+    expect(Number.parseFloat(mascotStyle.top)).toBeLessThan(620);
+    expect(teamStyle.position).toBe("absolute");
+    expect(Number.parseFloat(teamStyle.top)).toBeGreaterThanOrEqual(620);
+    expect(visibleTeamIndexes).toEqual(["0", "2", "5"]);
   });
 
   it("reveals team bubbles in waves only after scrolling below the hero", () => {
