@@ -191,7 +191,7 @@ export function WebsiteInquiryInbox({ api }: { api: WebsiteInquiryApi }) {
                               <WebsiteInquiryDetail
                                 api={api}
                                 inquiryId={selectedId}
-                                onChanged={() => void list.refetch()}
+                                onChanged={() => select(null)}
                                 onClose={() => select(null)}
                               />
                             </section>

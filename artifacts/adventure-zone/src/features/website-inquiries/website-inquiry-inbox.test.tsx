@@ -154,4 +154,54 @@ describe("WebsiteInquiryInbox", () => {
       await within(detail).findByText(inquiry.message),
     ).toBeInTheDocument();
   });
+
+  it("removes an archived inquiry from New even when a list refetch is stale", async () => {
+    window.history.replaceState({}, "", "/website-inquiries");
+    const inquiry = {
+      ...newest,
+      submissionId: "10000000-0000-4000-8000-000000000002",
+      message: "Please archive this completed test inquiry.",
+      pageUrl: "https://the-adventure-zone.com/contact",
+      sourceOrigin: "https://the-adventure-zone.com",
+      alertDeliveredRecipients: ["owner@example.com"],
+    };
+    let detailStatus: "new" | "archived" = "new";
+    const get = vi.fn((path: string) => {
+      if (path === "/website-inquiries/count") {
+        return Promise.resolve({ newCount: detailStatus === "new" ? 1 : 0 });
+      }
+      if (path === `/website-inquiries/${newest.id}/matches`) {
+        return Promise.resolve({
+          contacts: [],
+          organizations: [],
+          parsedLocation: null,
+        });
+      }
+      if (path === `/website-inquiries/${newest.id}`) {
+        return Promise.resolve({
+          inquiry: { ...inquiry, status: detailStatus },
+          auditHistory: [],
+        });
+      }
+      // Reproduce an older list response arriving after the status mutation.
+      return Promise.resolve({ items: [newest], nextCursor: null });
+    });
+    const patch = vi.fn(async () => {
+      detailStatus = "archived";
+      return { ...inquiry, status: detailStatus };
+    });
+    renderInbox({ get, patch, post: vi.fn() } as WebsiteInquiryApi);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Newest Contact/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Archive" }));
+
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("button", { name: /Newest Contact/ }),
+      ).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText(/no new inquiries/i)).toBeInTheDocument();
+  });
 });
