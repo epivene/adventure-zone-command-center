@@ -727,7 +727,8 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
     expect(dialog).toHaveTextContent("It’s So Nice to See You Again!");
-    expect(dialog).toHaveTextContent("Thank you for taking a moment to reconnect with The Adventure Zone after the convention.");
+    expect(dialog).toHaveTextContent("Thank you for taking a moment to reconnect with The Adventure Zone.");
+    expect(dialog).not.toHaveTextContent("after the convention");
     expect(dialog).toHaveTextContent("As a convention guest, you may qualify for special booking savings.");
     expect(dialog).not.toHaveTextContent("Welcome, Convention Guests!");
     expect(root.querySelector("[data-convention-claim]")).toHaveTextContent("Tell Us About Your Event");
