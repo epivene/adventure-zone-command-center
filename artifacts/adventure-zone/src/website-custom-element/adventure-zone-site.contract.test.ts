@@ -153,7 +153,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".team-label")?.display).toBe("block");
   });
 
-  it("keeps crew bubbles compact and the site shell full-width on a 320px mobile canvas", () => {
+  it("keeps crew bubbles small and the site shell full-width on mobile and desktop canvases", () => {
     const { root } = mountSite();
     const canvasWidth = 320;
     const hostStyle = applicableStyle(root, ":host", canvasWidth);
@@ -180,10 +180,10 @@ describe("adventure-zone-site inquiry contract", () => {
     const desktopPhotoWidth = Number.parseFloat(applicableStyle(root, ".team-photo", 1280).width);
     const desktopLabelWidth = Number.parseFloat(applicableStyle(root, ".team-label", 1280).width);
 
-    expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.125);
-    expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.26);
-    expect(desktopPhotoWidth / 1280).toBeLessThanOrEqual(0.07);
-    expect(desktopLabelWidth / 1280).toBeLessThanOrEqual(0.085);
+    expect(photoWidth / canvasWidth).toBeLessThanOrEqual(0.105);
+    expect(labelWidth / canvasWidth).toBeLessThanOrEqual(0.225);
+    expect(desktopPhotoWidth / 1280).toBeLessThanOrEqual(0.055);
+    expect(desktopLabelWidth / 1280).toBeLessThanOrEqual(0.07);
     expect(bubbleBounds.every(({ left, right }) => left >= 0 && right <= canvasWidth)).toBe(true);
     expect(Math.max(...leftEdgeGaps, ...rightEdgeGaps)).toBeLessThanOrEqual(28);
     expect(new Set(leftEdgeGaps).size).toBeGreaterThanOrEqual(4);
