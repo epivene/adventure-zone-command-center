@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 const source = readFileSync("public/adventure-zone-site.js", "utf8");
@@ -507,15 +507,66 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".mission-card h2", 320).fontSize).toBe("24px");
   });
 
-  it("uses the open space beneath the four stat cards for the Proud Members badge", () => {
+  it("keeps the Proud Members badge in the original standards row", () => {
     const { root } = mountSite();
     const stats = root.querySelector(".stats")!;
     const directStatCards = Array.from(stats.children).filter((child) => child.classList.contains("stat-card"));
     const directMemberBadge = Array.from(stats.children).find((child) => child.classList.contains("member-badge"));
 
     expect(directStatCards).toHaveLength(4);
-    expect(directMemberBadge).toHaveTextContent("Proud Members");
-    expect(root.querySelector(".about-bottom .member-badge")).toBeNull();
+    expect(directMemberBadge).toBeUndefined();
+    expect(root.querySelector(".about-bottom .member-badge")).toHaveTextContent("Proud Members");
+  });
+
+  it("uses the new Pirate's Rebellion photo anywhere that package is featured", () => {
+    const { root } = mountSite();
+    const pirateCard = Array.from(root.querySelectorAll(".package-card"))
+      .find((card) => card.querySelector("h3")?.textContent?.includes("Pirate's Rebellion"));
+    const expectedUrl = "https://adventure-zone-command-center-1.onrender.com/assets/pirates-rebellion-paddle-boats.jpg";
+
+    expect(pirateCard?.querySelector("img")).toHaveAttribute("src", expectedUrl);
+  });
+
+  it("rotates through 25 unique attraction images without using employee portraits", async () => {
+    vi.useFakeTimers();
+    const { element, root } = mountSite();
+    const rotator = element as HTMLElement & { rotateGallery(): void };
+    const gallerySources = new Set<string>();
+    const employeeSources = new Set(Array.from(root.querySelectorAll<HTMLImageElement>(".team-photo"), (image) => image.src));
+
+    for (let index = 0; index < 25; index += 1) {
+      Array.from(root.querySelectorAll<HTMLImageElement>("[data-gallery-slot]"), (image) => gallerySources.add(image.src));
+      rotator.rotateGallery();
+      await vi.advanceTimersByTimeAsync(121);
+    }
+
+    expect(gallerySources.size).toBe(25);
+    expect(Array.from(gallerySources).every((url) => !employeeSources.has(url))).toBe(true);
+  });
+
+  it.each([
+    "pirates-rebellion-paddle-boats.jpg",
+    "gallery-family-play-zone.jpg",
+    "gallery-adventure-rules.jpg",
+    "gallery-purple-obstacle-course.jpg",
+    "gallery-pirate-flag.jpg",
+    "gallery-red-yellow-obstacle-slide.jpg",
+    "gallery-wrecking-ball-obstacle.jpg",
+    "gallery-action-arena.jpg",
+    "gallery-rainbow-slide.jpg",
+    "gallery-bungee-run.jpg",
+  ])("ships the added attraction photo %s", (filename) => {
+    const path = `public/assets/${filename}`;
+
+    expect(existsSync(path)).toBe(true);
+    expect(readFileSync(path).subarray(0, 3).toString("hex")).toBe("ffd8ff");
+  });
+
+  it("slightly enlarges Spectacle cards by tightening responsive grid gaps", () => {
+    const { root } = mountSite();
+
+    expect(Number.parseFloat(applicableStyle(root, ".gallery-grid", 320).gap)).toBeLessThanOrEqual(8);
+    expect(Number.parseFloat(applicableStyle(root, ".gallery-grid", 980).gap)).toBeLessThanOrEqual(24);
   });
 
   it("highlights Pay-For-Play as a fundraising opportunity", () => {
