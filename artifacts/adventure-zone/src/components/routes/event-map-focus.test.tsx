@@ -72,6 +72,21 @@ describe("EventMap planning interactions", () => {
     expect(screen.getByText("Eastern Montana Fair").closest("li")).toHaveAttribute("data-emphasis", "primary");
   });
 
+  it("offers one-tap, color-coded leg route controls above the map", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+
+    expect(screen.getByRole("button", { name: "All routes" })).toHaveAttribute("aria-pressed", "true");
+    const kristy = screen.getByRole("button", { name: "Kristy route" });
+    const hulk = screen.getByRole("button", { name: "Hulk route" });
+    expect(kristy).toHaveStyle({ borderColor: "#ef4444" });
+    expect(hulk).toHaveStyle({ borderColor: "#2563eb" });
+
+    fireEvent.click(kristy);
+    expect(kristy).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Showing Kristy · 2026")).toBeInTheDocument();
+    expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
+  });
+
   it("supports explicit event focus without changing the active filters", () => {
     render(<EventMap events={events} travelLegs={legs} />);
     const buttons = screen.getAllByRole("button", { name: "Focus on map" });
