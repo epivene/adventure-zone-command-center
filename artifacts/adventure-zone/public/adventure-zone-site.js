@@ -1042,7 +1042,7 @@
   const mascotStyles = `
     :host { position: fixed; right: 0; bottom: 0; left: 0; display: block; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
     *, *::before, *::after { box-sizing: border-box; }
-    .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; }
+    .mascot-shell { display: flex; align-items: flex-end; justify-content: center; width: 100%; height: 100%; overflow: visible; transform: translateY(3px); }
     .tube-man-sway, .tube-man-wobble, .tube-man-image { transform-origin: 50% 100%; will-change: transform; }
     .tube-man-sway { width: 100%; height: 100%; animation: mascot-wave 2.23s ease-in-out infinite; }
     .tube-man-wobble { width: 100%; height: 100%; animation: mascot-wobble 1.37s ease-in-out infinite; }
