@@ -239,12 +239,12 @@ const packageCanvas = document("package-overview", 816, 1056, BLACK, [
   shape("pk-card-pirate", "rectangle", 378, 498, 368, 206, { name: "Pirate package card", fill: CREAM, stroke: WHITE, strokeWidth: 7, rotation: -1 }),
   text("pk-name-pirate", "⚓ PIRATE'S REBELLION", 401, 522, 323, 50, { color: BLACK, fontSize: 27 }),
   text("pk-copy-pirate", "Water & pirate-themed fun\nBoats • wet attractions • games", 402, 579, 315, 68, { color: BLACK, fontSize: 18, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
-  text("pk-price-pirate", "$7,500", 407, 652, 190, 42, { color: PINK, fontSize: 35 }),
+  text("pk-price-pirate", "$8,000", 407, 652, 190, 42, { color: PINK, fontSize: 35 }),
   image("pk-photo-warrior", STARTER_PHOTOS.joust.name, 72, 764, 286, 166, STARTER_PHOTOS.joust.url, { rotation: -2 }),
   shape("pk-card-warrior", "rectangle", 378, 746, 370, 203, { name: "Warrior package card", fill: CREAM, stroke: WHITE, strokeWidth: 7, rotation: 1 }),
   text("pk-name-warrior", "◎ WARRIOR'S PLAYGROUND", 398, 770, 330, 50, { color: BLACK, fontSize: 25 }),
   text("pk-copy-warrior", "Paintball • AirSoft • Orbeez\n+ four additional attractions", 402, 826, 318, 67, { color: BLACK, fontSize: 18, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
-  text("pk-price-warrior", "$7,500", 405, 900, 190, 42, { color: PINK, fontSize: 35 }),
+  text("pk-price-warrior", "$8,000", 405, 900, 190, 42, { color: PINK, fontSize: 35 }),
   text("pk-footer", "SETUP • STAFFING • $2M INSURANCE • TEARDOWN", 120, 998, 580, 30, { color: YELLOW, fontSize: 19, fontFamily: "Trebuchet MS", align: "center" }),
 ]);
 
@@ -326,7 +326,7 @@ export const CANVA_STARTERS: CanvaStarter[] = [
     canvasSize: "US Letter",
     accent: "blue",
     canvas: packageCanvas,
-    content: `THE ADVENTURE ZONE\n\nEPIC PACKAGES\n\nADVENTURE ZONE — $9,000 / 1–4 DAYS\nPIRATE'S REBELLION — $7,500 / 1–4 DAYS\nWARRIOR'S PLAYGROUND — $7,500 / 1–4 DAYS\n\nSETUP • STAFFING • $2M INSURANCE • TEARDOWN`,
+    content: `THE ADVENTURE ZONE\n\nEPIC PACKAGES\n\nADVENTURE ZONE — $9,000 / 1–4 DAYS\nPIRATE'S REBELLION — $8,000 / 1–4 DAYS\nWARRIOR'S PLAYGROUND — $8,000 / 1–4 DAYS\n\nSETUP • STAFFING • $2M INSURANCE • TEARDOWN`,
   },
   {
     id: "review-request",

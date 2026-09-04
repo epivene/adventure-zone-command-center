@@ -13,13 +13,13 @@ describe("reviewed package defaults", () => {
       baseDurationMaxDays: 4,
     });
     expect(REVIEWED_PACKAGE_DEFAULTS.pirates_rebellion).toMatchObject({
-      basePriceCents: 750000,
+      basePriceCents: 800000,
       baseAttractionCount: 3,
       baseDurationMinDays: 1,
       baseDurationMaxDays: 4,
     });
     expect(REVIEWED_PACKAGE_DEFAULTS.weekend_warriors).toMatchObject({
-      basePriceCents: 750000,
+      basePriceCents: 800000,
       baseAttractionCount: 5,
       baseDurationMinDays: 1,
       baseDurationMaxDays: 4,

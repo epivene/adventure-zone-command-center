@@ -27,4 +27,18 @@ describe("Adventure Zone canvas starters", () => {
       expect(starter.canvas.pages.some((page) => page.id === starter.canvas.activePageId)).toBe(true);
     }
   });
+
+  it("uses the current $8,000 Pirate and Warrior prices in the package one-sheet", () => {
+    const starter = starterById("package-overview");
+    expect(starter).toBeDefined();
+    expect(starter!.content).toContain("PIRATE'S REBELLION — $8,000 / 1–4 DAYS");
+    expect(starter!.content).toContain("WARRIOR'S PLAYGROUND — $8,000 / 1–4 DAYS");
+
+    const priceNodes = starter!.canvas.pages[0]!.nodes
+      .filter((node) => node.kind === "text" && ["pk-price-pirate", "pk-price-warrior"].includes(node.id));
+    expect(priceNodes.map((node) => node.kind === "text" ? node.text : null)).toEqual([
+      "$8,000",
+      "$8,000",
+    ]);
+  });
 });
