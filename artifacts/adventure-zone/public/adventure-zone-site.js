@@ -669,10 +669,12 @@
       .package-copy { margin-bottom: 16px; }
       .package-price { margin: 16px -16px -16px; padding: 16px; }
       .price { font-size: 34px; }
+      .how { overflow-x: hidden; }
       .how-layout { grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 18px; }
       .how-copy p, .safety-copy { font-size: 12px; }
       .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .step-card, .safety-card, .booking-card { padding: 16px; }
+      .step-number { font-size: 32px; }
       .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .gallery-frame:nth-child(2) { transform: translateY(18px); }
       .faq-item summary { padding: 13px 15px; font-size: 14px; }

@@ -256,6 +256,8 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(applicableStyle(root, ".about-layout", canvasWidth).gridTemplateColumns).not.toBe("");
     expect(applicableStyle(root, ".experience-layout", canvasWidth).gridTemplateColumns).not.toBe("");
     expect(applicableStyle(root, ".feature-grid", canvasWidth).gridTemplateColumns).not.toBe("");
+    expect(applicableStyle(root, ".how", canvasWidth).overflowX).toBe("hidden");
+    expect(Number.parseFloat(applicableStyle(root, ".step-number", canvasWidth).fontSize)).toBeLessThanOrEqual(32);
     expect(heroHeight).toBeLessThanOrEqual(560);
     expect(sectionPadding).toBeLessThanOrEqual(40);
     expect(statHeight).toBeLessThanOrEqual(104);
