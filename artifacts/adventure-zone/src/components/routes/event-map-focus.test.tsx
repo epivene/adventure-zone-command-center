@@ -87,6 +87,28 @@ describe("EventMap planning interactions", () => {
     expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
   });
 
+  it("orders route groups using the configured leg order", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Kristy",
+      "Hulk",
+    ]);
+  });
+
+  it("makes a tapped leg supersede an already-focused trip", () => {
+    const clearTripFocus = vi.fn();
+    render(
+      <EventMap
+        events={events}
+        travelLegs={legs}
+        focusedTripCoordinates={[[-111.891, 40.7608], [-105.8406, 46.4083]]}
+        onClearTripFocus={clearTripFocus}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Kristy route" }));
+    expect(clearTripFocus).toHaveBeenCalledTimes(1);
+  });
+
   it("supports explicit event focus without changing the active filters", () => {
     render(<EventMap events={events} travelLegs={legs} />);
     const buttons = screen.getAllByRole("button", { name: "Focus on map" });
