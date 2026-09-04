@@ -40,7 +40,7 @@ describe("AiOpportunityEmailWriter", () => {
     const prompt = ai.complete.mock.calls[0]?.[0] ?? "";
     expect(prompt).toContain(ADVENTURE_ZONE_EMAIL_RULES.payForPlay);
     expect(prompt).toContain("$9,000 / 1–4 days");
-    expect(prompt).toContain("$7,500 / 1–4 days (ammo extra)");
+    expect(prompt).toContain("$8,000 / 1–4 days (ammo extra)");
     expect(prompt).toContain("Never invent prior interactions");
     expect(prompt).toContain("Do not promise revenue, attendance, or minimum sales");
     expect(prompt).toContain("Casey asked us to check back");

@@ -88,8 +88,8 @@ describe("Adventure Zone email generation rule contract", () => {
     });
     expect(ADVENTURE_ZONE_EMAIL_RULES.pricing).toEqual({
       adventureZone: "$9,000 / 1–4 days",
-      piratesRebellion: "$7,500 / 1–4 days",
-      warriorsPlayground: "$7,500 / 1–4 days (ammo extra)",
+      piratesRebellion: "$8,000 / 1–4 days",
+      warriorsPlayground: "$8,000 / 1–4 days (ammo extra)",
     });
     expect(ADVENTURE_ZONE_EMAIL_RULES.insurance).toBe("$2M");
     expect(ADVENTURE_ZONE_EMAIL_RULES.payForPlay).toBe(

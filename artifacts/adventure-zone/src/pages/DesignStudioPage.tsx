@@ -165,8 +165,8 @@ function PackagesPreview() {
         <p className="text-[7px] font-black">★ ADVENTURE ZONE</p><p className="text-[5px]">10 attractions • slides • obstacles • games</p><p className="mt-1 text-[9px] font-black text-[#ef1763]">$9,000</p>
       </div>
       <div className="mx-3 mt-2 grid grid-cols-2 gap-2">
-        <div className="bg-white p-1.5 shadow-[3px_3px_0_#ffd21a]"><img alt="Pirate's Rebellion" className="h-10 w-full object-cover" src={PHOTOS.pirate} /><p className="mt-1 text-[5px] font-black">⚓ PIRATE'S REBELLION</p><p className="text-[8px] font-black text-[#ef1763]">$7,500</p></div>
-        <div className="bg-white p-1.5 shadow-[3px_3px_0_#ef1763]"><img alt="Warrior's Playground" className="h-10 w-full object-cover" src={PHOTOS.joust} /><p className="mt-1 text-[5px] font-black">◎ WARRIOR'S PLAYGROUND</p><p className="text-[8px] font-black text-[#ef1763]">$7,500</p></div>
+        <div className="bg-white p-1.5 shadow-[3px_3px_0_#ffd21a]"><img alt="Pirate's Rebellion" className="h-10 w-full object-cover" src={PHOTOS.pirate} /><p className="mt-1 text-[5px] font-black">⚓ PIRATE'S REBELLION</p><p className="text-[8px] font-black text-[#ef1763]">$8,000</p></div>
+        <div className="bg-white p-1.5 shadow-[3px_3px_0_#ef1763]"><img alt="Warrior's Playground" className="h-10 w-full object-cover" src={PHOTOS.joust} /><p className="mt-1 text-[5px] font-black">◎ WARRIOR'S PLAYGROUND</p><p className="text-[8px] font-black text-[#ef1763]">$8,000</p></div>
       </div>
       <Brush className="absolute bottom-3 left-3 right-3 text-center text-[6px]">SETUP • STAFFING • $2M INSURANCE • TEARDOWN</Brush>
     </div>
