@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/auth-token";
 
-type Tab = "tasks" | "emails" | "mail" | "messages" | "account";
+type Tab = "tasks" | "emails" | "mail" | "messages" | "account" | "boss";
 type Account = { id: string; loginName: string; displayName: string; role: string; enabled: boolean; sessionVersion: number; canReviewWebsiteInquiries: boolean };
 type Task = {
   id: string;
@@ -40,7 +40,7 @@ const taskTypes = [
 export default function OfficeCoordinatorAdminPage() {
   const search = useSearch();
   const initial = (new URLSearchParams(search).get("tab") as Tab | null) ?? "tasks";
-  const [tab, setTab] = useState<Tab>(["tasks", "emails", "mail", "messages", "account"].includes(initial) ? initial : "tasks");
+  const [tab, setTab] = useState<Tab>(["tasks", "emails", "mail", "messages", "account", "boss"].includes(initial) ? initial : "tasks");
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountId, setAccountId] = useState("");
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -101,7 +101,7 @@ export default function OfficeCoordinatorAdminPage() {
     {error ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}
     {notice ? <p role="status" className="rounded-xl bg-emerald-50 p-4 text-emerald-800">{notice}</p> : null}
     <div className="flex flex-wrap gap-2" role="tablist">
-      {([['tasks', 'Work Queue'], ['emails', 'Email Review'], ['mail', 'Mail & History'], ['messages', 'Messages'], ['account', 'Account']] as Array<[Tab, string]>).map(([key, label]) => <button key={key} className={tab === key ? "button-primary" : "button-secondary"} type="button" onClick={() => setTab(key)}>{label}{key === 'emails' && emails.length ? ` (${emails.length})` : key === 'tasks' && activeTasks.filter((task) => task.needsHelp).length ? ` (${activeTasks.filter((task) => task.needsHelp).length} help)` : ''}</button>)}
+      {([['tasks', 'Work Queue'], ['emails', 'Email Review'], ['mail', 'Mail & History'], ['messages', 'Messages'], ['account', 'Account'], ['boss', 'Boss Account']] as Array<[Tab, string]>).map(([key, label]) => <button key={key} className={tab === key ? "button-primary" : "button-secondary"} type="button" onClick={() => setTab(key)}>{label}{key === 'emails' && emails.length ? ` (${emails.length})` : key === 'tasks' && activeTasks.filter((task) => task.needsHelp).length ? ` (${activeTasks.filter((task) => task.needsHelp).length} help)` : ''}</button>)}
     </div>
     {!account && tab !== "account" ? <div className="rounded-xl border border-dashed bg-white p-8 text-center"><p className="font-semibold">No Office Coordinator account yet.</p><button className="button-primary mt-3" type="button" onClick={() => setTab("account")}>Create account</button></div> : null}
     {tab === "tasks" && account ? <TaskManager account={account} tasks={tasks} onChanged={refreshTasks} onReorder={reorder} /> : null}
@@ -109,6 +109,7 @@ export default function OfficeCoordinatorAdminPage() {
     {tab === "mail" && account ? <MailHistory mail={mail} /> : null}
     {tab === "messages" && account ? <OwnerMessages account={account} messages={messages} onChanged={async () => { const d = await apiGet<{ messages: Message[] }>(`/office-admin/messages/${account.id}`); setMessages(d.messages); }} /> : null}
     {tab === "account" ? <AccountPanel accounts={accounts} selected={account} onChanged={async (message) => { setNotice(message); await loadAccounts(); }} /> : null}
+    {tab === "boss" ? <BossAccountPanel /> : null}
   </div>;
 }
 
@@ -288,6 +289,174 @@ function AccountPanel({ accounts, selected, onChanged }: { accounts: Account[]; 
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+// Boss account management panel — owner-only, lives in admin surface only.
+type BossAccount = { id: string; loginName: string; displayName: string; enabled: boolean; studioOfficeAccountId: string | null };
+type BossOfficeTarget = { id: string; displayName: string };
+type OwnerBossAssignment = { id: string; title: string; details: string | null; priority: string; status: string; dueAt: string | null; updatedAt: string };
+
+function BossAccountPanel() {
+  const [accounts, setAccounts] = useState<BossAccount[]>([]);
+  const [officeTargets, setOfficeTargets] = useState<BossOfficeTarget[]>([]);
+  const [studioOfficeAccountId, setStudioOfficeAccountId] = useState("");
+  const [ownerAssignments, setOwnerAssignments] = useState<OwnerBossAssignment[]>([]);
+  const [loginName, setLoginName] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [resetPasswordValues, setResetPasswordValues] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const loadBossAccounts = useCallback(async () => {
+    try {
+      const [accountData, assignmentData, officeData] = await Promise.all([
+        apiGet<{ accounts: BossAccount[] }>("/boss-admin/accounts"),
+        apiGet<{ assignments: OwnerBossAssignment[] }>("/owner/boss-assignments"),
+        apiGet<{ accounts: BossOfficeTarget[] }>("/office-admin/accounts"),
+      ]);
+      setAccounts(accountData.accounts ?? []);
+      setOwnerAssignments(assignmentData.assignments ?? []);
+      setOfficeTargets(officeData.accounts ?? []);
+      setStudioOfficeAccountId((current) => current || officeData.accounts?.[0]?.id || "");
+    } catch { setAccounts([]); setOwnerAssignments([]); }
+  }, []);
+
+  useEffect(() => { void loadBossAccounts(); }, [loadBossAccounts]);
+
+  async function create() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await apiPost("/boss-admin/accounts", { loginName: loginName.trim(), displayName: displayName.trim(), password, studioOfficeAccountId });
+      setLoginName(""); setDisplayName(""); setPassword("");
+      setNotice("Boss account created.");
+      await loadBossAccounts();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create Boss account.");
+    } finally { setBusy(false); }
+  }
+
+  async function toggleEnabled(account: BossAccount) {
+    setError(""); setNotice("");
+    try {
+      await apiPatch(`/boss-admin/accounts/${account.id}`, { enabled: !account.enabled });
+      setNotice(account.enabled ? "Boss account disabled." : "Boss account enabled.");
+      await loadBossAccounts();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update Boss account.");
+    }
+  }
+
+  async function signOutAll(account: BossAccount) {
+    setError(""); setNotice("");
+    try {
+      await apiPost(`/boss-admin/accounts/${account.id}/sign-out-all`, {});
+      setNotice("All Boss sessions signed out.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not sign out.");
+    }
+  }
+
+  async function resetPassword(account: BossAccount) {
+    const newPwd = resetPasswordValues[account.id] ?? "";
+    if (newPwd.length < 8) return;
+    setError(""); setNotice("");
+    try {
+      await apiPut(`/boss-admin/accounts/${account.id}/password`, { password: newPwd });
+      setResetPasswordValues((prev) => ({ ...prev, [account.id]: "" }));
+      setNotice("Boss password reset. Existing sessions were signed out.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not reset password.");
+    }
+  }
+
+  return (
+    <div className="grid gap-5">
+      {error ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}
+      {notice ? <p role="status" className="rounded-xl bg-emerald-50 p-4 text-emerald-800">{notice}</p> : null}
+
+      <section className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm">
+        <h2 className="text-xl font-bold">Create Boss login</h2>
+        <p className="text-sm text-slate-600">Provision a Boss workspace account for Dave.</p>
+        <label className="grid gap-1 text-sm font-semibold">Name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Dave" /></label>
+        <label className="grid gap-1 text-sm font-semibold">Username<input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="boss" /></label>
+        <label className="grid gap-1 text-sm font-semibold">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" /></label>
+        <label className="grid gap-1 text-sm font-semibold">Design Studio workspace<select value={studioOfficeAccountId} onChange={(e) => setStudioOfficeAccountId(e.target.value)}>{officeTargets.map((account) => <option key={account.id} value={account.id}>{account.displayName}</option>)}</select></label>
+        <button className="button-primary w-fit" disabled={busy || !loginName.trim() || !displayName.trim() || password.length < 8 || !studioOfficeAccountId} type="button" onClick={() => void create()}>
+          {busy ? "Creating…" : "Create Boss Account"}
+        </button>
+      </section>
+
+      {accounts.length > 0 ? (
+        <section className="grid gap-3">
+          <h2 className="text-xl font-bold">Boss accounts</h2>
+          {accounts.map((account) => (
+            <div key={account.id} className="rounded-xl border bg-white p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-bold">{account.displayName}</p>
+                  <p className="text-sm text-slate-600">Username: {account.loginName} · {account.enabled ? "Enabled" : "Disabled"}</p>
+                </div>
+                <div className="flex gap-2 flex-wrap">
+                  <button className="button-secondary" type="button" onClick={() => void toggleEnabled(account)}>
+                    {account.enabled ? "Disable" : "Enable"}
+                  </button>
+                  <button className="button-secondary" type="button" onClick={() => void signOutAll(account)}>
+                    Sign Out All
+                  </button>
+                </div>
+              </div>
+              <div className="mt-3 grid gap-2 border-t pt-3">
+                <label className="grid gap-1 text-sm font-semibold">
+                  Design Studio workspace
+                  <select value={account.studioOfficeAccountId ?? ""} onChange={async (e) => { await apiPatch(`/boss-admin/accounts/${account.id}`, { studioOfficeAccountId: e.target.value }); await loadBossAccounts(); }}>
+                    <option value="" disabled>Select an Office workspace</option>
+                    {officeTargets.map((target) => <option key={target.id} value={target.id}>{target.displayName}</option>)}
+                  </select>
+                </label>
+                <label className="grid gap-1 text-sm font-semibold">
+                  Reset password
+                  <input
+                    type="password"
+                    placeholder="New password"
+                    value={resetPasswordValues[account.id] ?? ""}
+                    onChange={(e) => setResetPasswordValues((prev) => ({ ...prev, [account.id]: e.target.value }))}
+                  />
+                </label>
+                <button
+                  className="button-primary w-fit"
+                  disabled={(resetPasswordValues[account.id] ?? "").length < 8}
+                  type="button"
+                  onClick={() => void resetPassword(account)}
+                >
+                  Reset Password
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      ) : null}
+      <section className="grid gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <div>
+          <h2 className="text-xl font-bold text-foreground">Assignments for you</h2>
+          <p className="text-sm text-muted-foreground">Work Dave assigned directly to the owner.</p>
+        </div>
+        {ownerAssignments.length ? ownerAssignments.map((assignment) => (
+          <div key={assignment.id} className="rounded-lg border border-border bg-background p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-foreground">{assignment.title}</p>
+                {assignment.details ? <p className="mt-1 text-sm text-muted-foreground">{assignment.details}</p> : null}
+              </div>
+              <span className="text-xs font-semibold uppercase tracking-wide text-primary">{assignment.priority} · {assignment.status.replace("_", " ")}</span>
+            </div>
+            {assignment.dueAt ? <p className="mt-2 text-xs text-muted-foreground">Due {new Date(assignment.dueAt).toLocaleDateString()}</p> : null}
+          </div>
+        )) : <p className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">No assignments from Dave.</p>}
+      </section>
     </div>
   );
 }

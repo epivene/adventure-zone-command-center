@@ -1,0 +1,158 @@
+import { useEffect, useState } from "react";
+import { RefreshCw, Wrench } from "lucide-react";
+import { Badge } from "@workspace/avz-crm/components/ui/badge";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
+import { bossGet } from "@/lib/boss-auth-context";
+
+type MaintenanceItem = {
+  id?: string;
+  bookingId?: string;
+  title?: string | null;
+  phase?: string | null;
+  status?: string | null;
+  dueAt?: string | null;
+  notes?: string | null;
+  [key: string]: unknown;
+};
+
+type DashboardData = {
+  checklistAndMaintenance?: MaintenanceItem[];
+  [key: string]: unknown;
+};
+
+function phaseLabel(phase?: string | null) {
+  if (!phase) return null;
+  const map: Record<string, string> = {
+    pre: "Pre-event",
+    post: "Post-event",
+    pre_event: "Pre-event",
+    post_event: "Post-event",
+    maintenance: "Maintenance",
+  };
+  return map[phase] ?? phase;
+}
+
+function statusVariant(status?: string | null): "default" | "secondary" | "outline" | "destructive" {
+  switch (status) {
+    case "complete":
+    case "completed": return "default";
+    case "failed": return "destructive";
+    case "in_progress": return "secondary";
+    default: return "outline";
+  }
+}
+
+export default function BossMaintenancePage() {
+  const [items, setItems] = useState<MaintenanceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("all");
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await bossGet<DashboardData>("/boss/dashboard");
+      setItems(Array.isArray(data.checklistAndMaintenance) ? data.checklistAndMaintenance : []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load maintenance items.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  const phases = ["all", ...Array.from(new Set(items.map((i) => i.phase).filter(Boolean) as string[]))];
+
+  const filtered = filter === "all" ? items : items.filter((i) => i.phase === filter);
+
+  return (
+    <div className="grid gap-5" data-testid="boss-maintenance-page">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
+          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Maintenance</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Pre/post-event checklists and maintenance visibility.</p>
+        </div>
+        <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
+        </Button>
+      </header>
+
+      {phases.length > 1 ? (
+        <div className="flex flex-wrap gap-2" role="tablist">
+          {phases.map((p) => (
+            <Button
+              key={p}
+              role="tab"
+              aria-selected={filter === p}
+              variant={filter === p ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilter(p)}
+              data-testid={`tab-maintenance-${p}`}
+            >
+              {p === "all" ? "All" : phaseLabel(p)}
+            </Button>
+          ))}
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert">
+          <span className="text-destructive">{error}</span>
+          <Button onClick={() => void load()} variant="outline" size="sm" className="ml-3">
+            <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="grid gap-3">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="maintenance-empty">
+          <Wrench className="mx-auto h-8 w-8 text-muted-foreground" />
+          <p className="mt-3 font-semibold text-foreground">No maintenance items.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Pre/post-event checklists will appear here.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {filtered.map((item, i) => (
+            <div
+              key={item.id ?? i}
+              className="rounded-xl border border-border bg-card p-4 shadow-sm"
+              data-testid={`maintenance-item-${item.id ?? i}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="font-bold text-foreground">{item.title ?? `Item ${i + 1}`}</p>
+                  <div className="mt-0.5 flex items-center gap-2 flex-wrap">
+                    {item.phase ? (
+                      <span className="text-xs text-muted-foreground">{phaseLabel(item.phase)}</span>
+                    ) : null}
+                    {item.dueAt ? (
+                      <span className="text-xs text-muted-foreground">
+                        Due {new Date(item.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+                {item.status ? (
+                  <Badge variant={statusVariant(item.status)} className="capitalize shrink-0">
+                    {item.status.replace("_", " ")}
+                  </Badge>
+                ) : null}
+              </div>
+              {item.notes ? (
+                <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{item.notes as string}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

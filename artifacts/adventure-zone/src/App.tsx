@@ -1,6 +1,8 @@
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
+import { BossAuthProvider, useBossAuth } from "@/lib/boss-auth-context";
+import { BOSS_PROTECTED_PATH } from "@/lib/boss-route-pattern";
 import { lazy, Suspense, useState, type ComponentType, type FormEvent, type LazyExoticComponent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, useSearch } from "wouter";
@@ -83,6 +85,22 @@ const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWor
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+
+const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
+const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
+const BossBookingsPage = lazy(() => import("@/pages/BossBookingsPage"));
+const BossBookingDetailPage = lazy(() => import("@/pages/BossBookingDetailPage"));
+const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
+const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
+const BossContactDetailPage = lazy(() => import("@/pages/BossContactDetailPage"));
+const BossReceiptsPage = lazy(() => import("@/pages/BossReceiptsPage"));
+const BossReviewsPage = lazy(() => import("@/pages/BossReviewsPage"));
+const BossMaintenancePage = lazy(() => import("@/pages/BossMaintenancePage"));
+const BossAssignmentsPage = lazy(() => import("@/pages/BossAssignmentsPage"));
+const BossDesignStudioPage = lazy(() => import("@/pages/BossDesignStudioPage"));
+const BossDesignStudioEditorPage = lazy(() => import("@/pages/BossDesignStudioEditorPage"));
+const BossTemplatesFilesPage = lazy(() => import("@/pages/BossTemplatesFilesPage"));
+const BossShell = lazy(() => import("@/components/boss/boss-shell").then(({ BossShell }) => ({ default: BossShell })));
 
 const OfficeSignInPage = lazy(() => import("@/pages/OfficeSignInPage"));
 const OfficeTodayPage = lazy(() => import("@/pages/OfficeTodayPage"));
@@ -284,6 +302,34 @@ function OfficeProtectedApp() {
   );
 }
 
+function BossProtectedApp() {
+  const { boss, loading } = useBossAuth();
+  if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><p className="text-sm font-medium text-muted-foreground">Loading Boss Workspace…</p></div>;
+  if (!boss) return <Redirect to="/boss/sign-in" />;
+  return (
+    <BossShell>
+      <Switch>
+        <Route path="/boss/bookings/:id">{(params) => <BossBookingDetailPage bookingId={params.id} />}</Route>
+        <Route path="/boss/bookings" component={BossBookingsPage} />
+        <Route path="/boss/schedule" component={BossSchedulePage} />
+        <Route path="/boss/contacts/:id">{(params) => <BossContactDetailPage contactId={params.id} />}</Route>
+        <Route path="/boss/contacts" component={BossContactsPage} />
+        <Route path="/boss/receipts" component={BossReceiptsPage} />
+        <Route path="/boss/reviews" component={BossReviewsPage} />
+        <Route path="/boss/maintenance" component={BossMaintenancePage} />
+        <Route path="/boss/assignments" component={BossAssignmentsPage} />
+        <Route path="/boss/design-studio/:id">{(params) => <BossDesignStudioEditorPage />}</Route>
+        <Route path="/boss/design-studio" component={BossDesignStudioPage} />
+        <Route path="/boss/templates-files" component={BossTemplatesFilesPage} />
+        {/* Redirect away from disallowed paths */}
+        <Route path="/boss/today"><Redirect to="/boss" /></Route>
+        <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
+        <Route path="/boss"><BossHomePage /></Route>
+      </Switch>
+    </BossShell>
+  );
+}
+
 function AdminProtectedApp() {
   return (
     <AssistantContextProvider>
@@ -361,6 +407,9 @@ function AppRoutes() {
         <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
         <Route path={MANAGER_PROTECTED_PATH}><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
         <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+        <Route path="/boss/sign-in"><BossAuthProvider><BossSignInPage /></BossAuthProvider></Route>
+        <Route path={BOSS_PROTECTED_PATH}><BossAuthProvider><BossProtectedApp /></BossAuthProvider></Route>
+        <Route path="/boss"><BossAuthProvider><BossProtectedApp /></BossAuthProvider></Route>
         <Route><Protected><AdminProtectedApp /></Protected></Route>
       </Switch>
     </Suspense>

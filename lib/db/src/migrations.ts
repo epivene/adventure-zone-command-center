@@ -421,6 +421,10 @@ const migrationFiles = [
           AND column_name = 'can_review_website_inquiries'
       ) AS ready`,
   },
+  {
+    name: "20260905_boss_workspace.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

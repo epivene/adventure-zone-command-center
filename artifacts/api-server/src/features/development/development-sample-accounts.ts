@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { legManagerAccess, officeAccounts, travelLegs } from "@/db/schema";
+import { bossAccounts, legManagerAccess, officeAccounts, travelLegs } from "@/db/schema";
 import { hashPasswordCredential } from "@/lib/password-credential";
 
 export const DEVELOPMENT_SAMPLE_LEG_ID =
@@ -17,6 +17,7 @@ export const DEVELOPMENT_SAMPLE_LOGINS = {
     legName: "Demo Rocky Mountain Route",
     password: "LegDemo2026!",
   },
+  boss: { loginName: "demo-boss", displayName: "Demo Dave", password: "BossDemo2026!" },
 } as const;
 
 /**
@@ -74,6 +75,14 @@ export async function ensureDevelopmentSampleAccounts(): Promise<void> {
       enabled: true,
       sessionVersion: 1,
     });
+  }
+  const [studioOffice] = await db.select({ id: officeAccounts.id }).from(officeAccounts).where(sql`lower(${officeAccounts.loginName}) = lower(${DEVELOPMENT_SAMPLE_LOGINS.office.loginName})`).limit(1);
+  const existingBoss = await db.select({ id: bossAccounts.id, studioOfficeAccountId: bossAccounts.studioOfficeAccountId }).from(bossAccounts).where(sql`lower(${bossAccounts.loginName}) = lower(${DEVELOPMENT_SAMPLE_LOGINS.boss.loginName})`).limit(1);
+  if (!existingBoss[0]) {
+    const credential = await hashPasswordCredential(DEVELOPMENT_SAMPLE_LOGINS.boss.password);
+    await db.insert(bossAccounts).values({ loginName: DEVELOPMENT_SAMPLE_LOGINS.boss.loginName, displayName: DEVELOPMENT_SAMPLE_LOGINS.boss.displayName, passwordHash: credential.hash, passwordSalt: credential.salt, studioOfficeAccountId: studioOffice!.id });
+  } else if (!existingBoss[0].studioOfficeAccountId && studioOffice) {
+    await db.update(bossAccounts).set({ studioOfficeAccountId: studioOffice.id, updatedAt: new Date() }).where(eq(bossAccounts.id, existingBoss[0].id));
   }
 
   const existingManagerAccess = await db

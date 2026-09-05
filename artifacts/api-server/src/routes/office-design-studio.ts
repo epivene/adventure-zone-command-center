@@ -18,12 +18,15 @@ import { sanitizeDesignStudioCanvas } from "@/features/design-studio/canvas-sani
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { resolveOfficeSession } from "@/features/office/office-middleware";
 import { verifyOfficeToken } from "@/features/office/office-auth";
+import { verifyBossToken } from "@/features/boss/boss-auth";
+import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { verifyToken } from "@/lib/auth";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { officeAccounts } from "@workspace/db/office-coordinator-schema";
 
 const router: IRouter = Router();
 const officeRepository = new DrizzleOfficeAccountRepository(db);
+const bossRepository = new DrizzleBossAccountRepository(db);
 const studioAssetStorage = new GoogleCloudPrivateObjectStorage(process.env, [
   "GOOGLE_CLOUD_STORAGE_BUCKET",
   "LEG_MANAGER_RECEIPT_BUCKET",
@@ -47,6 +50,15 @@ async function requireStudio(req: any, res: any, next: () => void): Promise<void
     req.officeAccount = officeContext;
     next();
     return;
+  }
+  // Boss tokens get Studio access only; they never satisfy the owner middleware.
+  // Studio ownership is explicitly mapped on the Boss account.
+  const bossClaims = verifyBossToken(token);
+  const boss = bossClaims && await bossRepository.getActiveSession(bossClaims.accountId);
+  if (boss && boss.sessionVersion === bossClaims!.sessionVersion) {
+    const [account] = boss.studioOfficeAccountId ? await db.select({ id: officeAccounts.id })
+      .from(officeAccounts).where(and(eq(officeAccounts.id, boss.studioOfficeAccountId), eq(officeAccounts.enabled, true))).limit(1) : [];
+    if (account) { req.officeAccount = { accountId: account.id, displayName: boss.displayName, role: "office_coordinator" }; req.studioActorKind = "boss"; next(); return; }
   }
   if (verifyToken(token)) {
     const [account] = await db
