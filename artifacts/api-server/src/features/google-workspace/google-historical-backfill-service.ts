@@ -333,7 +333,7 @@ export class GoogleHistoricalBackfillService {
           });
           counts.attached += 1;
 
-          if (!copiedFileThreads.has(message.threadId)) {
+          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
             await this.copyThreadFiles(
               classification.organization.id,
@@ -447,7 +447,7 @@ export class GoogleHistoricalBackfillService {
             organizationId: classification.organization.id,
           });
           result.attached += 1;
-          if (!copiedFileThreads.has(message.threadId)) {
+          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
             await this.copyThreadFiles(classification.organization.id, message.threadId);
           }

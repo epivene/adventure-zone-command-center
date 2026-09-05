@@ -160,9 +160,14 @@ describe("GoogleHistoricalBackfillService", () => {
   });
 
   it("does not let a stalled Drive attachment copy freeze the Gmail batch", async () => {
+    const client = readClient(["m1"], null);
+    client.getMessageMetadata = vi.fn(async (id) => ({
+      ...message(id),
+      hasAttachments: true,
+    }));
     const repo = repository();
     const service = new GoogleHistoricalBackfillService({
-      connection: { createReadClient: async () => readClient(["m1"], null) },
+      connection: { createReadClient: async () => client },
       repository: repo,
       classifier: {
         classify: async () => ({
@@ -184,6 +189,29 @@ describe("GoogleHistoricalBackfillService", () => {
       state: "awaiting_approval",
     });
     expect(repo.finishBatch).toHaveBeenCalledOnce();
+  });
+
+  it("does not start a Drive copy for a matched message without attachments", async () => {
+    const copyApprovedThreadAttachments = vi.fn(async () => []);
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["m1"], null) },
+      repository: repository(),
+      classifier: {
+        classify: async () => ({
+          outcome: "attached" as const,
+          organization: { id: "org-1", name: "Known Event" },
+          evidenceCodes: ["existing_thread_association"],
+        }),
+      },
+      validationRepository: validationRepository(),
+      fileService: { copyApprovedThreadAttachments },
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 1,
+      attached: 1,
+    });
+    expect(copyApprovedThreadAttachments).not.toHaveBeenCalled();
   });
 
   it("records a stalled Gmail metadata fetch as failed and continues", async () => {
