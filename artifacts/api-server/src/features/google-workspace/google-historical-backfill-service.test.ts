@@ -213,4 +213,27 @@ describe("GoogleHistoricalBackfillService", () => {
       errorCode: "GOOGLE_WORKSPACE_OPERATION_TIMEOUT",
     }));
   });
+
+  it("records a stalled classifier as failed and continues", async () => {
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["stalled", "next"], null) },
+      repository: repo,
+      classifier: {
+        classify: async (item) => {
+          if (item.id === "stalled") return new Promise<never>(() => undefined);
+          return { outcome: "ignored" as const, evidenceCodes: [] };
+        },
+      },
+      validationRepository: validationRepository(),
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
+  });
 });

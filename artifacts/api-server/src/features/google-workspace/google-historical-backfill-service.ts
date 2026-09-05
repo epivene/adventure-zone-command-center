@@ -313,7 +313,10 @@ export class GoogleHistoricalBackfillService {
               organization: inheritedTarget,
               evidenceCodes: ["existing_thread_association"],
             }
-          : await this.classifier.classify(message, client);
+          : await withGoogleTimeout(
+              this.classifier.classify(message, client),
+              this.ioTimeoutMs,
+            );
 
         if (classification.outcome === "attached") {
           batchThreadTargets.set(message.threadId, classification.organization);
@@ -417,8 +420,14 @@ export class GoogleHistoricalBackfillService {
 
     for (const failure of failures) {
       try {
-        const message = await client.getMessageMetadata(failure.messageId);
-        const classification = await this.classifier.classify(message, client);
+        const message = await withGoogleTimeout(
+          client.getMessageMetadata(failure.messageId),
+          this.ioTimeoutMs,
+        );
+        const classification = await withGoogleTimeout(
+          this.classifier.classify(message, client),
+          this.ioTimeoutMs,
+        );
         if (classification.outcome === "attached") {
           await this.attach(message, classification);
           await this.repository.recordOutcome({
