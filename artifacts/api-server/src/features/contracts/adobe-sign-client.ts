@@ -86,7 +86,8 @@ export class AdobeSignClient {
     pdf: Uint8Array;
   }) {
     const form = new FormData();
-    form.append("File", new Blob([input.pdf], { type: "application/pdf" }), `${input.name}.pdf`);
+    const pdfBuffer = Uint8Array.from(input.pdf).buffer as ArrayBuffer;
+    form.append("File", new Blob([pdfBuffer], { type: "application/pdf" }), `${input.name}.pdf`);
     form.append("AgreementInfo", JSON.stringify({
       name: input.name,
       message: input.message,

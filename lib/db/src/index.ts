@@ -18,6 +18,7 @@ import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
 import * as legAssignmentSchema from "./leg-assignment-schema";
 import * as designStudioCanvaSchema from "./design-studio-canva-schema";
+import * as contractSchema from "./contract-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
 import { databasePoolTimeouts } from "./pool-config";
 import {
@@ -71,6 +72,7 @@ const schema = {
   ...bookingOpportunityEmailSchema,
   ...legAssignmentSchema,
   ...designStudioCanvaSchema,
+  ...contractSchema,
   designAssets,
   designOutputs,
   designProjectVersions,

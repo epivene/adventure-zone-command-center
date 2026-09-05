@@ -38,7 +38,7 @@ const studioAssetStorage = new GoogleCloudPrivateObjectStorage(process.env, [
  * Office account used for Studio ownership so records remain scoped and
  * auditable instead of using a magic user id.
  */
-async function requireStudio(req: any, res: any, next: () => void): Promise<void> {
+export async function requireStudio(req: any, res: any, next: () => void): Promise<void> {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
   if (!token) {

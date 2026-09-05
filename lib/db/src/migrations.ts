@@ -425,6 +425,13 @@ const migrationFiles = [
     name: "20260905_boss_workspace.sql",
     markerSql: "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
   },
+  {
+    name: "20260906_adobe_contracts.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.contract_agreements') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_provider_events') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

@@ -66,6 +66,35 @@ export type CanvaImportResult = {
   importedVersionId: string;
 };
 
+export type ContractAgreementState =
+  | "draft" | "ready" | "pending_customer" | "customer_signed"
+  | "countersign_pending" | "completed" | "declined" | "cancelled"
+  | "expired" | "failed" | "replaced";
+
+export type ContractAgreement = {
+  id: string;
+  projectId: string;
+  state: ContractAgreementState;
+  customerName: string;
+  customerEmail: string;
+  davidName: string;
+  davidEmail: string;
+  providerAgreementId: string | null;
+  sentAt: string | null;
+  customerSignedAt: string | null;
+  completedAt: string | null;
+  failureDetails: string | null;
+  signedPdfAvailable: boolean;
+  auditTrailAvailable: boolean;
+};
+
+export type ContractReadiness = {
+  draftingAvailable: true;
+  signApiAvailable: boolean;
+  reason: string;
+  missing: string[];
+};
+
 export function assetImageUrl(asset: DesignAsset): string | null {
   if (asset.url) return asset.url;
   return null;
@@ -136,7 +165,26 @@ export const designStudioApi = {
     return apiPost<Record<string, unknown>>(`/office/design-studio/projects/${encodeURIComponent(id)}/outputs`, { outputType });
   },
   prepareContract(id: string) {
-    return apiPost<Record<string, unknown>>(`/office/design-studio/projects/${encodeURIComponent(id)}/contract/prepare`, {});
+    return apiPost<{ agreement: ContractAgreement; readiness: ContractReadiness }>(`/office/design-studio/projects/${encodeURIComponent(id)}/contract/prepare`, {});
+  },
+  contractState(id: string) {
+    return apiGet<{ agreements: ContractAgreement[]; readiness: ContractReadiness }>(`/office/design-studio/projects/${encodeURIComponent(id)}/contracts`);
+  },
+  sendContract(id: string) {
+    return apiPost<{ agreement: ContractAgreement }>(`/office/contracts/${encodeURIComponent(id)}/send`, {});
+  },
+  refreshContract(id: string) {
+    return apiPost<{ agreement: ContractAgreement }>(`/office/contracts/${encodeURIComponent(id)}/refresh`, {});
+  },
+  cancelContract(id: string, reason: string) {
+    return apiPost<{ agreement: ContractAgreement }>(`/office/contracts/${encodeURIComponent(id)}/cancel`, { reason });
+  },
+  replaceContract(id: string) {
+    return apiPost<{ project: DesignProject }>(`/office/contracts/${encodeURIComponent(id)}/replace`, {});
+  },
+  async contractFile(id: string, kind: "signed" | "audit") {
+    const result = await apiGet<{ url: string }>(`/office/contracts/${encodeURIComponent(id)}/file/${kind}`);
+    window.open(result.url, "_blank", "noopener,noreferrer");
   },
   async get(id: string) {
     const response = await apiGet<{ project: DesignProject }>(`/office/design-studio/projects/${encodeURIComponent(id)}`);

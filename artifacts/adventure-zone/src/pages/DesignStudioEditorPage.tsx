@@ -32,6 +32,7 @@ import { LayersSheet } from "@/components/design-studio/LayersSheet";
 import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
 import { ExportSheet } from "@/components/design-studio/ExportSheet";
 import { CanvaHandoffSheet } from "@/components/design-studio/CanvaHandoffSheet";
+import { ContractSignaturePanel } from "@/components/design-studio/ContractSignaturePanel";
 
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
 const EMPTY_CANVAS = normalizeCanvas(null);
@@ -372,6 +373,10 @@ export default function DesignStudioEditorPage() {
         <div className="mx-3 mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">
           {error}
         </div>
+      ) : null}
+
+      {project.type === "contract" ? (
+        <ContractSignaturePanel dirty={dirty} onSave={save} projectId={project.id} />
       ) : null}
 
       <main className="relative flex min-h-0 flex-1 flex-col" data-testid="design-canvas">
