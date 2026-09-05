@@ -158,4 +158,31 @@ describe("GoogleHistoricalBackfillService", () => {
     }));
     expect(repo.finishBatch).not.toHaveBeenCalled();
   });
+
+  it("does not let a stalled Drive attachment copy freeze the Gmail batch", async () => {
+    const repo = repository();
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["m1"], null) },
+      repository: repo,
+      classifier: {
+        classify: async () => ({
+          outcome: "attached" as const,
+          organization: { id: "org-1", name: "Known Event" },
+          evidenceCodes: ["existing_thread_association"],
+        }),
+      },
+      validationRepository: validationRepository(),
+      fileService: {
+        copyApprovedThreadAttachments: async () => new Promise<never>(() => undefined),
+      },
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 1,
+      attached: 1,
+      state: "awaiting_approval",
+    });
+    expect(repo.finishBatch).toHaveBeenCalledOnce();
+  });
 });

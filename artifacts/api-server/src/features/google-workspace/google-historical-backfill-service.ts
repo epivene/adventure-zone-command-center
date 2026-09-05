@@ -1,4 +1,5 @@
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
+import { withGoogleTimeout } from "./google-async-timeout";
 import type {
   GoogleMessageMetadata,
   GoogleMessageRef,
@@ -147,6 +148,7 @@ export class GoogleHistoricalBackfillService {
   private readonly classifier: ClassifierAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
   private readonly fileService: FileServiceAccess;
+  private readonly ioTimeoutMs: number;
 
   constructor(options?: {
     connection?: ConnectionAccess;
@@ -155,6 +157,7 @@ export class GoogleHistoricalBackfillService {
     classifier?: ClassifierAccess;
     validationRepository?: ValidationRepositoryAccess;
     fileService?: FileServiceAccess;
+    ioTimeoutMs?: number;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
@@ -171,6 +174,7 @@ export class GoogleHistoricalBackfillService {
       (options
         ? { copyApprovedThreadAttachments: async () => undefined }
         : new GoogleProfileFileService());
+    this.ioTimeoutMs = options?.ioTimeoutMs ?? 15_000;
   }
 
   private async attach(
@@ -195,8 +199,10 @@ export class GoogleHistoricalBackfillService {
     organizationId: string,
     threadId: string,
   ): Promise<void> {
-    await this.fileService
-      .copyApprovedThreadAttachments({ organizationId, threadId })
+    await withGoogleTimeout(
+      this.fileService.copyApprovedThreadAttachments({ organizationId, threadId }),
+      this.ioTimeoutMs,
+    )
       .catch(() => undefined);
   }
 
