@@ -98,8 +98,6 @@ const BossReceiptsPage = lazy(() => import("@/pages/BossReceiptsPage"));
 const BossReviewsPage = lazy(() => import("@/pages/BossReviewsPage"));
 const BossMaintenancePage = lazy(() => import("@/pages/BossMaintenancePage"));
 const BossAssignmentsPage = lazy(() => import("@/pages/BossAssignmentsPage"));
-const BossDesignStudioPage = lazy(() => import("@/pages/BossDesignStudioPage"));
-const BossDesignStudioEditorPage = lazy(() => import("@/pages/BossDesignStudioEditorPage"));
 const BossTemplatesFilesPage = lazy(() => import("@/pages/BossTemplatesFilesPage"));
 const CoiManagementPage = lazy(() => import("@/pages/CoiManagementPage"));
 const BossShell = lazy(() => import("@/components/boss/boss-shell").then(({ BossShell }) => ({ default: BossShell })));
@@ -321,8 +319,8 @@ function BossProtectedApp() {
         <Route path="/boss/reviews" component={BossReviewsPage} />
         <Route path="/boss/maintenance" component={BossMaintenancePage} />
         <Route path="/boss/assignments" component={BossAssignmentsPage} />
-        <Route path="/boss/design-studio/:id">{(params) => <BossDesignStudioEditorPage />}</Route>
-        <Route path="/boss/design-studio" component={BossDesignStudioPage} />
+        <Route path="/boss/design-studio/:id"><Redirect to="/boss" /></Route>
+        <Route path="/boss/design-studio"><Redirect to="/boss" /></Route>
         <Route path="/boss/templates-files" component={BossTemplatesFilesPage} />
         <Route path="/boss/coi"><CoiManagementPage mode="boss" /></Route>
         {/* Redirect away from disallowed paths */}

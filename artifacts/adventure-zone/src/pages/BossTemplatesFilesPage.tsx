@@ -47,9 +47,6 @@ function ContractCard({ document }: { document: BossContractDocument }) {
         </Badge>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/boss/design-studio/${document.projectId}`}>Open contract</Link>
-        </Button>
         {document.fileUrl ? (
           <Button asChild size="sm" variant="ghost">
             <a href={document.fileUrl} target="_blank" rel="noreferrer">
