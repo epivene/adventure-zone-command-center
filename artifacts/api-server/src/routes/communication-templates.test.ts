@@ -4,6 +4,13 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("src/routes/communication-templates.ts", "utf8");
 
 describe("owner communication template administration", () => {
+  it("creates real templates as owner-managed drafts", () => {
+    expect(source).toContain('router.post("/communication-templates"');
+    expect(source).toContain('state: "draft"');
+    expect(source).toContain('ownerKind: "company"');
+    expect(source).toContain("communicationTemplateWriteSchema.safeParse");
+  });
+
   it("returns template ownership and coordinator display provenance", () => {
     expect(source).toContain("ownerKind");
     expect(source).toContain("creatorDisplayName");
