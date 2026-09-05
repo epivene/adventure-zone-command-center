@@ -31,6 +31,7 @@ import {
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@workspace/avz-crm/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@workspace/avz-crm/components/ui/dialog";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Label } from "@workspace/avz-crm/components/ui/label";
 import { Separator } from "@workspace/avz-crm/components/ui/separator";
@@ -125,6 +126,8 @@ export function BrandedEmailBuilder() {
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiSuggestion, setAiSuggestion] = useState("");
   const [aiThinking, setAiThinking] = useState(false);
+  const [showApiConnect, setShowApiConnect] = useState(false);
+  const [apiConnected, setApiConnected] = useState(false);
   const selected = useMemo(() => blocks.find((block) => block.id === selectedId), [blocks, selectedId]);
 
   function markDirty() { setSaved(false); setPublishState("Draft"); }
@@ -213,9 +216,35 @@ export function BrandedEmailBuilder() {
         <aside className="w-full border-t border-border bg-card lg:w-80 lg:border-l lg:border-t-0">
           <div className="flex items-center justify-between border-b border-border px-4 py-3"><div><p className="text-sm font-bold">Block settings</p><p className="text-xs text-muted-foreground">{selected?.label ?? "Nothing selected"}</p></div><Button aria-label="More block options" size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4" /></Button></div>
           {selected ? <div className="space-y-5 p-4"><div className="space-y-2"><Label htmlFor="block-heading">Content</Label><Textarea id="block-heading" onChange={markDirty} value={selected.type === "heading" ? "Your next adventure starts here" : selected.summary} /></div><div className="space-y-2"><Label htmlFor="link">Link destination</Label><Input id="link" onChange={markDirty} placeholder="https://adventurezone.com/visit" /></div><div className="flex items-center justify-between border-t border-border pt-4"><div><p className="text-sm font-semibold">Show on mobile</p><p className="text-xs text-muted-foreground">Keep this block responsive</p></div><Switch defaultChecked onCheckedChange={markDirty} /></div><Button className="w-full gap-2" onClick={removeBlock} variant="outline"><Trash2 className="h-4 w-4" />Remove block</Button></div> : <div className="p-6 text-sm text-muted-foreground">Select a block in the content panel to edit its copy, links, and responsive behavior.</div>}
-           <div className="m-4 border border-primary/20 bg-primary/5 p-3"><div className="flex items-start gap-2"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-xs font-bold">Smart content is ready</p><Button aria-label="Toggle AI helper" className="h-6 w-6" onClick={() => setAiExpanded(!aiExpanded)} size="icon" variant="ghost">{aiExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <WandSparkles className="h-3.5 w-3.5" />}</Button></div><p className="mt-1 text-xs text-muted-foreground">Use contact and event fields to personalize every send.</p>{aiExpanded ? <div className="mt-3 space-y-2 border-t border-primary/10 pt-3"><div className="flex items-center gap-1.5 text-[11px] font-semibold"><Bot className="h-3.5 w-3.5" />AI helper <Badge className="ml-auto text-[9px]" variant="secondary">Your API</Badge></div><Textarea aria-label="Ask AI helper" className="min-h-16 bg-background text-xs" onChange={(event) => setAiPrompt(event.target.value)} placeholder="Ask for a subject line, rewrite, or CTA..." value={aiPrompt} /><div className="flex flex-wrap gap-1.5"><Button onClick={() => runAiHelper("Write 3 subject lines for this email.")} size="sm" variant="outline">Subject lines</Button><Button onClick={() => runAiHelper()} size="sm" variant="outline">{aiThinking ? "Thinking..." : "Improve copy"}</Button></div>{aiSuggestion ? <div className="border-l-2 border-primary bg-background p-2 text-[11px] leading-4">{aiSuggestion}</div> : <p className="text-[10px] text-muted-foreground">Preview only: connect your API key in production to generate copy and images here.</p>}</div> : null}</div></div></div>
+            <div className="m-4 border border-primary/20 bg-primary/5 p-3"><div className="flex items-start gap-2"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="text-xs font-bold">Smart content is ready</p><Button aria-label="Toggle AI helper" className="h-6 w-6" onClick={() => setAiExpanded(!aiExpanded)} size="icon" variant="ghost">{aiExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <WandSparkles className="h-3.5 w-3.5" />}</Button></div><p className="mt-1 text-xs text-muted-foreground">Use contact and event fields to personalize every send.</p>{aiExpanded ? <div className="mt-3 space-y-2 border-t border-primary/10 pt-3"><div className="flex items-center gap-1.5 text-[11px] font-semibold"><Bot className="h-3.5 w-3.5" />AI helper <Button className="ml-auto h-6 px-2 text-[9px]" onClick={() => setShowApiConnect(true)} size="sm" variant="secondary">{apiConnected ? "Connected" : "Connect API"}</Button></div><Textarea aria-label="Ask AI helper" className="min-h-16 bg-background text-xs" onChange={(event) => setAiPrompt(event.target.value)} placeholder="Ask for a subject line, rewrite, or CTA..." value={aiPrompt} /><div className="flex flex-wrap gap-1.5"><Button onClick={() => runAiHelper("Write 3 subject lines for this email.")} size="sm" variant="outline">Subject lines</Button><Button onClick={() => runAiHelper()} size="sm" variant="outline">{aiThinking ? "Thinking..." : "Improve copy"}</Button></div>{aiSuggestion ? <div className="border-l-2 border-primary bg-background p-2 text-[11px] leading-4">{aiSuggestion}</div> : <p className="text-[10px] text-muted-foreground">{apiConnected ? "Connected to your workspace AI provider." : "Connect your API to generate copy and images here."}</p>}</div> : null}</div></div></div>
         </aside>
       </div>
+
+      <Dialog open={showApiConnect} onOpenChange={setShowApiConnect}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect your AI helper</DialogTitle>
+            <DialogDescription>Choose the workspace provider used for copy suggestions and image ideas. Secrets stay server-side in the production connection.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="ai-provider">Provider endpoint</Label>
+              <Input id="ai-provider" defaultValue="Adventure Zone AI gateway" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="ai-model">Model label</Label>
+              <Input id="ai-model" defaultValue="Campaign copy assistant" />
+            </div>
+            <div className="border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
+              The builder will send only the selected block, approved brand rules, and the prompt. Recipient data and API keys stay out of the browser.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setShowApiConnect(false)} variant="outline">Cancel</Button>
+            <Button onClick={() => { setApiConnected(true); setShowApiConnect(false); }}>Connect workspace AI</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {showReview ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"><Card className="w-full max-w-lg"><CardHeader className="flex-row items-start justify-between"><div><CardTitle>Review before publishing</CardTitle><p className="mt-1 text-sm text-muted-foreground">Save this email to the reusable template library.</p></div><Button aria-label="Close review" onClick={() => setShowReview(false)} size="icon" variant="ghost"><X className="h-4 w-4" /></Button></CardHeader><CardContent className="space-y-4"><div className="space-y-3 border border-border p-4 text-sm"><div className="flex justify-between"><span className="text-muted-foreground">Template name</span><strong>{projectName}</strong></div><div className="flex justify-between"><span className="text-muted-foreground">Content blocks</span><strong>{blocks.length}</strong></div><div className="flex justify-between"><span className="text-muted-foreground">Responsive check</span><span className="flex items-center gap-1 text-primary"><Check className="h-4 w-4" />Desktop + mobile</span></div></div><div className="flex gap-2"><Button className="flex-1" onClick={() => { setPublishState("Needs review"); setShowReview(false); }}>Mark needs review</Button><Button className="flex-1" onClick={() => { setPublishState("Published"); setSaved(true); setShowReview(false); }} variant="outline">Publish template</Button></div><p className="text-center text-xs text-muted-foreground">Publishing adds this version to Template Library for campaign use.</p></CardContent></Card></div> : null}
       <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 border border-border bg-card px-3 py-2 text-xs shadow-lg"><span className="font-semibold">Publish state</span><Badge variant={publishState === "Published" ? "default" : "outline"}>{publishState}</Badge></div>
