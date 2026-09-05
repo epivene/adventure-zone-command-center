@@ -46,7 +46,7 @@ export default function MarketingHomePage() {
       </header>
 
       <section aria-labelledby="marketing-now" className="grid gap-3">
-        <div><h2 className="text-xl font-bold" id="marketing-now">Use now</h2></div>
+        <div><h2 className="text-xl font-bold" id="marketing-now">Marketing tools</h2></div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/profiles"><h3 className="font-bold">Profiles</h3><p className="mt-1 text-sm text-muted-foreground">Event families, contacts, and cities.</p></Link>
           <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/office-coordinator"><h3 className="font-bold">Office Coordinator</h3><p className="mt-1 text-sm text-muted-foreground">Brochures, mail, and submitted outreach.</p></Link>
