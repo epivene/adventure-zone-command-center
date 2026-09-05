@@ -18,6 +18,15 @@ type Template = {
   ownerKind: TemplateOwnerKind;
   creatorDisplayName: string | null;
 };
+type NewTemplate = {
+  code: string;
+  name: string;
+  category: string;
+  channel: "email" | "internal_email";
+  subjectTemplate: string;
+  bodyTemplate: string;
+  requiredPlaceholders: string[];
+};
 
 const placeholderTokens = [
   "contactName", "eventName", "eventCity", "eventState", "eventDates",
@@ -45,6 +54,15 @@ const groupOrder = [
 ] as const;
 
 export default function SettingsCommunicationTemplatesPage() {
+  const blankTemplate: NewTemplate = {
+    code: "",
+    name: "",
+    category: "General",
+    channel: "email",
+    subjectTemplate: "",
+    bodyTemplate: "",
+    requiredPlaceholders: [],
+  };
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
@@ -52,6 +70,8 @@ export default function SettingsCommunicationTemplatesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTemplate, setNewTemplate] = useState<NewTemplate>(blankTemplate);
 
   async function load() {
     const response = await apiFetch("/communication-templates");
@@ -59,6 +79,7 @@ export default function SettingsCommunicationTemplatesPage() {
     const data = (await response.json()) as { templates: Template[] };
     setTemplates(data.templates);
     setSelectedId((current) => current && data.templates.some((item) => item.id === current) ? current : data.templates[0]?.id ?? null);
+    return data.templates;
   }
 
   useEffect(() => {
@@ -128,6 +149,31 @@ export default function SettingsCommunicationTemplatesPage() {
     } finally { setBusy(false); }
   }
 
+  async function createTemplate() {
+    if (busy || !newTemplate.name.trim() || !newTemplate.code.trim() || !newTemplate.bodyTemplate.trim()) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const response = await apiFetch("/communication-templates", {
+        method: "POST",
+        body: JSON.stringify({
+          ...newTemplate,
+          subjectTemplate: newTemplate.subjectTemplate || null,
+          accessScope: "owner",
+        }),
+      });
+      const data = (await response.json().catch(() => ({}))) as { template?: Template; error?: string };
+      if (!response.ok || !data.template) throw new Error(data.error ?? "Could not create template.");
+      const refreshed = await load();
+      setSelectedId(data.template.id);
+      setShowCreate(false);
+      setNewTemplate(blankTemplate);
+      setMessage(`Created "${data.template.name}" as a draft. Review it before activating.`);
+      if (!refreshed.some((template) => template.id === data.template?.id)) await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not create template.");
+    } finally { setBusy(false); }
+  }
+
   function insert(token: string, target: "subject" | "body") {
     const value = `{{${token}}}`;
     if (target === "subject") setSubject((current) => `${current}${current ? " " : ""}${value}`);
@@ -139,12 +185,26 @@ export default function SettingsCommunicationTemplatesPage() {
     {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 font-semibold text-rose-700">{error}</p> : null}
     <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
       <aside className="grid content-start gap-4 rounded-xl border bg-white p-3">
-        {groupOrder.map((title) => {
+         <button className="button-primary w-full" type="button" onClick={() => { setShowCreate(true); setError(""); setMessage(""); }}><span aria-hidden="true">＋</span> New reusable template</button>
+         {groupOrder.map((title) => {
           const items = grouped.get(title) ?? [];
           return <section className="grid gap-2" key={title}><div className="flex items-center justify-between"><h2 className="text-sm font-bold">{title}</h2><span className="text-xs text-slate-500">{items.length}</span></div>{items.length ? items.map((template) => <button key={template.id} type="button" onClick={() => setSelectedId(template.id)} className={`rounded-lg border p-3 text-left ${selectedId === template.id ? "border-orange-400 bg-orange-50" : "border-slate-200"}`}><div className="flex items-center justify-between gap-2"><span className="font-bold">{template.name}</span><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{stateLabel(template.state)}</span></div><p className="mt-1 text-xs text-slate-500">{template.category} · {template.accessScope === "office" ? "Office-safe" : "Owner only"}</p>{template.creatorDisplayName ? <p className="mt-1 text-xs font-semibold text-slate-600">Created by {template.creatorDisplayName}</p> : null}</button>) : <p className="rounded-lg border border-dashed p-2 text-xs text-slate-500">None</p>}</section>;
         })}
       </aside>
-      {selected ? <section className="grid gap-4 rounded-xl border bg-white p-4 shadow-sm">
+       {showCreate ? <section className="grid gap-4 rounded-xl border bg-white p-4 shadow-sm">
+         <div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">New draft</p><h2 className="text-xl font-bold">Create a reusable template</h2><p className="mt-1 text-sm text-slate-600">Save it as a draft, test the wording, then activate it for real email workflows.</p></div>
+         <div className="grid gap-4 sm:grid-cols-2">
+           <label className="grid gap-1 text-sm font-bold">Template name<input value={newTemplate.name} placeholder="Proposal follow-up" onChange={(event) => setNewTemplate((current) => ({ ...current, name: event.target.value }))} /></label>
+           <label className="grid gap-1 text-sm font-bold">Template code<input value={newTemplate.code} placeholder="proposal_follow_up" onChange={(event) => setNewTemplate((current) => ({ ...current, code: event.target.value.toLowerCase().replace(/[^a-z0-9_]+/g, "_") }))} /><span className="text-xs font-normal text-slate-500">Lowercase letters, numbers, and underscores.</span></label>
+           <label className="grid gap-1 text-sm font-bold">Category<input value={newTemplate.category} placeholder="Sales" onChange={(event) => setNewTemplate((current) => ({ ...current, category: event.target.value }))} /></label>
+           <label className="grid gap-1 text-sm font-bold">Channel<select value={newTemplate.channel} onChange={(event) => setNewTemplate((current) => ({ ...current, channel: event.target.value as NewTemplate["channel"] }))}><option value="email">Email</option><option value="internal_email">Internal email</option></select></label>
+         </div>
+         <label className="grid gap-1 text-sm font-bold">Subject<input value={newTemplate.subjectTemplate} placeholder="A note for {{contactName}}" onChange={(event) => setNewTemplate((current) => ({ ...current, subjectTemplate: event.target.value }))} /></label>
+         <label className="grid gap-1 text-sm font-bold">Body<textarea rows={14} value={newTemplate.bodyTemplate} placeholder={"Hi {{contactName}},\n\nWrite the reusable message here."} onChange={(event) => setNewTemplate((current) => ({ ...current, bodyTemplate: event.target.value }))} /></label>
+         <div><p className="text-sm font-bold">Required placeholders</p><p className="mt-1 text-xs text-slate-500">Choose values that must be present before this draft can be activated.</p><div className="mt-2 grid gap-2 sm:grid-cols-2">{placeholderTokens.map((token) => <label className="flex items-center gap-2 text-sm" key={token}><input type="checkbox" checked={newTemplate.requiredPlaceholders.includes(token)} onChange={(event) => setNewTemplate((current) => ({ ...current, requiredPlaceholders: event.target.checked ? [...current.requiredPlaceholders, token] : current.requiredPlaceholders.filter((item) => item !== token) }))} />{`{{${token}}}`}</label>)}</div></div>
+         {message ? <p role="status" className="rounded-lg bg-emerald-50 p-3 font-semibold text-emerald-800">{message}</p> : null}
+         <div className="flex flex-wrap gap-2"><button className="button-primary" disabled={busy || !newTemplate.name.trim() || !newTemplate.code.trim() || !newTemplate.bodyTemplate.trim()} type="button" onClick={() => void createTemplate()}>{busy ? "Creating…" : "Create draft"}</button><button className="button-secondary" disabled={busy} type="button" onClick={() => { setShowCreate(false); setNewTemplate(blankTemplate); }}>Cancel</button></div>
+       </section> : selected ? <section className="grid gap-4 rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{selected.code}</p><h2 className="text-xl font-bold">{selected.name}</h2>{selected.creatorDisplayName ? <p className="mt-1 text-sm text-slate-600">Created by {selected.creatorDisplayName}</p> : null}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold">{stateLabel(selected.state)}</span></div>
         <label className="grid gap-1 text-sm font-bold">Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
         <label className="grid gap-1 text-sm font-bold">Body<textarea rows={14} value={body} onChange={(event) => setBody(event.target.value)} /></label>
