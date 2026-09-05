@@ -1,4 +1,4 @@
-import { ArrowLeft, FileText, Mail, Megaphone, Settings2 } from "lucide-react";
+import { ArrowLeft, FileText, Mail, Megaphone, Settings2, UsersRound } from "lucide-react";
 import { Link, useLocation, useSearch } from "wouter";
 import type { MouseEvent } from "react";
 
