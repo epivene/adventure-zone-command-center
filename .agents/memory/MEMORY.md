@@ -16,3 +16,4 @@
 - [Stale workflow port owners](stale-workflow-port-owners.md) — when a restart builds new code but logs EADDRINUSE, an orphan may still serve the old bundle.
 - [Inbound browser calling safety](inbound-browser-calling-safety.md) — one leased browser may answer; answered calls are never recorded; voicemail media expires after 30 days.
 - [Render startup readiness gate](render-startup-readiness-gate.md) — bind early for port detection, but serve only liveness until required schema checks pass.
+- [Adventure Zone test runtime](adventure-zone-test-runtime.md) — Node 20 needs jsdom 29 here; jsdom 30 pulls undici 8 APIs unavailable in worker_threads.

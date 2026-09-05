@@ -68,4 +68,43 @@ describe("BossAssignmentsPage", () => {
       expect(screen.getByTestId("input-assignment-title")).toBeTruthy();
     });
   });
+
+  it("sends Amy's office account when creating an office assignment", async () => {
+    mockGet.mockResolvedValueOnce({ assignments: [] });
+    mockPost.mockResolvedValueOnce({});
+    render(<BossAssignmentsPage />);
+
+    await waitFor(() => expect(screen.getByTestId("button-new-assignment")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("button-new-assignment"));
+    fireEvent.change(screen.getByTestId("input-assignment-title"), { target: { value: "Send contract" } });
+    fireEvent.click(screen.getByTestId("button-save-assignment"));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith("/boss/assignments", expect.objectContaining({
+        title: "Send contract",
+        assigneeKind: "office",
+        officeAccountId: "office-1",
+      }));
+    });
+  });
+
+  it("omits the office account when creating an owner assignment", async () => {
+    mockGet.mockResolvedValueOnce({ assignments: [] });
+    mockPost.mockResolvedValueOnce({});
+    render(<BossAssignmentsPage />);
+
+    await waitFor(() => expect(screen.getByTestId("button-new-assignment")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("button-new-assignment"));
+    fireEvent.change(screen.getByTestId("input-assignment-title"), { target: { value: "Review budget" } });
+    fireEvent.change(screen.getByTestId("select-assignment-assignee"), { target: { value: "owner" } });
+    fireEvent.click(screen.getByTestId("button-save-assignment"));
+
+    await waitFor(() => {
+      expect(mockPost).toHaveBeenCalledWith("/boss/assignments", expect.objectContaining({
+        title: "Review budget",
+        assigneeKind: "owner",
+        officeAccountId: null,
+      }));
+    });
+  });
 });
