@@ -198,6 +198,42 @@ describe("MobileCallLogPage", () => {
     }));
   });
 
+  it("normalizes a restored incoming draft to the incoming inquiry script before saving", async () => {
+    apiGet.mockResolvedValue(workspace());
+    completeCallAction.mockResolvedValue({ ok: true });
+    localStorage.setItem(
+      `assisted-call-draft:v1:organization-1:${contactId}:none:none`,
+      JSON.stringify({
+        version: 1,
+        savedAt: new Date().toISOString(),
+        requestKey: "restored-request-key",
+        selectedPhoneId: primaryPhoneId,
+        direction: "incoming",
+        method: "mobile_log",
+        scriptKind: "first_outreach",
+        note: "Restored incoming call.",
+        disposition: "spoke_with_contact",
+        nextActionKind: "",
+        nextActionDate: "",
+        lastResortConfirmed: false,
+        lastResortReason: "",
+        doNotCallConfirmed: false,
+        doNotCallReason: "",
+        doNotCallPhoneId: null,
+      }),
+    );
+
+    render(<MobileCallLogPage contactId={contactId} />);
+    expect(await screen.findByText("Draft restored.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save call note" }));
+
+    await waitFor(() => expect(completeCallAction).toHaveBeenCalledTimes(1));
+    expect(completeCallAction).toHaveBeenCalledWith(expect.objectContaining({
+      direction: "incoming",
+      scriptKind: "incoming_inquiry",
+    }));
+  });
+
   it("discards a mobile draft into a fresh immediately usable log", async () => {
     apiGet.mockResolvedValue(workspace());
     completeCallAction.mockResolvedValue({ ok: true });

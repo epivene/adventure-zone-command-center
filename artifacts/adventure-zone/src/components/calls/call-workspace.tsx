@@ -373,7 +373,7 @@ export function CallWorkspace({
       setSelectedPhoneId(restoredPhoneId);
       setDirection(draft.direction);
       setMethod(isMobileLog ? "mobile_log" : draft.method);
-      setScriptKind(draft.scriptKind);
+      setScriptKind(scriptForDirection(draft.direction, draft.scriptKind));
       setNote(draft.note);
       setDisposition(draft.disposition);
       setNextActionKind(draft.nextActionKind);
@@ -775,8 +775,11 @@ export function CallWorkspace({
                       onChange={(event) => {
                         const nextDirection = event.target.value as CallDirection;
                         setDirection(nextDirection);
-                        setScriptKind(scriptForDirection(nextDirection, defaultScriptKind));
-                        changeGuidedKind(nextDirection === "incoming" ? "incoming_inquiry" : initialGuidedKind);
+                        const nextScriptKind = scriptForDirection(nextDirection, defaultScriptKind);
+                        const nextGuidedKind = nextScriptKind === "contract_follow_up"
+                          ? "proposal_contract"
+                          : nextScriptKind;
+                        changeGuidedKind(nextGuidedKind);
                       }}
                       value={direction}
                     >
