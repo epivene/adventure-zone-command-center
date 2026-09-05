@@ -236,4 +236,32 @@ describe("GoogleHistoricalBackfillService", () => {
       state: "complete",
     });
   });
+
+  it("records a stalled CRM mapping write as failed and continues", async () => {
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const mappings = validationRepository();
+    mappings.upsertRows = vi.fn(async () => new Promise<never>(() => undefined));
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["stalled", "next"], null) },
+      repository: repo,
+      classifier: {
+        classify: async (item) => item.id === "stalled"
+          ? {
+              outcome: "attached" as const,
+              organization: { id: "org-1", name: "Known Event" },
+              evidenceCodes: ["existing_thread_association"],
+            }
+          : { outcome: "ignored" as const, evidenceCodes: [] },
+      },
+      validationRepository: mappings,
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
+  });
 });

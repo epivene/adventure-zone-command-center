@@ -320,7 +320,10 @@ export class GoogleHistoricalBackfillService {
 
         if (classification.outcome === "attached") {
           batchThreadTargets.set(message.threadId, classification.organization);
-          await this.attach(message, classification);
+          await withGoogleTimeout(
+            this.attach(message, classification),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId,
             messageId: message.id,
@@ -338,9 +341,12 @@ export class GoogleHistoricalBackfillService {
             );
           }
         } else if (classification.outcome === "needs_review") {
-          await this.validationRepository.upsertReviewItems([
-            reviewInput(message, classification),
-          ]);
+          await withGoogleTimeout(
+            this.validationRepository.upsertReviewItems([
+              reviewInput(message, classification),
+            ]),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId,
             messageId: message.id,
@@ -429,7 +435,10 @@ export class GoogleHistoricalBackfillService {
           this.ioTimeoutMs,
         );
         if (classification.outcome === "attached") {
-          await this.attach(message, classification);
+          await withGoogleTimeout(
+            this.attach(message, classification),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId: failure.batchId,
             messageId: message.id,
@@ -443,9 +452,12 @@ export class GoogleHistoricalBackfillService {
             await this.copyThreadFiles(classification.organization.id, message.threadId);
           }
         } else if (classification.outcome === "needs_review") {
-          await this.validationRepository.upsertReviewItems([
-            reviewInput(message, classification),
-          ]);
+          await withGoogleTimeout(
+            this.validationRepository.upsertReviewItems([
+              reviewInput(message, classification),
+            ]),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId: failure.batchId,
             messageId: message.id,
