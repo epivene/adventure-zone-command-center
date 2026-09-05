@@ -1,16 +1,20 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleHistoricalBackfill } from "./google-historical-backfill";
+
+const testState = vi.hoisted(() => ({
+  status: "not_started" as "not_started" | "awaiting_approval" | "ready",
+}));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => ({
   getGoogleHistoricalBackfill: vi.fn(async () => ({
     syncEnabled: true,
     validationStatus: "approved",
     state: {
-      status: "not_started",
+      status: testState.status,
       nextPageToken: null,
-      firstBatchApproved: false,
+      firstBatchApproved: testState.status === "ready",
       cumulative: {
         processed: 0,
         attached: 0,
@@ -21,18 +25,23 @@ vi.mock("@/features/google-workspace/google-workspace-client", () => ({
       },
     },
   })),
-  runNextGoogleHistoricalBatch: vi.fn(async () => ({
+  runNextGoogleHistoricalBatch: vi.fn(async () => {
+    testState.status = "awaiting_approval";
+    return {
     batchId: "batch-1",
-    processed: 250,
-    attached: 180,
-    ignored: 60,
+    processed: 100,
+    attached: 80,
+    ignored: 10,
     needsReview: 8,
     failed: 2,
     skipped: 0,
     nextPageAvailable: true,
     state: "awaiting_approval",
-  })),
-  approveFirstGoogleHistoricalBatch: vi.fn(async () => ({
+  };
+  }),
+  approveFirstGoogleHistoricalBatch: vi.fn(async () => {
+    testState.status = "ready";
+    return {
     ok: true,
     state: {
       status: "ready",
@@ -47,29 +56,34 @@ vi.mock("@/features/google-workspace/google-workspace-client", () => ({
         skipped: 0,
       },
     },
-  })),
+  };
+  }),
   pauseGoogleHistoricalBackfill: vi.fn(async () => ({ ok: true, state: {} })),
 }));
 
 describe("GoogleHistoricalBackfill", () => {
-  it("runs only the first 250 and then requires explicit approval", async () => {
-    render(<GoogleHistoricalBackfill />);
-
-    const run = await screen.findByRole("button", { name: /run first 250/i });
-    fireEvent.click(run);
-
-    await screen.findByText(/250 processed/i);
-    expect(screen.getByRole("button", { name: /approve first batch/i })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /continue next 250/i })).toBeNull();
+  beforeEach(() => {
+    testState.status = "not_started";
   });
 
-  it("shows Continue next 250 only after explicit first-batch approval", async () => {
+  it("runs only the first 100 and then requires explicit approval", async () => {
     render(<GoogleHistoricalBackfill />);
-    fireEvent.click(await screen.findByRole("button", { name: /run first 250/i }));
+
+    const run = await screen.findByRole("button", { name: /run first 100/i });
+    fireEvent.click(run);
+
+    await screen.findByText(/100 processed/i);
+    expect(screen.getByRole("button", { name: /approve first batch/i })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /continue next 100/i })).toBeNull();
+  });
+
+  it("shows Continue next 100 only after explicit first-batch approval", async () => {
+    render(<GoogleHistoricalBackfill />);
+    fireEvent.click(await screen.findByRole("button", { name: /run first 100/i }));
     fireEvent.click(await screen.findByRole("button", { name: /approve first batch/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /continue next 250/i })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /continue next 100/i })).toBeTruthy();
     });
   });
 });

@@ -68,7 +68,7 @@ function validationRepository() {
 }
 
 describe("GoogleHistoricalBackfillService", () => {
-  it("processes at most 250 messages and parks the first batch for approval", async () => {
+  it("limits a batch to 100 messages so the service stays within its memory budget", async () => {
     const client = readClient(Array.from({ length: 300 }, (_, index) => `m${index + 1}`));
     const repo = repository();
     const mappings = validationRepository();
@@ -87,9 +87,9 @@ describe("GoogleHistoricalBackfillService", () => {
 
     const result = await service.runNextBatch();
 
-    expect(client.listMessagePage).toHaveBeenCalledWith({ maxResults: 250, pageToken: null });
-    expect(result.processed).toBe(250);
-    expect(result.attached).toBe(250);
+    expect(client.listMessagePage).toHaveBeenCalledWith({ maxResults: 100, pageToken: null });
+    expect(result.processed).toBe(100);
+    expect(result.attached).toBe(100);
     expect(result.state).toBe("awaiting_approval");
     expect(repo.finishBatch).toHaveBeenCalledWith(expect.objectContaining({
       firstBatch: true,

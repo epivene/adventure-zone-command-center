@@ -49,7 +49,7 @@ describe("Historical Gmail interrupted response handling", () => {
 
     render(<GoogleHistoricalBackfill />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /continue next 250/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /continue next 100/i }));
 
     await screen.findByText(/batch completed; connection response was interrupted/i);
     expect(screen.queryByText(/^Failed to fetch$/i)).toBeNull();

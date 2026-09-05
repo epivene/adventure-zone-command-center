@@ -25,7 +25,10 @@ import {
   type GoogleValidationReviewInput,
 } from "./google-validation-repository";
 
-const HISTORICAL_BATCH_SIZE = 250;
+// Gmail thread bodies can be large enough to exhaust the Starter instance when
+// 250 are classified in one long-lived request. Smaller pages also make frozen
+// batch recovery cheaper while preserving the same idempotent cursor behavior.
+const HISTORICAL_BATCH_SIZE = 100;
 
 type ConnectionAccess = {
   createReadClient(): Promise<GoogleWorkspaceReadClient | null>;

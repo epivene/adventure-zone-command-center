@@ -37,6 +37,6 @@ describe("Historical Gmail partial first-batch recovery", () => {
   it("offers a first-batch retry after an interrupted run saved some messages", async () => {
     render(<GoogleHistoricalBackfill />);
 
-    expect(await screen.findByRole("button", { name: /retry first 250/i })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: /retry first 100/i })).toBeTruthy();
   });
 });
