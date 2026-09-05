@@ -16,15 +16,66 @@ const message = (id: string, from: string, subject: string, labelIds: string[]) 
 function validationRepository(
   upsertRows = vi.fn(async () => undefined),
   upsertReviewItems = vi.fn(async () => undefined),
+  processedMessageIds = vi.fn(async () => new Set<string>()),
 ) {
   return {
     upsertRows,
     upsertReviewItems,
+    processedMessageIds,
     getStatus: vi.fn(async () => "ready_for_review" as const),
   };
 }
 
 describe("GoogleRecentValidationService", () => {
+  it("does not reload metadata for messages already mapped or reviewed", async () => {
+    const client: GoogleWorkspaceReadClient = {
+      authorizationUrl: () => "",
+      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
+      accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
+      listLabels: async () => [],
+      listCalendars: async () => [],
+      listRecentMessageRefs: async () => [
+        { id: "processed", threadId: "thread-processed" },
+        { id: "new", threadId: "thread-new" },
+      ],
+      getMessageMetadata: vi.fn(async (id) => {
+        if (id === "processed") throw new Error("processed message was reread");
+        return message(id, "booking@fair.org", "Hello", ["INBOX"]);
+      }),
+    };
+    const processedMessageIds = vi.fn(async () => new Set(["processed"]));
+    const service = new GoogleRecentValidationService({
+      connection: { createReadClient: async () => client },
+      scope: { getSaved: async () => ({ labels: [], calendars: [] }) },
+      evidence: {
+        load: async () => ({
+          contacts: [{ id: "c1", name: "Fair Office", emails: ["booking@fair.org"] }],
+          organizations: [],
+          profiles: [],
+        }),
+      },
+      contactProfileResolver: {
+        resolve: async () => ({
+          contactId: "c1",
+          status: "resolved" as const,
+          organization: { id: "org-1", name: "County Fair" },
+          candidates: [{ id: "org-1", name: "County Fair" }],
+        }),
+      },
+      validationRepository: validationRepository(
+        vi.fn(async () => undefined),
+        vi.fn(async () => undefined),
+        processedMessageIds,
+      ),
+    });
+
+    const result = await service.run(100, { skipProcessed: true });
+
+    expect(processedMessageIds).toHaveBeenCalledWith(["processed", "new"]);
+    expect(client.getMessageMetadata).toHaveBeenCalledTimes(1);
+    expect(result.counts).toEqual({ discovered: 2, matched: 1, needsReview: 0, ignored: 0 });
+  });
+
   it("resolves an exact contact match onward to its one active organization profile and persists the mapping", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",

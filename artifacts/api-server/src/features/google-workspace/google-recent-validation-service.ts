@@ -109,6 +109,7 @@ type ContactProfileResolverAccess = {
 };
 
 type ValidationRepositoryAccess = {
+  processedMessageIds?(messageIds: string[]): Promise<Set<string>>;
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
@@ -353,7 +354,10 @@ export class GoogleRecentValidationService {
       options?.validationRepository ?? new PostgresGoogleValidationRepository();
   }
 
-  async run(limit = 100): Promise<GoogleRecentValidationResult> {
+  async run(
+    limit = 100,
+    options?: { skipProcessed?: boolean },
+  ): Promise<GoogleRecentValidationResult> {
     const checkedLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
     const client = await this.connection.createReadClient();
     if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
@@ -376,12 +380,16 @@ export class GoogleRecentValidationService {
       accountIdentity.email.trim().toLowerCase(),
     ]);
     const refs = await client.listRecentMessageRefs(checkedLimit);
+    const processed = options?.skipProcessed && this.validationRepository.processedMessageIds
+      ? await this.validationRepository.processedMessageIds(refs.map((ref) => ref.id))
+      : new Set<string>();
 
     const matched: GoogleValidationRow[] = [];
     const needsReview: GoogleValidationRow[] = [];
     const ignored: GoogleValidationRow[] = [];
 
     for (const ref of refs) {
+      if (processed.has(ref.id)) continue;
       const message = await client.getMessageMetadata(ref.id);
       const learnedThread = learned.threadTargets.get(message.threadId);
       const metadataResult = classifyGoogleMessageRelevance({

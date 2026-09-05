@@ -62,6 +62,7 @@ import { readComputerCallingConfig } from "./features/calls/computer-calling-con
 import { VoicemailRetentionWorker } from "./features/calls/voicemail-retention-worker";
 import { VoicemailRetentionWorkerLoop } from "./features/calls/voicemail-retention-worker-loop";
 import { GoogleSentProfileLinkSweepService } from "./features/google-workspace/google-sent-profile-link-sweep-service";
+import { GoogleRecentValidationService } from "./features/google-workspace/google-recent-validation-service";
 import {
   GoogleSentProfileLinkSweepLoop,
   systemGoogleSentProfileLinkSweepLoopScheduler,
@@ -136,7 +137,8 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 });
 
 const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
-  sweep: new GoogleSentProfileLinkSweepService(),
+  recent: new GoogleRecentValidationService(),
+  sentSweep: new GoogleSentProfileLinkSweepService(),
   clock: { now: () => new Date() },
   scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
 });
