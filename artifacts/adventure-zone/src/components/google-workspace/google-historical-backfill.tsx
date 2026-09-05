@@ -110,7 +110,7 @@ export function GoogleHistoricalBackfill() {
   }
 
   const { state } = view;
-  const retryingFirst = state.status === "error" && state.cumulative.processed === 0;
+  const retryingFirst = state.status === "error" && !state.firstBatchApproved;
   const retryingLater =
     state.status === "error" &&
     state.firstBatchApproved &&
