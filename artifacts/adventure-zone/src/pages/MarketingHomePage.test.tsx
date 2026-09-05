@@ -1,17 +1,18 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("./MarketingHomePage.tsx", import.meta.url), "utf8");
+const source = readFileSync("src/pages/MarketingHomePage.tsx", "utf8");
 
 describe("Marketing workspace home", () => {
-  it("uses shared CRM context instead of creating fake marketing data", () => {
-    expect(source).toContain("shared profiles, contacts, and approved Google business context");
-    expect(source).toContain('href="/profiles"');
-    expect(source).toContain('href="/office-coordinator"');
+  it("keeps Marketing tools focused on marketing-owned work", () => {
+    expect(source).toContain('href="/design-studio"');
+    expect(source).not.toContain('href="/profiles"');
+    expect(source).not.toContain('href="/office-coordinator"');
+    expect(source).not.toContain('href="/research-sources"');
   });
 
   it("reserves clear areas for future working campaign tools without dead links", () => {
-    expect(source).toContain("Mass marketing emails");
+    expect(source).toContain("Email campaigns");
     expect(source).toContain("Brochures & promos");
     expect(source).toContain("Audiences & lists");
     expect(source).toContain("Campaign history");
