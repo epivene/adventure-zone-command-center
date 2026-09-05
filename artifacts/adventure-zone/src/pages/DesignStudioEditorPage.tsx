@@ -33,6 +33,8 @@ import { AddElementSheet } from "@/components/design-studio/AddElementSheet";
 import { ExportSheet } from "@/components/design-studio/ExportSheet";
 import { CanvaHandoffSheet } from "@/components/design-studio/CanvaHandoffSheet";
 import { ContractSignaturePanel } from "@/components/design-studio/ContractSignaturePanel";
+import { BrandedEmailEditor } from "@/components/design-studio/BrandedEmailEditor";
+import { shouldAcknowledgeSave } from "@/lib/design-studio/email-model";
 
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
 const EMPTY_CANVAS = normalizeCanvas(null);
@@ -101,6 +103,7 @@ export default function DesignStudioEditorPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const latestCanvas = useRef<CanvasDocument | null>(null);
+  const editRevision = useRef(0);
 
   const canEdit = Boolean(
     project &&
@@ -111,6 +114,7 @@ export default function DesignStudioEditorPage() {
 
   const onCanvasChange = useCallback((doc: CanvasDocument) => {
     latestCanvas.current = doc;
+    editRevision.current += 1;
     setDirty(true);
     setSaved(false);
   }, []);
@@ -164,6 +168,7 @@ export default function DesignStudioEditorPage() {
         const starterCanvas = starterById(starterId)?.canvas ?? null;
         const doc = normalizeCanvas(value.canvas ?? starterCanvas);
         latestCanvas.current = doc;
+        editRevision.current = 0;
         setCanvasDoc(doc);
         setDirty(false);
         setSaved(false);
@@ -177,6 +182,7 @@ export default function DesignStudioEditorPage() {
   const save = useCallback(async () => {
     if (!params.id || !project || !name.trim()) return false;
 
+    const savedRevision = editRevision.current;
     setSaving(true);
     setError(null);
     try {
@@ -187,8 +193,10 @@ export default function DesignStudioEditorPage() {
         syncState: "synced",
       });
       setProject(value);
-      setDirty(false);
-      setSaved(true);
+      if (shouldAcknowledgeSave(savedRevision, editRevision.current)) {
+        setDirty(false);
+        setSaved(true);
+      }
       void refreshCanvaState();
       return true;
     } catch (cause) {
@@ -345,6 +353,16 @@ export default function DesignStudioEditorPage() {
     );
   }
 
+  if (project.type === "email") {
+    return (
+      <BrandedEmailEditor
+        assets={assets}
+        onProjectChange={setProject}
+        project={project}
+      />
+    );
+  }
+
   return (
     <div className="flex min-h-[calc(100dvh-4rem)] flex-col overflow-hidden bg-background" data-testid="design-editor">
       <MobileEditorTopBar
@@ -356,6 +374,7 @@ export default function DesignStudioEditorPage() {
         onExport={() => setShowExport(true)}
         onNameChange={(nextName) => {
           setName(nextName);
+          editRevision.current += 1;
           setDirty(true);
           setSaved(false);
         }}
