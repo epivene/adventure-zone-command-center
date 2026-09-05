@@ -212,7 +212,8 @@ export class GoogleHistoricalBackfillService {
       state.status === "awaiting_approval" ||
       (state.cumulative.processed > 0 &&
         !state.firstBatchApproved &&
-        state.status !== "error")
+        state.status !== "error" &&
+        state.status !== "running")
     ) {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED");
     }

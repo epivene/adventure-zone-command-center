@@ -37,7 +37,7 @@ function client(listIds: string[]): GoogleWorkspaceReadClient {
 }
 
 function repository(input?: {
-  status?: "ready" | "error";
+  status?: "ready" | "running" | "error";
   firstBatchApproved?: boolean;
   processed?: number;
   nextPageToken?: string | null;
@@ -136,10 +136,10 @@ describe("historical Gmail frozen batch membership", () => {
     expect(result.nextPageAvailable).toBe(true);
   });
 
-  it("allows an interrupted unapproved first batch to retry its frozen membership", async () => {
+  it("allows an interrupted unapproved first batch to retry after the route acquires its lease", async () => {
     const readClient = client(["new-arrival"]);
     const backfillRepository = repository({
-      status: "error",
+      status: "running",
       firstBatchApproved: false,
       processed: 150,
       nextPageToken: null,
