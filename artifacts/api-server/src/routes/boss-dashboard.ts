@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { and, count, desc, eq, isNull, lte } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookings, bossAssignments, designProjects, eventChecklistRuns, eventManagerReviews, legExpenses, legReceipts, travelLegs } from "@/db/schema";
+import { bookings, bossAssignments, designCertificates, designOutputs, designProjects, eventChecklistRuns, eventManagerReviews, legExpenses, legReceipts, officeEmailDrafts, travelLegs } from "@/db/schema";
 import { eventLegLifecycle } from "@/features/leg-manager/event-lifecycle-schema";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
@@ -9,7 +9,8 @@ import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
 router.get("/boss/dashboard", requireBoss, async (req, res) => {
-  const [receipts, submittedDrafts, assignments, reviews, reviewsDue, checklists, lifecycle] = await Promise.all([
+  const officeAccountId = req.bossAccount!.studioOfficeAccountId;
+  const [receipts, submittedDrafts, assignments, reviews, reviewsDue, checklists, lifecycle, businessDocumentCounts] = await Promise.all([
     db.select({
       id: legReceipts.id,
       legId: legReceipts.legId,
@@ -29,7 +30,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       .where(eq(legReceipts.imageStatus, "image_uploaded"))
       .orderBy(desc(legReceipts.createdAt))
       .limit(50),
-    req.bossAccount!.studioOfficeAccountId
+     officeAccountId
       ? db.select({
           id: designProjects.id,
           name: designProjects.name,
@@ -40,7 +41,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
           .where(eq(designProjects.officeAccountId, req.bossAccount!.studioOfficeAccountId))
           .orderBy(desc(designProjects.updatedAt))
           .limit(25)
-      : Promise.resolve([]),
+       : Promise.resolve([]),
     db.select().from(bossAssignments).orderBy(desc(bossAssignments.updatedAt)).limit(25),
     db.select({ id: eventManagerReviews.id, bookingId: eventManagerReviews.bookingId, bookingName: bookings.name, legId: eventManagerReviews.legId, legName: travelLegs.name, rating: eventManagerReviews.rating, feedback: eventManagerReviews.feedback, createdAt: eventManagerReviews.createdAt })
       .from(eventManagerReviews).innerJoin(bookings, eq(bookings.id, eventManagerReviews.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventManagerReviews.legId)).orderBy(desc(eventManagerReviews.createdAt)).limit(25),
@@ -51,6 +52,17 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       .from(eventChecklistRuns).innerJoin(bookings, eq(bookings.id, eventChecklistRuns.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventChecklistRuns.legId)).orderBy(desc(eventChecklistRuns.updatedAt)).limit(50),
     (db as any).select({ bookingId: eventLegLifecycle.bookingId, bookingName: bookings.name, legId: eventLegLifecycle.legId, legName: travelLegs.name, checkedOutAt: eventLegLifecycle.checkedOutAt, wrapUpStatus: eventLegLifecycle.wrapUpStatus, wrapUpFinishedAt: eventLegLifecycle.wrapUpFinishedAt, updatedAt: eventLegLifecycle.updatedAt })
       .from(eventLegLifecycle).innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventLegLifecycle.legId)).orderBy(desc(eventLegLifecycle.updatedAt)).limit(25),
+     officeAccountId
+       ? Promise.all([
+           db.select({ value: count() }).from(designOutputs)
+             .innerJoin(designProjects, eq(designProjects.id, designOutputs.projectId))
+             .where(and(eq(designProjects.officeAccountId, officeAccountId), eq(designOutputs.outputType, "contract"))),
+           db.select({ value: count() }).from(designCertificates)
+             .where(eq(designCertificates.officeAccountId, officeAccountId)),
+           db.select({ value: count() }).from(officeEmailDrafts)
+             .where(eq(officeEmailDrafts.officeAccountId, officeAccountId)),
+         ])
+       : Promise.resolve([{ value: 0 }, { value: 0 }, { value: 0 }]),
   ]);
   const reviewAndWrapUp = [
     ...reviewsDue.map((item) => ({
@@ -104,6 +116,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       status: imageStatus === "image_uploaded" ? "submitted" : imageStatus,
     })),
     submittedDrafts,
+    businessDocumentsCount: businessDocumentCounts.reduce((total, result) => total + Number(result[0]?.value ?? 0), 0),
     assignments,
     reviewAndWrapUp,
     checklistAndMaintenance,

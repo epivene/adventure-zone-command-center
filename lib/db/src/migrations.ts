@@ -446,6 +446,13 @@ const migrationFiles = [
              AND column_name IN ('subject_template', 'body_template'))
       AS ready`,
   },
+  {
+    name: "20260907_coi_expiration.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.design_certificates') IS NOT NULL
+      AND to_regclass(current_schema() || '.design_certificates_asset_unique') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

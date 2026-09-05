@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
-import { AlertTriangle, ArrowRight, ClipboardList, FileText, RefreshCw, Star, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowRight, ClipboardList, RefreshCw, Star, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
@@ -10,6 +10,7 @@ import type { Assignment } from "@/lib/boss-types";
 type DashboardData = {
   submittedReceipts: number;
   submittedDrafts: { id: string; name: string; type: string; updatedAt?: string }[];
+  businessDocumentsCount: number;
   assignments: Assignment[];
   reviewAndWrapUp: { id?: string; title?: string; bookingId?: string; status?: string; eventDate?: string }[];
   checklistAndMaintenance: { id?: string; title?: string; bookingId?: string; phase?: string; status?: string }[];
@@ -111,12 +112,12 @@ export default function BossHomePage() {
           </p>
           <p className="text-xs text-muted-foreground">submitted</p>
         </Link>
-        <Link href="/boss/design-studio" className="rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-colors">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Studio Drafts</p>
-          <p className="mt-1 text-2xl font-bold text-foreground" data-testid="stat-drafts">
-            {data?.submittedDrafts?.length ?? 0}
+        <Link href="/boss/templates-files" className="rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-colors">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Business Documents</p>
+          <p className="mt-1 text-2xl font-bold text-foreground" data-testid="stat-documents">
+            {data?.businessDocumentsCount ?? 0}
           </p>
-          <p className="text-xs text-muted-foreground">waiting review</p>
+          <p className="text-xs text-muted-foreground">contracts, COIs &amp; emails</p>
         </Link>
         <Link href="/boss/assignments" className="rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-colors">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Assignments</p>
@@ -227,39 +228,8 @@ export default function BossHomePage() {
         </section>
       ) : null}
 
-      {/* Studio drafts */}
-      {(data?.submittedDrafts ?? []).length > 0 ? (
-        <section>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <h2 className="text-sm font-bold uppercase tracking-wide text-foreground">Studio Drafts Awaiting Review</h2>
-            </div>
-            <Link href="/boss/design-studio" className="text-xs font-semibold text-primary hover:underline flex items-center gap-1">
-              Studio <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(data?.submittedDrafts ?? []).slice(0, 4).map((draft) => (
-              <Link
-                key={draft.id}
-                href={`/boss/design-studio/${draft.id}`}
-                className="rounded-lg border border-border bg-card px-3 py-2 hover:border-primary/40 transition-colors"
-                data-testid={`draft-card-${draft.id}`}
-              >
-                <p className="truncate text-sm font-semibold text-foreground">{draft.name}</p>
-                <p className="mt-0.5 text-xs text-muted-foreground capitalize">
-                  {draft.type}
-                  {draft.updatedAt ? ` · ${new Date(draft.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
       {/* All-clear state */}
-      {!loading && (data?.submittedReceipts ?? 0) === 0 && urgentAssignments.length === 0 && (data?.reviewAndWrapUp ?? []).length === 0 && (data?.checklistAndMaintenance ?? []).length === 0 && (data?.submittedDrafts ?? []).length === 0 ? (
+      {!loading && (data?.submittedReceipts ?? 0) === 0 && urgentAssignments.length === 0 && (data?.reviewAndWrapUp ?? []).length === 0 && (data?.checklistAndMaintenance ?? []).length === 0 && (data?.businessDocumentsCount ?? 0) === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="boss-home-empty">
           <ClipboardList className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 font-bold text-foreground">All clear.</p>

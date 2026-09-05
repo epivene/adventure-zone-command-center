@@ -38,10 +38,13 @@ describe("Boss workspace route boundaries", () => {
   });
   it("keeps business documents inside the mapped Boss Office workspace", () => {
     const documents = source("boss-documents.ts");
+    const certificates = source("coi-certificates.ts");
     expect(documents).toContain('router.get("/boss/documents", requireBoss');
     expect(documents).toContain("req.bossAccount!.studioOfficeAccountId");
     expect(documents).toContain("eq(designProjects.officeAccountId, officeAccountId)");
-    expect(documents).toContain("eq(designAssets.uploadedByAccountId, officeAccountId)");
     expect(documents).toContain("eq(officeEmailDrafts.officeAccountId, officeAccountId)");
+    expect(certificates).toContain('router.get("/boss/coi", requireBoss');
+    expect(certificates).toContain("eq(designAssets.uploadedByAccountId, officeAccountId)");
+    expect(certificates).toContain('router.get("/admin/coi", requireOwnerMiddleware');
   });
 });

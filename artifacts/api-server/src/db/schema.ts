@@ -18,6 +18,7 @@ export * from "@workspace/db/booking-opportunity-email-schema";
 export * from "@workspace/db/leg-assignment-schema";
 export {
   designAssets,
+  designCertificates,
   designOutputs,
   designProjectVersions,
   designProjects,

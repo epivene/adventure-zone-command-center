@@ -76,6 +76,7 @@ const adminToolsGroups: MenuGroup[] = [
     label: "Business Setup",
     items: [
       { href: "/settings/business-sources", label: "Business sources" },
+      { href: "/settings/coi", label: "Certificates of insurance" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
       { href: "/settings/call-scripts", label: "Call scripts" },
       { href: "/settings/communication-templates", label: "Email templates" },

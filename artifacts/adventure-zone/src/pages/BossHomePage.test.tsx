@@ -19,6 +19,7 @@ const mockBossGet = vi.mocked(bossGet);
 const EMPTY_DASHBOARD = {
   submittedReceipts: 0,
   submittedDrafts: [],
+  businessDocumentsCount: 0,
   assignments: [],
   reviewAndWrapUp: [],
   checklistAndMaintenance: [],
@@ -41,6 +42,7 @@ describe("BossHomePage", () => {
     mockBossGet.mockResolvedValueOnce({
       submittedReceipts: 3,
       submittedDrafts: [{ id: "d1", name: "Event Flyer", type: "flyer" }],
+      businessDocumentsCount: 4,
       assignments: [
         {
           id: "a1",
@@ -62,7 +64,7 @@ describe("BossHomePage", () => {
     render(<BossHomePage />);
     await waitFor(() => {
       expect(screen.getByTestId("stat-receipts").textContent).toBe("3");
-      expect(screen.getByTestId("stat-drafts").textContent).toBe("1");
+      expect(screen.getByTestId("stat-documents").textContent).toBe("4");
       expect(screen.getByTestId("assignment-row-a1")).toBeTruthy();
     });
   });

@@ -1,10 +1,9 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, or, ilike } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   bookings,
   contacts,
-  designAssets,
   designOutputs,
   designProjects,
   officeEmailDrafts,
@@ -13,6 +12,7 @@ import {
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
+import { listCertificateRecords } from "./coi-certificates";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
@@ -40,7 +40,7 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
   }
 
   try {
-    const [contractRows, certificateRows, emailRows] = await Promise.all([
+    const [contractRows, emailRows, certificates] = await Promise.all([
       db.select({
         id: designOutputs.id,
         projectId: designProjects.id,
@@ -59,33 +59,6 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
           eq(designOutputs.outputType, "contract"),
         ))
         .orderBy(desc(designOutputs.createdAt)),
-      db.select({
-        id: designAssets.id,
-        name: designAssets.name,
-        altText: designAssets.altText,
-        scope: designAssets.scope,
-        mimeType: designAssets.mimeType,
-        storageKey: designAssets.storageKey,
-        projectId: designAssets.projectId,
-        bookingId: designAssets.bookingId,
-        bookingName: bookings.name,
-        organizationId: designAssets.organizationId,
-        organizationName: organizations.name,
-        isApproved: designAssets.isApproved,
-        createdAt: designAssets.createdAt,
-      })
-        .from(designAssets)
-        .leftJoin(bookings, eq(bookings.id, designAssets.bookingId))
-        .leftJoin(organizations, eq(organizations.id, designAssets.organizationId))
-        .where(and(
-          eq(designAssets.uploadedByAccountId, officeAccountId),
-          or(
-            ilike(designAssets.name, "%COI%"),
-            ilike(designAssets.name, "%certificate of insurance%"),
-            ilike(designAssets.name, "%insurance certificate%"),
-          ),
-        ))
-        .orderBy(desc(designAssets.createdAt)),
       db.select({
         id: officeEmailDrafts.id,
         organizationId: officeEmailDrafts.organizationId,
@@ -107,6 +80,7 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
         .innerJoin(contacts, eq(contacts.id, officeEmailDrafts.contactId))
         .where(eq(officeEmailDrafts.officeAccountId, officeAccountId))
         .orderBy(desc(officeEmailDrafts.updatedAt)),
+      listCertificateRecords({ officeAccountId }),
     ]);
 
     const contracts = await Promise.all(contractRows.map(async (row) => ({
@@ -118,17 +92,6 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
       metadata: undefined,
       storageKey: undefined,
     })));
-    const certificates = await Promise.all(certificateRows.map(async (row) => ({
-      ...row,
-      reviewState: row.isApproved ? "reviewed" : "needs_review",
-      expirationState: "not_recorded",
-      expiresAt: null,
-      fileUrl: row.storageKey
-        ? await assetStorage.getSignedReadUrl(row.storageKey, 15 * 60).catch(() => null)
-        : null,
-      storageKey: undefined,
-    })));
-
     res.json({
       contracts,
       certificates,

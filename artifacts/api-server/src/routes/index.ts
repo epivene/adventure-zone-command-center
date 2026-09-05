@@ -123,6 +123,7 @@ import { InboundCallService } from "@/features/calls/inbound-call-service";
 import { InboundVoicemailService } from "@/features/calls/inbound-voicemail-service";
 import { requireOwnerMiddleware } from "../lib/auth";
 import marketingRouter from "./marketing";
+import coiCertificatesRouter from "./coi-certificates";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
@@ -168,6 +169,7 @@ router.use(bossDashboardRouter);
 router.use(bossAssignmentsRouter);
 router.use(bossOperationsRouter);
 router.use(bossDocumentsRouter);
+router.use(coiCertificatesRouter);
 router.use(officeProfilesRouter);
 router.use(officeAttendanceHistoryRouter);
 router.use(officeProfileSourceDocumentsRouter);

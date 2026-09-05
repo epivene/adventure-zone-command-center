@@ -76,6 +76,7 @@ const schema = {
   ...contractSchema,
   ...marketingSchema,
   designAssets,
+  designCertificates,
   designOutputs,
   designProjectVersions,
   designProjects,

@@ -100,6 +100,7 @@ const BossAssignmentsPage = lazy(() => import("@/pages/BossAssignmentsPage"));
 const BossDesignStudioPage = lazy(() => import("@/pages/BossDesignStudioPage"));
 const BossDesignStudioEditorPage = lazy(() => import("@/pages/BossDesignStudioEditorPage"));
 const BossTemplatesFilesPage = lazy(() => import("@/pages/BossTemplatesFilesPage"));
+const CoiManagementPage = lazy(() => import("@/pages/CoiManagementPage"));
 const BossShell = lazy(() => import("@/components/boss/boss-shell").then(({ BossShell }) => ({ default: BossShell })));
 
 const OfficeSignInPage = lazy(() => import("@/pages/OfficeSignInPage"));
@@ -223,6 +224,7 @@ function ActMigrationRedirect() {
 function SettingsStub() {
   const tools = [
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
+    ["Certificates of insurance", "/settings/coi", "Create, review, and renew workspace-scoped certificates linked to Studio files."],
     ["Excel lead lists", "/imports/leads", "Import Amy's event lists and review every source row before research or drafting."],
     ["Attendance history", "/imports/attendance-history", "Review historical attendance records before attaching them to profiles."],
     ["Email templates", "/settings/communication-templates", "Maintain reviewed communication templates and placeholder wording."],
@@ -321,6 +323,7 @@ function BossProtectedApp() {
         <Route path="/boss/design-studio/:id">{(params) => <BossDesignStudioEditorPage />}</Route>
         <Route path="/boss/design-studio" component={BossDesignStudioPage} />
         <Route path="/boss/templates-files" component={BossTemplatesFilesPage} />
+        <Route path="/boss/coi"><CoiManagementPage mode="boss" /></Route>
         {/* Redirect away from disallowed paths */}
         <Route path="/boss/today"><Redirect to="/boss" /></Route>
         <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
@@ -372,6 +375,7 @@ function AdminProtectedApp() {
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
+          <Route path="/settings/coi"><CoiManagementPage mode="admin" /></Route>
           <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />

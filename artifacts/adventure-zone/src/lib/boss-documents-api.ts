@@ -14,20 +14,23 @@ export type BossContractDocument = {
 
 export type BossCertificateDocument = {
   id: string;
+  officeAccountId: string;
+  officeAccountName?: string;
   name: string;
-  altText: string | null;
-  scope: string;
-  mimeType: string | null;
-  projectId: string | null;
+  assetId: string | null;
+  assetName?: string | null;
   bookingId: string | null;
   bookingName: string | null;
   organizationId: string | null;
   organizationName: string | null;
+  issueDate: string | null;
+  expirationDate: string | null;
   reviewState: "reviewed" | "needs_review";
-  expirationState: "not_recorded";
-  expiresAt: null;
+  expirationState: "current" | "expiring_soon" | "expired" | "incomplete";
+  fileAvailable: boolean;
   fileUrl: string | null;
   createdAt: string;
+  updatedAt: string;
 };
 
 export type BossEmailDocument = {
