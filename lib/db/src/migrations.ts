@@ -432,6 +432,20 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.contract_provider_events') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "20260907_marketing_campaigns.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.marketing_audiences') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_audience_members') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaigns') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_recipients') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_deliveries') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_events') IS NOT NULL
+      AND (SELECT COUNT(*) = 2 FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = 'marketing_campaigns'
+             AND column_name IN ('subject_template', 'body_template'))
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

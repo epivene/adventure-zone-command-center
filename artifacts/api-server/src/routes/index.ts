@@ -122,6 +122,7 @@ import { DrizzleInboundCallerMatcher } from "@/features/calls/inbound-caller-mat
 import { InboundCallService } from "@/features/calls/inbound-call-service";
 import { InboundVoicemailService } from "@/features/calls/inbound-voicemail-service";
 import { requireOwnerMiddleware } from "../lib/auth";
+import marketingRouter from "./marketing";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
@@ -221,6 +222,7 @@ router.use(async (req, _res, next) => {
   next();
 });
 router.use(officeAdminAccountsRouter);
+router.use(marketingRouter);
 router.use(bossAdminAccountsRouter);
 router.use(officeAdminTasksRouter);
 router.use(officeAdminMailRouter);

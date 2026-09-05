@@ -81,6 +81,8 @@ import {
   systemWebsiteInquiryAlertWorkerLoopScheduler,
 } from "./features/website-inquiries/website-inquiry-alert-worker-loop";
 import { markAppReady, markAppStarting } from "./lib/startup-readiness";
+import { MarketingService } from "./features/marketing/marketing-service";
+import { MarketingCampaignWorkerLoop } from "./features/marketing/marketing-campaign-worker-loop";
 
 validateOwnerConfig();
 
@@ -153,6 +155,10 @@ const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
   () => readInboundCallingConfig(process.env).enabled,
   (err) => logger.error({ err }, "Inbound voicemail retention pass failed"),
 );
+const marketingCampaignLoop = new MarketingCampaignWorkerLoop(
+  new MarketingService(db),
+  (err) => logger.error({ err }, "Marketing scheduled-send pass failed"),
+);
 
 markAppStarting();
 const server = app.listen(port, () => {
@@ -179,6 +185,7 @@ const shutdown = createActServerShutdown({
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
       voicemailRetentionLoop.close(),
+      marketingCampaignLoop.close(),
     ]);
   },
   closeServer() {
@@ -432,6 +439,7 @@ async function startBackgroundWorkers() {
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
   voicemailRetentionLoop.start();
+  marketingCampaignLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();

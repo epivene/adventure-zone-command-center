@@ -17,3 +17,4 @@
 - [Inbound browser calling safety](inbound-browser-calling-safety.md) — one leased browser may answer; answered calls are never recorded; voicemail media expires after 30 days.
 - [Render startup readiness gate](render-startup-readiness-gate.md) — bind early for port detection, but serve only liveness until required schema checks pass.
 - [Adventure Zone test runtime](adventure-zone-test-runtime.md) — Node 20 needs jsdom 29 here; jsdom 30 pulls undici 8 APIs unavailable in worker_threads.
+- [Campaign delivery approval boundary](campaign-delivery-approval.md) — real audience sends require a current immutable snapshot, explicit approval, and provider-confirmed per-recipient results.
