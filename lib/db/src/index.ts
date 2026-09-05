@@ -18,6 +18,7 @@ import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-sche
 import * as legAssignmentSchema from "./leg-assignment-schema";
 import * as designStudioCanvaSchema from "./design-studio-canva-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
+import { databasePoolTimeouts } from "./pool-config";
 import {
   designAssets,
   designOutputs,
@@ -48,8 +49,7 @@ const finalConnectionString = normalizeDatabaseConnectionString(connectionString
 export const pool = new Pool({
   connectionString: finalConnectionString,
   application_name: "adventure-zone-command-center-api",
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15 * 60_000,
+  ...databasePoolTimeouts(),
 });
 const schema = {
   ...coreSchema,
