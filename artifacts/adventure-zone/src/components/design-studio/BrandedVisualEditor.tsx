@@ -20,9 +20,6 @@ type Props = {
   assets: DesignAsset[];
   canvas: CanvasDocument;
   onProjectChange: (project: DesignProject) => void;
-  onCanvaAction?: (canvas: CanvasDocument) => void;
-  canvaLabel?: string;
-  canvaBusy?: boolean;
 };
 type VisualType = Exclude<DesignProject["type"], "email" | "contract">;
 
@@ -40,7 +37,7 @@ const LOCAL_MEDIA = [
   { src: `${import.meta.env.BASE_URL}assets/branded-email-builder-camp.jpg`, name: "Family camp", alt: "Family camp" },
 ];
 
-export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, onCanvaAction, canvaLabel = "Canva", canvaBusy = false }: Props) {
+export function BrandedVisualEditor({ project, assets, canvas, onProjectChange }: Props) {
   const type = (CONFIG[project.type as VisualType] ? project.type : "blank") as VisualType;
   const config = CONFIG[type];
   const canEdit = project.status !== "archived" && project.status !== "used" && project.status !== "sent";
@@ -108,7 +105,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
           <Button asChild aria-label="Back to Design Studio" size="icon" variant="outline"><Link href="/design-studio"><ArrowLeft className="h-4 w-4" /></Link></Button>
           <div className="min-w-0"><div className="flex items-center gap-2"><Input aria-label="Visual project name" className="h-8 w-56 border-0 bg-transparent px-0 text-sm font-bold shadow-none focus-visible:ring-0" disabled={!canEdit} value={name} onChange={(e) => { setName(e.target.value); revision.current += 1; setDirty(true); setSaved(false); }} /><Badge variant="outline">{project.type}</Badge></div><p className="flex items-center gap-1 text-[11px] text-muted-foreground">{saved ? <Check className="h-3 w-3 text-primary" /> : <Cloud className="h-3 w-3" />}{saving ? "Saving…" : saved ? "Saved" : "Unsaved changes"}</p></div>
         </div>
-        <div className="flex gap-2"><Button disabled={!canEdit || canvaBusy || !onCanvaAction} onClick={async () => { if (dirty && !(await save())) return; onCanvaAction?.(latest.current); }} size="sm" variant="outline">{canvaLabel}</Button><Button disabled={!canEdit || saving || !dirty} onClick={() => void save()} size="sm" variant="outline"><Cloud className="mr-1 h-3.5 w-3.5" />Save</Button><Button disabled={!canEdit} onClick={() => setReviewOpen(true)} size="sm"><Eye className="mr-1 h-3.5 w-3.5" />Review</Button></div>
+        <div className="flex gap-2"><Button disabled={!canEdit || saving || !dirty} onClick={() => void save()} size="sm" variant="outline"><Cloud className="mr-1 h-3.5 w-3.5" />Save</Button><Button disabled={!canEdit} onClick={() => setReviewOpen(true)} size="sm"><Eye className="mr-1 h-3.5 w-3.5" />Review</Button></div>
       </header>
       {error ? <div className="m-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
       <div className="flex min-h-[calc(100vh-130px)] flex-col lg:flex-row">

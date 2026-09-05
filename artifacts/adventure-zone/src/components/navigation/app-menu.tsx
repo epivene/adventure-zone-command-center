@@ -56,9 +56,6 @@ const marketingGroups: MenuGroup[] = [
     items: [
       { href: "/marketing", label: "Marketing home" },
       { href: "/design-studio", label: "Design Studio" },
-      { href: "/profiles", label: "Profiles & audiences" },
-      { href: "/office-coordinator", label: "Office Coordinator" },
-      { href: "/research-sources", label: "Opportunity research" },
     ],
   },
 ];

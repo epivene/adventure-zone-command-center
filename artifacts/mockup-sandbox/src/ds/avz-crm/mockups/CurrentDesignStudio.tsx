@@ -5,7 +5,6 @@ import {
   Circle,
   Copy,
   Download,
-  ExternalLink,
   FileImage,
   FileText,
   ImagePlus,
@@ -211,9 +210,8 @@ export function CurrentDesignStudio() {
             )}
           </div>
         </div>
-        <div className="flex items-center justify-between gap-3 border-t border-border bg-card px-3 py-1.5">
-          <span className="truncate text-[11px] text-muted-foreground">{selected ? "1 layer selected" : "Tap a layer to edit it"}</span>
-          <Button className="shrink-0 gap-1.5" size="sm"><ExternalLink className="h-3.5 w-3.5" />Open in Canva</Button>
+        <div className="border-t border-border bg-card px-3 py-2">
+          <span className="block truncate text-[11px] text-muted-foreground">{selected ? "1 layer selected" : "Tap a layer to edit it"}</span>
         </div>
       </div>
 
@@ -257,7 +255,7 @@ export function CurrentDesignStudio() {
         <ModalShell eyebrow="Take it with you" onClose={() => setSheet(null)} title="Export design">
           <div className="grid gap-3 p-4 sm:grid-cols-2">
             <Button className="h-auto justify-start gap-3" onClick={() => setSheet(null)} variant="outline"><FileImage className="h-6 w-6" /><span className="text-left"><strong className="block">PNG image</strong><small>Best for email graphics and quick sharing.</small></span></Button>
-            <Button className="h-auto justify-start gap-3" onClick={() => setSheet(null)} variant="outline"><FileText className="h-6 w-6" /><span className="text-left"><strong className="block">PDF design</strong><small>Best for printing and Canva handoff.</small></span></Button>
+            <Button className="h-auto justify-start gap-3" onClick={() => setSheet(null)} variant="outline"><FileText className="h-6 w-6" /><span className="text-left"><strong className="block">PDF design</strong><small>Best for printing and document sharing.</small></span></Button>
           </div>
         </ModalShell>
       ) : null}

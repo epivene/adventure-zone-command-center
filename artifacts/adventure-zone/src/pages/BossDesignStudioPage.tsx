@@ -1,6 +1,6 @@
 // Boss Design Studio — uses Boss token via bossDesignStudioApi
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, ExternalLink, FileText, FolderOpen, Image, MessageSquare, RefreshCw, Search, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, FileText, FolderOpen, Image, MessageSquare, RefreshCw, Search, Sparkles, Trash2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -42,7 +42,7 @@ function ProjectCard({ project, deleting, onDelete }: { project: DesignProject; 
         <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30">
           <div className="text-center">
             <FolderOpen className="mx-auto h-6 w-6 text-primary" />
-            <p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Canva project</p>
+            <p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Studio project</p>
           </div>
         </div>
         <div className="mt-3 flex items-start justify-between gap-3">
@@ -179,18 +179,6 @@ export default function BossDesignStudioPage() {
               </Button>
             </article>
           ))}
-          <article className="rounded-xl border border-dashed border-border bg-card p-4 flex flex-col items-center justify-center text-center min-h-[8rem]">
-            <ExternalLink className="h-6 w-6 text-muted-foreground mb-2" />
-            <p className="text-sm font-semibold text-foreground">Open Canva Free</p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => window.open("https://www.canva.com/create/", "_blank", "noopener,noreferrer")}
-            >
-              Open Canva
-            </Button>
-          </article>
         </div>
       </section>
 

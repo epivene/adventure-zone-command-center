@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
-  ExternalLink,
   FileText,
   FolderOpen,
   Image,
@@ -30,7 +29,6 @@ import {
 import { designStudioApi, type DesignProject, type DesignType } from "@/lib/design-studio-api";
 import { CANVA_STARTERS, type CanvaStarter } from "@/lib/design-studio/canva-starters";
 
-const CANVA_CREATE_URL = "https://www.canva.com/create/";
 const LOGO_SRC = `${import.meta.env.BASE_URL}adventure-zone-logo.png`;
 
 const PHOTOS = {
@@ -217,7 +215,7 @@ function ProjectCard({ project, deleting, onDelete }: { project: DesignProject; 
   return (
     <article className="rounded-xl border border-border bg-card p-4 transition hover:border-primary/40 hover:shadow-md">
       <Link className="block" href={`/design-studio/${project.id}`}>
-        <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30"><div className="text-center"><FolderOpen className="mx-auto h-6 w-6 text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Canva project</p></div></div>
+        <div className="flex h-24 items-center justify-center rounded-lg border border-dashed border-border bg-muted/30"><div className="text-center"><FolderOpen className="mx-auto h-6 w-6 text-primary" /><p className="mt-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Studio project</p></div></div>
         <div className="mt-3 flex items-start justify-between gap-3"><div className="min-w-0"><p className="truncate font-bold text-foreground">{project.name}</p><p className="mt-1 text-xs text-muted-foreground">{dateLabel(project.updatedAt)}</p></div><Badge variant="outline" className="shrink-0 capitalize">{status}</Badge></div>
       </Link>
       <div className="mt-3 flex justify-end border-t border-border pt-3">
@@ -296,7 +294,7 @@ export default function DesignStudioPage() {
     <div className="mx-auto grid max-w-7xl gap-8 pb-12">
       <header className="relative overflow-hidden rounded-2xl bg-sidebar p-6 text-sidebar-foreground shadow-lg md:p-10">
         <div className="pointer-events-none absolute -right-16 -top-20 h-72 w-72 rounded-full bg-accent/20 blur-3xl" /><div className="pointer-events-none absolute -bottom-20 left-24 h-60 w-60 rounded-full bg-primary/20 blur-3xl" />
-        <div className="relative max-w-3xl"><div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]"><Sparkles className="h-3.5 w-3.5 text-accent" />Design Studio + Canva Free</div><h1 className="mt-5 text-3xl font-black tracking-tight md:text-5xl">Fun first. Canva second.</h1><p className="mt-3 max-w-2xl text-base leading-relaxed text-sidebar-foreground/70">Photo-heavy Adventure Zone designs, ready to customize.</p><div className="mt-6 flex flex-wrap gap-3"><Button className="gap-2" onClick={() => document.getElementById("starter-templates")?.scrollIntoView({ behavior: "smooth" })}><Sparkles className="h-4 w-4" />Choose a starter</Button><Button className="gap-2 border-sidebar-border bg-sidebar-accent/30 text-sidebar-foreground hover:bg-sidebar-accent" variant="outline" onClick={() => window.open(CANVA_CREATE_URL, "_blank", "noopener,noreferrer")}><ExternalLink className="h-4 w-4" />Open Canva Free</Button></div></div>
+        <div className="relative max-w-3xl"><div className="inline-flex items-center gap-2 rounded-full border border-sidebar-border bg-sidebar-accent/50 px-3 py-1 text-xs font-black uppercase tracking-[0.16em]"><Sparkles className="h-3.5 w-3.5 text-accent" />Adventure Zone Design Studio</div><h1 className="mt-5 text-3xl font-black tracking-tight md:text-5xl">Make it bold. Make it yours.</h1><p className="mt-3 max-w-2xl text-base leading-relaxed text-sidebar-foreground/70">Photo-heavy Adventure Zone designs, ready to customize and share.</p><div className="mt-6 flex flex-wrap gap-3"><Button className="gap-2" onClick={() => document.getElementById("starter-templates")?.scrollIntoView({ behavior: "smooth" })}><Sparkles className="h-4 w-4" />Choose a starter</Button></div></div>
       </header>
 
       {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert"><span className="text-destructive">{error}</span><Button onClick={() => void loadProjects()} size="sm" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></div> : null}
