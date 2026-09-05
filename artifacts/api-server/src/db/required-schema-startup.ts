@@ -13,6 +13,7 @@ import { ensureInboundCallingSchemaBeforeListen } from "./inbound-calling-requir
 import { ensurePaperNotesSchemaBeforeListen } from "./paper-notes-required-startup";
 import { ensureProfileTouchSchema } from "../features/organizations/profile-touch-schema";
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
+import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 
 type RequiredStep = () => Promise<unknown>;
 type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>;
@@ -31,6 +32,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureOfficeCoordinator?: RequiredStep;
   ensureBoss?: RequiredStep;
   ensureWebsiteInquiries?: RequiredStep;
+  ensureProfileFiller?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
 }): Promise<void> {
@@ -79,6 +81,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required website inquiry schema",
     dependencies?.ensureWebsiteInquiries ?? ensureWebsiteInquirySchemaBeforeListen,
+  );
+  await run(
+    "required profile filler schema",
+    dependencies?.ensureProfileFiller ?? ensureProfileFillerSchemaBeforeListen,
   );
   await run(
     "required profile touch schema",

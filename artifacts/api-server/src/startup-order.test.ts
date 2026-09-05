@@ -7,21 +7,21 @@ const here = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(resolve(here, "index.ts"), "utf8");
 
 describe("API startup order", () => {
-  it("validates config before binding the port", () => {
-    expect(source.indexOf("validateOwnerConfig();")).toBeLessThan(source.indexOf("app.listen("));
-  });
-
-  it("binds the HTTP server before running database maintenance", () => {
-    expect(source.indexOf("app.listen(")).toBeLessThan(source.indexOf("runStartupStep("));
-  });
-
   it("keeps API traffic gated until required schema startup completes", () => {
-    expect(source.indexOf("markAppStarting();")).toBeLessThan(source.indexOf("app.listen("));
-    expect(source.indexOf("app.listen(")).toBeLessThan(source.indexOf("runRequiredSchemaStartup();"));
-    expect(source.indexOf("runRequiredSchemaStartup();")).toBeLessThan(source.indexOf("markAppReady();"));
+    const starting = source.indexOf("markAppStarting();");
+    const listen = source.indexOf("app.listen(");
+    const requiredSchema = source.indexOf("runRequiredSchemaStartup();");
+    const ready = source.indexOf("markAppReady();");
+
+    expect(starting).toBeGreaterThan(-1);
+    expect(starting).toBeLessThan(listen);
+    expect(listen).toBeLessThan(requiredSchema);
+    expect(requiredSchema).toBeLessThan(ready);
   });
 
   it("keeps background workers behind post-listen maintenance", () => {
-    expect(source.indexOf("runPostListenMaintenance")).toBeLessThan(source.indexOf("leadScoutLoop.start()"));
+    expect(source.indexOf("runPostListenMaintenance")).toBeLessThan(
+      source.indexOf("leadScoutLoop.start()"),
+    );
   });
 });

@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { organizationListQuerySchema, setFillerInputSchema } from "./last-resort-input";
 
 function readSource(relativePath: string) {
-  return readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
+  const repositoryRoot = fileURLToPath(new URL("../../../../../", import.meta.url));
+  return readFileSync(path.resolve(repositoryRoot, relativePath), "utf8");
 }
 
 const routeSource = readSource("artifacts/api-server/src/routes/organization-filler.ts");
@@ -29,6 +31,7 @@ describe("filler profile strategy", () => {
     expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS filler boolean");
     expect(migrationSource).toContain("ADD COLUMN IF NOT EXISTS filler_reason text");
     expect(migrationSource).toContain("organizations_filler_reason_required");
+    expect(migrationSource).toContain("IF NOT EXISTS (");
     expect(routeSource).toContain('router.post("/organizations/filler"');
     expect(routeSource).not.toMatch(/probability_auto_filler/);
   });

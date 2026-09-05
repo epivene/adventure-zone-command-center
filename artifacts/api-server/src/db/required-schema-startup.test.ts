@@ -15,7 +15,6 @@ describe("runRequiredSchemaStartup", () => {
       calls.push(name);
       return step();
     });
-
     await runRequiredSchemaStartup({
       run,
       ensurePaperNotes: async () => false,
@@ -36,6 +35,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureOfficeCoordinator: async () => false,
       ensureBoss: async () => false,
       ensureWebsiteInquiries: async () => true,
+      ensureProfileFiller: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
     });
@@ -53,6 +53,7 @@ describe("runRequiredSchemaStartup", () => {
       "required office coordinator schema",
       "required Boss schema",
       "required website inquiry schema",
+      "required profile filler schema",
       "required profile touch schema",
       "required Design Studio schema",
     ]);

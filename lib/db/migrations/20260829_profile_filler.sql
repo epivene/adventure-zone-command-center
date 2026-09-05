@@ -7,9 +7,36 @@ ALTER TABLE organizations
 ALTER TABLE organizations
   ADD COLUMN IF NOT EXISTS filler_changed_at timestamptz;
 
-ALTER TABLE organizations
-  DROP CONSTRAINT IF EXISTS organizations_filler_reason_required;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'organizations'::regclass
+      AND conname = 'organizations_filler_reason_required'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'organizations'::regclass
+      AND conname = 'organizations_filler_reason_required'
+      AND contype = 'c'
+      AND convalidated
+      AND regexp_replace(lower(pg_get_constraintdef(oid)), '\s+', '', 'g')
+        = 'check(((notfiller)or(nullif(btrim(filler_reason),''''::text)isnotnull)))'
+  ) THEN
+    ALTER TABLE organizations
+      DROP CONSTRAINT organizations_filler_reason_required;
+  END IF;
 
-ALTER TABLE organizations
-  ADD CONSTRAINT organizations_filler_reason_required
-  CHECK (NOT filler OR nullif(btrim(filler_reason), '') IS NOT NULL);
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'organizations'::regclass
+      AND conname = 'organizations_filler_reason_required'
+  ) THEN
+    ALTER TABLE organizations
+      ADD CONSTRAINT organizations_filler_reason_required
+      CHECK (NOT filler OR nullif(btrim(filler_reason), '') IS NOT NULL);
+  END IF;
+END
+$$;
