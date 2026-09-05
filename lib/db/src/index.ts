@@ -24,6 +24,7 @@ import { normalizeDatabaseConnectionString } from "./connection-string";
 import { databasePoolTimeouts } from "./pool-config";
 import {
   designAssets,
+  designCertificates,
   designOutputs,
   designProjectVersions,
   designProjects,
