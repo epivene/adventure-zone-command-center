@@ -77,7 +77,7 @@ function EmailArtwork({ mobile, imageSrc }: { mobile: boolean; imageSrc: string 
         <span className="text-[10px] uppercase tracking-[0.16em] text-white/70">Explore</span>
       </div>
       <div className="relative h-44 overflow-hidden bg-[#ff1791]">
-        <img alt="Adventure Zone email hero" className="h-full w-full object-cover mix-blend-multiply opacity-80" src={imageSrc} />
+        <img alt="Adventure Zone email hero" className="h-full w-full object-cover" src={imageSrc} />
         <div className="absolute inset-x-5 bottom-5 bg-[#ffd21c] px-4 py-3 text-xl font-black uppercase leading-none text-[#080808]">Your next adventure starts here</div>
       </div>
       <div className="space-y-4 bg-[#fff9f5] px-6 py-6">
