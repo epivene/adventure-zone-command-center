@@ -1,5 +1,17 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq, ilike, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  ilike,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  or,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@workspace/db";
@@ -53,10 +65,53 @@ export function classify(expirationDate: string | null, assetId: string | null, 
   return "current" as const;
 }
 
-type CertificateQueryOptions = { officeAccountId?: string };
+const expirationFilterSchema = z.enum(["all", "current", "expiring_soon", "expired", "incomplete"]).default("all");
+const reviewFilterSchema = z.enum(["all", "needs_review", "reviewed"]).default("all");
 
-export async function listCertificateRecords({ officeAccountId }: CertificateQueryOptions = {}) {
-  const scope = officeAccountId ? eq(designCertificates.officeAccountId, officeAccountId) : undefined;
+type CertificateQueryOptions = {
+  officeAccountId?: string;
+  expirationState?: z.infer<typeof expirationFilterSchema>;
+  reviewState?: z.infer<typeof reviewFilterSchema>;
+};
+
+function dateAfterDays(todayText: string, days: number) {
+  const date = new Date(`${todayText}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export async function listCertificateRecords({
+  officeAccountId,
+  expirationState = "all",
+  reviewState = "all",
+}: CertificateQueryOptions = {}) {
+  const todayText = new Date().toISOString().slice(0, 10);
+  const soonText = dateAfterDays(todayText, 30);
+  const filters = [
+    officeAccountId ? eq(designCertificates.officeAccountId, officeAccountId) : undefined,
+    reviewState !== "all" ? eq(designCertificates.reviewState, reviewState) : undefined,
+  ];
+  if (expirationState === "current") {
+    filters.push(
+      isNotNull(designCertificates.assetId),
+      isNotNull(designCertificates.expirationDate),
+      gt(designCertificates.expirationDate, soonText),
+    );
+  } else if (expirationState === "expiring_soon") {
+    filters.push(
+      isNotNull(designCertificates.assetId),
+      gte(designCertificates.expirationDate, todayText),
+      lte(designCertificates.expirationDate, soonText),
+    );
+  } else if (expirationState === "expired") {
+    filters.push(
+      isNotNull(designCertificates.assetId),
+      isNotNull(designCertificates.expirationDate),
+      lt(designCertificates.expirationDate, todayText),
+    );
+  } else if (expirationState === "incomplete") {
+    filters.push(or(isNull(designCertificates.assetId), isNull(designCertificates.expirationDate)));
+  }
   const rows = await db
     .select({
       id: designCertificates.id,
@@ -81,7 +136,7 @@ export async function listCertificateRecords({ officeAccountId }: CertificateQue
     .leftJoin(bookings, eq(bookings.id, designCertificates.bookingId))
     .leftJoin(organizations, eq(organizations.id, designCertificates.organizationId))
     .leftJoin(designAssets, eq(designAssets.id, designCertificates.assetId))
-    .where(scope)
+    .where(and(...filters))
     .orderBy(desc(designCertificates.expirationDate), desc(designCertificates.updatedAt));
 
   return Promise.all(rows.map(async (row) => ({
@@ -269,12 +324,19 @@ router.patch("/boss/coi/:certificateId", requireBoss, async (req, res): Promise<
 
 router.get("/admin/coi", requireOwnerMiddleware, async (req, res): Promise<void> => {
   try {
+    const expirationState = expirationFilterSchema.parse(param(req.query.expirationState as string | string[] | undefined));
+    const reviewState = reviewFilterSchema.parse(param(req.query.reviewState as string | string[] | undefined));
+    const officeAccountId = param(req.query.officeAccountId as string | string[] | undefined);
+    if (officeAccountId && !idSchema.safeParse(officeAccountId).success) {
+      res.status(400).json({ error: "Choose a valid Office workspace." });
+      return;
+    }
     const [certificates, assetCandidates, accounts] = await Promise.all([
-      listCertificateRecords(),
+      listCertificateRecords({ officeAccountId: officeAccountId || undefined, expirationState, reviewState }),
       listAssetCandidates(),
       db.select({ id: officeAccounts.id, displayName: officeAccounts.displayName }).from(officeAccounts).orderBy(officeAccounts.displayName),
     ]);
-    res.json({ certificates, assetCandidates, officeAccounts: accounts });
+    res.json({ certificates, assetCandidates, officeAccounts: accounts, filters: { expirationState, reviewState, officeAccountId: officeAccountId || null } });
   } catch (error) {
     req.log.error({ err: error }, "Failed to load admin COIs");
     res.status(500).json({ error: "Could not load certificates of insurance." });

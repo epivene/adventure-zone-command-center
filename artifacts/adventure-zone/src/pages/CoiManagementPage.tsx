@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileText, Plus, RefreshCw } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
@@ -23,6 +23,8 @@ type AssetCandidate = {
 };
 type OfficeAccount = { id: string; displayName: string };
 type Props = { mode: "boss" | "admin" };
+type ExpirationFilter = "all" | "current" | "expiring_soon" | "expired" | "incomplete";
+type ReviewFilter = "all" | "needs_review" | "reviewed";
 type Fields = {
   officeAccountId: string;
   name: string;
@@ -58,6 +60,20 @@ function badgeVariant(status: BossCertificateDocument["expirationState"]): "defa
   if (status === "expiring_soon") return "default";
   if (status === "current") return "secondary";
   return "outline";
+}
+
+function readExpirationFilter(search: string): ExpirationFilter {
+  const value = new URLSearchParams(search).get("expirationState");
+  return value === "current" || value === "expiring_soon" || value === "expired" || value === "incomplete" ? value : "all";
+}
+
+function readReviewFilter(search: string): ReviewFilter {
+  const value = new URLSearchParams(search).get("reviewState");
+  return value === "needs_review" || value === "reviewed" ? value : "all";
+}
+
+function readWorkspaceFilter(search: string) {
+  return new URLSearchParams(search).get("officeAccountId") ?? "";
 }
 
 function CertificateForm({
@@ -191,6 +207,8 @@ function CertificateForm({
 }
 
 export default function CoiManagementPage({ mode }: Props) {
+  const search = useSearch();
+  const [location, setLocation] = useLocation();
   const [certificates, setCertificates] = useState<BossCertificateDocument[]>([]);
   const [assets, setAssets] = useState<AssetCandidate[]>([]);
   const [officeAccounts, setOfficeAccounts] = useState<OfficeAccount[]>([]);
@@ -199,14 +217,40 @@ export default function CoiManagementPage({ mode }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<BossCertificateDocument | null>(null);
   const [creating, setCreating] = useState(false);
+  const expirationFilter = readExpirationFilter(search);
+  const reviewFilter = readReviewFilter(search);
+  const workspaceFilter = readWorkspaceFilter(search);
+  const hasActiveFilters = mode === "admin" && (expirationFilter !== "all" || reviewFilter !== "all" || Boolean(workspaceFilter));
+
+  function updateFilter(key: "expirationState" | "reviewState" | "officeAccountId", value: string) {
+    const params = new URLSearchParams(search);
+    if (!value || value === "all") params.delete(key);
+    else params.set(key, value);
+    const query = params.toString();
+    setLocation(`${location.split("?")[0]}${query ? `?${query}` : ""}`);
+  }
+
+  function clearFilters() {
+    const params = new URLSearchParams(search);
+    params.delete("expirationState");
+    params.delete("reviewState");
+    params.delete("officeAccountId");
+    const query = params.toString();
+    setLocation(`${location.split("?")[0]}${query ? `?${query}` : ""}`);
+  }
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
+      const adminParams = new URLSearchParams();
+      if (expirationFilter !== "all") adminParams.set("expirationState", expirationFilter);
+      if (reviewFilter !== "all") adminParams.set("reviewState", reviewFilter);
+      if (workspaceFilter) adminParams.set("officeAccountId", workspaceFilter);
+      const adminPath = adminParams.toString() ? `/admin/coi?${adminParams.toString()}` : "/admin/coi";
       const data = mode === "boss"
         ? await bossGet<{ certificates: BossCertificateDocument[]; assetCandidates: AssetCandidate[]; workspaceAvailable: boolean }>("/boss/coi")
-        : await apiGet<{ certificates: BossCertificateDocument[]; assetCandidates: AssetCandidate[]; officeAccounts: OfficeAccount[] }>("/admin/coi");
+        : await apiGet<{ certificates: BossCertificateDocument[]; assetCandidates: AssetCandidate[]; officeAccounts: OfficeAccount[] }>(adminPath);
       setCertificates(data.certificates ?? []);
       setAssets(data.assetCandidates ?? []);
       if (mode === "boss") setWorkspaceAvailable((data as { workspaceAvailable: boolean }).workspaceAvailable);
@@ -217,7 +261,7 @@ export default function CoiManagementPage({ mode }: Props) {
       setLoading(false);
     }
   }
-  useEffect(() => { void load(); }, [mode]);
+  useEffect(() => { void load(); }, [mode, search]);
 
   return (
     <div className="grid gap-6" data-testid={`${mode}-coi-page`}>
@@ -227,8 +271,46 @@ export default function CoiManagementPage({ mode }: Props) {
       </header>
       {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert"><span className="text-destructive">{error}</span><Button variant="outline" size="sm" onClick={() => void load()}>Try again</Button></div> : null}
       {!loading && mode === "boss" && !workspaceAvailable ? <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center"><AlertTriangle className="mx-auto h-7 w-7 text-muted-foreground" /><p className="mt-2 font-semibold text-foreground">Document workspace unavailable</p><p className="mt-1 text-sm text-muted-foreground">Ask the owner to connect this Boss account to an Office workspace.</p></div> : null}
+      {!loading && mode === "admin" ? (
+        <section className="grid gap-3 rounded-xl border border-border bg-card p-4" aria-label="Certificate filters" data-testid="coi-filters">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-bold text-foreground">Renewal triage</h2>
+              <p className="text-sm text-muted-foreground">Filter the shared certificate register by risk, review state, or workspace.</p>
+            </div>
+            {hasActiveFilters ? <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button> : null}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <label className="grid gap-1 text-sm font-semibold">
+              Renewal status
+              <select value={expirationFilter} onChange={(event) => updateFilter("expirationState", event.target.value)} data-testid="coi-expiration-filter">
+                <option value="all">All renewal statuses</option>
+                <option value="current">Current</option>
+                <option value="expiring_soon">Expiring within 30 days</option>
+                <option value="expired">Expired</option>
+                <option value="incomplete">Incomplete record</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              Review state
+              <select value={reviewFilter} onChange={(event) => updateFilter("reviewState", event.target.value)} data-testid="coi-review-filter">
+                <option value="all">All review states</option>
+                <option value="needs_review">Needs review</option>
+                <option value="reviewed">Reviewed</option>
+              </select>
+            </label>
+            <label className="grid gap-1 text-sm font-semibold">
+              Office workspace
+              <select value={workspaceFilter} onChange={(event) => updateFilter("officeAccountId", event.target.value)} data-testid="coi-workspace-filter">
+                <option value="">All workspaces</option>
+                {officeAccounts.map((account) => <option key={account.id} value={account.id}>{account.displayName}</option>)}
+              </select>
+            </label>
+          </div>
+        </section>
+      ) : null}
       {loading ? <div className="grid gap-3 md:grid-cols-2">{[1, 2, 3, 4].map((item) => <Skeleton className="h-44 rounded-xl" key={item} />)}</div> : null}
-      {!loading && workspaceAvailable && !certificates.length ? <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><FileText className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-2 font-semibold text-foreground">No certificates recorded yet</p><p className="mt-1 text-sm text-muted-foreground">Create a record, then link an existing Studio asset when one is available.</p><Button className="mt-4" onClick={() => setCreating(true)}><Plus className="mr-2 h-4 w-4" />Add the first COI</Button></div> : null}
+      {!loading && workspaceAvailable && !certificates.length ? <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center"><FileText className="mx-auto h-8 w-8 text-muted-foreground" /><p className="mt-2 font-semibold text-foreground">{hasActiveFilters ? "No certificates match these filters" : "No certificates recorded yet"}</p><p className="mt-1 text-sm text-muted-foreground">{hasActiveFilters ? "Try a different renewal status, review state, or workspace." : "Create a record, then link an existing Studio asset when one is available."}</p>{hasActiveFilters ? <Button className="mt-4" variant="outline" onClick={clearFilters}>Clear filters</Button> : <Button className="mt-4" onClick={() => setCreating(true)}><Plus className="mr-2 h-4 w-4" />Add the first COI</Button>}</div> : null}
       {!loading && certificates.length ? <div className="grid gap-3 md:grid-cols-2">{certificates.map((certificate) => (
         <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={certificate.id}>
           <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-foreground">{certificate.name}</p><p className="mt-1 text-sm text-muted-foreground">{certificate.bookingName ?? certificate.organizationName ?? "No event or profile linked"}{mode === "admin" && certificate.officeAccountName ? ` · ${certificate.officeAccountName}` : ""}</p></div><div className="flex gap-1"><Badge variant={badgeVariant(certificate.expirationState)}>{statusLabel(certificate.expirationState)}</Badge><Badge variant={certificate.reviewState === "reviewed" ? "default" : "outline"}>{certificate.reviewState === "reviewed" ? "Reviewed" : "Needs review"}</Badge></div></div>
