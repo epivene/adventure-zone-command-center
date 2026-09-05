@@ -24,9 +24,9 @@ import {
 } from "@/lib/design-studio/email-model";
 
 const LOCAL_MEDIA = [
-  { src: "/assets/gallery-action-arena.jpg", name: "Action arena", alt: "Action arena" },
-  { src: "/assets/branded-email-builder-rafting.jpg", name: "Wyoming rafting", alt: "Wyoming rafting" },
-  { src: "/assets/branded-email-builder-camp.jpg", name: "Family camp", alt: "Family camp" },
+  { src: `${import.meta.env.BASE_URL}assets/gallery-action-arena.jpg`, name: "Action arena", alt: "Action arena" },
+  { src: `${import.meta.env.BASE_URL}assets/branded-email-builder-rafting.jpg`, name: "Wyoming rafting", alt: "Wyoming rafting" },
+  { src: `${import.meta.env.BASE_URL}assets/branded-email-builder-camp.jpg`, name: "Family camp", alt: "Family camp" },
 ];
 const SMART_FIELDS = ["contactName", "eventName", "eventDates", "senderName"];
 const ADDABLE: EmailBlockType[] = ["heading", "paragraph", "button", "hero", "divider", "spacer"];

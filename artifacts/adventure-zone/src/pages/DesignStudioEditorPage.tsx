@@ -286,20 +286,20 @@ export default function DesignStudioEditorPage() {
     }
   }
 
-  async function createCanvaCopy() {
+  async function createCanvaCopy(canvasOverride?: CanvasDocument) {
     if (!project) return;
     const target = openWaitingWindow();
     setCanvaBusy(true);
     setError(null);
     try {
-      if (dirty) {
+      if (dirty && !canvasOverride) {
         const savedOkay = await save();
         if (!savedOkay) {
           target?.close();
           return;
         }
       }
-      const pdf = await exportCanvasPdf(latestCanvas.current ?? editor.doc, assets);
+      const pdf = await exportCanvasPdf(canvasOverride ?? latestCanvas.current ?? editor.doc, assets);
       const imported = await designStudioApi.importToCanva(project.id, pdf);
       await refreshCanvaState();
       setShowCanvaHandoff(false);
@@ -312,7 +312,7 @@ export default function DesignStudioEditorPage() {
     }
   }
 
-  function handleCanvaAction() {
+  function handleCanvaAction(canvasOverride?: CanvasDocument) {
     if (!canvaState?.configured) {
       setError("Canva Connect still needs server configuration before it can be used.");
       return;
@@ -322,10 +322,10 @@ export default function DesignStudioEditorPage() {
       return;
     }
     if (!canvaState.linked) {
-      void createCanvaCopy();
+      void createCanvaCopy(canvasOverride);
       return;
     }
-    if (canvaState.outdated || dirty) {
+    if (canvaState.outdated || (dirty && !canvasOverride)) {
       setShowCanvaHandoff(true);
       return;
     }
@@ -371,7 +371,7 @@ export default function DesignStudioEditorPage() {
         canvas={canvasDoc}
         canvaBusy={canvaBusy}
         canvaLabel={canvaButtonLabel(canvaState, dirty)}
-        onCanvaAction={handleCanvaAction}
+        onCanvaAction={(latestVisualCanvas) => handleCanvaAction(latestVisualCanvas)}
         onProjectChange={setProject}
         project={project}
       />

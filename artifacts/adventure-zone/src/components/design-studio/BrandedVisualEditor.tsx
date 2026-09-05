@@ -20,7 +20,7 @@ type Props = {
   assets: DesignAsset[];
   canvas: CanvasDocument;
   onProjectChange: (project: DesignProject) => void;
-  onCanvaAction?: () => void;
+  onCanvaAction?: (canvas: CanvasDocument) => void;
   canvaLabel?: string;
   canvaBusy?: boolean;
 };
@@ -35,9 +35,9 @@ const CONFIG: Record<VisualType, { size: string; title: string; labels: string[]
 };
 
 const LOCAL_MEDIA = [
-  { src: "/assets/gallery-action-arena.jpg", name: "Action arena", alt: "Action arena" },
-  { src: "/assets/branded-email-builder-rafting.jpg", name: "Wyoming rafting", alt: "Wyoming rafting" },
-  { src: "/assets/branded-email-builder-camp.jpg", name: "Family camp", alt: "Family camp" },
+  { src: `${import.meta.env.BASE_URL}assets/gallery-action-arena.jpg`, name: "Action arena", alt: "Action arena" },
+  { src: `${import.meta.env.BASE_URL}assets/branded-email-builder-rafting.jpg`, name: "Wyoming rafting", alt: "Wyoming rafting" },
+  { src: `${import.meta.env.BASE_URL}assets/branded-email-builder-camp.jpg`, name: "Family camp", alt: "Family camp" },
 ];
 
 export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, onCanvaAction, canvaLabel = "Canva", canvaBusy = false }: Props) {
@@ -45,6 +45,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
   const config = CONFIG[type];
   const canEdit = project.status !== "archived" && project.status !== "used" && project.status !== "sent";
   const [name, setName] = useState(project.name);
+  const [notes, setNotes] = useState(project.notes ?? "");
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -72,7 +73,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
     setSaving(true); setError(null);
     try {
       const value = await designStudioApi.update(project.id, {
-        name: name.trim(), type: project.type, canvas: latest.current,
+        name: name.trim(), notes, type: project.type, canvas: latest.current,
         ...(status ? { status } : {}),
         syncState: "synced",
       });
@@ -83,7 +84,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
       setError(cause instanceof Error ? cause.message : "Design could not be saved.");
       return false;
     } finally { setSaving(false); }
-  }, [canEdit, name, onProjectChange, project.id, project.type, saving]);
+  }, [canEdit, name, notes, onProjectChange, project.id, project.type, saving]);
   const saveRef = useRef(save); saveRef.current = save;
   useEffect(() => {
     if (!canEdit || !dirty || saving) return;
@@ -107,7 +108,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
           <Button asChild aria-label="Back to Design Studio" size="icon" variant="outline"><Link href="/design-studio"><ArrowLeft className="h-4 w-4" /></Link></Button>
           <div className="min-w-0"><div className="flex items-center gap-2"><Input aria-label="Visual project name" className="h-8 w-56 border-0 bg-transparent px-0 text-sm font-bold shadow-none focus-visible:ring-0" disabled={!canEdit} value={name} onChange={(e) => { setName(e.target.value); revision.current += 1; setDirty(true); setSaved(false); }} /><Badge variant="outline">{project.type}</Badge></div><p className="flex items-center gap-1 text-[11px] text-muted-foreground">{saved ? <Check className="h-3 w-3 text-primary" /> : <Cloud className="h-3 w-3" />}{saving ? "Saving…" : saved ? "Saved" : "Unsaved changes"}</p></div>
         </div>
-        <div className="flex gap-2"><Button disabled={!canEdit || canvaBusy || !onCanvaAction} onClick={onCanvaAction} size="sm" variant="outline">{canvaLabel}</Button><Button disabled={!canEdit || saving || !dirty} onClick={() => void save()} size="sm" variant="outline"><Cloud className="mr-1 h-3.5 w-3.5" />Save</Button><Button disabled={!canEdit} onClick={() => setReviewOpen(true)} size="sm"><Eye className="mr-1 h-3.5 w-3.5" />Review</Button></div>
+        <div className="flex gap-2"><Button disabled={!canEdit || canvaBusy || !onCanvaAction} onClick={async () => { if (dirty && !(await save())) return; onCanvaAction?.(latest.current); }} size="sm" variant="outline">{canvaLabel}</Button><Button disabled={!canEdit || saving || !dirty} onClick={() => void save()} size="sm" variant="outline"><Cloud className="mr-1 h-3.5 w-3.5" />Save</Button><Button disabled={!canEdit} onClick={() => setReviewOpen(true)} size="sm"><Eye className="mr-1 h-3.5 w-3.5" />Review</Button></div>
       </header>
       {error ? <div className="m-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</div> : null}
       <div className="flex min-h-[calc(100vh-130px)] flex-col lg:flex-row">
@@ -116,7 +117,7 @@ export function BrandedVisualEditor({ project, assets, canvas, onProjectChange, 
             <TabsList className="grid w-full grid-cols-4 rounded-none border-b bg-transparent"><TabsTrigger value="content">Content</TabsTrigger><TabsTrigger value="media">Media</TabsTrigger><TabsTrigger value="brand">Brand Kit</TabsTrigger><TabsTrigger value="versions">Versions</TabsTrigger></TabsList>
             <TabsContent className="mt-0 p-4" value="content"><p className="text-sm font-bold">{config.title}</p><p className="mb-3 text-xs text-muted-foreground">{config.size} · {page.nodes.length} ordered layers</p><div className="space-y-1">{page.nodes.map((node) => <Button className={`h-auto w-full justify-start gap-2 border px-2 py-2 text-left ${editor.selectedIds.includes(node.id) ? "border-primary bg-primary/5" : "border-transparent"}`} key={node.id} onClick={() => editor.select(node.id)} variant="ghost"><PanelLeft className="h-4 w-4 shrink-0 text-primary" /><span className="truncate text-sm font-semibold">{node.name}</span></Button>)}</div><div className="mt-5 border-t border-border pt-4"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Recommended layers</p>{config.labels.map((label) => <Badge className="mr-1 mb-1" key={label} variant="secondary">{label}</Badge>)}</div></TabsContent>
             <TabsContent className="mt-0 space-y-3 p-4" value="media"><p className="text-sm font-bold">Media library</p><p className="text-xs text-muted-foreground">Local Adventure Zone and Studio assets.</p><div className="relative"><Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" /><Input aria-label="Search visual media" className="pl-8" onChange={(e) => setSearch(e.target.value)} placeholder="Search photos" value={search} /></div><div className="grid grid-cols-2 gap-2">{media.map((item) => <Button aria-label={`Add ${item.name}`} className="h-auto flex-col items-stretch gap-0 overflow-hidden p-0 text-left" disabled={!canEdit} key={`${item.assetId ?? "local"}-${item.src}`} onClick={() => chooseMedia(item)} variant="outline"><img alt={item.alt} className="h-20 w-full object-cover" src={item.src} /><span className="truncate px-2 py-1 text-xs font-semibold">{item.name}</span></Button>)}</div></TabsContent>
-            <TabsContent className="space-y-3 p-4" value="brand"><p className="text-sm font-bold">Adventure Zone kit</p><p className="text-xs text-muted-foreground">Safe presentation controls for this document.</p><Label htmlFor="visual-background">Background color</Label><Input disabled={!canEdit} id="visual-background" type="color" value={page.background.startsWith("#") ? page.background : "#ffffff"} onChange={(e) => editor.commitDoc({ ...editor.doc, pages: editor.doc.pages.map((p) => p.id === editor.doc.activePageId ? { ...p, background: e.target.value } : p) })} /><p className="text-xs text-muted-foreground">Selected text and shape colors are available in layer settings.</p><Label htmlFor="visual-notes">Design notes</Label><Textarea disabled={!canEdit} id="visual-notes" placeholder="Add internal presentation notes…" /></TabsContent>
+            <TabsContent className="space-y-3 p-4" value="brand"><p className="text-sm font-bold">Adventure Zone kit</p><p className="text-xs text-muted-foreground">Safe presentation controls for this document.</p><Label htmlFor="visual-background">Background color</Label><Input disabled={!canEdit} id="visual-background" type="color" value={page.background.startsWith("#") ? page.background : "#ffffff"} onChange={(e) => editor.commitDoc({ ...editor.doc, pages: editor.doc.pages.map((p) => p.id === editor.doc.activePageId ? { ...p, background: e.target.value } : p) })} /><p className="text-xs text-muted-foreground">Selected text and shape colors are available in layer settings.</p><Label htmlFor="visual-notes">Design notes</Label><Textarea disabled={!canEdit} id="visual-notes" onChange={(event) => { setNotes(event.target.value); revision.current += 1; setDirty(true); setSaved(false); }} placeholder="Add internal presentation notes…" value={notes} /></TabsContent>
             <TabsContent className="space-y-3 p-4" value="versions"><p className="text-sm font-bold">Current persisted version</p><div className="flex justify-between border border-border bg-background p-3 text-sm"><span>Project version</span><Badge variant="outline">{dirty ? "Unsaved edits" : "Saved"}</Badge></div><p className="text-xs text-muted-foreground">Historical versions are not available; this reflects the current persisted project.</p></TabsContent>
           </Tabs>
         </aside>
