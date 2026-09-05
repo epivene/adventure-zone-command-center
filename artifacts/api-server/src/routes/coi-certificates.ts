@@ -67,6 +67,20 @@ export function classify(expirationDate: string | null, assetId: string | null, 
 
 const expirationFilterSchema = z.enum(["all", "current", "expiring_soon", "expired", "incomplete"]).default("all");
 const reviewFilterSchema = z.enum(["all", "needs_review", "reviewed"]).default("all");
+const certificateFilterQuerySchema = z.object({
+  expirationState: expirationFilterSchema,
+  reviewState: reviewFilterSchema,
+  officeAccountId: idSchema.optional(),
+});
+
+export function parseCertificateFilterQuery(query: Record<string, unknown>) {
+  const first = (value: unknown) => Array.isArray(value) ? value[0] : value;
+  return certificateFilterQuerySchema.safeParse({
+    expirationState: first(query.expirationState) || undefined,
+    reviewState: first(query.reviewState) || undefined,
+    officeAccountId: first(query.officeAccountId) || undefined,
+  });
+}
 
 type CertificateQueryOptions = {
   officeAccountId?: string;
@@ -323,20 +337,19 @@ router.patch("/boss/coi/:certificateId", requireBoss, async (req, res): Promise<
 });
 
 router.get("/admin/coi", requireOwnerMiddleware, async (req, res): Promise<void> => {
+  const filters = parseCertificateFilterQuery(req.query);
+  if (!filters.success) {
+    res.status(400).json({ error: "Choose valid certificate filters." });
+    return;
+  }
   try {
-    const expirationState = expirationFilterSchema.parse(param(req.query.expirationState as string | string[] | undefined));
-    const reviewState = reviewFilterSchema.parse(param(req.query.reviewState as string | string[] | undefined));
-    const officeAccountId = param(req.query.officeAccountId as string | string[] | undefined);
-    if (officeAccountId && !idSchema.safeParse(officeAccountId).success) {
-      res.status(400).json({ error: "Choose a valid Office workspace." });
-      return;
-    }
+    const { expirationState, reviewState, officeAccountId } = filters.data;
     const [certificates, assetCandidates, accounts] = await Promise.all([
-      listCertificateRecords({ officeAccountId: officeAccountId || undefined, expirationState, reviewState }),
+      listCertificateRecords({ officeAccountId, expirationState, reviewState }),
       listAssetCandidates(),
       db.select({ id: officeAccounts.id, displayName: officeAccounts.displayName }).from(officeAccounts).orderBy(officeAccounts.displayName),
     ]);
-    res.json({ certificates, assetCandidates, officeAccounts: accounts, filters: { expirationState, reviewState, officeAccountId: officeAccountId || null } });
+    res.json({ certificates, assetCandidates, officeAccounts: accounts, filters: { expirationState, reviewState, officeAccountId: officeAccountId ?? null } });
   } catch (error) {
     req.log.error({ err: error }, "Failed to load admin COIs");
     res.status(500).json({ error: "Could not load certificates of insurance." });

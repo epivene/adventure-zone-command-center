@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("./CoiManagementPage.tsx", import.meta.url), "utf8");
+const source = readFileSync(resolve(__dirname, "CoiManagementPage.tsx"), "utf8");
 
 describe("COI management workflow states", () => {
   it("renders actionable loading, empty, unavailable-workspace, save-error, and unavailable-file states", () => {
@@ -27,5 +28,27 @@ describe("COI management workflow states", () => {
     expect(source).toContain('"needs_review" | "reviewed"');
     expect(source).toContain('value="needs_review"');
     expect(source).toContain('value="reviewed"');
+  });
+
+  it("persists Admin renewal, review, and workspace filters in the URL", () => {
+    expect(source).toContain('params.set(key, value)');
+    expect(source).toContain('"expirationState"');
+    expect(source).toContain('"reviewState"');
+    expect(source).toContain('"officeAccountId"');
+    expect(source).toContain("useSearch()");
+    expect(source).toContain("useLocation()");
+  });
+
+  it("sends active filters to the owner-only COI endpoint", () => {
+    expect(source).toContain('adminParams.set("expirationState", expirationFilter)');
+    expect(source).toContain('adminParams.set("reviewState", reviewFilter)');
+    expect(source).toContain('adminParams.set("officeAccountId", workspaceFilter)');
+    expect(source).toContain("`/admin/coi?${adminParams.toString()}`");
+  });
+
+  it("distinguishes an empty register from filters with no matches", () => {
+    expect(source).toContain("No certificates match these filters");
+    expect(source).toContain("Clear filters");
+    expect(source).toContain("No certificates recorded yet");
   });
 });
