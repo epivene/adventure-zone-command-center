@@ -34,6 +34,7 @@ import { ExportSheet } from "@/components/design-studio/ExportSheet";
 import { CanvaHandoffSheet } from "@/components/design-studio/CanvaHandoffSheet";
 import { ContractSignaturePanel } from "@/components/design-studio/ContractSignaturePanel";
 import { BrandedEmailEditor } from "@/components/design-studio/BrandedEmailEditor";
+import { BrandedVisualEditor } from "@/components/design-studio/BrandedVisualEditor";
 import { shouldAcknowledgeSave } from "@/lib/design-studio/email-model";
 
 const STARTER_PREFIX = "CANVA_STARTER_ID=";
@@ -357,6 +358,20 @@ export default function DesignStudioEditorPage() {
     return (
       <BrandedEmailEditor
         assets={assets}
+        onProjectChange={setProject}
+        project={project}
+      />
+    );
+  }
+
+  if (project.type === "flyer" || project.type === "social post" || project.type === "brochure" || project.type === "review request" || project.type === "blank") {
+    return (
+      <BrandedVisualEditor
+        assets={assets}
+        canvas={canvasDoc}
+        canvaBusy={canvaBusy}
+        canvaLabel={canvaButtonLabel(canvaState, dirty)}
+        onCanvaAction={handleCanvaAction}
         onProjectChange={setProject}
         project={project}
       />
