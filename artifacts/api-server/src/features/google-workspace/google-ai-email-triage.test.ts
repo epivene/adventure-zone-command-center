@@ -100,6 +100,24 @@ describe("triageGoogleEmailWithAi", () => {
     expect(result.reason).toMatch(/invalid/i);
   });
 
+  it("fails closed when the AI provider never responds", async () => {
+    const result = await triageGoogleEmailWithAi({
+      ...baseInput,
+      timeoutMs: 20,
+      ai: {
+        providerName: "Hanging AI",
+        complete: async () => new Promise<string>(() => undefined),
+      },
+    });
+
+    expect(result).toMatchObject({
+      outcome: "review",
+      confidence: "low",
+      providerName: "Hanging AI",
+    });
+    expect(result.reason).toMatch(/unavailable/i);
+  });
+
   it("tells the model that contact ownership is supporting evidence, not authority", async () => {
     const ai = client(JSON.stringify({
       decision: "REVIEW",
