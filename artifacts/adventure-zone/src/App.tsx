@@ -82,6 +82,7 @@ const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCo
 const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
+const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -344,6 +345,7 @@ function AdminProtectedApp() {
           <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
           <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
+          <Route path="/email-review" component={EmailReviewPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>

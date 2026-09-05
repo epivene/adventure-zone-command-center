@@ -23,6 +23,7 @@ type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
   { href: "/profiles", label: "Profiles" },
+  { href: "/email-review", label: "Email Review" },
   { href: "/calls/workspace", label: "Calls" },
   { href: "/calls/voicemail", label: "Voicemail" },
   { href: "/website-inquiries", label: "Website Inquiries" },
@@ -63,6 +64,12 @@ const marketingGroups: MenuGroup[] = [
 ];
 
 const adminToolsGroups: MenuGroup[] = [
+  {
+    label: "Review queues",
+    items: [
+      { href: "/email-review", label: "Email Review" },
+    ],
+  },
   {
     label: "Data & Imports",
     items: [
@@ -133,12 +140,29 @@ export function AddMenu() {
   );
 }
 
-function MenuLink({ item, workspace, location, websiteInquiryCount = 0 }: { item: MenuItem; workspace: AdminWorkspace; location: string; websiteInquiryCount?: number }) {
+function MenuLink({
+  item,
+  workspace,
+  location,
+  websiteInquiryCount = 0,
+  pendingEmailReviewCount = 0,
+}: {
+  item: MenuItem;
+  workspace: AdminWorkspace;
+  location: string;
+  websiteInquiryCount?: number;
+  pendingEmailReviewCount?: number;
+}) {
   const active = location === item.href || location.startsWith(`${item.href}/`);
+  const ariaLabel = item.href === "/website-inquiries" && websiteInquiryCount > 0
+    ? `Website Inquiries, ${websiteInquiryCount} new`
+    : item.href === "/email-review" && pendingEmailReviewCount > 0
+      ? `Email Review, ${pendingEmailReviewCount} pending`
+      : undefined;
   return (
     <DropdownMenuItem asChild className={cn(active && "bg-secondary font-semibold text-secondary-foreground")}>
       <Link
-        aria-label={item.href === "/website-inquiries" && websiteInquiryCount > 0 ? `Website Inquiries, ${websiteInquiryCount} new` : undefined}
+        aria-label={ariaLabel}
         href={item.href}
         onClick={() => {
           if (item.rememberBookingBeforeOpen && workspace === "booking") saveBookingReturnPath(location);
@@ -148,6 +172,11 @@ function MenuLink({ item, workspace, location, websiteInquiryCount = 0 }: { item
         {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
           <span className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
             {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
+          </span>
+        ) : null}
+        {item.href === "/email-review" && pendingEmailReviewCount > 0 ? (
+          <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
+            {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
           </span>
         ) : null}
       </Link>
@@ -162,6 +191,7 @@ function MenuSubmenu({
   location,
   nestedGroups = false,
   websiteInquiryCount = 0,
+  pendingEmailReviewCount = 0,
 }: {
   label: string;
   groups: MenuGroup[];
@@ -169,6 +199,7 @@ function MenuSubmenu({
   location: string;
   nestedGroups?: boolean;
   websiteInquiryCount?: number;
+  pendingEmailReviewCount?: number;
 }) {
   return (
     <DropdownMenuSub>
@@ -189,6 +220,7 @@ function MenuSubmenu({
                     workspace={workspace}
                     location={location}
                     websiteInquiryCount={websiteInquiryCount}
+                    pendingEmailReviewCount={pendingEmailReviewCount}
                     key={`${group.label}:${item.href}:${item.label}`}
                   />
                 ))}
@@ -201,6 +233,7 @@ function MenuSubmenu({
                 workspace={workspace}
                 location={location}
                 websiteInquiryCount={websiteInquiryCount}
+                pendingEmailReviewCount={pendingEmailReviewCount}
                 key={`${group.label}:${item.href}:${item.label}`}
               />
             ))
@@ -240,11 +273,13 @@ export function AppMenu({
   mobile = false,
   unreadMessages = 0,
   websiteInquiryCount = 0,
+  pendingEmailReviewCount = 0,
 }: {
   workspace: AdminWorkspace;
   mobile?: boolean;
   unreadMessages?: number;
   websiteInquiryCount?: number;
+  pendingEmailReviewCount?: number;
 }) {
   const { signOut } = useAuth();
   const { openAssistant } = useAssistantContext();
@@ -264,7 +299,7 @@ export function AppMenu({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
-          aria-label="More"
+          aria-label={pendingEmailReviewCount > 0 ? `More, ${pendingEmailReviewCount} email reviews pending` : "More"}
           className={cn(
             "inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground",
             mobile && "flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-2 text-xs",
@@ -273,6 +308,11 @@ export function AppMenu({
         >
           <Ellipsis className="h-5 w-5" />
           <span className={mobile ? "" : "hidden xl:inline"}>More</span>
+          {pendingEmailReviewCount > 0 ? (
+            <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
+              {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
+            </span>
+          ) : null}
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -289,6 +329,7 @@ export function AppMenu({
                 workspace={workspace}
                 location={location}
                 websiteInquiryCount={websiteInquiryCount}
+                pendingEmailReviewCount={pendingEmailReviewCount}
               />
             ) : null}
             <DropdownMenuItem asChild className="rounded-md px-2 py-2">
@@ -319,7 +360,7 @@ export function AppMenu({
         ) : null}
         {mobile && workspace === "booking" ? (
           <div className="grid gap-0.5 py-1">
-            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} key={`${item.href}:${item.label}`} />)}
+            {bookingMenuItems.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} key={`${item.href}:${item.label}`} />)}
           </div>
         ) : null}
         {mobile
@@ -340,7 +381,7 @@ export function AppMenu({
                   </button>
                   {expanded ? (
                     <div className="grid gap-0.5 pb-1 pl-2">
-                      {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} key={`${group.label}:${item.href}:${item.label}`} />)}
+                      {group.items.map((item) => <MenuLink item={item} workspace={workspace} location={location} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} key={`${group.label}:${item.href}:${item.label}`} />)}
                     </div>
                   ) : null}
                 </div>
@@ -355,6 +396,7 @@ export function AppMenu({
                     workspace={workspace}
                     location={location}
                     websiteInquiryCount={websiteInquiryCount}
+                    pendingEmailReviewCount={pendingEmailReviewCount}
                   />
                 ) : null}
               </div>
@@ -368,6 +410,7 @@ export function AppMenu({
             location={location}
             nestedGroups
             websiteInquiryCount={websiteInquiryCount}
+            pendingEmailReviewCount={pendingEmailReviewCount}
           />
         ) : null}
         <DropdownMenuSeparator />

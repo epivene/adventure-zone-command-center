@@ -34,7 +34,15 @@ function itemsForWorkspace(workspace: AdminWorkspace): MobileItem[] {
   return [{ href: "/command", label: "Panel", icon: LayoutGrid }];
 }
 
-export function MobileBottomNav({ workspace, websiteInquiryCount = 0 }: { workspace: AdminWorkspace; websiteInquiryCount?: number }) {
+export function MobileBottomNav({
+  workspace,
+  websiteInquiryCount = 0,
+  pendingEmailReviewCount = 0,
+}: {
+  workspace: AdminWorkspace;
+  websiteInquiryCount?: number;
+  pendingEmailReviewCount?: number;
+}) {
   const [location] = useLocation();
   const primaryItems = itemsForWorkspace(workspace);
 
@@ -64,7 +72,7 @@ export function MobileBottomNav({ workspace, websiteInquiryCount = 0 }: { worksp
             </Link>
           );
         })}
-        <AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} />
+        <AppMenu workspace={workspace} mobile websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />
       </div>
     </nav>
   );
