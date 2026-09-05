@@ -36,4 +36,12 @@ describe("Boss workspace route boundaries", () => {
     expect(admin).toContain("res.json({ accounts: await repository.list() })");
     expect(admin).toContain("res.status(201).json({ account: publicAccount");
   });
+  it("keeps business documents inside the mapped Boss Office workspace", () => {
+    const documents = source("boss-documents.ts");
+    expect(documents).toContain('router.get("/boss/documents", requireBoss');
+    expect(documents).toContain("req.bossAccount!.studioOfficeAccountId");
+    expect(documents).toContain("eq(designProjects.officeAccountId, officeAccountId)");
+    expect(documents).toContain("eq(designAssets.uploadedByAccountId, officeAccountId)");
+    expect(documents).toContain("eq(officeEmailDrafts.officeAccountId, officeAccountId)");
+  });
 });

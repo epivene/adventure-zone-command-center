@@ -39,7 +39,7 @@ const navItems: NavItem[] = [
   { href: "/boss/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/boss/assignments", label: "Assignments", icon: ClipboardList },
   { href: "/boss/design-studio", label: "Studio", icon: Palette },
-  { href: "/boss/templates-files", label: "Templates", icon: ClipboardCheck },
+  { href: "/boss/templates-files", label: "Documents", icon: ClipboardCheck },
 ];
 
 const appearanceOptions = [
