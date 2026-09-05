@@ -25,3 +25,4 @@ export {
   designTemplateFavorites,
   designTemplates,
 } from "@workspace/db/design-studio-schema";
+export * from "@workspace/db/contract-schema";
