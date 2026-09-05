@@ -185,4 +185,32 @@ describe("GoogleHistoricalBackfillService", () => {
     });
     expect(repo.finishBatch).toHaveBeenCalledOnce();
   });
+
+  it("records a stalled Gmail metadata fetch as failed and continues", async () => {
+    const gmail = readClient(["stalled", "next"], null);
+    gmail.getMessageMetadata = vi.fn(async (id) => {
+      if (id === "stalled") return new Promise<never>(() => undefined);
+      return message(id);
+    });
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => gmail },
+      repository: repo,
+      classifier: { classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }) },
+      validationRepository: validationRepository(),
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
+    expect(repo.recordOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: "stalled",
+      outcome: "failed",
+      errorCode: "GOOGLE_WORKSPACE_OPERATION_TIMEOUT",
+    }));
+  });
 });

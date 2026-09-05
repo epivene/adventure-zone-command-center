@@ -284,7 +284,10 @@ export class GoogleHistoricalBackfillService {
 
       let message: GoogleMessageMetadata;
       try {
-        message = await client.getMessageMetadata(ref.id);
+        message = await withGoogleTimeout(
+          client.getMessageMetadata(ref.id),
+          this.ioTimeoutMs,
+        );
       } catch (error) {
         const code = safeErrorCode(error);
         if (isStopError(code)) {
