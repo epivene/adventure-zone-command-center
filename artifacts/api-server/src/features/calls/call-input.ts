@@ -26,10 +26,7 @@ const callDispositionSchema = z.enum([
 ]);
 
 const nullableText = z.union([z.string(), z.null()]).transform((value) => value?.trim() || null);
-const nullableEmail = z
-  .union([z.string(), z.null()])
-  .transform((value) => value ?? "")
-  .pipe(nullableContactEmailSchema);
+const nullableEmail = nullableContactEmailSchema;
 const transportDate = z.union([
   z.date(),
   z.string().datetime({ offset: true }).transform((value) => new Date(value)),
