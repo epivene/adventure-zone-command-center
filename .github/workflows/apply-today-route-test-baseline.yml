@@ -1,0 +1,63 @@
+name: Apply Today route test baseline fix
+
+on:
+  push:
+    branches:
+      - test/today-route-baseline
+    paths:
+      - ".github/workflows/apply-today-route-test-baseline.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: test/today-route-baseline
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refresh Today route test fixtures
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/routes/today.test.ts')
+          text = path.read_text()
+          text = text.replace(
+              'const SNOOZE_UNTIL = "2026-08-27T15:00:00.000Z";',
+              'const SNOOZE_UNTIL = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();',
+              1,
+          )
+          text = text.replace(
+              '    const { app } = testApp({ reorder: vi.fn(async () => false) });',
+              '    const { app } = testApp(controls({ reorder: vi.fn(async () => false) }));',
+              1,
+          )
+          path.write_text(text)
+          PY
+      - name: Run Today route tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/today.test.ts
+      - name: Verify Today test typing is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'routes/today\.test\.ts\(' /tmp/api-typecheck.log; then
+            echo 'Today route test type errors remain.' >&2
+            exit 1
+          fi
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/today.test.ts
+          git diff --cached --quiet || git commit -m "test: refresh Today route baseline"
+          git push origin HEAD:test/today-route-baseline
