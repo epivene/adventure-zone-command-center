@@ -196,8 +196,11 @@ export function SimpleFullProfile({
   const nextFollowUp = openFollowUps[0] ?? null;
   const followUpOverdue = Boolean(nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now());
   const managerReviews = ((profile as EventProfile & { managerReviews?: ProfileManagerReview[] }).managerReviews ?? []);
-  const ratingCount = ratingSummary?.count ?? 0;
-  const average = ratingSummary?.average ?? 0;
+  const managerReviewAverage = managerReviews.length
+    ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length
+    : null;
+  const ratingCount = managerReviews.length || ratingSummary?.count || 0;
+  const average = managerReviewAverage ?? ratingSummary?.average ?? 0;
   const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
   const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
   const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({

@@ -283,5 +283,9 @@ describe("EventProfilePage ratings", () => {
     expect(screen.getAllByText(/The organizer was happy with the event/)[0]).toBeVisible();
     expect(screen.getByRole("link", { name: "Review for Prairie Days 2027" })).toHaveAttribute("href", `/bookings/${bookingId}`);
     expect(screen.getAllByText("Recommend return: yes")[0]).toBeVisible();
+    expect(screen.getByLabelText("4.0 out of 5 stars from 1 reviews")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "1Bookings" }));
+    expect(screen.getByText("Good standing")).toBeVisible();
+    expect(screen.getByText("1 rated occurrence")).toBeVisible();
   });
 });
