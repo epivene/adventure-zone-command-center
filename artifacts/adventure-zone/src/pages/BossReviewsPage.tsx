@@ -4,7 +4,7 @@ import { RefreshCw, Star } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { bossGet } from "@/lib/boss-auth-context";
+import { bossDelete, bossGet } from "@/lib/boss-auth-context";
 
 type ReviewItem = {
   id?: string;
@@ -26,6 +26,7 @@ export default function BossReviewsPage() {
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
   const search = useSearch();
   const focusBookingId = new URLSearchParams(search).get("bookingId");
 
@@ -43,6 +44,17 @@ export default function BossReviewsPage() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  async function removeDue(item: ReviewItem) {
+    if (!item.bookingId || !window.confirm(`Remove “${item.title ?? "this event"}” from Review Due?`)) return;
+    setBusy(item.bookingId);
+    try {
+      await bossDelete(`/boss/reviews/due/${item.bookingId}`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove review-due item.");
+    } finally { setBusy(null); }
+  }
 
   return (
     <div className="grid gap-5" data-testid="boss-reviews-page">
@@ -111,6 +123,11 @@ export default function BossReviewsPage() {
                 </div>
                 {item.notes ? (
                   <p className="mt-3 text-sm text-muted-foreground whitespace-pre-wrap">{item.notes as string}</p>
+                ) : null}
+                {item.status === "review_due" && item.bookingId ? (
+                  <Button className="mt-3 text-destructive" variant="outline" size="sm" disabled={busy === item.bookingId} onClick={() => void removeDue(item)}>
+                    {busy === item.bookingId ? "Removing…" : "Remove from Review Due"}
+                  </Button>
                 ) : null}
                 {/* Show any other top-level keys as detail fields */}
                 {Object.entries(item).filter(([k]) => !["id", "bookingId", "title", "eventDate", "status", "wrapUpStatus", "notes"].includes(k)).map(([k, v]) => {

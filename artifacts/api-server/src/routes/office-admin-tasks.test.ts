@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   listForOwner: vi.fn(),
   createForOwner: vi.fn(),
   updateForOwner: vi.fn(),
+  deleteForOwner: vi.fn(),
   reorderForOwner: vi.fn(),
   dbSelect: vi.fn(),
   dbFrom: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("@/features/office/office-task-repository", () => ({
     listForOwner = mocks.listForOwner;
     createForOwner = mocks.createForOwner;
     updateForOwner = mocks.updateForOwner;
+    deleteForOwner = mocks.deleteForOwner;
     reorderForOwner = mocks.reorderForOwner;
   },
 }));
@@ -50,6 +52,7 @@ beforeEach(() => {
   mocks.listForOwner.mockResolvedValue([]);
   mocks.createForOwner.mockResolvedValue({ id: taskId });
   mocks.updateForOwner.mockResolvedValue({ id: taskId });
+  mocks.deleteForOwner.mockResolvedValue({ id: taskId });
   mocks.reorderForOwner.mockResolvedValue(true);
 });
 
@@ -103,5 +106,11 @@ describe("owner office task routes", () => {
     });
     expect(response.status).toBe(200);
     expect(mocks.reorderForOwner).toHaveBeenCalledWith(accountId, [taskId, "20000000-0000-4000-8000-000000000002"]);
+  });
+
+  it("lets the owner permanently remove a task", async () => {
+    const response = await request(app()).delete(`/office-admin/tasks/${taskId}`);
+    expect(response.status).toBe(200);
+    expect(mocks.deleteForOwner).toHaveBeenCalledWith(taskId);
   });
 });

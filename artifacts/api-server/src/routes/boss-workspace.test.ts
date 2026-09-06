@@ -13,6 +13,10 @@ describe("Boss workspace route boundaries", () => {
     expect(dashboard).toContain("reviewsDue");
     expect(dashboard).not.toContain("reviewAndWrapUp: []");
     expect(dashboard).not.toContain("checklistAndMaintenance: []");
+    expect(dashboard).toContain('router.get("/boss/maintenance/:runId", requireBoss');
+    expect(dashboard).toContain('router.delete("/boss/maintenance/:runId", requireBoss');
+    expect(dashboard).toContain('router.delete("/boss/reviews/due/:bookingId", requireBoss');
+    expect(dashboard).toContain("event_manager_review_dismissals");
   });
   it("boss leg controls require Boss authentication and validate mutable inputs", () => {
     const operations = source("boss-operations.ts");

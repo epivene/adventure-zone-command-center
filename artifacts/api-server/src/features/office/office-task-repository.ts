@@ -202,6 +202,14 @@ export class DrizzleOfficeTaskRepository {
     return updated ?? null;
   }
 
+  async deleteForOwner(taskId: string) {
+    const [deleted] = await this.database
+      .delete(officeTasks)
+      .where(eq(officeTasks.id, taskId))
+      .returning({ id: officeTasks.id });
+    return deleted ?? null;
+  }
+
   async reorderForOwner(accountId: string, taskIds: string[]): Promise<boolean> {
     return this.database.transaction(async (transaction) => {
       const rows = await transaction

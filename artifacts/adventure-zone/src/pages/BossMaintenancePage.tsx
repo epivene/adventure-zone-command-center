@@ -3,7 +3,7 @@ import { RefreshCw, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { bossGet } from "@/lib/boss-auth-context";
+import { bossDelete, bossGet } from "@/lib/boss-auth-context";
 
 type MaintenanceItem = {
   id?: string;
@@ -19,6 +19,12 @@ type MaintenanceItem = {
 type DashboardData = {
   checklistAndMaintenance?: MaintenanceItem[];
   [key: string]: unknown;
+};
+
+type MaintenanceRecord = MaintenanceItem & {
+  bookingName?: string;
+  legName?: string;
+  items: Array<{ id: string; label: string; resourceName: string | null; result: string | null; note: string | null }>;
 };
 
 function phaseLabel(phase?: string | null) {
@@ -48,6 +54,9 @@ export default function BossMaintenancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [record, setRecord] = useState<MaintenanceRecord | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -67,6 +76,31 @@ export default function BossMaintenancePage() {
   const phases = ["all", ...Array.from(new Set(items.map((i) => i.phase).filter(Boolean) as string[]))];
 
   const filtered = filter === "all" ? items : items.filter((i) => i.phase === filter);
+
+  async function openRecord(id: string) {
+    if (openId === id) { setOpenId(null); setRecord(null); return; }
+    setBusy(id);
+    setError(null);
+    try {
+      const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
+      setRecord(data.record);
+      setOpenId(id);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open maintenance record.");
+    } finally { setBusy(null); }
+  }
+
+  async function removeRecord(item: MaintenanceItem) {
+    if (!item.id || !window.confirm(`Remove the saved maintenance record for “${item.title ?? "this event"}”?`)) return;
+    setBusy(item.id);
+    try {
+      await bossDelete(`/boss/maintenance/${item.id}`);
+      if (openId === item.id) { setOpenId(null); setRecord(null); }
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove maintenance record.");
+    } finally { setBusy(null); }
+  }
 
   return (
     <div className="grid gap-5" data-testid="boss-maintenance-page">
@@ -149,6 +183,25 @@ export default function BossMaintenancePage() {
               {item.notes ? (
                 <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{item.notes as string}</p>
               ) : null}
+              {item.id ? <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" disabled={busy === item.id} onClick={() => void openRecord(item.id!)}>
+                  {openId === item.id ? "Close record" : busy === item.id ? "Opening…" : "Open record"}
+                </Button>
+                <Button size="sm" variant="outline" className="text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
+                  Remove
+                </Button>
+              </div> : null}
+              {openId === item.id && record ? <div className="mt-4 grid gap-2 border-t border-border pt-4">
+                <p className="text-sm font-semibold">{record.legName ?? "Crew"} · {record.items.length} checklist item{record.items.length === 1 ? "" : "s"}</p>
+                {record.items.map((detail) => <div className="rounded-lg bg-muted/50 p-3 text-sm" key={detail.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-semibold">{detail.label}</p>
+                    <Badge variant="outline" className="capitalize">{detail.result?.replaceAll("_", " ") ?? "Not answered"}</Badge>
+                  </div>
+                  {detail.resourceName ? <p className="mt-1 text-xs text-muted-foreground">{detail.resourceName}</p> : null}
+                  {detail.note ? <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.note}</p> : null}
+                </div>)}
+              </div> : null}
             </div>
           ))}
         </div>

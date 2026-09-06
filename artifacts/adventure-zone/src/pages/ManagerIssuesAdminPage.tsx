@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPost } from "@/lib/auth-token";
 
 type ScheduleIssue = {
   id: string;
@@ -45,27 +45,71 @@ type ChecklistSummary = {
   checkoutOverride: boolean;
 };
 
+type ChecklistRecord = ChecklistSummary & {
+  items: Array<{ id: string; label: string; resourceName: string | null; result: string | null; note: string | null }>;
+};
+
+type ReviewDue = { bookingId: string; bookingName: string; legName: string; endsAt: string | null };
+
 export default function ManagerIssuesAdminPage() {
   const [issues, setIssues] = useState<ScheduleIssue[]>([]);
   const [safetyIssues, setSafetyIssues] = useState<SafetyIssue[]>([]);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
+  const [reviewsDue, setReviewsDue] = useState<ReviewDue[]>([]);
+  const [openRecord, setOpenRecord] = useState<ChecklistRecord | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   async function load() {
     setError("");
     try {
-      const [schedule, safety, checklistData] = await Promise.all([
+      const [schedule, safety, checklistData, reviewData] = await Promise.all([
         apiGet<{ issues: ScheduleIssue[] }>("/manager-admin/issues?status=open"),
         apiGet<{ issues: SafetyIssue[] }>("/manager-admin/resource-condition-issues?state=open"),
         apiGet<{ checklists: ChecklistSummary[] }>("/manager-admin/events/checklists"),
+        apiGet<{ reviewsDue: ReviewDue[] }>("/manager-admin/reviews/due"),
       ]);
       setIssues(schedule.issues ?? []);
       setSafetyIssues(safety.issues ?? []);
       setChecklists(checklistData.checklists ?? []);
+      setReviewsDue(reviewData.reviewsDue ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load manager issues.");
     }
+  }
+
+  async function toggleChecklist(run: ChecklistSummary) {
+    if (openRecord?.id === run.id) { setOpenRecord(null); return; }
+    setBusy(`open:${run.id}`);
+    try {
+      const data = await apiGet<{ record: ChecklistRecord }>(`/manager-admin/events/checklists/${run.id}`);
+      setOpenRecord(data.record);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open checklist.");
+    } finally { setBusy(null); }
+  }
+
+  async function removeChecklist(run: ChecklistSummary) {
+    if (!window.confirm(`Remove the saved checklist for “${run.bookingName}”?`)) return;
+    setBusy(`remove:${run.id}`);
+    try {
+      await apiDelete(`/manager-admin/events/checklists/${run.id}`);
+      if (openRecord?.id === run.id) setOpenRecord(null);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove checklist.");
+    } finally { setBusy(null); }
+  }
+
+  async function removeReviewDue(item: ReviewDue) {
+    if (!window.confirm(`Remove “${item.bookingName}” from Review Due?`)) return;
+    setBusy(`review:${item.bookingId}`);
+    try {
+      await apiDelete(`/manager-admin/reviews/due/${item.bookingId}`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove review-due item.");
+    } finally { setBusy(null); }
   }
 
   useEffect(() => { void load(); }, []);
@@ -156,8 +200,29 @@ export default function ManagerIssuesAdminPage() {
               {run.readyOverride ? <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">Ready-to-operate override</span> : null}
               {run.checkoutOverride ? <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">Checkout override</span> : null}
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="button-secondary" disabled={busy !== null} onClick={() => void toggleChecklist(run)} type="button">{openRecord?.id === run.id ? "Close record" : "Open record"}</button>
+              <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeChecklist(run)} type="button">Remove</button>
+            </div>
+            {openRecord?.id === run.id ? <div className="mt-4 grid gap-2 border-t pt-4">
+              {openRecord.items.map((item) => <div className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}>
+                <div className="flex justify-between gap-2"><strong>{item.label}</strong><span className="capitalize text-slate-600">{item.result?.replaceAll("_", " ") ?? "Not answered"}</span></div>
+                {item.resourceName ? <p className="text-xs text-slate-500">{item.resourceName}</p> : null}
+                {item.note ? <p className="mt-2 whitespace-pre-wrap">{item.note}</p> : null}
+              </div>)}
+            </div> : null}
           </article>
         )) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No event safety checklists yet.</p>}
+      </section>
+
+      <section className="grid gap-3">
+        <div><h2 className="text-xl font-bold">Review Due</h2><p className="text-sm text-slate-600">Completed events still waiting for a crew review. Remove items that should no longer be requested.</p></div>
+        {reviewsDue.length ? reviewsDue.map((item) => <article className="rounded-xl border bg-white p-4" key={item.bookingId}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><h3 className="font-bold">{item.bookingName}</h3><p className="text-sm text-slate-600">{item.legName}{item.endsAt ? ` · ${new Date(item.endsAt).toLocaleDateString()}` : ""}</p></div>
+            <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeReviewDue(item)} type="button">Remove from Review Due</button>
+          </div>
+        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No reviews are due.</p>}
       </section>
 
       <section className="grid gap-3">
