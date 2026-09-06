@@ -14,6 +14,8 @@ type Receipt = {
   submittedAt?: string | null;
   status?: string | null;
   vendor?: string | null;
+  imageUrl?: string | null;
+  mimeType?: string | null;
   [key: string]: unknown;
 };
 
@@ -89,9 +91,14 @@ export default function BossReceiptsPage() {
           {receipts.map((r) => (
             <div
               key={r.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
+              className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[7rem_1fr_auto]"
               data-testid={`receipt-row-${r.id}`}
             >
+              {r.imageUrl ? (
+                <a href={r.imageUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border bg-muted">
+                  <img src={r.imageUrl} alt={`Receipt from ${r.vendor ?? "submitted expense"}`} className="h-28 w-full object-cover sm:h-24" />
+                </a>
+              ) : <div className="flex h-24 items-center justify-center rounded-lg bg-muted px-2 text-center text-xs text-muted-foreground">Photo unavailable</div>}
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-foreground truncate">
                   {r.vendor ?? r.description ?? r.category ?? "Receipt"}
@@ -113,6 +120,7 @@ export default function BossReceiptsPage() {
                 <Badge variant={statusVariant(r.status)} className="capitalize">
                   {r.status ?? "submitted"}
                 </Badge>
+                {r.imageUrl ? <Button asChild size="sm" variant="outline"><a href={r.imageUrl} target="_blank" rel="noreferrer">Open photo</a></Button> : null}
               </div>
             </div>
           ))}

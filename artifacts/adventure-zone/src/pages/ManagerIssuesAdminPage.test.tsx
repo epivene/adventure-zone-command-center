@@ -24,5 +24,7 @@ describe("ManagerIssuesAdminPage safety oversight", () => {
     expect(source).toContain("Remove from Review Due");
     expect(source).toContain("apiDelete(`/manager-admin/events/checklists/${run.id}`)");
     expect(source).toContain("apiDelete(`/manager-admin/reviews/due/${item.bookingId}`)");
+    expect(source).toContain("apiPatch(`/manager-admin/reviews/${review.id}`");
+    expect(source).toContain("apiDelete(`/manager-admin/reviews/${review.id}`)");
   });
 });

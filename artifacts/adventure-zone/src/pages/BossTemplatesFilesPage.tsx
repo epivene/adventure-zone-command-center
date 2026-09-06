@@ -63,7 +63,7 @@ function ContractCard({ document }: { document: BossContractDocument }) {
 
 function CertificateCard({ document }: { document: BossCertificateDocument }) {
   const destination = document.bookingId
-    ? `/boss/bookings/${document.bookingId}`
+    ? "/boss/schedule"
     : document.organizationId ? `/boss/contacts/${document.organizationId}` : null;
   return (
     <article className="rounded-xl border border-border bg-card p-4 shadow-sm">

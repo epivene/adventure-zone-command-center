@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiDelete, apiGet, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
 type ScheduleIssue = {
   id: string;
@@ -50,12 +50,18 @@ type ChecklistRecord = ChecklistSummary & {
 };
 
 type ReviewDue = { bookingId: string; bookingName: string; legName: string; endsAt: string | null };
+type SavedReview = {
+  id: string; bookingName: string; legName: string; rating: number; feedback: string | null;
+  organizerSiteNotes: string | null; crewNotes: string | null; recommendReturn: "yes" | "no" | "unsure" | null;
+  createdAt: string;
+};
 
 export default function ManagerIssuesAdminPage() {
   const [issues, setIssues] = useState<ScheduleIssue[]>([]);
   const [safetyIssues, setSafetyIssues] = useState<SafetyIssue[]>([]);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
   const [reviewsDue, setReviewsDue] = useState<ReviewDue[]>([]);
+  const [savedReviews, setSavedReviews] = useState<SavedReview[]>([]);
   const [openRecord, setOpenRecord] = useState<ChecklistRecord | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -63,16 +69,18 @@ export default function ManagerIssuesAdminPage() {
   async function load() {
     setError("");
     try {
-      const [schedule, safety, checklistData, reviewData] = await Promise.all([
+      const [schedule, safety, checklistData, reviewData, savedReviewData] = await Promise.all([
         apiGet<{ issues: ScheduleIssue[] }>("/manager-admin/issues?status=open"),
         apiGet<{ issues: SafetyIssue[] }>("/manager-admin/resource-condition-issues?state=open"),
         apiGet<{ checklists: ChecklistSummary[] }>("/manager-admin/events/checklists"),
         apiGet<{ reviewsDue: ReviewDue[] }>("/manager-admin/reviews/due"),
+        apiGet<{ reviews: SavedReview[] }>("/manager-admin/reviews"),
       ]);
       setIssues(schedule.issues ?? []);
       setSafetyIssues(safety.issues ?? []);
       setChecklists(checklistData.checklists ?? []);
       setReviewsDue(reviewData.reviewsDue ?? []);
+      setSavedReviews(savedReviewData.reviews ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load manager issues.");
     }
@@ -109,6 +117,42 @@ export default function ManagerIssuesAdminPage() {
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not remove review-due item.");
+    } finally { setBusy(null); }
+  }
+
+  async function editSavedReview(review: SavedReview) {
+    const ratingText = window.prompt("Rating from 0 to 5", String(review.rating));
+    if (ratingText == null) return;
+    const rating = Number(ratingText);
+    if (!Number.isInteger(rating) || rating < 0 || rating > 5) {
+      setError("Rating must be a whole number from 0 to 5.");
+      return;
+    }
+    const feedback = window.prompt("Feedback", review.feedback ?? "");
+    if (feedback == null) return;
+    const crewNotes = window.prompt("Crew notes", review.crewNotes ?? "");
+    if (crewNotes == null) return;
+    setBusy(`saved-review:${review.id}`);
+    try {
+      await apiPatch(`/manager-admin/reviews/${review.id}`, {
+        rating,
+        feedback: feedback.trim() || null,
+        crewNotes: crewNotes.trim() || null,
+      });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update review.");
+    } finally { setBusy(null); }
+  }
+
+  async function deleteSavedReview(review: SavedReview) {
+    if (!window.confirm(`Delete the saved review for “${review.bookingName}”?`)) return;
+    setBusy(`saved-review:${review.id}`);
+    try {
+      await apiDelete(`/manager-admin/reviews/${review.id}`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not delete review.");
     } finally { setBusy(null); }
   }
 
@@ -223,6 +267,24 @@ export default function ManagerIssuesAdminPage() {
             <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeReviewDue(item)} type="button">Remove from Review Due</button>
           </div>
         </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No reviews are due.</p>}
+      </section>
+
+      <section className="grid gap-3">
+        <div><h2 className="text-xl font-bold">Saved event reviews</h2><p className="text-sm text-slate-600">Correct or delete reviews when operational records need to be updated.</p></div>
+        {savedReviews.length ? savedReviews.map((review) => <article className="rounded-xl border bg-white p-4" key={review.id}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">{review.bookingName}</h3>
+              <p className="text-sm text-slate-600">{review.legName} · {review.rating}/5 · {new Date(review.createdAt).toLocaleDateString()}</p>
+              {review.feedback ? <p className="mt-2 whitespace-pre-wrap text-sm">{review.feedback}</p> : null}
+              {review.crewNotes ? <p className="mt-2 text-sm"><strong>Crew:</strong> {review.crewNotes}</p> : null}
+            </div>
+            <div className="flex gap-2">
+              <button className="button-secondary" disabled={busy !== null} onClick={() => void editSavedReview(review)} type="button">Edit review</button>
+              <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void deleteSavedReview(review)} type="button">Delete review</button>
+            </div>
+          </div>
+        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No saved event reviews.</p>}
       </section>
 
       <section className="grid gap-3">

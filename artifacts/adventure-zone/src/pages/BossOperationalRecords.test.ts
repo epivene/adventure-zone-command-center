@@ -13,6 +13,20 @@ describe("Boss operational record controls", () => {
     const source = readFileSync("src/pages/BossReviewsPage.tsx", "utf8");
     expect(source).toContain("Remove from Review Due");
     expect(source).toContain("bossDelete(`/boss/reviews/due/${item.bookingId}`)");
+    expect(source).toContain("bossPatch(`/boss/reviews/${item.id}`");
+    expect(source).toContain("bossDelete(`/boss/reviews/${item.id}`)");
+  });
+
+  it("shows receipt photos and keeps booking management out of Boss", () => {
+    const receipts = readFileSync("src/pages/BossReceiptsPage.tsx", "utf8");
+    const schedule = readFileSync("src/pages/BossSchedulePage.tsx", "utf8");
+    const shell = readFileSync("src/components/boss/boss-shell.tsx", "utf8");
+    expect(receipts).toContain("Open photo");
+    expect(receipts).toContain("r.imageUrl");
+    expect(schedule).toContain("Events assigned by Desie");
+    expect(schedule).not.toContain("Booked Events");
+    expect(schedule).not.toContain("assignBookingToLeg");
+    expect(shell).not.toContain('label: "Bookings"');
   });
 
   it("lets the admin permanently remove office tasks", () => {

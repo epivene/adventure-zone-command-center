@@ -7,11 +7,20 @@ import { eventLegLifecycle } from "@/features/leg-manager/event-lifecycle-schema
 import { deleteChecklistRun } from "@/features/leg-manager/delete-checklist-run";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
+import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
 const uuid = z.string().uuid();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
+const receiptStorage = new GoogleCloudLegManagerObjectStorage();
+const reviewPatchSchema = z.object({
+  rating: z.number().int().min(0).max(5).optional(),
+  feedback: z.string().trim().max(12000).nullable().optional(),
+  organizerSiteNotes: z.string().trim().max(12000).nullable().optional(),
+  crewNotes: z.string().trim().max(12000).nullable().optional(),
+  recommendReturn: z.enum(["yes", "no", "unsure"]).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "No review changes provided.");
 
 router.get("/boss/maintenance/:runId", requireBoss, async (req, res): Promise<void> => {
   const runId = param(req.params.runId);
@@ -55,6 +64,52 @@ router.delete("/boss/reviews/due/:bookingId", requireBoss, async (req, res): Pro
   `);
   res.json({ ok: true });
 });
+
+router.patch("/boss/reviews/:reviewId", requireBoss, async (req, res): Promise<void> => {
+  const reviewId = param(req.params.reviewId);
+  const parsed = reviewPatchSchema.safeParse(req.body);
+  if (!uuid.safeParse(reviewId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid review ID." : parsed.error.issues[0]?.message ?? "Review the changes." });
+    return;
+  }
+  const [review] = await db.update(eventManagerReviews)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(and(
+      eq(eventManagerReviews.id, reviewId),
+      sql`exists (
+        select 1 from bookings b
+        where b.id=${eventManagerReviews.bookingId}
+          and b.travel_leg_id=${eventManagerReviews.legId}
+      )`,
+    ))
+    .returning();
+  if (!review) { res.status(404).json({ error: "Review not found for an assigned event." }); return; }
+  res.json({ review });
+});
+
+router.delete("/boss/reviews/:reviewId", requireBoss, async (req, res): Promise<void> => {
+  const reviewId = param(req.params.reviewId);
+  if (!uuid.safeParse(reviewId).success) { res.status(400).json({ error: "Invalid review ID." }); return; }
+  const [review] = await db.delete(eventManagerReviews)
+    .where(and(
+      eq(eventManagerReviews.id, reviewId),
+      sql`exists (
+        select 1 from bookings b
+        where b.id=${eventManagerReviews.bookingId}
+          and b.travel_leg_id=${eventManagerReviews.legId}
+      )`,
+    ))
+    .returning({ id: eventManagerReviews.id, bookingId: eventManagerReviews.bookingId, legId: eventManagerReviews.legId });
+  if (!review) { res.status(404).json({ error: "Review not found for an assigned event." }); return; }
+  await db.execute(sql`
+    insert into event_manager_review_dismissals (booking_id, leg_id, reason, dismissed_by)
+    values (${review.bookingId}::uuid, ${review.legId}::uuid, 'Saved review deleted by Boss', ${req.bossAccount!.displayName})
+    on conflict (booking_id, leg_id) do update set
+      reason=excluded.reason, dismissed_by=excluded.dismissed_by, dismissed_at=now(), updated_at=now()
+  `);
+  res.json({ ok: true });
+});
+
 router.get("/boss/dashboard", requireBoss, async (req, res) => {
   const officeAccountId = req.bossAccount!.studioOfficeAccountId;
   const [receipts, submittedDrafts, assignments, reviews, reviewsDue, checklists, lifecycle, businessDocumentCounts] = await Promise.all([
@@ -70,6 +125,8 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       description: legExpenses.notes,
       submittedAt: legReceipts.createdAt,
       imageStatus: legReceipts.imageStatus,
+      objectKey: legReceipts.objectKey,
+      mimeType: legReceipts.mimeType,
     }).from(legReceipts)
       .innerJoin(legExpenses, eq(legExpenses.id, legReceipts.expenseId))
       .innerJoin(travelLegs, eq(travelLegs.id, legReceipts.legId))
@@ -90,8 +147,8 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
           .limit(25)
        : Promise.resolve([]),
     db.select().from(bossAssignments).orderBy(desc(bossAssignments.updatedAt)).limit(25),
-    db.select({ id: eventManagerReviews.id, bookingId: eventManagerReviews.bookingId, bookingName: bookings.name, legId: eventManagerReviews.legId, legName: travelLegs.name, rating: eventManagerReviews.rating, feedback: eventManagerReviews.feedback, createdAt: eventManagerReviews.createdAt })
-      .from(eventManagerReviews).innerJoin(bookings, eq(bookings.id, eventManagerReviews.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventManagerReviews.legId)).orderBy(desc(eventManagerReviews.createdAt)).limit(25),
+    db.select({ id: eventManagerReviews.id, bookingId: eventManagerReviews.bookingId, bookingName: bookings.name, legId: eventManagerReviews.legId, legName: travelLegs.name, rating: eventManagerReviews.rating, feedback: eventManagerReviews.feedback, organizerSiteNotes: eventManagerReviews.organizerSiteNotes, crewNotes: eventManagerReviews.crewNotes, recommendReturn: eventManagerReviews.recommendReturn, createdAt: eventManagerReviews.createdAt })
+      .from(eventManagerReviews).innerJoin(bookings, and(eq(bookings.id, eventManagerReviews.bookingId), eq(bookings.travelLegId, eventManagerReviews.legId))).innerJoin(travelLegs, eq(travelLegs.id, eventManagerReviews.legId)).orderBy(desc(eventManagerReviews.createdAt)).limit(25),
     db.select({ bookingId: bookings.id, bookingName: bookings.name, legId: bookings.travelLegId, legName: travelLegs.name, endsAt: bookings.endsAt })
       .from(bookings).innerJoin(travelLegs, eq(travelLegs.id, bookings.travelLegId)).leftJoin(eventManagerReviews, eq(eventManagerReviews.bookingId, bookings.id))
       .where(and(
@@ -145,6 +202,10 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       status: "review_completed",
       rating: item.rating,
       notes: item.feedback,
+      feedback: item.feedback,
+      organizerSiteNotes: item.organizerSiteNotes,
+      crewNotes: item.crewNotes,
+      recommendReturn: item.recommendReturn,
     })),
   ];
   const checklistAndMaintenance = checklists.map((item) => ({
@@ -159,13 +220,17 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
     completedAt: item.completedAt,
     notes: item.unableReason,
   }));
+  const visibleReceipts = await Promise.all(receipts.map(async ({ amountCents, imageStatus, objectKey, ...item }) => ({
+    ...item,
+    amount: amountCents / 100,
+    status: imageStatus === "image_uploaded" ? "submitted" : imageStatus,
+    imageUrl: imageStatus === "image_uploaded" && objectKey
+      ? await receiptStorage.getSignedReadUrl(objectKey, 15 * 60).catch(() => null)
+      : null,
+  })));
   res.json({
     submittedReceipts: receipts.length,
-    receipts: receipts.map(({ amountCents, imageStatus, ...item }) => ({
-      ...item,
-      amount: amountCents / 100,
-      status: imageStatus === "image_uploaded" ? "submitted" : imageStatus,
-    })),
+    receipts: visibleReceipts,
     submittedDrafts,
     businessDocumentsCount: businessDocumentCounts.reduce((total, result) => total + Number(result[0]?.value ?? 0), 0),
     assignments,

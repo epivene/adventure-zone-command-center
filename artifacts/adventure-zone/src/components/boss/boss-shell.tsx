@@ -1,7 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  BookOpen,
   Calendar,
   Check,
   ClipboardCheck,
@@ -31,7 +30,6 @@ type NavItem = { href: string; label: string; icon: typeof House };
 
 const navItems: NavItem[] = [
   { href: "/boss", label: "Home", icon: House },
-  { href: "/boss/bookings", label: "Bookings", icon: BookOpen },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
   { href: "/boss/contacts", label: "Contacts", icon: ContactRound },
   { href: "/boss/receipts", label: "Receipts", icon: Receipt },

@@ -16,22 +16,21 @@ describe("Boss workspace route boundaries", () => {
     expect(dashboard).toContain('router.get("/boss/maintenance/:runId", requireBoss');
     expect(dashboard).toContain('router.delete("/boss/maintenance/:runId", requireBoss');
     expect(dashboard).toContain('router.delete("/boss/reviews/due/:bookingId", requireBoss');
+    expect(dashboard).toContain('router.patch("/boss/reviews/:reviewId", requireBoss');
+    expect(dashboard).toContain('router.delete("/boss/reviews/:reviewId", requireBoss');
+    expect(dashboard).toContain("getSignedReadUrl(objectKey");
     expect(dashboard).toContain("event_manager_review_dismissals");
   });
-  it("boss leg controls require Boss authentication and validate mutable inputs", () => {
+  it("keeps booking creation, editing, and leg assignment out of Boss while showing assigned events within legs", () => {
     const operations = source("boss-operations.ts");
     expect(operations).toContain('router.get("/boss/legs", requireBoss');
     expect(operations).toContain('router.patch("/boss/legs/:legId", requireBoss');
-    expect(operations).toContain('router.put("/boss/bookings/:bookingId/leg", requireBoss');
+    expect(operations).not.toContain('"/boss/bookings"');
+    expect(operations).not.toContain('"/boss/bookings/:bookingId"');
+    expect(operations).not.toContain('"/boss/bookings/:bookingId/leg"');
+    expect(operations).toContain("assignedBookings.filter(item => item.travelLegId === leg.id)");
     expect(operations).toContain("defaultMpg: z.number().positive()");
     expect(operations).toContain("sortOrder is intentionally not writable");
-    expect(operations).toContain("Travel leg not found.");
-  });
-  it("protects Boss booking date ordering for partial edits", () => {
-    const operations = source("boss-operations.ts");
-    expect(operations).toContain("effectiveStart");
-    expect(operations).toContain("effectiveEnd");
-    expect(operations).toContain("End date cannot be before the start date.");
   });
   it("admin account responses are explicitly public-field filtered", () => {
     const admin = source("boss-admin-accounts.ts");

@@ -4,8 +4,8 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { bossGet, bossPatch, bossPut } from "@/lib/boss-auth-context";
-import type { BossBooking, BossSchedule, ScheduleLeg } from "@/lib/boss-types";
+import { bossGet, bossPatch } from "@/lib/boss-auth-context";
+import type { BossSchedule, ScheduleLeg } from "@/lib/boss-types";
 
 function LegCard({ leg, onChanged }: { leg: ScheduleLeg; onChanged(): Promise<void> }) {
   const stops = leg.stops ?? [];
@@ -116,7 +116,22 @@ function LegCard({ leg, onChanged }: { leg: ScheduleLeg; onChanged(): Promise<vo
         </div>
       ) : null}
 
-      {leg.bookings?.length ? <p className="mt-3 text-xs text-muted-foreground">{leg.bookings.length} assigned booking{leg.bookings.length === 1 ? "" : "s"} · {leg.trips?.length ?? 0} trip{leg.trips?.length === 1 ? "" : "s"}</p> : null}
+      {leg.bookings?.length ? (
+        <div className="mt-3 border-t border-border pt-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Events assigned by Desie</p>
+          <div className="grid gap-2">
+            {leg.bookings.map((booking) => (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2" key={booking.id}>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{booking.name ?? "Event"}</p>
+                  {booking.startsAt ? <p className="text-xs text-muted-foreground">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}
+                </div>
+                {booking.status ? <Badge variant="outline" className="capitalize">{booking.status}</Badge> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : <p className="mt-3 text-xs text-muted-foreground">No events have been assigned to this leg by Desie.</p>}
       {error ? <p className="mt-3 text-sm text-destructive" role="alert">{error}</p> : null}
       <div className="mt-3 flex gap-2 border-t border-border pt-3">
         <Button size="sm" variant="outline" disabled={saving} onClick={() => setEditing((value) => !value)} data-testid={`button-leg-edit-${leg.id}`}>Edit leg</Button>
@@ -137,13 +152,10 @@ export default function BossSchedulePage() {
     setLoading(true);
     setError(null);
     try {
-      const [legData, bookingData] = await Promise.all([
-        bossGet<{ legs: ScheduleLeg[] }>("/boss/legs"),
-        bossGet<{ bookings: BossBooking[] }>("/boss/bookings"),
-      ]);
+      const legData = await bossGet<{ legs: ScheduleLeg[] }>("/boss/legs");
       setSchedule({
         legs: Array.isArray(legData.legs) ? legData.legs : [],
-        bookings: Array.isArray(bookingData.bookings) ? bookingData.bookings : [],
+        bookings: [],
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load schedule.");
@@ -153,16 +165,6 @@ export default function BossSchedulePage() {
   }
 
   useEffect(() => { void load(); }, []);
-
-  async function assignBookingToLeg(bookingId: string, legId: string) {
-    setError(null);
-    try {
-      await bossPut(`/boss/bookings/${bookingId}/leg`, { legId: legId || null });
-      await load();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not assign booking to leg.");
-    }
-  }
 
   return (
     <div className="grid gap-5" data-testid="boss-schedule-page">
@@ -207,41 +209,6 @@ export default function BossSchedulePage() {
             )}
           </section>
 
-          {/* Booked events on schedule */}
-          {(schedule?.bookings ?? []).length > 0 ? (
-            <section>
-              <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-muted-foreground">
-                Booked Events ({schedule?.bookings.length ?? 0})
-              </h2>
-              <div className="grid gap-2">
-                {(schedule?.bookings ?? []).map((b) => (
-                  <div
-                    key={b.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3"
-                    data-testid={`schedule-booking-${b.id}`}
-                  >
-                    <div>
-                      <p className="font-semibold text-foreground">{b.name ?? b.organizationName ?? "Event"}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {b.startsAt || b.eventDate ? new Date(b.startsAt ?? b.eventDate!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "TBD"}
-                        {b.city ? ` · ${b.city}${b.region ? `, ${b.region}` : ""}` : ""}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {b.status ? <Badge variant="outline" className="capitalize">{b.status}</Badge> : null}
-                      <label className="grid gap-1 text-xs font-semibold text-muted-foreground">
-                        Leg
-                        <select className="rounded-md border border-border bg-background px-2 py-1 text-sm text-foreground" value={b.travelLegId ?? ""} onChange={(event) => void assignBookingToLeg(b.id, event.target.value)}>
-                          <option value="">Unassigned</option>
-                          {(schedule?.legs ?? []).filter((leg) => !leg.archivedAt || leg.id === b.travelLegId).map((leg) => <option key={leg.id} value={leg.id}>{leg.name ?? "Unnamed leg"}</option>)}
-                        </select>
-                      </label>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
         </>
       )}
     </div>

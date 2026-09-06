@@ -89,8 +89,6 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 
 const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
 const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
-const BossBookingsPage = lazy(() => import("@/pages/BossBookingsPage"));
-const BossBookingDetailPage = lazy(() => import("@/pages/BossBookingDetailPage"));
 const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
 const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
 const BossContactDetailPage = lazy(() => import("@/pages/BossContactDetailPage"));
@@ -311,8 +309,8 @@ function BossProtectedApp() {
   return (
     <BossShell>
       <Switch>
-        <Route path="/boss/bookings/:id">{(params) => <BossBookingDetailPage bookingId={params.id} />}</Route>
-        <Route path="/boss/bookings" component={BossBookingsPage} />
+        <Route path="/boss/bookings/:id"><Redirect to="/boss/schedule" /></Route>
+        <Route path="/boss/bookings"><Redirect to="/boss/schedule" /></Route>
         <Route path="/boss/schedule" component={BossSchedulePage} />
         <Route path="/boss/contacts/:id">{(params) => <BossContactDetailPage contactId={params.id} />}</Route>
         <Route path="/boss/contacts" component={BossContactsPage} />

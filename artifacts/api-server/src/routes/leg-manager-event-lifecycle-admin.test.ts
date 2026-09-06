@@ -11,6 +11,9 @@ describe("owner event checklist oversight", () => {
     expect(source).toContain('router.delete("/manager-admin/events/checklists/:runId"');
     expect(source).toContain('router.get("/manager-admin/reviews/due"');
     expect(source).toContain('router.delete("/manager-admin/reviews/due/:bookingId"');
+    expect(source).toContain('router.get("/manager-admin/reviews"');
+    expect(source).toContain('router.patch("/manager-admin/reviews/:reviewId"');
+    expect(source).toContain('router.delete("/manager-admin/reviews/:reviewId"');
   });
 
   it("records attributed owner overrides without changing checklist results", () => {
