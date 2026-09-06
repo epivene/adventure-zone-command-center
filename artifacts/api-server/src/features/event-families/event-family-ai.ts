@@ -55,20 +55,22 @@ export async function suggestEventFamiliesWithAi(
     return [];
   }
 
+  type AiEventFamilyProposal = EventFamilyProposal & { source: "ai" };
+
   const normalized = parsed
-    .map((proposal) => {
+    .map((proposal): AiEventFamilyProposal | null => {
       const ids = [...new Set(proposal.candidateIds)].sort((a, b) => a.localeCompare(b, "en-US"));
       if (ids.length < 2 || ids.some((id) => !allowedIds.has(id))) return null;
       return {
         proposedName: proposal.proposedName,
         normalizedName: normalizeFamilyName(proposal.proposedName),
         candidateIds: ids,
-        source: "ai" as const,
+        source: "ai",
         confidence: proposal.confidence,
         reason: proposal.reason,
-      } satisfies EventFamilyProposal;
+      };
     })
-    .filter((proposal): proposal is EventFamilyProposal => proposal !== null)
+    .filter((proposal): proposal is AiEventFamilyProposal => proposal !== null)
     .sort((a, b) => b.confidence - a.confidence);
 
   const claimed = new Set<string>();
