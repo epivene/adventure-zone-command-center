@@ -36,7 +36,7 @@ describe("website inquiry authorization", () => {
     expect(response.body.actor).toEqual({
       kind: "owner",
       id: "owner",
-      name: "Owner",
+      name: "Desie",
     });
   });
 

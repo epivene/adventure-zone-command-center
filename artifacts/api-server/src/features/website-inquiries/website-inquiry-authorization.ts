@@ -9,7 +9,7 @@ import {
 } from "../office/office-middleware";
 
 export type WebsiteInquiryActor =
-  | { kind: "owner"; id: "owner"; name: "Owner" }
+  | { kind: "owner"; id: "owner"; name: "Desie" }
   | { kind: "office"; id: string; name: string };
 
 declare global {
@@ -47,7 +47,7 @@ export function createWebsiteInquiryAuthorization(input?: {
       req.websiteInquiryActor = {
         kind: "owner",
         id: "owner",
-        name: "Owner",
+        name: "Desie",
       };
       next();
       return;

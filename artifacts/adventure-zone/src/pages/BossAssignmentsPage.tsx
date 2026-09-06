@@ -153,7 +153,7 @@ function AssignmentDialog({
                 data-testid="select-assignment-assignee"
               >
                 <option value="office">Amy (Office)</option>
-                <option value="owner">Owner</option>
+                <option value="owner">Desie</option>
               </select>
             </label>
             {fields.assigneeKind === "office" ? (

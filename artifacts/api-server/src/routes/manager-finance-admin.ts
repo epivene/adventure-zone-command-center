@@ -55,7 +55,7 @@ router.patch("/manager-admin/finance/expenses/:expenseId", async (req, res): Pro
   const parsed = updateSchema.safeParse(req.body ?? {});
   if (!parsedId.success || !parsed.success) { res.status(400).json({ error: "Invalid expense update" }); return; }
   try {
-    const row = await finance.updateAdminExpense(parsedId.data, parsed.data, { actorId: null, actorLabel: "Owner/admin" });
+    const row = await finance.updateAdminExpense(parsedId.data, parsed.data, { actorId: null, actorLabel: "Desie/admin" });
     if (!row) { res.status(404).json({ error: "Expense not found" }); return; }
     res.json({ record: await enrichAdminExpenseRecord(row, await finance.listExpenseAudit(row.id), storage) });
   } catch (error) {

@@ -34,7 +34,7 @@ function app() {
         req.websiteInquiryActor = {
           kind: "owner",
           id: "owner",
-          name: "Owner",
+          name: "Desie",
         };
         next();
       },
@@ -92,7 +92,7 @@ describe("website inquiry review routes", () => {
     expect(mocks.changeStatus).toHaveBeenCalledWith({
       inquiryId,
       action: "archive",
-      actor: { kind: "owner", id: "owner", name: "Owner" },
+      actor: { kind: "owner", id: "owner", name: "Desie" },
     });
   });
 
@@ -137,7 +137,7 @@ describe("website inquiry review routes", () => {
     expect(mocks.convert).toHaveBeenCalledWith({
       inquiryId,
       input: conversion,
-      actor: { kind: "owner", id: "owner", name: "Owner" },
+      actor: { kind: "owner", id: "owner", name: "Desie" },
     });
   });
 

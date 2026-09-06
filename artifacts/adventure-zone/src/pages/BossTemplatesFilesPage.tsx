@@ -183,7 +183,7 @@ export default function BossTemplatesFilesPage() {
         </div>
       ) : data && !data.workspaceAvailable ? (
         <Empty icon={<AlertTriangle className="h-7 w-7" />} title="Document workspace unavailable">
-          Ask the owner to connect this Boss account to an Office workspace.
+          Ask Desie to connect this Boss account to an Office workspace.
         </Empty>
       ) : data ? (
         <>

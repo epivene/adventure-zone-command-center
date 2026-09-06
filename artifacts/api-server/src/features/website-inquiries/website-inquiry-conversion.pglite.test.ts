@@ -110,7 +110,7 @@ afterEach(async () => {
 function convert() {
   return service.convert({
     inquiryId,
-    actor: { kind: "owner", id: "owner", name: "Owner" },
+    actor: { kind: "owner", id: "owner", name: "Desie" },
     input: {
       contact: {
         mode: "create",

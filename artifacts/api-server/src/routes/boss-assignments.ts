@@ -23,7 +23,7 @@ const routeId = (x: string | string[] | undefined) => Array.isArray(x) ? x[0] ??
 async function validOffice(id: string) { return (await db.select({ id: officeAccounts.id }).from(officeAccounts).where(and(eq(officeAccounts.id, id), eq(officeAccounts.enabled, true))).limit(1))[0]; }
 router.get("/boss/assignments", requireBoss, async (_req, res) => res.json({ assignments: await db.select().from(bossAssignments).orderBy(desc(bossAssignments.createdAt)) }));
 router.get("/boss/assignment-targets", requireBoss, async (_req, res) => res.json({
-  owner: { kind: "owner", displayName: "Owner" },
+  owner: { kind: "owner", displayName: "Desie" },
   officeAccounts: await db.select({ id: officeAccounts.id, displayName: officeAccounts.displayName }).from(officeAccounts).where(eq(officeAccounts.enabled, true)).orderBy(asc(officeAccounts.displayName)),
 }));
 router.post("/boss/assignments", requireBoss, async (req, res): Promise<void> => {
