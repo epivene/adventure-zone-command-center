@@ -1,0 +1,60 @@
+name: Apply nullable call email schema fix
+
+on:
+  push:
+    branches:
+      - fix/call-nullable-email-schema
+    paths:
+      - ".github/workflows/apply-call-nullable-email-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/call-nullable-email-schema
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Reuse the contact email schema directly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/calls/call-input.ts')
+          text = path.read_text()
+          old = '''const nullableEmail = z\n  .union([z.string(), z.null()])\n  .transform((value) => value ?? "")\n  .pipe(nullableContactEmailSchema);'''
+          new = 'const nullableEmail = nullableContactEmailSchema;'
+          if old not in text:
+              raise SystemExit('nullableEmail block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run call input and email-requested tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/calls/call-email-request-outcome.test.ts
+          src/features/calls/assisted-calling.integration.test.ts
+      - name: Verify nullable-email type error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'features/calls/call-input\.ts\(32' /tmp/api-typecheck.log; then
+            echo 'Call nullable-email type error remains.' >&2
+            exit 1
+          fi
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/calls/call-input.ts
+          git diff --cached --quiet || git commit -m "fix: reuse canonical nullable contact email schema"
+          git push origin HEAD:fix/call-nullable-email-schema
