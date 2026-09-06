@@ -1,0 +1,61 @@
+name: Apply Google relevance matched return fix
+
+on:
+  push:
+    branches:
+      - fix/google-relevance-matched-return
+    paths:
+      - ".github/workflows/apply-google-relevance-return-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/google-relevance-matched-return
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Return the public matched shape explicitly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/google-workspace/google-relevance-classifier.ts')
+          text = path.read_text()
+          old = '''  if (weighted.status === "matched") {\n    return weighted;\n  }'''
+          new = '''  if (weighted.status === "matched") {\n    return {\n      status: "matched",\n      evidenceCodes: weighted.evidenceCodes,\n      candidates: weighted.candidates,\n    };\n  }'''
+          if old not in text:
+              raise SystemExit('weighted matched return block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run relevance tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/google-workspace/google-relevance-classifier.test.ts
+          src/features/google-workspace/google-weighted-profile-matcher.test.ts
+          src/features/google-workspace/google-weighted-relevance-classifier.test.ts
+      - name: Verify classifier type error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'google-relevance-classifier\.ts\(140' /tmp/api-typecheck.log; then
+            echo 'Google relevance classifier type error remains.' >&2
+            exit 1
+          fi
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/google-workspace/google-relevance-classifier.ts
+          git diff --cached --quiet || git commit -m "fix: return matched Google relevance result explicitly"
+          git push origin HEAD:fix/google-relevance-matched-return
