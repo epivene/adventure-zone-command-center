@@ -1,0 +1,60 @@
+name: Apply Event Family AI typing fix
+
+on:
+  push:
+    branches:
+      - fix/event-family-ai-proposal-typing
+    paths:
+      - ".github/workflows/apply-event-family-ai-typing-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/event-family-ai-proposal-typing
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Keep AI proposals narrow through filtering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/event-families/event-family-ai.ts')
+          text = path.read_text()
+          old = '''  const normalized = parsed\n    .map((proposal) => {\n      const ids = [...new Set(proposal.candidateIds)].sort((a, b) => a.localeCompare(b, "en-US"));\n      if (ids.length < 2 || ids.some((id) => !allowedIds.has(id))) return null;\n      return {\n        proposedName: proposal.proposedName,\n        normalizedName: normalizeFamilyName(proposal.proposedName),\n        candidateIds: ids,\n        source: "ai" as const,\n        confidence: proposal.confidence,\n        reason: proposal.reason,\n      } satisfies EventFamilyProposal;\n    })\n    .filter((proposal): proposal is EventFamilyProposal => proposal !== null)\n    .sort((a, b) => b.confidence - a.confidence);'''
+          new = '''  type AiEventFamilyProposal = EventFamilyProposal & { source: "ai" };\n\n  const normalized = parsed\n    .map((proposal): AiEventFamilyProposal | null => {\n      const ids = [...new Set(proposal.candidateIds)].sort((a, b) => a.localeCompare(b, "en-US"));\n      if (ids.length < 2 || ids.some((id) => !allowedIds.has(id))) return null;\n      return {\n        proposedName: proposal.proposedName,\n        normalizedName: normalizeFamilyName(proposal.proposedName),\n        candidateIds: ids,\n        source: "ai",\n        confidence: proposal.confidence,\n        reason: proposal.reason,\n      };\n    })\n    .filter((proposal): proposal is AiEventFamilyProposal => proposal !== null)\n    .sort((a, b) => b.confidence - a.confidence);'''
+          if old not in text:
+              raise SystemExit('Event Family AI normalization block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run Event Family tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/event-families/event-family-ai.test.ts
+          src/features/event-families/event-family-classifier.test.ts
+      - name: Verify Event Family AI type errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'event-family-ai\.ts\((71|72|77|78|79)' /tmp/api-typecheck.log; then
+            echo 'Event Family AI typing errors remain.' >&2
+            exit 1
+          fi
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/event-families/event-family-ai.ts
+          git diff --cached --quiet || git commit -m "fix: preserve Event Family AI proposal typing"
+          git push origin HEAD:fix/event-family-ai-proposal-typing
