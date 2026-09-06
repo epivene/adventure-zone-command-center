@@ -298,7 +298,7 @@ type BossAccount = { id: string; loginName: string; displayName: string; enabled
 type BossOfficeTarget = { id: string; displayName: string };
 type OwnerBossAssignment = { id: string; title: string; details: string | null; priority: string; status: string; dueAt: string | null; updatedAt: string };
 
-function BossAccountPanel() {
+export function BossAccountPanel() {
   const [accounts, setAccounts] = useState<BossAccount[]>([]);
   const [officeTargets, setOfficeTargets] = useState<BossOfficeTarget[]>([]);
   const [studioOfficeAccountId, setStudioOfficeAccountId] = useState("");
@@ -307,6 +307,7 @@ function BossAccountPanel() {
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
   const [resetPasswordValues, setResetPasswordValues] = useState<Record<string, string>>({});
+  const [accountEdits, setAccountEdits] = useState<Record<string, { displayName: string; loginName: string }>>({});
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -330,7 +331,7 @@ function BossAccountPanel() {
   async function create() {
     setBusy(true); setError(""); setNotice("");
     try {
-      await apiPost("/boss-admin/accounts", { loginName: loginName.trim(), displayName: displayName.trim(), password, studioOfficeAccountId });
+      await apiPost("/boss-admin/accounts", { loginName: loginName.trim(), displayName: displayName.trim(), password, studioOfficeAccountId: studioOfficeAccountId || null });
       setLoginName(""); setDisplayName(""); setPassword("");
       setNotice("Boss account created.");
       await loadBossAccounts();
@@ -373,6 +374,21 @@ function BossAccountPanel() {
     }
   }
 
+  async function saveAccount(account: BossAccount) {
+    const values = accountEdits[account.id] ?? { displayName: account.displayName, loginName: account.loginName };
+    setError(""); setNotice("");
+    try {
+      await apiPatch(`/boss-admin/accounts/${account.id}`, {
+        displayName: values.displayName.trim(),
+        loginName: values.loginName.trim(),
+      });
+      setNotice("Boss login updated.");
+      await loadBossAccounts();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update Boss login.");
+    }
+  }
+
   return (
     <div className="grid gap-5">
       {error ? <p role="alert" className="rounded-xl bg-rose-50 p-4 text-rose-700">{error}</p> : null}
@@ -384,8 +400,8 @@ function BossAccountPanel() {
         <label className="grid gap-1 text-sm font-semibold">Name<input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Dave" /></label>
         <label className="grid gap-1 text-sm font-semibold">Username<input value={loginName} onChange={(e) => setLoginName(e.target.value)} placeholder="boss" /></label>
         <label className="grid gap-1 text-sm font-semibold">Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Minimum 8 characters" /></label>
-        <label className="grid gap-1 text-sm font-semibold">Design Studio workspace<select value={studioOfficeAccountId} onChange={(e) => setStudioOfficeAccountId(e.target.value)}>{officeTargets.map((account) => <option key={account.id} value={account.id}>{account.displayName}</option>)}</select></label>
-        <button className="button-primary w-fit" disabled={busy || !loginName.trim() || !displayName.trim() || password.length < 8 || !studioOfficeAccountId} type="button" onClick={() => void create()}>
+        <label className="grid gap-1 text-sm font-semibold">Documents workspace<select value={studioOfficeAccountId} onChange={(e) => setStudioOfficeAccountId(e.target.value)}><option value="">No workspace yet</option>{officeTargets.map((account) => <option key={account.id} value={account.id}>{account.displayName}</option>)}</select></label>
+        <button className="button-primary w-fit" disabled={busy || !loginName.trim() || !displayName.trim() || password.length < 8} type="button" onClick={() => void create()}>
           {busy ? "Creating…" : "Create Boss Account"}
         </button>
       </section>
@@ -411,9 +427,31 @@ function BossAccountPanel() {
               </div>
               <div className="mt-3 grid gap-2 border-t pt-3">
                 <label className="grid gap-1 text-sm font-semibold">
-                  Design Studio workspace
-                  <select value={account.studioOfficeAccountId ?? ""} onChange={async (e) => { await apiPatch(`/boss-admin/accounts/${account.id}`, { studioOfficeAccountId: e.target.value }); await loadBossAccounts(); }}>
-                    <option value="" disabled>Select an Office workspace</option>
+                  Name
+                  <input
+                    value={accountEdits[account.id]?.displayName ?? account.displayName}
+                    onChange={(e) => setAccountEdits((current) => ({ ...current, [account.id]: { displayName: e.target.value, loginName: current[account.id]?.loginName ?? account.loginName } }))}
+                  />
+                </label>
+                <label className="grid gap-1 text-sm font-semibold">
+                  Username
+                  <input
+                    value={accountEdits[account.id]?.loginName ?? account.loginName}
+                    onChange={(e) => setAccountEdits((current) => ({ ...current, [account.id]: { displayName: current[account.id]?.displayName ?? account.displayName, loginName: e.target.value } }))}
+                  />
+                </label>
+                <button
+                  className="button-secondary w-fit"
+                  disabled={!(accountEdits[account.id]?.displayName ?? account.displayName).trim() || !(accountEdits[account.id]?.loginName ?? account.loginName).trim()}
+                  type="button"
+                  onClick={() => void saveAccount(account)}
+                >
+                  Save Login
+                </button>
+                <label className="grid gap-1 text-sm font-semibold">
+                  Documents workspace
+                  <select value={account.studioOfficeAccountId ?? ""} onChange={async (e) => { await apiPatch(`/boss-admin/accounts/${account.id}`, { studioOfficeAccountId: e.target.value || null }); await loadBossAccounts(); }}>
+                    <option value="">No workspace linked</option>
                     {officeTargets.map((target) => <option key={target.id} value={target.id}>{target.displayName}</option>)}
                   </select>
                 </label>

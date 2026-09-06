@@ -30,6 +30,14 @@ describe("owner Office Coordinator controls",()=>{
   it("keeps Office Coordinator in the booking workspace",()=>{
     const bookingItems=menu.slice(menu.indexOf("const bookingItems"),menu.indexOf("const bookingGroups"));
     expect(bookingItems).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
+    expect(bookingItems).toContain('{ href: "/boss-access", label: "Boss Access" }');
+  });
+  it("lets Desie create and update Boss login credentials without requiring a documents workspace",()=>{
+    expect(source).toContain("Create Boss login");
+    expect(source).toContain("Save Login");
+    expect(source).toContain("Reset Password");
+    expect(source).toContain("studioOfficeAccountId: studioOfficeAccountId || null");
+    expect(source).not.toContain("password.length < 8 || !studioOfficeAccountId");
   });
   it("lets the owner grant website inquiry access explicitly", async () => {
     api.get.mockImplementation((path: string) => {

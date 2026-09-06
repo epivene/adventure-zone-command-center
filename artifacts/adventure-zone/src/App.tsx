@@ -99,6 +99,7 @@ const BossReviewsPage = lazy(() => import("@/pages/BossReviewsPage"));
 const BossMaintenancePage = lazy(() => import("@/pages/BossMaintenancePage"));
 const BossAssignmentsPage = lazy(() => import("@/pages/BossAssignmentsPage"));
 const BossTemplatesFilesPage = lazy(() => import("@/pages/BossTemplatesFilesPage"));
+const BossAccessPage = lazy(() => import("@/pages/BossAccessPage"));
 const CoiManagementPage = lazy(() => import("@/pages/CoiManagementPage"));
 const BossShell = lazy(() => import("@/components/boss/boss-shell").then(({ BossShell }) => ({ default: BossShell })));
 
@@ -386,6 +387,7 @@ function AdminProtectedApp() {
           <Route path="/act-migration"><ActMigrationRedirect /></Route>
           <Route path="/quick-add"><CallsRedirect addMode /></Route>
           <Route path="/office-coordinator" component={OfficeCoordinatorAdminPage} />
+          <Route path="/boss-access" component={BossAccessPage} />
           <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
           <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
           <Route path="/manager-crew" component={ManagerCrewAdminPage} />

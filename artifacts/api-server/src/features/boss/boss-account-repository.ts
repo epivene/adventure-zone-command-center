@@ -13,7 +13,7 @@ export class DrizzleBossAccountRepository {
     return account?.enabled ? account : null;
   }
   async list() { return this.database.select({ id: bossAccounts.id, loginName: bossAccounts.loginName, displayName: bossAccounts.displayName, role: bossAccounts.role, enabled: bossAccounts.enabled, sessionVersion: bossAccounts.sessionVersion, studioOfficeAccountId: bossAccounts.studioOfficeAccountId }).from(bossAccounts).orderBy(asc(bossAccounts.displayName)); }
-  async create(input: { loginName: string; displayName: string; passwordHash: string; passwordSalt: string; studioOfficeAccountId: string }) {
+  async create(input: { loginName: string; displayName: string; passwordHash: string; passwordSalt: string; studioOfficeAccountId?: string | null }) {
     return (await this.database.insert(bossAccounts).values({ ...input, loginName: input.loginName.trim(), displayName: input.displayName.trim() }).returning())[0]!;
   }
   async update(id: string, input: { enabled?: boolean; loginName?: string; displayName?: string; studioOfficeAccountId?: string }) {

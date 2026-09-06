@@ -11,7 +11,7 @@ const workspaces: Array<{
 }> = [
   {
     label: "Boss",
-    detail: "Bookings, schedule, assignments, and design",
+    detail: "Bookings, schedule, assignments, and documents",
     href: "/boss/sign-in",
     icon: Briefcase,
   },

@@ -35,6 +35,8 @@ describe("Boss workspace route boundaries", () => {
     expect(admin).toContain("accounts: await repository.list()");
     expect(admin).toContain("res.json({ accounts: await repository.list() })");
     expect(admin).toContain("res.status(201).json({ account: publicAccount");
+    expect(admin).toContain("studioOfficeAccountId: z.string().uuid().nullable().optional()");
+    expect(admin).toContain("That Boss username is already in use.");
   });
   it("keeps business documents inside the mapped Boss Office workspace", () => {
     const documents = source("boss-documents.ts");

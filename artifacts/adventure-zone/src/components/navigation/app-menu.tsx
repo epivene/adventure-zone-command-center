@@ -28,6 +28,7 @@ const bookingItems: MenuItem[] = [
   { href: "/calls/voicemail", label: "Voicemail" },
   { href: "/website-inquiries", label: "Website Inquiries" },
   { href: "/office-coordinator", label: "Office Coordinator" },
+  { href: "/boss-access", label: "Boss Access" },
   { href: "/research-sources", label: "Research Sources" },
   { href: "/needs-answer", label: "Needs Answer" },
 ];
