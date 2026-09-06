@@ -42,14 +42,14 @@ jobs:
               raise SystemExit('Scout Alert fallback block not found')
           path.write_text(text.replace(old, new, 1))
           PY
-      - name: Run Today route tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/routes/today.test.ts
+      - name: Run Scout Alert repository tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/assistant/scout-alert-repository.test.ts
       - name: Verify Today severity type error is gone
         run: |
           set +e
           pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
           set -e
-          if grep -E 'routes/today\.ts\(180.*severity' /tmp/api-typecheck.log; then
+          if grep -E 'routes/today\.ts\(18[0-9].*severity' /tmp/api-typecheck.log; then
             echo 'Today Scout Alert severity type error remains.' >&2
             exit 1
           fi
