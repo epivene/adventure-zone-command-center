@@ -19,4 +19,4 @@
 - [Adventure Zone test runtime](adventure-zone-test-runtime.md) — Node 20 needs jsdom 29 here; jsdom 30 pulls undici 8 APIs unavailable in worker_threads.
 - [Campaign delivery approval boundary](campaign-delivery-approval.md) — real audience sends require a current immutable snapshot, explicit approval, and provider-confirmed per-recipient results.
 - [Review-due removal semantics](review-due-removal.md) — review-due rows are computed; remove them with an auditable dismissal, never by deleting a booking.
-- [Boss event visibility boundary](boss-event-visibility.md) — Boss never manages bookings; event visibility begins only after Desie assigns the booking to a leg.
+- [Boss event visibility boundary](boss-event-visibility.md) — Desie makes the initial leg assignment; Boss can then move that visible event between active legs.

@@ -21,6 +21,10 @@ import { loadMasterTodayQueue } from "@/features/today/master-work-queue-reposit
 import { listTripsInWindow } from "@/features/trips/trip-repository";
 import { ScoutAlertRepository } from "@/features/assistant/scout-alert-repository";
 import { businessDayBounds } from "@/lib/business-date";
+import { LegAssignmentRepository } from "@/features/leg-assignment/leg-assignment-repository";
+import { LegAssignmentService } from "@/features/leg-assignment/leg-assignment-service";
+import { RouteDriveTimeEstimator } from "@/features/leg-assignment/drive-time-estimator";
+import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import {
   emptyOfficeCoordinatorAttention,
   loadOfficeCoordinatorAttention,
@@ -129,8 +133,34 @@ router.get("/today", async (req, res): Promise<void> => {
       db,
       dashboard.needsFollowUpPlan,
     );
+    const assignmentRepository = new LegAssignmentRepository(db);
+    const assignmentService = new LegAssignmentService(assignmentRepository, new RouteDriveTimeEstimator(db));
+    const [travelLegs, leadAssignments] = await Promise.all([
+      new DrizzleTravelLegRepository(db).listTravelLegs(),
+      Promise.all(needsFollowUpPlan.map(async (booking) => {
+        let decision = await assignmentRepository.loadPersistedDecision(booking.id);
+        if (
+          booking.status === "new_lead" &&
+          (!decision || (!decision.suggestedLegId && decision.source === "needs_review"))
+        ) {
+          try {
+            decision = await assignmentService.suggest(booking.id);
+          } catch (error) {
+            req.log.warn({ err: error, bookingId: booking.id }, "Lead leg suggestion could not be generated");
+          }
+        }
+        return [booking.id, decision] as const;
+      })),
+    ]);
+    const assignmentByBooking = new Map(leadAssignments);
     const copilotDashboard = withBookingCopilotMetadata(
-      { ...dashboard, needsFollowUpPlan },
+      {
+        ...dashboard,
+        needsFollowUpPlan: needsFollowUpPlan.map((booking) => ({
+          ...booking,
+          legAssignment: assignmentByBooking.get(booking.id) ?? null,
+        })),
+      },
       now,
     );
     const followUps = await addCallablePhones(copilotDashboard.followUps);
@@ -149,6 +179,7 @@ router.get("/today", async (req, res): Promise<void> => {
       scoutUrgentAlertTotal: scoutAlerts.filter(
         (alert) => alert.severity === "urgent",
       ).length,
+      travelLegs,
       todayTrips: todayTrips.map((trip) => ({
         id: trip.id,
         name: trip.name,

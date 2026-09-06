@@ -4,10 +4,10 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { bossGet, bossPatch } from "@/lib/boss-auth-context";
+import { bossGet, bossPatch, bossPut } from "@/lib/boss-auth-context";
 import type { BossSchedule, ScheduleLeg } from "@/lib/boss-types";
 
-function LegCard({ leg, onChanged }: { leg: ScheduleLeg; onChanged(): Promise<void> }) {
+function LegCard({ leg, allLegs, onChanged }: { leg: ScheduleLeg; allLegs: ScheduleLeg[]; onChanged(): Promise<void> }) {
   const stops = leg.stops ?? [];
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(leg.name ?? "");
@@ -15,7 +15,22 @@ function LegCard({ leg, onChanged }: { leg: ScheduleLeg; onChanged(): Promise<vo
   const [vehicle, setVehicle] = useState(leg.defaultVehicleName ?? "");
   const [mpg, setMpg] = useState(leg.defaultMpg == null ? "" : String(leg.defaultMpg));
   const [saving, setSaving] = useState(false);
+  const [movingBookingId, setMovingBookingId] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  async function reassignBooking(bookingId: string, travelLegId: string) {
+    if (!travelLegId || travelLegId === leg.id) return;
+    setMovingBookingId(bookingId);
+    setError("");
+    try {
+      await bossPut(`/boss/bookings/${bookingId}/leg`, { travelLegId });
+      await onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not reassign event.");
+    } finally {
+      setMovingBookingId(null);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -126,7 +141,21 @@ function LegCard({ leg, onChanged }: { leg: ScheduleLeg; onChanged(): Promise<vo
                   <p className="text-sm font-semibold text-foreground">{booking.name ?? "Event"}</p>
                   {booking.startsAt ? <p className="text-xs text-muted-foreground">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}
                 </div>
-                {booking.status ? <Badge variant="outline" className="capitalize">{booking.status}</Badge> : null}
+                <div className="flex items-center gap-2">
+                  {booking.status ? <Badge variant="outline" className="capitalize">{booking.status}</Badge> : null}
+                  <label className="sr-only" htmlFor={`booking-leg-${booking.id}`}>Reassign {booking.name ?? "event"}</label>
+                  <select
+                    className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
+                    disabled={movingBookingId === booking.id}
+                    id={`booking-leg-${booking.id}`}
+                    onChange={(event) => void reassignBooking(booking.id, event.target.value)}
+                    value={leg.id}
+                  >
+                    {allLegs.filter((candidate) => !candidate.archivedAt).map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>{candidate.name ?? "Unnamed leg"}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
             ))}
           </div>
@@ -204,7 +233,7 @@ export default function BossSchedulePage() {
               </div>
             ) : (
               <div className="grid gap-3">
-                {(schedule?.legs ?? []).map((leg) => <LegCard key={leg.id} leg={leg} onChanged={load} />)}
+                {(schedule?.legs ?? []).map((leg) => <LegCard key={leg.id} leg={leg} allLegs={schedule?.legs ?? []} onChanged={load} />)}
               </div>
             )}
           </section>

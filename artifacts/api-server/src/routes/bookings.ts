@@ -91,6 +91,12 @@ router.post("/bookings", async (req, res): Promise<void> => {
   try {
     const service = new BookingService(bookingRepo() as any);
     const booking = await service.createBooking(parsed.data as any);
+    try {
+      if (parsed.data.travelLegId) await legAssignmentService().recordManualAssignment(booking.id, parsed.data.travelLegId);
+      else await legAssignmentService().suggest(booking.id);
+    } catch (assignmentError) {
+      req.log.warn({ err: assignmentError, bookingId: booking.id }, "Initial leg suggestion could not be generated");
+    }
     res.locals.operationalCalendarBookingId = booking.id;
     res.status(201).json({ ok: true, bookingId: booking.id });
   } catch (err) {
@@ -266,6 +272,8 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     const nextLegId = parsed.data.travelLegId ?? null;
     if (previousLegId !== nextLegId && nextLegId) {
       await legAssignmentService().recordManualAssignment(id, nextLegId);
+    } else if (nextLegId === null && parsed.data.status === "new_lead") {
+      await legAssignmentService().suggest(id);
     } else if (
       previousLegId !== nextLegId &&
       nextLegId === null &&

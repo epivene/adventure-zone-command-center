@@ -27,7 +27,8 @@ describe("Boss workspace route boundaries", () => {
     expect(operations).toContain('router.patch("/boss/legs/:legId", requireBoss');
     expect(operations).not.toContain('"/boss/bookings"');
     expect(operations).not.toContain('"/boss/bookings/:bookingId"');
-    expect(operations).not.toContain('"/boss/bookings/:bookingId/leg"');
+    expect(operations).toContain('router.put("/boss/bookings/:bookingId/leg", requireBoss');
+    expect(operations).toContain("Boss can only reassign events that Desie has already assigned.");
     expect(operations).toContain("assignedBookings.filter(item => item.travelLegId === leg.id)");
     expect(operations).toContain("defaultMpg: z.number().positive()");
     expect(operations).toContain("sortOrder is intentionally not writable");

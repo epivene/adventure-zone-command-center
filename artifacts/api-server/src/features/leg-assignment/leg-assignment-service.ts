@@ -41,7 +41,8 @@ export class LegAssignmentService {
     private readonly estimator: DriveTimeEstimator,
   ) {}
 
-  async evaluate(bookingId: string): Promise<LegAssignmentDecision> {
+  async evaluate(bookingId: string, options: { allowAutomaticAssignment?: boolean } = {}): Promise<LegAssignmentDecision> {
+    const allowAutomaticAssignment = options.allowAutomaticAssignment !== false;
     const target = await this.repository.loadTarget(bookingId);
     if (!target) {
       const decision = needsLegAssignmentDecision({
@@ -119,7 +120,8 @@ export class LegAssignmentService {
         nextStopDriveMinutes: candidate.feasibility.nextDriveMinutes,
         confidence: "high",
       };
-      await this.repository.assignLeg(bookingId, candidate.legId);
+      if (allowAutomaticAssignment) await this.repository.assignLeg(bookingId, candidate.legId);
+      else decision.assignedLegId = null;
       await this.repository.saveDecision(decision);
       return decision;
     }
@@ -172,7 +174,7 @@ export class LegAssignmentService {
         : "medium";
     const decision: LegAssignmentDecision = {
       bookingId,
-      assignedLegId: confidence === "high" ? best.legId : null,
+      assignedLegId: allowAutomaticAssignment && confidence === "high" ? best.legId : null,
       suggestedLegId: best.legId,
       source: "route_score",
       explanation: `Balanced workload first, then route fit. ${routeExplanation(best)}`,
@@ -184,6 +186,10 @@ export class LegAssignmentService {
     if (decision.assignedLegId) await this.repository.assignLeg(bookingId, decision.assignedLegId);
     await this.repository.saveDecision(decision);
     return decision;
+  }
+
+  async suggest(bookingId: string): Promise<LegAssignmentDecision> {
+    return this.evaluate(bookingId, { allowAutomaticAssignment: false });
   }
 
   async recordManualAssignment(bookingId: string, legId: string): Promise<LegAssignmentDecision> {

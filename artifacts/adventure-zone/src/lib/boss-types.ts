@@ -57,7 +57,7 @@ export type ScheduleLeg = {
   defaultVehicleName?: string | null;
   defaultMpg?: number | null;
   archivedAt?: string | null;
-  bookings?: Array<{ id: string; name?: string | null; startsAt?: string | null; status?: string | null }>;
+  bookings?: Array<{ id: string; name?: string | null; startsAt?: string | null; status?: string | null; travelLegId?: string | null }>;
   trips?: Array<{ id: string; name?: string | null }>;
   startDate?: string | null;
   endDate?: string | null;

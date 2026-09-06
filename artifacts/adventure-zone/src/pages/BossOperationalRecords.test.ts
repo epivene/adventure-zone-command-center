@@ -25,7 +25,8 @@ describe("Boss operational record controls", () => {
     expect(receipts).toContain("r.imageUrl");
     expect(schedule).toContain("Events assigned by Desie");
     expect(schedule).not.toContain("Booked Events");
-    expect(schedule).not.toContain("assignBookingToLeg");
+    expect(schedule).toContain("reassignBooking");
+    expect(schedule).toContain("bossPut(`/boss/bookings/${bookingId}/leg`");
     expect(shell).not.toContain('label: "Bookings"');
   });
 
