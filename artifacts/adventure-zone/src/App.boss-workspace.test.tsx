@@ -15,4 +15,11 @@ describe("Boss workspace route protection", () => {
     expect(source).toContain('<Route path="/boss/today"><Redirect to="/boss" /></Route>');
     expect(source).toContain('<Route path="/boss/tasks"><Redirect to="/boss" /></Route>');
   });
+
+  it("keeps broad booking pages outside the Boss workspace", () => {
+    expect(source).toContain('<Route path="/boss/bookings/:id"><Redirect to="/boss/schedule" /></Route>');
+    expect(source).toContain('<Route path="/boss/bookings"><Redirect to="/boss/schedule" /></Route>');
+    expect(source).not.toContain('import("@/pages/BossBookingsPage")');
+    expect(source).not.toContain('import("@/pages/BossBookingDetailPage")');
+  });
 });
