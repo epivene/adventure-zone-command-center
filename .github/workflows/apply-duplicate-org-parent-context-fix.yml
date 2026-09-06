@@ -1,0 +1,61 @@
+name: Apply duplicate organization parent context fix
+
+on:
+  push:
+    branches:
+      - fix/duplicate-org-parent-context
+    paths:
+      - ".github/workflows/apply-duplicate-org-parent-context-fix.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/duplicate-org-parent-context
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Set duplicate-review parent context explicitly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/organizations/organization-repository.ts')
+          text = path.read_text()
+          old = '''            locationCount: locationCountByOrganization.get(organization.id) ?? 0,\n            matchedLocation: null,\n          } satisfies OrganizationListRecord];'''
+          new = '''            locationCount: locationCountByOrganization.get(organization.id) ?? 0,\n            matchedLocation: null,\n            parentContext: null,\n          } satisfies OrganizationListRecord];'''
+          if old not in text:
+              raise SystemExit('duplicate review organization record block not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run organization duplicate/family tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/organizations/duplicate-review-resolution-filter.test.ts
+          src/features/organizations/organization-family-discovery.test.ts
+          src/features/organizations/organization-family-matcher.test.ts
+      - name: Verify organization parentContext type errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'organization-repository\.ts\((1200|1219).*parentContext' /tmp/api-typecheck.log; then
+            echo 'Duplicate organization parentContext type errors remain.' >&2
+            exit 1
+          fi
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/organizations/organization-repository.ts
+          git diff --cached --quiet || git commit -m "fix: define duplicate review parent context"
+          git push origin HEAD:fix/duplicate-org-parent-context
