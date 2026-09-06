@@ -126,6 +126,10 @@ export function createFollowUpsRouter(
         dueAt: parsed.data.dueAt,
       });
       if (!result.ok) {
+        if (result.error.code === "FOLLOW_UP_NOT_FOUND") {
+          res.status(404).json({ ok: false, error: "Follow-up not found." });
+          return;
+        }
         res.status(400).json({ ok: false, error: result.error.message });
         return;
       }
