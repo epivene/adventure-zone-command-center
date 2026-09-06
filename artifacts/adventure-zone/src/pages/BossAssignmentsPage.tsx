@@ -152,7 +152,7 @@ function AssignmentDialog({
                 onChange={(e) => patch("assigneeKind", e.target.value as "office" | "owner")}
                 data-testid="select-assignment-assignee"
               >
-                <option value="office">Amy (Office)</option>
+                <option value="office">Amy</option>
                 <option value="owner">Desie</option>
               </select>
             </label>
@@ -318,7 +318,7 @@ export default function BossAssignmentsPage() {
                 <div className="min-w-0 flex-1">
                   <p className="font-bold text-foreground">{a.title}</p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {a.assigneeKind === "office" ? "Amy (Office)" : "Owner"}
+                    {a.assigneeKind === "office" ? "Amy" : "Desie"}
                     {" · "}
                     {a.status.replace("_", " ")}
                     {a.dueAt ? ` · Due ${new Date(a.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}
