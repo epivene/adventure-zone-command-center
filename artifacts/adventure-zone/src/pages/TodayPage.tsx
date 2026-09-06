@@ -228,7 +228,7 @@ export default function TodayPage() {
             <summary className="cursor-pointer font-bold">Contracts <span className="ml-1 text-slate-500">({contractCount})</span></summary>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600">Booking and contract work that needs your attention.</p>
-              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/profiles">Open booking work</Link>
+              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/bookings?attention=contracts">Open contract work</Link>
             </div>
           </details>
         ) : null}
