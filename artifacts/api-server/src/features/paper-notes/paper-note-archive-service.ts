@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { PaperNoteImportError } from "./paper-note-import-service";
+import { firstQueryRow } from "./paper-note-query-rows";
 
 type DrizzleDatabase = typeof database;
 
@@ -25,7 +26,9 @@ export class PaperNoteArchiveService {
       where id = ${batchId}::uuid and created_by = ${actorId}
       limit 1
     `);
-    const row = (existing as { rows?: Array<{ status: string }> }).rows?.[0];
+    const row = firstQueryRow(existing, (candidate): candidate is { status: string } =>
+      typeof candidate.status === "string",
+    );
     if (!row) {
       throw new PaperNoteImportError("BATCH_NOT_FOUND", "Paper-note batch was not found.");
     }
