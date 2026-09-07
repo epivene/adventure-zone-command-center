@@ -57,7 +57,7 @@ function accepted(overrides: Record<string, unknown> = {}) {
 function store(match: any = { status: "new_prospect" }) {
   return {
     classify: vi.fn(async () => match),
-    createLead: vi.fn(async () => ({ profileId: "profile-1", bookingId: "booking-1" })),
+    createLead: vi.fn(async (_input: unknown) => ({ profileId: "profile-1", bookingId: "booking-1" })),
   };
 }
 

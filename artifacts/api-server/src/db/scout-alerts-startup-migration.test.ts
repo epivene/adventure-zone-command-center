@@ -4,7 +4,7 @@ import { ensureScoutAlertsSchema } from "./scout-alerts-startup-migration";
 
 describe("ensureScoutAlertsSchema", () => {
   it("does nothing when both Scout Alert tables and required indexes are ready", async () => {
-    const query = vi.fn(async () => ({ rows: [{ ready: true }] }));
+    const query = vi.fn(async (_sql: string) => ({ rows: [{ ready: true }] }));
 
     await expect(ensureScoutAlertsSchema({ query })).resolves.toBe(false);
 
