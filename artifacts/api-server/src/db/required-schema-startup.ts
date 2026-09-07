@@ -14,6 +14,7 @@ import { ensurePaperNotesSchemaBeforeListen } from "./paper-notes-required-start
 import { ensureProfileTouchSchema } from "../features/organizations/profile-touch-schema";
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
+import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
 
 type RequiredStep = () => Promise<unknown>;
 type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>;
@@ -35,6 +36,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureProfileFiller?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
+  ensureBusinessDocuments?: RequiredStep;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
   await run(
@@ -93,5 +95,9 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required Design Studio schema",
     dependencies?.ensureDesignStudio ?? ensureDesignStudioSchemaBeforeListen,
+  );
+  await run(
+    "required business document schema",
+    dependencies?.ensureBusinessDocuments ?? ensureBusinessDocumentSchemaBeforeListen,
   );
 }
