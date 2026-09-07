@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { LeadScoutRepository } from "./lead-scout-repository";
 import type { LeadScoutEvidenceFact } from "./lead-scout-types";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 async function database() {
   const client = new PGlite();
   await client.exec(`
@@ -42,9 +49,9 @@ async function database() {
   `);
   const run = await client.query(`insert into lead_scout_runs(actor_id, original_question, status, stage, completed_at)
     values ('owner-a','find events','complete','complete',now()) returning id`);
-  const runId = String(run.rows[0]?.id);
+  const runId = String(rowValue(run.rows, 0, "id"));
   const other = await client.query(`insert into lead_scout_runs(actor_id, original_question) values ('owner-b','other') returning id`);
-  const otherRunId = String(other.rows[0]?.id);
+  const otherRunId = String(rowValue(other.rows, 0, "id"));
   const source = await client.query(`insert into lead_scout_sources(run_id,url,title,category,retrieved_at)
     values ($1,'https://event.example/vendors','Vendor page','vendor_application',now()) returning id`, [runId]);
   await client.query(`insert into lead_scout_sources(run_id,url,title,category,retrieved_at)
@@ -55,8 +62,8 @@ async function database() {
     client,
     repository: new LeadScoutRepository(client as never),
     runId,
-    candidateId: String(candidate.rows[0]?.id),
-    sourceId: String(source.rows[0]?.id),
+    candidateId: String(rowValue(candidate.rows, 0, "id")),
+    sourceId: String(rowValue(source.rows, 0, "id")),
   };
 }
 
@@ -82,9 +89,9 @@ describe("LeadScoutRepository candidate enrichment", () => {
     await db.repository.replaceCandidateFacts(db.runId, db.candidateId, [{ ...fact, value: "2027-06-02" }]);
     const rows = (await db.client.query(`select fact_key, fact_value, source_ids from lead_scout_candidate_facts`)).rows;
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.fact_key).toBe("vendor_deadline");
-    expect(rows[0]?.fact_value).toBe("2027-06-02");
-    expect(rows[0]?.source_ids).toEqual([db.sourceId]);
+    expect(rowValue(rows, 0, "fact_key")).toBe("vendor_deadline");
+    expect(rowValue(rows, 0, "fact_value")).toBe("2027-06-02");
+    expect(rowValue(rows, 0, "source_ids")).toEqual([db.sourceId]);
   });
 
   it("queues Research deeper for one actor-owned eligible candidate and reopens the run", async () => {
