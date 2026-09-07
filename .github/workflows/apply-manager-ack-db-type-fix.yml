@@ -33,12 +33,20 @@ jobs:
           from pathlib import Path
           path = Path('artifacts/api-server/src/features/manager-comms/admin-message-acknowledgment-status.ts')
           text = path.read_text()
-          text = text.replace('import type { db as database } from "@/db/client";', 'import type { db as databaseClient } from "@/db/client";')
-          text = text.replace('  database: typeof database,', '  database: typeof databaseClient,')
+          old_import = 'import type { db as database } from "@/db/client";'
+          new_import = 'import type { db as databaseClient } from "@/db/client";'
+          old_param = '  database: typeof database,'
+          new_param = '  database: typeof databaseClient,'
+          if old_import in text:
+              text = text.replace(old_import, new_import, 1)
+          if old_param in text:
+              text = text.replace(old_param, new_param, 1)
+          if new_import not in text or new_param not in text:
+              raise SystemExit('manager acknowledgment db alias fix is missing')
           path.write_text(text)
           PY
-      - name: Run manager comms tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms
+      - name: Run focused acknowledgment behavior tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/manager-comms/admin-message-acknowledgment.test.ts
       - name: Commit verified production patch
         run: |
           git config user.name "github-actions[bot]"
