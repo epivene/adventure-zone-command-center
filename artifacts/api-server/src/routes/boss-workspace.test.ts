@@ -35,8 +35,9 @@ describe("Boss workspace route boundaries", () => {
     expect(operations).toMatch(
       /planningBookings\.filter\(\(item\) =>\s*item\.travelLegId === leg\.id &&\s*isBookedForSchedule\(item\)\)/,
     );
-    expect(operations).toContain("latitude: bookings.latitude");
-    expect(operations).toContain("probability: bookings.probability");
+    expect(operations).toContain("legRepo.listMapEvents()");
+    expect(operations).toContain("resolveRouteMapEvents(");
+    expect(operations).toContain("filterMapEvents(mapEvents");
     expect(operations).not.toContain("notes: bookings.notes");
     expect(operations).toContain("defaultMpg: z.number().positive()");
     expect(operations).toContain("sortOrder is intentionally not writable");
