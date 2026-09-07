@@ -6,6 +6,7 @@ export async function runStartupStep<T>(
   name: string,
   work: () => Promise<T>,
   timeoutMs = DEFAULT_STARTUP_STEP_TIMEOUT_MS,
+  onTimeout?: (error: Error) => void,
 ): Promise<T> {
   logger.info({ startupStep: name, timeoutMs }, "Startup step started");
 
@@ -13,7 +14,9 @@ export async function runStartupStep<T>(
   try {
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error(`Startup step timed out: ${name}`));
+        const error = new Error(`Startup step timed out: ${name}`);
+        onTimeout?.(error);
+        reject(error);
       }, timeoutMs);
     });
 
