@@ -1,4 +1,10 @@
 import { PGlite } from "@electric-sql/pglite";
+
+function rowValue(row: unknown, key: string): unknown {
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
@@ -101,7 +107,7 @@ describe("approved communication-template startup", () => {
       storage_reference: APPROVED_LEAD_INTRODUCTION_2026.sourceDocument.storageReference,
       reviewed_at: new Date("2026-08-25T00:00:00Z"),
     });
-    expect(repaired?.updated_at).not.toEqual(new Date("2026-01-02T03:04:05Z"));
+    expect(rowValue(repaired, "updated_at")).not.toEqual(new Date("2026-01-02T03:04:05Z"));
 
     await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
     const restarted = (await client.query(`
