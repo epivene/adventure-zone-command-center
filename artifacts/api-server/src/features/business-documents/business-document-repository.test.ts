@@ -80,4 +80,31 @@ describe("BusinessDocumentRepository", () => {
     expect(repeated).toMatchObject({ outcome: "deduplicated", documentId: first.documentId });
     expect((await database.query("SELECT id FROM business_document_sources")).rows).toHaveLength(1);
   });
+
+  it("lists the openable file and its profile link for profile document screens", async () => {
+    const profileId = "00000000-0000-4000-8000-000000000001";
+    await database.query("INSERT INTO organizations (id) VALUES ($1)", [profileId]);
+    const repo = repository();
+    const ingestInput = input("gmail", "message-2:attachment-1");
+    const created = await repo.ingest({
+      ...ingestInput,
+      links: [{
+        targetKind: "profile",
+        targetId: profileId,
+        confirmationMode: "automatic",
+        confidence: 1,
+        evidence: [{ kind: "recipient_email" }],
+      }],
+    });
+
+    const documents = await repo.list({ profileId });
+
+    expect(documents).toHaveLength(1);
+    expect(documents[0]).toMatchObject({
+      id: created.documentId,
+      fileAvailable: true,
+      links: [{ targetKind: "profile", targetId: profileId }],
+    });
+    expect(documents[0]?.links[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
 });

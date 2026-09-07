@@ -36,6 +36,28 @@ function isoTime(value: unknown): string {
   return Number.isFinite(date.getTime()) ? date.toISOString() : new Date(0).toISOString();
 }
 
+function documentLinks(value: unknown): BusinessDocumentView["links"] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { return []; }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.flatMap((link) => {
+    if (!link || typeof link !== "object") return [];
+    const candidate = link as Record<string, unknown>;
+    if (
+      typeof candidate.id !== "string"
+      || !["profile", "booking", "event_family"].includes(String(candidate.targetKind))
+      || typeof candidate.targetId !== "string"
+    ) return [];
+    return [{
+      id: candidate.id,
+      targetKind: candidate.targetKind as BusinessDocumentView["links"][number]["targetKind"],
+      targetId: candidate.targetId,
+    }];
+  });
+}
+
 function toView(row: Record<string, unknown>): BusinessDocumentView {
   return {
     id: String(row.id),
@@ -49,6 +71,8 @@ function toView(row: Record<string, unknown>): BusinessDocumentView {
     issueDate: isoDate(row.issue_date),
     expirationDate: isoDate(row.expiration_date),
     notes: typeof row.notes === "string" ? row.notes : null,
+    fileAvailable: row.file_available === true,
+    links: documentLinks(row.links),
     createdAt: isoTime(row.created_at),
     updatedAt: isoTime(row.updated_at),
   };
@@ -261,13 +285,33 @@ export class BusinessDocumentRepository {
     try {
       const values: unknown[] = [];
       const conditions = ["d.lifecycle <> 'deleted'"];
-      if (input.profileId) { values.push(input.profileId); conditions.push(`l.organization_id = $${values.length}`); }
+      if (input.profileId) {
+        values.push(input.profileId);
+        conditions.push(`EXISTS (
+          SELECT 1 FROM business_document_links profile_link
+          WHERE profile_link.document_id = d.id AND profile_link.organization_id = $${values.length}
+        )`);
+      }
       if (input.category) { values.push(input.category); conditions.push(`d.category = $${values.length}`); }
       if (input.reviewState) { values.push(input.reviewState); conditions.push(`d.review_state = $${values.length}`); }
       values.push(Math.min(100, Math.max(1, input.limit ?? 50)));
       const result = await client.query(
-        `SELECT DISTINCT d.* FROM business_documents d
-         LEFT JOIN business_document_links l ON l.document_id = d.id
+        `SELECT d.*,
+           EXISTS (
+             SELECT 1 FROM business_document_versions version
+             JOIN business_document_blobs blob ON blob.id = version.blob_id
+             WHERE version.id = d.current_version_id AND blob.validation_state = 'accepted'
+           ) AS file_available,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'id', document_link.id,
+               'targetKind', document_link.target_kind,
+               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id)
+             ) ORDER BY document_link.created_at)
+             FROM business_document_links document_link
+             WHERE document_link.document_id = d.id
+           ), '[]'::json) AS links
+         FROM business_documents d
          WHERE ${conditions.join(" AND ")}
          ORDER BY d.updated_at DESC LIMIT $${values.length}`,
         values,
@@ -279,7 +323,26 @@ export class BusinessDocumentRepository {
   async getById(documentId: string) {
     const client = await this.pool.connect();
     try {
-      const result = await client.query("SELECT * FROM business_documents WHERE id = $1 AND lifecycle <> 'deleted' LIMIT 1", [documentId]);
+      const result = await client.query(
+        `SELECT d.*,
+           EXISTS (
+             SELECT 1 FROM business_document_versions version
+             JOIN business_document_blobs blob ON blob.id = version.blob_id
+             WHERE version.id = d.current_version_id AND blob.validation_state = 'accepted'
+           ) AS file_available,
+           COALESCE((
+             SELECT json_agg(json_build_object(
+               'id', document_link.id,
+               'targetKind', document_link.target_kind,
+               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id)
+             ) ORDER BY document_link.created_at)
+             FROM business_document_links document_link
+             WHERE document_link.document_id = d.id
+           ), '[]'::json) AS links
+         FROM business_documents d
+         WHERE d.id = $1 AND d.lifecycle <> 'deleted' LIMIT 1`,
+        [documentId],
+      );
       return result.rows[0] ? toView(result.rows[0]) : null;
     } finally { client.release?.(); }
   }

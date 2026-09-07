@@ -80,6 +80,7 @@ const adminToolsGroups: MenuGroup[] = [
   {
     label: "Business Setup",
     items: [
+      { href: "/business-documents", label: "Business Documents" },
       { href: "/settings/business-sources", label: "Business sources" },
       { href: "/settings/coi", label: "Certificates of insurance" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
