@@ -11,7 +11,6 @@ export async function exitAfterRequiredStartupFailure(options: {
       resolve,
       options.timeoutMs ?? DEFAULT_REQUIRED_STARTUP_SHUTDOWN_TIMEOUT_MS,
     );
-    timer.unref();
   });
 
   try {
