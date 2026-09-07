@@ -8,6 +8,7 @@ on:
       - "artifacts/adventure-zone/src/pages/BossSignInPage.tsx"
       - "artifacts/adventure-zone/src/components/calendar/event-calendar.tsx"
       - "artifacts/adventure-zone/src/components/routes/event-map.tsx"
+      - "artifacts/adventure-zone/src/components/routes/route-conflict-warning.tsx"
       - "artifacts/adventure-zone/src/components/routes/manager-route-map-layers.tsx"
       - "artifacts/adventure-zone/src/lib/boss-types.ts"
       - "artifacts/api-server/src/routes/boss-operations.ts"
