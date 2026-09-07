@@ -193,7 +193,7 @@ const entrySchema = z.object({
     method: activityMethodSchema.optional().default("unknown"),
     outcome: z.unknown().optional().nullable(),
     summary: z.unknown().optional().nullable(),
-  }).optional().default({}),
+  }).optional().default({ dateSource: "unknown", method: "unknown" }),
   contacts: z.array(z.object({
     name: z.unknown().optional().nullable(),
     role: z.unknown().optional().nullable(),
