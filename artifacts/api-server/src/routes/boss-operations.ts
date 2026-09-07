@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
-import { and, eq, gte, isNull, lt, notInArray } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { bookings, contacts, travelLegs, trips } from "@/db/schema";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
@@ -10,48 +10,34 @@ import { LegAssignmentService } from "@/features/leg-assignment/leg-assignment-s
 import { RouteDriveTimeEstimator } from "@/features/leg-assignment/drive-time-estimator";
 import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import { DrizzleScheduleDisplaySettingsRepository } from "@/features/calendar/schedule-display-settings";
+import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
+import { filterMapEvents } from "@/features/routes/map-data";
+import { resolveRouteMapEvents } from "@/features/routes/location-resolver";
+import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
 
 const router: IRouter = Router(), requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
+const routeGeocoder = new NominatimGeocodingProvider();
 const routeId = (x: string | string[] | undefined) => Array.isArray(x) ? x[0] ?? "" : x ?? "";
 const legPatch = z.object({ name: z.string().trim().min(1).max(160).optional(), color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(), baseAddress: z.string().trim().max(500).nullable().optional(), defaultVehicleName: z.string().trim().max(160).nullable().optional(), defaultMpg: z.number().positive().nullable().optional(), archivedAt: z.coerce.date().nullable().optional() }).strict().refine(value => Object.keys(value).length > 0, "No leg changes provided.");
 const legReassignment = z.object({ travelLegId: z.string().uuid() }).strict();
 router.get("/boss/legs", requireBoss, async (_req, res) => {
-  const now = new Date();
-  const planningWindowStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
-  const planningWindowEnd = new Date(Date.UTC(now.getUTCFullYear() + 3, 0, 1));
-  const [legs, scheduleBookings, assignedTrips, displaySettings] = await Promise.all([
-    db.select().from(travelLegs).orderBy(travelLegs.sortOrder),
-    db.select({
-      id: bookings.id,
-      name: bookings.name,
-      city: bookings.city,
-      region: bookings.region,
-      latitude: bookings.latitude,
-      longitude: bookings.longitude,
-      startsAt: bookings.startsAt,
-      endsAt: bookings.endsAt,
-      status: bookings.status,
-      probability: bookings.probability,
-      travelLegId: bookings.travelLegId,
-    })
-      .from(bookings)
-      .where(and(
-        gte(bookings.startsAt, planningWindowStart),
-        lt(bookings.startsAt, planningWindowEnd),
-        notInArray(bookings.status, ["declined", "cancelled", "completed", "renewal_due"]),
-      ))
-      .orderBy(bookings.startsAt, bookings.name),
+  const legRepo = new DrizzleTravelLegRepository(db);
+  const [legs, mapEvents, assignedTrips, displaySettings] = await Promise.all([
+    legRepo.listTravelLegs({ includeArchived: true }),
+    legRepo.listMapEvents(),
     db.select({ id: trips.id, name: trips.name, travelLegId: trips.travelLegId }).from(trips),
     new DrizzleScheduleDisplaySettingsRepository(db).get(),
   ]);
-  const planningBookings = scheduleBookings.map((booking) => {
-    const leg = booking.travelLegId ? legs.find((candidate) => candidate.id === booking.travelLegId) : null;
-    return {
-      ...booking,
-      travelLegName: leg?.name ?? null,
-      travelLegColor: leg?.color ?? null,
-    };
-  });
+  const planningBookings = await resolveRouteMapEvents(
+    filterMapEvents(mapEvents, {
+      statuses: [],
+      travelLegIds: [],
+      dateFrom: null,
+      dateTo: null,
+      regions: [],
+    }),
+    routeGeocoder,
+  );
   res.json({
     bookings: planningBookings,
     displaySettings,
