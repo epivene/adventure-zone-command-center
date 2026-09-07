@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { validatePaperNoteEventDate } from "./paper-note-event-date-validation";
+import { firstQueryRow, queryRows } from "./paper-note-query-rows";
 import { validatePaperNoteCurrentFollowUp } from "./paper-note-follow-up-validation";
 import { validatePaperNotePrimaryContact } from "./paper-note-primary-contact-validation";
 import { validatePaperNotePrimaryPhones } from "./paper-note-primary-phone-validation";
@@ -202,7 +203,27 @@ export class PaperNotePreflightService {
 }
 
 type DrizzleDatabase = typeof database;
+type BatchRow = { id: string; status: string };
+type PageRow = PaperNotePreflightBatch["pages"][number];
 type EntryRow = { id: string; pageId: string; state: string; reviewPayload: unknown; targetSnapshot: unknown };
+
+function isBatchRow(row: Record<string, unknown>): row is BatchRow {
+  return typeof row.id === "string" && typeof row.status === "string";
+}
+
+function isPageRow(row: Record<string, unknown>): row is PageRow {
+  return typeof row.id === "string"
+    && typeof row.status === "string"
+    && (row.originalObjectKey === null || typeof row.originalObjectKey === "string");
+}
+
+function isEntryRow(row: Record<string, unknown>): row is EntryRow {
+  return typeof row.id === "string"
+    && typeof row.pageId === "string"
+    && typeof row.state === "string"
+    && "reviewPayload" in row
+    && "targetSnapshot" in row;
+}
 
 function targetSnapshotFrom(value: unknown): PaperNoteStoredTargetSnapshot | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -222,7 +243,7 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
       where id = ${batchId}::uuid and created_by = ${actorId}
       limit 1
     `);
-    const batch = (batchResult as { rows?: Array<{ id: string; status: string }> }).rows?.[0];
+    const batch = firstQueryRow(batchResult, isBatchRow);
     if (!batch) return null;
 
     const [pagesResult, entriesResult] = await Promise.all([
@@ -248,8 +269,8 @@ export class DrizzlePaperNotePreflightRepository implements PaperNotePreflightRe
     return {
       id: batch.id,
       status: batch.status,
-      pages: ((pagesResult as { rows?: PaperNotePreflightBatch["pages"] }).rows ?? []),
-      entries: ((entriesResult as { rows?: EntryRow[] }).rows ?? []).map((entry) => ({
+      pages: queryRows(pagesResult, isPageRow),
+      entries: queryRows(entriesResult, isEntryRow).map((entry) => ({
         id: entry.id,
         pageId: entry.pageId,
         state: entry.state,
