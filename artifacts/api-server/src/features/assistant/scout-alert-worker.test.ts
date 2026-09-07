@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ScoutAlertWorker } from "./scout-alert-worker";
+import type { LeadScoutProvider } from "./lead-scout-provider";
 import type {
   ScoutAlertRepository,
   ScoutAlertWatchClaim,
@@ -132,8 +133,8 @@ function dependencies(input?: {
   };
   const provider = {
     enrichCandidate: input?.providerError
-      ? vi.fn(async () => { throw input.providerError; })
-      : vi.fn(async () => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] })),
+      ? vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => { throw input.providerError; })
+      : vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] })),
   };
   return { repository, provider };
 }
