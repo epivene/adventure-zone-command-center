@@ -1,0 +1,86 @@
+name: Apply communication template test drift
+
+on:
+  push:
+    branches:
+      - fix/communication-template-test-drift
+    paths:
+      - ".github/workflows/apply-communication-template-test-drift.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/communication-template-test-drift
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm both communication-template errors exist
+        run: |
+          set +e
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          grep -E 'communication-template-permissions\.test\.ts.*error TS2322' /tmp/api-before.log >/dev/null || exit 1
+          grep -E 'communication-template-seed\.pglite\.test\.ts.*error TS2339' /tmp/api-before.log >/dev/null || exit 1
+      - name: Refresh communication-template test fixtures
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          permissions = Path('artifacts/api-server/src/features/communication-templates/communication-template-permissions.test.ts')
+          text = permissions.read_text()
+          marker = '    code: "test",\n'
+          if '    templateVersion: null,\n' not in text:
+            if marker not in text:
+              raise SystemExit('template fixture marker not found')
+            text = text.replace(marker, marker + '    templateVersion: null,\n', 1)
+          permissions.write_text(text)
+
+          seed = Path('artifacts/api-server/src/features/communication-templates/communication-template-seed.pglite.test.ts')
+          text = seed.read_text()
+          import_marker = 'import { PGlite } from "@electric-sql/pglite";\n'
+          helper = '''\nfunction rowValue(row: unknown, key: string): unknown {\n  return row && typeof row === "object" && !Array.isArray(row) && key in row\n    ? (row as Record<string, unknown>)[key]\n    : undefined;\n}\n'''
+          if 'function rowValue(row: unknown, key: string): unknown' not in text:
+            if import_marker not in text:
+              raise SystemExit('PGlite import marker not found')
+            text = text.replace(import_marker, import_marker + helper, 1)
+          text = text.replace('repaired?.updated_at', 'rowValue(repaired, "updated_at")', 1)
+          seed.write_text(text)
+          PY
+      - name: Run focused communication-template tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/communication-templates/communication-template-permissions.test.ts \
+            src/features/communication-templates/communication-template-seed.pglite.test.ts
+      - name: Commit verified test patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/communication-templates/communication-template-permissions.test.ts \
+            artifacts/api-server/src/features/communication-templates/communication-template-seed.pglite.test.ts
+          git diff --cached --quiet || git commit -m "test: refresh communication template fixtures"
+          git push origin HEAD:fix/communication-template-test-drift
+      - run: pnpm run typecheck:libs
+      - name: Verify both communication-template errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          if grep -E 'communication-template-(permissions|seed\.pglite)\.test\.ts.*error (TS2322|TS2339)' /tmp/api-after.log; then
+            echo "Communication-template targeted type errors remain." >&2
+            exit 1
+          fi
