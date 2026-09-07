@@ -6,7 +6,7 @@ import { useBossAuth } from "@/lib/boss-auth-context";
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 export default function BossSignInPage() {
-  const { boss, signIn, demoSignIn } = useBossAuth();
+  const { boss, signIn } = useBossAuth();
   const [, setLocation] = useLocation();
   const [loginName, setLoginName] = useState("");
   const [password, setPassword] = useState("");
@@ -21,15 +21,6 @@ export default function BossSignInPage() {
     setSubmitting(true);
     setError(null);
     const result = await signIn(loginName.trim(), password);
-    setSubmitting(false);
-    if (result.ok) setLocation("/boss");
-    else setError(result.error);
-  }
-
-  async function handleDemo() {
-    setSubmitting(true);
-    setError(null);
-    const result = await demoSignIn();
     setSubmitting(false);
     if (result.ok) setLocation("/boss");
     else setError(result.error);
@@ -95,16 +86,6 @@ export default function BossSignInPage() {
           data-testid="button-boss-sign-in"
         >
           {submitting ? "Signing in…" : "Sign in"}
-        </Button>
-        <Button
-          className="mt-2 w-full"
-          disabled={submitting}
-          type="button"
-          variant="outline"
-          data-testid="button-boss-demo-sign-in"
-          onClick={handleDemo}
-        >
-          Demo sign-in
         </Button>
       </form>
     </div>

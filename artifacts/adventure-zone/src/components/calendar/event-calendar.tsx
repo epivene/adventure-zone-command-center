@@ -123,18 +123,22 @@ function bookingHref(event: BookingEvent) {
   return `/bookings/${event.id}`;
 }
 
-function BookingEventLink({ event, compact = false }: { event: BookingEvent; compact?: boolean }) {
+function BookingEventLink({ event, compact = false, readOnly = false }: { event: BookingEvent; compact?: boolean; readOnly?: boolean }) {
   const confirmed = event.status === "confirmed";
   const color = event.travelLegColor ?? "#64748b";
-  return (
-    <Link className={`block rounded-lg border bg-white px-3 py-2 shadow-sm transition hover:border-orange-300 hover:shadow ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"}`} href={bookingHref(event)} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>
+  const className = `block rounded-lg border bg-white px-3 py-2 shadow-sm transition ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"} ${readOnly ? "" : "hover:border-orange-300 hover:shadow"}`;
+  const content = (
+    <>
       <span className={`block font-bold text-slate-950 ${compact ? "text-xs" : "text-sm"}`}>{calendarBookingLabel(event)}</span>
       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
         <span className={confirmed ? "rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800" : "rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800"}>{confirmed ? "Confirmed" : "Tentative"}</span>
         {!compact ? <span>{formatStatus(event.status)}</span> : null}
       </span>
-    </Link>
+    </>
   );
+  return readOnly
+    ? <div className={className} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>{content}</div>
+    : <Link className={className} href={bookingHref(event)} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>{content}</Link>;
 }
 
 const actTypeColors: Record<ActCalendarActivity["activityType"], string> = {
@@ -187,7 +191,7 @@ function gradientForSegment(event: BookingEvent, segment: MonthSpanSegment, days
   return `linear-gradient(to right, ${stops.join(", ")})`;
 }
 
-function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments, activeMonth, onSelectActivity, colors }: { weekIndex: number; days: Date[]; bookingEvents: BookingEvent[]; actEvents: ActCalendarActivity[]; segments: MonthSpanSegment[]; activeMonth: Date; onSelectActivity: (event: ActCalendarActivity) => void; colors: ScheduleDisplayColors }) {
+function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments, activeMonth, onSelectActivity, colors, readOnly = false }: { weekIndex: number; days: Date[]; bookingEvents: BookingEvent[]; actEvents: ActCalendarActivity[]; segments: MonthSpanSegment[]; activeMonth: Date; onSelectActivity: (event: ActCalendarActivity) => void; colors: ScheduleDisplayColors; readOnly?: boolean }) {
   const positioned = useMemo(() => positionWeekSegments(segments), [segments]);
   const laneCount = positioned.length ? Math.max(...positioned.map((segment) => segment.lane)) + 1 : 0;
   const eventById = useMemo(() => new Map(bookingEvents.map((event) => [event.id, event])), [bookingEvents]);
@@ -207,14 +211,20 @@ function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments,
           const event = eventById.get(segment.eventId);
           if (!event) return null;
           const confirmed = event.status === "confirmed";
-          return <Link className={`pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition hover:ring-2 hover:ring-orange-300 ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={bookingHref(event)} key={`${event.id}-${weekIndex}`} style={{ background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1, textShadow: "0 1px 2px rgba(15, 23, 42, 0.8)" }} title={`${calendarBookingLabel(event)}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`}>{segment.startsHere ? calendarBookingLabel(event) : `↳ ${calendarBookingLabel(event)}`}</Link>;
+          const className = `pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition ${readOnly ? "" : "hover:ring-2 hover:ring-orange-300"} ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`;
+          const style = { background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1, textShadow: "0 1px 2px rgba(15, 23, 42, 0.8)" };
+          const label = segment.startsHere ? calendarBookingLabel(event) : `↳ ${calendarBookingLabel(event)}`;
+          const title = `${calendarBookingLabel(event)}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`;
+          return readOnly
+            ? <span className={className} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} key={`${event.id}-${weekIndex}`} style={style} title={title}>{label}</span>
+            : <Link className={className} data-end-column={segment.endColumn} data-start-column={segment.startColumn} data-testid={`booking-span-${event.id}-${weekIndex}`} href={bookingHref(event)} key={`${event.id}-${weekIndex}`} style={style} title={title}>{label}</Link>;
         })}
       </div>
     </div>
   );
 }
 
-function MobileBookingStrip({ event, dateKey, colors }: { event: BookingEvent; dateKey: string; colors: ScheduleDisplayColors }) {
+function MobileBookingStrip({ event, dateKey, colors, readOnly = false }: { event: BookingEvent; dateKey: string; colors: ScheduleDisplayColors; readOnly?: boolean }) {
   if (!event.startsAt) return null;
   const kind = bookingVisualKindOnDate(event, dateKey);
   if (!kind) return null;
@@ -224,20 +234,15 @@ function MobileBookingStrip({ event, dateKey, colors }: { event: BookingEvent; d
   const endsHere = dateKey === endsOn;
   const color = colorForBookingDay(event, dateKey, colors) ?? colors.eventColor;
   const label = calendarBookingLabel(event);
-  return (
-    <Link
-      aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`}
-      className={`block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 shadow-sm ${kind === "event" ? "text-white" : "text-slate-800"} ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`}
-      href={bookingHref(event)}
-      style={{ backgroundColor: color }}
-      title={`${label} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`}
-    >
-      {startsHere ? <span className="block truncate">{label}</span> : <span aria-hidden="true">&nbsp;</span>}
-    </Link>
-  );
+  const className = `block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 shadow-sm ${kind === "event" ? "text-white" : "text-slate-800"} ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`;
+  const content = startsHere ? <span className="block truncate">{label}</span> : <span aria-hidden="true">&nbsp;</span>;
+  const title = `${label} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`;
+  return readOnly
+    ? <span aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} style={{ backgroundColor: color }} title={title}>{content}</span>
+    : <Link aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} href={bookingHref(event)} style={{ backgroundColor: color }} title={title}>{content}</Link>;
 }
 
-export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange, colors = DEFAULT_SCHEDULE_DISPLAY_COLORS }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void; colors?: ScheduleDisplayColors }) {
+export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange, colors = DEFAULT_SCHEDULE_DISPLAY_COLORS, readOnly = false }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void; colors?: ScheduleDisplayColors; readOnly?: boolean }) {
   const [view, setView] = useState<CalendarView>("month");
   const activeMonth = useMemo(() => parseMonth(initialMonth), [initialMonth]);
   const [showActActivities, setShowActActivities] = useState(false);
@@ -371,7 +376,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
                       <span className={`mx-auto flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${today ? "bg-orange-600 text-white" : ""}`}>{date.getUTCDate()}</span>
                     </button>
                     <div className="mt-1 grid gap-0.5 overflow-hidden">
-                      {bookingsOnDay.map((event) => <MobileBookingStrip colors={colors} dateKey={key} event={event} key={event.id} />)}
+                      {bookingsOnDay.map((event) => <MobileBookingStrip colors={colors} dateKey={key} event={event} key={event.id} readOnly={readOnly} />)}
                       {actCount ? <button className="mx-1 rounded bg-sky-100 px-1 text-[9px] font-bold text-sky-800" onClick={() => chooseMobileDay(date)} type="button">{actCount} ACT</button> : null}
                     </div>
                   </div>
@@ -381,7 +386,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
             <section className="border-t border-slate-200 p-3">
               <h3 className="font-bold">{formatSelectedDay(selectedDay)}</h3>
               <div className="mt-2 grid gap-2">
-                {selectedBookings.map((event) => <BookingEventLink event={event} key={event.id} />)}
+                {selectedBookings.map((event) => <BookingEventLink event={event} key={event.id} readOnly={readOnly} />)}
                 {selectedActivities.map((event) => <ActActivityCard event={event} key={event.id} onClick={setSelectedActivity} />)}
                 {!selectedBookings.length && !selectedActivities.length ? <p className="text-sm text-slate-500">Nothing scheduled for this day.</p> : null}
               </div>
@@ -391,7 +396,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
           <div className="hidden sm:block">
             {Array.from({ length: 6 }, (_, weekIndex) => {
               const days = monthDays.slice(weekIndex * 7, weekIndex * 7 + 7);
-              return <DesktopMonthWeek activeMonth={activeMonth} actEvents={showActActivities ? datedActEvents : []} bookingEvents={datedBookings} colors={colors} days={days} key={weekIndex} onSelectActivity={setSelectedActivity} segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)} weekIndex={weekIndex} />;
+              return <DesktopMonthWeek activeMonth={activeMonth} actEvents={showActActivities ? datedActEvents : []} bookingEvents={datedBookings} colors={colors} days={days} key={weekIndex} onSelectActivity={setSelectedActivity} readOnly={readOnly} segments={bookingSpanSegments.filter((segment) => segment.weekIndex === weekIndex)} weekIndex={weekIndex} />;
             })}
           </div>
         </div>
@@ -400,7 +405,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
           {upcomingGroups.map(([key, groupEvents]) => (
             <section className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm" key={key}>
               <h2 className="text-sm font-bold text-slate-700">{new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: BUSINESS_TIME_ZONE }).format(new Date(`${key}T12:00:00`))}</h2>
-              <ol className="mt-2 grid gap-2">{groupEvents.map((event) => <li key={event.id}>{isActActivity(event) ? <ActActivityCard event={event} onClick={setSelectedActivity} /> : <BookingEventLink event={event} />}</li>)}</ol>
+              <ol className="mt-2 grid gap-2">{groupEvents.map((event) => <li key={event.id}>{isActActivity(event) ? <ActActivityCard event={event} onClick={setSelectedActivity} /> : <BookingEventLink event={event} readOnly={readOnly} />}</li>)}</ol>
             </section>
           ))}
           {futureEvents.length > agendaLimit ? <button className="button-secondary justify-self-center" onClick={() => setAgendaLimit((value) => value + 12)} type="button">Show more</button> : null}

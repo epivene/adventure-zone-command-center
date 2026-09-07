@@ -26,6 +26,11 @@ export type BossBooking = {
   contactName?: string | null;
   city?: string | null;
   region?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  probability?: "definite" | "likely" | "possible" | "unlikely";
+  travelLegName?: string | null;
+  travelLegColor?: string | null;
   legName?: string | null;
   notes?: string | null;
   [key: string]: unknown;
@@ -53,6 +58,7 @@ export type ScheduleLeg = {
   id: string;
   name?: string | null;
   color?: string | null;
+  sortOrder?: number;
   baseAddress?: string | null;
   defaultVehicleName?: string | null;
   defaultMpg?: number | null;

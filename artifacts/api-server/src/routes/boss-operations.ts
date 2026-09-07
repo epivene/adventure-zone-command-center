@@ -14,8 +14,39 @@ const routeId = (x: string | string[] | undefined) => Array.isArray(x) ? x[0] ??
 const legPatch = z.object({ name: z.string().trim().min(1).max(160).optional(), color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(), baseAddress: z.string().trim().max(500).nullable().optional(), defaultVehicleName: z.string().trim().max(160).nullable().optional(), defaultMpg: z.number().positive().nullable().optional(), archivedAt: z.coerce.date().nullable().optional() }).strict().refine(value => Object.keys(value).length > 0, "No leg changes provided.");
 const legReassignment = z.object({ travelLegId: z.string().uuid() }).strict();
 router.get("/boss/legs", requireBoss, async (_req, res) => {
-  const [legs, assignedBookings, assignedTrips] = await Promise.all([db.select().from(travelLegs).orderBy(travelLegs.sortOrder), db.select({ id: bookings.id, name: bookings.name, travelLegId: bookings.travelLegId, startsAt: bookings.startsAt, status: bookings.status }).from(bookings), db.select({ id: trips.id, name: trips.name, travelLegId: trips.travelLegId }).from(trips)]);
-  res.json({ legs: legs.map(leg => ({ ...leg, bookings: assignedBookings.filter(item => item.travelLegId === leg.id), trips: assignedTrips.filter(item => item.travelLegId === leg.id) })) });
+  const [legs, scheduleBookings, assignedTrips] = await Promise.all([
+    db.select().from(travelLegs).orderBy(travelLegs.sortOrder),
+    db.select({
+      id: bookings.id,
+      name: bookings.name,
+      city: bookings.city,
+      region: bookings.region,
+      latitude: bookings.latitude,
+      longitude: bookings.longitude,
+      startsAt: bookings.startsAt,
+      endsAt: bookings.endsAt,
+      status: bookings.status,
+      probability: bookings.probability,
+      travelLegId: bookings.travelLegId,
+    }).from(bookings).orderBy(bookings.startsAt, bookings.name),
+    db.select({ id: trips.id, name: trips.name, travelLegId: trips.travelLegId }).from(trips),
+  ]);
+  const planningBookings = scheduleBookings.map((booking) => {
+    const leg = booking.travelLegId ? legs.find((candidate) => candidate.id === booking.travelLegId) : null;
+    return {
+      ...booking,
+      travelLegName: leg?.name ?? null,
+      travelLegColor: leg?.color ?? null,
+    };
+  });
+  res.json({
+    bookings: planningBookings,
+    legs: legs.map((leg) => ({
+      ...leg,
+      bookings: planningBookings.filter((item) => item.travelLegId === leg.id),
+      trips: assignedTrips.filter((item) => item.travelLegId === leg.id),
+    })),
+  });
 });
 router.patch("/boss/legs/:legId", requireBoss, async (req, res): Promise<void> => {
   const legId = routeId(req.params.legId), value = legPatch.safeParse(req.body); if (!z.string().uuid().safeParse(legId).success || !value.success) { res.status(400).json({ error: value.success ? "Invalid leg ID." : value.error.issues[0]?.message ?? "Review leg changes." }); return; }
