@@ -29,6 +29,8 @@ describe("Boss workspace route boundaries", () => {
     expect(operations).not.toContain('"/boss/bookings/:bookingId"');
     expect(operations).toContain('router.put("/boss/bookings/:bookingId/leg", requireBoss');
     expect(operations).toContain("Boss can only reassign events that Desie has already assigned.");
+    expect(operations).toContain("Potential events are view-only.");
+    expect(operations).toContain("isBookedForSchedule(booking[0])");
     expect(operations).toContain("bookings: planningBookings");
     expect(operations).toContain("planningBookings.filter((item) => item.travelLegId === leg.id)");
     expect(operations).toContain("latitude: bookings.latitude");
