@@ -7,6 +7,7 @@ import {
   paperNotePages,
 } from "@/db/schema";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
+import { firstQueryRow } from "./paper-note-query-rows";
 
 export type PaperNoteSourceKind = "original" | "analysis";
 
@@ -16,6 +17,13 @@ export type PaperNoteResolvedSource = {
   originalObjectKey: string | null;
   analysisObjectKey: string | null;
 };
+
+function isPaperNoteResolvedSource(row: Record<string, unknown>): row is PaperNoteResolvedSource {
+  return typeof row.batchId === "string"
+    && typeof row.pageId === "string"
+    && (row.originalObjectKey === null || typeof row.originalObjectKey === "string")
+    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string");
+}
 
 export interface PaperNoteSourceResolver {
   resolvePage(
@@ -157,7 +165,6 @@ export class DrizzlePaperNoteSourceResolver implements PaperNoteSourceResolver {
         and batches.created_by = ${createdBy}
       limit 1
     `);
-    const row = (result as { rows?: PaperNoteResolvedSource[] }).rows?.[0];
-    return row ?? null;
+    return firstQueryRow(result, isPaperNoteResolvedSource);
   }
 }
