@@ -31,6 +31,20 @@ export type BossBooking = {
   probability?: "definite" | "likely" | "possible" | "unlikely";
   travelLegName?: string | null;
   travelLegColor?: string | null;
+  travelLegAssignmentKind?: "assigned" | "suggested" | null;
+  legAssignmentWarning?: "long_travel" | "major_travel_concern" | null;
+  legAssignmentExplanation?: string | null;
+  routeBucket?: "confirmed" | "potential" | "history";
+  locationQuality?: "coordinates" | "address" | "city" | "missing";
+  locationLabel?: string | null;
+  mappingState?:
+    | "mapped_coordinates"
+    | "mapped_address"
+    | "mapped_city"
+    | "needs_mapping_no_results"
+    | "needs_mapping_provider_unavailable"
+    | "needs_mapping_missing_location";
+  seasonYear?: number | null;
   legName?: string | null;
   notes?: string | null;
   [key: string]: unknown;
