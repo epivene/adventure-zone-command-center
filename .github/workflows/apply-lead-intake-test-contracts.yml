@@ -1,0 +1,95 @@
+name: Apply Lead Intake test contracts
+
+on:
+  push:
+    branches:
+      - fix/lead-intake-test-contracts
+    paths:
+      - ".github/workflows/apply-lead-intake-test-contracts.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/lead-intake-test-contracts
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm Lead Intake contract errors exist
+        run: |
+          set +e
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          grep -E 'communication-block-policy\.test\.ts.*error TS2345' /tmp/api-before.log >/dev/null || exit 1
+          grep -E 'lead-email-preview-service\.version\.test\.ts.*error TS2345' /tmp/api-before.log >/dev/null || exit 1
+          grep -E 'lead-availability-service\.test\.ts.*error TS2322' /tmp/api-before.log >/dev/null || exit 1
+      - name: Refresh Lead Intake test contracts
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('artifacts/api-server/src/features/lead-intake/communication-block-policy.test.ts')
+          text = p.read_text()
+          marker = '      blocks: [{ active: true, targetType: "recipient_email", normalizedEmail: "pat@example.com" }],\n'
+          if '      approvedTemplate: null,\n' not in text:
+            if marker not in text:
+              raise SystemExit('communication block marker not found')
+            text = text.replace(marker, marker + '      approvedTemplate: null,\n', 1)
+          p.write_text(text)
+
+          p = Path('artifacts/api-server/src/features/lead-intake/lead-email-preview-service.version.test.ts')
+          text = p.read_text()
+          old = 'blocks: [], availability:'
+          if 'approvedTemplate: null' not in text:
+            if old not in text:
+              raise SystemExit('preview version marker not found')
+            text = text.replace(old, 'blocks: [], approvedTemplate: null, availability:', 1)
+          p.write_text(text)
+
+          p = Path('artifacts/api-server/src/features/lead-intake/lead-availability-service.test.ts')
+          text = p.read_text()
+          old = 'save: async () => undefined'
+          new = 'save: async () => ({ reviewVersion: 6 })'
+          if text.count(old) != 1:
+            raise SystemExit(f'expected one stale save mock, found {text.count(old)}')
+          p.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run focused Lead Intake tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/lead-intake/communication-block-policy.test.ts \
+            src/features/lead-intake/lead-email-preview-service.version.test.ts \
+            src/features/lead-intake/lead-availability-service.test.ts
+      - name: Commit verified test patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/lead-intake/communication-block-policy.test.ts \
+            artifacts/api-server/src/features/lead-intake/lead-email-preview-service.version.test.ts \
+            artifacts/api-server/src/features/lead-intake/lead-availability-service.test.ts
+          git diff --cached --quiet || git commit -m "test: align Lead Intake contracts"
+          git push origin HEAD:fix/lead-intake-test-contracts
+      - run: pnpm run typecheck:libs
+      - name: Verify Lead Intake contract errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          if grep -E '(communication-block-policy|lead-email-preview-service\.version|lead-availability-service)\.test\.ts.*error (TS2345|TS2322)' /tmp/api-after.log; then
+            echo "Lead Intake targeted type errors remain." >&2
+            exit 1
+          fi
