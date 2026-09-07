@@ -94,6 +94,23 @@ describe("Boss schedule planning views", () => {
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
     expect(screen.queryByRole("link", { name: /Potential County Fair/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry location" })).not.toBeInTheDocument();
+
+    const overlaps = screen.getByRole("region", { name: "Route schedule conflicts" });
+    expect(overlaps.tagName).toBe("DETAILS");
+    expect(overlaps).not.toHaveAttribute("open");
+
+    const routeLeg = screen.getByTestId("route-event-leg-10000000-0000-4000-8000-000000000001");
+    expect(routeLeg.tagName).toBe("DETAILS");
+    expect(routeLeg).not.toHaveAttribute("open");
+
+    const bossLegs = screen.getByTestId("boss-travel-legs");
+    expect(bossLegs.tagName).toBe("DETAILS");
+    expect(bossLegs).not.toHaveAttribute("open");
+    const bossLeg = screen.getByTestId("leg-card-10000000-0000-4000-8000-000000000001");
+    expect(bossLeg.tagName).toBe("DETAILS");
+    expect(bossLeg).not.toHaveAttribute("open");
+    expect(document.querySelector('[data-testid^="button-leg-edit-"]')).toBeNull();
+    expect(document.querySelector('[data-testid^="button-leg-archive-"]')).toBeNull();
   });
 });
 
