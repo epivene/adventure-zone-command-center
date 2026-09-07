@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
-import { PaperNoteIntakeRepository, PaperNoteRepositoryError } from "./paper-note-intake-repository";
+import { PaperNoteIntakeRepository } from "./paper-note-intake-repository";
 
 async function setup() {
   const client = new PGlite();
@@ -120,7 +120,7 @@ describe("PaperNoteIntakeRepository mutation guards", () => {
       otherPage,
       90,
       new Date("2026-08-20T19:30:00Z"),
-    )).rejects.toMatchObject<Partial<PaperNoteRepositoryError>>({ code: "BATCH_NOT_FOUND" });
+    )).rejects.toMatchObject({ code: "BATCH_NOT_FOUND" });
 
     expect((await client.query(`
       select rotation_degrees from paper_note_pages where id = '${otherPage}'
