@@ -16,6 +16,12 @@ function iso(value: Date | string | null | undefined) {
   return (value instanceof Date ? value : new Date(value)).toISOString();
 }
 
+function tripStopTripId(target: { snapshot: unknown } | null) {
+  const snapshot = target?.snapshot;
+  if (!snapshot || typeof snapshot !== "object" || !("tripId" in snapshot)) return null;
+  return typeof snapshot.tripId === "string" ? snapshot.tripId : null;
+}
+
 export class DrizzleRouteSuggestionDomain implements RouteSuggestionTargetResolver, RouteSuggestionMutationAdapter {
   private readonly tripRepository: DrizzleTripRepository;
   private readonly bookingRepository: DrizzleBookingRepository;
@@ -90,7 +96,7 @@ export class DrizzleRouteSuggestionDomain implements RouteSuggestionTargetResolv
   async apply(suggestion: ManagerRouteSuggestion): Promise<{ ok: true } | { ok: false; error: string }> {
     if (suggestion.targetType === "trip_stop" && suggestion.kind === "reorder_stop") {
       const target = await this.resolve("trip_stop", suggestion.targetId);
-      const tripId = target?.snapshot.tripId;
+      const tripId = tripStopTripId(target);
       const requested = Number(suggestion.proposedJson.sortOrder);
       if (typeof tripId !== "string" || !Number.isInteger(requested) || requested < 1) return { ok: false, error: "Choose a valid stop position." };
       const stops = await this.tripRepository.listStops(tripId);
@@ -103,7 +109,7 @@ export class DrizzleRouteSuggestionDomain implements RouteSuggestionTargetResolv
 
     if (suggestion.targetType === "trip_stop" && suggestion.kind === "remove_stop") {
       const target = await this.resolve("trip_stop", suggestion.targetId);
-      const tripId = target?.snapshot.tripId;
+      const tripId = tripStopTripId(target);
       if (typeof tripId !== "string") return { ok: false, error: "Trip stop no longer exists." };
       return (await this.tripRepository.removeStop(tripId, suggestion.targetId)) ? { ok: true } : { ok: false, error: "Trip stop no longer exists." };
     }
