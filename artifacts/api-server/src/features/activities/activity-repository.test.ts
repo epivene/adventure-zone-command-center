@@ -82,7 +82,7 @@ function isColumnPair(
     "kind" in predicate &&
     (predicate as { kind: unknown }).kind === "eq"
   ) {
-    const eqPredicate = predicate as { left: unknown; right: unknown };
+    const eqPredicate = predicate as unknown as { left: unknown; right: unknown };
     return (
       (eqPredicate.left === leftColumn && eqPredicate.right === rightColumn) ||
       (eqPredicate.left === rightColumn && eqPredicate.right === leftColumn)
