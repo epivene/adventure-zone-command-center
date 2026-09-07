@@ -34,7 +34,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Boss schedule frontend tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossSchedulePage.test.tsx
+        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossSchedulePage.test.tsx src/pages/BossSchedulePage.event-data.test.tsx
       - name: Boss workspace API tests
         run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/routes/boss-workspace.test.ts src/routes/boss-schedule-route.test.ts
       - name: Build frontend
