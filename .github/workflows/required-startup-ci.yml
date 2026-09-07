@@ -9,6 +9,8 @@ on:
       - "artifacts/api-server/src/db/lead-intake-startup-migration.ts"
       - "artifacts/api-server/src/lib/startup-step.ts"
       - "artifacts/api-server/src/lib/startup-step.test.ts"
+      - "artifacts/api-server/src/lib/required-startup-shutdown.ts"
+      - "artifacts/api-server/src/lib/required-startup-shutdown.test.ts"
       - ".github/workflows/required-startup-ci.yml"
 
 jobs:
@@ -27,6 +29,6 @@ jobs:
       - name: Required startup tests
         env:
           DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/test
-        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/db/required-schema-startup.test.ts src/db/lead-intake-required-startup.test.ts src/lib/startup-step.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/db/required-schema-startup.test.ts src/db/lead-intake-required-startup.test.ts src/lib/startup-step.test.ts src/lib/required-startup-shutdown.test.ts
       - name: Build API server
         run: pnpm --filter @workspace/api-server build
