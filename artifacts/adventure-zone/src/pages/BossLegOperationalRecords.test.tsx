@@ -107,6 +107,30 @@ describe("Boss operational records by leg", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("falls back to all maintenance records when refresh removes the selected phase", async () => {
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      checklistAndMaintenance: [
+        { id: "maintenance-pre", legId: "leg-hulk", legName: "Hulk", title: "Pre inspection", phase: "pre" },
+        { id: "maintenance-post", legId: "leg-hulk", legName: "Hulk", title: "Post inspection", phase: "post" },
+      ],
+    });
+    render(<BossMaintenancePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 2 maintenance records" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Pre-event" }));
+    expect(screen.getByText("Pre inspection")).toBeInTheDocument();
+
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      checklistAndMaintenance: [
+        { id: "maintenance-post", legId: "leg-hulk", legName: "Hulk", title: "Post inspection", phase: "post" },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+
+    expect(await screen.findByText("Post inspection")).toBeInTheDocument();
+  });
+
   it("opens a dashboard-linked review inside its matching leg", async () => {
     window.history.replaceState(
       {},
@@ -120,5 +144,18 @@ describe("Boss operational records by leg", () => {
     );
     expect(screen.getByText("Kristy event")).toBeInTheDocument();
     expect(screen.queryByText("Hulk event")).not.toBeInTheDocument();
+  });
+
+  it("offers an Unassigned bucket for any legacy review without a leg", async () => {
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      reviewAndWrapUp: [
+        { id: "legacy-review", bookingId: "legacy-booking", legId: null, legName: null, title: "Legacy event", status: "review_completed" },
+      ],
+    });
+    render(<BossReviewsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Unassigned, 1 review" }));
+
+    expect(screen.getByText("Legacy event")).toBeInTheDocument();
   });
 });
