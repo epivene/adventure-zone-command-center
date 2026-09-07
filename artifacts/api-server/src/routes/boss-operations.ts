@@ -23,12 +23,12 @@ const legReassignment = z.object({ travelLegId: z.string().uuid() }).strict();
 router.get("/boss/legs", requireBoss, async (_req, res) => {
   const legRepo = new DrizzleTravelLegRepository(db);
   const [legs, mapEvents, assignedTrips, displaySettings] = await Promise.all([
-    legRepo.listTravelLegs({ includeArchived: true }),
+    db.select().from(travelLegs).orderBy(travelLegs.sortOrder),
     legRepo.listMapEvents(),
     db.select({ id: trips.id, name: trips.name, travelLegId: trips.travelLegId }).from(trips),
     new DrizzleScheduleDisplaySettingsRepository(db).get(),
   ]);
-  const planningBookings = await resolveRouteMapEvents(
+  const resolvedEvents = await resolveRouteMapEvents(
     filterMapEvents(mapEvents, {
       statuses: [],
       travelLegIds: [],
@@ -38,6 +38,33 @@ router.get("/boss/legs", requireBoss, async (_req, res) => {
     }),
     routeGeocoder,
   );
+  const routeMetadataById = new Map(mapEvents.map((event) => [event.id, event]));
+  const planningBookings = resolvedEvents.map((event) => {
+    const routeMetadata = routeMetadataById.get(event.id);
+    return {
+      id: event.id,
+      name: event.name,
+      city: event.city,
+      region: event.region,
+      latitude: event.latitude,
+      longitude: event.longitude,
+      startsAt: event.startsAt,
+      endsAt: event.endsAt,
+      status: event.status,
+      probability: event.probability,
+      travelLegId: event.travelLegId,
+      travelLegName: event.travelLegName,
+      travelLegColor: event.travelLegColor,
+      travelLegAssignmentKind: routeMetadata?.travelLegAssignmentKind ?? null,
+      legAssignmentWarning: routeMetadata?.legAssignmentWarning ?? null,
+      legAssignmentExplanation: routeMetadata?.legAssignmentExplanation ?? null,
+      routeBucket: event.routeBucket,
+      locationQuality: event.locationQuality,
+      locationLabel: [event.city, event.region].filter(Boolean).join(", ") || null,
+      mappingState: event.mappingState,
+      seasonYear: event.seasonYear,
+    };
+  });
   res.json({
     bookings: planningBookings,
     displaySettings,
