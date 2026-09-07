@@ -40,6 +40,34 @@ describe("Boss schedule planning views", () => {
         travelLegId: null,
         travelLegName: null,
         travelLegColor: null,
+      }, {
+        id: "20000000-0000-4000-8000-000000000002",
+        name: "Booked Fair One",
+        city: "Ogden",
+        region: "UT",
+        latitude: 41.223,
+        longitude: -111.9738,
+        startsAt: "2026-09-18T12:00:00.000Z",
+        endsAt: "2026-09-20T12:00:00.000Z",
+        status: "confirmed",
+        probability: "definite",
+        travelLegId: "10000000-0000-4000-8000-000000000001",
+        travelLegName: "Leg 1",
+        travelLegColor: "#ea580c",
+      }, {
+        id: "20000000-0000-4000-8000-000000000003",
+        name: "Booked Fair Two",
+        city: "Brigham City",
+        region: "UT",
+        latitude: 41.5102,
+        longitude: -112.0155,
+        startsAt: "2026-09-20T12:00:00.000Z",
+        endsAt: "2026-09-22T12:00:00.000Z",
+        status: "confirmed",
+        probability: "definite",
+        travelLegId: "10000000-0000-4000-8000-000000000001",
+        travelLegName: "Leg 1",
+        travelLegColor: "#ea580c",
       }],
     }), { status: 200, headers: { "Content-Type": "application/json" } })));
 
@@ -58,6 +86,11 @@ describe("Boss schedule planning views", () => {
     screen.getByRole("button", { name: "Map" }).click();
     expect(await screen.findByRole("heading", { name: "Route Map" })).toBeInTheDocument();
     expect(screen.getByText("Confirmed and potential route context across the selected season and leg.")).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Route schedule conflicts" })).toBeInTheDocument();
+    expect(screen.getByText("Booked Fair One")).toBeInTheDocument();
+    expect(screen.getByText("Booked Fair Two")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Booked Fair One" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Booked Fair Two" })).not.toBeInTheDocument();
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
     expect(screen.queryByRole("link", { name: /Potential County Fair/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Retry location" })).not.toBeInTheDocument();
