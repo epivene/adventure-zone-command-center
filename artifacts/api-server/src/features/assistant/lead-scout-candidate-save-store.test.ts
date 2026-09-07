@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { PostgresLeadScoutCandidateSaveLinker } from "./lead-scout-candidate-save-store";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 async function database() {
   const client = new PGlite();
   await client.exec(`
@@ -43,7 +50,7 @@ async function database() {
     );
   `);
   const run = await client.query(`insert into lead_scout_runs(actor_id) values ('owner-a') returning id`);
-  const runId = String(run.rows[0]?.id);
+  const runId = String(rowValue(run.rows, 0, "id"));
   const candidate = await client.query(
     `insert into lead_scout_candidates(run_id, enriched_at)
      values ($1, timestamptz '2026-08-20T12:00:00Z') returning id`,
@@ -52,7 +59,7 @@ async function database() {
   return {
     client,
     runId,
-    candidateId: String(candidate.rows[0]?.id),
+    candidateId: String(rowValue(candidate.rows, 0, "id")),
     linker: new PostgresLeadScoutCandidateSaveLinker(client as never),
   };
 }
@@ -106,7 +113,7 @@ describe("PostgresLeadScoutCandidateSaveLinker", () => {
       bookingId: "20000000-0000-4000-8000-000000000001",
     })).toBe(false);
     const count = await db.client.query(`select count(*)::int as count from scout_alert_watches`);
-    expect(count.rows[0]?.count).toBe(1);
+    expect(rowValue(count.rows, 0, "count")).toBe(1);
   });
 
   it("does not link or activate a watch for another actor's, dismissed, possible-match, or already-saved result", async () => {
@@ -128,6 +135,6 @@ describe("PostgresLeadScoutCandidateSaveLinker", () => {
     expect(await db.linker.markSaved({ ...input, actorId: "owner-a" })).toBe(false);
 
     const count = await db.client.query(`select count(*)::int as count from scout_alert_watches`);
-    expect(count.rows[0]?.count).toBe(0);
+    expect(rowValue(count.rows, 0, "count")).toBe(0);
   });
 });
