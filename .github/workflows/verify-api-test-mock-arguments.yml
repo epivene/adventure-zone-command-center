@@ -1,0 +1,40 @@
+name: Verify API test mock arguments
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/adventure_zone_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused API tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/db/scout-alerts-startup-migration.test.ts
+          src/features/profile-research/research-prospect-intake.test.ts
+      - name: Verify targeted compiler errors cleared
+        shell: bash
+        run: |
+          set +e
+          pnpm typecheck 2>&1 | tee /tmp/workspace-typecheck.log
+          status=${PIPESTATUS[0]}
+          set -e
+          test "$status" -ne 0
+          if grep -E "scout-alerts-startup-migration\.test\.ts|research-prospect-intake\.test\.ts" /tmp/workspace-typecheck.log; then
+            echo "Targeted compiler errors remain"
+            exit 1
+          fi
