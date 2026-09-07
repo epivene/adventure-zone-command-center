@@ -22,6 +22,7 @@ afterEach(() => {
 
 describe("Boss route event handoff", () => {
   it("preserves Admin mapping and suggested-leg metadata while enforcing read-only mode", async () => {
+    const currentYear = new Date().getFullYear();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({
       legs: [{
         id: "leg-hulk",
@@ -37,8 +38,8 @@ describe("Boss route event handoff", () => {
         region: "UT",
         latitude: 41.73698,
         longitude: -111.83384,
-        startsAt: "2026-09-18T12:00:00.000Z",
-        endsAt: "2026-09-20T12:00:00.000Z",
+        startsAt: `${currentYear}-09-18T12:00:00.000Z`,
+        endsAt: `${currentYear}-09-20T12:00:00.000Z`,
         status: "possible",
         probability: "possible",
         travelLegId: "leg-hulk",
@@ -51,7 +52,7 @@ describe("Boss route event handoff", () => {
         locationQuality: "city",
         locationLabel: "Logan, UT",
         mappingState: "mapped_city",
-        seasonYear: 2026,
+        seasonYear: currentYear,
       }],
     }), { status: 200, headers: { "Content-Type": "application/json" } })));
 
@@ -68,6 +69,6 @@ describe("Boss route event handoff", () => {
     expect(handoff).toHaveTextContent('"locationQuality":"city"');
     expect(handoff).toHaveTextContent('"locationLabel":"Logan, UT"');
     expect(handoff).toHaveTextContent('"mappingState":"mapped_city"');
-    expect(handoff).toHaveTextContent('"seasonYear":2026');
+    expect(handoff).toHaveTextContent(`"seasonYear":${currentYear}`);
   });
 });
