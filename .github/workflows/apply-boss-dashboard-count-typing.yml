@@ -51,10 +51,10 @@ jobs:
           if text.count(old) != 1:
               raise SystemExit(f'expected one nullable office account comparison, found {text.count(old)}')
           text = text.replace(old, 'eq(designProjects.officeAccountId, officeAccountId)', 1)
-          old = ': [{ value: 0 }, { value: 0 }, { value: 0 }];'
-          if old not in text:
-              raise SystemExit('workspace count fallback marker not found')
-          text = text.replace(old, ': [[{ value: 0 }], [{ value: 0 }], [{ value: 0 }]];', 1)
+          old = 'Promise.resolve([{ value: 0 }, { value: 0 }, { value: 0 }])'
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one business-document fallback, found {text.count(old)}')
+          text = text.replace(old, 'Promise.resolve([[{ value: 0 }], [{ value: 0 }], [{ value: 0 }]])', 1)
           path.write_text(text)
           PY
       - name: Run available Boss route tests
