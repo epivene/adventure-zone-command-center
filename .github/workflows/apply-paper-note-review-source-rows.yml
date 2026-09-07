@@ -1,0 +1,165 @@
+name: Apply paper note review and source row guards
+
+on:
+  push:
+    branches:
+      - fix/paper-note-review-source-rows
+    paths:
+      - ".github/workflows/apply-paper-note-review-source-rows.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/paper-note-review-source-rows
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm target compiler errors exist before fix
+        run: |
+          set +e
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          for file in \
+            paper-note-review-repository.ts \
+            paper-note-reread-service.ts \
+            paper-note-source-restore-service.ts \
+            paper-note-source-service.ts; do
+            grep -E "${file//./\\.}.*error TS2352" /tmp/api-before.log >/dev/null || {
+              echo "Expected pre-fix TS2352 for $file was not present." >&2
+              exit 1
+            }
+          done
+      - name: Guard review, reread, and source query rows
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          base = Path('artifacts/api-server/src/features/paper-notes')
+
+          review = base / 'paper-note-review-repository.ts'
+          text = review.read_text()
+          text = text.replace(
+              'import type { PaperNoteReviewIssue } from "./paper-note-review-schema";\n',
+              'import type { PaperNoteReviewIssue } from "./paper-note-review-schema";\nimport { firstQueryRow } from "./paper-note-query-rows";\nimport { paperNoteEntryStateValues, type PaperNoteEntryState } from "./paper-note-types";\n',
+              1,
+          )
+          marker = '''type ReviewRow = {\n  id: string;\n  extractionPayload: unknown;\n  reviewPayload: unknown;\n  reviewVersion: number;\n  state: PaperNoteReviewMutationView["state"];\n  validationIssues: unknown;\n  approvedAt: Date | string | null;\n};\n'''
+          guards = marker + '''\ntype ReviewMutationMissRow = { reviewVersion: number; state: string };\n\nfunction isPaperNoteEntryState(value: unknown): value is PaperNoteEntryState {\n  return typeof value === "string"\n    && paperNoteEntryStateValues.some((state) => state === value);\n}\n\nfunction isReviewRow(row: Record<string, unknown>): row is ReviewRow {\n  return typeof row.id === "string"\n    && "extractionPayload" in row\n    && "reviewPayload" in row\n    && typeof row.reviewVersion === "number"\n    && isPaperNoteEntryState(row.state)\n    && "validationIssues" in row\n    && (row.approvedAt === null || typeof row.approvedAt === "string" || row.approvedAt instanceof Date);\n}\n\nfunction isReviewMutationMissRow(row: Record<string, unknown>): row is ReviewMutationMissRow {\n  return typeof row.reviewVersion === "number" && typeof row.state === "string";\n}\n'''
+          if marker not in text:
+              raise SystemExit('review row marker not found')
+          text = text.replace(marker, guards, 1)
+          old = '    const row = (result as { rows?: ReviewRow[] }).rows?.[0];'
+          count = text.count(old)
+          if count != 3:
+              raise SystemExit(f'expected 3 review row casts, found {count}')
+          text = text.replace(old, '    const row = firstQueryRow(result, isReviewRow);')
+          old_miss = '    const row = (result as { rows?: Array<{ reviewVersion: number; state: string }> }).rows?.[0];'
+          if old_miss not in text:
+              raise SystemExit('review mutation miss cast not found')
+          text = text.replace(old_miss, '    const row = firstQueryRow(result, isReviewMutationMissRow);', 1)
+          review.write_text(text)
+
+          reread = base / 'paper-note-reread-service.ts'
+          text = reread.read_text()
+          text = text.replace(
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\n',
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\nimport { firstQueryRow, queryRows } from "./paper-note-query-rows";\n',
+              1,
+          )
+          marker = '''export type PaperNoteRereadTarget = {\n  batchId: string;\n  pageId: string;\n  batchStatus: string;\n  pageStatus: string;\n  analysisObjectKey: string | null;\n  hasEntries: boolean;\n  hasImportedEntries: boolean;\n};\n'''
+          guard = marker + '''\nfunction isPaperNoteRereadTarget(row: Record<string, unknown>): row is PaperNoteRereadTarget {\n  return typeof row.batchId === "string"\n    && typeof row.pageId === "string"\n    && typeof row.batchStatus === "string"\n    && typeof row.pageStatus === "string"\n    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string")\n    && typeof row.hasEntries === "boolean"\n    && typeof row.hasImportedEntries === "boolean";\n}\n\nfunction isLockedPageRow(row: Record<string, unknown>): row is { id: string } {\n  return typeof row.id === "string";\n}\n'''
+          if marker not in text:
+              raise SystemExit('reread target marker not found')
+          text = text.replace(marker, guard, 1)
+          old = '    return (result as { rows?: PaperNoteRereadTarget[] }).rows?.[0] ?? null;'
+          if old not in text:
+              raise SystemExit('reread target cast not found')
+          text = text.replace(old, '    return firstQueryRow(result, isPaperNoteRereadTarget);', 1)
+          old = '      if (!(locked as { rows?: unknown[] }).rows?.length) {'
+          if old not in text:
+              raise SystemExit('reread lock cast not found')
+          text = text.replace(old, '      if (!queryRows(locked, isLockedPageRow).length) {', 1)
+          reread.write_text(text)
+
+          restore = base / 'paper-note-source-restore-service.ts'
+          text = restore.read_text()
+          text = text.replace(
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\n',
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\nimport { firstQueryRow } from "./paper-note-query-rows";\n',
+              1,
+          )
+          marker = '''export type PaperNoteRestoreTarget = {\n  batchId: string;\n  pageId: string;\n  sha256: string | null;\n  originalObjectKey: string;\n};\n'''
+          guard = marker + '''\nfunction isPaperNoteRestoreTarget(row: Record<string, unknown>): row is PaperNoteRestoreTarget {\n  return typeof row.batchId === "string"\n    && typeof row.pageId === "string"\n    && (row.sha256 === null || typeof row.sha256 === "string")\n    && typeof row.originalObjectKey === "string";\n}\n'''
+          if marker not in text:
+              raise SystemExit('restore target marker not found')
+          text = text.replace(marker, guard, 1)
+          old = '    return (result as { rows?: PaperNoteRestoreTarget[] }).rows?.[0] ?? null;'
+          if old not in text:
+              raise SystemExit('restore target cast not found')
+          text = text.replace(old, '    return firstQueryRow(result, isPaperNoteRestoreTarget);', 1)
+          restore.write_text(text)
+
+          source = base / 'paper-note-source-service.ts'
+          text = source.read_text()
+          text = text.replace(
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\n',
+              'import type { PaperNoteObjectStorage } from "./paper-note-object-storage";\nimport { firstQueryRow } from "./paper-note-query-rows";\n',
+              1,
+          )
+          marker = '''export type PaperNoteResolvedSource = {\n  batchId: string;\n  pageId: string;\n  originalObjectKey: string | null;\n  analysisObjectKey: string | null;\n};\n'''
+          guard = marker + '''\nfunction isPaperNoteResolvedSource(row: Record<string, unknown>): row is PaperNoteResolvedSource {\n  return typeof row.batchId === "string"\n    && typeof row.pageId === "string"\n    && (row.originalObjectKey === null || typeof row.originalObjectKey === "string")\n    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string");\n}\n'''
+          if marker not in text:
+              raise SystemExit('resolved source marker not found')
+          text = text.replace(marker, guard, 1)
+          old = '''    const row = (result as { rows?: PaperNoteResolvedSource[] }).rows?.[0];\n    return row ?? null;'''
+          if old not in text:
+              raise SystemExit('resolved source cast not found')
+          text = text.replace(old, '    return firstQueryRow(result, isPaperNoteResolvedSource);', 1)
+          source.write_text(text)
+          PY
+      - name: Run focused paper note behavior tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/paper-notes/paper-note-review-repository.pglite.test.ts \
+            src/features/paper-notes/paper-note-reread-service.test.ts \
+            src/features/paper-notes/paper-note-source-restore-service.test.ts \
+            src/features/paper-notes/paper-note-source-service.test.ts
+      - name: Commit verified production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/paper-notes/paper-note-review-repository.ts \
+                  artifacts/api-server/src/features/paper-notes/paper-note-reread-service.ts \
+                  artifacts/api-server/src/features/paper-notes/paper-note-source-restore-service.ts \
+                  artifacts/api-server/src/features/paper-notes/paper-note-source-service.ts
+          git diff --cached --quiet || git commit -m "fix: guard paper note review and source rows"
+          git push origin HEAD:fix/paper-note-review-source-rows
+      - run: pnpm run typecheck:libs
+      - name: Verify target compiler errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          for file in \
+            paper-note-review-repository.ts \
+            paper-note-reread-service.ts \
+            paper-note-source-restore-service.ts \
+            paper-note-source-service.ts; do
+            if grep -E "${file//./\\.}.*error TS2352" /tmp/api-after.log; then
+              echo "Unsafe query-result cast remains in $file." >&2
+              exit 1
+            fi
+          done
