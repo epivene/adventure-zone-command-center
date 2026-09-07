@@ -2,6 +2,7 @@ import { pool as defaultPool } from "@workspace/db";
 import { BusinessDocumentIngestion } from "./business-document-ingestion";
 import { GoogleDriveDocumentSource } from "./google-drive-document-source";
 import { GoogleGmailDocumentSource, type GmailImportWindow } from "./google-gmail-document-source";
+import { safeBusinessDocumentErrorCode } from "./business-document-error-code";
 
 type ImportCounts = { discovered: number; imported: number; deduplicated: number; linked: number; review: number; skipped: number; retry: number; failed: number };
 export type BusinessDocumentImportRun = { id: string; sourceKind: "drive" | "gmail"; status: string; mode: string; scope: Record<string, unknown>; counts: ImportCounts };
@@ -55,7 +56,7 @@ export class BusinessDocumentImportService {
         }
       } catch (error) {
         report.retry += 1;
-        await this.dependencies.store.checkpoint({ runId, externalId: file.id, status: "retry", errorCode: error instanceof Error ? error.message : "DRIVE_IMPORT_FAILED" });
+        await this.dependencies.store.checkpoint({ runId, externalId: file.id, status: "retry", errorCode: safeBusinessDocumentErrorCode(error, "DRIVE_IMPORT_FAILED") });
       }
     }
     await this.dependencies.store.finish(runId, report);
@@ -121,7 +122,7 @@ export class BusinessDocumentImportService {
         }
       } catch (error) {
         report.retry += 1;
-        await this.dependencies.store.checkpoint({ runId, externalId, status: "retry", errorCode: error instanceof Error ? error.message : "GMAIL_IMPORT_FAILED" });
+        await this.dependencies.store.checkpoint({ runId, externalId, status: "retry", errorCode: safeBusinessDocumentErrorCode(error, "GMAIL_IMPORT_FAILED") });
       }
     }
     await this.dependencies.store.finish(runId, report);

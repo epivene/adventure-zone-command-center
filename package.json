@@ -9,6 +9,7 @@
     "report:act-import": "pnpm --filter @workspace/scripts exec tsx report-act-replacement-import.ts",
     "preview:business-documents": "pnpm --filter @workspace/scripts run preview:business-documents",
     "migrate:business-documents": "pnpm --filter @workspace/scripts run migrate:business-documents",
+    "report:business-documents": "pnpm --filter @workspace/scripts run report:business-documents --",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
   },

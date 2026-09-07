@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, FileText, Unlink } from "lucide-react";
-import { Link } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import {
@@ -17,8 +16,8 @@ export function ProfileDocuments({ profileId }: { profileId: string }) {
   useEffect(() => {
     let current = true;
     setLoading(true);
-    businessDocumentsApi.forProfile(profileId)
-      .then((result) => { if (current) setDocuments(result.documents); })
+    Promise.resolve(businessDocumentsApi.forProfile(profileId))
+      .then((result) => { if (current) setDocuments(result?.documents ?? []); })
       .catch(() => { if (current) setError("Could not load profile documents."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
@@ -59,9 +58,9 @@ export function ProfileDocuments({ profileId }: { profileId: string }) {
           <h2 className="text-lg font-bold text-slate-900">Documents</h2>
           <p className="text-sm text-slate-600">Protected business files linked to this profile.</p>
         </div>
-        <Link className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:underline" href={`/business-documents?profileId=${profileId}`}>
+        <a className="inline-flex items-center gap-1 text-sm font-semibold text-blue-700 hover:underline" href={`/business-documents?profileId=${profileId}`}>
           Open document library <ExternalLink className="h-3.5 w-3.5" />
-        </Link>
+        </a>
       </div>
 
       {error ? <p className="mt-3 text-sm text-rose-700">{error}</p> : null}

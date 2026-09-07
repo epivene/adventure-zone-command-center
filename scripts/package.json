@@ -7,6 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "preview:business-documents": "tsx ./migrate-business-documents.ts",
     "migrate:business-documents": "tsx ./migrate-business-documents.ts --apply",
+    "report:business-documents": "tsx ./report-business-document-import.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

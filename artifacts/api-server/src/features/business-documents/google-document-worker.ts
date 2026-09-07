@@ -2,6 +2,7 @@ import { pool as defaultPool } from "@workspace/db";
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import type { BusinessDocumentIngestion } from "./business-document-ingestion";
 import { GoogleGmailDocumentSource, type GmailDocumentInventoryItem } from "./google-gmail-document-source";
+import { safeBusinessDocumentErrorCode } from "./business-document-error-code";
 
 export type GoogleDocumentCursor = { internalDateMs: number; messageId: string };
 export type GoogleDocumentRunSummary = {
@@ -71,7 +72,7 @@ export class GoogleDocumentWorker {
           completed = true;
           break;
         } catch (error) {
-          lastError = error instanceof Error ? error.message : lastError;
+          lastError = safeBusinessDocumentErrorCode(error, "GMAIL_DOCUMENT_IMPORT_FAILED");
           if (attempt < 3) {
             await this.dependencies.state.checkpoint({ runId, externalId, status: "retry", errorCode: lastError });
           }

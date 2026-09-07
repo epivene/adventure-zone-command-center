@@ -58,6 +58,6 @@ describe("GoogleDocumentWorker", () => {
     const result = await worker.runOnce(new Date(200));
     expect(source.candidate).toHaveBeenCalledTimes(3);
     expect(result.review).toBe(1);
-    expect(checkpoint).toHaveBeenLastCalledWith(expect.objectContaining({ status: "review", errorCode: "temporary" }));
+    expect(checkpoint).toHaveBeenLastCalledWith(expect.objectContaining({ status: "review", errorCode: "GMAIL_DOCUMENT_IMPORT_FAILED" }));
   });
 });
