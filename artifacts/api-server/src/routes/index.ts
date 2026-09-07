@@ -125,6 +125,7 @@ import { requireOwnerMiddleware } from "../lib/auth";
 import marketingRouter from "./marketing";
 import coiCertificatesRouter from "./coi-certificates";
 import businessDocumentsRouter from "./business-documents";
+import businessDocumentImportsRouter from "./business-document-imports";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
@@ -247,6 +248,7 @@ router.use(attendanceHistoryProfileRouter);
 router.use(businessSourceDocumentFilesRouter);
 router.use(businessSourceDocumentLinksRouter);
 router.use(businessDocumentsRouter);
+router.use(businessDocumentImportsRouter);
 router.use(profileSourceDocumentsRouter);
 router.use(todayRouter);
 router.use(opportunityEmailLiveRuntimeRouter);

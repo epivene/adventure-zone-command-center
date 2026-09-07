@@ -2,6 +2,8 @@ import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
   GoogleCalendarSummary,
+  GoogleDriveFile,
+  GoogleDrivePage,
   GoogleLabelSummary,
   GoogleMessageMetadata,
   GoogleMessagePage,
@@ -33,6 +35,7 @@ const draftsEndpoint = `${gmailBaseEndpoint}/drafts`;
 const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
+const driveFilesEndpoint = "https://www.googleapis.com/drive/v3/files";
 
 type TokenResponse = {
   access_token?: unknown;
@@ -307,6 +310,17 @@ export function createGoogleWorkspaceReadClient(input: {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
     }
     return responseJson(response);
+  }
+
+  async function authorizedBytes(url: string, retryUnauthorized = true): Promise<Uint8Array> {
+    const token = await currentAccessToken(!retryUnauthorized);
+    const response = await fetcher(url, { headers: { authorization: `Bearer ${token}` } });
+    if (response.status === 401 && retryUnauthorized) {
+      accessToken = null;
+      return authorizedBytes(url, false);
+    }
+    if (!response.ok) throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
+    return new Uint8Array(await response.arrayBuffer());
   }
 
   return {
@@ -702,6 +716,47 @@ export function createGoogleWorkspaceReadClient(input: {
         originalGmailUrl: `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(payload.id)}`,
         messages,
       };
+    },
+
+    async listDriveFiles(parentId: string, pageToken?: string | null): Promise<GoogleDrivePage> {
+      const parent = parentId.trim();
+      if (!parent || parent.length > 500) throw clientError("GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID");
+      const url = new URL(driveFilesEndpoint);
+      url.searchParams.set("q", `'${parent.replaceAll("'", "\\'")}' in parents and trashed = false`);
+      url.searchParams.set("pageSize", "1000");
+      url.searchParams.set("fields", "nextPageToken,files(id,name,mimeType,modifiedTime,size,parents,webViewLink)");
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
+      const payload = await authorizedJson(url.toString());
+      const files = (Array.isArray(payload.files) ? payload.files : []).flatMap((value): GoogleDriveFile[] => {
+        if (!value || typeof value !== "object") return [];
+        const file = value as Record<string, unknown>;
+        if (typeof file.id !== "string" || typeof file.name !== "string" || typeof file.mimeType !== "string") return [];
+        return [{
+          id: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          modifiedTime: typeof file.modifiedTime === "string" ? file.modifiedTime : null,
+          size: typeof file.size === "string" && /^\d+$/.test(file.size) ? Number(file.size) : null,
+          parents: Array.isArray(file.parents) ? file.parents.filter((item): item is string => typeof item === "string") : [],
+          webViewLink: typeof file.webViewLink === "string" ? file.webViewLink : null,
+        }];
+      });
+      return { files, nextPageToken: typeof payload.nextPageToken === "string" ? payload.nextPageToken : null };
+    },
+
+    async downloadDriveFile(fileId: string, mimeType = "application/octet-stream") {
+      const id = fileId.trim();
+      if (!id) throw clientError("GOOGLE_WORKSPACE_DRIVE_FILE_INVALID");
+      const exports: Record<string, string> = {
+        "application/vnd.google-apps.document": "application/pdf",
+        "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.google-apps.presentation": "application/pdf",
+      };
+      const exportMime = exports[mimeType];
+      const url = new URL(`${driveFilesEndpoint}/${encodeURIComponent(id)}${exportMime ? "/export" : ""}`);
+      if (exportMime) url.searchParams.set("mimeType", exportMime);
+      else url.searchParams.set("alt", "media");
+      return authorizedBytes(url.toString());
     },
   };
 }

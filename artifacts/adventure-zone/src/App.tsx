@@ -83,6 +83,7 @@ const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPa
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
 const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
+const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
 const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
@@ -355,6 +356,7 @@ function AdminProtectedApp() {
           <Route path="/profiles" component={OrganizationsPage} />
           <Route path="/organizations"><ProfilesRedirect /></Route>
           <Route path="/event-families/:id"><EventFamilyPage /></Route>
+          <Route path="/business-documents/import" component={BusinessDocumentImportPage} />
           <Route path="/business-documents" component={BusinessDocumentsPage} />
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar"><ScheduleRedirect /></Route>
