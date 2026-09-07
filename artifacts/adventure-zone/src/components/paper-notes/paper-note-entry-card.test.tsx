@@ -110,7 +110,7 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByText(/Emmett Cherry Festival — Tina — ext 3115/)).toBeInTheDocument();
     expect(screen.getByLabelText("Phone number")).toHaveValue("208-555-0142");
     expect(screen.getByLabelText("Extension")).toHaveValue("3115");
-    expect(screen.getByLabelText("Phone type")).toHaveValue("office");
+    expect(screen.getByLabelText(/^Phone type$/i)).toHaveValue("office");
     expect(screen.getByLabelText("Phone label")).toHaveValue("fair office");
     expect(screen.getByLabelText("Phone status")).toHaveValue("active");
     expect(screen.getByLabelText("Import as structured phone")).toBeChecked();
