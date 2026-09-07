@@ -59,16 +59,12 @@
     {
       "subject": "2027 timing and source review",
       "body": "The 2026 fair occurred July 20-August 1, so routine 2026 outreach is closed. Schedule the next individual follow-up for April 20, 2027, approximately three months before the expected 2027 fair window, unless the organizer is contacted sooner through the convention campaign. Confirm official 2027 dates before putting dates in outreach. Sources reviewed September 7, 2026: University of Wyoming Extension Niobrara County Fair page and Niobrara County Extension contact page; Explore Niobrara 2026 community calendar."
-    },
-    {
-      "subject": "Individualized 2027 email draft prepared",
-      "body": "An unsent Gmail draft titled “Planning for the 2027 Niobrara County Fair” was prepared for Kellie Chichester, with the general fair inbox copied. It is intentionally separate from the planned broader convention email and leads with the guaranteed, fully staffed package structure."
     }
   ],
   "followUps": [
     {
       "label": "2027 Niobrara County Fair outreach",
-      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and send/review the individualized guaranteed-package draft if no earlier contact occurred through the convention campaign.",
+      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and prepare individualized outreach if no earlier contact occurred through the convention campaign.",
       "dueAt": "2027-04-20T16:00:00.000Z"
     }
   ]
