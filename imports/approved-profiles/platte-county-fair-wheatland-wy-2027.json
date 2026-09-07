@@ -52,16 +52,12 @@
     {
       "subject": "2027 timing and source review",
       "body": "The 2026 fair occurred July 24-August 2, so routine 2026 outreach is closed. Schedule the next individual follow-up for April 24, 2027, approximately three months before the expected 2027 fair window, unless the organizer is contacted sooner through the convention campaign. Confirm official 2027 dates before putting dates in outreach. Platte County Fair Board bylaws state annual fair dates are set at the April meeting of the preceding year, so the board plans far ahead. Sources reviewed September 7, 2026: official Platte County Fair site, 2026 fair-events and vendor pages, Platte County Fair Board bylaws, and the Rocky Mountain Association of Fairs 2026 listing."
-    },
-    {
-      "subject": "Individualized 2027 email draft prepared",
-      "body": "An unsent Gmail draft titled “Planning for the 2027 Platte County Fair & Rodeo” was prepared for the fair office. It is intentionally separate from the planned broader convention email, references the 2025 WAF meeting, and leads with the guaranteed, fully staffed package structure."
     }
   ],
   "followUps": [
     {
       "label": "2027 Platte County Fair outreach",
-      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and send/review the individualized guaranteed-package draft if no earlier contact occurred through the convention campaign.",
+      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and prepare individualized outreach if no earlier contact occurred through the convention campaign.",
       "dueAt": "2027-04-24T16:00:00.000Z"
     }
   ]
