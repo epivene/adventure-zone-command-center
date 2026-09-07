@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
-import { LeadReviewService, LeadReviewServiceError } from "./lead-review-service";
+import { LeadReviewService } from "./lead-review-service";
 
 const rowId = "30000000-0000-4000-8000-000000000001";
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -102,14 +102,14 @@ describe("LeadReviewService", () => {
     const { client, service } = await setup(); clients.push(client);
     await service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision });
     await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Amy", decision: { ...decision, recipientEmail: "other@aspenfilm.org" } }))
-      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "VERSION_CONFLICT" });
+      .rejects.toMatchObject({ code: "VERSION_CONFLICT" });
   }, 15_000);
 
   it("does not verify a contact attached to another profile", async () => {
     const { client, service } = await setup(); clients.push(client);
     await client.exec(`delete from organization_contacts`);
     await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision }))
-      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
+      .rejects.toMatchObject({ code: "REVIEW_BLOCKED" });
     expect((await client.query(`select state from lead_import_rows where id='${rowId}'`)).rows).toEqual([{ state: "needs_review" }]);
   }, 15_000);
 
@@ -120,7 +120,7 @@ describe("LeadReviewService", () => {
       expectedVersion: 0,
       reviewedBy: "Desiree",
       decision: { ...decision, recipientEmail: "other@aspenfilm.org" },
-    })).rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
+    })).rejects.toMatchObject({ code: "REVIEW_BLOCKED" });
   }, 15_000);
 
   it("derives conflicting profile emails on the server and requires an explicit manual override", async () => {
@@ -138,7 +138,7 @@ describe("LeadReviewService", () => {
       emailEvidence: { sourceKind: "official_website" as const, sourceReference: "https://aspenfilm.org/contact" },
     };
     await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision: manual }))
-      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "REVIEW_BLOCKED" });
+      .rejects.toMatchObject({ code: "REVIEW_BLOCKED" });
     await expect(service.confirm({ rowId, expectedVersion: 0, reviewedBy: "Desiree", decision: { ...manual, recipientConflictResolved: true } }))
       .resolves.toMatchObject({ state: "verified" });
   }, 15_000);
