@@ -4,6 +4,7 @@
   const INQUIRY_API_URL =
     "https://adventure-zone-command-center.onrender.com/api/public/website-inquiries";
   const INQUIRY_TIMEOUT_MS = 12000;
+  const GALLERY_AUTOPLAY_MS = 10000;
 
   const IMAGE = Object.freeze({
     logo: "https://static.wixstatic.com/media/0e6e2c_1517bd8d12f94f3194787c7f4f972079~mv2.png",
@@ -441,11 +442,21 @@
     .fundraising-highlight { position: relative; z-index: 1; display: inline-flex; width: fit-content; margin: -4px 0 20px; padding: 8px 12px; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); box-shadow: 5px 5px 0 var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .08em; line-height: 1.1; text-transform: uppercase; }
 
     .gallery { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
-    .gallery-grid { display: grid; gap: 16px; }
-    .gallery-frame { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--az-navy); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
-    .gallery-frame:nth-child(2) { transform: none; }
-    .gallery-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 1; transition: opacity 1s ease; }
-    .gallery-frame img.fading { opacity: 0; }
+    .gallery-heading-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
+    .gallery-heading-row h2 { margin: 0; }
+    .gallery-controls { display: flex; flex: 0 0 auto; gap: 12px; }
+    .gallery-arrow { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 0; color: var(--az-navy); background: var(--az-yellow); border: 4px solid var(--az-navy); box-shadow: 5px 5px 0 var(--az-navy); cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; }
+    .gallery-arrow:hover { transform: translate(2px, 2px); box-shadow: 3px 3px 0 var(--az-navy); }
+    .gallery-arrow:focus-visible { outline: 4px solid var(--az-pink); outline-offset: 3px; }
+    .gallery-arrow .az-icon { width: 22px; height: 22px; }
+    .gallery-prev .az-icon { transform: rotate(180deg); }
+    .gallery-grid { display: flex; gap: 16px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 8px 8px 24px; scroll-behavior: smooth; scroll-snap-type: x mandatory; scrollbar-color: var(--az-pink) rgba(15,23,41,.15); scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+    .gallery-grid:focus-visible { outline: 4px solid var(--az-pink); outline-offset: 4px; }
+    .gallery-grid::-webkit-scrollbar { height: 10px; }
+    .gallery-grid::-webkit-scrollbar-track { background: rgba(15,23,41,.15); }
+    .gallery-grid::-webkit-scrollbar-thumb { background: var(--az-pink); border: 2px solid var(--az-navy); }
+    .gallery-frame { position: relative; flex: 0 0 min(78vw, 340px); aspect-ratio: 4 / 5; margin: 0; overflow: hidden; background: var(--az-navy); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); scroll-snap-align: start; scroll-snap-stop: always; }
+    .gallery-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     .gallery-frame::after { position: absolute; inset: 0; content: ""; pointer-events: none; opacity: 0; background: linear-gradient(to top, rgba(15,23,41,.8), transparent 60%); transition: opacity .3s ease; }
     .gallery-frame:hover::after { opacity: 1; }
 
@@ -597,8 +608,8 @@
       .safety-card { padding: 28px; }
       .booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 36px; }
       .booking-card { padding: 42px; }
-      .gallery-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
-      .gallery-frame:nth-child(2) { transform: translateY(48px); }
+      .gallery-grid { gap: 24px; }
+      .gallery-frame { flex-basis: calc((100% - 24px) / 2); }
       .faq-item summary { padding: 18px 22px; font-size: 20px; }
       .faq-answer { padding: 24px; font-size: 18px; }
       .contact { padding-top: 96px; padding-bottom: 96px; }
@@ -613,8 +624,7 @@
       .desktop-book { display: flex; }
       .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
       .package-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 32px; }
-      .gallery-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
-      .gallery-frame:nth-child(2) { transform: none; }
+      .gallery-frame { flex-basis: calc((100% - 48px) / 3); }
     }
 
     @media (min-width: 1180px) {
@@ -711,9 +721,12 @@
       .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .step-card, .safety-card, .booking-card { padding: 16px; }
       .step-number { font-size: 32px; }
-            .gallery-frame { margin: 0; }
-      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .gallery-frame:nth-child(2) { transform: translateY(18px); }
+      .gallery-heading-row { align-items: center; gap: 12px; margin-bottom: 14px; }
+      .gallery-controls { gap: 8px; }
+      .gallery-arrow { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
+      .gallery-arrow .az-icon { width: 18px; height: 18px; }
+      .gallery-grid { gap: 12px; padding: 6px 6px 18px; }
+      .gallery-frame { flex-basis: min(78vw, 320px); border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
       .faq-item summary { padding: 13px 15px; font-size: 14px; }
       .faq-answer { padding: 16px; font-size: 13px; }
       .contact-panel, .contact-form { padding: 18px; }
@@ -815,7 +828,7 @@
   }
 
   function galleryMarkup() {
-    return [0, 1, 2].map((slot) => `<figure class="gallery-frame"><img data-gallery-slot="${slot}" src="${galleryImages[slot][0]}" alt="${galleryImages[slot][1]}" loading="lazy"></figure>`).join("");
+    return galleryImages.map(([source, alt], index) => `<figure class="gallery-frame"><img src="${source}" alt="${alt}" loading="${index < 3 ? "eager" : "lazy"}"></figure>`).join("");
   }
 
   function faqMarkup() {
@@ -944,7 +957,7 @@
         <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
       </div></section>
 
-      <section class="section gallery" id="gallery"><div class="container"><h2 class="display">The Spectacle</h2><div class="gallery-grid">${galleryMarkup()}</div></div></section>
+      <section class="section gallery" id="gallery"><div class="container"><div class="gallery-heading-row"><h2 class="display">The Spectacle</h2><div class="gallery-controls" aria-label="Gallery controls"><button class="gallery-arrow gallery-prev" type="button" aria-label="Previous photo">${icon("arrow")}</button><button class="gallery-arrow gallery-next" type="button" aria-label="Next photo">${icon("arrow")}</button></div></div><div class="gallery-grid" role="region" aria-label="The Spectacle photo gallery" tabindex="0">${galleryMarkup()}</div></div></section>
 
       <section class="section faq" id="faq"><div class="container">
         <div class="faq-heading"><div class="tag">${icon("check")}Plan With Confidence</div><h2 class="display">FAQ</h2><p class="faq-intro">The practical details organizers ask about space, power, water, setup, safety, and booking.</p></div>
@@ -968,9 +981,10 @@
       super();
       this.attachShadow({ mode: "open" });
       this.heroIndex = 0;
-      this.galleryIndex = 0;
       this.menuOpen = false;
       this.timers = [];
+      this.galleryAutoplayTimer = null;
+      this.galleryResumeTimer = null;
       this.abortController = null;
       this.inquiryAbortController = null;
       this.pendingSubmissionId = null;
@@ -1006,6 +1020,7 @@
     disconnectedCallback() {
       this.timers.forEach((timer) => window.clearInterval(timer));
       this.timers = [];
+      this.pauseGalleryAutoplay();
       this.abortController?.abort();
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
@@ -1025,6 +1040,23 @@
           this.scrollToId(link.getAttribute("href").slice(1));
         }, { signal });
       });
+      const gallery = root.querySelector(".gallery-grid");
+      root.querySelector(".gallery-prev").addEventListener("click", () => {
+        this.scrollGallery(-1);
+        this.scheduleGalleryAutoplay();
+      }, { signal });
+      root.querySelector(".gallery-next").addEventListener("click", () => {
+        this.scrollGallery(1);
+        this.scheduleGalleryAutoplay();
+      }, { signal });
+      gallery.addEventListener("pointerdown", () => this.pauseGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("pointerup", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("pointercancel", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("mouseenter", () => this.pauseGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("mouseleave", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("focusin", () => this.pauseGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("focusout", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
+      gallery.addEventListener("wheel", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
       window.addEventListener("scroll", () => this.updateScrollState(), { signal, passive: true });
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
@@ -1244,7 +1276,7 @@
       const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
       if (reduced) return;
       this.timers.push(window.setInterval(() => this.rotateHero(), 6500));
-      this.timers.push(window.setInterval(() => this.rotateGallery(), 5000));
+      this.startGalleryAutoplay();
     }
 
     rotateHero() {
@@ -1255,20 +1287,43 @@
       slides[this.heroIndex].classList.add("active");
     }
 
-    rotateGallery() {
-      const frames = this.shadowRoot.querySelectorAll("[data-gallery-slot]");
-      if (!frames.length) return;
-      this.galleryIndex = (this.galleryIndex + 1) % galleryImages.length;
-      frames.forEach((image, slot) => {
-        const next = galleryImages[(this.galleryIndex + slot) % galleryImages.length];
-        image.classList.add("fading");
-        window.setTimeout(() => {
-          image.src = next[0];
-          image.alt = next[1];
-          image.onload = () => image.classList.remove("fading");
-          window.setTimeout(() => image.classList.remove("fading"), 80);
-        }, 120);
-      });
+    startGalleryAutoplay() {
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+      window.clearInterval(this.galleryAutoplayTimer);
+      this.galleryAutoplayTimer = window.setInterval(() => this.scrollGallery(1), GALLERY_AUTOPLAY_MS);
+    }
+
+    pauseGalleryAutoplay() {
+      window.clearInterval(this.galleryAutoplayTimer);
+      window.clearTimeout(this.galleryResumeTimer);
+      this.galleryAutoplayTimer = null;
+      this.galleryResumeTimer = null;
+    }
+
+    scheduleGalleryAutoplay() {
+      this.pauseGalleryAutoplay();
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+      this.galleryResumeTimer = window.setTimeout(() => {
+        this.galleryResumeTimer = null;
+        this.scrollGallery(1);
+        this.startGalleryAutoplay();
+      }, GALLERY_AUTOPLAY_MS);
+    }
+
+    scrollGallery(direction) {
+      const gallery = this.shadowRoot.querySelector(".gallery-grid");
+      const frame = gallery?.querySelector(".gallery-frame");
+      if (!gallery || !frame) return;
+      const gap = Number.parseFloat(window.getComputedStyle(gallery).columnGap) || 0;
+      const step = frame.getBoundingClientRect().width + gap;
+      const maxScroll = Math.max(0, gallery.scrollWidth - gallery.clientWidth);
+      const next = direction > 0 && gallery.scrollLeft >= maxScroll - step / 2
+        ? 0
+        : direction < 0 && gallery.scrollLeft <= step / 2
+          ? maxScroll
+          : Math.min(maxScroll, Math.max(0, gallery.scrollLeft + direction * step));
+      const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+      gallery.scrollTo({ left: next, behavior: reduced ? "auto" : "smooth" });
     }
 
     collectFormValues(form) {
