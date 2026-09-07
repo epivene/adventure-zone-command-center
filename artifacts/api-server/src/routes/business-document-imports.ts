@@ -5,6 +5,7 @@ import { BusinessDocumentIngestion } from "@/features/business-documents/busines
 import { GoogleDriveDocumentSource } from "@/features/business-documents/google-drive-document-source";
 import { GoogleGmailDocumentSource, PostgresExistingGoogleProfileFileLookup } from "@/features/business-documents/google-gmail-document-source";
 import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
+import { logger } from "@/lib/logger";
 
 const uuid = z.string().uuid();
 const previewBody = z.object({ folderIds: z.array(z.string().trim().min(1).max(500)).min(1).max(25) }).strict();
@@ -29,6 +30,11 @@ async function productionService(): Promise<Service> {
 
 function actor(req: unknown) { return String((req as { userId?: string }).userId ?? "owner"); }
 function param(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] ?? "" : value ?? ""; }
+function observeImport(job: Promise<unknown>, source: "drive" | "gmail", previewRunId: string) {
+  void job
+    .then(() => logger.info({ source, previewRunId }, "Business document pilot completed"))
+    .catch(() => logger.warn({ source, previewRunId }, "Business document pilot failed"));
+}
 
 export function createBusinessDocumentImportsRouter(factory: Factory = productionService): IRouter {
   const router = Router();
@@ -41,7 +47,11 @@ export function createBusinessDocumentImportsRouter(factory: Factory = productio
   router.post("/business-document-imports/drive/start", async (req, res) => {
     const parsed = startBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Preview the folders and confirm START PILOT first." }); return; }
-    try { res.status(202).json(await (await factory()).startApproved(parsed.data.previewRunId, actor(req), parsed.data.pilotLimit)); }
+    try {
+      const job = (await factory()).startApproved(parsed.data.previewRunId, actor(req), parsed.data.pilotLimit);
+      observeImport(job, "drive", parsed.data.previewRunId);
+      res.status(202).json({ accepted: true, previewRunId: parsed.data.previewRunId });
+    }
     catch { res.status(409).json({ error: "The Drive preview is no longer available; preview again." }); }
   });
   router.post("/business-document-imports/gmail/preview", async (req, res) => {
@@ -53,7 +63,11 @@ export function createBusinessDocumentImportsRouter(factory: Factory = productio
   router.post("/business-document-imports/gmail/start", async (req, res) => {
     const parsed = gmailStartBody.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: "Preview Gmail and confirm START PILOT first." }); return; }
-    try { res.status(202).json(await (await factory()).startApprovedGmail(parsed.data.previewRunId, actor(req), parsed.data.pilotLimit)); }
+    try {
+      const job = (await factory()).startApprovedGmail(parsed.data.previewRunId, actor(req), parsed.data.pilotLimit);
+      observeImport(job, "gmail", parsed.data.previewRunId);
+      res.status(202).json({ accepted: true, previewRunId: parsed.data.previewRunId });
+    }
     catch { res.status(409).json({ error: "The Gmail preview is no longer available; preview again." }); }
   });
   router.get("/business-document-imports/:runId", async (req, res) => {
