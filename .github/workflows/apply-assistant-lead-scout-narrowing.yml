@@ -27,31 +27,19 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Narrow Lead Scout discovery by successful result shape
+      - name: Confirm Lead Scout discovery narrowing is present
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('artifacts/api-server/src/routes/assistant.ts')
-          text = path.read_text()
-          old = '''      if ("kind" in discovery && discovery.kind === "needs_clarification") {\n        res.json({\n          kind: "lead_discovery_clarification",\n          text: discovery.message,\n          runId: discovery.runId,\n        });\n        return;\n      }\n      res.json({\n        kind: "lead_discovery",\n        text: discovery.crmMatches.length\n          ? `I found ${discovery.crmMatches.length} existing Command Center ${discovery.crmMatches.length === 1 ? "possibility" : "possibilities"}.`\n          : "I did not find a strong existing Command Center match for those criteria.",\n        run: discovery,\n      });'''
-          new = '''      if (!("crmMatches" in discovery)) {\n        res.json({\n          kind: "lead_discovery_clarification",\n          text: discovery.message,\n          runId: discovery.runId,\n        });\n        return;\n      }\n      res.json({\n        kind: "lead_discovery",\n        text: discovery.crmMatches.length\n          ? `I found ${discovery.crmMatches.length} existing Command Center ${discovery.crmMatches.length === 1 ? "possibility" : "possibilities"}.`\n          : "I did not find a strong existing Command Center match for those criteria.",\n        run: discovery,\n      });'''
-          if old not in text:
-              raise SystemExit('assistant Lead Scout branch not found')
-          path.write_text(text.replace(old, new, 1))
+          text = Path('artifacts/api-server/src/routes/assistant.ts').read_text()
+          expected = 'if (!("crmMatches" in discovery)) {'
+          if expected not in text:
+              raise SystemExit('assistant Lead Scout narrowing is missing')
           PY
       - name: Run focused Lead Scout service tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/assistant/lead-scout-service.test.ts
-      - name: Commit verified production patch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/api-server/src/routes/assistant.ts
-          git diff --cached --quiet || git commit -m "fix: narrow Lead Scout assistant result"
-          git push origin HEAD:fix/assistant-lead-scout-narrowing
-      - name: Build shared libraries for API typecheck
-        run: |
-          pnpm --filter @workspace/db build
-          pnpm --filter @workspace/api-zod build
+      - name: Build/typecheck shared libraries
+        run: pnpm run typecheck:libs
       - name: Verify assistant route compiler error is gone
         run: |
           set +e
