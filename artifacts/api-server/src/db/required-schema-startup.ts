@@ -15,8 +15,14 @@ import { ensureProfileTouchSchema } from "../features/organizations/profile-touc
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 
+const REQUIRED_LEAD_INTAKE_TIMEOUT_MS = 120_000;
+
 type RequiredStep = () => Promise<unknown>;
-type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>;
+type RequiredStepRunner = (
+  name: string,
+  step: RequiredStep,
+  timeoutMs?: number,
+) => Promise<unknown>;
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
@@ -49,6 +55,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await run(
     "required lead intake schema",
     dependencies?.ensureLeadIntake ?? ensureLeadIntakeSchemaBeforeListen,
+    REQUIRED_LEAD_INTAKE_TIMEOUT_MS,
   );
   await run(
     "required leg assignment schema",
