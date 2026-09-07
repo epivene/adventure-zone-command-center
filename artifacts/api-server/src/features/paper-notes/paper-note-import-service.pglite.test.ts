@@ -10,6 +10,13 @@ const pageId = "20000000-0000-4000-8000-000000000001";
 const entryId = "30000000-0000-4000-8000-000000000001";
 const requestKey = "40000000-0000-4000-8000-000000000001";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 const review = {
   event: { name: "County Fair", city: "Minot", region: "ND", venue: "Fairgrounds", eventDateText: "June 22", startsOn: "2026-06-22", endsOn: null, pageYearConfirmed: true },
   activity: { occurredOn: null, method: "call", outcome: "Requested info", summary: "Spoke with Tina." },
@@ -168,8 +175,8 @@ describe("PaperNoteImportService", () => {
       source_type: "paper_note",
       paper_note_entry_id: entryId,
     });
-    expect(String(activities[0]?.body)).toContain("Original reminder: Call Monday. This was a historical reminder and was not added as a current task.");
-    expect(String(activities[0]?.body)).toContain("Starred on original paper.");
+    expect(String(rowValue(activities, 0, "body"))).toContain("Original reminder: Call Monday. This was a historical reminder and was not added as a current task.");
+    expect(String(rowValue(activities, 0, "body"))).toContain("Starred on original paper.");
   });
 
   it("returns the stored result on retry without duplicating CRM rows", async () => {
