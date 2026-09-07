@@ -87,8 +87,8 @@ describe("Boss schedule planning views", () => {
     expect(await screen.findByRole("heading", { name: "Route Map" })).toBeInTheDocument();
     expect(screen.getByText("Confirmed and potential route context across the selected season and leg.")).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Route schedule conflicts" })).toBeInTheDocument();
-    expect(screen.getByText("Booked Fair One")).toBeInTheDocument();
-    expect(screen.getByText("Booked Fair Two")).toBeInTheDocument();
+    expect(screen.getAllByText("Booked Fair One").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Booked Fair Two").length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: "Booked Fair One" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Booked Fair Two" })).not.toBeInTheDocument();
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
