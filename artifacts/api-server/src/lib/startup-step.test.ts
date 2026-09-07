@@ -8,23 +8,25 @@ describe("runStartupStep", () => {
     ).rejects.toThrow("Startup step timed out: act review migrations");
   });
 
-  it("aborts timed-out startup work before rejecting", async () => {
+  it("runs timeout cancellation before rejecting", async () => {
+    const controller = new AbortController();
     const aborted = vi.fn();
     await expect(
       runStartupStep(
         "blocked schema",
-        (signal) =>
+        () =>
           new Promise<never>((_, reject) => {
-            signal.addEventListener(
+            controller.signal.addEventListener(
               "abort",
               () => {
                 aborted();
-                reject(signal.reason);
+                reject(controller.signal.reason);
               },
               { once: true },
             );
           }),
         10,
+        (error) => controller.abort(error),
       ),
     ).rejects.toThrow("Startup step timed out: blocked schema");
     expect(aborted).toHaveBeenCalledOnce();
