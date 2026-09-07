@@ -53,6 +53,11 @@ jobs:
           if marker not in text:
             raise SystemExit('communication block marker not found')
           text = text.replace(marker, marker + f'      approvedTemplate: {approved},\n', 1)
+          old_window = 'proposedStartDate: "2026-09-29", proposedEndDate: "2026-09-29"'
+          new_window = 'proposedStartDate: "2026-09-27", proposedEndDate: "2026-09-30"'
+          if old_window not in text:
+            raise SystemExit('communication block availability window marker not found')
+          text = text.replace(old_window, new_window, 1)
           p.write_text(text)
 
           p = Path('artifacts/api-server/src/features/lead-intake/lead-email-preview-service.version.test.ts')
