@@ -1,0 +1,30 @@
+name: Required Startup CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/src/db/required-schema-startup.ts"
+      - "artifacts/api-server/src/db/required-schema-startup.test.ts"
+      - "artifacts/api-server/src/db/lead-intake-required-startup.ts"
+      - "artifacts/api-server/src/db/lead-intake-startup-migration.ts"
+      - "artifacts/api-server/src/lib/startup-step.ts"
+      - "artifacts/api-server/src/lib/startup-step.test.ts"
+      - ".github/workflows/required-startup-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Required startup tests
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/db/required-schema-startup.test.ts src/db/lead-intake-required-startup.test.ts src/lib/startup-step.test.ts
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
