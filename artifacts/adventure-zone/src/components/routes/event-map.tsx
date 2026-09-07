@@ -114,6 +114,94 @@ type HandoffFeatureCollection = {
   }>;
 };
 
+function EventRows({
+  events,
+  unmapped,
+  retryingId,
+  focusedEventId,
+  onRetry,
+  onFocus,
+  showBookingLinks,
+}: {
+  events: PlanningEvent[];
+  unmapped: boolean;
+  retryingId: string | null;
+  focusedEventId: string | null;
+  onRetry?: (event: PlanningEvent) => void;
+  onFocus?: (event: PlanningEvent) => void;
+  showBookingLinks: boolean;
+}) {
+  return (
+    <ul className="grid gap-2">
+      {events.map((event) => (
+        <li
+          className={`rounded-lg border border-slate-200 p-3 transition ${event.planningEmphasis === "dimmed" ? "opacity-40" : ""}`}
+          data-emphasis={event.planningEmphasis}
+          key={event.id}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="flex min-w-0 items-start gap-2">
+              {event.routeStopNumber ? (
+                <span
+                  aria-label={`Stop ${event.routeStopNumber}`}
+                  className="flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-sm font-black text-white shadow"
+                  style={{ backgroundColor: event.travelLegColor || "#64748b" }}
+                >
+                  {event.routeStopNumber}
+                </span>
+              ) : null}
+              <div>
+                {showBookingLinks ? (
+                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={`/bookings/${event.id}`}>
+                    {event.name}
+                  </Link>
+                ) : <span className="font-bold text-slate-950">{event.name}</span>}
+                <p className="mt-0.5 text-sm text-slate-600">
+                  {[event.city, event.region].filter(Boolean).join(", ")}
+                  {event.travelLegName ? ` · ${event.travelLegName}` : ""}
+                </p>
+                {!unmapped && onFocus ? (
+                  <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">
+                    {focusedEventId === event.id ? "Focused on map" : "Focus on map"}
+                  </button>
+                ) : null}
+                {unmapped ? (
+                  <div className="mt-1 grid gap-2">
+                    <p className="text-xs font-semibold text-amber-700">
+                      {event.locationLabel ? `${event.locationLabel} — ` : ""}{mappingReason(event.mappingState)}
+                    </p>
+                    {canRetryMapping(event.mappingState) && onRetry ? (
+                      <button
+                        className="button-secondary w-fit"
+                        disabled={retryingId === event.id}
+                        onClick={() => onRetry(event)}
+                        type="button"
+                      >
+                        {retryingId === event.id ? "Retrying…" : "Retry location"}
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <span
+              className={
+                event.routeBucket === "confirmed"
+                  ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800"
+                  : event.routeBucket === "history"
+                    ? "rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
+                    : "rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800"
+              }
+            >
+              {event.routeBucket === "confirmed" ? "Confirmed" : formatLabel(event.status)}
+            </span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function EventList({
   events,
   title,
@@ -155,94 +243,48 @@ function EventList({
           (legOrderById?.get(b.id) ?? Number.MAX_SAFE_INTEGER)
         ) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id))
         .map((group) => ({ ...group, events: [...group.events].sort(compareRouteStops) }))
-    : [{ name: null, color: null, events }];
+    : [{ id: "events", name: null, color: null, events }];
+
+  const content = events.length ? (
+    <div className={groupByLeg ? "grid gap-2" : ""}>
+      {groups.map((group) => groupByLeg && group.name ? (
+        <details
+          className="group overflow-hidden rounded-xl border border-slate-200 bg-white"
+          data-testid={`route-event-leg-${group.id}`}
+          key={group.id}
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-3 p-3 text-left">
+            <span className="size-3 shrink-0 rounded-full border border-slate-900" style={{ backgroundColor: group.color ?? undefined }} />
+            <span className="min-w-0 flex-1 font-bold text-slate-900">{group.name}</span>
+            <span className="text-xs font-semibold text-slate-500">{group.events.length} event{group.events.length === 1 ? "" : "s"}</span>
+            <span aria-hidden="true" className="text-slate-400 transition group-open:rotate-180">⌄</span>
+          </summary>
+          <div className="border-t border-slate-100 p-3">
+            <EventRows events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} />
+          </div>
+        </details>
+      ) : (
+        <EventRows key={group.id} events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} />
+      ))}
+    </div>
+  ) : <p className="text-sm text-slate-600">No events in this group.</p>;
+
+  if (unmapped) {
+    return (
+      <details className="group rounded-xl border border-slate-200 bg-white shadow-sm">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+          <h2 className="text-lg font-bold">{title}</h2>
+          <span className="text-sm font-semibold text-slate-500">{events.length} event{events.length === 1 ? "" : "s"} <span aria-hidden="true" className="inline-block transition group-open:rotate-180">⌄</span></span>
+        </summary>
+        <div className="border-t border-slate-100 p-4">{content}</div>
+      </details>
+    );
+  }
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold">{title}</h2>
-      {events.length ? (
-        <div className="mt-3 grid gap-4">
-          {groups.map((group) => (
-            <section key={group.id ?? "events"}>
-              {group.name ? (
-                <h3 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-wide text-slate-700">
-                  <span className="size-3 rounded-full border border-slate-900" style={{ backgroundColor: group.color ?? undefined }} />
-                  {group.name}
-                </h3>
-              ) : null}
-              <ul className="grid gap-2">
-                {group.events.map((event) => (
-                  <li
-                    className={`rounded-lg border border-slate-200 p-3 transition ${event.planningEmphasis === "dimmed" ? "opacity-40" : ""}`}
-                    data-emphasis={event.planningEmphasis}
-                    key={event.id}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2">
-                      <div className="flex min-w-0 items-start gap-2">
-                        {event.routeStopNumber ? (
-                          <span
-                            aria-label={`Stop ${event.routeStopNumber}`}
-                            className="flex size-7 shrink-0 items-center justify-center rounded-full border-2 border-white text-sm font-black text-white shadow"
-                            style={{ backgroundColor: event.travelLegColor || "#64748b" }}
-                          >
-                            {event.routeStopNumber}
-                          </span>
-                        ) : null}
-                        <div>
-                          {showBookingLinks ? (
-                            <Link className="font-bold text-slate-950 hover:text-orange-700" href={`/bookings/${event.id}`}>
-                              {event.name}
-                            </Link>
-                          ) : <span className="font-bold text-slate-950">{event.name}</span>}
-                          <p className="mt-0.5 text-sm text-slate-600">
-                            {[event.city, event.region].filter(Boolean).join(", ")}
-                            {event.travelLegName ? ` · ${event.travelLegName}` : ""}
-                          </p>
-                          {!unmapped && onFocus ? (
-                            <button className="button-secondary mt-2" onClick={() => onFocus(event)} type="button">
-                              {focusedEventId === event.id ? "Focused on map" : "Focus on map"}
-                            </button>
-                          ) : null}
-                          {unmapped ? (
-                            <div className="mt-1 grid gap-2">
-                              <p className="text-xs font-semibold text-amber-700">
-                                {event.locationLabel ? `${event.locationLabel} — ` : ""}{mappingReason(event.mappingState)}
-                              </p>
-                              {canRetryMapping(event.mappingState) && onRetry ? (
-                                <button
-                                  className="button-secondary w-fit"
-                                  disabled={retryingId === event.id}
-                                  onClick={() => onRetry(event)}
-                                  type="button"
-                                >
-                                  {retryingId === event.id ? "Retrying…" : "Retry location"}
-                                </button>
-                              ) : null}
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                      <span
-                        className={
-                          event.routeBucket === "confirmed"
-                            ? "rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800"
-                            : event.routeBucket === "history"
-                              ? "rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-700"
-                              : "rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800"
-                        }
-                      >
-                        {event.routeBucket === "confirmed" ? "Confirmed" : formatLabel(event.status)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </div>
-      ) : (
-        <p className="mt-3 text-sm text-slate-600">No events in this group.</p>
-      )}
+      <div className="mt-3">{content}</div>
     </section>
   );
 }
