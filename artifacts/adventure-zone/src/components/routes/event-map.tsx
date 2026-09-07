@@ -1,7 +1,7 @@
 "use client";
 
 import { Link } from "wouter";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { apiPost } from "@/lib/auth-token";
 import type { EquipmentHandoffView } from "@/components/routes/equipment-handoffs";
@@ -124,6 +124,7 @@ function EventList({
   onFocus,
   groupByLeg = false,
   legOrderById,
+  showBookingLinks = true,
 }: {
   events: PlanningEvent[];
   title: string;
@@ -134,6 +135,7 @@ function EventList({
   onFocus?: (event: PlanningEvent) => void;
   groupByLeg?: boolean;
   legOrderById?: ReadonlyMap<string, number>;
+  showBookingLinks?: boolean;
 }) {
   const groups = groupByLeg
     ? [...events.reduce((byLeg, event) => {
@@ -187,9 +189,11 @@ function EventList({
                           </span>
                         ) : null}
                         <div>
-                          <Link className="font-bold text-slate-950 hover:text-orange-700" href={`/bookings/${event.id}`}>
-                            {event.name}
-                          </Link>
+                          {showBookingLinks ? (
+                            <Link className="font-bold text-slate-950 hover:text-orange-700" href={`/bookings/${event.id}`}>
+                              {event.name}
+                            </Link>
+                          ) : <span className="font-bold text-slate-950">{event.name}</span>}
                           <p className="mt-0.5 text-sm text-slate-600">
                             {[event.city, event.region].filter(Boolean).join(", ")}
                             {event.travelLegName ? ` · ${event.travelLegName}` : ""}
@@ -250,6 +254,8 @@ export function EventMap({
   focusedTrip = null,
   focusedTripCoordinates = null,
   onClearTripFocus,
+  readOnly = false,
+  requestedSeasonYear,
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
@@ -257,17 +263,23 @@ export function EventMap({
   focusedTrip?: FocusedTripMapData | null;
   focusedTripCoordinates?: [number, number][] | null;
   onClearTripFocus?: () => void;
+  readOnly?: boolean;
+  requestedSeasonYear?: number;
 }) {
   const currentYear = new Date().getFullYear();
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
   const [mode, setMode] = useState<RouteViewMode>("full");
-  const [seasonYear, setSeasonYear] = useState(currentYear);
+  const [seasonYear, setSeasonYear] = useState(requestedSeasonYear ?? currentYear);
   const [focusedLegId, setFocusedLegId] = useState<string | null>(null);
   const [focusedEventId, setFocusedEventId] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [eventOverrides, setEventOverrides] = useState<Record<string, MapEvent>>({});
   const [retryError, setRetryError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (requestedSeasonYear) setSeasonYear(requestedSeasonYear);
+  }, [requestedSeasonYear]);
 
   const effectiveEvents = useMemo(
     () => events.map((event) => eventOverrides[event.id] ?? event),
@@ -318,7 +330,6 @@ export function EventMap({
   const planningEvents = useMemo(() => {
     const result: UnnumberedPlanningEvent[] = [];
     for (const event of filteredEvents) {
-      if (!event.travelLegId) continue;
       if (eventSeasonYear(event) !== seasonYear) continue;
       const bucket = event.routeBucket ?? classifyRouteBucket(event.status, event.probability);
       const emphasis = routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId });
@@ -617,6 +628,7 @@ export function EventMap({
             managerMode="on-road"
             focusedTrip={focusedTrip}
             onFocusEvent={setFocusedEventId}
+            showBookingDetailsLink={!readOnly}
           />
         </ManagerRouteMapShell>
       </div>
@@ -624,13 +636,14 @@ export function EventMap({
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} />
+        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} showBookingLinks={!readOnly} />
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"
           unmapped
           retryingId={retryingId}
-          onRetry={(event) => { void retryLocation(event); }}
+          onRetry={readOnly ? undefined : (event) => { void retryLocation(event); }}
+          showBookingLinks={!readOnly}
         />
       </div>
     </div>

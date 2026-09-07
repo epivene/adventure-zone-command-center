@@ -1,0 +1,37 @@
+name: Boss Schedule CI
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/adventure-zone/src/pages/BossSchedulePage.tsx"
+      - "artifacts/adventure-zone/src/pages/BossSchedulePage.test.tsx"
+      - "artifacts/adventure-zone/src/pages/BossSignInPage.tsx"
+      - "artifacts/adventure-zone/src/components/calendar/event-calendar.tsx"
+      - "artifacts/adventure-zone/src/components/routes/event-map.tsx"
+      - "artifacts/adventure-zone/src/components/routes/manager-route-map-layers.tsx"
+      - "artifacts/adventure-zone/src/lib/boss-types.ts"
+      - "artifacts/api-server/src/routes/boss-operations.ts"
+      - "artifacts/api-server/src/routes/boss-workspace.test.ts"
+      - ".github/workflows/boss-schedule-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Boss schedule frontend tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/BossSchedulePage.test.tsx
+      - name: Boss workspace API boundary tests
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/routes/boss-workspace.test.ts
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build

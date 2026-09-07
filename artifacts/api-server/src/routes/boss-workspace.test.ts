@@ -29,7 +29,15 @@ describe("Boss workspace route boundaries", () => {
     expect(operations).not.toContain('"/boss/bookings/:bookingId"');
     expect(operations).toContain('router.put("/boss/bookings/:bookingId/leg", requireBoss');
     expect(operations).toContain("Boss can only reassign events that Desie has already assigned.");
-    expect(operations).toContain("assignedBookings.filter(item => item.travelLegId === leg.id)");
+    expect(operations).toContain("Potential events are view-only.");
+    expect(operations).toContain("isBookedForSchedule(booking[0])");
+    expect(operations).toContain("bookings: planningBookings");
+    expect(operations).toMatch(
+      /planningBookings\.filter\(\(item\) =>\s*item\.travelLegId === leg\.id &&\s*isBookedForSchedule\(item\)\)/,
+    );
+    expect(operations).toContain("latitude: bookings.latitude");
+    expect(operations).toContain("probability: bookings.probability");
+    expect(operations).not.toContain("notes: bookings.notes");
     expect(operations).toContain("defaultMpg: z.number().positive()");
     expect(operations).toContain("sortOrder is intentionally not writable");
   });

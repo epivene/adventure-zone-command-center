@@ -67,7 +67,7 @@ function warningText(event: RenderEvent) {
   return null;
 }
 
-function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
+function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBookingDetailsLink: boolean) {
   const destination = event.latitude !== null && event.longitude !== null
     ? ([event.longitude, event.latitude] as [number, number])
     : [event.city, event.region].filter(Boolean).join(", ");
@@ -85,7 +85,7 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
     ${warning ? `<div><strong>${escapeHtml(warning)}</strong></div>` : ""}
     ${event.legAssignmentExplanation ? `<div>${escapeHtml(event.legAssignmentExplanation)}</div>` : ""}
     <div class="az-route-popup__actions">
-      <a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>
+      ${showBookingDetailsLink ? `<a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>` : ""}
       <a href="${escapeHtml(directions)}" target="_blank" rel="noreferrer">${managerMode === "on-road" ? "Directions" : "Directions to event"}</a>
     </div>
   </div>`;
@@ -132,6 +132,7 @@ export function ManagerRouteMapLayers({
   managerMode,
   focusedTrip,
   onFocusEvent,
+  showBookingDetailsLink = true,
 }: {
   events: RenderEvent[];
   handoffs: EquipmentHandoffView[];
@@ -140,6 +141,7 @@ export function ManagerRouteMapLayers({
   managerMode: ManagerMapMode;
   focusedTrip?: FocusedTripMapData | null;
   onFocusEvent?: (id: string) => void;
+  showBookingDetailsLink?: boolean;
 }) {
   const map = useManagerRouteMap();
 
@@ -181,7 +183,7 @@ export function ManagerRouteMapLayers({
         keyboard: true,
         title: event.name,
       }).addTo(group);
-      marker.bindPopup(eventPopup(event, managerMode));
+      marker.bindPopup(eventPopup(event, managerMode, showBookingDetailsLink));
       marker.on("click", () => onFocusEvent?.(event.id));
     }
 
@@ -197,7 +199,7 @@ export function ManagerRouteMapLayers({
     return () => {
       group.remove();
     };
-  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines]);
+  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines, showBookingDetailsLink]);
 
   return null;
 }
