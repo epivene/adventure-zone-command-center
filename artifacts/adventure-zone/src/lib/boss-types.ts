@@ -52,6 +52,10 @@ export type BossContact = {
 export type BossSchedule = {
   legs: ScheduleLeg[];
   bookings: BossBooking[];
+  displaySettings?: {
+    eventColor: string;
+    travelColor: string;
+  };
 };
 
 export type ScheduleLeg = {

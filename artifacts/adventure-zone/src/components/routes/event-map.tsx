@@ -330,7 +330,6 @@ export function EventMap({
   const planningEvents = useMemo(() => {
     const result: UnnumberedPlanningEvent[] = [];
     for (const event of filteredEvents) {
-      if (!event.travelLegId) continue;
       if (eventSeasonYear(event) !== seasonYear) continue;
       const bucket = event.routeBucket ?? classifyRouteBucket(event.status, event.probability);
       const emphasis = routeEmphasis({ bucket, mode, eventLegId: event.travelLegId, focusedLegId });

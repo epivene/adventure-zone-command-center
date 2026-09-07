@@ -225,10 +225,11 @@ export default function BossSchedulePage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await bossGet<{ legs: ScheduleLeg[]; bookings?: BossBooking[] }>("/boss/legs");
+      const data = await bossGet<{ legs: ScheduleLeg[]; bookings?: BossBooking[]; displaySettings?: BossSchedule["displaySettings"] }>("/boss/legs");
       setSchedule({
         legs: Array.isArray(data.legs) ? data.legs : [],
         bookings: Array.isArray(data.bookings) ? data.bookings : [],
+        displaySettings: data.displaySettings,
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load schedule.");
@@ -333,7 +334,7 @@ export default function BossSchedulePage() {
                   </button>
                 </div>
               ) : null}
-              <EventCalendar events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} readOnly />
+              <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} readOnly />
             </section>
           ) : (
             <EventMap events={scopedEvents} readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
