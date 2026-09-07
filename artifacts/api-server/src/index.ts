@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
+import { exitAfterRequiredStartupFailure } from "./lib/required-startup-shutdown";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
@@ -222,8 +223,10 @@ async function completeRequiredStartup(): Promise<void> {
       "Required startup checks failed; shutting down without serving API traffic",
     );
     shutdownRequested = true;
-    await shutdown();
-    process.exit(1);
+    await exitAfterRequiredStartupFailure({
+      shutdown,
+      exit: (code) => process.exit(code),
+    });
   }
 
   if (shutdownRequested) return;

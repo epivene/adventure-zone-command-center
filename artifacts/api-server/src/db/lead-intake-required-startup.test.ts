@@ -34,4 +34,35 @@ describe("lead email startup readiness", () => {
     })).rejects.toThrow("mismatched readiness fields: sourceStorageReference");
     expect(client.release).toHaveBeenCalledOnce();
   });
+
+  it("destroys its checked-out client when startup is aborted", async () => {
+    const controller = new AbortController();
+    let rejectLock: ((error: Error) => void) | undefined;
+    const client = {
+      query: vi.fn(
+        () =>
+          new Promise<{ rows: Array<Record<string, unknown>> }>((_, reject) => {
+            rejectLock = reject;
+          }),
+      ),
+      release: vi.fn((error?: Error | boolean) => {
+        if (error instanceof Error) rejectLock?.(error);
+      }),
+    };
+
+    const startup = ensureLeadIntakeSchemaBeforeListen({
+      pool: { connect: async () => client },
+      signal: controller.signal,
+      ensureSchema: async () => false,
+      ensureTemplateSeed: async () => undefined,
+      isTemplateReady: async () => true,
+    });
+    await vi.waitFor(() => expect(client.query).toHaveBeenCalledOnce());
+
+    controller.abort(new Error("Startup step timed out: required lead intake schema"));
+
+    await expect(startup).rejects.toThrow("Startup step timed out: required lead intake schema");
+    expect(client.release).toHaveBeenCalledWith(expect.any(Error));
+    expect(client.release).toHaveBeenCalledOnce();
+  });
 });

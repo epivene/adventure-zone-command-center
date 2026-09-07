@@ -8,12 +8,19 @@ import {
 
 type Client = {
   query(sql: string): Promise<{ rows: Array<Record<string, unknown>> }>;
-  release(): void;
+  release(error?: Error | boolean): void;
 };
 type Pool = { connect(): Promise<Client> };
 
+function getAbortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new Error("Lead intake startup was aborted");
+}
+
 export async function ensureLeadIntakeSchemaBeforeListen(options?: {
   pool?: Pool;
+  signal?: AbortSignal;
   ensureSchema?: (client: Client) => Promise<boolean>;
   ensureTemplateSeed?: () => Promise<void>;
   isTemplateReady?: () => Promise<boolean>;
@@ -22,6 +29,21 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
   const pool = options?.pool ?? (defaultPool as unknown as Pool);
   const client = await pool.connect();
   let locked = false;
+  let released = false;
+  const release = (error?: Error) => {
+    if (released) return;
+    released = true;
+    client.release(error);
+  };
+  const abort = () => release(getAbortError(options!.signal!));
+
+  if (options?.signal?.aborted) {
+    const error = getAbortError(options.signal);
+    release(error);
+    throw error;
+  }
+  options?.signal?.addEventListener("abort", abort, { once: true });
+
   try {
     await client.query("SELECT pg_advisory_lock(hashtext('adventure-zone:lead-intake-schema'))");
     locked = true;
@@ -38,7 +60,10 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
     }
     return schemaChanged;
   } finally {
-    if (locked) await client.query("SELECT pg_advisory_unlock(hashtext('adventure-zone:lead-intake-schema'))").catch(() => undefined);
-    client.release();
+    options?.signal?.removeEventListener("abort", abort);
+    if (!released) {
+      if (locked) await client.query("SELECT pg_advisory_unlock(hashtext('adventure-zone:lead-intake-schema'))").catch(() => undefined);
+      release();
+    }
   }
 }
