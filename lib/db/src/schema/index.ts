@@ -27,7 +27,7 @@ const bookingStatusValues = [
 ] as const;
 export type BookingStatus = (typeof bookingStatusValues)[number];
 
-const probabilityValues = ["likely","possible","unlikely"] as const;
+const probabilityValues = ["definite","likely","possible","unlikely"] as const;
 export type Probability = (typeof probabilityValues)[number];
 
 const placeTypeValues = [
@@ -183,6 +183,7 @@ export const callDispositionValues = [
   "spoke_with_contact",
   "wrong_number",
   "do_not_call",
+  "email_requested",
 ] as const;
 export const activityKindEnum = pgEnum("activity_kind", activityKindValues);
 export const callDispositionEnum = pgEnum(
