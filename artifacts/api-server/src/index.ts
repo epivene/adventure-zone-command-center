@@ -84,6 +84,10 @@ import {
 import { markAppReady, markAppStarting } from "./lib/startup-readiness";
 import { MarketingService } from "./features/marketing/marketing-service";
 import { MarketingCampaignWorkerLoop } from "./features/marketing/marketing-campaign-worker-loop";
+import { BusinessDocumentIngestion } from "./features/business-documents/business-document-ingestion";
+import { GoogleGmailDocumentSource, PostgresExistingGoogleProfileFileLookup } from "./features/business-documents/google-gmail-document-source";
+import { GoogleDocumentWorker, PostgresGoogleDocumentWorkerState } from "./features/business-documents/google-document-worker";
+import { GoogleDocumentWorkerLoop, systemGoogleDocumentWorkerLoopScheduler } from "./features/business-documents/google-document-worker-loop";
 
 validateOwnerConfig();
 
@@ -143,6 +147,19 @@ const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
   scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
 });
 
+const googleConnectionRepository = new PostgresGoogleConnectionRepository();
+const googleDocumentLoop = new GoogleDocumentWorkerLoop({
+  worker: new GoogleDocumentWorker({
+    connection: googleConnectionRepository,
+    sourceFactory: (client) => new GoogleGmailDocumentSource(client, new PostgresExistingGoogleProfileFileLookup()),
+    ingestion: new BusinessDocumentIngestion(),
+    state: new PostgresGoogleDocumentWorkerState(),
+    accountKey: "workspace",
+  }),
+  clock: { now: () => new Date() },
+  scheduler: systemGoogleDocumentWorkerLoopScheduler,
+});
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
@@ -186,6 +203,7 @@ const shutdown = createActServerShutdown({
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      googleDocumentLoop.close(),
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
     ]);
@@ -440,6 +458,7 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  googleDocumentLoop.start();
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
 

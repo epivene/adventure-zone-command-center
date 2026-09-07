@@ -30,4 +30,13 @@ describe("GoogleGmailDocumentSource", () => {
     expect(candidate.evidence.approvedThreadProfileId).toBe("profile-1");
     expect(client.getAttachment).not.toHaveBeenCalled();
   });
+
+  it("filters incremental Gmail results by timestamp and message-id cursor", async () => {
+    const { client, source } = setup();
+    client.getMessageMetadata.mockResolvedValue({ id: "message-1", threadId: "thread-1", hasAttachments: true, internalDateMs: 100 } as any);
+    client.getThreadDetail.mockResolvedValue({ id: "thread-1", subject: "City COI", originalGmailUrl: "https://mail.google/thread-1", messages: [{ id: "message-1", internalDateMs: 100, subject: "City COI", bodyText: "", attachments: [{ attachmentId: "attachment-1", filename: "coi.pdf", mimeType: "application/pdf", sizeBytes: 10 }] }] } as any);
+    const found = [];
+    for await (const item of source.inventoryIncrementalGmail({ internalDateMs: 100, messageId: "message-0" }, new Date(200))) found.push(item);
+    expect(found.map((item) => item.messageId)).toEqual(["message-1"]);
+  });
 });

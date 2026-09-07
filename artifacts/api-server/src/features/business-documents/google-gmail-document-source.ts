@@ -6,6 +6,7 @@ import type { StoredBusinessDocumentBlob } from "./business-document-types";
 export type GmailImportWindow = { after: string; before: string; pageToken?: string | null; maxResults?: number };
 export type GmailDocumentInventoryItem = {
   messageId: string;
+  internalDateMs: number;
   threadId: string;
   attachmentId: string;
   filename: string;
@@ -56,6 +57,7 @@ export class GoogleGmailDocumentSource {
         const existing = await this.existingFiles.find(message.id, attachment.attachmentId);
         items.push({
           messageId: message.id,
+          internalDateMs: message.internalDateMs ?? metadata.internalDateMs ?? 0,
           threadId: thread.id,
           attachmentId: attachment.attachmentId,
           filename: attachment.filename,
@@ -85,6 +87,23 @@ export class GoogleGmailDocumentSource {
       }
       pageToken = page.nextPageToken;
     } while (pageToken);
+  }
+
+  async *inventoryIncrementalGmail(
+    cursor: { internalDateMs: number; messageId: string },
+    now: Date,
+  ): AsyncGenerator<GmailDocumentInventoryItem> {
+    const after = new Date(cursor.internalDateMs);
+    const before = new Date(now.getTime() + 24 * 60 * 60 * 1_000);
+    const day = (value: Date) => value.toISOString().slice(0, 10);
+    const items: GmailDocumentInventoryItem[] = [];
+    for await (const item of this.inventoryHistoricalGmail({ after: day(after), before: day(before) })) {
+      const isNewer = item.internalDateMs > cursor.internalDateMs
+        || (item.internalDateMs === cursor.internalDateMs && item.messageId > cursor.messageId);
+      if (isNewer && item.internalDateMs <= now.getTime()) items.push(item);
+    }
+    items.sort((left, right) => left.internalDateMs - right.internalDateMs || left.messageId.localeCompare(right.messageId));
+    yield* items;
   }
 
   async candidate(item: GmailDocumentInventoryItem, accountKey: string): Promise<BusinessDocumentCandidate> {
