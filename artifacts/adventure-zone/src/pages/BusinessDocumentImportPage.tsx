@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { ArrowLeft, FolderSearch, Play } from "lucide-react";
+import { ArrowLeft, FolderSearch, Play, Upload } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import { apiPost } from "@/lib/auth-token";
+import { apiPost, apiUpload } from "@/lib/auth-token";
 
 type ImportReport = { runId: string; discovered: number; imported: number; deduplicated: number; linked: number; review: number; skipped: number; retry: number; failed: number };
 type ImportAccepted = { accepted: true; previewRunId: string };
@@ -17,6 +17,9 @@ export default function BusinessDocumentImportPage() {
   const [gmailBefore, setGmailBefore] = useState("");
   const [gmailPreview, setGmailPreview] = useState<ImportReport | null>(null);
   const [gmailRunning, setGmailRunning] = useState(false);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const folderIds = [...new Set(folderText.split(/[\s,]+/).map((value) => value.trim()).filter(Boolean))];
 
   async function previewFolders() {
@@ -55,11 +58,39 @@ export default function BusinessDocumentImportPage() {
     finally { setBusy(false); }
   }
 
+  async function uploadDocuments() {
+    if (!uploadFiles.length) return;
+    setUploading(true); setError(null); setUploadMessage(null);
+    let uploaded = 0;
+    try {
+      for (const file of uploadFiles) {
+        if (file.size > 25 * 1024 * 1024) throw new Error(`${file.name} is larger than 25 MB.`);
+        await apiUpload("/business-documents/upload", file);
+        uploaded += 1;
+      }
+      setUploadMessage(`${uploaded} document${uploaded === 1 ? "" : "s"} uploaded.`);
+      setUploadFiles([]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not upload the selected documents.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
   const displayed = preview;
   return (
     <main className="mx-auto grid w-full max-w-4xl gap-5">
       <Link className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline" href="/business-documents"><ArrowLeft className="h-4 w-4" />Business Documents</Link>
       <header><h1 className="text-3xl font-bold text-foreground">Import from Google Drive</h1><p className="mt-1 text-sm text-muted-foreground">Choose only approved Adventure Zone business folders. Preview is read-only and source files stay in Drive.</p></header>
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="font-bold text-foreground">Upload protected copies</h2>
+        <p className="mt-1 text-sm text-muted-foreground">Add files that cannot be imported directly from Google Workspace. Maximum 25 MB per file.</p>
+        <label className="mt-3 grid gap-2 text-sm font-semibold">Upload business documents
+          <input multiple onChange={(event) => { setUploadFiles(Array.from(event.target.files ?? [])); setUploadMessage(null); }} type="file" />
+        </label>
+        <Button className="mt-4" disabled={uploading || !uploadFiles.length} onClick={() => void uploadDocuments()} variant="outline"><Upload className="mr-2 h-4 w-4" />{uploading ? "Uploading…" : `Upload ${uploadFiles.length} document${uploadFiles.length === 1 ? "" : "s"}`}</Button>
+        {uploadMessage ? <p className="mt-3 text-sm font-semibold text-foreground">{uploadMessage} <Link className="text-primary hover:underline" href="/business-documents">View library</Link></p> : null}
+      </section>
       <section className="rounded-xl border border-border bg-card p-5">
         <label className="grid gap-2 text-sm font-bold text-foreground">Approved Drive folder IDs
           <textarea className="min-h-28 rounded-lg border border-input bg-background px-3 py-2 font-mono text-sm" onChange={(event) => { setFolderText(event.target.value); setPreview(null); setDriveRunning(false); }} placeholder="One folder ID per line" value={folderText} />

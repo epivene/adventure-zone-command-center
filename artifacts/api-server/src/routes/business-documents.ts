@@ -1,4 +1,5 @@
-import { Router, type IRouter } from "express";
+import { randomUUID } from "node:crypto";
+import express, { Router, type IRouter } from "express";
 import { z } from "zod";
 
 import {
@@ -6,6 +7,7 @@ import {
   businessDocumentReviewStateValues,
 } from "@workspace/db";
 import { BusinessDocumentService } from "@/features/business-documents/business-document-service";
+import { BusinessDocumentIngestion } from "@/features/business-documents/business-document-ingestion";
 
 const uuid = z.string().uuid();
 const listQuery = z.object({
@@ -41,6 +43,7 @@ const reviewActionBody = z.discriminatedUnion("action", [
 ]);
 
 type Service = BusinessDocumentService;
+type Ingestion = Pick<BusinessDocumentIngestion, "ingest">;
 
 function actor(req: unknown) {
   return String((req as { userId?: string }).userId ?? "owner");
@@ -57,10 +60,47 @@ function statusFor(error: unknown) {
   return 503;
 }
 
+function safeUploadFilename(header: string | string[] | undefined) {
+  if (typeof header !== "string") return null;
+  try {
+    const decoded = decodeURIComponent(header).replaceAll("\\", "/");
+    const filename = decoded.split("/").at(-1)?.trim() ?? "";
+    if (!filename || filename === "." || filename === ".." || filename.length > 255 || /[\u0000-\u001f]/.test(filename)) return null;
+    return filename;
+  } catch {
+    return null;
+  }
+}
+
 export function createBusinessDocumentsRouter(
   service: Service = new BusinessDocumentService(),
+  ingestion: Ingestion = new BusinessDocumentIngestion(),
 ): IRouter {
   const router = Router();
+
+  router.post("/business-documents/upload", express.raw({ type: () => true, limit: "25mb" }), async (req, res) => {
+    const filename = safeUploadFilename(req.headers["x-file-name"]);
+    const bytes = req.body instanceof Buffer ? new Uint8Array(req.body) : new Uint8Array();
+    const rawMimeType = req.headers["content-type"];
+    const mimeType = (Array.isArray(rawMimeType) ? rawMimeType[0] : rawMimeType)?.split(";", 1)[0]?.trim() || "application/octet-stream";
+    if (!filename || !bytes.length) { res.status(400).json({ error: "Choose a non-empty document with a safe filename." }); return; }
+    try {
+      const result = await ingestion.ingest({
+        bytes,
+        filename,
+        mimeType,
+        subject: filename,
+        bodyText: "",
+        source: { sourceKind: "manual", sourceAccountKey: "owner", externalId: randomUUID(), originalUrl: null, metadata: {} },
+        evidence: { approvedThreadProfileId: null, exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] },
+        actor: actor(req),
+      });
+      if (result.outcome === "skipped") { res.status(422).json({ error: "That file is not an importable business document." }); return; }
+      res.status(201).json(result);
+    } catch {
+      res.status(503).json({ error: "Could not store that business document." });
+    }
+  });
 
   router.get("/business-documents/review-count", async (_req, res) => {
     try { res.json({ count: await service.pendingReviewCount() }); }
