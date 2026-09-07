@@ -639,7 +639,7 @@
     }
 
     @media (max-width: 767px) {
-      :host { font-size: 13px; }
+      :host { min-height: 100vh; background: var(--az-navy); font-size: 13px; }
       .container { width: calc(100% - 24px); }
       .site-header, .site-header.scrolled { padding: 8px 0; }
       .header-row { gap: 10px; }
