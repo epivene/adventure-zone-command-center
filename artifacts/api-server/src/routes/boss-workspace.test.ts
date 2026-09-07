@@ -32,7 +32,9 @@ describe("Boss workspace route boundaries", () => {
     expect(operations).toContain("Potential events are view-only.");
     expect(operations).toContain("isBookedForSchedule(booking[0])");
     expect(operations).toContain("bookings: planningBookings");
-    expect(operations).toContain("planningBookings.filter((item) => item.travelLegId === leg.id)");
+    expect(operations).toMatch(
+      /planningBookings\.filter\(\(item\) =>\s*item\.travelLegId === leg\.id &&\s*isBookedForSchedule\(item\)\)/,
+    );
     expect(operations).toContain("latitude: bookings.latitude");
     expect(operations).toContain("probability: bookings.probability");
     expect(operations).not.toContain("notes: bookings.notes");
