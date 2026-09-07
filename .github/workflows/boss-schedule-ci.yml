@@ -4,7 +4,8 @@ on:
   pull_request:
     paths:
       - "artifacts/adventure-zone/src/pages/BossSchedulePage.tsx"
-      - "artifacts/adventure-zone/src/pages/BossSchedulePage.test.tsx"
+      - "artifacts/adventure-zone/src/pages/BossSchedulePage.test.tsx src/pages/BossSchedulePage.event-data.test.tsx"
+      - "artifacts/adventure-zone/src/pages/BossSchedulePage.event-data.test.tsx"
       - "artifacts/adventure-zone/src/pages/BossSignInPage.tsx"
       - "artifacts/adventure-zone/src/components/calendar/event-calendar.tsx"
       - "artifacts/adventure-zone/src/components/routes/event-map.tsx"
@@ -14,6 +15,9 @@ on:
       - "artifacts/api-server/src/routes/boss-operations.ts"
       - "artifacts/api-server/src/routes/boss-workspace.test.ts"
       - "artifacts/api-server/src/routes/boss-schedule-route.test.ts"
+      - "artifacts/api-server/src/features/routes/travel-leg-repository.ts"
+      - "artifacts/api-server/src/features/routes/map-data.ts"
+      - "artifacts/api-server/src/features/routes/location-resolver.ts"
       - ".github/workflows/boss-schedule-ci.yml"
 
 jobs:
