@@ -31,13 +31,13 @@ import {
   type MasterWorkKind,
 } from "./master-work-queue";
 
-const closedOpportunityStatuses = [
+const closedOpportunityStatuses: OpportunityStatus[] = [
   "not_pursuing",
   "declined",
   "no_response",
   "territory_hold",
   "cancelled",
-] as const;
+];
 
 type DrizzleDatabase = typeof database;
 
