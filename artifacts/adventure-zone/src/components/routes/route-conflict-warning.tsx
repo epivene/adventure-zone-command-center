@@ -11,7 +11,7 @@ function overlapLabel(conflict: RouteConflict) {
     : `${formatDate(conflict.overlapFrom)}–${formatDate(conflict.overlapTo)}`;
 }
 
-export function RouteConflictWarning({ conflicts }: { conflicts: RouteConflict[] }) {
+export function RouteConflictWarning({ conflicts, readOnly = false }: { conflicts: RouteConflict[]; readOnly?: boolean }) {
   if (!conflicts.length) return null;
   return (
     <section className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-sm" aria-label="Route schedule conflicts">
@@ -27,9 +27,9 @@ export function RouteConflictWarning({ conflicts }: { conflicts: RouteConflict[]
           <div className="rounded-lg border border-rose-200 bg-white/80 p-3 text-sm" key={`${conflict.first.id}:${conflict.second.id}`}>
             <p className="font-bold text-rose-950">{conflict.legName} · operational overlap {overlapLabel(conflict)}</p>
             <p className="mt-1 text-slate-700">
-              <Link className="font-semibold text-orange-700 hover:underline" href={`/bookings/${conflict.first.id}`}>{conflict.first.name}</Link>
+              {readOnly ? <span className="font-semibold">{conflict.first.name}</span> : <Link className="font-semibold text-orange-700 hover:underline" href={`/bookings/${conflict.first.id}`}>{conflict.first.name}</Link>}
               <span className="mx-1.5 text-slate-400">↔</span>
-              <Link className="font-semibold text-orange-700 hover:underline" href={`/bookings/${conflict.second.id}`}>{conflict.second.name}</Link>
+              {readOnly ? <span className="font-semibold">{conflict.second.name}</span> : <Link className="font-semibold text-orange-700 hover:underline" href={`/bookings/${conflict.second.id}`}>{conflict.second.name}</Link>}
             </p>
           </div>
         ))}
