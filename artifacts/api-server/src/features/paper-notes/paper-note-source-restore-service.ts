@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import { PaperNoteImageError, preparePaperNoteImage } from "./paper-note-image";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
+import { firstQueryRow } from "./paper-note-query-rows";
 
 type DrizzleDatabase = typeof database;
 
@@ -12,6 +13,13 @@ export type PaperNoteRestoreTarget = {
   sha256: string | null;
   originalObjectKey: string;
 };
+
+function isPaperNoteRestoreTarget(row: Record<string, unknown>): row is PaperNoteRestoreTarget {
+  return typeof row.batchId === "string"
+    && typeof row.pageId === "string"
+    && (row.sha256 === null || typeof row.sha256 === "string")
+    && typeof row.originalObjectKey === "string";
+}
 
 export interface PaperNoteRestoreRepository {
   findRestoreTarget(
@@ -131,6 +139,6 @@ export class DrizzlePaperNoteRestoreRepository implements PaperNoteRestoreReposi
         and batches.created_by = ${actorId}
       limit 1
     `);
-    return (result as { rows?: PaperNoteRestoreTarget[] }).rows?.[0] ?? null;
+    return firstQueryRow(result, isPaperNoteRestoreTarget);
   }
 }

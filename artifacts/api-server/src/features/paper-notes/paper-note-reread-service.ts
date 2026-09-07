@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import type { PaperNoteObjectStorage } from "./paper-note-object-storage";
+import { firstQueryRow, queryRows } from "./paper-note-query-rows";
 
 type DrizzleDatabase = typeof database;
 
@@ -14,6 +15,20 @@ export type PaperNoteRereadTarget = {
   hasEntries: boolean;
   hasImportedEntries: boolean;
 };
+
+function isPaperNoteRereadTarget(row: Record<string, unknown>): row is PaperNoteRereadTarget {
+  return typeof row.batchId === "string"
+    && typeof row.pageId === "string"
+    && typeof row.batchStatus === "string"
+    && typeof row.pageStatus === "string"
+    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string")
+    && typeof row.hasEntries === "boolean"
+    && typeof row.hasImportedEntries === "boolean";
+}
+
+function isLockedPageRow(row: Record<string, unknown>): row is { id: string } {
+  return typeof row.id === "string";
+}
 
 export interface PaperNoteRereadRepository {
   getRereadTarget(
@@ -145,7 +160,7 @@ export class DrizzlePaperNoteRereadRepository implements PaperNoteRereadReposito
         and batches.created_by = ${actorId}
       limit 1
     `);
-    return (result as { rows?: PaperNoteRereadTarget[] }).rows?.[0] ?? null;
+    return firstQueryRow(result, isPaperNoteRereadTarget);
   }
 
   async resetForReread(input: {
@@ -171,7 +186,7 @@ export class DrizzlePaperNoteRereadRepository implements PaperNoteRereadReposito
           )
         for update of pages
       `);
-      if (!(locked as { rows?: unknown[] }).rows?.length) {
+      if (!queryRows(locked, isLockedPageRow).length) {
         throw new PaperNoteRereadError(
           "PAGE_IMMUTABLE",
           "This paper-note page changed and can no longer be re-read.",
