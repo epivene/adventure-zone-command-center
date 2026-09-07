@@ -6,8 +6,15 @@ on:
 
 jobs:
   focused-paper-notes-frontend:
+    strategy:
+      fail-fast: false
+      matrix:
+        test-file:
+          - paper-note-destination-picker.test.tsx
+          - paper-note-entry-card.test.tsx
+          - paper-note-entry-panel-autosave.test.tsx
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -18,9 +25,8 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Focused Paper Notes frontend tests
+      - name: Run focused test file
         run: >-
           pnpm --filter @workspace/adventure-zone exec vitest run
-          src/components/paper-notes/paper-note-destination-picker.test.tsx
-          src/components/paper-notes/paper-note-entry-card.test.tsx
-          src/components/paper-notes/paper-note-entry-panel-autosave.test.tsx
+          src/components/paper-notes/${{ matrix.test-file }}
+          --reporter=verbose
