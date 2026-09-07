@@ -96,12 +96,14 @@ describe("EventMap planning interactions", () => {
     expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
   });
 
-  it("orders route groups using the configured leg order", () => {
+  it("orders route groups using the configured leg order and keeps them collapsed by default", () => {
     render(<EventMap events={events} travelLegs={legs} />);
-    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
-      "Kristy",
-      "Hulk",
+    const groups = screen.getAllByTestId(/^route-event-leg-/);
+    expect(groups.map((group) => group.dataset.testid)).toEqual([
+      "route-event-leg-leg-kristy",
+      "route-event-leg-leg-hulk",
     ]);
+    expect(groups.every((group) => group.tagName === "DETAILS" && !group.hasAttribute("open"))).toBe(true);
   });
 
   it("makes a tapped leg supersede an already-focused trip", () => {
