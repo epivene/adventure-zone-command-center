@@ -7,7 +7,7 @@ const environment = {
   clientSecret: "secret",
   redirectUri: "https://app.example.com/google-workspace/oauth/callback",
   appOrigin: "https://app.example.com",
-  tokenEncryptionKey: Buffer.alloc(32, 1).toString("base64"),
+  tokenEncryptionKey: Buffer.alloc(32, 1),
 };
 
 function response(body: unknown, status = 200) {
