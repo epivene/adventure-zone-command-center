@@ -87,7 +87,11 @@ export function PaperNoteEntryPanel({
 
         queueMicrotask(async () => {
           try {
-            while (sequence < saveSequence.current) await saveTail.current;
+            while (sequence < saveSequence.current) {
+              const observedTail = saveTail.current;
+              await observedTail;
+              if (observedTail === saveTail.current) break;
+            }
             resolveResult(latestSaved.current ?? saved);
           } catch (error) {
             rejectResult(error);
