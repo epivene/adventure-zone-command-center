@@ -255,7 +255,7 @@ function EventList({
         >
           <summary className="flex cursor-pointer list-none items-center gap-3 p-3 text-left">
             <span className="size-3 shrink-0 rounded-full border border-slate-900" style={{ backgroundColor: group.color ?? undefined }} />
-            <span className="min-w-0 flex-1 font-bold text-slate-900">{group.name}</span>
+            <h3 className="min-w-0 flex-1 font-bold text-slate-900">{group.name}</h3>
             <span className="text-xs font-semibold text-slate-500">{group.events.length} event{group.events.length === 1 ? "" : "s"}</span>
             <span aria-hidden="true" className="text-slate-400 transition group-open:rotate-180">⌄</span>
           </summary>
