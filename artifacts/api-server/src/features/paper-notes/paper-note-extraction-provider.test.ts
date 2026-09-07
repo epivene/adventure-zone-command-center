@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { AiCompletionClient } from "@/features/ai-suggestions/ai-client";
-import {
-  DefaultPaperNoteExtractionProvider,
-  PaperNoteProviderError,
-} from "./paper-note-extraction-provider";
+import { DefaultPaperNoteExtractionProvider } from "./paper-note-extraction-provider";
 
 function client(outputs: string[]): AiCompletionClient {
   const completeImage = vi.fn(async () => outputs.shift() ?? "{}");
@@ -113,7 +110,7 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     const provider = new DefaultPaperNoteExtractionProvider(async () => ai);
 
     await expect(provider.segmentPage({ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }))
-      .rejects.toMatchObject<Partial<PaperNoteProviderError>>({ code: "MALFORMED_OUTPUT" });
+      .rejects.toMatchObject({ code: "MALFORMED_OUTPUT" });
   });
 
   it("reports unavailable configuration separately", async () => {
@@ -122,6 +119,6 @@ describe("DefaultPaperNoteExtractionProvider", () => {
     const provider = new DefaultPaperNoteExtractionProvider(async () => { throw unavailable; });
 
     await expect(provider.segmentPage({ bytes: new Uint8Array([1]), mimeType: "image/jpeg" }))
-      .rejects.toMatchObject<Partial<PaperNoteProviderError>>({ code: "PROVIDER_UNAVAILABLE" });
+      .rejects.toMatchObject({ code: "PROVIDER_UNAVAILABLE" });
   });
 });
