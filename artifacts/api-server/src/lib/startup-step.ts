@@ -15,7 +15,14 @@ export async function runStartupStep<T>(
     const timeout = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
         const error = new Error(`Startup step timed out: ${name}`);
-        onTimeout?.(error);
+        try {
+          onTimeout?.(error);
+        } catch (cancellationError) {
+          logger.error(
+            { err: cancellationError, startupStep: name },
+            "Startup step timeout cancellation failed",
+          );
+        }
         reject(error);
       }, timeoutMs);
     });
