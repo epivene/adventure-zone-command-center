@@ -82,7 +82,8 @@ export default function BossMaintenancePage() {
   const legItems = recordsForLeg(items, effectiveLegKey);
   const phases = ["all", ...Array.from(new Set(legItems.map((i) => i.phase).filter(Boolean) as string[]))];
 
-  const filtered = filter === "all" ? legItems : legItems.filter((i) => i.phase === filter);
+  const effectiveFilter = phases.includes(filter) ? filter : "all";
+  const filtered = effectiveFilter === "all" ? legItems : legItems.filter((i) => i.phase === effectiveFilter);
 
   function selectLeg(key: string | null) {
     setSelectedLegKey(key);
@@ -137,8 +138,8 @@ export default function BossMaintenancePage() {
             <Button
               key={p}
               role="tab"
-              aria-selected={filter === p}
-              variant={filter === p ? "default" : "outline"}
+              aria-selected={effectiveFilter === p}
+              variant={effectiveFilter === p ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter(p)}
               data-testid={`tab-maintenance-${p}`}
