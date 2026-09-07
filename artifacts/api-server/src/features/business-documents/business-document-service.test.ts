@@ -34,4 +34,11 @@ describe("BusinessDocumentService", () => {
     expect(repository.archive).not.toHaveBeenCalled();
     expect(repository.softDelete).not.toHaveBeenCalled();
   });
+
+  it("delegates review actions atomically to the repository", async () => {
+    const repository = { actOnReview: vi.fn(async () => true) };
+    const service = new BusinessDocumentService({ repository: repository as any, storage: {} as any });
+    await expect(service.reviewAction("review-1", { action: "approve" }, "owner")).resolves.toEqual({ ok: true });
+    expect(repository.actOnReview).toHaveBeenCalledWith("review-1", { action: "approve" }, "owner");
+  });
 });

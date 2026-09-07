@@ -24,6 +24,8 @@ function setup() {
     archive: vi.fn(async () => true),
     delete: vi.fn(async () => true),
     pendingReviewCount: vi.fn(async () => 3),
+    reviewItems: vi.fn(async () => [{ id: linkId, displayName: "City COI" }]),
+    reviewAction: vi.fn(async () => ({ ok: true })),
   };
   const app = express();
   app.use(express.json());
@@ -64,5 +66,19 @@ describe("business document routes", () => {
     const { app, service } = setup();
     await request(app).delete(`/business-documents/${documentId}`).set(ownerHeader()).send({ confirmation: "no" }).expect(400);
     expect(service.delete).not.toHaveBeenCalled();
+  });
+
+  it("lists and resolves document reviews separately from the document list", async () => {
+    const { app, service } = setup();
+    await request(app).get("/business-documents/reviews").set(ownerHeader()).expect(200);
+    await request(app).post(`/business-documents/reviews/${linkId}/actions`).set(ownerHeader()).send({ action: "approve" }).expect(200, { ok: true });
+    expect(service.reviewItems).toHaveBeenCalledWith(50);
+    expect(service.reviewAction).toHaveBeenCalledWith(linkId, { action: "approve" }, "");
+  });
+
+  it("validates corrections before correct-and-approve", async () => {
+    const { app, service } = setup();
+    await request(app).post(`/business-documents/reviews/${linkId}/actions`).set(ownerHeader()).send({ action: "correct_and_approve", corrections: {} }).expect(400);
+    expect(service.reviewAction).not.toHaveBeenCalled();
   });
 });

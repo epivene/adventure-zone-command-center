@@ -6,6 +6,8 @@ import type {
 
 import type {
   BusinessDocumentIngestInput,
+  BusinessDocumentReviewAction,
+  BusinessDocumentReviewItemView,
   BusinessDocumentView,
   DocumentIngestionOutcome,
   DocumentLinkInput,
@@ -56,6 +58,13 @@ function documentLinks(value: unknown): BusinessDocumentView["links"] {
       targetId: candidate.targetId,
     }];
   });
+}
+
+function jsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value === "string") {
+    try { value = JSON.parse(value); } catch { return {}; }
+  }
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
 function toView(row: Record<string, unknown>): BusinessDocumentView {
@@ -433,6 +442,101 @@ export class BusinessDocumentRepository {
     try {
       const result = await client.query("SELECT count(*)::int AS count FROM business_document_review_items WHERE state = 'pending' OR (state = 'deferred' AND deferred_until <= now())");
       return Number(result.rows[0]?.count ?? 0);
+    } finally { client.release?.(); }
+  }
+
+  async listPendingReviews(limit = 50): Promise<BusinessDocumentReviewItemView[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT review.*, document.display_name, document.original_filename, document.category
+           FROM business_document_review_items review
+           JOIN business_documents document ON document.id = review.document_id
+          WHERE review.state = 'pending' OR (review.state = 'deferred' AND review.deferred_until <= now())
+          ORDER BY review.created_at ASC LIMIT $1`,
+        [Math.min(100, Math.max(1, limit))],
+      );
+      return result.rows.map((row) => ({
+        id: String(row.id),
+        documentId: String(row.document_id),
+        kind: row.kind as BusinessDocumentReviewItemView["kind"],
+        state: row.state as BusinessDocumentReviewItemView["state"],
+        proposals: jsonObject(row.proposals),
+        reasonCodes: Array.isArray(row.reason_codes) ? row.reason_codes.filter((value): value is string => typeof value === "string") : [],
+        lastErrorCode: typeof row.last_error_code === "string" ? row.last_error_code : null,
+        deferredUntil: row.deferred_until ? isoTime(row.deferred_until) : null,
+        displayName: String(row.display_name),
+        originalFilename: String(row.original_filename),
+        category: row.category as BusinessDocumentCategory,
+        createdAt: isoTime(row.created_at),
+      }));
+    } finally { client.release?.(); }
+  }
+
+  async actOnReview(reviewId: string, action: BusinessDocumentReviewAction, actor: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const selected = await client.query(
+        `SELECT * FROM business_document_review_items
+          WHERE id = $1 AND state IN ('pending','deferred') FOR UPDATE`,
+        [reviewId],
+      );
+      const review = selected.rows[0];
+      if (!review) { await client.query("ROLLBACK"); return false; }
+      const documentId = String(review.document_id);
+
+      if (action.action === "defer") {
+        await client.query(
+          "UPDATE business_document_review_items SET state = 'deferred', deferred_until = $2, updated_at = now() WHERE id = $1",
+          [reviewId, action.deferredUntil],
+        );
+      } else if (action.action === "retry") {
+        if (review.kind !== "source_failure" || review.last_error_code !== "retry_required") {
+          throw new Error("BUSINESS_DOCUMENT_RETRY_NOT_ALLOWED");
+        }
+        await client.query(
+          "UPDATE business_document_review_items SET state = 'pending', attempts = attempts + 1, last_error_code = null, deferred_until = null, updated_at = now() WHERE id = $1",
+          [reviewId],
+        );
+      } else if (action.action === "non_business") {
+        await client.query("UPDATE business_documents SET lifecycle = 'archived', archived_at = now(), updated_at = now() WHERE id = $1", [documentId]);
+        await client.query("UPDATE business_document_review_items SET state = 'rejected', resolved_by = $2, resolved_at = now(), updated_at = now() WHERE id = $1", [reviewId, actor]);
+      } else {
+        const corrections = action.action === "correct_and_approve" ? action.corrections : jsonObject(review.proposals);
+        const category = typeof corrections.category === "string" ? corrections.category : null;
+        const effectiveDate = typeof corrections.effectiveDate === "string" ? corrections.effectiveDate : null;
+        const issueDate = typeof corrections.issueDate === "string" ? corrections.issueDate : null;
+        const expirationDate = typeof corrections.expirationDate === "string" ? corrections.expirationDate : null;
+        await client.query(
+          `UPDATE business_documents SET
+             category = COALESCE($2, category), effective_date = COALESCE($3, effective_date),
+             issue_date = COALESCE($4, issue_date), expiration_date = COALESCE($5, expiration_date),
+             review_state = 'accepted', updated_at = now()
+           WHERE id = $1`,
+          [documentId, category, effectiveDate, issueDate, expirationDate],
+        );
+        if (Array.isArray(corrections.targets)) {
+          await client.query("DELETE FROM business_document_links WHERE document_id = $1", [documentId]);
+          const links = corrections.targets.flatMap((target): DocumentLinkInput[] => {
+            if (!target || typeof target !== "object") return [];
+            const item = target as Record<string, unknown>;
+            if (!["profile", "booking", "event_family"].includes(String(item.targetKind)) || typeof item.targetId !== "string") return [];
+            return [{ targetKind: item.targetKind as DocumentLinkInput["targetKind"], targetId: item.targetId, confirmationMode: "manual", confidence: 1, evidence: [{ kind: "review_correction" }] }];
+          });
+          await this.addLinks(client, documentId, links, actor);
+        }
+        await client.query("UPDATE business_document_review_items SET state = 'approved', proposals = $3::jsonb, resolved_by = $2, resolved_at = now(), updated_at = now() WHERE id = $1", [reviewId, actor, JSON.stringify(corrections)]);
+      }
+      await client.query(
+        "INSERT INTO business_document_audit_events (document_id, action, actor, metadata) VALUES ($1,$2,$3,$4::jsonb)",
+        [documentId, `review_${action.action}`, actor, JSON.stringify({ reviewId })],
+      );
+      await client.query("COMMIT");
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
     } finally { client.release?.(); }
   }
 }

@@ -7,6 +7,7 @@ import {
   businessDocumentsApi,
   type BusinessDocumentRecord,
 } from "@/lib/business-documents-api";
+import { DocumentReviewQueue } from "@/components/business-documents/document-review-queue";
 
 type View = "all" | "templates" | "insurance" | "review";
 
@@ -30,8 +31,9 @@ function visibleInView(document: BusinessDocumentRecord, view: View) {
 
 export default function BusinessDocumentsPage() {
   const search = useSearch();
-  const profileId = new URLSearchParams(search).get("profileId") ?? undefined;
-  const [view, setView] = useState<View>("all");
+  const searchParams = new URLSearchParams(search);
+  const profileId = searchParams.get("profileId") ?? undefined;
+  const [view, setView] = useState<View>(() => searchParams.get("view") === "review" ? "review" : "all");
   const [documents, setDocuments] = useState<BusinessDocumentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +98,9 @@ export default function BusinessDocumentsPage() {
       {error ? <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading documents…</p> : null}
 
-      {!loading && !visibleDocuments.length ? (
+      {view === "review" ? <DocumentReviewQueue /> : null}
+
+      {view !== "review" && !loading && !visibleDocuments.length ? (
         <section className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
           <FolderOpen className="mx-auto h-9 w-9 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-bold text-foreground">No business documents yet</h2>
@@ -104,7 +108,7 @@ export default function BusinessDocumentsPage() {
         </section>
       ) : null}
 
-      {visibleDocuments.length ? (
+      {view !== "review" && visibleDocuments.length ? (
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {visibleDocuments.map((document) => (
             <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={document.id}>

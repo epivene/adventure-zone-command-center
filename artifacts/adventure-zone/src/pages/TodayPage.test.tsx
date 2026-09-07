@@ -82,6 +82,7 @@ function mockDashboard(value: ReturnType<typeof dashboard>) {
         voicemailLauncherUrl: null,
       });
     }
+    if (path === "/business-documents/review-count") return Promise.resolve({ count: 0 });
     return Promise.reject(new Error(`Unexpected API path: ${path}`));
   });
 }
@@ -99,6 +100,19 @@ afterEach(() => {
 });
 
 describe("TodayPage renewals", () => {
+  it("shows document attention separately from calls and follow-ups", async () => {
+    mockDashboard(dashboard());
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/today") return Promise.resolve(dashboard());
+      if (path === "/calls/config") return Promise.resolve({ assistedCallingEnabled: false, voicemailLauncherUrl: null });
+      if (path === "/business-documents/review-count") return Promise.resolve({ count: 3 });
+      return Promise.reject(new Error(`Unexpected API path: ${path}`));
+    });
+    render(<TodayPage />);
+    expect(await screen.findByText("3 documents need review")).toBeVisible();
+    expect(screen.getByRole("link", { name: "Review documents" })).toHaveAttribute("href", "/business-documents?view=review");
+  });
+
   it("keeps later renewals collapsed and separate from current-season work", async () => {
     mockDashboard(dashboard());
     render(<TodayPage />);

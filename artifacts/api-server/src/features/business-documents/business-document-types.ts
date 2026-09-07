@@ -75,3 +75,25 @@ export type BusinessDocumentView = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type BusinessDocumentReviewItemView = {
+  id: string;
+  documentId: string;
+  kind: "classification" | "relationship" | "metadata" | "source_failure";
+  state: "pending" | "deferred";
+  proposals: Record<string, unknown>;
+  reasonCodes: string[];
+  lastErrorCode: string | null;
+  deferredUntil: string | null;
+  displayName: string;
+  originalFilename: string;
+  category: BusinessDocumentCategory;
+  createdAt: string;
+};
+
+export type BusinessDocumentReviewAction =
+  | { action: "approve" }
+  | { action: "correct_and_approve"; corrections: Record<string, unknown> }
+  | { action: "non_business" }
+  | { action: "defer"; deferredUntil: string }
+  | { action: "retry" };

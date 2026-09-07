@@ -38,6 +38,21 @@ export type BusinessDocumentRecord = {
   links: BusinessDocumentLink[];
 };
 
+export type BusinessDocumentReviewItem = {
+  id: string;
+  documentId: string;
+  kind: "classification" | "relationship" | "metadata" | "source_failure";
+  state: "pending" | "deferred";
+  proposals: Record<string, unknown>;
+  reasonCodes: string[];
+  lastErrorCode: string | null;
+  deferredUntil: string | null;
+  displayName: string;
+  originalFilename: string;
+  category: BusinessDocumentCategory;
+  createdAt: string;
+};
+
 type ListResponse = { documents: BusinessDocumentRecord[] };
 
 function queryString(filters: Record<string, string | number | undefined>) {
@@ -70,5 +85,17 @@ export const businessDocumentsApi = {
 
   unlink(documentId: string, linkId: string) {
     return apiDelete<{ ok: true }>(`/business-documents/${documentId}/links/${linkId}`);
+  },
+
+  reviewItems() {
+    return apiGet<{ items: BusinessDocumentReviewItem[] }>("/business-documents/reviews");
+  },
+
+  reviewCount() {
+    return apiGet<{ count: number }>("/business-documents/review-count");
+  },
+
+  reviewAction(reviewId: string, body: Record<string, unknown>) {
+    return apiPost<{ ok: true }>(`/business-documents/reviews/${reviewId}/actions`, body);
   },
 };

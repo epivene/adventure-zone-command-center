@@ -107,4 +107,22 @@ describe("BusinessDocumentRepository", () => {
     });
     expect(documents[0]?.links[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
   });
+
+  it("applies review corrections and their links in one review action", async () => {
+    const profileId = "00000000-0000-4000-8000-000000000002";
+    await database.query("INSERT INTO organizations (id) VALUES ($1)", [profileId]);
+    const repo = repository();
+    const created = await repo.ingest({ ...input("gmail", "message-3:attachment-1"), reviewState: "needs_review" });
+    const review = await database.query("SELECT id FROM business_document_review_items WHERE document_id = $1", [created.documentId]);
+    const reviewId = String((review.rows[0] as { id?: unknown } | undefined)?.id);
+
+    await expect(repo.actOnReview(reviewId, {
+      action: "correct_and_approve",
+      corrections: { category: "coi", targets: [{ targetKind: "profile", targetId: profileId }] },
+    }, "owner")).resolves.toBe(true);
+
+    expect((await repo.getById(created.documentId))).toMatchObject({ reviewState: "accepted", category: "coi" });
+    expect((await repo.list({ profileId }))).toHaveLength(1);
+    expect((await repo.listPendingReviews())).toHaveLength(0);
+  });
 });

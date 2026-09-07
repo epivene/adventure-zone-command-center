@@ -5,7 +5,7 @@ import type {
 
 import { BusinessDocumentRepository } from "./business-document-repository";
 import { BusinessDocumentStorage } from "./business-document-storage";
-import type { DocumentLinkInput } from "./business-document-types";
+import type { BusinessDocumentReviewAction, DocumentLinkInput } from "./business-document-types";
 
 type Repository = Pick<
   BusinessDocumentRepository,
@@ -17,6 +17,8 @@ type Repository = Pick<
   | "archive"
   | "softDelete"
   | "countPendingReviews"
+  | "listPendingReviews"
+  | "actOnReview"
 >;
 
 type Storage = Pick<BusinessDocumentStorage, "signedReadUrl">;
@@ -69,5 +71,15 @@ export class BusinessDocumentService {
 
   pendingReviewCount() {
     return this.repository.countPendingReviews();
+  }
+
+  reviewItems(limit?: number) {
+    return this.repository.listPendingReviews(limit);
+  }
+
+  async reviewAction(reviewId: string, action: BusinessDocumentReviewAction, actor: string) {
+    const applied = await this.repository.actOnReview(reviewId, action, actor);
+    if (!applied) throw new Error("BUSINESS_DOCUMENT_REVIEW_NOT_FOUND");
+    return { ok: true as const };
   }
 }
