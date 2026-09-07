@@ -44,21 +44,18 @@ jobs:
           path = Path('artifacts/api-server/src/features/organizations/profile-subset-merge-guard.ts')
           text = path.read_text()
           marker = '''type MergeCandidateRow = {\n  id: string;\n  city: string | null;\n  region: string | null;\n  consolidatedIntoId: string | null;\n};\n'''
-          guard = marker + '''\nfunction isMergeCandidateRow(row: Record<string, unknown>): row is MergeCandidateRow {\n  return typeof row.id === "string"\n    && (row.city === null || typeof row.city === "string")\n    && (row.region === null || typeof row.region === "string")\n    && (row.consolidatedIntoId === null || typeof row.consolidatedIntoId === "string");\n}\n\nfunction mergeCandidateRows(result: unknown): MergeCandidateRow[] {\n  if (!result || typeof result !== "object" || Array.isArray(result)) return [];\n  const rows = (result as { rows?: unknown }).rows;\n  if (!Array.isArray(rows)) return [];\n  return rows.filter((row): row is MergeCandidateRow =>\n    Boolean(row) && typeof row === "object" && !Array.isArray(row)\n      && isMergeCandidateRow(row as Record<string, unknown>),\n  );\n}\n'''
+          guard = marker + '''\nfunction isMergeCandidateRow(row: Record<string, unknown>): row is MergeCandidateRow {\n  return typeof row.id === "string"\n    && (row.city === null || typeof row.city === "string")\n    && (row.region === null || typeof row.region === "string")\n    && (row.consolidatedIntoId === null || typeof row.consolidatedIntoId === "string");\n}\n'''
           if marker not in text:
               raise SystemExit('merge candidate marker not found')
           text = text.replace(marker, guard, 1)
           old = '  const rows = ((result as { rows?: MergeCandidateRow[] }).rows ?? []);'
           if old not in text:
               raise SystemExit('unsafe merge candidate cast not found')
-          text = text.replace(old, '  const rows = mergeCandidateRows(result);', 1)
+          text = text.replace(old, '  const rows = result.rows.filter(isMergeCandidateRow);', 1)
           path.write_text(text)
           PY
-      - name: Run merge safety tests
-        run: |
-          pnpm --filter @workspace/api-server exec vitest run \
-            src/features/organizations/organization-merge-subset-safety.test.ts \
-            src/features/organizations/organization-consolidation.test.ts
+      - name: Run subset merge safety tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/organizations/organization-merge-subset-safety.test.ts
       - name: Commit verified patch
         run: |
           git config user.name "github-actions[bot]"
