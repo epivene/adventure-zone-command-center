@@ -32,6 +32,19 @@ describe("runStartupStep", () => {
     expect(aborted).toHaveBeenCalledOnce();
   });
 
+  it("preserves the timeout failure when cancellation throws", async () => {
+    await expect(
+      runStartupStep(
+        "blocked cleanup",
+        () => new Promise<never>(() => undefined),
+        10,
+        () => {
+          throw new Error("cancellation failed");
+        },
+      ),
+    ).rejects.toThrow("Startup step timed out: blocked cleanup");
+  });
+
   it("returns successful startup work unchanged", async () => {
     await expect(runStartupStep("schema check", async () => 42, 100)).resolves.toBe(42);
   });
