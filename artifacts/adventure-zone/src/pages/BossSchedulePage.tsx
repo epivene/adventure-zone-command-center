@@ -347,7 +347,7 @@ export default function BossSchedulePage() {
                 <h2 className="text-xl font-bold" id="boss-event-map-title">Route Map</h2>
                 <p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p>
               </div>
-              <RouteConflictWarning conflicts={routeConflicts} />
+              <RouteConflictWarning conflicts={routeConflicts} readOnly />
               <EventMap events={scopedEvents} readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
             </section>
           )}
