@@ -47,6 +47,7 @@ async function harness() {
       id uuid primary key,
       batch_id uuid not null,
       page_id uuid not null,
+      source_order integer not null default 0,
       state text not null,
       review_payload jsonb not null,
       extraction_payload jsonb not null,
