@@ -4,6 +4,13 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ScoutAlertRepository } from "./scout-alert-repository";
 import type { ScoutAlertDraft, ScoutAlertSnapshot } from "./scout-alert-types";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 const NOW = new Date("2026-08-25T12:00:00.000Z");
 
 async function database() {
@@ -162,7 +169,7 @@ async function database() {
   return {
     client,
     ids,
-    watchId: String(watch.rows[0]?.id),
+    watchId: String(rowValue(watch.rows, 0, "id")),
     repository: new ScoutAlertRepository(client as never),
   };
 }
@@ -258,8 +265,8 @@ describe("ScoutAlertRepository", () => {
 
     const watch = (await db.client.query(`select snapshot,failure_count,worker_id,lease_expires_at,last_evaluated_at from scout_alert_watches where id=$1`, [db.watchId])).rows[0];
     expect(watch).toMatchObject({ failure_count: 0, worker_id: null, lease_expires_at: null });
-    expect(watch?.snapshot).toMatchObject({ applicationDeadline: "2026-08-31" });
-    expect(new Date(String(watch?.last_evaluated_at)).toISOString()).toBe(NOW.toISOString());
+    expect(rowValue([watch], 0, "snapshot")).toMatchObject({ applicationDeadline: "2026-08-31" });
+    expect(new Date(String(rowValue([watch], 0, "last_evaluated_at"))).toISOString()).toBe(NOW.toISOString());
 
     const stored = await db.client.query(`select kind,severity,status,fingerprint from scout_alerts`);
     expect(stored.rows).toEqual([expect.objectContaining({
@@ -276,7 +283,7 @@ describe("ScoutAlertRepository", () => {
       nextResearchAt: new Date("2026-09-01T12:00:00Z"), researched: false,
     });
     const count = await db.client.query(`select count(*)::int as count from scout_alerts`);
-    expect(count.rows[0]?.count).toBe(1);
+    expect(rowValue(count.rows, 0, "count")).toBe(1);
   });
 
   it("records failure backoff and inserts one monitoring alert when supplied", async () => {
@@ -304,7 +311,7 @@ describe("ScoutAlertRepository", () => {
 
     const watch = (await db.client.query(`select failure_count,last_error,next_evaluation_at,worker_id from scout_alert_watches where id=$1`, [db.watchId])).rows[0];
     expect(watch).toMatchObject({ failure_count: 3, last_error: "Provider unavailable", worker_id: null });
-    expect(new Date(String(watch?.next_evaluation_at)).toISOString()).toBe("2026-08-25T18:00:00.000Z");
+    expect(new Date(String(rowValue([watch], 0, "next_evaluation_at"))).toISOString()).toBe("2026-08-25T18:00:00.000Z");
     expect((await db.client.query(`select kind,status from scout_alerts`)).rows).toEqual([
       expect.objectContaining({ kind: "monitoring_problem", status: "open" }),
     ]);
@@ -319,7 +326,7 @@ describe("ScoutAlertRepository", () => {
     const claim = await db.repository.claimDue({ workerId: "worker-a", now: NOW, leaseMs: 60_000 });
     await db.repository.completeWatch({ claim: claim!, now: NOW });
 
-    expect((await db.client.query(`select status from scout_alert_watches where id=$1`, [db.watchId])).rows[0]?.status).toBe("complete");
+    expect((await db.client.query(`select status from scout_alert_watches where id=$1`, [db.watchId])).rows.length ? rowValue((await db.client.query(`select status from scout_alert_watches where id=$1`, [db.watchId])).rows, 0, "status") : undefined).toBe("complete");
     expect((await db.client.query(`select distinct status from scout_alerts`)).rows).toEqual([{ status: "resolved" }]);
   });
 
