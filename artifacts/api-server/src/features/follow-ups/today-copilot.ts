@@ -78,7 +78,7 @@ export function explainFollowUpAction(
   }
 
   if (item.probability === "likely") {
-    if (priority === "low" || priority === "normal") priority = "high";
+    if (priority === "low") priority = "high";
     if (headline === "Follow up when ready") headline = "Likely opportunity";
     reasons.push("Likely opportunity based on the current booking probability.");
   }
