@@ -1,0 +1,95 @@
+name: Apply paper note query row guards
+
+on:
+  push:
+    branches:
+      - fix/paper-note-query-row-guards
+    paths:
+      - ".github/workflows/apply-paper-note-query-row-guards.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/paper-note-query-row-guards
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Add guarded query row helper and migrate first paper note consumers
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          base = Path('artifacts/api-server/src/features/paper-notes')
+          helper = base / 'paper-note-query-rows.ts'
+          helper.write_text('''export type QueryRow = Record<string, unknown>;\n\nfunction isQueryRow(value: unknown): value is QueryRow {\n  return typeof value === "object" && value !== null && !Array.isArray(value);\n}\n\nexport function queryRows<T extends QueryRow>(\n  result: unknown,\n  isRow: (row: QueryRow) => row is T,\n): T[] {\n  if (!isQueryRow(result)) return [];\n  const rows = result.rows;\n  if (!Array.isArray(rows)) return [];\n  return rows.filter((row): row is T => isQueryRow(row) && isRow(row));\n}\n\nexport function firstQueryRow<T extends QueryRow>(\n  result: unknown,\n  isRow: (row: QueryRow) => row is T,\n): T | null {\n  return queryRows(result, isRow)[0] ?? null;\n}\n''')
+
+          archive = base / 'paper-note-archive-service.ts'
+          text = archive.read_text()
+          text = text.replace(
+              'import { PaperNoteImportError } from "./paper-note-import-service";\n',
+              'import { PaperNoteImportError } from "./paper-note-import-service";\nimport { firstQueryRow } from "./paper-note-query-rows";\n'
+          )
+          text = text.replace(
+              '    const row = (existing as { rows?: Array<{ status: string }> }).rows?.[0];',
+              '    const row = firstQueryRow(existing, (candidate): candidate is { status: string } =>\n      typeof candidate.status === "string",\n    );'
+          )
+          archive.write_text(text)
+
+          extraction = base / 'paper-note-extraction-repository.ts'
+          text = extraction.read_text()
+          text = text.replace(
+              'import type { PaperNotePageStage } from "./paper-note-types";\n',
+              'import type { PaperNotePageStage } from "./paper-note-types";\nimport { firstQueryRow } from "./paper-note-query-rows";\n'
+          )
+          marker = 'type ClaimedRow = {\n  pageId: string;\n  batchId: string;\n  originalObjectKey: string;\n  analysisObjectKey: string | null;\n  mimeType: string;\n  rotationDegrees: number;\n  attemptCount: number;\n};\n'
+          guard = marker + '''\nfunction isClaimedRow(row: Record<string, unknown>): row is ClaimedRow {\n  return typeof row.pageId === "string"\n    && typeof row.batchId === "string"\n    && typeof row.originalObjectKey === "string"\n    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string")\n    && typeof row.mimeType === "string"\n    && typeof row.rotationDegrees === "number"\n    && typeof row.attemptCount === "number";\n}\n\nfunction isCountRow(row: Record<string, unknown>): row is { count: number } {\n  return typeof row.count === "number";\n}\n'''
+          if marker not in text:
+              raise SystemExit('ClaimedRow marker not found')
+          text = text.replace(marker, guard, 1)
+          text = text.replace(
+              '      const row = (result as { rows?: ClaimedRow[] }).rows?.[0];',
+              '      const row = firstQueryRow(result, isClaimedRow);'
+          )
+          text = text.replace(
+              '    const unresolved = Number((result as { rows?: Array<{ count: number }> }).rows?.[0]?.count ?? 0);',
+              '    const unresolved = Number(firstQueryRow(result, isCountRow)?.count ?? 0);'
+          )
+          extraction.write_text(text)
+          PY
+      - name: Run focused paper note tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/paper-notes/paper-note-extraction-provider.test.ts \
+            src/features/paper-notes/paper-note-batch-delete-policy.test.ts
+      - name: Commit verified production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/paper-notes/paper-note-query-rows.ts \
+                  artifacts/api-server/src/features/paper-notes/paper-note-archive-service.ts \
+                  artifacts/api-server/src/features/paper-notes/paper-note-extraction-repository.ts
+          git diff --cached --quiet || git commit -m "fix: guard raw paper note query rows"
+          git push origin HEAD:fix/paper-note-query-row-guards
+      - run: pnpm run typecheck:libs
+      - name: Verify first paper note cast errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'paper-note-archive-service\.ts\(28,18\)|paper-note-extraction-repository\.ts\((86,20|285,32)\)' /tmp/api-typecheck.log; then
+            echo 'Paper-note query row cast errors remain.' >&2
+            exit 1
+          fi
