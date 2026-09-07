@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 const source = readFileSync(
@@ -26,4 +26,17 @@ test("auto-advances the gallery every ten seconds without blocking manual contro
   assert.match(source, /prefers-reduced-motion: reduce/);
   assert.match(source, /addEventListener\("pointerdown"/);
   assert.match(source, /addEventListener\("wheel"/);
+});
+
+test("includes the two new team photos with at least ten cards between them", () => {
+  const galleryBlock = /const galleryImages = \[([\s\S]*?)\n  \];/.exec(source)?.[1] ?? "";
+  const galleryKeys = [...galleryBlock.matchAll(/\[IMAGE\.([A-Za-z0-9]+),/g)].map((match) => match[1]);
+  const hostIndex = galleryKeys.indexOf("galleryDaveHost");
+  const foamPartyIndex = galleryKeys.indexOf("galleryDesireeFoamParty");
+
+  assert.equal(existsSync(new URL("../public/assets/gallery-dave-host.jpg", import.meta.url)), true);
+  assert.equal(existsSync(new URL("../public/assets/gallery-desiree-foam-party.jpg", import.meta.url)), true);
+  assert.notEqual(hostIndex, -1);
+  assert.notEqual(foamPartyIndex, -1);
+  assert.ok(Math.abs(foamPartyIndex - hostIndex) >= 11);
 });
