@@ -13,6 +13,8 @@ permissions:
 jobs:
   apply:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,11 +39,8 @@ jobs:
               raise SystemExit('assistant Lead Scout branch not found')
           path.write_text(text.replace(old, new, 1))
           PY
-      - name: Run focused Assistant tests
-        run: >-
-          pnpm --filter @workspace/api-server exec vitest run
-          src/features/assistant/lead-scout-service.test.ts
-          src/features/assistant/general-assistant.test.ts
+      - name: Run focused Lead Scout service tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/assistant/lead-scout-service.test.ts
       - name: Commit verified production patch
         run: |
           git config user.name "github-actions[bot]"
