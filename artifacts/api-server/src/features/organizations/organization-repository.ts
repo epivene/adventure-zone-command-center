@@ -1216,6 +1216,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             primaryContactName: primaryContactByOrg.get(organization.id) ?? null,
             locationCount: locationCountByOrganization.get(organization.id) ?? 0,
             matchedLocation: null,
+            parentContext: null,
           } satisfies OrganizationListRecord];
         }),
       }))
