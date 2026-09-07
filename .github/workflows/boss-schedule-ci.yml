@@ -4,7 +4,7 @@ on:
   pull_request:
     paths:
       - "artifacts/adventure-zone/src/pages/BossSchedulePage.tsx"
-      - "artifacts/adventure-zone/src/pages/BossSchedulePage.test.tsx src/pages/BossSchedulePage.event-data.test.tsx"
+      - "artifacts/adventure-zone/src/pages/BossSchedulePage.test.tsx"
       - "artifacts/adventure-zone/src/pages/BossSchedulePage.event-data.test.tsx"
       - "artifacts/adventure-zone/src/pages/BossSignInPage.tsx"
       - "artifacts/adventure-zone/src/components/calendar/event-calendar.tsx"
