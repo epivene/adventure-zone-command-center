@@ -711,6 +711,7 @@
       .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .step-card, .safety-card, .booking-card { padding: 16px; }
       .step-number { font-size: 32px; }
+            .gallery-frame { margin: 0; }
       .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
       .gallery-frame:nth-child(2) { transform: translateY(18px); }
       .faq-item summary { padding: 13px 15px; font-size: 14px; }
