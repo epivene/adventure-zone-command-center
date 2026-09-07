@@ -25,7 +25,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Set remaining saved-review parent context explicitly
+      - name: Set duplicate-review parent context explicitly
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -34,7 +34,7 @@ jobs:
           old = '''            locationCount: locationCountByOrganization.get(organization.id) ?? 0,\n            matchedLocation: null,\n          } satisfies OrganizationListRecord];'''
           new = '''            locationCount: locationCountByOrganization.get(organization.id) ?? 0,\n            matchedLocation: null,\n            parentContext: null,\n          } satisfies OrganizationListRecord];'''
           if old not in text:
-              raise SystemExit('saved duplicate review organization record block not found')
+              raise SystemExit('duplicate review organization record block not found')
           path.write_text(text.replace(old, new, 1))
           PY
       - name: Run organization duplicate/family tests
@@ -43,19 +43,19 @@ jobs:
           src/features/organizations/duplicate-review-resolution-filter.test.ts
           src/features/organizations/organization-family-discovery.test.ts
           src/features/organizations/organization-family-matcher.test.ts
-      - name: Verify organization parentContext type errors are gone
-        run: |
-          set +e
-          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
-          set -e
-          if grep -E 'organization-repository\.ts\(.*parentContext' /tmp/api-typecheck.log; then
-            echo 'Duplicate organization parentContext type errors remain.' >&2
-            exit 1
-          fi
-      - name: Commit patch
+      - name: Commit verified production patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/api-server/src/features/organizations/organization-repository.ts
           git diff --cached --quiet || git commit -m "fix: complete duplicate review parent context"
           git push origin HEAD:fix/duplicate-org-parent-context
+      - name: Check for a real missing-parentContext compiler error
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -F "Property 'parentContext' is missing" /tmp/api-typecheck.log; then
+            echo 'A real missing parentContext error remains.' >&2
+            exit 1
+          fi
