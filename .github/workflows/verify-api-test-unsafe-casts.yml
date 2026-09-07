@@ -26,6 +26,8 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/activities/activity-repository.test.ts
           src/features/profile-integrity/organization-reference-inspector.test.ts
+      - name: Build database declarations
+        run: pnpm --filter @workspace/db build
       - name: Verify targeted compiler errors cleared
         shell: bash
         run: |
