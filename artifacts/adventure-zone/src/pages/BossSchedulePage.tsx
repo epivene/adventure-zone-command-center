@@ -8,9 +8,11 @@ import { bossGet, bossPatch, bossPut } from "@/lib/boss-auth-context";
 import type { BossBooking, BossSchedule, ScheduleLeg } from "@/lib/boss-types";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { EventMap } from "@/components/routes/event-map";
+import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import { ScheduleViewToggle, type ScheduleView } from "@/components/schedule/schedule-view-toggle";
 import { asScheduleCalendarEvent, isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import type { MapEvent } from "@/features/routes/map-data";
+import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
 function LegCard({ leg, allLegs, onChanged }: { leg: ScheduleLeg; allLegs: ScheduleLeg[]; onChanged(): Promise<void> }) {
@@ -252,6 +254,8 @@ export default function BossSchedulePage() {
     return true;
   }), [legId, mapEvents, season, status]);
   const potentialCount = scopedEvents.filter((event) => !isBookedForSchedule(event)).length;
+  const routeConflicts = useMemo(() => findSameLegDateConflicts(scopedEvents), [scopedEvents]);
+  const extraFilterCount = Number(Boolean(legId)) + Number(status !== "all");
   const calendarEvents = useMemo(() => {
     const visible = status !== "all" || showPotential
       ? scopedEvents
@@ -270,17 +274,8 @@ export default function BossSchedulePage() {
   return (
     <div className="mx-auto grid max-w-7xl gap-4" data-testid="boss-schedule-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
-          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Schedule</h1>
-          <p className="mt-1 text-sm text-muted-foreground">See the full confirmed and potential plan. Booking details remain view-only here.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ScheduleViewToggle view={view} onChange={setView} />
-          <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
-          </Button>
-        </div>
+        <h1 className="text-3xl font-bold tracking-tight">Schedule</h1>
+        <ScheduleViewToggle view={view} onChange={setView} />
       </header>
 
       <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
@@ -292,7 +287,11 @@ export default function BossSchedulePage() {
             </select>
           </label>
           <details className="group ml-auto">
-            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">Filters <span className="text-slate-400 group-open:rotate-180">⌄</span></summary>
+            <summary className="flex min-h-9 cursor-pointer list-none items-center gap-2 rounded-lg px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Filters
+              {extraFilterCount ? <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs font-bold text-orange-800">{extraFilterCount}</span> : null}
+              <span className="text-slate-400 group-open:rotate-180">⌄</span>
+            </summary>
             <div className="mt-2 grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
               <label className="grid gap-1 text-sm font-semibold">Leg
                 <select aria-label="Leg" value={legId} onChange={(event) => setLegId(event.target.value)}>
@@ -312,6 +311,12 @@ export default function BossSchedulePage() {
             </div>
           </details>
         </div>
+        {extraFilterCount ? (
+          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
+            {legId ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">{activeLegs.find((leg) => leg.id === legId)?.name ?? "Selected leg"}</span> : null}
+            {status !== "all" ? <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">{status.replaceAll("_", " ")}</span> : null}
+          </div>
+        ) : null}
       </div>
 
       {error ? (
@@ -328,7 +333,7 @@ export default function BossSchedulePage() {
           {view === "calendar" ? (
             <section className="grid gap-3">
               {status === "all" && potentialCount > 0 ? (
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-end gap-2">
                   <button className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${showPotential ? "border-amber-300 bg-amber-50 text-amber-900" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`} onClick={() => setShowPotential((value) => !value)} type="button">
                     {showPotential ? "Hide potential" : `Show potential (${potentialCount})`}
                   </button>
@@ -337,7 +342,14 @@ export default function BossSchedulePage() {
               <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} readOnly />
             </section>
           ) : (
-            <EventMap events={scopedEvents} readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
+            <section aria-labelledby="boss-event-map-title" className="grid gap-4">
+              <div>
+                <h2 className="text-xl font-bold" id="boss-event-map-title">Route Map</h2>
+                <p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p>
+              </div>
+              <RouteConflictWarning conflicts={routeConflicts} />
+              <EventMap events={scopedEvents} readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
+            </section>
           )}
 
           <details className="rounded-xl border border-border bg-card p-4 shadow-sm">
