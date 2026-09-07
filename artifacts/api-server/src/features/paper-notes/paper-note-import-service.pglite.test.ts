@@ -99,7 +99,7 @@ async function harness() {
       organization_id uuid not null,
       contact_id uuid not null,
       role text,
-      is_"primary" boolean not null default false,
+      is_primary boolean not null default false,
       active boolean not null default true,
       source text not null default 'local',
       created_at timestamptz not null default now(),
