@@ -1,0 +1,61 @@
+name: Apply Boss account clear-link fix
+
+on:
+  push:
+    branches:
+      - fix/boss-account-clear-office-link
+    paths:
+      - ".github/workflows/apply-boss-account-clear-link.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/boss-account-clear-office-link
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Allow clearing linked Studio Office account
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/boss/boss-account-repository.ts')
+          text = path.read_text()
+          old = 'studioOfficeAccountId?: string })'
+          new = 'studioOfficeAccountId?: string | null })'
+          if old not in text:
+              raise SystemExit('Boss account update input not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run Boss auth tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/boss/boss-auth.test.ts
+      - name: Commit verified production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/boss/boss-account-repository.ts
+          git diff --cached --quiet || git commit -m "fix: allow clearing Boss office account link"
+          git push origin HEAD:fix/boss-account-clear-office-link
+      - name: Build/typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Verify Boss admin account compiler error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'src/routes/boss-admin-accounts\.ts\(20,56\)' /tmp/api-typecheck.log; then
+            echo 'Boss admin account nullability error remains.' >&2
+            exit 1
+          fi
