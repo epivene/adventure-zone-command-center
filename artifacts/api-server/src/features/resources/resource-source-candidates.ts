@@ -41,9 +41,16 @@ type ExistingIdentity = {
   serialNumber: string | null;
 };
 
+type SourceIdentity = {
+  yearBuilt: number;
+  make: string;
+  model: string;
+  serialNumber: string;
+};
+
 export function canApplySourceIdentity(
   existing: ExistingIdentity,
-  source: Pick<SourceAsset, "yearBuilt" | "make" | "model" | "serialNumber">,
+  source: SourceIdentity,
 ): { allowed: boolean; conflicts: Array<keyof ExistingIdentity> } {
   const conflicts: Array<keyof ExistingIdentity> = [];
   for (const key of ["yearBuilt", "make", "model", "serialNumber"] as const) {
