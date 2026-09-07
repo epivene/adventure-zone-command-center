@@ -3,6 +3,7 @@ name: Required Startup CI
 on:
   pull_request:
     paths:
+      - "artifacts/api-server/src/index.ts"
       - "artifacts/api-server/src/db/required-schema-startup.ts"
       - "artifacts/api-server/src/db/required-schema-startup.test.ts"
       - "artifacts/api-server/src/db/lead-intake-required-startup.ts"
