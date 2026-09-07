@@ -8,7 +8,7 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "test": "vitest run --config vitest.config.ts",
-    "test:boss": "vitest run --config vitest.config.ts src/App.boss-workspace.test.tsx src/lib/boss-auth-context.test.tsx src/pages/BossAssignmentsPage.test.tsx",
+    "test:boss": "vitest run --config vitest.config.ts src/App.boss-workspace.test.tsx src/lib/boss-auth-context.test.tsx src/components/boss/leg-record-picker.test.tsx src/pages/BossAssignmentsPage.test.tsx src/pages/BossLegOperationalRecords.test.tsx",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

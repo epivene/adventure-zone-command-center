@@ -3,11 +3,14 @@ import { RefreshCw, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
+import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
 import { bossDelete, bossGet } from "@/lib/boss-auth-context";
 
 type MaintenanceItem = {
   id?: string;
   bookingId?: string;
+  legId?: string | null;
+  legName?: string | null;
   title?: string | null;
   phase?: string | null;
   status?: string | null;
@@ -51,6 +54,7 @@ function statusVariant(status?: string | null): "default" | "secondary" | "outli
 
 export default function BossMaintenancePage() {
   const [items, setItems] = useState<MaintenanceItem[]>([]);
+  const [selectedLegKey, setSelectedLegKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
@@ -73,9 +77,18 @@ export default function BossMaintenancePage() {
 
   useEffect(() => { void load(); }, []);
 
-  const phases = ["all", ...Array.from(new Set(items.map((i) => i.phase).filter(Boolean) as string[]))];
+  const legGroups = groupRecordsByLeg(items);
+  const effectiveLegKey = legGroups.some((group) => group.key === selectedLegKey) ? selectedLegKey : null;
+  const legItems = recordsForLeg(items, effectiveLegKey);
+  const phases = ["all", ...Array.from(new Set(legItems.map((i) => i.phase).filter(Boolean) as string[]))];
 
-  const filtered = filter === "all" ? items : items.filter((i) => i.phase === filter);
+  const effectiveFilter = phases.includes(filter) ? filter : "all";
+  const filtered = effectiveFilter === "all" ? legItems : legItems.filter((i) => i.phase === effectiveFilter);
+
+  function selectLeg(key: string | null) {
+    setSelectedLegKey(key);
+    setFilter("all");
+  }
 
   async function openRecord(id: string) {
     if (openId === id) { setOpenId(null); setRecord(null); return; }
@@ -115,14 +128,18 @@ export default function BossMaintenancePage() {
         </Button>
       </header>
 
-      {phases.length > 1 ? (
+      {!loading && items.length > 0 ? (
+        <LegRecordPicker groups={legGroups} noun="maintenance record" selectedLegKey={effectiveLegKey} onSelect={selectLeg} />
+      ) : null}
+
+      {effectiveLegKey && phases.length > 1 ? (
         <div className="flex flex-wrap gap-2" role="tablist">
           {phases.map((p) => (
             <Button
               key={p}
               role="tab"
-              aria-selected={filter === p}
-              variant={filter === p ? "default" : "outline"}
+              aria-selected={effectiveFilter === p}
+              variant={effectiveFilter === p ? "default" : "outline"}
               size="sm"
               onClick={() => setFilter(p)}
               data-testid={`tab-maintenance-${p}`}
@@ -146,13 +163,13 @@ export default function BossMaintenancePage() {
         <div className="grid gap-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="maintenance-empty">
           <Wrench className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 font-semibold text-foreground">No maintenance items.</p>
           <p className="mt-1 text-sm text-muted-foreground">Pre/post-event checklists will appear here.</p>
         </div>
-      ) : (
+      ) : effectiveLegKey ? (
         <div className="grid gap-3">
           {filtered.map((item, i) => (
             <div
@@ -205,7 +222,7 @@ export default function BossMaintenancePage() {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

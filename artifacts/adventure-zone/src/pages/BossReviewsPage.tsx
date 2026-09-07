@@ -4,11 +4,14 @@ import { RefreshCw, Star } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
+import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
 import { bossDelete, bossGet, bossPatch } from "@/lib/boss-auth-context";
 
 type ReviewItem = {
   id?: string;
   bookingId?: string;
+  legId?: string | null;
+  legName?: string | null;
   title?: string;
   eventDate?: string | null;
   status?: string | null;
@@ -29,6 +32,7 @@ type DashboardData = {
 
 export default function BossReviewsPage() {
   const [items, setItems] = useState<ReviewItem[]>([]);
+  const [selectedLegKey, setSelectedLegKey] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -53,6 +57,13 @@ export default function BossReviewsPage() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  const legGroups = groupRecordsByLeg(items);
+  const focusedItem = focusBookingId ? items.find((item) => item.bookingId === focusBookingId) : undefined;
+  const focusedLegKey = focusedItem?.legId ?? (focusedItem ? "unassigned" : null);
+  const requestedLegKey = selectedLegKey === undefined ? focusedLegKey : selectedLegKey;
+  const effectiveLegKey = legGroups.some((group) => group.key === requestedLegKey) ? requestedLegKey : null;
+  const visibleItems = recordsForLeg(items, effectiveLegKey);
 
   async function removeDue(item: ReviewItem) {
     if (!item.bookingId || !window.confirm(`Remove “${item.title ?? "this event"}” from Review Due?`)) return;
@@ -140,8 +151,10 @@ export default function BossReviewsPage() {
           <p className="mt-1 text-sm text-muted-foreground">Completed events will appear here for post-event review and wrap-up.</p>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {items.map((item, i) => {
+        <div className="grid gap-4">
+          <LegRecordPicker groups={legGroups} noun="review" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
+          {effectiveLegKey ? <div className="grid gap-3">
+          {visibleItems.map((item, i) => {
             const isFocused = focusBookingId && item.bookingId === focusBookingId;
             return (
               <section
@@ -210,7 +223,7 @@ export default function BossReviewsPage() {
                   </Button>
                 ) : null}
                 {/* Show any other top-level keys as detail fields */}
-                {editing !== item.id ? Object.entries(item).filter(([k]) => !["id", "bookingId", "title", "eventDate", "status", "wrapUpStatus", "notes"].includes(k)).map(([k, v]) => {
+                {editing !== item.id ? Object.entries(item).filter(([k]) => !["id", "bookingId", "legId", "legName", "title", "eventDate", "status", "wrapUpStatus", "notes"].includes(k)).map(([k, v]) => {
                   if (v == null || v === "") return null;
                   const label = k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
                   return (
@@ -223,6 +236,7 @@ export default function BossReviewsPage() {
               </section>
             );
           })}
+          </div> : null}
         </div>
       )}
     </div>

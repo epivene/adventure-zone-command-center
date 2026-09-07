@@ -3,10 +3,13 @@ import { RefreshCw } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
+import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
 import { bossGet } from "@/lib/boss-auth-context";
 
 type Receipt = {
   id: string;
+  legId?: string | null;
+  legName?: string | null;
   submittedBy?: string | null;
   amount?: number | null;
   category?: string | null;
@@ -30,6 +33,7 @@ function statusVariant(status?: string | null): "default" | "secondary" | "outli
 
 export default function BossReceiptsPage() {
   const [receipts, setReceipts] = useState<Receipt[]>([]);
+  const [selectedLegKey, setSelectedLegKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +58,10 @@ export default function BossReceiptsPage() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  const legGroups = groupRecordsByLeg(receipts);
+  const effectiveLegKey = legGroups.some((group) => group.key === selectedLegKey) ? selectedLegKey : null;
+  const visibleReceipts = recordsForLeg(receipts, effectiveLegKey);
 
   return (
     <div className="grid gap-5" data-testid="boss-receipts-page">
@@ -87,8 +95,10 @@ export default function BossReceiptsPage() {
           <p className="mt-1 text-sm text-muted-foreground">Receipts submitted by Amy or the owner will appear here.</p>
         </div>
       ) : (
-        <div className="grid gap-2">
-          {receipts.map((r) => (
+        <div className="grid gap-4">
+          <LegRecordPicker groups={legGroups} noun="receipt" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
+          {effectiveLegKey ? <div className="grid gap-2">
+          {visibleReceipts.map((r) => (
             <div
               key={r.id}
               className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[7rem_1fr_auto]"
@@ -124,6 +134,7 @@ export default function BossReceiptsPage() {
               </div>
             </div>
           ))}
+          </div> : null}
         </div>
       )}
     </div>
