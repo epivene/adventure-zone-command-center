@@ -10,9 +10,11 @@ import { runRequiredSchemaStartup } from "./required-schema-startup";
 describe("runRequiredSchemaStartup", () => {
   it("creates required schemas without reapplying the retired Kristy review cleanup", async () => {
     const calls: string[] = [];
+    const timeouts = new Map<string, number | undefined>();
     let googleReady = false;
-    const run = vi.fn(async (name: string, step: () => Promise<unknown>) => {
+    const run = vi.fn(async (name: string, step: () => Promise<unknown>, timeoutMs?: number) => {
       calls.push(name);
+      timeouts.set(name, timeoutMs);
       return step();
     });
     await runRequiredSchemaStartup({
@@ -40,6 +42,8 @@ describe("runRequiredSchemaStartup", () => {
       ensureDesignStudio: async () => false,
     });
 
+    expect(timeouts.get("required lead intake schema")).toBe(120_000);
+    expect(timeouts.get("required paper notes schema")).toBeUndefined();
     expect(calls).toEqual([
       "required paper notes schema",
       "required inbound calling schema",
