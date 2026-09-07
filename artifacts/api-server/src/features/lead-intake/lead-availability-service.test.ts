@@ -22,7 +22,7 @@ describe("LeadAvailabilityService", () => {
   it("rejects an out-of-date row before calling Google", async () => {
     const google = { listCalendarEvents: async () => { throw new Error("must not call Google"); } };
     const service = new LeadAvailabilityService({
-      persistence: { loadVerifiedLead: async () => ({ id: "row-1", reviewVersion: 5, state: "needs_review" }), selectedCalendars: async () => [], save: async () => undefined },
+      persistence: { loadVerifiedLead: async () => ({ id: "row-1", reviewVersion: 5, state: "needs_review" }), selectedCalendars: async () => [], save: async () => ({ reviewVersion: 6 }) },
       google,
     });
     await expect(service.check({ rowId: "row-1", expectedVersion: 4, checkedBy: "owner" })).rejects.toMatchObject({ code: "VERSION_CONFLICT" });
