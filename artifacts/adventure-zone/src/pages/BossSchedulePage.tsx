@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
-import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { bossGet, bossPatch, bossPut } from "@/lib/boss-auth-context";
+import { bossGet } from "@/lib/boss-auth-context";
 import type { BossBooking, BossSchedule, ScheduleLeg } from "@/lib/boss-types";
 import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-calendar";
 import { EventMap } from "@/components/routes/event-map";
@@ -15,168 +13,78 @@ import type { MapEvent } from "@/features/routes/map-data";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
-function LegCard({ leg, allLegs, onChanged }: { leg: ScheduleLeg; allLegs: ScheduleLeg[]; onChanged(): Promise<void> }) {
+function LegCard({ leg }: { leg: ScheduleLeg }) {
   const stops = leg.stops ?? [];
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(leg.name ?? "");
-  const [baseAddress, setBaseAddress] = useState(leg.baseAddress ?? "");
-  const [vehicle, setVehicle] = useState(leg.defaultVehicleName ?? "");
-  const [mpg, setMpg] = useState(leg.defaultMpg == null ? "" : String(leg.defaultMpg));
-  const [saving, setSaving] = useState(false);
-  const [movingBookingId, setMovingBookingId] = useState<string | null>(null);
-  const [error, setError] = useState("");
-
-  async function reassignBooking(bookingId: string, travelLegId: string) {
-    if (!travelLegId || travelLegId === leg.id) return;
-    setMovingBookingId(bookingId);
-    setError("");
-    try {
-      await bossPut(`/boss/bookings/${bookingId}/leg`, { travelLegId });
-      await onChanged();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not reassign event.");
-    } finally {
-      setMovingBookingId(null);
-    }
-  }
-
-  async function save() {
-    setSaving(true);
-    setError("");
-    try {
-      await bossPatch(`/boss/legs/${leg.id}`, {
-        name: name.trim(),
-        baseAddress: baseAddress.trim() || null,
-        defaultVehicleName: vehicle.trim() || null,
-        defaultMpg: mpg ? Number(mpg) : null,
-      });
-      setEditing(false);
-      await onChanged();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not save leg.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleArchived() {
-    setSaving(true);
-    setError("");
-    try {
-      await bossPatch(`/boss/legs/${leg.id}`, {
-        archivedAt: leg.archivedAt ? null : new Date().toISOString(),
-      });
-      await onChanged();
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not update leg.");
-    } finally {
-      setSaving(false);
-    }
-  }
+  const bookings = leg.bookings ?? [];
+  const legName = leg.name ?? `Leg ${leg.id}`;
+  const dateLabel = leg.startDate || leg.endDate
+    ? [
+        leg.startDate ? new Date(leg.startDate).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : null,
+        leg.endDate ? new Date(leg.endDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : null,
+      ].filter(Boolean).join(" – ")
+    : null;
 
   return (
-    <section
-      className="rounded-xl border border-border bg-card p-4 shadow-sm"
+    <details
+      className="group overflow-hidden rounded-xl border border-slate-200 bg-white"
       data-testid={`leg-card-${leg.id}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 text-left">
+        <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: leg.color ?? "#64748b" }} />
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold text-slate-900">{legName}</span>
+          <span className="mt-0.5 block text-sm text-slate-600">
+            {leg.archivedAt ? "Archived" : "Active"}
+            {leg.defaultVehicleName ? ` · ${leg.defaultVehicleName}` : ""}
+            {` · ${bookings.length} event${bookings.length === 1 ? "" : "s"}`}
+          </span>
+        </span>
+        <span aria-hidden="true" className="text-slate-400 transition group-open:rotate-180">⌄</span>
+      </summary>
+
+      <div className="grid gap-4 border-t border-slate-100 p-4">
+        {dateLabel || leg.route ? (
+          <div>
+            {dateLabel ? <p className="text-sm font-semibold text-slate-700">{dateLabel}</p> : null}
+            {leg.route ? <p className="mt-1 text-sm text-slate-600">{leg.route}</p> : null}
+          </div>
+        ) : null}
+
+        <div className="grid gap-3 rounded-lg bg-slate-50 p-3 text-sm sm:grid-cols-3">
+          <div><p className="text-xs font-bold uppercase text-slate-500">Base address</p><p className="mt-1 text-slate-800">{leg.baseAddress || "Not set"}</p></div>
+          <div><p className="text-xs font-bold uppercase text-slate-500">Vehicle</p><p className="mt-1 text-slate-800">{leg.defaultVehicleName || "Not set"}</p></div>
+          <div><p className="text-xs font-bold uppercase text-slate-500">MPG</p><p className="mt-1 text-slate-800">{leg.defaultMpg ?? "Not set"}</p></div>
+        </div>
+
+        {stops.length ? (
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Stops ({stops.length})</p>
+            <ol className="grid gap-2">
+              {stops.map((stop, index) => (
+                <li className="flex items-start gap-2 text-sm" data-testid={`stop-${stop.id}`} key={stop.id}>
+                  <span className="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-black text-white" style={{ backgroundColor: leg.color ?? "#64748b" }}>{index + 1}</span>
+                  <span><span className="font-semibold text-slate-900">{stop.name ?? stop.city ?? `Stop ${index + 1}`}</span>{stop.city || stop.region ? <span className="ml-1.5 text-slate-500">{[stop.city, stop.region].filter(Boolean).join(", ")}</span> : null}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
+
         <div>
-          <p className="font-bold text-foreground">{leg.name ?? `Leg ${leg.id}`}</p>
-          {leg.startDate || leg.endDate ? (
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {leg.startDate ? new Date(leg.startDate).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
-              {leg.startDate && leg.endDate ? " – " : ""}
-              {leg.endDate ? new Date(leg.endDate).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : ""}
-            </p>
-          ) : null}
+          <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Events assigned by Desie ({bookings.length})</p>
+          {bookings.length ? (
+            <div className="grid gap-2">
+              {bookings.map((booking) => (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" key={booking.id}>
+                  <div><p className="text-sm font-semibold text-slate-900">{booking.name ?? "Event"}</p>{booking.startsAt ? <p className="text-xs text-slate-500">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}</div>
+                  {booking.status ? <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold capitalize text-slate-700">{booking.status.replaceAll("_", " ")}</span> : null}
+                </div>
+              ))}
+            </div>
+          ) : <p className="text-sm text-slate-500">No events are assigned to this leg.</p>}
         </div>
-        <Badge variant="outline" className="capitalize">{leg.archivedAt ? "Archived" : "Active"}</Badge>
       </div>
-
-      {editing ? (
-        <div className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2">
-          <label className="grid gap-1 text-sm font-semibold text-foreground">Leg name<Input value={name} onChange={(event) => setName(event.target.value)} /></label>
-          <label className="grid gap-1 text-sm font-semibold text-foreground">Vehicle<Input value={vehicle} onChange={(event) => setVehicle(event.target.value)} /></label>
-          <label className="grid gap-1 text-sm font-semibold text-foreground sm:col-span-2">Base address<Input value={baseAddress} onChange={(event) => setBaseAddress(event.target.value)} /></label>
-          <label className="grid gap-1 text-sm font-semibold text-foreground">Default MPG<Input inputMode="decimal" value={mpg} onChange={(event) => setMpg(event.target.value)} /></label>
-          <div className="flex items-end gap-2">
-            <Button size="sm" disabled={saving || !name.trim() || (mpg !== "" && (!Number.isFinite(Number(mpg)) || Number(mpg) <= 0))} onClick={() => void save()}>Save leg</Button>
-            <Button size="sm" variant="outline" disabled={saving} onClick={() => setEditing(false)}>Cancel</Button>
-          </div>
-        </div>
-      ) : null}
-
-      {leg.route ? (
-        <p className="mt-2 text-sm text-muted-foreground">{leg.route}</p>
-      ) : null}
-
-      {stops.length > 0 ? (
-        <div className="mt-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">
-            Stops ({stops.length})
-          </p>
-          <ol className="grid gap-1.5">
-            {stops.map((stop, idx) => (
-              <li
-                key={stop.id}
-                className="flex items-start gap-2 text-sm"
-                data-testid={`stop-${stop.id}`}
-              >
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                  {idx + 1}
-                </span>
-                <div>
-                  <span className="font-semibold text-foreground">{stop.name ?? stop.city ?? `Stop ${idx + 1}`}</span>
-                  {stop.city || stop.region ? (
-                    <span className="ml-1.5 text-xs text-muted-foreground">
-                      {[stop.city, stop.region].filter(Boolean).join(", ")}
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
-
-      {leg.bookings?.length ? (
-        <div className="mt-3 border-t border-border pt-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Events assigned by Desie</p>
-          <div className="grid gap-2">
-            {leg.bookings.map((booking) => (
-              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2" key={booking.id}>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{booking.name ?? "Event"}</p>
-                  {booking.startsAt ? <p className="text-xs text-muted-foreground">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}
-                </div>
-                <div className="flex items-center gap-2">
-                  {booking.status ? <Badge variant="outline" className="capitalize">{booking.status}</Badge> : null}
-                  <label className="sr-only" htmlFor={`booking-leg-${booking.id}`}>Reassign {booking.name ?? "event"}</label>
-                  <select
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground"
-                    disabled={movingBookingId === booking.id}
-                    id={`booking-leg-${booking.id}`}
-                    onChange={(event) => void reassignBooking(booking.id, event.target.value)}
-                    value={leg.id}
-                  >
-                    {allLegs.filter((candidate) => !candidate.archivedAt).map((candidate) => (
-                      <option key={candidate.id} value={candidate.id}>{candidate.name ?? "Unnamed leg"}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : <p className="mt-3 text-xs text-muted-foreground">No events have been assigned to this leg by Desie.</p>}
-      {error ? <p className="mt-3 text-sm text-destructive" role="alert">{error}</p> : null}
-      <div className="mt-3 flex gap-2 border-t border-border pt-3">
-        <Button size="sm" variant="outline" disabled={saving} onClick={() => setEditing((value) => !value)} data-testid={`button-leg-edit-${leg.id}`}>Edit leg</Button>
-        <Button size="sm" variant="outline" disabled={saving} onClick={() => void toggleArchived()} data-testid={`button-leg-archive-${leg.id}`}>
-          {leg.archivedAt ? "Restore leg" : "Archive leg"}
-        </Button>
-      </div>
-    </section>
+    </details>
   );
 }
 
@@ -360,12 +268,19 @@ export default function BossSchedulePage() {
             </section>
           )}
 
-          <details className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <summary className="cursor-pointer text-sm font-bold uppercase tracking-wide text-muted-foreground">Manage legs ({schedule?.legs.length ?? 0})</summary>
-            <div className="mt-4 grid gap-3">
+          <details className="group rounded-xl border border-slate-200 bg-white shadow-sm" data-testid="boss-travel-legs">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.14em] text-orange-700">Legs &amp; operations</p>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">Managers &amp; travel legs</h2>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-slate-500">{schedule?.legs.length ?? 0} legs <span aria-hidden="true" className="inline-block transition group-open:rotate-180">⌄</span></span>
+            </summary>
+            <div className="grid gap-3 border-t border-slate-100 p-4">
+              <p className="text-sm text-slate-600">Open a leg to view its route defaults, stops, and assigned events.</p>
               {(schedule?.legs ?? []).length === 0 ? (
-                <div className="rounded-xl border border-dashed border-border bg-card p-6 text-center" data-testid="legs-empty"><p className="text-sm text-muted-foreground">No legs in the schedule yet.</p></div>
-              ) : (schedule?.legs ?? []).map((leg) => <LegCard key={leg.id} leg={leg} allLegs={schedule?.legs ?? []} onChanged={load} />)}
+                <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center" data-testid="legs-empty"><p className="text-sm text-slate-500">No legs in the schedule yet.</p></div>
+              ) : (schedule?.legs ?? []).map((leg) => <LegCard key={leg.id} leg={leg} />)}
             </div>
           </details>
         </>
