@@ -1,0 +1,73 @@
+name: Apply paper note QueryResult row guards
+
+on:
+  push:
+    branches:
+      - fix/paper-note-query-result-cluster-v2
+    paths:
+      - ".github/workflows/apply-paper-note-query-result-cluster-v2.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/paper-note-query-result-cluster-v2
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm production QueryResult errors exist
+        run: |
+          pnpm run typecheck:libs
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          for file in \
+            paper-note-preflight-service.ts \
+            paper-note-recovery-repository.ts \
+            paper-note-reread-service.ts \
+            paper-note-review-repository.ts \
+            paper-note-source-restore-service.ts \
+            paper-note-source-service.ts
+          do
+            grep -E "$file.*error TS2352" /tmp/api-before.log >/dev/null || exit 1
+          done
+      - name: Apply previously verified row guards
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git cherry-pick \
+            4bd436a3bfcac05177d806cd6ce32118b92ee890 \
+            ec659c2e15db7e9ef3cf131e4e9a1891352fa9d8
+      - name: Run focused Paper Notes tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/paper-notes/paper-note-preflight-service.test.ts \
+            src/features/paper-notes/paper-note-recovery-service.pglite.test.ts \
+            src/features/paper-notes/paper-note-reread-service.test.ts \
+            src/features/paper-notes/paper-note-review-repository.pglite.test.ts \
+            src/features/paper-notes/paper-note-source-restore-service.test.ts \
+            src/features/paper-notes/paper-note-source-service.test.ts
+      - name: Verify production QueryResult errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          if grep -E '(paper-note-preflight-service|paper-note-recovery-repository|paper-note-reread-service|paper-note-review-repository|paper-note-source-restore-service|paper-note-source-service)\.ts.*error TS2352' /tmp/api-after.log; then
+            echo "Paper Notes production QueryResult errors remain." >&2
+            exit 1
+          fi
+      - name: Push verified row guards
+        run: git push origin HEAD:fix/paper-note-query-result-cluster-v2
