@@ -8,6 +8,13 @@ const organizationId = "10000000-0000-4000-8000-000000000001";
 const contactId = "20000000-0000-4000-8000-000000000001";
 const entryId = "30000000-0000-4000-8000-000000000001";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 async function harness() {
   const client = new PGlite();
   await client.exec(`
@@ -115,7 +122,7 @@ describe("PaperNotePhoneService", () => {
        returning id`,
       [contactId],
     );
-    const savedId = String(inserted.rows[0]?.id);
+    const savedId = String(rowValue(inserted.rows, 0, "id"));
 
     const result = await service.apply(db as never, {
       owner: { kind: "contact", contactId },
@@ -163,7 +170,7 @@ describe("PaperNotePhoneService", () => {
     const { client, db, service } = await harness();
     clients.push(client);
     const inserted = await client.query(`insert into contact_phones(contact_id, number, normalized_number, primary) values($1, '701-555-0100', '+17015550100', true) returning id`, [contactId]);
-    const oldId = String(inserted.rows[0]?.id);
+    const oldId = String(rowValue(inserted.rows, 0, "id"));
 
     await service.apply(db as never, {
       owner: { kind: "contact", contactId },
