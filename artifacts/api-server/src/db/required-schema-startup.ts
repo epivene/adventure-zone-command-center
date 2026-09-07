@@ -22,6 +22,7 @@ type RequiredStepRunner = (
   name: string,
   step: RequiredStep,
   timeoutMs?: number,
+  onTimeout?: (error: Error) => void,
 ) => Promise<unknown>;
 
 export async function runRequiredSchemaStartup(dependencies?: {
@@ -52,10 +53,15 @@ export async function runRequiredSchemaStartup(dependencies?: {
     "required Google Workspace schema",
     dependencies?.ensureGoogleWorkspace ?? ensureGoogleWorkspaceSchemaBeforeListen,
   );
+  const leadIntakeAbortController = new AbortController();
   await run(
     "required lead intake schema",
-    dependencies?.ensureLeadIntake ?? ensureLeadIntakeSchemaBeforeListen,
+    dependencies?.ensureLeadIntake
+      ?? (() => ensureLeadIntakeSchemaBeforeListen({
+        signal: leadIntakeAbortController.signal,
+      })),
     REQUIRED_LEAD_INTAKE_TIMEOUT_MS,
+    (error) => leadIntakeAbortController.abort(error),
   );
   await run(
     "required leg assignment schema",
