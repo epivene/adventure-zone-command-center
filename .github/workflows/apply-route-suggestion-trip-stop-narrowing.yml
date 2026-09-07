@@ -1,0 +1,76 @@
+name: Apply route suggestion trip-stop narrowing
+
+on:
+  push:
+    branches:
+      - fix/route-suggestion-trip-stop-narrowing
+    paths:
+      - ".github/workflows/apply-route-suggestion-trip-stop-narrowing.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/route-suggestion-trip-stop-narrowing
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm compiler errors exist before fix
+        run: |
+          set +e
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          count=$(grep -cE 'route-suggestion-domain\.ts\((93|106),' /tmp/api-before.log || true)
+          if [ "$count" -lt 2 ]; then
+            echo "Expected both tripId compiler errors were not present." >&2
+            exit 1
+          fi
+      - name: Narrow trip-stop snapshot before reading tripId
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/leg-manager/route-suggestion-domain.ts')
+          text = path.read_text()
+          marker = '''function iso(value: Date | string | null | undefined) {\n  if (!value) return null;\n  return (value instanceof Date ? value : new Date(value)).toISOString();\n}\n'''
+          helper = marker + '''\nfunction tripStopTripId(target: { snapshot: unknown } | null) {\n  const snapshot = target?.snapshot;\n  if (!snapshot || typeof snapshot !== "object" || !("tripId" in snapshot)) return null;\n  return typeof snapshot.tripId === "string" ? snapshot.tripId : null;\n}\n'''
+          if marker not in text:
+              raise SystemExit('iso marker not found')
+          text = text.replace(marker, helper, 1)
+          old = '      const tripId = target?.snapshot.tripId;'
+          if text.count(old) != 2:
+              raise SystemExit(f'expected 2 tripId reads, found {text.count(old)}')
+          text = text.replace(old, '      const tripId = tripStopTripId(target);')
+          path.write_text(text)
+          PY
+      - name: Run route suggestion behavior tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/route-suggestion-service.test.ts
+      - name: Commit verified patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/leg-manager/route-suggestion-domain.ts
+          git diff --cached --quiet || git commit -m "fix: narrow route suggestion trip stop snapshots"
+          git push origin HEAD:fix/route-suggestion-trip-stop-narrowing
+      - run: pnpm run typecheck:libs
+      - name: Verify compiler errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          if grep -E 'route-suggestion-domain\.ts.*Property .tripId. does not exist' /tmp/api-after.log; then
+            echo "Route suggestion tripId compiler errors remain." >&2
+            exit 1
+          fi
