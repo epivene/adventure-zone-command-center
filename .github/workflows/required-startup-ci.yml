@@ -25,6 +25,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Required startup tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/test
         run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/db/required-schema-startup.test.ts src/db/lead-intake-required-startup.test.ts src/lib/startup-step.test.ts
       - name: Build API server
         run: pnpm --filter @workspace/api-server build
