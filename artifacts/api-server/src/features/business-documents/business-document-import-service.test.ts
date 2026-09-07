@@ -25,4 +25,16 @@ describe("BusinessDocumentImportService", () => {
     expect(source.candidate).toHaveBeenCalledTimes(2);
     expect(ingestion.ingest).toHaveBeenCalledTimes(2);
   });
+
+  it("previews Gmail metadata without materializing attachments", async () => {
+    const { source, store, ingestion } = setup();
+    const gmailSource = {
+      inventoryHistoricalGmail: async function* () { yield { messageId: "m1", attachmentId: "a1" }; },
+      candidate: vi.fn(),
+    };
+    const service = new BusinessDocumentImportService({ source: source as any, gmailSource: gmailSource as any, store, ingestion: ingestion as any, accountKey: "workspace" });
+    await expect(service.previewGmail({ after: "2025-01-01", before: "2026-01-01" }, "owner")).resolves.toMatchObject({ discovered: 1 });
+    expect(gmailSource.candidate).not.toHaveBeenCalled();
+    expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ sourceKind: "gmail", mode: "preview", scope: { after: "2025-01-01", before: "2026-01-01" } }));
+  });
 });

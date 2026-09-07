@@ -121,6 +121,24 @@ export class BusinessDocumentRepository {
     }
   }
 
+  private async ensureCoiMetadata(client: SqlClient, documentId: string, input: BusinessDocumentIngestInput) {
+    if (input.category !== "coi") return;
+    await client.query(
+      "UPDATE business_documents SET category = 'coi', issue_date = COALESCE(issue_date, $2), expiration_date = COALESCE(expiration_date, $3), updated_at = now() WHERE id = $1",
+      [documentId, input.issueDate ?? null, input.expirationDate ?? null],
+    );
+    await client.query(
+      `INSERT INTO business_document_coi_metadata (document_id, certificate_name, issue_date, expiration_date, review_state)
+       VALUES ($1,$4,$2,$3,$5)
+       ON CONFLICT (document_id) DO UPDATE SET
+         certificate_name = EXCLUDED.certificate_name,
+         issue_date = COALESCE(business_document_coi_metadata.issue_date, EXCLUDED.issue_date),
+         expiration_date = COALESCE(business_document_coi_metadata.expiration_date, EXCLUDED.expiration_date),
+         updated_at = now()`,
+      [documentId, input.issueDate ?? null, input.expirationDate ?? null, input.displayName, input.reviewState === "accepted" ? "reviewed" : "needs_review"],
+    );
+  }
+
   async ingest(input: BusinessDocumentIngestInput): Promise<DocumentIngestionOutcome> {
     const client = await this.pool.connect();
     try {
@@ -137,6 +155,7 @@ export class BusinessDocumentRepository {
       const sourceRow = existingSource.rows[0];
       if (sourceRow && typeof sourceRow.document_id === "string") {
         await this.addLinks(client, sourceRow.document_id, input.links, input.actor);
+        await this.ensureCoiMetadata(client, sourceRow.document_id, input);
         await client.query("COMMIT");
         return this.outcome(
           "deduplicated",
@@ -190,6 +209,7 @@ export class BusinessDocumentRepository {
           ],
         );
         await this.addLinks(client, duplicate.document_id, input.links, input.actor);
+        await this.ensureCoiMetadata(client, duplicate.document_id, input);
         await client.query(
           "INSERT INTO business_document_audit_events (document_id, action, actor, metadata) VALUES ($1,'source_deduplicated',$2,$3::jsonb)",
           [duplicate.document_id, input.actor, JSON.stringify({ sourceKind: input.source.sourceKind })],
@@ -248,6 +268,7 @@ export class BusinessDocumentRepository {
         ],
       );
       await this.addLinks(client, documentId, input.links, input.actor);
+      await this.ensureCoiMetadata(client, documentId, input);
       if (input.reviewState === "needs_review") {
         await client.query(
           `INSERT INTO business_document_review_items (document_id, kind, proposals, reason_codes)

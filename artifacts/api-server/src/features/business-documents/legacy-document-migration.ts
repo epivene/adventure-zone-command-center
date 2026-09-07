@@ -243,9 +243,10 @@ export function migrateLegacyDocuments(
     finalize: async (candidate, outcome) => {
       if (candidate.sourceName !== "design_certificate") return;
       const certificateId = candidate.externalId.replace(/^design_certificate:/, "");
-      await (defaultPool as unknown as QueryPool).query(
-        `UPDATE business_documents SET category = 'coi', updated_at = now() WHERE id = $1;
-         INSERT INTO business_document_coi_metadata (
+      const pool = defaultPool as unknown as QueryPool;
+      await pool.query("UPDATE business_documents SET category = 'coi', updated_at = now() WHERE id = $1", [outcome.documentId]);
+      await pool.query(
+        `INSERT INTO business_document_coi_metadata (
            document_id, office_account_id, certificate_name, issue_date, expiration_date, review_state
          ) SELECT $1, office_account_id, name, issue_date, expiration_date, review_state
              FROM design_certificates WHERE id = $2
@@ -255,10 +256,10 @@ export function migrateLegacyDocuments(
            issue_date = EXCLUDED.issue_date,
            expiration_date = EXCLUDED.expiration_date,
            review_state = EXCLUDED.review_state,
-           updated_at = now();
-         UPDATE design_certificates SET document_id = $1, updated_at = now() WHERE id = $2`,
+           updated_at = now()`,
         [outcome.documentId, certificateId],
       );
+      await pool.query("UPDATE design_certificates SET document_id = $1, updated_at = now() WHERE id = $2", [outcome.documentId, certificateId]);
     },
   }).migrate(input);
 }

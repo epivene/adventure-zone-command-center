@@ -13,7 +13,8 @@ import type {
 } from "./business-document-types";
 
 export type BusinessDocumentCandidate = {
-  bytes: Uint8Array;
+  bytes?: Uint8Array;
+  storedBlob?: StoredBusinessDocumentBlob;
   filename: string;
   mimeType: string;
   subject: string;
@@ -21,6 +22,7 @@ export type BusinessDocumentCandidate = {
   source: DocumentSourceIdentity;
   evidence: BusinessDocumentCrmEvidence;
   actor: string;
+  requireRelationshipReview?: boolean;
 };
 
 type Storage = {
@@ -46,17 +48,17 @@ export class BusinessDocumentIngestion {
     if (classification.decision === "skip") {
       return { outcome: "skipped", errorCode: classification.errorCode };
     }
-    if (candidate.bytes.byteLength === 0) {
+    if (!candidate.storedBlob && (!candidate.bytes || candidate.bytes.byteLength === 0)) {
       return { outcome: "skipped", errorCode: "business_document_empty_file" };
     }
 
     const proposals = matchBusinessDocument(candidate.evidence);
-    const ambiguousLink = proposals.some((proposal) => proposal.decision === "review");
+    const ambiguousLink = proposals.some((proposal) => proposal.decision === "review") || Boolean(candidate.requireRelationshipReview && !proposals.some((proposal) => proposal.decision === "auto"));
     const reviewState =
       classification.decision === "auto" && !ambiguousLink
         ? "accepted" as const
         : "needs_review" as const;
-    const blob = await this.storage.putIfAbsent(candidate.bytes, candidate.mimeType);
+    const blob = candidate.storedBlob ?? await this.storage.putIfAbsent(candidate.bytes!, candidate.mimeType);
 
     return this.repository.ingest({
       displayName: candidate.filename.replace(/\.[^.]+$/, "").trim() || candidate.filename,

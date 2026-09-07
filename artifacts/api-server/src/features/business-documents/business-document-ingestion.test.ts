@@ -45,4 +45,14 @@ describe("BusinessDocumentIngestion", () => {
     await expect(ingestion.ingest({ bytes, filename: "desktop.ini", mimeType: "application/octet-stream", subject: "", bodyText: "", source, evidence: { approvedThreadProfileId: null, exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] }, actor: "owner" })).resolves.toEqual({ outcome: "skipped", errorCode: "business_document_temporary_file" });
     expect(storage.putIfAbsent).not.toHaveBeenCalled();
   });
+
+  it("reuses a previously copied blob without writing storage again", async () => {
+    const storedBlob = { sha256Hex: "b".repeat(64), storageKey: "profile-files/b", mimeType: "application/pdf", sizeBytes: 3 };
+    const storage = { putIfAbsent: vi.fn() };
+    const repository = { ingest: vi.fn(async (input: any) => ({ outcome: "deduplicated" as const, documentId: "doc-1", versionId: "version-1", blobId: "blob-1", reviewState: input.reviewState, linkedProfileIds: [], linkedBookingIds: [], linkedEventFamilyIds: [] })) };
+    const ingestion = new BusinessDocumentIngestion({ storage, repository });
+    await expect(ingestion.ingest({ storedBlob, filename: "COI.pdf", mimeType: "application/pdf", subject: "COI", bodyText: "", source, evidence: { approvedThreadProfileId: "profile-1", exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] }, actor: "owner" })).resolves.toMatchObject({ outcome: "deduplicated" });
+    expect(storage.putIfAbsent).not.toHaveBeenCalled();
+    expect(repository.ingest).toHaveBeenCalledWith(expect.objectContaining({ blob: storedBlob }));
+  });
 });

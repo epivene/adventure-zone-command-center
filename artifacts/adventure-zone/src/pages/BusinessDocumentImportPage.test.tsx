@@ -27,4 +27,15 @@ describe("BusinessDocumentImportPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Start 25-file pilot" }));
     await waitFor(() => expect(apiPost).toHaveBeenLastCalledWith("/business-document-imports/drive/start", { previewRunId: "preview-1", confirmation: "START PILOT", pilotLimit: 25 }));
   });
+
+  it("previews a bounded Gmail date window before offering its pilot", async () => {
+    apiPost.mockReset().mockResolvedValueOnce({ runId: "gmail-preview", discovered: 4 });
+    render(<BusinessDocumentImportPage />);
+    fireEvent.change(screen.getByLabelText("Gmail start date"), { target: { value: "2025-01-01" } });
+    fireEvent.change(screen.getByLabelText("Gmail end date"), { target: { value: "2026-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview Gmail attachments" }));
+    expect(await screen.findByText("4 attachments discovered")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start Gmail pilot" })).toBeVisible();
+    expect(apiPost).toHaveBeenCalledWith("/business-document-imports/gmail/preview", { after: "2025-01-01", before: "2026-01-01" });
+  });
 });
