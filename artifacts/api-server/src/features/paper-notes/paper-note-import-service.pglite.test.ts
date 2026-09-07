@@ -99,7 +99,7 @@ async function harness() {
       organization_id uuid not null,
       contact_id uuid not null,
       role text,
-      is_primary boolean not null default false,
+      is_"primary" boolean not null default false,
       active boolean not null default true,
       source text not null default 'local',
       created_at timestamptz not null default now(),
@@ -109,7 +109,7 @@ async function harness() {
     create table contact_phones (
       id uuid primary key default gen_random_uuid(), contact_id uuid not null, number text not null,
       normalized_number text, type text not null default 'unknown', extension text, label text,
-      instructions text, status text not null default 'active', primary boolean not null default false,
+      instructions text, status text not null default 'active', "primary" boolean not null default false,
       source text not null default 'local', source_paper_note_entry_id uuid, do_not_call_at timestamptz,
       do_not_call_reason text, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
@@ -117,7 +117,7 @@ async function harness() {
       id uuid primary key default gen_random_uuid(), organization_id uuid not null, organization_location_id uuid,
       number text not null, normalized_number text, type text not null default 'unknown', extension text,
       normalized_extension text, label text, instructions text, status text not null default 'active',
-      primary boolean not null default false, source text not null default 'local', source_paper_note_entry_id uuid,
+      "primary" boolean not null default false, source text not null default 'local', source_paper_note_entry_id uuid,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
     create table activities (
