@@ -27,56 +27,45 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Confirm stale worker mock errors exist
+      - name: Confirm residual provider mock errors exist
         run: |
           set +e
           pnpm run typecheck:libs
           pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
           set -e
-          grep -E 'scout-alert-worker\.test\.ts.*error TS2322' /tmp/api-before.log >/dev/null || {
-            echo "Expected worker repository mock typing errors were not present." >&2
+          grep -E 'scout-alert-worker\.test\.ts.*error (TS2532|TS2493)' /tmp/api-before.log >/dev/null || {
+            echo "Expected residual provider mock typing errors were not present." >&2
             exit 1
           }
-      - name: Match repository mock signatures
+      - name: Match provider mock signature
         run: |
           python - <<'PY'
           from pathlib import Path
           path = Path('artifacts/api-server/src/features/assistant/scout-alert-worker.test.ts')
           text = path.read_text()
-          old_import = '''import type {\n  ScoutAlertWatchClaim,\n  ScoutAlertWatchContext,\n} from "./scout-alert-repository";'''
-          new_import = '''import type {\n  ScoutAlertRepository,\n  ScoutAlertWatchClaim,\n  ScoutAlertWatchContext,\n} from "./scout-alert-repository";'''
-          if old_import not in text:
-            raise SystemExit('repository import marker not found')
-          text = text.replace(old_import, new_import, 1)
-          text = text.replace(
-            'const claimed = input && "claim" in input ? input.claim : claim();',
-            'const claimed: ScoutAlertWatchClaim | null = input && "claim" in input ? input.claim ?? null : claim();',
-            1,
-          )
-          text = text.replace(
-            'const loaded = input && "context" in input ? input.context : context({ claim: claimed ?? claim() });',
-            'const loaded: ScoutAlertWatchContext | null = input && "context" in input ? input.context ?? null : context({ claim: claimed ?? claim() });',
-            1,
-          )
-          replacements = {
-            'saveSuccess: vi.fn(async () => undefined),': 'saveSuccess: vi.fn(async (_input: Parameters<ScoutAlertRepository["saveSuccess"]>[0]) => undefined),',
-            'recordFailure: vi.fn(async () => undefined),': 'recordFailure: vi.fn(async (_input: Parameters<ScoutAlertRepository["recordFailure"]>[0]) => undefined),',
-            'completeWatch: vi.fn(async () => undefined),': 'completeWatch: vi.fn(async (_input: Parameters<ScoutAlertRepository["completeWatch"]>[0]) => undefined),',
-          }
-          for old, new in replacements.items():
-            if text.count(old) != 1:
-              raise SystemExit(f'expected one mock marker: {old}')
-            text = text.replace(old, new, 1)
+          import_marker = 'import { ScoutAlertWorker } from "./scout-alert-worker";\n'
+          provider_import = 'import type { LeadScoutProvider } from "./lead-scout-provider";\n'
+          if provider_import not in text:
+            if import_marker not in text:
+              raise SystemExit('worker import marker not found')
+            text = text.replace(import_marker, import_marker + provider_import, 1)
+          old_throw = 'vi.fn(async () => { throw input.providerError; })'
+          new_throw = 'vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => { throw input.providerError; })'
+          old_ok = 'vi.fn(async () => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] }))'
+          new_ok = 'vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] }))'
+          if old_throw not in text or old_ok not in text:
+            raise SystemExit('provider mock markers not found')
+          text = text.replace(old_throw, new_throw, 1).replace(old_ok, new_ok, 1)
           path.write_text(text)
           PY
       - name: Run Scout Alert worker tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/assistant/scout-alert-worker.test.ts
-      - name: Commit verified test patch
+      - name: Commit verified residual patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add artifacts/api-server/src/features/assistant/scout-alert-worker.test.ts
-          git diff --cached --quiet || git commit -m "test: align Scout Alert worker repository mocks"
+          git diff --cached --quiet || git commit -m "test: align Scout Alert worker provider mock"
           git push origin HEAD:fix/scout-alert-worker-mock-typing
       - run: pnpm run typecheck:libs
       - name: Verify worker mock errors are gone
