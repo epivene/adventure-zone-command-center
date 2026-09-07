@@ -20,9 +20,10 @@ describe("exitAfterRequiredStartupFailure", () => {
       exit,
       timeoutMs: 100,
     });
+    const assertion = expect(result).rejects.toBe(exitError);
     await vi.advanceTimersByTimeAsync(100);
 
-    await expect(result).rejects.toBe(exitError);
+    await assertion;
     expect(exit).toHaveBeenCalledOnce();
   });
 });
