@@ -161,6 +161,7 @@ export default function BossTemplatesFilesPage() {
           <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
           <h1 className="mt-0.5 text-2xl font-bold text-foreground">Business Documents</h1>
           <p className="mt-1 text-sm text-muted-foreground">Contracts, certificates of insurance, and operational emails.</p>
+          {data?.libraryDocuments?.length ? <p className="mt-1 text-xs text-muted-foreground">{data.libraryDocuments.length} file{data.libraryDocuments.length === 1 ? "" : "s"} backed by the unified document library.</p> : null}
         </div>
          <div className="flex gap-2">
            <Button asChild size="sm"><Link href="/boss/coi">Manage COIs</Link></Button>

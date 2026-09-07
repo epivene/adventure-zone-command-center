@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Bot, Check, ChevronDown, Ellipsis, Moon, Palette, Plus, Sun } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
@@ -17,8 +17,9 @@ import { useAuth } from "@/lib/auth-context";
 import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearance";
 import { saveBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
+import { apiGet } from "@/lib/auth-token";
 
-type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean };
+type MenuItem = { href: string; label: string; rememberBookingBeforeOpen?: boolean; badgeCount?: number };
 type MenuGroup = { label: string; items: MenuItem[] };
 
 const bookingItems: MenuItem[] = [
@@ -80,6 +81,7 @@ const adminToolsGroups: MenuGroup[] = [
   {
     label: "Business Setup",
     items: [
+      { href: "/business-documents", label: "Business Documents" },
       { href: "/settings/business-sources", label: "Business sources" },
       { href: "/settings/coi", label: "Certificates of insurance" },
       { href: "/settings/packages-resources", label: "Packages & resources" },
@@ -156,7 +158,7 @@ function MenuLink({
     ? `Website Inquiries, ${websiteInquiryCount} new`
     : item.href === "/email-review" && pendingEmailReviewCount > 0
       ? `Email Review, ${pendingEmailReviewCount} pending`
-      : undefined;
+      : item.badgeCount ? `${item.label}, ${item.badgeCount} pending` : undefined;
   return (
     <DropdownMenuItem asChild className={cn(active && "bg-secondary font-semibold text-secondary-foreground")}>
       <Link
@@ -175,6 +177,11 @@ function MenuLink({
         {item.href === "/email-review" && pendingEmailReviewCount > 0 ? (
           <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
             {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
+          </span>
+        ) : null}
+        {item.badgeCount ? (
+          <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
+            {item.badgeCount > 99 ? "99+" : item.badgeCount}
           </span>
         ) : null}
       </Link>
@@ -284,8 +291,31 @@ export function AppMenu({
   const [location] = useLocation();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [appearance, setAppearance] = useState<Appearance>(() => readAppearance());
+  const [pendingDocumentReviewCount, setPendingDocumentReviewCount] = useState(0);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => apiGet<{ count: number }>("/business-documents/review-count")
+      .then((result) => { if (active) setPendingDocumentReviewCount(result.count); })
+      .catch(() => undefined);
+    const changed = (event: Event) => {
+      const count = (event as CustomEvent<number>).detail;
+      if (active && Number.isFinite(count)) setPendingDocumentReviewCount(count);
+    };
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("business-document-review-count-changed", changed);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("business-document-review-count-changed", changed);
+    };
+  }, []);
+  const visibleAdminToolsGroups = adminToolsGroups.map((group) => ({
+    ...group,
+    items: group.items.map((item) => item.href === "/business-documents" ? { ...item, badgeCount: pendingDocumentReviewCount } : item),
+  }));
   const workspaceGroups = groupsForWorkspace(workspace);
-  const groups = workspace === "command" ? [] : [...workspaceGroups, ...adminToolsGroups];
+  const groups = workspace === "command" ? [] : [...workspaceGroups, ...visibleAdminToolsGroups];
   const bookingMenuItems = bookingItems;
 
   function chooseAppearance(value: Appearance) {
@@ -403,7 +433,7 @@ export function AppMenu({
         {!mobile ? (
           <MenuSubmenu
             label="Admin Tools"
-            groups={adminToolsGroups}
+            groups={visibleAdminToolsGroups}
             workspace={workspace}
             location={location}
             nestedGroups

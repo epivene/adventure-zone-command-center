@@ -20,6 +20,7 @@ import * as legAssignmentSchema from "./leg-assignment-schema";
 import * as designStudioCanvaSchema from "./design-studio-canva-schema";
 import * as contractSchema from "./contract-schema";
 import * as marketingSchema from "./marketing-schema";
+import * as businessDocumentSchema from "./business-document-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
 import { databasePoolTimeouts } from "./pool-config";
 import {
@@ -76,6 +77,7 @@ const schema = {
   ...designStudioCanvaSchema,
   ...contractSchema,
   ...marketingSchema,
+  ...businessDocumentSchema,
   designAssets,
   designCertificates,
   designOutputs,
@@ -108,3 +110,4 @@ export * from "./design-studio-schema";
 export * from "./contract-schema";
 export * from "./design-studio-canva-schema";
 export * from "./marketing-schema";
+export * from "./business-document-schema";

@@ -58,6 +58,8 @@ describe("Boss workspace route boundaries", () => {
     expect(documents).toContain("req.bossAccount!.studioOfficeAccountId");
     expect(documents).toContain("eq(designProjects.officeAccountId, officeAccountId)");
     expect(documents).toContain("eq(officeEmailDrafts.officeAccountId, officeAccountId)");
+    expect(documents).toContain("libraryDocuments:");
+    expect(documents).toContain("documentId: certificate.documentId");
     expect(certificates).toContain('router.get("/boss/coi", requireBoss');
     expect(certificates).toContain("eq(designAssets.uploadedByAccountId, officeAccountId)");
     expect(certificates).toContain('router.get("/admin/coi", requireOwnerMiddleware');

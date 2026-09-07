@@ -1,5 +1,7 @@
 # Business source document upload and linking
 
+New imports and cross-profile access use the canonical **Business Documents** library. This older Business Sources workflow remains available during rollout as a compatibility view; do not remove it until the applicable import runs reconcile. See [Business document library operations](business-document-library.md) for the required preview, pilot, report, and rollback sequence.
+
 Use the owner **Settings → Business sources** page for protected event-source files. Do not add signed contracts or vendor applications to GitHub.
 
 ## Ravalli County Fair — 2025 contract

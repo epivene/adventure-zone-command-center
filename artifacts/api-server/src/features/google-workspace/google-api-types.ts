@@ -10,6 +10,21 @@ export type GoogleCalendarSummary = {
   primary: boolean;
 };
 
+export type GoogleDriveFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime: string | null;
+  size: number | null;
+  parents: string[];
+  webViewLink: string | null;
+};
+
+export type GoogleDrivePage = {
+  files: GoogleDriveFile[];
+  nextPageToken: string | null;
+};
+
 export type GoogleWorkspaceAccountIdentity = {
   subject: string | null;
   email: string;
@@ -112,6 +127,8 @@ export interface GoogleWorkspaceReadClient {
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
   createGmailDraft?(input: { raw: string }): Promise<GoogleGmailDraft>;
+  listDriveFiles?(parentId: string, pageToken?: string | null): Promise<GoogleDrivePage>;
+  downloadDriveFile?(fileId: string, mimeType?: string): Promise<Uint8Array>;
 }
 
 export type GoogleWorkspaceFetch = (

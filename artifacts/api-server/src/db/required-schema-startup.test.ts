@@ -47,6 +47,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureProfileFiller: async () => false,
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
+      ensureBusinessDocuments: async () => false,
     });
 
     expect(timeouts.get("required lead intake schema")).toBe(120_000);
@@ -69,6 +70,7 @@ describe("runRequiredSchemaStartup", () => {
       "required profile filler schema",
       "required profile touch schema",
       "required Design Studio schema",
+      "required business document schema",
     ]);
   });
 });

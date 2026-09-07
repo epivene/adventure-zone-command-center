@@ -57,6 +57,7 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
+  const [documentReviewCount, setDocumentReviewCount] = useState(0);
   const [scoutAlerts, setScoutAlerts] = useState<ScoutAlertView[]>([]);
   const [manageNextSteps, setManageNextSteps] = useState(false);
   const [selectedNextSteps, setSelectedNextSteps] = useState<Set<string>>(new Set());
@@ -69,11 +70,16 @@ export default function TodayPage() {
   const now = new Date();
 
   useEffect(() => {
-    Promise.all([apiGet<any>("/today"), apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig)])
-      .then(([d, config]) => {
+    Promise.all([
+      apiGet<any>("/today"),
+      apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig),
+      apiGet<{ count: number }>("/business-documents/review-count").catch(() => ({ count: 0 })),
+    ])
+      .then(([d, config, documentReviews]) => {
         setDashboard(d);
         setScoutAlerts(Array.isArray(d.scoutAlerts) ? d.scoutAlerts : []);
         setCallingConfig(config);
+        setDocumentReviewCount(documentReviews.count);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -200,6 +206,16 @@ export default function TodayPage() {
           <Link className="text-orange-700 hover:underline" href="/schedule">View schedule</Link>
         </div>
       </section>
+
+      {documentReviewCount > 0 ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Document attention">
+          <div>
+            <h2 className="font-bold text-amber-950">{documentReviewCount} {documentReviewCount === 1 ? "document needs" : "documents need"} review</h2>
+            <p className="text-sm text-amber-800">This is document filing work and is separate from calls and follow-ups.</p>
+          </div>
+          <Link className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-bold text-white hover:bg-amber-800" href="/business-documents?view=review">Review documents</Link>
+        </section>
+      ) : null}
 
       <section className="grid gap-3" aria-labelledby="my-work-title">
         <div className="flex items-center justify-between gap-3">

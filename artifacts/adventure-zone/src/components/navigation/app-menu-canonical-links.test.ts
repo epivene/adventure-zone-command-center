@@ -12,4 +12,8 @@ describe("canonical navigation links", () => {
   it("keeps caller creation as a shortcut into Calls add mode", () => {
     expect(source).toContain('<Link href="/calls/workspace?mode=add">New caller</Link>');
   });
+
+  it("links to the canonical Business Documents library", () => {
+    expect(source).toContain('{ href: "/business-documents", label: "Business Documents" }');
+  });
 });
