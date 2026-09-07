@@ -1,0 +1,26 @@
+name: Verify Paper Notes frontend test drift
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  focused-paper-notes-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused Paper Notes frontend tests
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/paper-notes/paper-note-destination-picker.test.tsx
+          src/components/paper-notes/paper-note-entry-card.test.tsx
+          src/components/paper-notes/paper-note-entry-panel-autosave.test.tsx
