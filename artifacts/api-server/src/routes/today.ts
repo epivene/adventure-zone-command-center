@@ -20,6 +20,7 @@ import {
 import { loadMasterTodayQueue } from "@/features/today/master-work-queue-repository";
 import { listTripsInWindow } from "@/features/trips/trip-repository";
 import { ScoutAlertRepository } from "@/features/assistant/scout-alert-repository";
+import type { ScoutAlertView } from "@/features/assistant/scout-alert-types";
 import { businessDayBounds } from "@/lib/business-date";
 import { LegAssignmentRepository } from "@/features/leg-assignment/leg-assignment-repository";
 import { LegAssignmentService } from "@/features/leg-assignment/leg-assignment-service";
@@ -114,7 +115,7 @@ router.get("/today", async (req, res): Promise<void> => {
         );
         return emptyOfficeCoordinatorAttention();
       }),
-      scoutAlertRepository.listVisible(now).catch((error) => {
+      scoutAlertRepository.listVisible(now).catch((error): ScoutAlertView[] => {
         req.log.warn({ err: error }, "Scout Alerts could not be loaded for Today");
         return [];
       }),
