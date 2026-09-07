@@ -22,6 +22,7 @@ describe("paper note candidate priority", () => {
 
     const compiled = dialect.sqlToQuery(query);
     const sql = compiled.sql.toLowerCase();
+    console.log("EXACT_MATCH_COMPILED", JSON.stringify({ sql, params: compiled.params }));
     const where = sql.slice(sql.indexOf("where org.consolidated_into_id"));
 
     expect(where).not.toMatch(/\bor\s+upper\(coalesce\(org\.region/);
