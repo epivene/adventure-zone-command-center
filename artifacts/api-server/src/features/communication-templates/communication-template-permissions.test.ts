@@ -10,6 +10,7 @@ function template(overrides: Partial<CommunicationTemplateRecord>): Communicatio
   return {
     id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     code: "test",
+    templateVersion: null,
     name: "Test",
     channel: "email",
     category: "outreach",
