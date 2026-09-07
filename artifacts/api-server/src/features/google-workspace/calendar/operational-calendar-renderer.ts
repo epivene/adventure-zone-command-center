@@ -8,7 +8,7 @@ export type ConfirmedBookingProjection = {
   actualEventDateText: string;
   reservedStart: Date;
   reservedEnd: Date;
-  packages: Array<Exclude<OperationalPackageKey, "unknown">>;
+  packages: ReadonlyArray<Exclude<OperationalPackageKey, "unknown">>;
   contactText?: string | null;
   addressText?: string | null;
   attractionText?: string | null;
