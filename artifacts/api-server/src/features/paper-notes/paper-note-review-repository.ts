@@ -5,6 +5,8 @@ import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
 import { recoverPaperNoteFutureActionReminder } from "./paper-note-future-action-reminder";
 import { initializePaperNoteReview, type PaperNoteReviewDraft } from "./paper-note-review-initializer";
 import type { PaperNoteReviewIssue } from "./paper-note-review-schema";
+import { firstQueryRow } from "./paper-note-query-rows";
+import { paperNoteEntryStateValues, type PaperNoteEntryState } from "./paper-note-types";
 import type {
   PaperNoteReviewMutationView,
   PaperNoteReviewStore,
@@ -37,6 +39,27 @@ type ReviewRow = {
   validationIssues: unknown;
   approvedAt: Date | string | null;
 };
+
+type ReviewMutationMissRow = { reviewVersion: number; state: string };
+
+function isPaperNoteEntryState(value: unknown): value is PaperNoteEntryState {
+  return typeof value === "string"
+    && paperNoteEntryStateValues.some((state) => state === value);
+}
+
+function isReviewRow(row: Record<string, unknown>): row is ReviewRow {
+  return typeof row.id === "string"
+    && "extractionPayload" in row
+    && "reviewPayload" in row
+    && typeof row.reviewVersion === "number"
+    && isPaperNoteEntryState(row.state)
+    && "validationIssues" in row
+    && (row.approvedAt === null || typeof row.approvedAt === "string" || row.approvedAt instanceof Date);
+}
+
+function isReviewMutationMissRow(row: Record<string, unknown>): row is ReviewMutationMissRow {
+  return typeof row.reviewVersion === "number" && typeof row.state === "string";
+}
 
 function asObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -169,7 +192,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
         and batches.created_by = ${actorId}
       limit 1
     `);
-    const row = (result as { rows?: ReviewRow[] }).rows?.[0];
+    const row = firstQueryRow(result, isReviewRow);
     if (!row) return null;
     return {
       review: reviewFrom(row),
@@ -217,7 +240,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
         entries.validation_issues as "validationIssues",
         entries.approved_at as "approvedAt"
     `);
-    const row = (result as { rows?: ReviewRow[] }).rows?.[0];
+    const row = firstQueryRow(result, isReviewRow);
     if (!row) await this.throwMutationMiss(input.actorId, input.entryId, input.expectedVersion);
     return mutationView(row!);
   }
@@ -261,7 +284,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
         entries.validation_issues as "validationIssues",
         entries.approved_at as "approvedAt"
     `);
-    const row = (result as { rows?: ReviewRow[] }).rows?.[0];
+    const row = firstQueryRow(result, isReviewRow);
     if (!row) await this.throwMutationMiss(input.actorId, input.entryId, input.expectedVersion);
     return mutationView(row!);
   }
@@ -275,7 +298,7 @@ export class PaperNoteReviewRepository implements PaperNoteReviewStore {
         and batches.created_by = ${actorId}
       limit 1
     `);
-    const row = (result as { rows?: Array<{ reviewVersion: number; state: string }> }).rows?.[0];
+    const row = firstQueryRow(result, isReviewMutationMissRow);
     if (!row) throw new PaperNoteReviewRepositoryError("ENTRY_NOT_FOUND", "Paper-note entry was not found.");
     if (row.state === "imported") throw new PaperNoteReviewRepositoryError("ENTRY_NOT_EDITABLE", "Imported paper-note entries are read-only.");
     if (Number(row.reviewVersion) !== expectedVersion) {
