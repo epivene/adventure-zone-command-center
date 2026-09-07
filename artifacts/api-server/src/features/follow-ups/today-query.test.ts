@@ -6,6 +6,7 @@ import {
   currentSeasonPlanStatuses,
   getTodayDashboard,
   type TodayDashboardBookingRecord,
+  type TodayDashboardFollowUpRow,
   type TodayDashboardRepository,
 } from "./today-query";
 
@@ -91,6 +92,49 @@ function repository(
 }
 
 describe("Today renewal separation", () => {
+  it("uses the profile contact when an organization follow-up has no explicit contact", async () => {
+    const profileContactId = "20000000-0000-4000-8000-000000000009";
+    const followUpRow = {
+      booking: null,
+      contact: {
+        id: profileContactId,
+        organizationId: null,
+        firstName: "Ada",
+        lastName: "Organizer",
+      },
+      followUp: {
+        id: "40000000-0000-4000-8000-000000000009",
+        organizationId: "10000000-0000-4000-8000-000000000009",
+        contactId: null,
+        bookingId: null,
+        kind: "call",
+        dueAt: new Date("2026-08-14T15:00:00.000Z"),
+        completedAt: null,
+        createdAt: new Date("2026-08-01T15:00:00.000Z"),
+      },
+      organization: { name: "Profile-linked Festival" },
+      lastContactedAt: null,
+    } as unknown as TodayDashboardFollowUpRow;
+
+    const result = await getTodayDashboard(
+      now,
+      repository({
+        async listOpenFollowUps() {
+          return { records: [followUpRow], total: 1, page: 1 };
+        },
+      }),
+    );
+
+    expect(result.followUps[0]).toEqual(
+      expect.objectContaining({
+        organizationId: followUpRow.followUp.organizationId,
+        contactId: profileContactId,
+        contactName: "Ada Organizer",
+        organizationName: "Profile-linked Festival",
+      }),
+    );
+  });
+
   it("keeps renewal_due out of Needs Follow-up Plan statuses", () => {
     expect(currentSeasonPlanStatuses).not.toContain("renewal_due");
     expect(currentSeasonPlanStatuses).toContain("new_lead");
