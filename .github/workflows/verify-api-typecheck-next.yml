@@ -24,5 +24,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Build workspace declarations
         run: pnpm run typecheck:libs
-      - name: Capture API compiler baseline
+      - name: Run focused matcher suites
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/lead-intake/lead-review-service.pglite.test.ts
+          src/features/lead-intake/lead-review-service.relationship.pglite.test.ts
+          src/features/paper-notes/paper-note-extraction-provider.test.ts
+          src/features/paper-notes/paper-note-intake-repository.pglite.test.ts
+      - name: Verify API compiler cluster
         run: pnpm --filter @workspace/api-server run typecheck
