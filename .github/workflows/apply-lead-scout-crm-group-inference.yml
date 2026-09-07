@@ -1,0 +1,61 @@
+name: Apply Lead Scout CRM group inference fix
+
+on:
+  push:
+    branches:
+      - fix/lead-scout-crm-group-inference
+    paths:
+      - ".github/workflows/apply-lead-scout-crm-group-inference.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/lead-scout-crm-group-inference
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Type organization group fallback explicitly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/features/assistant/lead-scout-crm-search.ts')
+          text = path.read_text()
+          old = '      const group = groups.get(id) ?? {'
+          new = '      const group: OrganizationGroup = groups.get(id) ?? {'
+          if old not in text:
+              raise SystemExit('Lead Scout group fallback not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run focused CRM search tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/assistant/lead-scout-crm-search.test.ts
+      - name: Commit verified production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/features/assistant/lead-scout-crm-search.ts
+          git diff --cached --quiet || git commit -m "fix: type Lead Scout CRM organization group"
+          git push origin HEAD:fix/lead-scout-crm-group-inference
+      - name: Build/typecheck shared libraries
+        run: pnpm run typecheck:libs
+      - name: Verify CRM search compiler error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'src/features/assistant/lead-scout-crm-search\.ts\(192,29\)' /tmp/api-typecheck.log; then
+            echo 'Lead Scout CRM group inference error remains.' >&2
+            exit 1
+          fi
