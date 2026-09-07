@@ -124,6 +124,7 @@ import { InboundVoicemailService } from "@/features/calls/inbound-voicemail-serv
 import { requireOwnerMiddleware } from "../lib/auth";
 import marketingRouter from "./marketing";
 import coiCertificatesRouter from "./coi-certificates";
+import businessDocumentsRouter from "./business-documents";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
@@ -245,6 +246,7 @@ router.use(attendanceHistoryImportRouter);
 router.use(attendanceHistoryProfileRouter);
 router.use(businessSourceDocumentFilesRouter);
 router.use(businessSourceDocumentLinksRouter);
+router.use(businessDocumentsRouter);
 router.use(profileSourceDocumentsRouter);
 router.use(todayRouter);
 router.use(opportunityEmailLiveRuntimeRouter);

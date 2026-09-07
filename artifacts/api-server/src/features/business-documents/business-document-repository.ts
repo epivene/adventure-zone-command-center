@@ -298,6 +298,73 @@ export class BusinessDocumentRepository {
     } finally { client.release?.(); }
   }
 
+  async getOpenableFile(documentId: string) {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query(
+        `SELECT b.storage_key
+           FROM business_documents d
+           JOIN business_document_versions v ON v.id = d.current_version_id
+           JOIN business_document_blobs b ON b.id = v.blob_id
+          WHERE d.id = $1
+            AND d.lifecycle <> 'deleted'
+            AND b.validation_state = 'accepted'
+          LIMIT 1`,
+        [documentId],
+      );
+      const storageKey = result.rows[0]?.storage_key;
+      return typeof storageKey === "string" ? { storageKey } : null;
+    } finally { client.release?.(); }
+  }
+
+  async archive(documentId: string, actor: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `UPDATE business_documents
+            SET lifecycle = 'archived', archived_at = now(), updated_at = now()
+          WHERE id = $1 AND lifecycle = 'active' RETURNING id`,
+        [documentId],
+      );
+      if (result.rows.length) {
+        await client.query(
+          "INSERT INTO business_document_audit_events (document_id, action, actor) VALUES ($1,'archived',$2)",
+          [documentId, actor],
+        );
+      }
+      await client.query("COMMIT");
+      return result.rows.length > 0;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release?.(); }
+  }
+
+  async softDelete(documentId: string, actor: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `UPDATE business_documents
+            SET lifecycle = 'deleted', deleted_at = now(), updated_at = now()
+          WHERE id = $1 AND lifecycle <> 'deleted' RETURNING id`,
+        [documentId],
+      );
+      if (result.rows.length) {
+        await client.query(
+          "INSERT INTO business_document_audit_events (document_id, action, actor) VALUES ($1,'deleted',$2)",
+          [documentId, actor],
+        );
+      }
+      await client.query("COMMIT");
+      return result.rows.length > 0;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release?.(); }
+  }
+
   async countPendingReviews() {
     const client = await this.pool.connect();
     try {
