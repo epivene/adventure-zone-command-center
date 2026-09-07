@@ -41,22 +41,29 @@ jobs:
           python - <<'PY'
           from pathlib import Path
 
+          approved = '''{ templateId: "template-1", code: APPROVED_LEAD_INTRODUCTION_2026.code, version: APPROVED_LEAD_INTRODUCTION_2026.version, sourceDocumentId: "source-1", sourceFilename: APPROVED_LEAD_INTRODUCTION_2026.sourceFilename, reviewedBy: APPROVED_LEAD_INTRODUCTION_2026.reviewedBy, reviewedAt: "2026-08-25T00:00:00.000Z", definition: APPROVED_LEAD_INTRODUCTION_2026 }'''
+          import_line = 'import { APPROVED_LEAD_INTRODUCTION_2026 } from "../communication-templates/lead-introduction-2026-approved";\n'
+
           p = Path('artifacts/api-server/src/features/lead-intake/communication-block-policy.test.ts')
           text = p.read_text()
+          import_marker = 'import { describe, expect, it } from "vitest";\n'
+          if import_line not in text:
+            text = text.replace(import_marker, import_marker + import_line, 1)
           marker = '      blocks: [{ active: true, targetType: "recipient_email", normalizedEmail: "pat@example.com" }],\n'
-          if '      approvedTemplate: null,\n' not in text:
-            if marker not in text:
-              raise SystemExit('communication block marker not found')
-            text = text.replace(marker, marker + '      approvedTemplate: null,\n', 1)
+          if marker not in text:
+            raise SystemExit('communication block marker not found')
+          text = text.replace(marker, marker + f'      approvedTemplate: {approved},\n', 1)
           p.write_text(text)
 
           p = Path('artifacts/api-server/src/features/lead-intake/lead-email-preview-service.version.test.ts')
           text = p.read_text()
+          import_marker = 'import { expect, it } from "vitest";\n'
+          if import_line not in text:
+            text = text.replace(import_marker, import_marker + import_line, 1)
           old = 'blocks: [], availability:'
-          if 'approvedTemplate: null' not in text:
-            if old not in text:
-              raise SystemExit('preview version marker not found')
-            text = text.replace(old, 'blocks: [], approvedTemplate: null, availability:', 1)
+          if old not in text:
+            raise SystemExit('preview version marker not found')
+          text = text.replace(old, f'blocks: [], approvedTemplate: {approved}, availability:', 1)
           p.write_text(text)
 
           p = Path('artifacts/api-server/src/features/lead-intake/lead-availability-service.test.ts')
