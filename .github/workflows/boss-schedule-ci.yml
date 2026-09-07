@@ -11,6 +11,7 @@ on:
       - "artifacts/adventure-zone/src/components/routes/manager-route-map-layers.tsx"
       - "artifacts/adventure-zone/src/lib/boss-types.ts"
       - "artifacts/api-server/src/routes/boss-operations.ts"
+      - "artifacts/api-server/src/routes/boss-workspace.test.ts"
       - ".github/workflows/boss-schedule-ci.yml"
 
 jobs:
