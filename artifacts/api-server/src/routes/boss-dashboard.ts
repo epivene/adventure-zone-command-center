@@ -142,7 +142,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
           status: designProjects.status,
           updatedAt: designProjects.updatedAt,
         }).from(designProjects)
-          .where(eq(designProjects.officeAccountId, req.bossAccount!.studioOfficeAccountId))
+          .where(eq(designProjects.officeAccountId, officeAccountId))
           .orderBy(desc(designProjects.updatedAt))
           .limit(25)
        : Promise.resolve([]),
@@ -170,7 +170,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
            db.select({ value: count() }).from(officeEmailDrafts)
              .where(eq(officeEmailDrafts.officeAccountId, officeAccountId)),
          ])
-       : Promise.resolve([{ value: 0 }, { value: 0 }, { value: 0 }]),
+       : Promise.resolve([[{ value: 0 }], [{ value: 0 }], [{ value: 0 }]]),
   ]);
   const reviewAndWrapUp = [
     ...reviewsDue.map((item) => ({
