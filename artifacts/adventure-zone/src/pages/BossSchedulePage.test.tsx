@@ -52,6 +52,11 @@ describe("Boss schedule planning views", () => {
     screen.getByRole("button", { name: "Show potential (1)" }).click();
     expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
     expect(screen.queryByRole("link", { name: /Potential County Fair/i })).not.toBeInTheDocument();
+
+    screen.getByRole("button", { name: "Map" }).click();
+    expect(await screen.findAllByText("Potential County Fair")).not.toHaveLength(0);
+    expect(screen.queryByRole("link", { name: /Potential County Fair/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry location" })).not.toBeInTheDocument();
   });
 });
 
