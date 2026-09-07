@@ -7,6 +7,7 @@ import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@workspace/avz-crm/components/ui/dialog";
 import { apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { businessDocumentsApi } from "@/lib/business-documents-api";
 import { bossGet, bossPatch, bossPost } from "@/lib/boss-auth-context";
 import type { BossCertificateDocument } from "@/lib/boss-documents-api";
 
@@ -94,7 +95,7 @@ function CertificateForm({
   const isEdit = Boolean(initial);
   const initialAsset = initial?.assetId ? assets.find((asset) => asset.id === initial.assetId) : undefined;
   const [fields, setFields] = useState<Fields>(initial ? {
-    officeAccountId: initial.officeAccountId,
+    officeAccountId: initial.officeAccountId ?? "",
     name: initial.name,
     assetId: initial.assetId ?? "",
     bookingId: initial.bookingId ?? initialAsset?.bookingId ?? "",
@@ -217,6 +218,7 @@ export default function CoiManagementPage({ mode }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<BossCertificateDocument | null>(null);
   const [creating, setCreating] = useState(false);
+  const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(null);
   const expirationFilter = readExpirationFilter(search);
   const reviewFilter = readReviewFilter(search);
   const workspaceFilter = readWorkspaceFilter(search);
@@ -262,6 +264,24 @@ export default function CoiManagementPage({ mode }: Props) {
     }
   }
   useEffect(() => { void load(); }, [mode, search]);
+
+  async function openCertificate(certificate: BossCertificateDocument) {
+    if (mode !== "admin" || !certificate.documentId) {
+      if (certificate.fileUrl) window.open(certificate.fileUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    setOpeningDocumentId(certificate.documentId);
+    setError(null);
+    try {
+      const url = await businessDocumentsApi.open(certificate.documentId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      if (certificate.fileUrl) window.open(certificate.fileUrl, "_blank", "noopener,noreferrer");
+      else setError("The protected certificate file is unavailable.");
+    } finally {
+      setOpeningDocumentId(null);
+    }
+  }
 
   return (
     <div className="grid gap-6" data-testid={`${mode}-coi-page`}>
@@ -315,7 +335,7 @@ export default function CoiManagementPage({ mode }: Props) {
         <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={certificate.id}>
           <div className="flex flex-wrap items-start justify-between gap-2"><div><p className="font-bold text-foreground">{certificate.name}</p><p className="mt-1 text-sm text-muted-foreground">{certificate.bookingName ?? certificate.organizationName ?? "No event or profile linked"}{mode === "admin" && certificate.officeAccountName ? ` · ${certificate.officeAccountName}` : ""}</p></div><div className="flex gap-1"><Badge variant={badgeVariant(certificate.expirationState)}>{statusLabel(certificate.expirationState)}</Badge><Badge variant={certificate.reviewState === "reviewed" ? "default" : "outline"}>{certificate.reviewState === "reviewed" ? "Reviewed" : "Needs review"}</Badge></div></div>
           <p className="mt-3 text-xs text-muted-foreground">Issued {dateLabel(certificate.issueDate)} · Expires {dateLabel(certificate.expirationDate)}</p>
-          <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setEditing(certificate)}>Edit</Button>{certificate.fileUrl ? <Button asChild size="sm" variant="ghost"><a href={certificate.fileUrl} target="_blank" rel="noreferrer"><Download className="mr-1.5 h-3.5 w-3.5" />Open file</a></Button> : <span className="self-center text-xs text-destructive">{certificate.fileAvailable ? "File link unavailable — retry later" : "File unavailable — link a Studio file"}</span>}{certificate.bookingId && mode !== "boss" ? <Button asChild size="sm" variant="ghost"><Link href={`/bookings/${certificate.bookingId}`}>Open event</Link></Button> : null}</div>
+          <div className="mt-4 flex flex-wrap gap-2"><Button size="sm" variant="outline" disabled={certificate.legacyRecord === false} onClick={() => setEditing(certificate)}>{certificate.legacyRecord === false ? "Edit in document library" : "Edit"}</Button>{certificate.fileAvailable ? <Button size="sm" variant="ghost" disabled={openingDocumentId === certificate.documentId} onClick={() => void openCertificate(certificate)}><Download className="mr-1.5 h-3.5 w-3.5" />{openingDocumentId === certificate.documentId ? "Opening…" : "Open file"}</Button> : <span className="self-center text-xs text-destructive">File unavailable — link a Studio file</span>}{certificate.bookingId && mode !== "boss" ? <Button asChild size="sm" variant="ghost"><Link href={`/bookings/${certificate.bookingId}`}>Open event</Link></Button> : null}</div>
           {certificate.reviewState === "reviewed" ? <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground"><CheckCircle2 className="h-3.5 w-3.5 text-primary" />Review complete</p> : null}
         </article>
       ))}</div> : null}

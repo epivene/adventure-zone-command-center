@@ -11,12 +11,18 @@ import {
   lt,
   lte,
   or,
+  sql,
 } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@workspace/db";
 import {
   bookings,
+  businessDocumentAuditEvents,
+  businessDocumentCoiMetadata,
+  businessDocumentLinks,
+  businessDocuments,
+  businessDocumentSources,
   designAssets,
   designCertificates,
   designProjects,
@@ -129,6 +135,7 @@ export async function listCertificateRecords({
   const rows = await db
     .select({
       id: designCertificates.id,
+      documentId: designCertificates.documentId,
       officeAccountId: designCertificates.officeAccountId,
       officeAccountName: officeAccounts.displayName,
       name: designCertificates.name,
@@ -153,8 +160,9 @@ export async function listCertificateRecords({
     .where(and(...filters))
     .orderBy(desc(designCertificates.expirationDate), desc(designCertificates.updatedAt));
 
-  return Promise.all(rows.map(async (row) => ({
+  const legacyCertificates = await Promise.all(rows.map(async (row) => ({
     ...row,
+    legacyRecord: true as const,
     expirationState: classify(row.expirationDate, row.assetId),
     fileAvailable: Boolean(row.storageKey),
     fileUrl: row.storageKey
@@ -162,6 +170,81 @@ export async function listCertificateRecords({
       : null,
     storageKey: undefined,
   })));
+
+  const canonicalResult = await db.execute(sql`
+    SELECT
+      document.id AS "documentId",
+      document.display_name AS "name",
+      metadata.office_account_id AS "officeAccountId",
+      office.display_name AS "officeAccountName",
+      document.issue_date AS "issueDate",
+      document.expiration_date AS "expirationDate",
+      metadata.review_state AS "reviewState",
+      document.created_at AS "createdAt",
+      document.updated_at AS "updatedAt",
+      blob.storage_key AS "storageKey",
+      (
+        SELECT link.booking_id FROM business_document_links link
+        WHERE link.document_id = document.id AND link.booking_id IS NOT NULL LIMIT 1
+      ) AS "bookingId",
+      (
+        SELECT booking.name FROM business_document_links link
+        JOIN bookings booking ON booking.id = link.booking_id
+        WHERE link.document_id = document.id AND link.booking_id IS NOT NULL LIMIT 1
+      ) AS "bookingName",
+      (
+        SELECT link.organization_id FROM business_document_links link
+        WHERE link.document_id = document.id AND link.organization_id IS NOT NULL LIMIT 1
+      ) AS "organizationId",
+      (
+        SELECT organization.name FROM business_document_links link
+        JOIN organizations organization ON organization.id = link.organization_id
+        WHERE link.document_id = document.id AND link.organization_id IS NOT NULL LIMIT 1
+      ) AS "organizationName"
+    FROM business_documents document
+    JOIN business_document_coi_metadata metadata ON metadata.document_id = document.id
+    LEFT JOIN office_accounts office ON office.id = metadata.office_account_id
+    LEFT JOIN business_document_versions version ON version.id = document.current_version_id
+    LEFT JOIN business_document_blobs blob ON blob.id = version.blob_id AND blob.validation_state = 'accepted'
+    WHERE document.category = 'coi'
+      AND document.lifecycle <> 'deleted'
+      AND (${officeAccountId ?? null}::uuid IS NULL OR metadata.office_account_id = ${officeAccountId ?? null}::uuid)
+  `) as unknown as { rows: Array<Record<string, unknown>> };
+  const representedDocumentIds = new Set(legacyCertificates.flatMap((certificate) => certificate.documentId ? [certificate.documentId] : []));
+  const canonicalCertificates = await Promise.all(canonicalResult.rows
+    .filter((row) => typeof row.documentId === "string" && !representedDocumentIds.has(row.documentId))
+    .map(async (row) => {
+      const expirationDate = typeof row.expirationDate === "string" ? row.expirationDate.slice(0, 10) : null;
+      const storageKey = typeof row.storageKey === "string" ? row.storageKey : null;
+      return {
+        id: String(row.documentId),
+        documentId: String(row.documentId),
+        legacyRecord: false as const,
+        officeAccountId: typeof row.officeAccountId === "string" ? row.officeAccountId : null,
+        officeAccountName: typeof row.officeAccountName === "string" ? row.officeAccountName : null,
+        name: String(row.name ?? "Certificate of Insurance"),
+        bookingId: typeof row.bookingId === "string" ? row.bookingId : null,
+        bookingName: typeof row.bookingName === "string" ? row.bookingName : null,
+        organizationId: typeof row.organizationId === "string" ? row.organizationId : null,
+        organizationName: typeof row.organizationName === "string" ? row.organizationName : null,
+        assetId: null,
+        assetName: null,
+        issueDate: typeof row.issueDate === "string" ? row.issueDate.slice(0, 10) : null,
+        expirationDate,
+        reviewState: row.reviewState === "reviewed" ? "reviewed" as const : "needs_review" as const,
+        expirationState: classify(expirationDate, storageKey),
+        fileAvailable: Boolean(storageKey),
+        fileUrl: storageKey ? await assetStorage.getSignedReadUrl(storageKey, 15 * 60).catch(() => null) : null,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    }));
+
+  return [...legacyCertificates, ...canonicalCertificates].filter((certificate) => {
+    if (reviewState !== "all" && certificate.reviewState !== reviewState) return false;
+    if (expirationState !== "all" && certificate.expirationState !== expirationState) return false;
+    return true;
+  });
 }
 
 async function listAssetCandidates(officeAccountId?: string) {
@@ -256,22 +339,74 @@ function validateDates(issueDate: string | null | undefined, expirationDate: str
   return null;
 }
 
-async function createCertificate(input: z.infer<typeof createSchema>, officeAccountId: string) {
+async function createCertificate(input: z.infer<typeof createSchema>, officeAccountId: string, actor = "owner") {
   const dateError = validateDates(input.issueDate, input.expirationDate);
   if (dateError) return { error: dateError } as const;
   const relationError = await validateRelations({ officeAccountId, ...input });
   if (relationError) return { error: relationError } as const;
   try {
-    const [certificate] = await db.insert(designCertificates).values({
-      officeAccountId,
-      name: input.name,
-      bookingId: input.bookingId ?? null,
-      organizationId: input.organizationId ?? null,
-      assetId: input.assetId ?? null,
-      issueDate: input.issueDate ?? null,
-      expirationDate: input.expirationDate ?? null,
-      reviewState: input.reviewState ?? "needs_review",
-    }).returning({ id: designCertificates.id });
+    const certificate = await db.transaction(async (tx) => {
+      const [legacy] = await tx.insert(designCertificates).values({
+        officeAccountId,
+        name: input.name,
+        bookingId: input.bookingId ?? null,
+        organizationId: input.organizationId ?? null,
+        assetId: input.assetId ?? null,
+        issueDate: input.issueDate ?? null,
+        expirationDate: input.expirationDate ?? null,
+        reviewState: input.reviewState ?? "needs_review",
+      }).returning({ id: designCertificates.id });
+      if (!legacy) throw new Error("COI_CREATE_FAILED");
+
+      const [document] = await tx.insert(businessDocuments).values({
+        displayName: input.name,
+        originalFilename: input.name,
+        category: "coi",
+        reviewState: input.reviewState === "reviewed" ? "accepted" : "needs_review",
+        issueDate: input.issueDate ?? null,
+        expirationDate: input.expirationDate ?? null,
+        createdBy: actor,
+      }).returning({ id: businessDocuments.id });
+      if (!document) throw new Error("COI_DOCUMENT_CREATE_FAILED");
+
+      await tx.insert(businessDocumentCoiMetadata).values({
+        documentId: document.id,
+        officeAccountId,
+        certificateName: input.name,
+        issueDate: input.issueDate ?? null,
+        expirationDate: input.expirationDate ?? null,
+        reviewState: input.reviewState ?? "needs_review",
+      });
+      await tx.insert(businessDocumentSources).values({
+        documentId: document.id,
+        sourceKind: "business_source",
+        sourceAccountKey: officeAccountId,
+        externalId: `design_certificate:${legacy.id}`,
+        metadata: { legacyCertificateId: legacy.id, assetId: input.assetId ?? null },
+      });
+      const links = [
+        input.organizationId ? { targetKind: "profile" as const, organizationId: input.organizationId } : null,
+        input.bookingId ? { targetKind: "booking" as const, bookingId: input.bookingId } : null,
+      ].filter((link): link is NonNullable<typeof link> => Boolean(link));
+      if (links.length) {
+        await tx.insert(businessDocumentLinks).values(links.map((link) => ({
+          documentId: document.id,
+          ...link,
+          confirmationMode: "manual" as const,
+          confidence: "1",
+          evidence: [{ kind: "coi_form_selection" }],
+          createdBy: actor,
+        })));
+      }
+      await tx.insert(businessDocumentAuditEvents).values({
+        documentId: document.id,
+        action: "created_from_coi_register",
+        actor,
+        metadata: { legacyCertificateId: legacy.id },
+      });
+      await tx.update(designCertificates).set({ documentId: document.id }).where(eq(designCertificates.id, legacy.id));
+      return { id: legacy.id, documentId: document.id };
+    });
     return { certificate } as const;
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && (error as { code?: string }).code === "23505") {
@@ -305,7 +440,7 @@ router.post("/boss/coi", requireBoss, async (req, res): Promise<void> => {
   if (!officeAccountId) { res.status(409).json({ error: "Connect this Boss account to an Office workspace first." }); return; }
   if (!input.success) { res.status(400).json({ error: input.error.issues[0]?.message ?? "Review the certificate details." }); return; }
   try {
-    const result = await createCertificate(input.data, officeAccountId);
+    const result = await createCertificate(input.data, officeAccountId, "boss");
     if ("error" in result) { res.status(400).json(result); return; }
     res.status(201).json(result);
   } catch (error) {
@@ -328,7 +463,41 @@ router.patch("/boss/coi/:certificateId", requireBoss, async (req, res): Promise<
     if (dateError) { res.status(400).json({ error: dateError }); return; }
     const relationError = await validateRelations({ officeAccountId, bookingId: next.bookingId, organizationId: next.organizationId, assetId: next.assetId });
     if (relationError) { res.status(400).json({ error: relationError }); return; }
-    await db.update(designCertificates).set({ ...input.data, updatedAt: new Date() }).where(eq(designCertificates.id, certificateId));
+    await db.transaction(async (tx) => {
+      await tx.update(designCertificates).set({ ...input.data, updatedAt: new Date() }).where(eq(designCertificates.id, certificateId));
+      if (current.documentId) {
+        await tx.update(businessDocuments).set({
+          displayName: next.name,
+          issueDate: next.issueDate,
+          expirationDate: next.expirationDate,
+          reviewState: next.reviewState === "reviewed" ? "accepted" : "needs_review",
+          updatedAt: new Date(),
+        }).where(eq(businessDocuments.id, current.documentId));
+        await tx.update(businessDocumentCoiMetadata).set({
+          certificateName: next.name,
+          issueDate: next.issueDate,
+          expirationDate: next.expirationDate,
+          reviewState: next.reviewState,
+          updatedAt: new Date(),
+        }).where(eq(businessDocumentCoiMetadata.documentId, current.documentId));
+        await tx.delete(businessDocumentLinks).where(and(
+          eq(businessDocumentLinks.documentId, current.documentId),
+          or(eq(businessDocumentLinks.targetKind, "profile"), eq(businessDocumentLinks.targetKind, "booking")),
+        ));
+        const nextLinks = [
+          next.organizationId ? { targetKind: "profile" as const, organizationId: next.organizationId } : null,
+          next.bookingId ? { targetKind: "booking" as const, bookingId: next.bookingId } : null,
+        ].filter((link): link is NonNullable<typeof link> => Boolean(link));
+        if (nextLinks.length) await tx.insert(businessDocumentLinks).values(nextLinks.map((link) => ({
+          documentId: current.documentId!,
+          ...link,
+          confirmationMode: "manual" as const,
+          confidence: "1",
+          evidence: [{ kind: "coi_form_selection" }],
+          createdBy: "boss",
+        })));
+      }
+    });
     res.json({ ok: true });
   } catch (error) {
     req.log.error({ err: error }, "Failed to update Boss COI");
@@ -360,7 +529,7 @@ router.post("/admin/coi", requireOwnerMiddleware, async (req, res): Promise<void
   const input = createSchema.safeParse(req.body);
   if (!input.success || !input.data.officeAccountId) { res.status(400).json({ error: input.success ? "Choose an Office workspace." : input.error.issues[0]?.message }); return; }
   try {
-    const result = await createCertificate(input.data, input.data.officeAccountId);
+    const result = await createCertificate(input.data, input.data.officeAccountId, String((req as { userId?: string }).userId ?? "owner"));
     if ("error" in result) { res.status(400).json(result); return; }
     res.status(201).json(result);
   } catch (error) {
@@ -381,7 +550,41 @@ router.patch("/admin/coi/:certificateId", requireOwnerMiddleware, async (req, re
     if (dateError) { res.status(400).json({ error: dateError }); return; }
     const relationError = await validateRelations({ officeAccountId: current.officeAccountId, bookingId: next.bookingId, organizationId: next.organizationId, assetId: next.assetId });
     if (relationError) { res.status(400).json({ error: relationError }); return; }
-    await db.update(designCertificates).set({ ...input.data, updatedAt: new Date() }).where(eq(designCertificates.id, certificateId));
+    await db.transaction(async (tx) => {
+      await tx.update(designCertificates).set({ ...input.data, updatedAt: new Date() }).where(eq(designCertificates.id, certificateId));
+      if (current.documentId) {
+        await tx.update(businessDocuments).set({
+          displayName: next.name,
+          issueDate: next.issueDate,
+          expirationDate: next.expirationDate,
+          reviewState: next.reviewState === "reviewed" ? "accepted" : "needs_review",
+          updatedAt: new Date(),
+        }).where(eq(businessDocuments.id, current.documentId));
+        await tx.update(businessDocumentCoiMetadata).set({
+          certificateName: next.name,
+          issueDate: next.issueDate,
+          expirationDate: next.expirationDate,
+          reviewState: next.reviewState,
+          updatedAt: new Date(),
+        }).where(eq(businessDocumentCoiMetadata.documentId, current.documentId));
+        await tx.delete(businessDocumentLinks).where(and(
+          eq(businessDocumentLinks.documentId, current.documentId),
+          or(eq(businessDocumentLinks.targetKind, "profile"), eq(businessDocumentLinks.targetKind, "booking")),
+        ));
+        const nextLinks = [
+          next.organizationId ? { targetKind: "profile" as const, organizationId: next.organizationId } : null,
+          next.bookingId ? { targetKind: "booking" as const, bookingId: next.bookingId } : null,
+        ].filter((link): link is NonNullable<typeof link> => Boolean(link));
+        if (nextLinks.length) await tx.insert(businessDocumentLinks).values(nextLinks.map((link) => ({
+          documentId: current.documentId!,
+          ...link,
+          confirmationMode: "manual" as const,
+          confidence: "1",
+          evidence: [{ kind: "coi_form_selection" }],
+          createdBy: String((req as { userId?: string }).userId ?? "owner"),
+        })));
+      }
+    });
     res.json({ ok: true });
   } catch (error) {
     req.log.error({ err: error }, "Failed to update admin COI");

@@ -51,4 +51,9 @@ describe("COI management workflow states", () => {
     expect(source).toContain("Clear filters");
     expect(source).toContain("No certificates recorded yet");
   });
+
+  it("opens canonical owner COIs through the protected document service", () => {
+    expect(source).toContain("businessDocumentsApi.open(certificate.documentId)");
+    expect(source).toContain("if (certificate.fileUrl) window.open(certificate.fileUrl");
+  });
 });

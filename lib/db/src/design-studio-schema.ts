@@ -292,6 +292,9 @@ export const designCertificates = pgTable(
       .$type<CoiReviewState>()
       .default("needs_review")
       .notNull(),
+    // The migration adds the FK to business_documents; keeping this declaration
+    // unreferenced avoids a circular schema import through office_accounts.
+    documentId: uuid("document_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -302,6 +305,7 @@ export const designCertificates = pgTable(
       sql`${table.issueDate} is null or ${table.expirationDate} is null or ${table.issueDate} <= ${table.expirationDate}`,
     ),
     uniqueIndex("design_certificates_asset_unique").on(table.assetId),
+    uniqueIndex("design_certificates_document_unique").on(table.documentId),
     index("design_certificates_account_expiration_idx").on(table.officeAccountId, table.expirationDate),
     index("design_certificates_booking_idx").on(table.bookingId),
     index("design_certificates_organization_idx").on(table.organizationId),

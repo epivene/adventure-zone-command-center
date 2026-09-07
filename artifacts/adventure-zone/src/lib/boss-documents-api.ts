@@ -2,6 +2,7 @@ import { bossGet } from "@/lib/boss-auth-context";
 
 export type BossContractDocument = {
   id: string;
+  documentId?: string | null;
   projectId: string;
   projectName: string;
   projectStatus: string;
@@ -14,7 +15,8 @@ export type BossContractDocument = {
 
 export type BossCertificateDocument = {
   id: string;
-  officeAccountId: string;
+  documentId: string | null;
+  officeAccountId: string | null;
   officeAccountName?: string;
   name: string;
   assetId: string | null;
@@ -31,6 +33,7 @@ export type BossCertificateDocument = {
   fileUrl: string | null;
   createdAt: string;
   updatedAt: string;
+  legacyRecord?: boolean;
 };
 
 export type BossEmailDocument = {
@@ -53,6 +56,12 @@ export type BossDocumentsResponse = {
   contracts: BossContractDocument[];
   certificates: BossCertificateDocument[];
   emailDrafts: BossEmailDocument[];
+  libraryDocuments?: Array<{
+    documentId: string;
+    category: "coi" | "contract" | "operational_template";
+    name: string;
+    fileAvailable: boolean;
+  }>;
   workspaceAvailable: boolean;
 };
 

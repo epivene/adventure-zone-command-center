@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { describe, expect, it, vi } from "vitest";
+
+vi.hoisted(() => {
+  process.env.DATABASE_URL ??= "postgres://postgres:postgres@127.0.0.1:5432/test";
+});
 import { classify, parseCertificateFilterQuery } from "./coi-certificates";
 
 describe("COI expiration classification", () => {
@@ -39,5 +44,17 @@ describe("admin certificate filters", () => {
   it("rejects unknown renewal states and invalid workspace ids", () => {
     expect(parseCertificateFilterQuery({ expirationState: "overdue" }).success).toBe(false);
     expect(parseCertificateFilterQuery({ officeAccountId: "not-a-workspace" }).success).toBe(false);
+  });
+});
+
+describe("canonical COI compatibility", () => {
+  it("writes one canonical document while preserving the legacy register row", () => {
+    const source = readFileSync(new URL("./coi-certificates.ts", import.meta.url), "utf8");
+    expect(source).toContain("documentId: designCertificates.documentId");
+    expect(source).toContain("tx.insert(businessDocuments)");
+    expect(source).toContain("tx.insert(businessDocumentCoiMetadata)");
+    expect(source).toContain('sourceKind: "business_source"');
+    expect(source).toContain("representedDocumentIds");
+    expect(source).toContain("canonicalCertificates");
   });
 });

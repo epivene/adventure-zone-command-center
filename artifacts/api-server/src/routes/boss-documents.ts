@@ -95,6 +95,12 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
     res.json({
       contracts,
       certificates,
+      libraryDocuments: certificates.flatMap((certificate) => certificate.documentId ? [{
+        documentId: certificate.documentId,
+        category: "coi" as const,
+        name: certificate.name,
+        fileAvailable: certificate.fileAvailable,
+      }] : []),
       emailDrafts: emailRows.map((row) => ({
         ...row,
         contactName: `${row.contactFirstName} ${row.contactLastName}`.trim(),
