@@ -1,0 +1,68 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": [
+    "Platte County Fair",
+    "Platte County Fair & Rodeo",
+    "County Fair - Platte (Wheatland) WY",
+    "Platte County Fairboard"
+  ],
+  "event": {
+    "id": null,
+    "name": "Platte County Fair & Rodeo",
+    "city": "Wheatland",
+    "region": "WY"
+  },
+  "profile": {
+    "placeType": "fair",
+    "description": "Annual county fair and rodeo at the Platte County Fairgrounds in Wheatland. The 2026 fair ran July 24-August 2, 2026; 2027 dates were not published when reviewed September 7, 2026. Adventure Zone met the Platte County Fair Board at the 2025 WAF Convention and followed up afterward, but no reply was found in the matched Gmail thread. Treat this as a warm prior-contact 2027 renewal lead.",
+    "phone": "307-322-9504",
+    "website": "https://plattecountyfair.org/",
+    "address1": "59 Antelope Gap Road",
+    "address2": "",
+    "postalCode": "82201"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Platte County Fair Board / Fair Office",
+      "phone": "307-322-9504",
+      "email": "plattecofair8@gmail.com",
+      "role": "Fair board and office contact",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Gmail and WAF relationship history through September 2026",
+      "body": "Adventure Zone emailed the Platte County Fair about the 2024 fair on November 21, 2023; sent a WAF Convention introduction on September 29, 2025; met the fair board at the 2025 WAF Convention; and sent the latest targeted recap on October 9, 2025. That message summarized the three packages, 2026 prices and convention/early-bird discounts. No reply appears in the matched thread. The address remains included on the 2026 Wyoming Association of Fairs distribution."
+    },
+    {
+      "subject": "2027 timing and source review",
+      "body": "The 2026 fair occurred July 24-August 2, so routine 2026 outreach is closed. Schedule the next individual follow-up for April 24, 2027, approximately three months before the expected 2027 fair window, unless the organizer is contacted sooner through the convention campaign. Confirm official 2027 dates before putting dates in outreach. Platte County Fair Board bylaws state annual fair dates are set at the April meeting of the preceding year, so the board plans far ahead. Sources reviewed September 7, 2026: official Platte County Fair site, 2026 fair-events and vendor pages, Platte County Fair Board bylaws, and the Rocky Mountain Association of Fairs 2026 listing."
+    },
+    {
+      "subject": "Individualized 2027 email draft prepared",
+      "body": "An unsent Gmail draft titled “Planning for the 2027 Platte County Fair & Rodeo” was prepared for the fair office. It is intentionally separate from the planned broader convention email, references the 2025 WAF meeting, and leads with the guaranteed, fully staffed package structure."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "2027 Platte County Fair outreach",
+      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and send/review the individualized guaranteed-package draft if no earlier contact occurred through the convention campaign.",
+      "dueAt": "2027-04-24T16:00:00.000Z"
+    }
+  ]
+}
