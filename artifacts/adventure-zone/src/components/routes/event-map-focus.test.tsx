@@ -104,6 +104,10 @@ describe("EventMap planning interactions", () => {
       "route-event-leg-leg-hulk",
     ]);
     expect(groups.every((group) => group.tagName === "DETAILS" && !group.hasAttribute("open"))).toBe(true);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Kristy",
+      "Hulk",
+    ]);
   });
 
   it("makes a tapped leg supersede an already-focused trip", () => {
