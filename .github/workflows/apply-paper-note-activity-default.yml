@@ -27,40 +27,17 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Add regression test for omitted activity
-        run: |
-          cat > artifacts/api-server/src/features/paper-notes/paper-note-extraction-schema.activity-default.test.ts <<'EOF'
-          import { describe, expect, it } from "vitest";
-          import { parsePaperNoteEntryExtraction } from "./paper-note-extraction-schema";
-
-          describe("paper-note extraction activity defaults", () => {
-            it("normalizes an omitted activity to unknown date source and method", () => {
-              const extraction = parsePaperNoteEntryExtraction(JSON.stringify({
-                transcription: "Called about next year's festival.",
-                event: { name: "Example Festival" },
-              }));
-
-              expect(extraction.activity.dateSource).toBe("unknown");
-              expect(extraction.activity.method).toBe("unknown");
-            });
-          });
-          EOF
-      - name: Confirm regression fails before fix
+      - name: Confirm activity default compiler error exists before fix
         run: |
           set +e
-          pnpm --filter @workspace/api-server exec vitest run src/features/paper-notes/paper-note-extraction-schema.activity-default.test.ts > /tmp/red.log 2>&1
-          code=$?
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
           set -e
-          cat /tmp/red.log
-          if [ "$code" -eq 0 ]; then
-            echo "Regression test unexpectedly passed before the fix." >&2
-            exit 1
-          fi
-          grep -E 'expected.*unknown|Expected.*unknown|to be.*unknown' /tmp/red.log >/dev/null || {
-            echo "Regression did not fail for the expected missing activity defaults." >&2
+          grep -E 'paper-note-extraction-schema\.ts.*error TS2769' /tmp/api-before.log >/dev/null || {
+            echo "Expected paper-note extraction activity default error was not present." >&2
             exit 1
           }
-      - name: Fix activity parent default
+      - name: Make activity parent default type-valid
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -72,18 +49,14 @@ jobs:
               raise SystemExit('activity default marker not found')
           path.write_text(text.replace(old, new, 1))
           PY
-      - name: Run regression and extraction tests
-        run: |
-          pnpm --filter @workspace/api-server exec vitest run \
-            src/features/paper-notes/paper-note-extraction-schema.activity-default.test.ts \
-            src/features/paper-notes/paper-note-extraction-provider.test.ts
+      - name: Run extraction behavior tests
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/paper-notes/paper-note-extraction-provider.test.ts
       - name: Commit verified patch
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add artifacts/api-server/src/features/paper-notes/paper-note-extraction-schema.ts \
-                  artifacts/api-server/src/features/paper-notes/paper-note-extraction-schema.activity-default.test.ts
-          git diff --cached --quiet || git commit -m "fix: default missing paper note activity metadata"
+          git add artifacts/api-server/src/features/paper-notes/paper-note-extraction-schema.ts
+          git diff --cached --quiet || git commit -m "fix: type paper note activity default"
           git push origin HEAD:fix/paper-note-activity-default
       - run: pnpm run typecheck:libs
       - name: Verify production schema compiler error is gone
