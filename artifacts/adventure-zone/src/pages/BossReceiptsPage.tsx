@@ -3,11 +3,7 @@ import { RefreshCw } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import {
-  LegRecordPicker,
-  groupRecordsByLeg,
-  recordsForLeg,
-} from "@/components/boss/leg-record-picker";
+import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
 import { bossGet } from "@/lib/boss-auth-context";
 
 type Receipt = {
@@ -26,18 +22,12 @@ type Receipt = {
   [key: string]: unknown;
 };
 
-function statusVariant(
-  status?: string | null,
-): "default" | "secondary" | "outline" | "destructive" {
+function statusVariant(status?: string | null): "default" | "secondary" | "outline" | "destructive" {
   switch (status) {
-    case "approved":
-      return "default";
-    case "rejected":
-      return "destructive";
-    case "submitted":
-      return "secondary";
-    default:
-      return "outline";
+    case "approved": return "default";
+    case "rejected": return "destructive";
+    case "submitted": return "secondary";
+    default: return "outline";
   }
 }
 
@@ -52,84 +42,44 @@ export default function BossReceiptsPage() {
     setError(null);
     try {
       // Dashboard has submittedReceipts count; actual list comes from /boss/dashboard or a dedicated receipts key
-      const data = await bossGet<
-        | {
-            receipts?: Receipt[];
-            submittedReceipts?: number;
-            items?: Receipt[];
-          }
-        | Receipt[]
-      >("/boss/dashboard");
+      const data = await bossGet<{ receipts?: Receipt[]; submittedReceipts?: number; items?: Receipt[] } | Receipt[]>("/boss/dashboard");
       if (Array.isArray(data)) {
         setReceipts(data);
       } else {
         // Try known shapes
-        const list =
-          (data as { receipts?: Receipt[] }).receipts ??
-          (data as { items?: Receipt[] }).items ??
-          [];
+        const list = (data as { receipts?: Receipt[] }).receipts ?? (data as { items?: Receipt[] }).items ?? [];
         setReceipts(list);
       }
     } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Could not load receipts.",
-      );
+      setError(cause instanceof Error ? cause.message : "Could not load receipts.");
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void load();
-  }, []);
+  useEffect(() => { void load(); }, []);
 
   const legGroups = groupRecordsByLeg(receipts);
-  const effectiveLegKey = legGroups.some(
-    (group) => group.key === selectedLegKey,
-  )
-    ? selectedLegKey
-    : null;
+  const effectiveLegKey = legGroups.some((group) => group.key === selectedLegKey) ? selectedLegKey : null;
   const visibleReceipts = recordsForLeg(receipts, effectiveLegKey);
 
   return (
     <div className="grid gap-5" data-testid="boss-receipts-page">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-primary">
-            Boss
-          </p>
-          <h1 className="mt-0.5 text-2xl font-bold text-foreground">
-            Submitted Receipts
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Read-only visibility into submitted receipts.
-          </p>
+          <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
+          <h1 className="mt-0.5 text-2xl font-bold text-foreground">Submitted Receipts</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Read-only visibility into submitted receipts.</p>
         </div>
-        <Button
-          onClick={() => void load()}
-          variant="outline"
-          size="sm"
-          disabled={loading}
-        >
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`}
-          />{" "}
-          Refresh
+        <Button onClick={() => void load()} variant="outline" size="sm" disabled={loading}>
+          <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </header>
 
       {error ? (
-        <div
-          className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm"
-          role="alert"
-        >
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert">
           <span className="text-destructive">{error}</span>
-          <Button
-            onClick={() => void load()}
-            variant="outline"
-            size="sm"
-            className="ml-3"
-          >
+          <Button onClick={() => void load()} variant="outline" size="sm" className="ml-3">
             <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
           </Button>
         </div>
@@ -137,95 +87,54 @@ export default function BossReceiptsPage() {
 
       {loading ? (
         <div className="grid gap-3">
-          {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 rounded-xl" />
-          ))}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
       ) : receipts.length === 0 ? (
-        <div
-          className="rounded-xl border border-dashed border-border bg-card p-8 text-center"
-          data-testid="receipts-empty"
-        >
-          <p className="font-semibold text-foreground">
-            No submitted receipts.
-          </p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Receipts submitted by Amy or the owner will appear here.
-          </p>
+        <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="receipts-empty">
+          <p className="font-semibold text-foreground">No submitted receipts.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Receipts submitted by Amy or the owner will appear here.</p>
         </div>
       ) : (
         <div className="grid gap-4">
-          <LegRecordPicker
-            groups={legGroups}
-            noun="receipt"
-            selectedLegKey={effectiveLegKey}
-            onSelect={setSelectedLegKey}
-          />
-          {effectiveLegKey ? (
-            <div className="grid gap-2">
-              {visibleReceipts.map((r) => (
-                <div
-                  key={r.id}
-                  className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[7rem_1fr_auto]"
-                  data-testid={`receipt-row-${r.id}`}
-                >
-                  {r.imageUrl ? (
-                    <a
-                      href={r.imageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block overflow-hidden rounded-lg border border-border bg-muted"
-                    >
-                      <img
-                        src={r.imageUrl}
-                        alt={`Receipt from ${r.vendor ?? "submitted expense"}`}
-                        className="h-28 w-full object-cover sm:h-24"
-                      />
-                    </a>
-                  ) : (
-                    <div className="flex h-24 items-center justify-center rounded-lg bg-muted px-2 text-center text-xs text-muted-foreground">
-                      Photo unavailable
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-foreground truncate">
-                      {r.vendor ?? r.description ?? r.category ?? "Receipt"}
-                    </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {r.submittedBy ? `${r.submittedBy} · ` : ""}
-                      {r.submittedAt
-                        ? new Date(r.submittedAt).toLocaleDateString(
-                            undefined,
-                            { month: "short", day: "numeric", year: "numeric" },
-                          )
-                        : ""}
-                      {r.category ? ` · ${r.category}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {r.amount != null ? (
-                      <span className="text-sm font-semibold text-foreground">
-                        ${Number(r.amount).toLocaleString()}
-                      </span>
-                    ) : null}
-                    <Badge
-                      variant={statusVariant(r.status)}
-                      className="capitalize"
-                    >
-                      {r.status ?? "submitted"}
-                    </Badge>
-                    {r.imageUrl ? (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={r.imageUrl} target="_blank" rel="noreferrer">
-                          Open photo
-                        </a>
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
+          <LegRecordPicker groups={legGroups} noun="receipt" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
+          {effectiveLegKey ? <div className="grid gap-2">
+          {visibleReceipts.map((r) => (
+            <div
+              key={r.id}
+              className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[7rem_1fr_auto]"
+              data-testid={`receipt-row-${r.id}`}
+            >
+              {r.imageUrl ? (
+                <a href={r.imageUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-lg border border-border bg-muted">
+                  <img src={r.imageUrl} alt={`Receipt from ${r.vendor ?? "submitted expense"}`} className="h-28 w-full object-cover sm:h-24" />
+                </a>
+              ) : <div className="flex h-24 items-center justify-center rounded-lg bg-muted px-2 text-center text-xs text-muted-foreground">Photo unavailable</div>}
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-foreground truncate">
+                  {r.vendor ?? r.description ?? r.category ?? "Receipt"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {r.submittedBy ? `${r.submittedBy} · ` : ""}
+                  {r.submittedAt
+                    ? new Date(r.submittedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })
+                    : ""}
+                  {r.category ? ` · ${r.category}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {r.amount != null ? (
+                  <span className="text-sm font-semibold text-foreground">
+                    ${Number(r.amount).toLocaleString()}
+                  </span>
+                ) : null}
+                <Badge variant={statusVariant(r.status)} className="capitalize">
+                  {r.status ?? "submitted"}
+                </Badge>
+                {r.imageUrl ? <Button asChild size="sm" variant="outline"><a href={r.imageUrl} target="_blank" rel="noreferrer">Open photo</a></Button> : null}
+              </div>
             </div>
-          ) : null}
+          ))}
+          </div> : null}
         </div>
       )}
     </div>
