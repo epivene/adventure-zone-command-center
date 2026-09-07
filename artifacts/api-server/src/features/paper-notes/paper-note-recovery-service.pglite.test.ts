@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
-import { PaperNoteRecoveryService } from "./paper-note-recovery-service";
+import { PaperNoteRecoveryRepository } from "./paper-note-recovery-repository";
 
 const batchId = "10000000-0000-4000-8000-000000000001";
 const pageId = "20000000-0000-4000-8000-000000000001";
@@ -49,17 +49,17 @@ async function setup() {
     );
   `);
   const db = drizzle(client, { schema });
-  return { client, service: new PaperNoteRecoveryService(db as never) };
+  return { client, repository: new PaperNoteRecoveryRepository(db as never) };
 }
 
-describe("PaperNoteRecoveryService", () => {
+describe("PaperNoteRecoveryRepository", () => {
   const clients: PGlite[] = [];
   afterEach(async () => Promise.all(clients.splice(0).map((client) => client.close())));
 
   it("queues only a retryable owner page and clears its safe error", async () => {
-    const { client, service } = await setup();
+    const { client, repository } = await setup();
     clients.push(client);
-    await service.retryPage({ createdBy: "owner", batchId, pageId, now: new Date("2026-08-20T20:30:00Z") });
+    await repository.retryPage("owner", batchId, pageId, new Date("2026-08-20T20:30:00Z"));
     expect((await client.query(`select status, last_error_code, lease_token from paper_note_pages where id='${pageId}'`)).rows)
       .toEqual([{ status: "queued", last_error_code: null, lease_token: null }]);
     expect((await client.query(`select status from paper_note_batches where id='${batchId}'`)).rows)
@@ -67,12 +67,15 @@ describe("PaperNoteRecoveryService", () => {
   });
 
   it("creates a manual needs-review entry without inventing structured facts", async () => {
-    const { client, service } = await setup();
+    const { client, repository } = await setup();
     clients.push(client);
-    await service.addManualEntry({
-      createdBy: "owner", batchId, pageId, transcription: "Example Fair — number hard to read",
-      now: new Date("2026-08-20T20:30:00Z"),
-    });
+    await repository.addManualEntry(
+      "owner",
+      batchId,
+      pageId,
+      "Example Fair — number hard to read",
+      new Date("2026-08-20T20:30:00Z"),
+    );
     const row = (await client.query(`select state, extraction_payload from paper_note_entries where page_id='${pageId}'`)).rows[0] as any;
     expect(row.state).toBe("needs_review");
     expect(row.extraction_payload).toMatchObject({
@@ -86,9 +89,9 @@ describe("PaperNoteRecoveryService", () => {
   });
 
   it("marks an empty failed page terminal without creating an entry", async () => {
-    const { client, service } = await setup();
+    const { client, repository } = await setup();
     clients.push(client);
-    await service.markReviewedEmpty({ createdBy: "owner", batchId, pageId, now: new Date("2026-08-20T20:30:00Z") });
+    await repository.markReviewedEmpty("owner", batchId, pageId, new Date("2026-08-20T20:30:00Z"));
     expect((await client.query(`select status from paper_note_pages where id='${pageId}'`)).rows)
       .toEqual([{ status: "reviewed_empty" }]);
     expect((await client.query(`select count(*)::int as count from paper_note_entries`)).rows)
