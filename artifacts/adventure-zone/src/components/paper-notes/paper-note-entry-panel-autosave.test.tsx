@@ -70,7 +70,7 @@ describe("PaperNoteEntryPanel autosave serialization", () => {
 
     const first = capturedProps.onSave(reviewA, 2);
     const second = capturedProps.onSave(reviewB, 2);
-    expect(savePaperNoteEntryReview).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(savePaperNoteEntryReview).toHaveBeenCalledTimes(1));
     expect(savePaperNoteEntryReview.mock.calls[0]?.[2]).toBe(2);
 
     await act(async () => {

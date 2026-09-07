@@ -65,7 +65,7 @@ describe("PaperNoteDestinationPicker", () => {
     );
 
     expect(screen.getByText(/Matched to existing profile/i)).toBeInTheDocument();
-    expect(screen.getByText("County Fair")).toBeInTheDocument();
+    expect(screen.getByText(/County Fair · Minot, ND/i)).toBeInTheDocument();
     expect(screen.queryByLabelText("Search existing profiles")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Change matched profile/i }));
@@ -94,7 +94,7 @@ describe("PaperNoteDestinationPicker", () => {
       />,
     );
 
-    expect(screen.getByText("County Fair")).toBeInTheDocument();
+    expect(screen.getByText(/County Fair · Minot, ND/i)).toBeInTheDocument();
     expect(screen.getByText(/same phone number/i)).toBeInTheDocument();
     expect(screen.queryByText("Existing CRM profile")).not.toBeInTheDocument();
   });
