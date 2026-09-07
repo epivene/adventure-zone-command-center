@@ -33,7 +33,7 @@ jobs:
           pnpm run typecheck:libs
           pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
           set -e
-          count=$(grep -cE 'operational-calendar-renderer\.test\.ts.*readonly.*zone' /tmp/api-before.log || true)
+          count=$(grep -cE 'operational-calendar-renderer\.test\.ts\((26|48),.*error TS2345' /tmp/api-before.log || true)
           if [ "$count" -lt 2 ]; then
             echo "Expected readonly package fixture errors were not present." >&2
             exit 1
@@ -65,7 +65,7 @@ jobs:
           set +e
           pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
           set -e
-          if grep -E 'operational-calendar-renderer\.test\.ts.*readonly.*zone' /tmp/api-after.log; then
+          if grep -E 'operational-calendar-renderer\.test\.ts\((26|48),.*error TS2345' /tmp/api-after.log; then
             echo "Readonly package fixture errors remain." >&2
             exit 1
           fi
