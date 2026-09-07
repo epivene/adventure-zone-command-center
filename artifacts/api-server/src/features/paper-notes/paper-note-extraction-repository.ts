@@ -9,6 +9,7 @@ import {
   paperNotePages,
 } from "@/db/schema";
 import type { PaperNotePageStage } from "./paper-note-types";
+import { firstQueryRow } from "./paper-note-query-rows";
 import type {
   PaperNoteExtraction,
   PaperNotePageSegmentation,
@@ -48,6 +49,20 @@ type ClaimedRow = {
   attemptCount: number;
 };
 
+function isClaimedRow(row: Record<string, unknown>): row is ClaimedRow {
+  return typeof row.pageId === "string"
+    && typeof row.batchId === "string"
+    && typeof row.originalObjectKey === "string"
+    && (row.analysisObjectKey === null || typeof row.analysisObjectKey === "string")
+    && typeof row.mimeType === "string"
+    && typeof row.rotationDegrees === "number"
+    && typeof row.attemptCount === "number";
+}
+
+function isCountRow(row: Record<string, unknown>): row is { count: number } {
+  return typeof row.count === "number";
+}
+
 export class PaperNoteExtractionRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
@@ -83,7 +98,7 @@ export class PaperNoteExtractionRepository {
         for update of pages skip locked
         limit 1
       `);
-      const row = (result as { rows?: ClaimedRow[] }).rows?.[0];
+      const row = firstQueryRow(result, isClaimedRow);
       if (!row) return null;
 
       const leaseToken = randomUUID();
@@ -282,7 +297,7 @@ export class PaperNoteExtractionRepository {
       where batch_id = ${batchId}::uuid
         and status not in ('extracted', 'needs_retry', 'reviewed_empty')
     `);
-    const unresolved = Number((result as { rows?: Array<{ count: number }> }).rows?.[0]?.count ?? 0);
+    const unresolved = Number(firstQueryRow(result, isCountRow)?.count ?? 0);
     if (unresolved === 0) {
       await tx.execute(sql`
         update paper_note_batches
