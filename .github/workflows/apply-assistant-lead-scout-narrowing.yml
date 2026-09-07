@@ -1,0 +1,64 @@
+name: Apply assistant Lead Scout narrowing
+
+on:
+  push:
+    branches:
+      - fix/assistant-lead-scout-narrowing
+    paths:
+      - ".github/workflows/apply-assistant-lead-scout-narrowing.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/assistant-lead-scout-narrowing
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Narrow Lead Scout discovery by successful result shape
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('artifacts/api-server/src/routes/assistant.ts')
+          text = path.read_text()
+          old = '''      if ("kind" in discovery && discovery.kind === "needs_clarification") {\n        res.json({\n          kind: "lead_discovery_clarification",\n          text: discovery.message,\n          runId: discovery.runId,\n        });\n        return;\n      }\n      res.json({\n        kind: "lead_discovery",\n        text: discovery.crmMatches.length\n          ? `I found ${discovery.crmMatches.length} existing Command Center ${discovery.crmMatches.length === 1 ? "possibility" : "possibilities"}.`\n          : "I did not find a strong existing Command Center match for those criteria.",\n        run: discovery,\n      });'''
+          new = '''      if (!("crmMatches" in discovery)) {\n        res.json({\n          kind: "lead_discovery_clarification",\n          text: discovery.message,\n          runId: discovery.runId,\n        });\n        return;\n      }\n      res.json({\n        kind: "lead_discovery",\n        text: discovery.crmMatches.length\n          ? `I found ${discovery.crmMatches.length} existing Command Center ${discovery.crmMatches.length === 1 ? "possibility" : "possibilities"}.`\n          : "I did not find a strong existing Command Center match for those criteria.",\n        run: discovery,\n      });'''
+          if old not in text:
+              raise SystemExit('assistant Lead Scout branch not found')
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Run focused Assistant tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/assistant/lead-scout-service.test.ts
+          src/features/assistant/general-assistant.test.ts
+      - name: Commit verified production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add artifacts/api-server/src/routes/assistant.ts
+          git diff --cached --quiet || git commit -m "fix: narrow Lead Scout assistant result"
+          git push origin HEAD:fix/assistant-lead-scout-narrowing
+      - name: Build shared libraries for API typecheck
+        run: |
+          pnpm --filter @workspace/db build
+          pnpm --filter @workspace/api-zod build
+      - name: Verify assistant route compiler error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-typecheck.log
+          set -e
+          if grep -E 'src/routes/assistant\.ts\(12[23],' /tmp/api-typecheck.log; then
+            echo 'Assistant Lead Scout narrowing errors remain.' >&2
+            exit 1
+          fi
