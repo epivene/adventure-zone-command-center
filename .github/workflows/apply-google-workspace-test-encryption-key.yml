@@ -1,0 +1,95 @@
+name: Apply Google Workspace test encryption key fixtures
+
+on:
+  push:
+    branches:
+      - fix/google-workspace-test-encryption-key
+    paths:
+      - ".github/workflows/apply-google-workspace-test-encryption-key.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/google-workspace-test-encryption-key
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Confirm stale encryption-key fixture errors exist
+        run: |
+          set +e
+          pnpm run typecheck:libs
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-before.log
+          set -e
+          for file in operational-calendar-client.test.ts google-gmail-delivery.test.ts google-gmail-draft.test.ts; do
+            grep -E "${file//./\\.}.*tokenEncryptionKey" /tmp/api-before.log >/dev/null || {
+              echo "Expected tokenEncryptionKey type error was not present for $file." >&2
+              exit 1
+            }
+          done
+      - name: Use binary encryption-key fixtures
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          paths = [
+            Path('artifacts/api-server/src/features/google-workspace/calendar/operational-calendar-client.test.ts'),
+            Path('artifacts/api-server/src/features/google-workspace/google-gmail-delivery.test.ts'),
+            Path('artifacts/api-server/src/features/google-workspace/google-gmail-draft.test.ts'),
+          ]
+          replacements = {
+            'tokenEncryptionKey: Buffer.alloc(32, 1).toString("base64"),': 'tokenEncryptionKey: Buffer.alloc(32, 1),',
+            'tokenEncryptionKey: "x".repeat(32),': 'tokenEncryptionKey: Buffer.alloc(32, 1),',
+          }
+          changed = 0
+          for path in paths:
+            text = path.read_text()
+            original = text
+            for old, new in replacements.items():
+              text = text.replace(old, new)
+            if text == original:
+              raise SystemExit(f'No stale encryption key fixture found in {path}')
+            path.write_text(text)
+            changed += 1
+          if changed != 3:
+            raise SystemExit(f'Expected 3 files, changed {changed}')
+          PY
+      - name: Run focused Google Workspace tests
+        run: |
+          pnpm --filter @workspace/api-server exec vitest run \
+            src/features/google-workspace/calendar/operational-calendar-client.test.ts \
+            src/features/google-workspace/google-gmail-delivery.test.ts \
+            src/features/google-workspace/google-gmail-draft.test.ts
+      - name: Commit verified fixture patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            artifacts/api-server/src/features/google-workspace/calendar/operational-calendar-client.test.ts \
+            artifacts/api-server/src/features/google-workspace/google-gmail-delivery.test.ts \
+            artifacts/api-server/src/features/google-workspace/google-gmail-draft.test.ts
+          git diff --cached --quiet || git commit -m "test: use binary Google Workspace encryption keys"
+          git push origin HEAD:fix/google-workspace-test-encryption-key
+      - run: pnpm run typecheck:libs
+      - name: Verify encryption-key fixture errors are gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api-after.log
+          set -e
+          for file in operational-calendar-client.test.ts google-gmail-delivery.test.ts google-gmail-draft.test.ts; do
+            if grep -E "${file//./\\.}.*tokenEncryptionKey" /tmp/api-after.log; then
+              echo "tokenEncryptionKey type error remains in $file." >&2
+              exit 1
+            fi
+          done
