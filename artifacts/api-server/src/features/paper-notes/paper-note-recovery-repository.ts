@@ -7,8 +7,31 @@ import {
   paperNotePages,
 } from "@/db/schema";
 import type { PaperNoteExtraction } from "./paper-note-extraction-schema";
+import { firstQueryRow } from "./paper-note-query-rows";
 
 type DrizzleDatabase = typeof database;
+
+type LockedPageRow = {
+  id: string;
+  status: string;
+  extractedAt: Date | null;
+  batchStatus: string;
+};
+
+function isValueRow(row: Record<string, unknown>): row is { value: number } {
+  return typeof row.value === "number";
+}
+
+function isCountRow(row: Record<string, unknown>): row is { count: number } {
+  return typeof row.count === "number";
+}
+
+function isLockedPageRow(row: Record<string, unknown>): row is LockedPageRow {
+  return typeof row.id === "string"
+    && typeof row.status === "string"
+    && (row.extractedAt === null || row.extractedAt instanceof Date)
+    && typeof row.batchStatus === "string";
+}
 
 export type PaperNoteRecoveryErrorCode =
   | "BATCH_NOT_FOUND"
@@ -121,9 +144,7 @@ export class PaperNoteRecoveryRepository {
         from paper_note_entries
         where page_id = ${pageId}::uuid
       `);
-      const currentMax = Number(
-        (orderResult as { rows?: Array<{ value: number }> }).rows?.[0]?.value ?? -1,
-      );
+      const currentMax = Number(firstQueryRow(orderResult, isValueRow)?.value ?? -1);
       const extraction = manualExtraction(clean);
       const [entry] = await tx.insert(paperNoteEntries).values({
         batchId,
@@ -208,14 +229,7 @@ export class PaperNoteRecoveryRepository {
       for update of pages, batches
       limit 1
     `);
-    const row = (result as {
-      rows?: Array<{
-        id: string;
-        status: string;
-        extractedAt: Date | null;
-        batchStatus: string;
-      }>;
-    }).rows?.[0];
+    const row = firstQueryRow(result, isLockedPageRow);
     if (!row) {
       throw new PaperNoteRecoveryError(
         "PAGE_NOT_FOUND",
@@ -238,9 +252,7 @@ export class PaperNoteRecoveryRepository {
       where batch_id = ${batchId}::uuid
         and status not in ('extracted', 'needs_retry', 'reviewed_empty')
     `);
-    const unresolved = Number(
-      (result as { rows?: Array<{ count: number }> }).rows?.[0]?.count ?? 0,
-    );
+    const unresolved = Number(firstQueryRow(result, isCountRow)?.count ?? 0);
     await tx.execute(unresolved === 0 ? sql`
       update paper_note_batches
       set status = 'review',
