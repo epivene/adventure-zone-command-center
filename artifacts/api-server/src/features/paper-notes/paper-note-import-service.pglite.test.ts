@@ -10,6 +10,13 @@ const pageId = "20000000-0000-4000-8000-000000000001";
 const entryId = "30000000-0000-4000-8000-000000000001";
 const requestKey = "40000000-0000-4000-8000-000000000001";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 const review = {
   event: { name: "County Fair", city: "Minot", region: "ND", venue: "Fairgrounds", eventDateText: "June 22", startsOn: "2026-06-22", endsOn: null, pageYearConfirmed: true },
   activity: { occurredOn: null, method: "call", outcome: "Requested info", summary: "Spoke with Tina." },
@@ -40,6 +47,7 @@ async function harness() {
       id uuid primary key,
       batch_id uuid not null,
       page_id uuid not null,
+      source_order integer not null default 0,
       state text not null,
       review_payload jsonb not null,
       extraction_payload jsonb not null,
@@ -102,7 +110,7 @@ async function harness() {
     create table contact_phones (
       id uuid primary key default gen_random_uuid(), contact_id uuid not null, number text not null,
       normalized_number text, type text not null default 'unknown', extension text, label text,
-      instructions text, status text not null default 'active', primary boolean not null default false,
+      instructions text, status text not null default 'active', "primary" boolean not null default false,
       source text not null default 'local', source_paper_note_entry_id uuid, do_not_call_at timestamptz,
       do_not_call_reason text, created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
@@ -110,7 +118,7 @@ async function harness() {
       id uuid primary key default gen_random_uuid(), organization_id uuid not null, organization_location_id uuid,
       number text not null, normalized_number text, type text not null default 'unknown', extension text,
       normalized_extension text, label text, instructions text, status text not null default 'active',
-      primary boolean not null default false, source text not null default 'local', source_paper_note_entry_id uuid,
+      "primary" boolean not null default false, source text not null default 'local', source_paper_note_entry_id uuid,
       created_at timestamptz not null default now(), updated_at timestamptz not null default now()
     );
     create table activities (
@@ -168,8 +176,8 @@ describe("PaperNoteImportService", () => {
       source_type: "paper_note",
       paper_note_entry_id: entryId,
     });
-    expect(String(activities[0]?.body)).toContain("Original reminder: Call Monday. This was a historical reminder and was not added as a current task.");
-    expect(String(activities[0]?.body)).toContain("Starred on original paper.");
+    expect(String(rowValue(activities, 0, "body"))).toContain("Original reminder: Call Monday. This was a historical reminder and was not added as a current task.");
+    expect(String(rowValue(activities, 0, "body"))).toContain("Starred on original paper.");
   });
 
   it("returns the stored result on retry without duplicating CRM rows", async () => {

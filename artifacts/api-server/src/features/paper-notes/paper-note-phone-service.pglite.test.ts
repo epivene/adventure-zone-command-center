@@ -8,6 +8,13 @@ const organizationId = "10000000-0000-4000-8000-000000000001";
 const contactId = "20000000-0000-4000-8000-000000000001";
 const entryId = "30000000-0000-4000-8000-000000000001";
 
+function rowValue(rows: unknown[], index: number, key: string): unknown {
+  const row = rows[index];
+  return row && typeof row === "object" && !Array.isArray(row) && key in row
+    ? (row as Record<string, unknown>)[key]
+    : undefined;
+}
+
 async function harness() {
   const client = new PGlite();
   await client.exec(`
@@ -37,7 +44,7 @@ async function harness() {
       label text,
       instructions text,
       status text not null default 'active',
-      primary boolean not null default false,
+      "primary" boolean not null default false,
       source text not null default 'local',
       source_paper_note_entry_id uuid,
       do_not_call_at timestamptz,
@@ -60,7 +67,7 @@ async function harness() {
       label text,
       instructions text,
       status text not null default 'active',
-      primary boolean not null default false,
+      "primary" boolean not null default false,
       source text not null default 'local',
       source_paper_note_entry_id uuid,
       created_at timestamptz not null default now(),
@@ -110,12 +117,12 @@ describe("PaperNotePhoneService", () => {
     const { client, db, service } = await harness();
     clients.push(client);
     const inserted = await client.query(
-      `insert into contact_phones(contact_id, number, normalized_number, type, label, status, primary, source)
+      `insert into contact_phones(contact_id, number, normalized_number, type, label, status, "primary", source)
        values($1, '435-890-6349', '+14358906349', 'office', 'saved label', 'active', false, 'local')
        returning id`,
       [contactId],
     );
-    const savedId = String(inserted.rows[0]?.id);
+    const savedId = String(rowValue(inserted.rows, 0, "id"));
 
     const result = await service.apply(db as never, {
       owner: { kind: "contact", contactId },
@@ -145,7 +152,7 @@ describe("PaperNotePhoneService", () => {
   it("replaces primary only when explicitly selected and syncs the legacy field", async () => {
     const { client, db, service } = await harness();
     clients.push(client);
-    await client.query(`insert into contact_phones(contact_id, number, normalized_number, primary) values($1, '701-555-0100', '+17015550100', true)`, [contactId]);
+    await client.query(`insert into contact_phones(contact_id, number, normalized_number, "primary") values($1, '701-555-0100', '+17015550100', true)`, [contactId]);
 
     await service.apply(db as never, {
       owner: { kind: "contact", contactId },
@@ -155,15 +162,15 @@ describe("PaperNotePhoneService", () => {
       sourcePaperNoteEntryId: entryId,
     }, new Date());
 
-    expect((await client.query(`select number from contact_phones where primary = true`)).rows).toEqual([{ number: "208-555-0142" }]);
+    expect((await client.query(`select number from contact_phones where "primary" = true`)).rows).toEqual([{ number: "208-555-0142" }]);
     expect((await client.query(`select phone, normalized_phone from contacts where id = $1`, [contactId])).rows).toEqual([{ phone: "208-555-0142", normalized_phone: "+12085550142" }]);
   });
 
   it("inactivates an old number without ever touching Do Not Call", async () => {
     const { client, db, service } = await harness();
     clients.push(client);
-    const inserted = await client.query(`insert into contact_phones(contact_id, number, normalized_number, primary) values($1, '701-555-0100', '+17015550100', true) returning id`, [contactId]);
-    const oldId = String(inserted.rows[0]?.id);
+    const inserted = await client.query(`insert into contact_phones(contact_id, number, normalized_number, "primary") values($1, '701-555-0100', '+17015550100', true) returning id`, [contactId]);
+    const oldId = String(rowValue(inserted.rows, 0, "id"));
 
     await service.apply(db as never, {
       owner: { kind: "contact", contactId },
