@@ -25,7 +25,7 @@ const tables = vi.hoisted(() => ({
   trips: { id: "trips.id", name: "trips.name", travelLegId: "trips.travelLegId" },
 }));
 
-const legs = [{
+const routeLegs = [{
   id: "leg-kristy",
   name: "Kristy",
   color: "#dc2626",
@@ -44,6 +44,12 @@ const legs = [{
   defaultVehicleName: null,
   defaultMpg: null,
 }];
+
+const databaseLegs = routeLegs.map((leg, index) => ({
+  ...leg,
+  createdAt: new Date(`2026-01-0${index + 1}T00:00:00.000Z`),
+  updatedAt: new Date(`2026-02-0${index + 1}T00:00:00.000Z`),
+}));
 
 const rawEvents = [{
   id: "booking-kristy",
@@ -64,7 +70,7 @@ const rawEvents = [{
   legAssignmentExplanation: null,
   routeBucket: "confirmed",
   locationQuality: "city",
-  locationLabel: "Moorcroft, WY",
+  locationLabel: "Moorcroft Jubilee Grounds, 123 Main St, Moorcroft, WY",
   seasonYear: 2026,
 }, {
   id: "booking-hulk",
@@ -139,7 +145,7 @@ vi.mock("@workspace/db", () => ({
           const value = table === tables.bookings
             ? [rawEvents[0]]
             : table === tables.travelLegs
-              ? legs
+              ? databaseLegs
               : [];
           return Promise.resolve(value).then(resolve, reject);
         },
@@ -200,7 +206,7 @@ function app() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.listTravelLegs.mockResolvedValue(legs);
+  mocks.listTravelLegs.mockResolvedValue(routeLegs);
   mocks.listMapEvents.mockResolvedValue(rawEvents);
   mocks.resolveRouteMapEvents.mockResolvedValue(resolvedEvents);
 });
@@ -217,7 +223,10 @@ describe("Boss schedule route parity", () => {
         latitude: 44.2633,
         longitude: -104.9505,
         mappingState: "mapped_city",
+        routeBucket: "confirmed",
+        travelLegAssignmentKind: "assigned",
         travelLegName: "Kristy",
+        locationLabel: "Moorcroft, WY",
       }),
       expect.objectContaining({
         id: "booking-hulk",
@@ -227,5 +236,13 @@ describe("Boss schedule route parity", () => {
         travelLegName: "Hulk",
       }),
     ]));
+    expect(response.body.legs[0]).toMatchObject({
+      id: "leg-kristy",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-02-01T00:00:00.000Z",
+    });
+    expect(response.body.bookings[0]).not.toHaveProperty("venueName");
+    expect(response.body.bookings[0]).not.toHaveProperty("address1");
+    expect(response.body.bookings[0].locationLabel).not.toContain("123 Main St");
   });
 });
