@@ -32,6 +32,7 @@ export type BusinessDocumentRecord = {
   issueDate: string | null;
   expirationDate: string | null;
   notes: string | null;
+  sourceKinds: Array<"manual" | "gmail" | "drive" | "business_source" | "google_profile_file" | "design_asset" | "design_output">;
   createdAt: string;
   updatedAt: string;
   fileAvailable: boolean;

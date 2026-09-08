@@ -37,7 +37,7 @@ describe("BusinessDocumentImportPage", () => {
     fireEvent.change(screen.getByLabelText("Gmail start date"), { target: { value: "2025-01-01" } });
     fireEvent.change(screen.getByLabelText("Gmail end date"), { target: { value: "2026-01-01" } });
     fireEvent.click(screen.getByRole("button", { name: "Preview Gmail attachments" }));
-    expect(await screen.findByText("4 attachments discovered")).toBeVisible();
+    expect(await screen.findByText(/4 attachments discovered in this quick preview/)).toBeVisible();
     expect(screen.getByRole("button", { name: "Start Gmail pilot" })).toBeVisible();
     expect(apiPost).toHaveBeenCalledWith("/business-document-imports/gmail/preview", { after: "2025-01-01", before: "2026-01-01" });
   });

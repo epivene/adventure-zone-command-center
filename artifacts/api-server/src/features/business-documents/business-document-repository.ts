@@ -60,6 +60,17 @@ function documentLinks(value: unknown): BusinessDocumentView["links"] {
   });
 }
 
+function sourceKinds(value: unknown): BusinessDocumentView["sourceKinds"] {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try { parsed = JSON.parse(parsed); } catch { return []; }
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.filter((item): item is BusinessDocumentView["sourceKinds"][number] =>
+    ["manual", "gmail", "drive", "business_source", "google_profile_file", "design_asset", "design_output"].includes(String(item)),
+  );
+}
+
 function jsonObject(value: unknown): Record<string, unknown> {
   if (typeof value === "string") {
     try { value = JSON.parse(value); } catch { return {}; }
@@ -80,6 +91,7 @@ function toView(row: Record<string, unknown>): BusinessDocumentView {
     issueDate: isoDate(row.issue_date),
     expirationDate: isoDate(row.expiration_date),
     notes: typeof row.notes === "string" ? row.notes : null,
+    sourceKinds: sourceKinds(row.source_kinds),
     fileAvailable: row.file_available === true,
     links: documentLinks(row.links),
     createdAt: isoTime(row.created_at),
@@ -343,7 +355,12 @@ export class BusinessDocumentRepository {
              ) ORDER BY document_link.created_at)
              FROM business_document_links document_link
              WHERE document_link.document_id = d.id
-           ), '[]'::json) AS links
+           ), '[]'::json) AS links,
+           COALESCE((
+             SELECT json_agg(DISTINCT document_source.source_kind)
+             FROM business_document_sources document_source
+             WHERE document_source.document_id = d.id
+           ), '[]'::json) AS source_kinds
          FROM business_documents d
          WHERE ${conditions.join(" AND ")}
          ORDER BY d.updated_at DESC, d.id DESC LIMIT $${limitParameter} OFFSET $${offsetParameter}`,
@@ -371,7 +388,12 @@ export class BusinessDocumentRepository {
              ) ORDER BY document_link.created_at)
              FROM business_document_links document_link
              WHERE document_link.document_id = d.id
-           ), '[]'::json) AS links
+           ), '[]'::json) AS links,
+           COALESCE((
+             SELECT json_agg(DISTINCT document_source.source_kind)
+             FROM business_document_sources document_source
+             WHERE document_source.document_id = d.id
+           ), '[]'::json) AS source_kinds
          FROM business_documents d
          WHERE d.id = $1 AND d.lifecycle <> 'deleted' LIMIT 1`,
         [documentId],

@@ -36,14 +36,19 @@ describe("BusinessDocumentImportService", () => {
     expect(source.candidate.mock.calls.map(([file]) => file.id)).toEqual(["file-2", "file-3"]);
   });
 
-  it("previews Gmail metadata without materializing attachments", async () => {
+  it("previews only a bounded Gmail page without scanning the full historical window", async () => {
     const { source, store, ingestion } = setup();
     const gmailSource = {
-      inventoryHistoricalGmail: async function* () { yield { messageId: "m1", attachmentId: "a1" }; },
+      inventoryPreviewPage: vi.fn(async () => ({
+        items: [{ messageId: "m1", attachmentId: "a1" }],
+        hasMore: true,
+      })),
+      inventoryHistoricalGmail: async function* () { throw new Error("full historical scan must not run during preview"); },
       candidate: vi.fn(),
     };
     const service = new BusinessDocumentImportService({ source: source as any, gmailSource: gmailSource as any, store, ingestion: ingestion as any, accountKey: "workspace" });
-    await expect(service.previewGmail({ after: "2025-01-01", before: "2026-01-01" }, "owner")).resolves.toMatchObject({ discovered: 1 });
+    await expect(service.previewGmail({ after: "2025-01-01", before: "2026-01-01" }, "owner")).resolves.toMatchObject({ discovered: 1, hasMore: true });
+    expect(gmailSource.inventoryPreviewPage).toHaveBeenCalledWith({ after: "2025-01-01", before: "2026-01-01" }, 10);
     expect(gmailSource.candidate).not.toHaveBeenCalled();
     expect(store.create).toHaveBeenCalledWith(expect.objectContaining({ sourceKind: "gmail", mode: "preview", scope: { after: "2025-01-01", before: "2026-01-01" } }));
   });
