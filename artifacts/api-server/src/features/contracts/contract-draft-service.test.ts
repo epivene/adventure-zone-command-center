@@ -89,14 +89,14 @@ class MemoryDraftRepository implements ContractDraftRepository {
   }
 }
 
-function service(repository = new MemoryDraftRepository()) {
+function service(repository = new MemoryDraftRepository(), loadedSource = source) {
   const generatedFiles: Array<{ contractVersionId: string; bytes: Uint8Array; actorId: string }> = [];
   return {
     repository,
     generatedFiles,
     service: new ContractDraftService({
       repository,
-      sources: { load: async (bookingId) => bookingId === source.booking.id ? source : null },
+      sources: { load: async (bookingId) => bookingId === loadedSource.booking.id ? loadedSource : null },
       templates: { active: async () => ({ ...contractTemplateV1, state: "active", id: "template-1" }) },
       render: renderContract,
       generatePdf: async () => ({ bytes: new TextEncoder().encode("%PDF-1.7\ncontract") }),
@@ -107,6 +107,15 @@ function service(repository = new MemoryDraftRepository()) {
 }
 
 describe("ContractDraftService", () => {
+  it("creates an incomplete draft when the booking has no package selection", async () => {
+    const setup = service(new MemoryDraftRepository(), { ...source, packages: [] });
+
+    const result = await setup.service.start({ bookingId: source.booking.id, actorId: "owner" });
+
+    expect(result.draft.storedValues.contract.packages).toEqual([]);
+    expect(result.draft.validationState.ready).toBe(false);
+  });
+
   it("creates one resumable draft with autofill and setting snapshots", async () => {
     const setup = service();
     const first = await setup.service.start({ bookingId: source.booking.id, actorId: "owner" });
