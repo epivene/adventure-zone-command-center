@@ -11,6 +11,7 @@ import {
   ignoreGoogleWorkspaceValidationReview,
   resolveGoogleWorkspaceValidationReview,
   retryGoogleWorkspaceGmailMutation,
+  runGoogleWorkspaceRecentValidation,
   type GoogleProfileLabelSyncResult,
   type GoogleValidationReviewItem,
 } from "@/features/google-workspace/google-workspace-client";
@@ -70,14 +71,17 @@ function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
 }
 
 export function GoogleValidationReview({
+  checkGmailOnMount = false,
   onPendingCountChange,
   showHistory = false,
 }: {
+  checkGmailOnMount?: boolean;
   onPendingCountChange?(count: number): void;
   showHistory?: boolean;
 } = {}) {
   const [items, setItems] = useState<GoogleValidationReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [checking, setChecking] = useState(false);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gmailStatus, setGmailStatus] = useState<GmailNotice | null>(null);
@@ -86,7 +90,7 @@ export function GoogleValidationReview({
   const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  async function load() {
+  async function load(): Promise<boolean> {
     setError(null);
     try {
       const result = await getGoogleWorkspaceValidationReview();
@@ -94,16 +98,34 @@ export function GoogleValidationReview({
       const pendingCount = result.items.filter((item) => item.state === "pending").length;
       onPendingCountChange?.(pendingCount);
       window.dispatchEvent(new CustomEvent("email-review-count-changed", { detail: pendingCount }));
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load email review items.");
+      return false;
     } finally {
       setLoading(false);
     }
   }
 
+  async function checkEmails() {
+    setChecking(true);
+    let checkFailed = false;
+    try {
+      await runGoogleWorkspaceRecentValidation(100);
+    } catch {
+      checkFailed = true;
+    }
+    const queueLoaded = await load();
+    if (checkFailed && queueLoaded) {
+      setError("Could not check Gmail. Showing saved email review items.");
+    }
+    setChecking(false);
+  }
+
   useEffect(() => {
-    void load();
-  }, []);
+    if (checkGmailOnMount) void checkEmails();
+    else void load();
+  }, [checkGmailOnMount]);
 
   const pending = useMemo(
     () => items.filter((item) => item.state === "pending"),
@@ -265,22 +287,38 @@ export function GoogleValidationReview({
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading email review…</p>;
+    return (
+      <p className="text-sm text-slate-500">
+        {checking ? "Checking Gmail…" : "Loading email review…"}
+      </p>
+    );
   }
 
   return (
     <section className="grid gap-4 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/20">
-      <div>
-        <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
-          Needs Review
-        </h3>
-        <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-          Assign uncertain business email to an existing profile, create a new profile for a new opportunity, or ignore it if it does not belong in the CRM.
-        </p>
-        {resolvedCount || ignoredCount ? (
-          <p className="mt-1 text-xs text-slate-500">
-            {resolvedCount} resolved · {ignoredCount} ignored
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+            Needs Review
+          </h3>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+            Assign uncertain business email to an existing profile, create a new profile for a new opportunity, or ignore it if it does not belong in the CRM.
           </p>
+          {resolvedCount || ignoredCount ? (
+            <p className="mt-1 text-xs text-slate-500">
+              {resolvedCount} resolved · {ignoredCount} ignored
+            </p>
+          ) : null}
+        </div>
+        {checkGmailOnMount ? (
+          <button
+            className="button-secondary shrink-0 px-3 py-2 text-sm"
+            disabled={checking || busyMessageId !== null || retryingMutationId !== null}
+            onClick={() => void checkEmails()}
+            type="button"
+          >
+            {checking ? "Checking Gmail…" : "Check emails"}
+          </button>
         ) : null}
       </div>
 

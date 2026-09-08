@@ -11,6 +11,7 @@ const { createFromReview } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => ({
+  runGoogleWorkspaceRecentValidation: vi.fn(async () => ({})),
   getGoogleWorkspaceValidationReview: vi.fn(async () => ({
     items: [{
       messageId: "m1",

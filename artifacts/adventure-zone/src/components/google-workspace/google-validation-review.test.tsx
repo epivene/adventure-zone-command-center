@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
+  runGoogleWorkspaceRecentValidation: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
   retryGoogleWorkspaceGmailMutation: vi.fn(),
@@ -34,6 +35,7 @@ const item = {
 };
 
 beforeEach(() => {
+  client.runGoogleWorkspaceRecentValidation.mockResolvedValue({});
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
     ok: true,
@@ -57,6 +59,75 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
+  it("checks recent Gmail before loading the review queue when opted in", async () => {
+    render(<GoogleValidationReview checkGmailOnMount />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100);
+  });
+
+  it("shows Gmail-checking progress during the opening scan", async () => {
+    let finishCheck!: () => void;
+    client.runGoogleWorkspaceRecentValidation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCheck = () => resolve({});
+      }),
+    );
+
+    render(<GoogleValidationReview checkGmailOnMount />);
+
+    expect(screen.getByText("Checking Gmail…")).toBeInTheDocument();
+    finishCheck();
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+  });
+
+  it("lets the owner check Gmail again when opted in", async () => {
+    render(<GoogleValidationReview checkGmailOnMount />);
+    await screen.findByText("County Fair application");
+    client.runGoogleWorkspaceRecentValidation.mockClear();
+    client.getGoogleWorkspaceValidationReview.mockClear();
+
+    let finishCheck!: () => void;
+    client.runGoogleWorkspaceRecentValidation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCheck = () => resolve({});
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Check emails" }));
+
+    const checkingButton = screen.getByRole("button", { name: "Checking Gmail…" });
+    expect(checkingButton).toBeDisabled();
+    await waitFor(() =>
+      expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100),
+    );
+    finishCheck();
+    await waitFor(() =>
+      expect(client.getGoogleWorkspaceValidationReview).toHaveBeenCalledTimes(1),
+    );
+    expect(await screen.findByRole("button", { name: "Check emails" })).toBeEnabled();
+  });
+
+  it("loads only the saved queue in shared views", async () => {
+    render(<GoogleValidationReview />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(client.runGoogleWorkspaceRecentValidation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Check emails" })).not.toBeInTheDocument();
+  });
+
+  it("loads the saved queue when Gmail checking fails", async () => {
+    client.runGoogleWorkspaceRecentValidation.mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
+    );
+
+    render(<GoogleValidationReview checkGmailOnMount />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not check Gmail. Showing saved email review items.",
+    );
+  });
+
   it("shows pending items and lets the owner use a suggested profile", async () => {
     render(<GoogleValidationReview />);
 
