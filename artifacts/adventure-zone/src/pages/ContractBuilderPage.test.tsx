@@ -45,6 +45,35 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("ContractBuilderPage", () => {
+  it("renders an autofilled draft whose optional builder sections have not been saved yet", async () => {
+    mocks.getDraft.mockResolvedValue({
+      draft: {
+        ...draft(),
+        storedValues: {
+          ...draft().storedValues,
+          contract: {
+            organizationId: "org-1",
+            organizationName: "Meeteetse Celebration",
+            bookingId: "booking-1",
+            eventName: "Labor Day Celebration",
+            venueName: "Main Street",
+            venueAddress: { address1: "100 Main", city: "Meeteetse", region: "WY", postalCode: "82433" },
+            eventSigner: values.eventSigner,
+            internalSigner: values.internalSigner,
+            packages: [],
+            coi: { certificateHolderName: "", certificateHolderAddress: "", additionalInsuredWording: "" },
+          },
+        },
+      },
+    });
+
+    render(<ContractBuilderPage draftId="draft-1" />);
+
+    expect(await screen.findByRole("heading", { name: "Build contract" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Guaranteed fee")).toHaveValue(0);
+    expect(screen.getByLabelText("Power requirements confirmed")).not.toBeChecked();
+  });
+
   it("shows missing fields, confirmations, signer order, and every arrangement branch", async () => {
     render(<ContractBuilderPage draftId="draft-1" />);
     expect(await screen.findByRole("heading", { name: "Build contract" })).toBeInTheDocument();
