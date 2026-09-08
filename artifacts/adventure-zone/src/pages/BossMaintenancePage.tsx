@@ -168,7 +168,7 @@ export default function BossMaintenancePage() {
     }
   }
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { void load(); }, [linkedBookingId]);
 
   const legGroups = groupRecordsByLeg(items);
   const effectiveLegKey = legGroups.some((group) => group.key === selectedLegKey) ? selectedLegKey : null;
