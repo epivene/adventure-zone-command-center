@@ -3,12 +3,23 @@ name: Boss Unified Documents CI
 on:
   pull_request:
     paths:
-      - "artifacts/adventure-zone/src/lib/boss-documents-api.ts"
+     -      - "artifacts/adventure-zone/src/lib/boss-documents-api.ts"
+      - "artifacts/adventure-zone/src/lib/office-documents-api.ts"
+      - "artifacts/adventure-zone/src/components/business-documents/role-business-documents-page.tsx"
+      - "artifacts/adventure-zone/src/components/boss/boss-shell.tsx"
+      - "artifacts/adventure-zone/src/components/office/office-shell.tsx"
+      - "artifacts/adventure-zone/src/pages/BossProfilesPage.tsx"
+      - "artifacts/adventure-zone/src/pages/BossProfilePage.tsx"
+      - "artifacts/adventure-zone/src/pages/OfficeDocumentsPage.tsx"
+      - "artifacts/adventure-zone/src/App.tsx"
       - "artifacts/adventure-zone/src/pages/BossTemplatesFilesPage.tsx"
       - "artifacts/adventure-zone/src/pages/BossTemplatesFilesPage.test.tsx"
       - "artifacts/adventure-zone/package.json"
       - "artifacts/api-server/src/routes/boss-documents.ts"
       - "artifacts/api-server/src/routes/business-documents.ts"
+      - "artifacts/api-server/src/routes/boss-profiles.ts"
+      - "artifacts/api-server/src/routes/office-profiles.ts"
+      - "artifacts/api-server/src/routes/index.ts"
       - ".github/workflows/boss-unified-documents-ci.yml"
 
 permissions:
