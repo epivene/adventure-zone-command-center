@@ -252,6 +252,14 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
           WHERE id = $1`,
         [first.mutation.id],
       );
+      await db.query(
+        `INSERT INTO google_workspace_gmail_mutations (
+           connection_id, message_id, thread_id, organization_id, operation,
+           idempotency_key, state, intent_generation
+         ) VALUES ($1,'inbound-old','thread-1',$2,'label_inbound_message',
+                   'inbound-old-key','retryable_error',1)`,
+        [connectionId, organizationA],
+      );
 
       const second = await repository.resolveReview(
         assignment(organizationB, "2026-09-08T12:01:00Z"),
@@ -265,6 +273,16 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
         [first.mutation.id],
       );
       expect(oldMutation.rows[0]).toEqual({
+        state: "permanent_error",
+        last_error_code: "GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED",
+      });
+      const staleInbound = await db.query<{
+        state: string;
+        last_error_code: string | null;
+      }>(
+        "SELECT state, last_error_code FROM google_workspace_gmail_mutations WHERE idempotency_key = 'inbound-old-key'",
+      );
+      expect(staleInbound.rows[0]).toEqual({
         state: "permanent_error",
         last_error_code: "GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED",
       });
