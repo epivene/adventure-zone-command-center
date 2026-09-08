@@ -30,7 +30,8 @@ export async function changeMatchedGoogleEmailProfile(
   row: GoogleRecentValidationRow,
   organizationId: string,
 ): Promise<{ ok: true; gmailSync: GoogleProfileLabelSyncResult }> {
-  return ok(await apiFetch(`/google-workspace/validation/matched/${encodeURIComponent(row.id)}`, {
+  return ok<{ ok: true; gmailSync: GoogleProfileLabelSyncResult }>(
+    await apiFetch(`/google-workspace/validation/matched/${encodeURIComponent(row.id)}`, {
     method: "PUT",
     body: JSON.stringify({ ...metadata(row), organizationId }),
   }));
