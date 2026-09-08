@@ -110,7 +110,7 @@ async function fixture() {
       ('20000000-0000-4000-8000-000000000001', 'message-1', 'thread-1', '10000000-0000-4000-8000-000000000001',
        'assign_thread', 'processing-key', 'processing', 1, 1),
       ('20000000-0000-4000-8000-000000000001', 'message-1', 'thread-1', '10000000-0000-4000-8000-000000000001',
-       'assign_thread', 'retry-key', 'retryable_error', 1, 1);
+       'label_inbound_message', 'retry-key', 'retryable_error', 1, 1);
     INSERT INTO google_workspace_gmail_thread_intents(
       connection_id, thread_id, generation, intent_kind,
       organization_id, current_mutation_id
@@ -141,7 +141,7 @@ async function fixture() {
 }
 
 describe("PostgresGoogleThreadIgnoreTransaction", () => {
-  it("atomically makes Ignore current and cancels all unfinished assignments", async () => {
+  it("atomically makes Ignore current and cancels assignment and inbound work", async () => {
     const { db, transaction } = await fixture();
     try {
       await transaction.ignoreReview({
