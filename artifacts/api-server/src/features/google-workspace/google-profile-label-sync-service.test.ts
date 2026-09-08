@@ -37,6 +37,7 @@ function harness(enabled = true) {
       return row;
     }),
     complete: vi.fn(async (input: {
+      expectedAttemptCount: number;
       targetLabelId: string;
       removeLabelIds: string[];
     }) => {
@@ -47,6 +48,7 @@ function harness(enabled = true) {
         removeLabelIds: input.removeLabelIds,
         lastErrorCode: null,
       };
+      return row;
     }),
     fail: vi.fn(async (input: {
       state: "retryable_error" | "permanent_error" | "conflict";
@@ -203,6 +205,7 @@ describe("GoogleProfileLabelSyncService", () => {
           removeLabelIds: input.removeLabelIds,
           lastErrorCode: null,
         });
+        return current;
       });
 
     const first = await h.service.assignThread({
