@@ -211,6 +211,9 @@ implements GoogleProfileAssignmentTransactionPort {
         organizationId: input.organizationId,
         actorId: input.actorId,
         now: input.now,
+        newIntent:
+          previous.review_state !== "resolved" ||
+          previous.resolved_organization_id !== input.organizationId,
       });
     });
   }
@@ -303,6 +306,9 @@ implements GoogleProfileAssignmentTransactionPort {
         organizationId: input.organizationId,
         actorId: input.actorId,
         now: input.now,
+        newIntent:
+          previous?.review_state !== "resolved" ||
+          previous?.resolved_organization_id !== input.organizationId,
       });
     });
   }
@@ -315,7 +321,15 @@ implements GoogleProfileAssignmentTransactionPort {
       stage: { set(value: GoogleProfileAssignmentTransactionStage): void },
     ) => Promise<CommittedProfileAssignment>,
   ): Promise<CommittedProfileAssignment> {
-    const client = await this.pool.connect();
+    let client: SqlClient;
+    try {
+      client = await this.pool.connect();
+    } catch (cause) {
+      throw new GoogleProfileAssignmentTransactionError({
+        stage: "connection",
+        cause,
+      });
+    }
     let currentStage: GoogleProfileAssignmentTransactionStage = "connection";
     const stage = {
       set(value: GoogleProfileAssignmentTransactionStage) {
@@ -373,6 +387,7 @@ implements GoogleProfileAssignmentTransactionPort {
       organizationId: string;
       actorId: string;
       now: Date;
+      newIntent: boolean;
     },
   ): Promise<CommittedProfileAssignment> {
     stage.set("supersede");
@@ -394,35 +409,24 @@ implements GoogleProfileAssignmentTransactionPort {
     stage.set("mutation");
     const idempotencyKey =
       `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`;
+    if (input.newIntent) {
+      await client.query(
+        `UPDATE google_workspace_gmail_mutations
+            SET idempotency_key =
+                  idempotency_key || ':history:' || id::text,
+                updated_at = $2
+          WHERE idempotency_key = $1
+            AND state IN ('completed','permanent_error','conflict')`,
+        [idempotencyKey, input.now],
+      );
+    }
     const inserted = await client.query(
       `INSERT INTO google_workspace_gmail_mutations (
          connection_id, message_id, thread_id, organization_id, operation,
          idempotency_key, actor_id, state, created_at, updated_at
        ) VALUES ($1,$2,$3,$4,'assign_thread',$5,$6,'pending',$7,$7)
        ON CONFLICT (idempotency_key) DO UPDATE SET
-         message_id = EXCLUDED.message_id,
-         actor_id = EXCLUDED.actor_id,
-         state = CASE
-           WHEN google_workspace_gmail_mutations.state = 'permanent_error'
-            AND google_workspace_gmail_mutations.last_error_code =
-                'GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED'
-           THEN 'pending'
-           ELSE google_workspace_gmail_mutations.state
-         END,
-         last_error_code = CASE
-           WHEN google_workspace_gmail_mutations.state = 'permanent_error'
-            AND google_workspace_gmail_mutations.last_error_code =
-                'GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED'
-           THEN NULL
-           ELSE google_workspace_gmail_mutations.last_error_code
-         END,
-         updated_at = CASE
-           WHEN google_workspace_gmail_mutations.state = 'permanent_error'
-            AND google_workspace_gmail_mutations.last_error_code =
-                'GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED'
-           THEN EXCLUDED.updated_at
-           ELSE google_workspace_gmail_mutations.updated_at
-         END
+         idempotency_key = EXCLUDED.idempotency_key
        RETURNING id::text, connection_id::text, message_id, thread_id,
                  organization_id::text, operation, target_label_id,
                  remove_label_ids, idempotency_key, state, attempt_count,
