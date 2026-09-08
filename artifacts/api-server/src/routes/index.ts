@@ -46,6 +46,7 @@ import actReplacementRouter from "./act-replacement";
 import actRecoveryRouter from "./act-recovery";
 import aiSuggestionsRouter from "./ai-suggestions";
 import paperNotesRouter from "./paper-notes";
+import contractsRouter from "./contracts-runtime";
 import leadIntakeRouter from "./lead-intake";
 import followUpsRouter from "./follow-ups";
 import opportunityEmailLiveRuntimeRouter from "./opportunity-email-live-runtime";
@@ -309,6 +310,7 @@ router.use(actReplacementRouter);
 router.use(actMigrationRouter);
 router.use(aiSuggestionsRouter);
 router.use(paperNotesRouter);
+router.use(contractsRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;

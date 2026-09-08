@@ -3057,3 +3057,157 @@ export const legIncidents = pgTable("leg_incidents", {
 export const legIncidentAttachments = pgTable("leg_incident_attachments", {
   id: uuid("id").primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), incidentId: uuid("incident_id").notNull().references(() => legIncidents.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [uniqueIndex("leg_incident_attachments_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incident_attachments_incident_idx").on(table.incidentId), check("leg_incident_attachments_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`)]);
+
+export const contractTemplateStateValues = ["draft", "reviewed", "active", "retired"] as const;
+export const contractArrangementValues = ["guaranteed_fee", "pay_for_play", "guarantee_plus_percentage"] as const;
+export const contractStatusValues = ["draft", "ready_for_adobe", "sent_for_signature", "partially_signed", "completed", "declined", "cancelled", "superseded"] as const;
+export const contractFileKindValues = ["unsigned_generated", "signed_completed"] as const;
+export const contractCoiDraftStateValues = ["details_needed", "prepared", "created", "retryable_error", "manual_review"] as const;
+
+export const contractTemplates = pgTable("contract_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  stableKey: text("stable_key").notNull(),
+  version: integer("version").notNull(),
+  state: text("state").$type<(typeof contractTemplateStateValues)[number]>().default("draft").notNull(),
+  fixedClauses: jsonb("fixed_clauses").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  arrangementClauses: jsonb("arrangement_clauses").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  operationalDefaults: jsonb("operational_defaults").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  renderMetadata: jsonb("render_metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  sourceProvenance: jsonb("source_provenance").$type<Record<string, unknown>[]>().default(sql`'[]'::jsonb`).notNull(),
+  effectiveAt: timestamp("effective_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("contract_templates_stable_key_version_unique").on(table.stableKey, table.version),
+  uniqueIndex("contract_templates_one_active_key_unique").on(table.stableKey).where(sql`${table.state} = 'active'`),
+  check("contract_templates_stable_key_nonblank", sql`nullif(trim(${table.stableKey}), '') is not null`),
+  check("contract_templates_version_positive", sql`${table.version} >= 1`),
+  check("contract_templates_state_valid", sql`${table.state} in (${sqlTextValues(contractTemplateStateValues)})`),
+]);
+
+export const contractSettings = pgTable("contract_settings", {
+  key: text("key").primaryKey().default("default"),
+  internalSignerName: text("internal_signer_name").default("Dave Gordon").notNull(),
+  internalSignerEmail: text("internal_signer_email"),
+  internalSignerOrder: integer("internal_signer_order").default(2).notNull(),
+  insuranceRecipientName: text("insurance_recipient_name").default("Sara Toone").notNull(),
+  insuranceRecipientEmail: text("insurance_recipient_email").default("sara@protectiveins.net").notNull(),
+  updatedBy: text("updated_by").default("migration").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("contract_settings_singleton_key", sql`${table.key} = 'default'`),
+  check("contract_settings_internal_signer_name_nonblank", sql`nullif(trim(${table.internalSignerName}), '') is not null`),
+  check("contract_settings_internal_signer_order_second", sql`${table.internalSignerOrder} = 2`),
+  check("contract_settings_insurance_name_nonblank", sql`nullif(trim(${table.insuranceRecipientName}), '') is not null`),
+  check("contract_settings_insurance_email_nonblank", sql`nullif(trim(${table.insuranceRecipientEmail}), '') is not null`),
+]);
+
+export const contractDrafts = pgTable("contract_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  templateId: uuid("template_id").notNull().references(() => contractTemplates.id, { onDelete: "restrict" }),
+  arrangement: text("arrangement").$type<(typeof contractArrangementValues)[number]>(),
+  values: jsonb("values").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  validationState: jsonb("validation_state").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  revision: integer("revision").default(1).notNull(),
+  predecessorVersionId: uuid("predecessor_version_id"),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+  lastEditedBy: text("last_edited_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("contract_drafts_one_open_booking_unique").on(table.bookingId).where(sql`${table.finalizedAt} is null`),
+  index("contract_drafts_organization_idx").on(table.organizationId, table.updatedAt.desc()),
+  check("contract_drafts_arrangement_valid", sql`${table.arrangement} is null or ${table.arrangement} in (${sqlTextValues(contractArrangementValues)})`),
+  check("contract_drafts_revision_positive", sql`${table.revision} >= 1`),
+]);
+
+export const contractVersions = pgTable("contract_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  templateId: uuid("template_id").notNull().references(() => contractTemplates.id, { onDelete: "restrict" }),
+  draftId: uuid("draft_id").notNull().references(() => contractDrafts.id, { onDelete: "restrict" }),
+  versionNumber: integer("version_number").notNull(),
+  status: text("status").$type<(typeof contractStatusValues)[number]>().default("draft").notNull(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  renderedLegalText: text("rendered_legal_text").notNull(),
+  signerSnapshot: jsonb("signer_snapshot").$type<Record<string, unknown>[]>().notNull(),
+  predecessorVersionId: uuid("predecessor_version_id").references((): AnyPgColumn => contractVersions.id, { onDelete: "restrict" }),
+  supersedingVersionId: uuid("superseding_version_id").references((): AnyPgColumn => contractVersions.id, { onDelete: "restrict" }),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("contract_versions_booking_number_unique").on(table.bookingId, table.versionNumber),
+  unique("contract_versions_draft_unique").on(table.draftId),
+  index("contract_versions_organization_created_idx").on(table.organizationId, table.createdAt.desc()),
+  check("contract_versions_number_positive", sql`${table.versionNumber} >= 1`),
+  check("contract_versions_status_valid", sql`${table.status} in (${sqlTextValues(contractStatusValues)})`),
+]);
+
+export const contractFiles = pgTable("contract_files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }),
+  kind: text("kind").$type<(typeof contractFileKindValues)[number]>().notNull(),
+  revision: integer("revision").notNull(),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").default("application/pdf").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  originalSizeBytes: integer("original_size_bytes").notNull(),
+  sha256Hex: text("sha256_hex").notNull(),
+  uploadedBy: text("uploaded_by").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+}, (table) => [
+  unique("contract_files_kind_revision_unique").on(table.contractVersionId, table.kind, table.revision),
+  unique("contract_files_version_checksum_unique").on(table.contractVersionId, table.sha256Hex),
+  check("contract_files_kind_valid", sql`${table.kind} in (${sqlTextValues(contractFileKindValues)})`),
+  check("contract_files_revision_positive", sql`${table.revision} >= 1`),
+  check("contract_files_mime_pdf", sql`${table.mimeType} = 'application/pdf'`),
+  check("contract_files_size_positive", sql`${table.originalSizeBytes} > 0`),
+  check("contract_files_sha256_valid", sql`${table.sha256Hex} ~ '^[0-9a-f]{64}$'`),
+]);
+
+export const contractStatusEvents = pgTable("contract_status_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }),
+  fromStatus: text("from_status").$type<(typeof contractStatusValues)[number]>(),
+  toStatus: text("to_status").$type<(typeof contractStatusValues)[number]>().notNull(),
+  actorId: text("actor_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  context: jsonb("context").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("contract_status_events_version_created_idx").on(table.contractVersionId, table.createdAt),
+  check("contract_status_events_from_valid", sql`${table.fromStatus} is null or ${table.fromStatus} in (${sqlTextValues(contractStatusValues)})`),
+  check("contract_status_events_to_valid", sql`${table.toStatus} in (${sqlTextValues(contractStatusValues)})`),
+  check("contract_status_events_key_nonblank", sql`nullif(trim(${table.idempotencyKey}), '') is not null`),
+]);
+
+export const contractCoiDrafts = pgTable("contract_coi_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }).unique(),
+  recipientName: text("recipient_name").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  state: text("state").$type<(typeof contractCoiDraftStateValues)[number]>().notNull(),
+  googleConnectionId: uuid("google_connection_id"),
+  gmailDraftId: text("gmail_draft_id"),
+  gmailMessageId: text("gmail_message_id"),
+  lastErrorCode: text("last_error_code"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("contract_coi_drafts_state_valid", sql`${table.state} in (${sqlTextValues(contractCoiDraftStateValues)})`),
+  check("contract_coi_drafts_recipient_name_nonblank", sql`nullif(trim(${table.recipientName}), '') is not null`),
+  check("contract_coi_drafts_recipient_email_nonblank", sql`nullif(trim(${table.recipientEmail}), '') is not null`),
+  check("contract_coi_drafts_attempt_nonnegative", sql`${table.attemptCount} >= 0`),
+  check("contract_coi_drafts_created_ids_valid", sql`${table.state} <> 'created' or (${table.gmailDraftId} is not null and ${table.gmailMessageId} is not null and ${table.completedAt} is not null)`),
+]);

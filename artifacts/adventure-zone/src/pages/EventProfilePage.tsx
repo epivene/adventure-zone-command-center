@@ -17,6 +17,10 @@ import { extractHistoricalEventDates } from "@/features/event-profiles/historica
 import { listFamilyNotes } from "@/actions/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
 import { readProfileOriginLabel } from "@/lib/profile-navigation";
+import { ContractAction } from "@/components/contracts/contract-action";
+import { ContractHistoryCard } from "@/components/contracts/contract-history-card";
+import { contractClient } from "@/features/contracts/contract-client";
+import type { ContractVersion } from "@/features/contracts/contract-types";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -37,6 +41,8 @@ export default function EventProfilePage() {
   const [familyNotes, setFamilyNotes] = useState<ScopedNoteView[]>([]);
   const [familyNotesError, setFamilyNotesError] = useState<string | null>(null);
   const [profileOrigin, setProfileOrigin] = useState("Profiles");
+  const [contractBookings, setContractBookings] = useState<Array<{ id: string; name: string; openDraftId: string | null }>>([]);
+  const [contractVersions, setContractVersions] = useState<ContractVersion[]>([]);
 
   const params = new URLSearchParams(search);
   const contactId = params.get("contactId") ?? undefined;
@@ -116,6 +122,17 @@ export default function EventProfilePage() {
   useEffect(() => {
     if (researchRequested && data && !profileEditing) setResearchOpen(true);
   }, [researchRequested, Boolean(data), profileEditing]);
+  useEffect(() => {
+    if (!profileId || !data) return;
+    let cancelled = false;
+    contractClient.listOrganization(profileId).then((result) => {
+      if (!cancelled) {
+        setContractBookings(result.eligibleBookings);
+        setContractVersions(result.contracts);
+      }
+    }).catch(() => { if (!cancelled) { setContractBookings([]); setContractVersions([]); } });
+    return () => { cancelled = true; };
+  }, [profileId, Boolean(data)]);
 
   async function saveProfileImage(dataUrl: string | null) {
     if (!profileId) return;
@@ -170,6 +187,15 @@ export default function EventProfilePage() {
     <div className="profile-modern -mx-4 -my-5 min-h-[100dvh] bg-[#f3f5f0] px-4 py-5 text-[#173b48] md:-mx-8 md:-my-7 md:px-8 md:py-7 lg:px-10">
       <div className="mx-auto grid w-full max-w-[1420px] gap-5">
         {profileId ? <AssistantContextRegistration kind="organization" label={profileLabel} recordId={profileId} /> : null}
+
+        {contractBookings.length || contractVersions.length ? <section className="rounded-xl border border-[#d8dfd6] bg-white p-4 shadow-sm">
+          <h2 className="font-bold">Contracts</h2>
+          <p className="mb-3 mt-1 text-sm text-[#58717a]">Create one from an event booking, or continue the unfinished draft.</p>
+          {contractBookings.length ? <ContractAction bookings={contractBookings} /> : null}
+          {contractVersions.length ? <div className="mt-4 grid gap-3">
+            {contractVersions.map((contract) => <ContractHistoryCard key={contract.id} version={contract} />)}
+          </div> : null}
+        </section> : null}
 
         <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
           <SimpleFullProfile
