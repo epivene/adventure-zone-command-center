@@ -82,7 +82,9 @@ function record(row: Record<string, unknown> | undefined): GoogleGmailMutationRe
     intentGeneration:
       typeof row.intent_generation === "number"
         ? row.intent_generation
-        : typeof row.intent_generation === "string"
+        : typeof row.intent_generation === "bigint"
+          ? Number(row.intent_generation)
+          : typeof row.intent_generation === "string"
           ? Number(row.intent_generation)
           : null,
     lastErrorCode:
