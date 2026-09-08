@@ -90,6 +90,14 @@ export type GoogleRecentValidationResult = {
   ignored: GoogleRecentValidationRow[];
 };
 
+export type GoogleProfileLabelSyncResult = {
+  mutationId: string;
+  state: "completed" | "retryable_error" | "permanent_error" | "conflict";
+  gmailLabelId: string | null;
+  gmailLabelName: string | null;
+  errorCode: string | null;
+};
+
 export type GoogleValidationReviewItem = {
   messageId: string;
   threadId: string;
@@ -102,6 +110,15 @@ export type GoogleValidationReviewItem = {
   hasAttachments: boolean;
   state: "pending" | "resolved" | "ignored";
   resolvedOrganizationId: string | null;
+  gmailSyncState:
+    | "not_requested"
+    | "pending"
+    | "completed"
+    | "retryable_error"
+    | "permanent_error"
+    | "conflict";
+  gmailSyncErrorCode: string | null;
+  gmailSyncMutationId: string | null;
 };
 
 export type GoogleHistoricalBackfillStatus =
@@ -288,7 +305,12 @@ export async function getGoogleWorkspaceValidationReview(): Promise<{
 export async function resolveGoogleWorkspaceValidationReview(
   messageId: string,
   organizationId: string,
-): Promise<{ ok: true }> {
+): Promise<{
+  ok: true;
+  organizationId: string;
+  threadId: string;
+  gmailSync: GoogleProfileLabelSyncResult;
+}> {
   return responseJson(
     await apiFetch(
       `/google-workspace/validation/review/${encodeURIComponent(messageId)}`,
@@ -306,6 +328,17 @@ export async function ignoreGoogleWorkspaceValidationReview(
   return responseJson(
     await apiFetch(
       `/google-workspace/validation/review/${encodeURIComponent(messageId)}/ignore`,
+      { method: "POST", body: "{}" },
+    ),
+  );
+}
+
+export async function retryGoogleWorkspaceGmailMutation(
+  mutationId: string,
+): Promise<{ ok: true; gmailSync: GoogleProfileLabelSyncResult }> {
+  return responseJson(
+    await apiFetch(
+      `/google-workspace/gmail-mutations/${encodeURIComponent(mutationId)}/retry`,
       { method: "POST", body: "{}" },
     ),
   );
