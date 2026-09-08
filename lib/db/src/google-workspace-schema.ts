@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  bigint,
   boolean,
   check,
   index,
@@ -352,7 +353,7 @@ export const googleWorkspaceGmailMutations = pgTable(
       .default("pending")
       .notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
-    intentGeneration: integer("intent_generation"),
+    intentGeneration: bigint("intent_generation", { mode: "number" }),
     lastErrorCode: text("last_error_code"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     processingLeaseExpiresAt: timestamp("processing_lease_expires_at", {
@@ -413,7 +414,7 @@ export const googleWorkspaceGmailThreadIntents = pgTable(
       .notNull()
       .references(() => googleWorkspaceConnections.id, { onDelete: "cascade" }),
     threadId: text("thread_id").notNull(),
-    generation: integer("generation").default(1).notNull(),
+    generation: bigint("generation", { mode: "number" }).default(1).notNull(),
     intentKind: text("intent_kind")
       .$type<GoogleWorkspaceGmailThreadIntentKind>()
       .notNull(),
