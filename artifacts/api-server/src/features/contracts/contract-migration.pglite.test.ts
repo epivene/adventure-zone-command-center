@@ -3,6 +3,8 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { loadActReviewMigrations } from "@workspace/db/migrations";
+
 const databases: PGlite[] = [];
 
 afterEach(async () => {
@@ -10,6 +12,12 @@ afterEach(async () => {
 });
 
 describe("contract builder migration", () => {
+  it("is included in the production startup migration set", async () => {
+    const migrations = await loadActReviewMigrations();
+
+    expect(migrations.map(({ name }) => name)).toContain("20260908_contract_builder.sql");
+  });
+
   it("creates defaults and prevents duplicate open drafts and COI requests", async () => {
     const database = new PGlite();
     databases.push(database);
