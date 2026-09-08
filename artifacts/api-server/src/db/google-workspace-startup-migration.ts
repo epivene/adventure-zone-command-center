@@ -357,6 +357,37 @@ export async function ensureGoogleWorkspaceSchema(
        WHERE mutation.id = intent.current_mutation_id
          AND mutation.intent_generation IS NULL;
 
+      UPDATE google_workspace_gmail_mutations mutation
+         SET intent_generation = intent.generation,
+             updated_at = now()
+        FROM google_workspace_gmail_thread_intents intent
+       WHERE mutation.connection_id = intent.connection_id
+         AND mutation.thread_id = intent.thread_id
+         AND mutation.operation = 'label_inbound_message'
+         AND mutation.organization_id = intent.organization_id
+         AND mutation.state IN ('pending','retryable_error')
+         AND mutation.intent_generation IS NULL
+         AND intent.intent_kind = 'assign';
+
+      UPDATE google_workspace_gmail_mutations mutation
+         SET state = 'permanent_error',
+             last_error_code = 'GOOGLE_WORKSPACE_THREAD_INTENT_SUPERSEDED',
+             next_attempt_at = NULL,
+             processing_lease_expires_at = NULL,
+             updated_at = now()
+       WHERE mutation.operation = 'label_inbound_message'
+         AND mutation.state IN ('pending','retryable_error')
+         AND EXISTS (
+           SELECT 1
+             FROM google_workspace_gmail_thread_intents intent
+            WHERE intent.connection_id = mutation.connection_id
+              AND intent.thread_id = mutation.thread_id
+              AND (
+                intent.intent_kind = 'ignore'
+                OR intent.organization_id <> mutation.organization_id
+              )
+         );
+
       ALTER TABLE google_workspace_validation_review_items
         ADD COLUMN IF NOT EXISTS gmail_sync_state text NOT NULL DEFAULT 'not_requested';
       ALTER TABLE google_workspace_validation_review_items
