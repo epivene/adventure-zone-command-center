@@ -3,6 +3,10 @@ import { z } from "zod";
 
 import { GoogleMatchedEmailCorrectionService } from "@/features/google-workspace/google-matched-email-correction-service";
 import { GoogleReviewProfileAssignmentService, type GoogleReviewAssignmentView } from "@/features/google-workspace/google-review-profile-assignment-service";
+import {
+  PostgresGoogleThreadIgnoreTransaction,
+  type MatchedIgnoreInput,
+} from "@/features/google-workspace/google-thread-ignore-transaction";
 
 const metadataSchema = z.object({
   threadId: z.string().min(1),
@@ -44,6 +48,9 @@ export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
     assignMatched(input: Parameters<GoogleMatchedEmailCorrectionService["assign"]>[0]):
       Promise<GoogleReviewAssignmentView | void>;
   };
+  ignoreService?: {
+    ignoreMatched(input: MatchedIgnoreInput): Promise<void>;
+  };
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
@@ -52,6 +59,10 @@ export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
     (options?.service
       ? { assignMatched: service.assign.bind(service) }
       : new GoogleReviewProfileAssignmentService());
+  const ignoreService = options?.ignoreService ??
+    (options?.service
+      ? { ignoreMatched: service.ignore.bind(service) }
+      : new PostgresGoogleThreadIgnoreTransaction());
   const now = options?.now ?? (() => new Date());
 
   router.put("/google-workspace/validation/matched/:messageId", async (req, res) => {
@@ -81,7 +92,7 @@ export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
       return;
     }
     try {
-      await service.ignore({
+      await ignoreService.ignoreMatched({
         messageId: req.params.messageId,
         ...parsed.data,
         actorId: actorId(req),
