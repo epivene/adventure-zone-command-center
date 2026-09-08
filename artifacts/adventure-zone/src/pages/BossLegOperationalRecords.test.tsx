@@ -375,12 +375,21 @@ describe("Boss operational records by leg", () => {
       "",
       "/boss/reviews?bookingId=booking-kristy",
     );
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      reviewAndWrapUp: dashboard.reviewAndWrapUp.map((item) =>
+        item.bookingId === "booking-kristy"
+          ? { ...item, feedback: "Focused review details" }
+          : item,
+      ),
+    });
     render(<BossReviewsPage />);
 
     await waitFor(() =>
       expect(screen.getByText("Kristy reviews")).toBeInTheDocument(),
     );
     expect(screen.getByText("Kristy event")).toBeInTheDocument();
+    expect(screen.getByText("Focused review details")).toBeInTheDocument();
     expect(screen.queryByText("Hulk event")).not.toBeInTheDocument();
   });
 

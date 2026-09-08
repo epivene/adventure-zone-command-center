@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -100,4 +101,9 @@ describe("manager admin access identity", () => {
     expect(mocks.verifyPassword).not.toHaveBeenCalled();
     expect(mocks.setPassword).toHaveBeenCalledTimes(1);
   });
+  it("does not shadow the enriched event-review route", () => {
+    const source = readFileSync("src/routes/leg-manager-admin.ts", "utf8");
+    expect(source).not.toContain('router.get("/manager-admin/reviews"');
+  });
+
 });
