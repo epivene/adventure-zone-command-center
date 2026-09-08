@@ -19,6 +19,7 @@ on:
       - "artifacts/api-server/src/routes/business-documents.ts"
       - "artifacts/api-server/src/routes/boss-profiles.ts"
       - "artifacts/api-server/src/routes/office-profiles.ts"
+      - "artifacts/api-server/src/routes/office-documents.ts"
       - "artifacts/api-server/src/routes/index.ts"
       - ".github/workflows/boss-unified-documents-ci.yml"
 
