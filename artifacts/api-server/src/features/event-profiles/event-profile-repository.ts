@@ -280,7 +280,7 @@ function canonicalProfileContacts(records: EventProfileContactRecord[]) {
   return groups;
 }
 
-const mergedBookingNotePattern = /^\s*\[Merged duplicate\]\s*Canonical booking:\s*([0-9a-f-]{36})/i;
+const mergedBookingNotePattern = /\[Merged duplicate\]\s*Canonical booking:\s*([0-9a-f-]{36})/i;
 
 function exactBookingKey(booking: EventProfileBookingRecord) {
   if (!booking.startsAt) return `booking:${booking.id}`;
