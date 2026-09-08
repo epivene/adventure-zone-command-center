@@ -59,15 +59,15 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
-  it("checks recent Gmail before loading the review queue", async () => {
-    render(<GoogleValidationReview />);
+  it("checks recent Gmail before loading the review queue when opted in", async () => {
+    render(<GoogleValidationReview checkGmailOnMount />);
 
     expect(await screen.findByText("County Fair application")).toBeInTheDocument();
     expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100);
   });
 
-  it("lets the owner check Gmail again", async () => {
-    render(<GoogleValidationReview />);
+  it("lets the owner check Gmail again when opted in", async () => {
+    render(<GoogleValidationReview checkGmailOnMount />);
     await screen.findByText("County Fair application");
     client.runGoogleWorkspaceRecentValidation.mockClear();
     client.getGoogleWorkspaceValidationReview.mockClear();
@@ -82,12 +82,20 @@ describe("GoogleValidationReview", () => {
     );
   });
 
+  it("loads only the saved queue in shared views", async () => {
+    render(<GoogleValidationReview />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(client.runGoogleWorkspaceRecentValidation).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Check emails" })).not.toBeInTheDocument();
+  });
+
   it("loads the saved queue when Gmail checking fails", async () => {
     client.runGoogleWorkspaceRecentValidation.mockRejectedValueOnce(
       new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
     );
 
-    render(<GoogleValidationReview />);
+    render(<GoogleValidationReview checkGmailOnMount />);
 
     expect(await screen.findByText("County Fair application")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent(
