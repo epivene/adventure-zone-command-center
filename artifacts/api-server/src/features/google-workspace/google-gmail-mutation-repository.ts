@@ -125,6 +125,43 @@ export class PostgresGoogleGmailMutationRepository {
     return result.rows[0] ? record(result.rows[0]) : null;
   }
 
+  async listDueIdsForCurrentConnection(
+    now: Date,
+    limit = 25,
+  ): Promise<string[]> {
+    const result = await this.pool.query(
+      `SELECT mutation.id::text
+         FROM google_workspace_gmail_mutations mutation
+        WHERE mutation.connection_id = (
+          SELECT connection.id
+            FROM google_workspace_connections connection
+           WHERE connection.status = 'connected'
+           ORDER BY connection.updated_at DESC
+           LIMIT 1
+        )
+          AND (
+            mutation.state = 'pending'
+            OR (
+              mutation.state = 'retryable_error'
+              AND (
+                mutation.next_attempt_at IS NULL
+                OR mutation.next_attempt_at <= $1
+              )
+            )
+            OR (
+              mutation.state = 'processing'
+              AND mutation.processing_lease_expires_at <= $1
+            )
+          )
+        ORDER BY mutation.created_at, mutation.id
+        LIMIT $2`,
+      [now, limit],
+    );
+    return result.rows.flatMap((row) =>
+      typeof row.id === "string" ? [row.id] : [],
+    );
+  }
+
   async listDueIds(
     connectionId: string,
     now: Date,
