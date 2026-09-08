@@ -82,12 +82,24 @@ async function fixture(options?: { failMutation?: boolean }) {
       idempotency_key text NOT NULL UNIQUE,
       state text NOT NULL DEFAULT 'pending',
       attempt_count integer NOT NULL DEFAULT 0,
+      intent_generation bigint,
       last_error_code text,
       next_attempt_at timestamptz,
       processing_lease_expires_at timestamptz,
       actor_id text,
       created_at timestamptz NOT NULL DEFAULT now(),
       updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE google_workspace_gmail_thread_intents (
+      connection_id uuid NOT NULL,
+      thread_id text NOT NULL,
+      generation bigint NOT NULL DEFAULT 1,
+      intent_kind text NOT NULL,
+      organization_id uuid,
+      current_mutation_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (connection_id, thread_id)
     );
     INSERT INTO organizations(id, name) VALUES
       ('${organizationA}', 'First Profile'),
@@ -106,6 +118,9 @@ async function fixture(options?: { failMutation?: boolean }) {
   `);
   const client = {
     query: async (text: string, values?: unknown[]) => {
+      if (text.includes("pg_advisory_xact_lock")) {
+        return { rows: [{ pg_advisory_xact_lock: null }] };
+      }
       if (
         options?.failMutation &&
         text.includes("INSERT INTO google_workspace_gmail_mutations")
@@ -220,6 +235,54 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
           state: "pending",
         }),
       ]));
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("supersedes an older processing assignment before making another profile current", async () => {
+    const { db, repository } = await fixture();
+    try {
+      const first = await repository.resolveReview(
+        assignment(organizationA, "2026-09-08T12:00:00Z"),
+      );
+      await db.query(
+        `UPDATE google_workspace_gmail_mutations
+            SET state = 'processing', attempt_count = 1
+          WHERE id = $1`,
+        [first.mutation.id],
+      );
+
+      const second = await repository.resolveReview(
+        assignment(organizationB, "2026-09-08T12:01:00Z"),
+      );
+
+      const oldMutation = await db.query<{
+        state: string;
+        last_error_code: string | null;
+      }>(
+        "SELECT state, last_error_code FROM google_workspace_gmail_mutations WHERE id = $1",
+        [first.mutation.id],
+      );
+      expect(oldMutation.rows[0]).toEqual({
+        state: "permanent_error",
+        last_error_code: "GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED",
+      });
+      const intent = await db.query<{
+        organization_id: string;
+        current_mutation_id: string;
+        generation: string;
+      }>(
+        `SELECT organization_id::text, current_mutation_id::text,
+                generation::text
+           FROM google_workspace_gmail_thread_intents`,
+      );
+      expect(intent.rows[0]).toEqual({
+        organization_id: organizationB,
+        current_mutation_id: second.mutation.id,
+        generation: "2",
+      });
+      expect(second.mutation.intentGeneration).toBe(2);
     } finally {
       await db.close();
     }
