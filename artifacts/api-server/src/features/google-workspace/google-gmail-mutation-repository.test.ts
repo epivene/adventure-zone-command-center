@@ -158,6 +158,50 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     expect(events).toEqual(["lock", "gmail", "unlock", "release"]);
   });
 
+  it("keeps application queries off the dedicated lock pool", async () => {
+    const events: string[] = [];
+    const queryPool = {
+      async query() {
+        events.push("application-query");
+        return { rows: [row] };
+      },
+    };
+    const lockPool = {
+      async query() {
+        throw new Error("lock pool must only use its checked-out client");
+      },
+      async connect() {
+        return {
+          async query(text: string) {
+            events.push(text.includes("advisory_unlock") ? "unlock" : "lock");
+            return { rows: [] };
+          },
+          release() {
+            events.push("release");
+          },
+        };
+      },
+    };
+    const repository = new PostgresGoogleGmailMutationRepository(
+      queryPool,
+      lockPool,
+    );
+
+    await repository.withThreadLock(
+      { connectionId: "conn-1", threadId: "thread-1" },
+      async () => {
+        await repository.get("mutation-1");
+      },
+    );
+
+    expect(events).toEqual([
+      "lock",
+      "application-query",
+      "unlock",
+      "release",
+    ]);
+  });
+
   it("evicts a pooled session when advisory unlock fails", async () => {
     const release = vi.fn();
     const repository = new PostgresGoogleGmailMutationRepository({
