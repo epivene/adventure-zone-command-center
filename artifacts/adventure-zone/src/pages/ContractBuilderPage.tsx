@@ -2,50 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
 import { ContractArrangementFields } from "@/components/contracts/contract-arrangement-fields";
+import { ContractEventFields } from "@/components/contracts/contract-event-fields";
 import { ContractOperationalFields } from "@/components/contracts/contract-operational-fields";
 import { ContractPreview } from "@/components/contracts/contract-preview";
 import { contractClient } from "@/features/contracts/contract-client";
+import { editableContractValues } from "@/features/contracts/contract-form-values";
 import type { ContractDraft, ContractValues } from "@/features/contracts/contract-types";
-
-const blankSigner = { name: "", role: "", email: "", phone: "", order: 1 };
-
-function editableContractValues(partial: Partial<ContractValues>): ContractValues {
-  return {
-    organizationId: partial.organizationId ?? "",
-    organizationName: partial.organizationName ?? "",
-    bookingId: partial.bookingId ?? "",
-    eventName: partial.eventName ?? "",
-    venueName: partial.venueName ?? "",
-    venueAddress: partial.venueAddress ?? { address1: "", city: "", region: "", postalCode: "" },
-    eventStartDate: partial.eventStartDate ?? "",
-    eventEndDate: partial.eventEndDate ?? "",
-    arrivalDate: partial.arrivalDate ?? "",
-    departureDate: partial.departureDate ?? "",
-    eventSigner: partial.eventSigner ?? blankSigner,
-    internalSigner: partial.internalSigner ?? { ...blankSigner, order: 2 },
-    packages: partial.packages ?? [],
-    physicalAttractionTotal: partial.physicalAttractionTotal ?? 0,
-    travelLegName: partial.travelLegName ?? "",
-    arrangement: partial.arrangement ?? "guaranteed_fee",
-    commercialTerms: partial.commercialTerms ?? {
-      guaranteedFeeCents: null,
-      depositCents: null,
-      balanceCents: null,
-      eventPercentageBasisPoints: null,
-      percentageBase: null,
-      admissionPriceCents: null,
-    },
-    operationalTerms: partial.operationalTerms ?? {
-      ticketsPerRide: 0,
-      hoursPerDay: 0,
-      operatingDays: 0,
-      powerConfirmed: false,
-      siteAccessConfirmed: false,
-      staffingConfirmed: false,
-    },
-    coi: partial.coi ?? { certificateHolderName: "", certificateHolderAddress: "", additionalInsuredWording: "" },
-  };
-}
 
 export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: { draftId: string; autosaveDelayMs?: number }) {
   const [, setLocation] = useLocation();
@@ -61,10 +23,15 @@ export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: 
     let cancelled = false;
     contractClient.getDraft(draftId).then(({ draft: loadedDraft }) => {
       if (cancelled) return;
+      if (!loadedDraft?.storedValues?.contract || !loadedDraft.validationState) {
+        throw new Error("Could not load this contract draft. Please return to the profile and try again.");
+      }
       setDraft(loadedDraft);
       setValues(editableContractValues(loadedDraft.storedValues.contract));
       loaded.current = true;
-    }).catch((reason: Error) => setError(reason.message));
+    }).catch((reason: Error) => {
+      if (!cancelled) setError(reason.message || "Could not load this contract draft.");
+    });
     return () => { cancelled = true; };
   }, [draftId]);
 
@@ -72,10 +39,14 @@ export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: 
     if (!loaded.current || !draft || !values || saveState !== "saving") return;
     const timer = window.setTimeout(() => {
       contractClient.saveDraft(draft.id, draft.revision, values).then(({ draft: saved }) => {
+        if (!saved?.storedValues?.contract || !saved.validationState) throw new Error("The contract was saved, but the returned draft was incomplete. Please refresh.");
         setDraft(saved);
+        setValues(editableContractValues(saved.storedValues.contract));
+        setError(null);
         setSaveState("saved");
       }).catch((reason: Error) => {
-        setError(reason.message);
+        const conflict = (reason as Error & { status?: number }).status === 409;
+        setError(conflict ? "This contract changed in another session. Refresh before saving again." : reason.message);
         setSaveState("error");
       });
     }, autosaveDelayMs);
@@ -116,14 +87,7 @@ export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: 
         {draft.validationState.errors.map((item) => <p className="mt-1 text-sm" key={`${item.path}-${item.message}`}>{item.message}</p>)}
       </section> : null}
 
-      <section className="grid gap-3 rounded-xl border bg-white p-4">
-        <h2 className="text-lg font-bold">Event identity</h2>
-        <label className="grid gap-1 text-sm font-semibold">Event name <span className="font-normal text-slate-500">From booking</span>
-          <input aria-label="Event name" value={values.eventName} onChange={(event) => change({ ...values, eventName: event.target.value })} />
-        </label>
-        <p className="text-sm"><strong>Organization:</strong> {values.organizationName}</p>
-        <p className="text-sm"><strong>Venue:</strong> {values.venueName}, {values.venueAddress.city}, {values.venueAddress.region}</p>
-      </section>
+      <ContractEventFields values={values} onChange={change} />
 
       <ContractArrangementFields values={values} onChange={change} />
       <ContractOperationalFields values={values} onChange={change} />
