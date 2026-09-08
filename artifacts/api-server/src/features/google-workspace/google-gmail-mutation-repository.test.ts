@@ -14,6 +14,7 @@ const row = {
   idempotency_key: "assign-thread:key",
   state: "pending",
   attempt_count: 0,
+  intent_generation: 1,
   last_error_code: null,
 };
 
