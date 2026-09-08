@@ -15,7 +15,7 @@ describe("EventWrapUpReviewQueue", () => {
       finance: { missingReceiptCount: 1 },
     } as any]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Kristy, 1 review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unassigned leg, 1 review" }));
     fireEvent.click(screen.getByRole("button", { name: "Dickinson Fair, 1 review" }));
     expect(screen.getByRole("heading", { name: "Dickinson Fair" })).toBeInTheDocument();
     expect(screen.getAllByText(/Kristy/).length).toBeGreaterThan(0);

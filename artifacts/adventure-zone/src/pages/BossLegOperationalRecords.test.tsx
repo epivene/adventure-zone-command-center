@@ -388,7 +388,7 @@ describe("Boss operational records by leg", () => {
     await waitFor(() =>
       expect(screen.getByText("Kristy reviews")).toBeInTheDocument(),
     );
-    expect(screen.getByText("Kristy event")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kristy event, 1 review" })).toHaveAttribute("aria-expanded", "true");
     expect(screen.getByText("Focused review details")).toBeInTheDocument();
     expect(screen.queryByText("Hulk event")).not.toBeInTheDocument();
   });
