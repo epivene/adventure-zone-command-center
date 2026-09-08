@@ -72,13 +72,12 @@ describe("BossHomePage", () => {
   it("shows only the three latest completed events across all legs", async () => {
     mockBossGet.mockResolvedValueOnce({
       ...EMPTY_DASHBOARD,
-      checklistAndMaintenance: [
-        { id: "unfinished", bookingId: "booking-unfinished", title: "Unfinished Event", legId: "leg-a", phase: "post_event", status: "in_progress", completedAt: null },
-        { id: "a-post", bookingId: "booking-a", title: "Newest Event", legId: "leg-a", phase: "post_event", status: "completed", completedAt: "2026-09-07T12:00:00.000Z" },
-        { id: "a-pre", bookingId: "booking-a", title: "Newest Event", legId: "leg-a", phase: "pre_event", status: "completed", completedAt: "2026-09-06T12:00:00.000Z" },
-        { id: "b-post", bookingId: "booking-b", title: "Second Event", legId: "leg-b", phase: "post_event", status: "completed", completedAt: "2026-09-05T12:00:00.000Z" },
-        { id: "c-post", bookingId: "booking-c", title: "Third Event", legId: "leg-c", phase: "post_event", status: "completed", completedAt: "2026-09-04T12:00:00.000Z" },
-        { id: "d-post", bookingId: "booking-d", title: "Older Event", legId: "leg-d", phase: "post_event", status: "completed", completedAt: "2026-09-03T12:00:00.000Z" },
+      checklistAndMaintenance: [],
+      recentCompletedMaintenanceEvents: [
+        { id: "unable", bookingId: "booking-unable", title: "Unable Event", status: "unable_to_complete", completedAt: "2026-09-08T12:00:00.000Z" },
+        { id: "a-post", bookingId: "booking-a", title: "Newest Event", status: "completed", completedAt: "2026-09-07T12:00:00.000Z" },
+        { id: "b-post", bookingId: "booking-b", title: "Second Event", status: "completed", completedAt: "2026-09-05T12:00:00.000Z" },
+        { id: "c-post", bookingId: "booking-c", title: "Third Event", status: "completed", completedAt: "2026-09-04T12:00:00.000Z" },
       ],
     });
 
@@ -90,7 +89,7 @@ describe("BossHomePage", () => {
     expect(screen.getByText("Second Event")).toBeVisible();
     expect(screen.getByText("Third Event")).toBeVisible();
     expect(screen.queryByText("Older Event")).not.toBeInTheDocument();
-    expect(screen.queryByText("Unfinished Event")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unable Event")).not.toBeInTheDocument();
     expect(rows[0]).toHaveAttribute("href", "/boss/maintenance?bookingId=booking-a");
     expect(screen.queryByText("post_event")).not.toBeInTheDocument();
   });
