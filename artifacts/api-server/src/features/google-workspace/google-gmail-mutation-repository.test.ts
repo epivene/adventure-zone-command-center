@@ -107,18 +107,47 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     expect(queries[1]).toContain("attempt_count = $6");
   });
 
-  it("claims retryable work only when no other worker owns the thread", async () => {
+  it("claims assignment work only when it is the current thread generation", async () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
         expect(text).toContain("FOR UPDATE OF candidate_mutation SKIP LOCKED");
-        expect(text).toContain("pg_try_advisory_xact_lock");
-        expect(text).toContain("active.thread_id");
-        expect(text).toContain("active.state = 'processing'");
-        expect(text).not.toContain("active.processing_lease_expires_at");
+        expect(text).toContain("google_workspace_gmail_thread_intents");
+        expect(text).toContain("intent.current_mutation_id = candidate_mutation.id");
+        expect(text).toContain("intent.generation = candidate_mutation.intent_generation");
+        expect(text).not.toContain("pg_try_advisory_xact_lock");
         return { rows: [] };
       },
     });
 
     await repository.claim("mutation-1", new Date("2026-09-08T12:00:00Z"));
+  });
+
+  it("holds one session thread lock for the complete Gmail operation", async () => {
+    const events: string[] = [];
+    const repository = new PostgresGoogleGmailMutationRepository({
+      async query() {
+        return { rows: [] };
+      },
+      async connect() {
+        return {
+          async query(text: string) {
+            events.push(text.includes("advisory_unlock") ? "unlock" : "lock");
+            return { rows: [] };
+          },
+          release() {
+            events.push("release");
+          },
+        };
+      },
+    });
+
+    await repository.withThreadLock(
+      { connectionId: "conn-1", threadId: "thread-1" },
+      async () => {
+        events.push("gmail");
+      },
+    );
+
+    expect(events).toEqual(["lock", "gmail", "unlock", "release"]);
   });
 });
