@@ -16,8 +16,11 @@ export function readGoogleProfileLabelConfig(
 }
 
 export function canonicalProfileLabelName(profileName: string): string {
+  if (/[\/\r\n\0]/.test(profileName)) {
+    throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID");
+  }
   const name = profileName.normalize("NFC").trim().replace(/\s+/g, " ");
-  if (!name || name.length > 180 || /[\/\r\n\0]/.test(name)) {
+  if (!name || name.length > 180) {
     throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID");
   }
   return `${GOOGLE_PROFILE_LABEL_ROOT}/${name}`;
