@@ -342,6 +342,32 @@ describe("Boss operational records by leg", () => {
     confirm.mockRestore();
   });
 
+  it("opens a dashboard-linked maintenance event inside its matching leg", async () => {
+    window.history.replaceState({}, "", "/boss/maintenance?bookingId=booking-kristy");
+    bossGet.mockImplementation(async (path: string) => {
+      if (path === "/boss/dashboard") {
+        return {
+          ...dashboard,
+          checklistAndMaintenance: [
+            { id: "maintenance-hulk", bookingId: "booking-hulk", legId: "leg-hulk", legName: "Hulk", title: "Hulk inspection", phase: "post_event" },
+            { id: "maintenance-kristy", bookingId: "booking-kristy", legId: "leg-kristy", legName: "Kristy", title: "Kristy inspection", phase: "post_event" },
+          ],
+        };
+      }
+      if (path === "/boss/maintenance/maintenance-kristy") {
+        return { record: { id: "maintenance-kristy", items: [{ id: "answer-kristy", label: "Kristy detail", resourceName: null, result: "safe", note: null }] } };
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    render(<BossMaintenancePage />);
+
+    expect(await screen.findByText("Kristy maintenance records")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Kristy inspection/ })).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("Kristy detail")).toBeInTheDocument();
+    expect(screen.queryByText("Hulk inspection")).not.toBeInTheDocument();
+  });
+
   it("opens a dashboard-linked review inside its matching leg", async () => {
     window.history.replaceState(
       {},
