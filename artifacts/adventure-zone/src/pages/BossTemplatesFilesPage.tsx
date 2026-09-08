@@ -26,8 +26,10 @@ export default function BossTemplatesFilesPage() {
   }
 
   const uploadAction = (
-    <Button disabled={uploading} onClick={() => inputRef.current?.click()} type="button">
-      <Upload className="mr-2 h-4 w-4" />{uploading ? "Uploading…" : "Upload document"}
+    <>
+      <Button disabled={uploading} onClick={() => inputRef.current?.click()} type="button">
+        <Upload className="mr-2 h-4 w-4" />{uploading ? "Uploading…" : "Upload document"}
+      </Button>
       <input
         accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.rtf,.jpg,.jpeg,.png,.webp"
         aria-label="Choose document to upload"
@@ -37,7 +39,7 @@ export default function BossTemplatesFilesPage() {
         ref={inputRef}
         type="file"
       />
-    </Button>
+    </>
   );
 
   return (
