@@ -52,7 +52,7 @@ describe("runRequiredSchemaStartup", () => {
 
     expect(timeouts.get("required lead intake schema")).toBe(120_000);
     expect(timeoutHooks.get("required lead intake schema")).toEqual(expect.any(Function));
-    expect(timeouts.get("required paper notes schema")).toBeUndefined();
+    expect(timeouts.get("required paper notes schema")).toBe(120_000);
     expect(timeoutHooks.get("required paper notes schema")).toBeUndefined();
     expect(calls).toEqual([
       "required paper notes schema",
@@ -72,5 +72,36 @@ describe("runRequiredSchemaStartup", () => {
       "required Design Studio schema",
       "required business document schema",
     ]);
+  });
+
+  it("retries a required schema once when the database drops the connection", async () => {
+    const ensurePaperNotes = vi.fn()
+      .mockRejectedValueOnce(new Error("Connection terminated unexpectedly"))
+      .mockResolvedValue(false);
+    const run = vi.fn(async (_name: string, step: () => Promise<unknown>) => step());
+    const unchanged = async () => false;
+
+    await runRequiredSchemaStartup({
+      run,
+      ensurePaperNotes,
+      ensureInboundCalling: unchanged,
+      ensureGoogleWorkspace: unchanged,
+      ensureLeadIntake: unchanged,
+      ensureLegAssignment: unchanged,
+      ensureEventReviewDismissals: unchanged,
+      ensureFollowUpDismissals: unchanged,
+      ensureOrganizerFeedback: unchanged,
+      ensureComputerCalling: unchanged,
+      ensureOfficeCoordinator: unchanged,
+      ensureBoss: unchanged,
+      ensureWebsiteInquiries: unchanged,
+      ensureProfileFiller: unchanged,
+      ensureProfileTouch: unchanged,
+      ensureDesignStudio: unchanged,
+      ensureBusinessDocuments: unchanged,
+    });
+
+    expect(ensurePaperNotes).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls.filter(([name]) => name === "required paper notes schema")).toHaveLength(2);
   });
 });
