@@ -18,7 +18,15 @@ async function fixture(options?: { failMutation?: boolean }) {
     );
     CREATE TABLE contacts (id uuid PRIMARY KEY);
   `);
-  await ensureGoogleWorkspaceSchema(db as never);
+  await ensureGoogleWorkspaceSchema({
+    async query(sql: string) {
+      if (sql.includes(";")) {
+        await db.exec(sql);
+        return { rows: [] };
+      }
+      return db.query(sql);
+    },
+  } as never);
   await db.exec(`
     INSERT INTO organizations(id, name) VALUES
       ('${organizationA}', 'First Profile'),
