@@ -44,11 +44,13 @@ function appWith(options: {
       reviewReconciler: {
         reconcile: options.reconcileReview ?? (async () => undefined),
       },
+      reviewAssignmentService: {
+        resolve: options.resolveReviewItem ?? (async () => undefined),
+      },
       validationRepository: {
         setDecision: options.setDecision ?? (async () => undefined),
         getStatus: async () => "ready_for_review",
         listReviewItems: options.listReviewItems ?? (async () => []),
-        resolveReviewItem: options.resolveReviewItem ?? (async () => undefined),
         ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
       },
       now: () => new Date("2026-08-24T17:00:00.000Z"),
@@ -190,6 +192,29 @@ describe("Google Workspace recent validation route", () => {
       organizationId: "11111111-1111-4111-8111-111111111111",
       actorId: "owner-1",
       now: new Date("2026-08-24T17:00:00.000Z"),
+    });
+  });
+
+  it("returns completed Gmail label and archive state", async () => {
+    const resolveReviewItem = vi.fn(async () => ({
+      organizationId: "11111111-1111-4111-8111-111111111111",
+      threadId: "t1",
+      gmailSync: {
+        mutationId: "mutation-1",
+        state: "completed" as const,
+        gmailLabelId: "Label_10",
+        gmailLabelName: "Z - AdventureZone/Profiles/Elko County Fair",
+        errorCode: null,
+      },
+    }));
+    const response = await request(appWith({ resolveReviewItem }))
+      .put("/google-workspace/validation/review/m1")
+      .send({ organizationId: "11111111-1111-4111-8111-111111111111" });
+
+    expect(response.status).toBe(200);
+    expect(response.body.gmailSync).toMatchObject({
+      state: "completed",
+      gmailLabelId: "Label_10",
     });
   });
 
