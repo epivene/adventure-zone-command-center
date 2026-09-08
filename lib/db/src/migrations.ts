@@ -465,6 +465,15 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.contract_coi_drafts') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "20260908a_contract_template_v1.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM contract_templates
+      WHERE stable_key = 'adventure-zone-standard'
+        AND version = 1
+        AND state = 'active'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
