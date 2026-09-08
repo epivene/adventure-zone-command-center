@@ -1,6 +1,7 @@
 import { apiFetch } from "@/lib/auth-token";
 import {
   resolveGoogleWorkspaceValidationReview,
+  type GoogleProfileLabelSyncResult,
   type GoogleValidationReviewItem,
 } from "./google-workspace-client";
 
@@ -67,7 +68,11 @@ async function responseJson<T>(response: Response): Promise<T> {
 export async function createGoogleReviewNewProfile(
   item: Pick<GoogleValidationReviewItem, "messageId" | "subject">,
   input: GoogleReviewNewProfileInput,
-): Promise<{ id: string; name: string }> {
+): Promise<{
+  id: string;
+  name: string;
+  gmailSync: GoogleProfileLabelSyncResult;
+}> {
   const profileName = input.profileName.trim();
   if (!profileName) throw new Error("Add a profile name.");
   const region = input.region.trim().toUpperCase();
@@ -121,6 +126,13 @@ export async function createGoogleReviewNewProfile(
     }),
   );
 
-  await resolveGoogleWorkspaceValidationReview(item.messageId, created.profileId);
-  return { id: created.profileId, name: profileName };
+  const assignment = await resolveGoogleWorkspaceValidationReview(
+    item.messageId,
+    created.profileId,
+  );
+  return {
+    id: created.profileId,
+    name: profileName,
+    gmailSync: assignment.gmailSync,
+  };
 }
