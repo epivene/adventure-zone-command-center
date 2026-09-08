@@ -226,6 +226,10 @@ export class PostgresGoogleGmailMutationRepository {
               candidate_mutation.next_attempt_at IS NULL
               OR candidate_mutation.next_attempt_at <= $2
             )
+            AND pg_try_advisory_xact_lock(
+              hashtext(candidate_mutation.connection_id::text),
+              hashtext(candidate_mutation.thread_id)
+            )
             AND NOT EXISTS (
               SELECT 1
                 FROM google_workspace_gmail_mutations active
