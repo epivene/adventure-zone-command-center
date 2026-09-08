@@ -185,4 +185,22 @@ describe("EventMap unresolved locations", () => {
       [-106.0, 45.0],
     ]);
   });
+
+  it("opens the linked Boss event profile from the read-only route list", () => {
+    const linkedEvent = { ...confirmedMapped, organizationId: "profile-1" } as MapEvent;
+    const props = {
+      events: [linkedEvent],
+      travelLegs: [leg],
+      readOnly: true,
+      profileBasePath: "/boss/profiles",
+    } as Parameters<typeof EventMap>[0];
+
+    render(<EventMap {...props} />);
+
+    expect(screen.getByRole("link", { name: "Confirmed Stop" })).toHaveAttribute(
+      "href",
+      "/boss/profiles/profile-1",
+    );
+  });
+
 });
