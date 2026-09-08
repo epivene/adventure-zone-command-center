@@ -121,6 +121,41 @@ describe("PostgresGoogleGmailMutationRepository intent fencing", () => {
     }
   });
 
+  it("adopts the current generation when Check emails reloads a legacy retry", async () => {
+    const { db, repository } = await fixture();
+    try {
+      await db.query(
+        `INSERT INTO google_workspace_gmail_thread_intents (
+           connection_id, thread_id, generation, intent_kind, organization_id
+         ) VALUES ($1,'thread-1',3,'assign',$2)`,
+        [connectionId, organizationA],
+      );
+      await db.query(
+        `INSERT INTO google_workspace_gmail_mutations (
+           connection_id, message_id, thread_id, organization_id, operation,
+           idempotency_key, state, intent_generation
+         ) VALUES ($1,'legacy-retry','thread-1',$2,'label_inbound_message',
+                   'legacy-retry-key','retryable_error',NULL)`,
+        [connectionId, organizationA],
+      );
+
+      await expect(repository.createOrLoad({
+        connectionId,
+        messageId: "legacy-retry",
+        threadId: "thread-1",
+        organizationId: organizationA,
+        operation: "label_inbound_message",
+        idempotencyKey: "legacy-retry-key",
+        actorId: null,
+      })).resolves.toMatchObject({
+        state: "retryable_error",
+        intentGeneration: 3,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
   it("allows only inbound work matching the current profile generation", async () => {
     const { db, repository } = await fixture();
     try {
