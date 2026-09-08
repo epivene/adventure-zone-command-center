@@ -92,17 +92,13 @@ export class GoogleProfileLabelResolver {
     }
 
     const canonicalName = canonicalProfileLabelName(organization.name);
-    const exact = labels.filter(
-      (label) => label.type === "user" && label.name === canonicalName,
-    );
     const normalizedName = normalizedProfileLabelPath(canonicalName);
-    const compatible = labels.filter(
+    const candidates = labels.filter(
       (label) =>
         label.type === "user" &&
         isProfileLabelPath(label.name) &&
         normalizedProfileLabelPath(label.name) === normalizedName,
     );
-    const candidates = exact.length ? exact : compatible;
     if (candidates.length > 1) return this.conflict(input, candidates);
 
     if (candidates.length === 1) {
@@ -131,7 +127,50 @@ export class GoogleProfileLabelResolver {
       }
     }
 
-    const created = await this.gmail.createLabel(canonicalName);
+    let created: GoogleLabelSummary;
+    try {
+      created = await this.gmail.createLabel(canonicalName);
+    } catch (error) {
+      if (errorCode(error) !== "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT") {
+        throw error;
+      }
+      const refreshed = (await this.gmail.listLabels()).filter(
+        (label) =>
+          label.type === "user" &&
+          isProfileLabelPath(label.name) &&
+          normalizedProfileLabelPath(label.name) === normalizedName,
+      );
+      if (refreshed.length > 1) return this.conflict(input, refreshed);
+      const winner = refreshed[0];
+      if (!winner) {
+        throw new Error("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE");
+      }
+      const owner = await this.repository.findByLabelId({
+        connectionId: input.connectionId,
+        gmailLabelId: winner.id,
+      });
+      if (owner && owner.organizationId !== input.organizationId) {
+        return this.conflict(input, [winner]);
+      }
+      try {
+        return {
+          status: "resolved",
+          mapping: await this.repository.adopt({
+            ...input,
+            gmailLabelId: winner.id,
+            gmailLabelName: winner.name,
+          }),
+        };
+      } catch (adoptError) {
+        if (
+          errorCode(adoptError) ===
+          "GOOGLE_WORKSPACE_PROFILE_LABEL_CONFLICT"
+        ) {
+          return this.conflict(input, [winner]);
+        }
+        throw adoptError;
+      }
+    }
     try {
       return {
         status: "resolved",
