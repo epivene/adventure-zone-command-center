@@ -197,7 +197,8 @@ describe("GoogleReviewProfileAssignmentService", () => {
     await expect(h.service.resolveReview(baseInput())).resolves.toMatchObject({
       gmailSync: { state: "completed", gmailLabelId: "Label_10" },
     });
-    expect(h.order).toEqual(["transaction"]);
+    expect(h.order).toEqual([]);
+    expect(h.assignmentPersistence.resolveReview).toHaveBeenCalledOnce();
     expect(h.retry).not.toHaveBeenCalled();
   });
 });
