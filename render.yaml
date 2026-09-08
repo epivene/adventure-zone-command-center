@@ -71,10 +71,9 @@ services:
       # may use the app's existing AI provider for MATCH / IGNORE / NEEDS REVIEW triage.
       - key: GOOGLE_WORKSPACE_SYNC_ENABLED
         value: "false"
-      # Roll out profile-label/archive mutations separately after reconnecting
-      # the company account with Gmail modify permission.
+      # Email Review assignments create/reuse profile labels and archive assigned threads.
       - key: GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED
-        value: "false"
+        value: "true"
       - key: GOOGLE_WORKSPACE_AI_ENABLED
         value: "true"
       # Act! settings are server-only. Never expose these through Vite.
