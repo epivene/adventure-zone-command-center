@@ -36,6 +36,30 @@ describe("GoogleReviewProfileAssignmentService", () => {
           return { rows: [] };
         },
       },
+      mutations: {
+        createOrLoad: vi.fn(async () => {
+          order.push("queue");
+          return {
+          id: "mutation-1",
+          connectionId: "conn-1",
+          messageId: "message-1",
+          threadId: "thread-1",
+          organizationId: "org-1",
+          operation: "assign_thread" as const,
+          targetLabelId: null,
+          removeLabelIds: [],
+          idempotencyKey: "assignment-1",
+          state: "pending" as const,
+          attemptCount: 0,
+          lastErrorCode: null,
+        };
+        }),
+        get: vi.fn(),
+        retryNow: vi.fn(),
+        claim: vi.fn(),
+        complete: vi.fn(),
+        fail: vi.fn(),
+      },
       syncFactory: async () => {
         order.push("preflight");
         return {
@@ -59,7 +83,7 @@ describe("GoogleReviewProfileAssignmentService", () => {
       gmailSync: { state: "completed" },
     });
 
-    expect(order).toEqual(["preflight", "persist", "gmail", "sync-state"]);
+    expect(order).toEqual(["persist", "queue", "sync-state", "preflight", "gmail", "sync-state"]);
     expect(assignThread).toHaveBeenCalledWith(expect.objectContaining({
       threadId: "thread-1",
       organizationId: "org-1",
@@ -91,6 +115,27 @@ describe("GoogleReviewProfileAssignmentService", () => {
               }
             : { rows: [] };
         },
+      },
+      mutations: {
+        createOrLoad: vi.fn(async () => {
+          id: "mutation-1",
+          connectionId: "conn-1",
+          messageId: "message-1",
+          threadId: "thread-1",
+          organizationId: "org-1",
+          operation: "assign_thread" as const,
+          targetLabelId: null,
+          removeLabelIds: [],
+          idempotencyKey: "assignment-1",
+          state: "pending" as const,
+          attemptCount: 0,
+          lastErrorCode: null,
+        }),
+        get: vi.fn(),
+        retryNow: vi.fn(),
+        claim: vi.fn(),
+        complete: vi.fn(),
+        fail: vi.fn(),
       },
       syncFactory: async () => ({
         connectionId: "conn-1",
