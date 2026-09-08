@@ -90,6 +90,7 @@ describe("Boss operational records by leg", () => {
     expect(screen.queryByText("Hulk Fuel")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Hulk, 1 receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unassigned event, 1 receipt" }));
     expect(screen.getByText("Hulk Fuel")).toBeInTheDocument();
     expect(screen.queryByText("Kristy Fuel")).not.toBeInTheDocument();
   });

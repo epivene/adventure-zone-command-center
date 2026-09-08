@@ -57,13 +57,13 @@ describe("ManagerFinanceAdminPage", () => {
   it("shows combined totals and filters archived legs", async () => {
     render(<ManagerFinanceAdminPage />);
     expect(await screen.findByText("$1,500.00")).toBeInTheDocument();
-    expect(screen.getByText("Leg A")).toBeInTheDocument();
+    expect(screen.getAllByText("Leg A").length).toBeGreaterThan(0);
     expect(screen.queryByText(/Leg B/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Show archived legs"));
     expect(screen.getByText(/Leg B/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Leg A/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Leg A" }));
     await waitFor(() =>
       expect(mocks.get).toHaveBeenCalledWith(
         "/manager-admin/legs/a/money/summary",
