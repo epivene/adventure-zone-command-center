@@ -470,7 +470,7 @@ implements GoogleProfileAssignmentTransactionPort {
                 updated_at = $3
           WHERE connection_id = $1
             AND thread_id = $2
-            AND operation = 'assign_thread'
+            AND operation IN ('assign_thread','label_inbound_message')
             AND state IN ('pending','processing','retryable_error')`,
         [input.connectionId, input.threadId, input.now],
       );
