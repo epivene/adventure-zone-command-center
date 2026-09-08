@@ -88,6 +88,37 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
 }
 
 
+function googleForbiddenCode(
+  payload: Record<string, unknown>,
+  fallback: string,
+): string {
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? payload.error as Record<string, unknown>
+      : {};
+  const reasons = Array.isArray(error.errors)
+    ? error.errors.flatMap((entry) =>
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as Record<string, unknown>).reason === "string"
+          ? [String((entry as Record<string, unknown>).reason)]
+          : [],
+      )
+    : [];
+  if (reasons.some((reason) =>
+    /^(rateLimitExceeded|userRateLimitExceeded|quotaExceeded|dailyLimitExceeded)$/i
+      .test(reason)
+  )) {
+    return "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED";
+  }
+  if (reasons.some((reason) =>
+    /^(authError|insufficientPermissions)$/i.test(reason)
+  )) {
+    return "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED";
+  }
+  return fallback;
+}
+
 function googleLabelSummary(value: unknown): GoogleLabelSummary {
   if (!value || typeof value !== "object") {
     throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_RESPONSE_INVALID");
@@ -342,8 +373,14 @@ export function createGoogleWorkspaceReadClient(input: {
       accessToken = null;
       return authorizedJson(url, false);
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 403) {
+      throw clientError(googleForbiddenCode(
+        await responseJson(response),
+        "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
+      ));
     }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
@@ -371,8 +408,14 @@ export function createGoogleWorkspaceReadClient(input: {
       accessToken = null;
       return authorizedMutation(url, method, body, false);
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
       throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 403) {
+      throw clientError(googleForbiddenCode(
+        await responseJson(response),
+        "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
+      ));
     }
     if (response.status === 404) {
       throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
