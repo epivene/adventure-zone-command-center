@@ -89,6 +89,77 @@ describe("PostgresGoogleValidationRepository", () => {
     expect(query.mock.calls.some(([sql]) => String(sql).includes("SYNC_ENABLED"))).toBe(false);
   });
 
+  it("uses the mutation as the authoritative Gmail sync state", async () => {
+    const { pool, query } = poolWith((sql) => {
+      if (sql.includes("SELECT id FROM google_workspace_connections")) {
+        return [{ id: "connection-1" }];
+      }
+      if (sql.includes("google_workspace_validation_review_items item")) {
+        return [{
+          message_id: "m1",
+          thread_id: "t1",
+          subject: "Fair",
+          from_header: "fair@example.com",
+          to_header: "zone@example.com",
+          internal_date_ms: "1",
+          evidence_codes: [],
+          candidate_organizations: [],
+          has_attachments: false,
+          review_state: "resolved",
+          resolved_organization_id: "org-1",
+          gmail_sync_state: "completed",
+          gmail_sync_error_code: null,
+          gmail_sync_mutation_id: "mutation-1",
+        }];
+      }
+      return [];
+    });
+    const repository = new PostgresGoogleValidationRepository(pool);
+
+    await expect(repository.listReviewItems()).resolves.toEqual([
+      expect.objectContaining({
+        messageId: "m1",
+        gmailSyncState: "completed",
+        gmailSyncErrorCode: null,
+        gmailSyncMutationId: "mutation-1",
+      }),
+    ]);
+    const select = query.mock.calls.find(([sql]) =>
+      String(sql).includes("google_workspace_validation_review_items item"),
+    );
+    expect(String(select?.[0])).toContain("LEFT JOIN google_workspace_gmail_mutations");
+    expect(String(select?.[0])).toContain("COALESCE(mutation.state");
+  });
+
+  it("normalizes an in-flight mutation to pending", async () => {
+    const { pool } = poolWith((sql) => {
+      if (sql.includes("SELECT id FROM google_workspace_connections")) {
+        return [{ id: "connection-1" }];
+      }
+      return [{
+        message_id: "m1",
+        thread_id: "t1",
+        subject: "Fair",
+        from_header: "fair@example.com",
+        to_header: "zone@example.com",
+        internal_date_ms: 1,
+        evidence_codes: [],
+        candidate_organizations: [],
+        has_attachments: false,
+        review_state: "resolved",
+        resolved_organization_id: "org-1",
+        gmail_sync_state: "processing",
+        gmail_sync_error_code: null,
+        gmail_sync_mutation_id: "mutation-1",
+      }];
+    });
+    const repository = new PostgresGoogleValidationRepository(pool);
+
+    await expect(repository.listReviewItems()).resolves.toEqual([
+      expect.objectContaining({ gmailSyncState: "pending" }),
+    ]);
+  });
+
   it("lists only approved mappings for one organization", async () => {
     const { pool } = poolWith((sql) => {
       if (sql.includes("SELECT id FROM google_workspace_connections")) {
