@@ -94,8 +94,8 @@ describe("business document routes", () => {
     }));
   });
 
-  it("applies the supplied display name and category to an uploaded document", async () => {
-    const { app, service } = setup();
+  it("passes supplied display name and category into the ingestion transaction", async () => {
+    const { app, service, ingestion } = setup();
     await request(app)
       .post("/business-documents/upload")
       .set(ownerHeader())
@@ -106,11 +106,13 @@ describe("business document routes", () => {
       .send(Buffer.from([1, 2, 3]))
       .expect(201);
 
-    expect(service.update).toHaveBeenCalledWith(documentId, {
-      displayName: "County Fair Agreement",
-      category: "contract",
-      notes: null,
-    }, "");
+    expect(ingestion.ingest).toHaveBeenCalledWith(expect.objectContaining({
+      uploadMetadata: {
+        displayName: "County Fair Agreement",
+        category: "contract",
+      },
+    }));
+    expect(service.update).not.toHaveBeenCalled();
   });
 
   it("rejects an upload without a safe filename", async () => {
