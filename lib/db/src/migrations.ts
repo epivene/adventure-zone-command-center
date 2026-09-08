@@ -453,6 +453,18 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.design_certificates_asset_unique') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "20260908_contract_builder.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.contract_templates') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_settings') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_drafts') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_versions') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_files') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_status_events') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_coi_drafts') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
