@@ -166,6 +166,7 @@ implements GoogleProfileLabelSyncServicePort {
       if (resolution.status === "conflict") {
         const winner = await this.dependencies.mutations.fail({
           id: claimed.id,
+          expectedAttemptCount: claimed.attemptCount,
           state: "conflict",
           errorCode: resolution.code,
           nextAttemptAt: null,
@@ -204,24 +205,27 @@ implements GoogleProfileLabelSyncServicePort {
         });
       }
 
-      await this.dependencies.mutations.complete({
+      const winner = await this.dependencies.mutations.complete({
         id: claimed.id,
+        expectedAttemptCount: claimed.attemptCount,
         targetLabelId: target.gmailLabelId,
         removeLabelIds,
         now,
       });
+      if (!winner) {
+        throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
+      }
+      if (winner.state !== "completed") return this.view(winner);
       return {
-        mutationId: claimed.id,
-        state: "completed",
-        gmailLabelId: target.gmailLabelId,
+        ...this.view(winner),
         gmailLabelName: target.gmailLabelName,
-        errorCode: null,
       };
     } catch (error) {
       const code = safeCode(error);
       const state = failureState(code);
       const winner = await this.dependencies.mutations.fail({
         id: claimed.id,
+        expectedAttemptCount: claimed.attemptCount,
         state,
         errorCode: code,
         nextAttemptAt:
