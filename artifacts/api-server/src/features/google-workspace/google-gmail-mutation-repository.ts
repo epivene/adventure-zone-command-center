@@ -35,7 +35,7 @@ export type GoogleGmailMutationIntent = {
 type QueryResult = { rows: Array<Record<string, unknown>> };
 type SqlClient = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
-  release(): void;
+  release(error?: Error | boolean): void;
 };
 type SqlPool = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
@@ -128,13 +128,20 @@ export class PostgresGoogleGmailMutationRepository {
       locked = true;
       return await work();
     } finally {
+      let unlockError: Error | null = null;
       if (locked) {
-        await client.query(
-          "SELECT pg_advisory_unlock(hashtext($1), hashtext($2))",
-          [input.connectionId, input.threadId],
-        ).catch(() => undefined);
+        try {
+          await client.query(
+            "SELECT pg_advisory_unlock(hashtext($1), hashtext($2))",
+            [input.connectionId, input.threadId],
+          );
+        } catch (error) {
+          unlockError = error instanceof Error
+            ? error
+            : new Error("GOOGLE_WORKSPACE_GMAIL_THREAD_UNLOCK_FAILED");
+        }
       }
-      client.release();
+      client.release(unlockError ?? undefined);
     }
   }
 
@@ -158,8 +165,15 @@ export class PostgresGoogleGmailMutationRepository {
          ) ELSE NULL END,
          now(),now()
        )
-       ON CONFLICT (idempotency_key) DO UPDATE
-         SET idempotency_key = EXCLUDED.idempotency_key
+       ON CONFLICT (idempotency_key) DO UPDATE SET
+         idempotency_key = EXCLUDED.idempotency_key,
+         intent_generation = CASE
+           WHEN google_workspace_gmail_mutations.operation = 'label_inbound_message'
+            AND google_workspace_gmail_mutations.state IN ('pending','retryable_error')
+            AND EXCLUDED.intent_generation IS NOT NULL
+           THEN EXCLUDED.intent_generation
+           ELSE google_workspace_gmail_mutations.intent_generation
+         END
        ${returning}`,
       [
         input.connectionId,
