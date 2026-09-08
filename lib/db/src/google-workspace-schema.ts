@@ -352,6 +352,7 @@ export const googleWorkspaceGmailMutations = pgTable(
       .default("pending")
       .notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
+    intentGeneration: integer("intent_generation"),
     lastErrorCode: text("last_error_code"),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     processingLeaseExpiresAt: timestamp("processing_lease_expires_at", {
@@ -393,6 +394,63 @@ export const googleWorkspaceGmailMutations = pgTable(
     check(
       "google_workspace_gmail_mutations_attempt_nonnegative",
       sql`${table.attemptCount} >= 0`,
+    ),
+  ],
+);
+
+
+export const googleWorkspaceGmailThreadIntentKindValues = [
+  "assign",
+  "ignore",
+] as const;
+export type GoogleWorkspaceGmailThreadIntentKind =
+  (typeof googleWorkspaceGmailThreadIntentKindValues)[number];
+
+export const googleWorkspaceGmailThreadIntents = pgTable(
+  "google_workspace_gmail_thread_intents",
+  {
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => googleWorkspaceConnections.id, { onDelete: "cascade" }),
+    threadId: text("thread_id").notNull(),
+    generation: integer("generation").default(1).notNull(),
+    intentKind: text("intent_kind")
+      .$type<GoogleWorkspaceGmailThreadIntentKind>()
+      .notNull(),
+    organizationId: uuid("organization_id")
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    currentMutationId: uuid("current_mutation_id")
+      .references(() => googleWorkspaceGmailMutations.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("google_workspace_gmail_thread_intents_identity_unique").on(
+      table.connectionId,
+      table.threadId,
+    ),
+    index("google_workspace_gmail_thread_intents_mutation_idx")
+      .on(table.currentMutationId)
+      .where(sql`${table.currentMutationId} is not null`),
+    check(
+      "google_workspace_gmail_thread_intents_thread_nonblank",
+      sql`btrim(${table.threadId}) <> ''`,
+    ),
+    check(
+      "google_workspace_gmail_thread_intents_generation_positive",
+      sql`${table.generation} > 0`,
+    ),
+    check(
+      "google_workspace_gmail_thread_intents_kind_valid",
+      sql`${table.intentKind} in ('assign', 'ignore')`,
+    ),
+    check(
+      "google_workspace_gmail_thread_intents_assignment_consistent",
+      sql`(${table.intentKind} = 'assign' and ${table.organizationId} is not null) or (${table.intentKind} = 'ignore' and ${table.organizationId} is null and ${table.currentMutationId} is null)`,
     ),
   ],
 );
