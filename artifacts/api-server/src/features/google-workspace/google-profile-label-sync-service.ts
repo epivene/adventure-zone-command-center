@@ -134,13 +134,14 @@ implements GoogleProfileLabelSyncServicePort {
   ): Promise<GoogleProfileLabelSyncResult> {
     const now = this.dependencies.now?.() ?? new Date();
     if (!this.dependencies.enabled) {
-      await this.dependencies.mutations.fail({
+      const winner = await this.dependencies.mutations.fail({
         id: mutation.id,
         state: "retryable_error",
         errorCode: "GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_DISABLED",
         nextAttemptAt: null,
         now,
       });
+      if (winner?.state === "completed") return this.view(winner);
       return {
         mutationId: mutation.id,
         state: "retryable_error",
@@ -163,13 +164,14 @@ implements GoogleProfileLabelSyncServicePort {
         organizationId: claimed.organizationId,
       });
       if (resolution.status === "conflict") {
-        await this.dependencies.mutations.fail({
+        const winner = await this.dependencies.mutations.fail({
           id: claimed.id,
           state: "conflict",
           errorCode: resolution.code,
           nextAttemptAt: null,
           now,
         });
+        if (winner?.state === "completed") return this.view(winner);
         return {
           mutationId: claimed.id,
           state: "conflict",
@@ -218,7 +220,7 @@ implements GoogleProfileLabelSyncServicePort {
     } catch (error) {
       const code = safeCode(error);
       const state = failureState(code);
-      await this.dependencies.mutations.fail({
+      const winner = await this.dependencies.mutations.fail({
         id: claimed.id,
         state,
         errorCode: code,
@@ -228,6 +230,7 @@ implements GoogleProfileLabelSyncServicePort {
             : null,
         now,
       });
+      if (winner?.state === "completed") return this.view(winner);
       return {
         mutationId: claimed.id,
         state,
