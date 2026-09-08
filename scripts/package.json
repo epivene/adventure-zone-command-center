@@ -8,6 +8,7 @@
     "preview:business-documents": "tsx ./migrate-business-documents.ts",
     "migrate:business-documents": "tsx ./migrate-business-documents.ts --apply",
     "report:business-documents": "tsx ./report-business-document-import.ts",
+    "report:test-failures": "tsx ./report-adventure-zone-test-failures.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

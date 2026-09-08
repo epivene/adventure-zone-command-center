@@ -1,0 +1,306 @@
+{
+  "runtime": {
+    "node": "v22.23.2",
+    "platform": "win32"
+  },
+  "totals": {
+    "failedFiles": 91,
+    "failedTests": 155
+  },
+  "groups": [
+    {
+      "domain": "app-branding-name.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/app-branding-name.test.ts"
+      ]
+    },
+    {
+      "domain": "App.google-workspace-navigation.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/App.google-workspace-navigation.test.ts"
+      ]
+    },
+    {
+      "domain": "App.simplified-navigation-regression.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/App.simplified-navigation-regression.test.ts"
+      ]
+    },
+    {
+      "domain": "call-router-compat-routes.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/call-router-compat-routes.test.ts"
+      ]
+    },
+    {
+      "domain": "call-script-settings-navigation.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/call-script-settings-navigation.test.ts"
+      ]
+    },
+    {
+      "domain": "canonical-internal-links.test.ts",
+      "failedFiles": 1,
+      "failedTests": 2,
+      "files": [
+        "src/canonical-internal-links.test.ts"
+      ]
+    },
+    {
+      "domain": "components/assistant",
+      "failedFiles": 4,
+      "failedTests": 14,
+      "files": [
+        "src/components/assistant/assistant-drawer-polling.test.tsx",
+        "src/components/assistant/assistant-drawer.test.tsx",
+        "src/components/assistant/lead-discovery-results.test.tsx",
+        "src/components/assistant/lead-scout-save-dialog.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/calls",
+      "failedFiles": 3,
+      "failedTests": 3,
+      "files": [
+        "src/components/calls/call-console-ui-cleanup.test.ts",
+        "src/components/calls/call-workspace.computer-call.integration.test.tsx",
+        "src/components/calls/caller-finder.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/contacts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/components/contacts/quick-add-caller.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/design-studio",
+      "failedFiles": 2,
+      "failedTests": 2,
+      "files": [
+        "src/components/design-studio/ContextualBottomToolbar.test.tsx",
+        "src/components/design-studio/contract-signature-panel.test.ts"
+      ]
+    },
+    {
+      "domain": "components/event-families",
+      "failedFiles": 2,
+      "failedTests": 3,
+      "files": [
+        "src/components/event-families/profile-member-picker-location.test.ts",
+        "src/components/event-families/profile-member-picker.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/google-workspace",
+      "failedFiles": 2,
+      "failedTests": 3,
+      "files": [
+        "src/components/google-workspace/google-scope-preview.test.tsx",
+        "src/components/google-workspace/operational-calendar-settings-card.review-details.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/manager",
+      "failedFiles": 3,
+      "failedTests": 5,
+      "files": [
+        "src/components/manager/event-lifecycle-action.test.tsx",
+        "src/components/manager/receipt-expense-form.test.tsx",
+        "src/components/manager/report-schedule-issue.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/navigation",
+      "failedFiles": 3,
+      "failedTests": 5,
+      "files": [
+        "src/components/navigation/app-shell.test.tsx",
+        "src/components/navigation/mobile-bottom-nav.performance.test.tsx",
+        "src/components/navigation/workspace-switcher-menu.test.ts"
+      ]
+    },
+    {
+      "domain": "components/office",
+      "failedFiles": 3,
+      "failedTests": 5,
+      "files": [
+        "src/components/office/office-appearance-control.test.ts",
+        "src/components/office/office-email-editor.syntax.test.ts",
+        "src/components/office/office-email-editor.template-authoring.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/opportunities",
+      "failedFiles": 2,
+      "failedTests": 2,
+      "files": [
+        "src/components/opportunities/current-opportunity-card.test.tsx",
+        "src/components/opportunities/opportunity-draft-composer.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/organizations",
+      "failedFiles": 5,
+      "failedTests": 7,
+      "files": [
+        "src/components/organizations/duplicates-view.profile-language.test.ts",
+        "src/components/organizations/duplicates-view.subset-selection.test.tsx",
+        "src/components/organizations/duplicates-view.test.tsx",
+        "src/components/organizations/organization-list-card.test.tsx",
+        "src/components/organizations/organization-membership-drawer.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/packages",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/components/packages/package-template-editor.base-price.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/profiles",
+      "failedFiles": 6,
+      "failedTests": 9,
+      "files": [
+        "src/components/profiles/profile-detail-sheet.test.tsx",
+        "src/components/profiles/profile-locations-panel.test.tsx",
+        "src/components/profiles/profile-research-contract.test.ts",
+        "src/components/profiles/profile-research-prospect-intake-release3.test.ts",
+        "src/components/profiles/profile-research-release1-finish.test.ts",
+        "src/components/profiles/simple-full-profile.gmail-history.test.tsx"
+      ]
+    },
+    {
+      "domain": "components/today",
+      "failedFiles": 3,
+      "failedTests": 13,
+      "files": [
+        "src/components/today/booking-copilot-ui.test.tsx",
+        "src/components/today/call-queue-workspace.test.tsx",
+        "src/components/today/renewals-section.test.tsx"
+      ]
+    },
+    {
+      "domain": "dark-theme-booking-new.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/dark-theme-booking-new.test.ts"
+      ]
+    },
+    {
+      "domain": "features/assistant",
+      "failedFiles": 2,
+      "failedTests": 2,
+      "files": [
+        "src/features/assistant/assistant-api.test.ts",
+        "src/features/assistant/on-device-ai-router.test.ts"
+      ]
+    },
+    {
+      "domain": "features/calls",
+      "failedFiles": 2,
+      "failedTests": 4,
+      "files": [
+        "src/features/calls/adventure-zone-call-flow.test.ts",
+        "src/features/calls/global-guided-call-entrypoints.test.ts"
+      ]
+    },
+    {
+      "domain": "features/event-profiles",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/features/event-profiles/event-profile-activity-classification.test.ts"
+      ]
+    },
+    {
+      "domain": "login-landing.test.ts",
+      "failedFiles": 1,
+      "failedTests": 2,
+      "files": [
+        "src/login-landing.test.ts"
+      ]
+    },
+    {
+      "domain": "manager-appearance-selector.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/manager-appearance-selector.test.ts"
+      ]
+    },
+    {
+      "domain": "pages",
+      "failedFiles": 35,
+      "failedTests": 58,
+      "files": [
+        "src/pages/ActRecoveryPage.ownership-repair.test.ts",
+        "src/pages/AdminCommandPanelPage.test.tsx",
+        "src/pages/BossOperationalRecords.test.ts",
+        "src/pages/CalendarPage.confirmed-default.test.ts",
+        "src/pages/CallWorkspacePage.quick-add.test.tsx",
+        "src/pages/EventFamilyPage.member-link.test.ts",
+        "src/pages/EventProfilePage.cleanup-followup.test.ts",
+        "src/pages/EventProfilePage.locations-panel.test.ts",
+        "src/pages/EventProfilePage.organization-membership.test.tsx",
+        "src/pages/EventProfilePage.scout-notes.test.tsx",
+        "src/pages/EventProfilePage.simple-layout.test.ts",
+        "src/pages/EventProfilePage.test.tsx",
+        "src/pages/ManagerAftermathAdminPage.incident-actions.test.ts",
+        "src/pages/ManagerFinanceAdminPage.test.tsx",
+        "src/pages/ManagerHomePage.money-endpoint.test.ts",
+        "src/pages/ManagerIncidentPage.general.test.ts",
+        "src/pages/ManagerIncidentPage.test.tsx",
+        "src/pages/ManagerMessagesPage.test.tsx",
+        "src/pages/ManagerMoneyPage.test.tsx",
+        "src/pages/OrganizationsPage.test.tsx",
+        "src/pages/RoutesPage.workflow-split.test.ts",
+        "src/pages/SettingsBusinessSourcesPage.test.tsx",
+        "src/pages/SettingsGoogleWorkspaceOAuthReturn.test.tsx",
+        "src/pages/SettingsGoogleWorkspaceOptionalSublabels.test.tsx",
+        "src/pages/SettingsGoogleWorkspacePage.test.tsx",
+        "src/pages/SettingsPackagesResourcesPage.collapsible.test.tsx",
+        "src/pages/SimpleFrontendRefinement.test.ts",
+        "src/pages/TodayPage.scout-alerts.test.tsx",
+        "src/pages/main-copy-density.test.ts",
+        "src/pages/needs-attention-new-leads-navigation.test.ts",
+        "src/pages/new-leads-past-visibility.test.ts",
+        "src/pages/profile-advanced-tools-simplification.test.ts",
+        "src/pages/today-active-event-labels.test.ts",
+        "src/pages/today-layout-contract.test.ts",
+        "src/pages/today-section-heading-simplification.test.ts"
+      ]
+    },
+    {
+      "domain": "profile-creation-flow.test.ts",
+      "failedFiles": 1,
+      "failedTests": 1,
+      "files": [
+        "src/profile-creation-flow.test.ts"
+      ]
+    },
+    {
+      "domain": "website-custom-element",
+      "failedFiles": 1,
+      "failedTests": 5,
+      "files": [
+        "src/website-custom-element/adventure-zone-site.contract.test.ts"
+      ]
+    }
+  ]
+}
