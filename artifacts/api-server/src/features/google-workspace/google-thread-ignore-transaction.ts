@@ -219,13 +219,13 @@ implements GoogleThreadIgnoreTransactionPort {
     await client.query(
       `UPDATE google_workspace_gmail_mutations
           SET state = 'permanent_error',
-              last_error_code = 'GOOGLE_WORKSPACE_ASSIGNMENT_IGNORED',
+              last_error_code = 'GOOGLE_WORKSPACE_THREAD_INTENT_IGNORED',
               next_attempt_at = NULL,
               processing_lease_expires_at = NULL,
               updated_at = $3
         WHERE connection_id = $1
           AND thread_id = $2
-          AND operation = 'assign_thread'
+          AND operation IN ('assign_thread','label_inbound_message')
           AND state IN ('pending','processing','retryable_error')`,
       [input.connectionId, input.threadId, input.now],
     );
