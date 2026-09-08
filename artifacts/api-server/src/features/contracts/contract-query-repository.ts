@@ -7,8 +7,11 @@ import {
   contractDrafts,
   contractFiles,
   contractStatusEvents,
+  contractTemplates,
   contractVersions,
 } from "@/db/schema";
+import type { StoredContractDraftValues } from "./contract-draft-service";
+import type { ContractReadiness } from "./contract-types";
 
 type Database = typeof database;
 
@@ -83,8 +86,27 @@ export class DrizzleContractQueryRepository {
   }
 
   async getDraft(draftId: string) {
-    const [draft] = await this.database.select().from(contractDrafts)
-      .where(eq(contractDrafts.id, draftId)).limit(1);
-    return draft ?? null;
+    const [row] = await this.database.select({
+      draft: contractDrafts,
+      templateVersion: contractTemplates.version,
+    })
+      .from(contractDrafts)
+      .innerJoin(contractTemplates, eq(contractDrafts.templateId, contractTemplates.id))
+      .where(eq(contractDrafts.id, draftId))
+      .limit(1);
+    if (!row) return null;
+    return {
+      id: row.draft.id,
+      bookingId: row.draft.bookingId,
+      organizationId: row.draft.organizationId,
+      templateId: row.draft.templateId,
+      templateVersion: row.templateVersion,
+      arrangement: row.draft.arrangement,
+      storedValues: row.draft.values as StoredContractDraftValues,
+      validationState: row.draft.validationState as ContractReadiness,
+      revision: row.draft.revision,
+      predecessorVersionId: row.draft.predecessorVersionId,
+      finalizedAt: row.draft.finalizedAt,
+    };
   }
 }
