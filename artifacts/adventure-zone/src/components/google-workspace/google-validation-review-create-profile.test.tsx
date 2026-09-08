@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { GoogleValidationReview } from "./google-validation-review";
 
-const createFromReview = vi.fn(async () => ({ id: "profile-1", name: "Town of Langford" }));
+const { createFromReview } = vi.hoisted(() => ({
+  createFromReview: vi.fn(async () => ({
+    id: "profile-1",
+    name: "Town of Langford",
+  })),
+}));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => ({
   getGoogleWorkspaceValidationReview: vi.fn(async () => ({
