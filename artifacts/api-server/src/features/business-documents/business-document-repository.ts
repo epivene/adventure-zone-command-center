@@ -459,6 +459,38 @@ export class BusinessDocumentRepository {
     } finally { client.release?.(); }
   }
 
+  async updateMetadata(documentId: string, input: {
+    displayName: string;
+    category: BusinessDocumentCategory;
+    notes: string | null;
+  }, actor: string) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `UPDATE business_documents
+            SET display_name = $2, category = $3, notes = $4, updated_at = now()
+          WHERE id = $1 AND lifecycle <> 'deleted'
+          RETURNING id`,
+        [documentId, input.displayName, input.category, input.notes],
+      );
+      if (!result.rows.length) {
+        await client.query("ROLLBACK");
+        return null;
+      }
+      await client.query(
+        `INSERT INTO business_document_audit_events (document_id, action, actor, metadata)
+         VALUES ($1,'metadata_updated',$2,$3::jsonb)`,
+        [documentId, actor, JSON.stringify(input)],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release?.(); }
+    return this.getById(documentId);
+  }
+
   async softDelete(documentId: string, actor: string) {
     const client = await this.pool.connect();
     try {

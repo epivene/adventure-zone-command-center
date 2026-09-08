@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
 export type BusinessDocumentCategory =
   | "contract"
@@ -104,6 +104,18 @@ export const businessDocumentsApi = {
   async open(documentId: string) {
     const result = await apiPost<{ url: string }>(`/business-documents/${documentId}/open`, {});
     return result.url;
+  },
+
+  update(documentId: string, input: {
+    displayName: string;
+    category: BusinessDocumentCategory;
+    notes: string | null;
+  }) {
+    return apiPatch<{ document: BusinessDocumentRecord }>(`/business-documents/${documentId}`, input);
+  },
+
+  deleteDocument(documentId: string) {
+    return apiDelete<{ ok: true }>(`/business-documents/${documentId}`, { confirmation: "DELETE" });
   },
 
   unlink(documentId: string, linkId: string) {

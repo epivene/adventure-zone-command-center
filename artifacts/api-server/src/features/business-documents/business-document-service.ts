@@ -14,6 +14,7 @@ type Repository = Pick<
   | "getOpenableFile"
   | "addLink"
   | "removeLink"
+  | "updateMetadata"
   | "archive"
   | "softDelete"
   | "countPendingReviews"
@@ -60,6 +61,16 @@ export class BusinessDocumentService {
 
   async unlink(documentId: string, linkId: string, _actor: string) {
     return this.repository.removeLink(documentId, linkId);
+  }
+
+  async update(documentId: string, input: {
+    displayName: string;
+    category: BusinessDocumentCategory;
+    notes: string | null;
+  }, actor: string) {
+    const document = await this.repository.updateMetadata(documentId, input, actor);
+    if (!document) throw new Error("BUSINESS_DOCUMENT_NOT_FOUND");
+    return document;
   }
 
   archive(documentId: string, actor: string) {

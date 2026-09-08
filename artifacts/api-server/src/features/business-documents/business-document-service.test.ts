@@ -41,4 +41,16 @@ describe("BusinessDocumentService", () => {
     await expect(service.reviewAction("review-1", { action: "approve" }, "owner")).resolves.toEqual({ ok: true });
     expect(repository.actOnReview).toHaveBeenCalledWith("review-1", { action: "approve" }, "owner");
   });
+
+  it("returns edited document metadata and reports a missing document", async () => {
+    const updateMetadata = vi.fn()
+      .mockResolvedValueOnce({ id: "document-1", displayName: "Updated contract" })
+      .mockResolvedValueOnce(null);
+    const service = new BusinessDocumentService({ repository: { updateMetadata } as any, storage: {} as any });
+
+    await expect(service.update("document-1", { displayName: "Updated contract", category: "contract", notes: null }, "owner"))
+      .resolves.toMatchObject({ displayName: "Updated contract" });
+    await expect(service.update("missing", { displayName: "Missing", category: "other", notes: null }, "owner"))
+      .rejects.toThrow("BUSINESS_DOCUMENT_NOT_FOUND");
+  });
 });

@@ -24,6 +24,11 @@ const linkBody = z.object({
   evidence: z.array(z.record(z.string(), z.unknown())).max(25).optional(),
 }).strict();
 const deleteBody = z.object({ confirmation: z.literal("DELETE") }).strict();
+const updateBody = z.object({
+  displayName: z.string().trim().min(1).max(255),
+  category: z.enum(businessDocumentCategoryValues),
+  notes: z.string().trim().max(5000).nullable(),
+}).strict();
 const targetCorrection = z.object({
   targetKind: z.enum(["profile", "booking", "event_family"]),
   targetId: uuid,
@@ -138,6 +143,14 @@ export function createBusinessDocumentsRouter(
     if (!uuid.safeParse(documentId).success) { res.status(400).json({ error: "Invalid business document ID." }); return; }
     try { res.json({ document: await service.detail(documentId) }); }
     catch (error) { res.status(statusFor(error)).json({ error: error instanceof Error && error.message === "BUSINESS_DOCUMENT_NOT_FOUND" ? "Business document not found." : "Could not load the business document." }); }
+  });
+
+  router.patch("/business-documents/:documentId", async (req, res) => {
+    const documentId = idParam(req.params.documentId);
+    const parsed = updateBody.safeParse(req.body);
+    if (!uuid.safeParse(documentId).success || !parsed.success) { res.status(400).json({ error: "Review the document details." }); return; }
+    try { res.json({ document: await service.update(documentId, parsed.data, actor(req)) }); }
+    catch (error) { res.status(statusFor(error)).json({ error: error instanceof Error && error.message === "BUSINESS_DOCUMENT_NOT_FOUND" ? "Business document not found." : "Could not update the business document." }); }
   });
 
   router.post("/business-documents/:documentId/open", async (req, res) => {
