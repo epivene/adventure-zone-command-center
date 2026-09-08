@@ -49,7 +49,7 @@ Only after commit will the service initialize Gmail and execute the queued mutat
 
 Each thread also has one durable, versioned intent row. Assigning a profile makes that mutation the current generation; Ignore makes an `ignore` generation current and clears the current mutation. Workers may claim assignment work only when its mutation ID and generation still match that row.
 
-A dedicated PostgreSQL session advisory lock is held from worker claim through the Gmail API call and mutation completion. Assignment and Ignore transactions take the matching transaction advisory lock before changing intent. This serializes the external side effect with user decisions, prevents expired workers from applying stale labels, and guarantees that no queued assignment can change Gmail after Ignore returns.
+A dedicated PostgreSQL session advisory lock is held from worker claim through the Gmail API call and mutation completion. The session locks use a separate two-connection pool so concurrent Gmail work cannot reserve every application query connection. Assignment and Ignore transactions take the matching transaction advisory lock before changing intent. This serializes the external side effect with user decisions, prevents expired workers from applying stale labels, and guarantees that no queued assignment can change Gmail after Ignore returns.
 
 The transaction repository will receive a checked-out database client. It will use `BEGIN`, `COMMIT`, and `ROLLBACK`; no transaction work will use pool-level queries that could switch connections.
 
@@ -82,7 +82,7 @@ After the transaction commits:
 - Never remove `UNREAD`.
 - Mark the mutation completed.
 
-For later inbound messages on a mapped thread, keep the existing message-level behavior: add the profile label and remove nothing, preserving Inbox and Unread.
+For later inbound messages on a mapped thread, keep the existing message-level behavior: add the profile label and remove nothing, preserving Inbox and Unread. Versioned thread intent overrides stale historical mappings after reassignment or Ignore. Startup migration and Check emails also adopt interrupted legacy inbound jobs into the current generation after their processing lease expires.
 
 ## Failure Handling
 
@@ -132,8 +132,8 @@ Existing unrelated failing repository checks will be reported separately; the fo
 
 ## Verification Results
 
-- Google Workspace backend: 78 files, 320 tests passed.
-- Atomic transaction coverage includes rollback, stable identical retries, processing reassignment superseding, A → B → A generations, staged connection failure, session-lock lifetime, and atomic Ignore cancellation.
+- Google Workspace backend: 79 files, 327 tests passed.
+- Atomic transaction coverage includes rollback, stable identical retries, processing reassignment superseding, A → B → A generations, staged connection failure, session-lock lifetime and pool isolation, interrupted inbound-job recovery, and atomic Ignore cancellation.
 - Office Coordinator workflow: API and frontend builds passed.
 - Release Safety: no new type errors in the atomic transaction, review assignment service, validation repository, matched-corrections route, or route contract test. Remaining type errors are pre-existing Google Gmail client declaration issues.
 - Google Workspace workflow remains red only in pre-existing frontend settings/navigation tests after its backend step passes.
