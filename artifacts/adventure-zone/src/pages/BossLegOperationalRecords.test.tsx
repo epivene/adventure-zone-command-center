@@ -122,12 +122,13 @@ describe("Boss operational records by leg", () => {
     bossGet.mockResolvedValueOnce({
       ...dashboard,
       checklistAndMaintenance: [
+        { id: "maintenance-pre", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "pre" },
         { id: "maintenance-post", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "post" },
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
 
-    expect(await screen.findByRole("button", { name: /Hulk Birthday Party/ })).toBeInTheDocument();
+    expect(await screen.findAllByText("Hulk Birthday Party")).toHaveLength(1);
   });
 
   it("opens one event card with its pre-event and post-event records underneath", async () => {
@@ -305,12 +306,16 @@ describe("Boss operational records by leg", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Hulk, 2 maintenance records" }));
 
     expect(screen.getAllByText("Legacy Party")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: /Legacy Party/ })).toHaveTextContent("Pre-event available");
-    expect(screen.getByRole("button", { name: /Legacy Party/ })).toHaveTextContent("Post-event available");
+    const legacyToggle = screen.getByRole("button", { name: /Legacy Party/ });
+    expect(legacyToggle).toHaveTextContent("Pre-event available");
+    expect(legacyToggle).toHaveTextContent("Post-event available");
+    expect(legacyToggle.getAttribute("aria-controls")).not.toMatch(/\s/);
   });
 
   it("removes a phase record without using the event card as the action", async () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    let finishDelete!: () => void;
+    bossDelete.mockImplementationOnce(() => new Promise<void>((resolve) => { finishDelete = resolve; }));
     bossGet.mockImplementation(async (path: string) => {
       if (path === "/boss/dashboard") {
         return {
@@ -330,8 +335,10 @@ describe("Boss operational records by leg", () => {
     await screen.findByText("No checklist answers.");
     fireEvent.click(screen.getByRole("button", { name: "Remove pre-event record" }));
 
-    await waitFor(() => expect(bossDelete).toHaveBeenCalledWith("/boss/maintenance/maintenance-pre"));
+    expect(toggle).toBeInTheDocument();
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    finishDelete();
+    await waitFor(() => expect(bossDelete).toHaveBeenCalledWith("/boss/maintenance/maintenance-pre"));
     confirm.mockRestore();
   });
 
