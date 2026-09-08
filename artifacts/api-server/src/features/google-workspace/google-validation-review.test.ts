@@ -67,6 +67,48 @@ describe("Google validation review repository", () => {
     ]);
   });
 
+  it("prefers the authoritative Gmail mutation state over a stale projection", async () => {
+    const queries: string[] = [];
+    const pool = {
+      async query(text: string) {
+        queries.push(text);
+        if (text.includes("FROM google_workspace_connections")) {
+          return { rows: [{ id: "connection-id" }] };
+        }
+        return {
+          rows: [{
+            message_id: "m1",
+            thread_id: "t1",
+            subject: "County Fair application",
+            from_header: "fair@example.org",
+            to_header: "zone@example.com",
+            internal_date_ms: "1787510000000",
+            evidence_codes: [],
+            candidate_organizations: [],
+            has_attachments: false,
+            review_state: "resolved",
+            resolved_organization_id: "org-live",
+            gmail_sync_state: "completed",
+            gmail_sync_error_code: null,
+            gmail_sync_mutation_id: "mutation-1",
+          }],
+        };
+      },
+    };
+    const repository = new PostgresGoogleValidationRepository(pool);
+
+    await expect(repository.listReviewItems()).resolves.toEqual([
+      expect.objectContaining({
+        gmailSyncState: "completed",
+        gmailSyncErrorCode: null,
+        gmailSyncMutationId: "mutation-1",
+      }),
+    ]);
+    expect(queries.at(-1)).toContain(
+      "LEFT JOIN google_workspace_gmail_mutations mutation",
+    );
+  });
+
   it("resolves a review item only to a live organization and creates the normal mapping", async () => {
     const pool = fakePool();
     const repository = new PostgresGoogleValidationRepository(pool);
