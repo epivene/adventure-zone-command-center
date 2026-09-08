@@ -118,4 +118,84 @@ describe("GoogleReviewProfileAssignmentService", () => {
     expect(assign).toHaveBeenCalledOnce();
     expect(assignThread).toHaveBeenCalledOnce();
   });
+
+  it("persists and queues the assignment before Gmail bootstrap, returning a retryable result when bootstrap fails", async () => {
+    const order: string[] = [];
+    const resolve = vi.fn(async () => { order.push("persist"); });
+    const createOrLoad = vi.fn(async () => {
+      order.push("queue");
+      return {
+        id: "mutation-1",
+        connectionId: "conn-1",
+        messageId: "message-1",
+        threadId: "thread-1",
+        organizationId: "org-1",
+        operation: "assign_thread" as const,
+        targetLabelId: null,
+        removeLabelIds: [],
+        idempotencyKey: "assignment-1",
+        state: "pending" as const,
+        attemptCount: 0,
+        lastErrorCode: null,
+      };
+    });
+    const fail = vi.fn(async () => { order.push("mark-retryable"); });
+    const service = new GoogleReviewProfileAssignmentService({
+      reviewPersistence: { resolve },
+      matchedPersistence: { assign: vi.fn() },
+      mutations: {
+        createOrLoad,
+        get: vi.fn(),
+        retryNow: vi.fn(),
+        claim: vi.fn(),
+        complete: vi.fn(),
+        fail,
+      },
+      pool: {
+        async query(text: string) {
+          if (text.includes("SELECT item.connection_id")) {
+            order.push("load-decision");
+            return {
+              rows: [{
+                connection_id: "conn-1",
+                thread_id: "thread-1",
+                decision_revision: "2026-09-08T12:00:00.000Z",
+              }],
+            };
+          }
+          order.push("sync-state");
+          return { rows: [] };
+        },
+      },
+      syncFactory: async () => {
+        order.push("gmail-bootstrap");
+        throw new Error("unexpected bootstrap failure");
+      },
+    });
+
+    await expect(service.resolveReview({
+      messageId: "message-1",
+      organizationId: "org-1",
+      actorId: "owner-1",
+      now: new Date("2026-09-08T12:00:00.000Z"),
+    })).resolves.toMatchObject({
+      threadId: "thread-1",
+      gmailSync: {
+        mutationId: "mutation-1",
+        state: "retryable_error",
+        errorCode: "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
+      },
+    });
+
+    expect(order).toEqual([
+      "persist",
+      "load-decision",
+      "queue",
+      "sync-state",
+      "gmail-bootstrap",
+      "mark-retryable",
+      "sync-state",
+    ]);
+  });
+
 });
