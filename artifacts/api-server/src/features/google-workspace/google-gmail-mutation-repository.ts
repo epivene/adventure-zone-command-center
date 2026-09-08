@@ -98,6 +98,15 @@ const returning = `
             remove_label_ids, idempotency_key, state, attempt_count,
             intent_generation, last_error_code`;
 
+const claimReturning = `
+  RETURNING mutation.id::text, mutation.connection_id::text,
+            mutation.message_id, mutation.thread_id,
+            mutation.organization_id::text, mutation.operation,
+            mutation.target_label_id, mutation.remove_label_ids,
+            mutation.idempotency_key, mutation.state,
+            mutation.attempt_count, mutation.intent_generation,
+            mutation.last_error_code`;
+
 export class PostgresGoogleGmailMutationRepository {
   constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
 
@@ -442,7 +451,7 @@ export class PostgresGoogleGmailMutationRepository {
               updated_at = $2
          FROM candidate
         WHERE mutation.id = candidate.id
-        ${returning}`,
+        ${claimReturning}`,
       [id, now],
     );
     return result.rows[0] ? record(result.rows[0]) : null;
