@@ -222,6 +222,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "accountIdentity",
       "authorizationUrl",
       "createGmailDraft",
+      "createLabel",
       "exchangeCode",
       "getAttachment",
       "getMessageMetadata",
@@ -231,7 +232,13 @@ describe("GoogleWorkspaceReadClient", () => {
       "listLabels",
       "listMessagePage",
       "listRecentMessageRefs",
+      "modifyMessageLabels",
+      "modifyThreadLabels",
+      "renameLabel",
     ]);
     expect(Object.keys(client).some((name) => /send/i.test(name))).toBe(false);
+    const scopes = GOOGLE_WORKSPACE_REQUIRED_SCOPES as readonly string[];
+    expect(scopes).toContain("https://www.googleapis.com/auth/gmail.modify");
+    expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.readonly");
   });
 });
