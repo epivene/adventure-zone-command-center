@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const auth = vi.hoisted(() => ({
   apiDelete: vi.fn(),
   apiGet: vi.fn(),
+  apiPatch: vi.fn(),
   apiPost: vi.fn(),
 }));
 
@@ -36,5 +37,18 @@ describe("businessDocumentsApi document listing", () => {
     expect(auth.apiGet).toHaveBeenNthCalledWith(1, "/business-documents?limit=100&offset=0");
     expect(auth.apiGet).toHaveBeenNthCalledWith(2, "/business-documents?limit=100&offset=100");
     expect(result.documents).toHaveLength(101);
+  });
+});
+
+describe("businessDocumentsApi document changes", () => {
+  it("sends editable metadata and explicit deletion confirmation", async () => {
+    auth.apiPatch.mockResolvedValue({ document: { id: "document-1" } });
+    auth.apiDelete.mockResolvedValue({ ok: true });
+
+    await businessDocumentsApi.update("document-1", { displayName: "Contract", category: "contract", notes: null });
+    await businessDocumentsApi.deleteDocument("document-1");
+
+    expect(auth.apiPatch).toHaveBeenCalledWith("/business-documents/document-1", { displayName: "Contract", category: "contract", notes: null });
+    expect(auth.apiDelete).toHaveBeenCalledWith("/business-documents/document-1", { confirmation: "DELETE" });
   });
 });

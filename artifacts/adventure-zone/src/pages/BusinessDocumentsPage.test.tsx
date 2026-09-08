@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ listAll: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  listAll: vi.fn(),
+  open: vi.fn(),
+  update: vi.fn(),
+  deleteDocument: vi.fn(),
+}));
 vi.mock("@/lib/business-documents-api", () => ({
-  businessDocumentsApi: { listAll: mocks.listAll },
+  businessDocumentsApi: mocks,
 }));
 
 import BusinessDocumentsPage from "./BusinessDocumentsPage";
@@ -12,7 +17,20 @@ import BusinessDocumentsPage from "./BusinessDocumentsPage";
 beforeEach(() => {
   mocks.listAll.mockReset();
   mocks.listAll.mockResolvedValue({ documents: [] });
+  mocks.open.mockReset();
+  mocks.update.mockReset();
+  mocks.deleteDocument.mockReset();
 });
+
+function documentFixture() {
+  return {
+    id: "template-1", displayName: "Pirate Names", originalFilename: "Pirate Names.docx",
+    category: "operational_template", lifecycle: "active", reviewState: "accepted", currentVersionId: "v1",
+    effectiveDate: null, issueDate: null, expirationDate: null, notes: null,
+    createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z",
+    fileAvailable: true, links: [], sourceKinds: ["drive"],
+  };
+}
 
 describe("BusinessDocumentsPage", () => {
   it("shows high-volume document categories as top-level views", async () => {
@@ -68,5 +86,33 @@ describe("BusinessDocumentsPage", () => {
     render(<BusinessDocumentsPage />);
     expect(await screen.findByText("No business documents yet")).toBeVisible();
     expect(screen.getByRole("link", { name: "Import business documents" })).toHaveAttribute("href", "/business-documents/import");
+  });
+
+  it("edits a document name, type, and notes from its library card", async () => {
+    mocks.listAll.mockResolvedValue({ documents: [documentFixture()] });
+    mocks.update.mockResolvedValue({ document: { ...documentFixture(), displayName: "Crew Name Ideas", category: "marketing", notes: "Branding reference" } });
+    render(<BusinessDocumentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Pirate Names" }));
+    fireEvent.change(screen.getByLabelText("Document name"), { target: { value: "Crew Name Ideas" } });
+    fireEvent.change(screen.getByLabelText("Edit document type"), { target: { value: "marketing" } });
+    fireEvent.change(screen.getByLabelText("Document notes"), { target: { value: "Branding reference" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save document" }));
+
+    expect(await screen.findByText("Crew Name Ideas")).toBeVisible();
+    expect(screen.getByText("Branding reference")).toBeVisible();
+  });
+
+  it("deletes a confirmed document and removes it from the active library", async () => {
+    mocks.listAll.mockResolvedValue({ documents: [documentFixture()] });
+    mocks.deleteDocument.mockResolvedValue({ ok: true });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<BusinessDocumentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Pirate Names" }));
+
+    await waitFor(() => expect(screen.queryByText("Pirate Names")).not.toBeInTheDocument());
+    expect(screen.getByText("No business documents yet")).toBeVisible();
+    expect(confirm).toHaveBeenCalledWith("Delete Pirate Names.docx? This removes it from the active library.");
   });
 });

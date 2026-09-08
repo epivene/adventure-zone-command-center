@@ -18,6 +18,7 @@ function setup() {
   const service = {
     list: vi.fn(async () => []),
     detail: vi.fn(async () => null),
+    update: vi.fn(async () => ({ id: documentId, displayName: "Updated contract" })),
     open: vi.fn(async () => "https://signed.example/file"),
     unlink: vi.fn(async () => true),
     addLink: vi.fn(async () => undefined),
@@ -115,6 +116,16 @@ describe("business document routes", () => {
     const { app, service } = setup();
     await request(app).delete(`/business-documents/${documentId}`).set(ownerHeader()).send({ confirmation: "no" }).expect(400);
     expect(service.delete).not.toHaveBeenCalled();
+  });
+
+  it("validates and applies editable document metadata", async () => {
+    const { app, service } = setup();
+    const body = { displayName: "Updated contract", category: "contract", notes: "Signed copy" };
+
+    await request(app).patch(`/business-documents/${documentId}`).set(ownerHeader()).send(body).expect(200);
+    expect(service.update).toHaveBeenCalledWith(documentId, body, "");
+
+    await request(app).patch(`/business-documents/${documentId}`).set(ownerHeader()).send({ ...body, displayName: "   " }).expect(400);
   });
 
   it("lists and resolves document reviews separately from the document list", async () => {

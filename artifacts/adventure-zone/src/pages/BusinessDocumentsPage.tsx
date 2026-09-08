@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, FolderOpen, Search, SlidersHorizontal, Upload } from "lucide-react";
+import { FileText, FolderOpen, Pencil, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -54,6 +54,12 @@ export default function BusinessDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editCategory, setEditCategory] = useState<BusinessDocumentRecord["category"]>("other");
+  const [editNotes, setEditNotes] = useState("");
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [reviewState, setReviewState] = useState("");
@@ -107,6 +113,52 @@ export default function BusinessDocumentsPage() {
     setSource("");
     setLinkState("");
     setYear("");
+  }
+
+  function beginEdit(document: BusinessDocumentRecord) {
+    setEditingId(document.id);
+    setEditName(document.displayName);
+    setEditCategory(document.category);
+    setEditNotes(document.notes ?? "");
+    setError(null);
+  }
+
+  async function saveDocument(document: BusinessDocumentRecord) {
+    const displayName = editName.trim();
+    if (!displayName) {
+      setError("Enter a document name before saving.");
+      return;
+    }
+    setSavingId(document.id);
+    setError(null);
+    try {
+      const result = await businessDocumentsApi.update(document.id, {
+        displayName,
+        category: editCategory,
+        notes: editNotes.trim() || null,
+      });
+      setDocuments((current) => current.map((item) => item.id === document.id ? result.document : item));
+      setEditingId(null);
+    } catch {
+      setError("Could not save the document changes.");
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function deleteDocument(document: BusinessDocumentRecord) {
+    if (!window.confirm(`Delete ${document.originalFilename}? This removes it from the active library.`)) return;
+    setDeletingId(document.id);
+    setError(null);
+    try {
+      await businessDocumentsApi.deleteDocument(document.id);
+      setDocuments((current) => current.filter((item) => item.id !== document.id));
+      if (editingId === document.id) setEditingId(null);
+    } catch {
+      setError("Could not delete the business document.");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -208,26 +260,53 @@ export default function BusinessDocumentsPage() {
         <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {visibleDocuments.map((document) => (
             <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={document.id}>
-              <div className="flex items-start gap-3">
-                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-                <div className="min-w-0 flex-1">
-                  <h2 className="truncate font-bold text-foreground">{document.displayName}</h2>
-                  <p className="truncate text-xs text-muted-foreground">{document.originalFilename}</p>
+              {editingId === document.id ? (
+                <div className="grid gap-3">
+                  <label className="grid gap-1 text-xs font-semibold">Document name
+                    <input className="rounded-md border border-input bg-background px-3 py-2 text-sm" onChange={(event) => setEditName(event.target.value)} value={editName} />
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold">Edit document type
+                    <select className="rounded-md border border-input bg-background px-2 py-2 text-sm" onChange={(event) => setEditCategory(event.target.value as BusinessDocumentRecord["category"])} value={editCategory}>
+                      {categories.map((item) => <option key={item} value={item}>{titleCase(item)}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-xs font-semibold">Document notes
+                    <textarea className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm" onChange={(event) => setEditNotes(event.target.value)} value={editNotes} />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button disabled={savingId === document.id} onClick={() => void saveDocument(document)} size="sm" type="button">
+                      {savingId === document.id ? "Saving…" : "Save document"}
+                    </Button>
+                    <Button disabled={savingId === document.id} onClick={() => setEditingId(null)} size="sm" type="button" variant="outline">Cancel</Button>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Badge variant="secondary">{titleCase(document.category)}</Badge>
-                {document.reviewState === "needs_review" ? <Badge variant="outline">Needs review</Badge> : null}
-              </div>
-              <Button
-                className="mt-4"
-                disabled={!document.fileAvailable || openingId === document.id}
-                onClick={() => void openDocument(document)}
-                size="sm"
-                variant="outline"
-              >
-                {openingId === document.id ? "Opening…" : document.fileAvailable ? "Open protected file" : "File unavailable"}
-              </Button>
+              ) : (
+                <>
+                  <div className="flex items-start gap-3">
+                    <FileText className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate font-bold text-foreground">{document.displayName}</h2>
+                      <p className="truncate text-xs text-muted-foreground">{document.originalFilename}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge variant="secondary">{titleCase(document.category)}</Badge>
+                    {document.reviewState === "needs_review" ? <Badge variant="outline">Needs review</Badge> : null}
+                  </div>
+                  {document.notes ? <p className="mt-3 text-sm text-muted-foreground">{document.notes}</p> : null}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Button disabled={!document.fileAvailable || openingId === document.id} onClick={() => void openDocument(document)} size="sm" variant="outline">
+                      {openingId === document.id ? "Opening…" : document.fileAvailable ? "Open protected file" : "File unavailable"}
+                    </Button>
+                    <Button aria-label={`Edit ${document.displayName}`} onClick={() => beginEdit(document)} size="sm" type="button" variant="outline">
+                      <Pencil className="mr-1 h-4 w-4" />Edit
+                    </Button>
+                    <Button aria-label={`Delete ${document.displayName}`} disabled={deletingId === document.id} onClick={() => void deleteDocument(document)} size="sm" type="button" variant="outline">
+                      <Trash2 className="mr-1 h-4 w-4" />{deletingId === document.id ? "Deleting…" : "Delete"}
+                    </Button>
+                  </div>
+                </>
+              )}
             </article>
           ))}
         </section>

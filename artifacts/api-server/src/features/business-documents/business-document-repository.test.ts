@@ -125,6 +125,23 @@ describe("BusinessDocumentRepository", () => {
     await expect(repo.list({ limit: 1, offset: 2 })).resolves.toMatchObject([{ id: oldest.documentId }]);
   });
 
+  it("updates editable metadata and writes an audit event", async () => {
+    const repo = repository();
+    const created = await repo.ingest(input("drive", "editable-file"));
+
+    await expect(repo.updateMetadata(created.documentId, {
+      displayName: "Signed city contract",
+      category: "contract",
+      notes: "Reviewed by owner",
+    }, "owner")).resolves.toMatchObject({
+      displayName: "Signed city contract",
+      category: "contract",
+      notes: "Reviewed by owner",
+    });
+    await expect(database.query("SELECT action FROM business_document_audit_events WHERE document_id = $1 AND action = 'metadata_updated'", [created.documentId]))
+      .resolves.toMatchObject({ rows: [{ action: "metadata_updated" }] });
+  });
+
   it("applies review corrections and their links in one review action", async () => {
     const profileId = "00000000-0000-4000-8000-000000000002";
     await database.query("INSERT INTO organizations (id) VALUES ($1)", [profileId]);
