@@ -71,9 +71,11 @@ function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
 }
 
 export function GoogleValidationReview({
+  checkGmailOnMount = false,
   onPendingCountChange,
   showHistory = false,
 }: {
+  checkGmailOnMount?: boolean;
   onPendingCountChange?(count: number): void;
   showHistory?: boolean;
 } = {}) {
@@ -121,8 +123,9 @@ export function GoogleValidationReview({
   }
 
   useEffect(() => {
-    void checkEmails();
-  }, []);
+    if (checkGmailOnMount) void checkEmails();
+    else void load();
+  }, [checkGmailOnMount]);
 
   const pending = useMemo(
     () => items.filter((item) => item.state === "pending"),
@@ -284,7 +287,11 @@ export function GoogleValidationReview({
   }
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading email review…</p>;
+    return (
+      <p className="text-sm text-slate-500">
+        {checking ? "Checking Gmail…" : "Loading email review…"}
+      </p>
+    );
   }
 
   return (
@@ -303,14 +310,16 @@ export function GoogleValidationReview({
             </p>
           ) : null}
         </div>
-        <button
-          className="button-secondary shrink-0 px-3 py-2 text-sm"
-          disabled={checking || busyMessageId !== null || retryingMutationId !== null}
-          onClick={() => void checkEmails()}
-          type="button"
-        >
-          {checking ? "Checking Gmail…" : "Check emails"}
-        </button>
+        {checkGmailOnMount ? (
+          <button
+            className="button-secondary shrink-0 px-3 py-2 text-sm"
+            disabled={checking || busyMessageId !== null || retryingMutationId !== null}
+            onClick={() => void checkEmails()}
+            type="button"
+          >
+            {checking ? "Checking Gmail…" : "Check emails"}
+          </button>
+        ) : null}
       </div>
 
       {error ? <p className="text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
