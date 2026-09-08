@@ -16,6 +16,7 @@ const mutation: GoogleGmailMutationRecord = {
   idempotencyKey: "assign-thread:conn-1:thread-1:org-1",
   state: "pending",
   attemptCount: 0,
+  intentGeneration: 1,
   lastErrorCode: null,
 };
 
