@@ -1,8 +1,8 @@
 # Atomic Gmail Profile Assignment Design
 
 **Date:** 2026-09-08  
-**Status:** Proposed  
-**PR:** #757
+**Status:** Implemented  
+**PR:** #758
 
 ## Goal
 
@@ -124,3 +124,12 @@ Existing unrelated failing repository checks will be reported separately; the fo
 3. Confirm the profile label is created or reused, the complete thread is labeled, and Inbox is removed.
 4. Send a new reply to the thread and confirm the new message remains Inbox + Unread while receiving the profile label.
 5. Use the existing Check emails action as the manual fallback for newly arrived messages.
+
+
+## Verification Results
+
+- Google Workspace backend: 77 files, 316 tests passed.
+- Atomic transaction coverage includes rollback, stable identical retries, reassignment superseding, A → B → A generations, and staged connection failure.
+- Office Coordinator workflow: API and frontend builds passed.
+- Release Safety: no new type errors in the atomic transaction, review assignment service, validation repository, matched-corrections route, or route contract test. Remaining type errors are pre-existing Google Gmail client declaration issues.
+- Google Workspace workflow remains red only in pre-existing frontend settings/navigation tests after its backend step passes.
