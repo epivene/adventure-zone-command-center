@@ -18,6 +18,7 @@ export type GoogleGmailMutationRecord = {
     | "permanent_error"
     | "conflict";
   attemptCount: number;
+  intentGeneration: number | null;
   lastErrorCode: string | null;
 };
 
@@ -32,8 +33,13 @@ export type GoogleGmailMutationIntent = {
 };
 
 type QueryResult = { rows: Array<Record<string, unknown>> };
+type SqlClient = {
+  query(text: string, values?: unknown[]): Promise<QueryResult>;
+  release(): void;
+};
 type SqlPool = {
   query(text: string, values?: unknown[]): Promise<QueryResult>;
+  connect?: () => Promise<SqlClient>;
 };
 
 function strings(value: unknown): string[] {
@@ -73,6 +79,12 @@ function record(row: Record<string, unknown> | undefined): GoogleGmailMutationRe
     state: row.state,
     attemptCount:
       typeof row.attempt_count === "number" ? row.attempt_count : 0,
+    intentGeneration:
+      typeof row.intent_generation === "number"
+        ? row.intent_generation
+        : typeof row.intent_generation === "string"
+          ? Number(row.intent_generation)
+          : null,
     lastErrorCode:
       typeof row.last_error_code === "string" ? row.last_error_code : null,
   };
@@ -82,10 +94,38 @@ const returning = `
   RETURNING id::text, connection_id::text, message_id, thread_id,
             organization_id::text, operation, target_label_id,
             remove_label_ids, idempotency_key, state, attempt_count,
-            last_error_code`;
+            intent_generation, last_error_code`;
 
 export class PostgresGoogleGmailMutationRepository {
   constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
+
+
+  async withThreadLock<T>(
+    input: { connectionId: string; threadId: string },
+    work: () => Promise<T>,
+  ): Promise<T> {
+    if (!this.pool.connect) {
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_THREAD_LOCK_UNAVAILABLE");
+    }
+    const client = await this.pool.connect();
+    let locked = false;
+    try {
+      await client.query(
+        "SELECT pg_advisory_lock(hashtext($1), hashtext($2))",
+        [input.connectionId, input.threadId],
+      );
+      locked = true;
+      return await work();
+    } finally {
+      if (locked) {
+        await client.query(
+          "SELECT pg_advisory_unlock(hashtext($1), hashtext($2))",
+          [input.connectionId, input.threadId],
+        ).catch(() => undefined);
+      }
+      client.release();
+    }
+  }
 
   async createOrLoad(
     input: GoogleGmailMutationIntent,
@@ -116,7 +156,7 @@ export class PostgresGoogleGmailMutationRepository {
       `SELECT id::text, connection_id::text, message_id, thread_id,
               organization_id::text, operation, target_label_id,
               remove_label_ids, idempotency_key, state, attempt_count,
-              last_error_code
+              intent_generation, last_error_code
          FROM google_workspace_gmail_mutations
         WHERE id = $1
         LIMIT 1`,
@@ -139,6 +179,18 @@ export class PostgresGoogleGmailMutationRepository {
            ORDER BY connection.updated_at DESC
            LIMIT 1
         )
+          AND (
+            mutation.operation <> 'assign_thread'
+            OR EXISTS (
+              SELECT 1
+                FROM google_workspace_gmail_thread_intents intent
+               WHERE intent.connection_id = mutation.connection_id
+                 AND intent.thread_id = mutation.thread_id
+                 AND intent.intent_kind = 'assign'
+                 AND intent.current_mutation_id = mutation.id
+                 AND intent.generation = mutation.intent_generation
+            )
+          )
           AND (
             mutation.state = 'pending'
             OR (
@@ -172,6 +224,18 @@ export class PostgresGoogleGmailMutationRepository {
          FROM google_workspace_gmail_mutations
         WHERE connection_id = $1
           AND (
+            operation <> 'assign_thread'
+            OR EXISTS (
+              SELECT 1
+                FROM google_workspace_gmail_thread_intents intent
+               WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                 AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                 AND intent.intent_kind = 'assign'
+                 AND intent.current_mutation_id = google_workspace_gmail_mutations.id
+                 AND intent.generation = google_workspace_gmail_mutations.intent_generation
+            )
+          )
+          AND (
             state = 'pending'
             OR (
               state = 'retryable_error'
@@ -203,6 +267,18 @@ export class PostgresGoogleGmailMutationRepository {
               updated_at = $2
         WHERE id = $1
           AND state = 'retryable_error'
+          AND (
+            operation <> 'assign_thread'
+            OR EXISTS (
+              SELECT 1
+                FROM google_workspace_gmail_thread_intents intent
+               WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                 AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                 AND intent.intent_kind = 'assign'
+                 AND intent.current_mutation_id = google_workspace_gmail_mutations.id
+                 AND intent.generation = google_workspace_gmail_mutations.intent_generation
+            )
+          )
         ${returning}`,
       [id, now],
     );
@@ -226,17 +302,17 @@ export class PostgresGoogleGmailMutationRepository {
               candidate_mutation.next_attempt_at IS NULL
               OR candidate_mutation.next_attempt_at <= $2
             )
-            AND pg_try_advisory_xact_lock(
-              hashtext(candidate_mutation.connection_id::text),
-              hashtext(candidate_mutation.thread_id)
-            )
-            AND NOT EXISTS (
-              SELECT 1
-                FROM google_workspace_gmail_mutations active
-               WHERE active.connection_id = candidate_mutation.connection_id
-                 AND active.thread_id = candidate_mutation.thread_id
-                 AND active.id <> candidate_mutation.id
-                 AND active.state = 'processing'
+            AND (
+              candidate_mutation.operation <> 'assign_thread'
+              OR EXISTS (
+                SELECT 1
+                  FROM google_workspace_gmail_thread_intents intent
+                 WHERE intent.connection_id = candidate_mutation.connection_id
+                   AND intent.thread_id = candidate_mutation.thread_id
+                   AND intent.intent_kind = 'assign'
+                   AND intent.current_mutation_id = candidate_mutation.id
+                   AND intent.generation = candidate_mutation.intent_generation
+              )
             )
           FOR UPDATE OF candidate_mutation SKIP LOCKED
        )
