@@ -53,6 +53,13 @@ export type BusinessDocumentReviewItem = {
   createdAt: string;
 };
 
+export type BusinessDocumentProfileOption = {
+  id: string;
+  name: string;
+  city: string | null;
+  region: string | null;
+};
+
 type ListResponse = { documents: BusinessDocumentRecord[] };
 
 function queryString(filters: Record<string, string | number | undefined>) {
@@ -93,6 +100,13 @@ export const businessDocumentsApi = {
 
   reviewCount() {
     return apiGet<{ count: number }>("/business-documents/review-count");
+  },
+
+  async searchProfiles(query: string) {
+    const response = await apiGet<{ organizations: { records: BusinessDocumentProfileOption[] } }>(
+      `/organizations?q=${encodeURIComponent(query)}&pageSize=10&includeRetired=no`,
+    );
+    return response.organizations.records;
   },
 
   reviewAction(reviewId: string, body: Record<string, unknown>) {
