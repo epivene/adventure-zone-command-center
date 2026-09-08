@@ -336,14 +336,39 @@ export class PostgresGoogleConnectionRepository {
     ) {
       throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CLIENT_UNAVAILABLE");
     }
+    const guardReauthorization = async <T>(
+      operation: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await operation();
+      } catch (error) {
+        const code =
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof (error as { code?: unknown }).code === "string"
+            ? (error as { code: string }).code
+            : error instanceof Error
+              ? error.message
+              : "";
+        if (code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+          await this.markReauthorizationRequired(code);
+        }
+        throw error;
+      }
+    };
     return {
       connectionId: row.id,
       client: {
-        listLabels: client.listLabels.bind(client),
-        createLabel: client.createLabel.bind(client),
-        renameLabel: client.renameLabel.bind(client),
-        modifyThreadLabels: client.modifyThreadLabels.bind(client),
-        modifyMessageLabels: client.modifyMessageLabels.bind(client),
+        listLabels: () => guardReauthorization(() => client.listLabels()),
+        createLabel: (name) =>
+          guardReauthorization(() => client.createLabel!(name)),
+        renameLabel: (input) =>
+          guardReauthorization(() => client.renameLabel!(input)),
+        modifyThreadLabels: (input) =>
+          guardReauthorization(() => client.modifyThreadLabels!(input)),
+        modifyMessageLabels: (input) =>
+          guardReauthorization(() => client.modifyMessageLabels!(input)),
       },
     };
   }
