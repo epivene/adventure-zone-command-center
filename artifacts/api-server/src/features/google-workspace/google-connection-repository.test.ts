@@ -280,6 +280,41 @@ describe("PostgresGoogleConnectionRepository", () => {
     ]);
   });
 
+  it("persists reconnect-required state when a Gmail label operation loses authorization", async () => {
+    const harness = repositoryHarness();
+    const unauthorized = Object.assign(
+      new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
+      { code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" },
+    );
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => ({
+        ...fakeClient,
+        modifyThreadLabels: async () => { throw unauthorized; },
+      }),
+    });
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    const result = await repository.createGmailLabelMutationClient();
+    await expect(result?.client.modifyThreadLabels({
+      threadId: "thread-1",
+      addLabelIds: ["Label_1"],
+      removeLabelIds: ["INBOX"],
+    })).rejects.toThrow("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+
+    expect(harness.row.status).toBe("reauthorization_required");
+    expect(harness.row.last_error_code).toBe(
+      "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    );
+  });
+
   it("requires an explicit disconnect before replacing the active Google account", async () => {
     const harness = repositoryHarness();
     const repository = new PostgresGoogleConnectionRepository({
