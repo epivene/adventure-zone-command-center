@@ -11,7 +11,6 @@ import { DrizzleFinanceRepository } from "@/features/leg-manager/finance-reposit
 import { DrizzleCrewRepository, listWorkersForManager } from "@/features/leg-manager/crew-repository";
 import { crewRehireStatuses } from "@/features/leg-manager/crew-types";
 import { DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";
-import { DrizzleEventReviewRepository } from "@/features/leg-manager/event-review-repository";
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
 import { attachIncidentPhotoUrls } from "@/features/leg-manager/incident-photo-service";
 
@@ -19,7 +18,6 @@ const router: IRouter = Router();
 const repo = new DrizzleLegManagerRepository(db);
 const crew = new DrizzleCrewRepository(db);
 const incidents = new DrizzleIncidentRepository(db);
-const reviews = new DrizzleEventReviewRepository(db);
 const incidentStorage = new GoogleCloudLegManagerObjectStorage();
 const access = z.object({ password: z.string().min(1) });
 const duplicatePasswordMessage =
@@ -220,10 +218,6 @@ router.delete("/manager-admin/incidents/:incidentId", async (req, res): Promise<
     req.log.warn({ incidentId: parsedId.data, failures }, "Incident deleted but some attachment objects could not be removed");
   }
   res.json({ ok: true });
-});
-
-router.get("/manager-admin/reviews", async (_req, res) => {
-  res.json({ reviews: await reviews.listAll() });
 });
 
 export default router;

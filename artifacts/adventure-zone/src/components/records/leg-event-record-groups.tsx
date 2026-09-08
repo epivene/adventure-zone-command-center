@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 
 export type LegEventOwnedRecord = {
   id?: string;
@@ -26,18 +26,15 @@ function labelCount(count: number, noun: string) {
 }
 
 function eventName(record: LegEventOwnedRecord) {
+  if (!record.bookingId) return "Unassigned event";
   return record.bookingName?.trim()
     || record.eventName?.trim()
     || record.title?.trim()
-    || "Unassigned event";
+    || "Unnamed event";
 }
 
 function eventKey(record: LegEventOwnedRecord) {
-  if (record.bookingId) return `booking:${record.bookingId}`;
-  const snapshot = eventName(record);
-  return snapshot === "Unassigned event"
-    ? UNASSIGNED_EVENT_KEY
-    : `legacy:${snapshot.toLocaleLowerCase()}`;
+  return record.bookingId ? `booking:${record.bookingId}` : UNASSIGNED_EVENT_KEY;
 }
 
 export function groupRecordsByEvent<T extends LegEventOwnedRecord>(
@@ -63,8 +60,7 @@ export function groupRecordsByLegAndEvent<T extends LegEventOwnedRecord>(
   const legs = new Map<string, { key: string; name: string; records: T[] }>();
   for (const record of records) {
     const legSnapshot = record.legName?.trim();
-    const key = record.legId
-      ?? (legSnapshot ? `legacy-leg:${legSnapshot.toLocaleLowerCase()}` : UNASSIGNED_LEG_KEY);
+    const key = record.legId ?? UNASSIGNED_LEG_KEY;
     const existing = legs.get(key);
     if (existing) existing.records.push(record);
     else legs.set(key, {
@@ -91,15 +87,28 @@ function safeId(value: string) {
 export function EventRecordGroups<T extends LegEventOwnedRecord>({
   records,
   noun,
+  openBookingId,
   children,
 }: {
   records: T[];
   noun: string;
+  openBookingId?: string | null;
   children: (record: T, index: number) => ReactNode;
 }) {
   const groups = useMemo(() => groupRecordsByEvent(records), [records]);
-  const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [open, setOpen] = useState<Set<string>>(
+    () => new Set(openBookingId ? [`booking:${openBookingId}`] : []),
+  );
   const prefix = useId();
+
+  useEffect(() => {
+    if (!openBookingId) return;
+    const key = `booking:${openBookingId}`;
+    setOpen((current) => {
+      if (current.has(key)) return current;
+      return new Set(current).add(key);
+    });
+  }, [openBookingId]);
 
   return <div className="grid gap-3">
     {groups.map((group) => {

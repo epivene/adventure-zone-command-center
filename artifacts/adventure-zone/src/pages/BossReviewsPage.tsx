@@ -154,7 +154,7 @@ export default function BossReviewsPage() {
       ) : (
         <div className="grid gap-4">
           <LegRecordPicker groups={legGroups} noun="review" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
-          {effectiveLegKey ? <EventRecordGroups records={visibleItems} noun="review">
+          {effectiveLegKey ? <EventRecordGroups records={visibleItems} noun="review" openBookingId={focusBookingId}>
           {(item, i) => {
             const isFocused = focusBookingId && item.bookingId === focusBookingId;
             return (
