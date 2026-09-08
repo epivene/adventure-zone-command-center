@@ -35,6 +35,7 @@ export type LegResource = {
 
 export type MapEventRecord = {
   id: string;
+  organizationId: string | null;
   name: string;
   city: string;
   region: string;
@@ -123,6 +124,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
             : "missing" as const;
       return {
         id: booking.id,
+        organizationId: booking.organizationId,
         name: booking.name,
         city: booking.city,
         region: booking.region,
