@@ -112,7 +112,7 @@ describe("GoogleValidationReview", () => {
         state: "retryable_error",
         gmailLabelId: null,
         gmailLabelName: null,
-        errorCode: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED",
+        errorCode: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
       },
     });
     client.retryGoogleWorkspaceGmailMutation.mockResolvedValueOnce({
@@ -129,7 +129,10 @@ describe("GoogleValidationReview", () => {
     await screen.findByText("County Fair application");
 
     fireEvent.click(screen.getByRole("button", { name: "Assign to County Fair" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Retry Gmail" }));
+    expect(await screen.findByText(
+      "Profile assigned. Reconnect the company Google account in Settings, then retry Gmail.",
+    )).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry Gmail" }));
 
     await waitFor(() => expect(client.retryGoogleWorkspaceGmailMutation)
       .toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333"));
