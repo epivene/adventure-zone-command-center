@@ -96,6 +96,8 @@ const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
 const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
 const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
 const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
+const BossProfilesPage = lazy(() => import("@/pages/BossProfilesPage"));
+const BossProfilePage = lazy(() => import("@/pages/BossProfilePage"));
 const BossContactDetailPage = lazy(() => import("@/pages/BossContactDetailPage"));
 const BossReceiptsPage = lazy(() => import("@/pages/BossReceiptsPage"));
 const BossReviewsPage = lazy(() => import("@/pages/BossReviewsPage"));
@@ -110,6 +112,7 @@ const OfficeSignInPage = lazy(() => import("@/pages/OfficeSignInPage"));
 const OfficeTodayPage = lazy(() => import("@/pages/OfficeTodayPage"));
 const OfficeTasksPage = lazy(() => import("@/pages/OfficeTasksPage"));
 const OfficeProfilesPage = lazy(() => import("@/pages/OfficeProfilesPage"));
+const OfficeDocumentsPage = lazy(() => import("@/pages/OfficeDocumentsPage"));
 const OfficeProfilePage = lazy(() => import("@/pages/OfficeProfilePage"));
 const OfficeMailPage = lazy(() => import("@/pages/OfficeMailPage"));
 const OfficeEmailDraftsPage = lazy(() => import("@/pages/OfficeEmailDraftsPage"));
@@ -298,6 +301,7 @@ function OfficeProtectedApp() {
         </Route>
         <Route path="/office/profiles/:profileId">{(params)=><OfficeProfilePage profileId={params.profileId}/>}</Route>
         <Route path="/office/profiles" component={OfficeProfilesPage} />
+        <Route path="/office/documents" component={OfficeDocumentsPage} />
         <Route path="/office/mail" component={OfficeMailPage} />
         <Route path="/office/emails" component={OfficeEmailDraftsPage} />
         <Route path="/office/tasks" component={OfficeTasksPage} />
@@ -320,6 +324,8 @@ function BossProtectedApp() {
         <Route path="/boss/schedule" component={BossSchedulePage} />
         <Route path="/boss/contacts/:id">{(params) => <BossContactDetailPage contactId={params.id} />}</Route>
         <Route path="/boss/contacts" component={BossContactsPage} />
+        <Route path="/boss/profiles/:profileId">{(params) => <BossProfilePage profileId={params.profileId} />}</Route>
+        <Route path="/boss/profiles" component={BossProfilesPage} />
         <Route path="/boss/receipts" component={BossReceiptsPage} />
         <Route path="/boss/reviews" component={BossReviewsPage} />
         <Route path="/boss/maintenance" component={BossMaintenancePage} />
