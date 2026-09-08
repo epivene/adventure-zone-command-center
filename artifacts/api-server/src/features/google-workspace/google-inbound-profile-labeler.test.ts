@@ -38,6 +38,31 @@ describe("GoogleInboundProfileLabeler", () => {
     });
   });
 
+  it("retries due mutations even when no new matching reply is present", async () => {
+    const retry = vi.fn(async () => ({
+      mutationId: "mutation-due",
+      state: "completed" as const,
+      gmailLabelId: "Label_10",
+      gmailLabelName: null,
+      errorCode: null,
+    }));
+    const labeler = new GoogleInboundProfileLabeler({
+      dueMutationIds: async () => ["mutation-due"],
+      syncFactory: async () => ({
+        connectionId: "conn-1",
+        service: {
+          assignThread: vi.fn(),
+          labelInboundMessage: vi.fn(),
+          retry,
+        },
+      }),
+    });
+
+    await labeler.labelNewThreadMatches([]);
+
+    expect(retry).toHaveBeenCalledWith("mutation-due");
+  });
+
   it("does not touch unrelated, ambiguous, or sent messages", async () => {
     const syncFactory = vi.fn();
     const labeler = new GoogleInboundProfileLabeler({ syncFactory });
