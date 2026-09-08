@@ -16,6 +16,9 @@ import {
 } from "@/features/google-workspace/google-review-profile-search";
 
 function gmailMessage(result: GoogleProfileLabelSyncResult): string {
+  if (result.errorCode === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+    return "Profile assigned. Reconnect the company Google account in Settings, then retry Gmail.";
+  }
   if (result.state === "completed") return "Assigned and archived in Gmail.";
   if (result.state === "retryable_error") {
     return "Profile assigned. The Gmail update needs a retry.";
