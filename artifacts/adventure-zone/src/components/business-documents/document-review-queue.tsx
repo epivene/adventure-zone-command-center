@@ -4,16 +4,35 @@ import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
 import {
   businessDocumentsApi,
+  type BusinessDocumentCategory,
+  type BusinessDocumentProfileOption,
   type BusinessDocumentReviewItem,
 } from "@/lib/business-documents-api";
 
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const categoryOptions: Array<{ value: BusinessDocumentCategory; label: string }> = [
+  { value: "contract", label: "Contract" },
+  { value: "proposal", label: "Proposal" },
+  { value: "coi", label: "COI / certificate of insurance" },
+  { value: "insurance_policy", label: "Insurance policy" },
+  { value: "w9_tax", label: "W-9 / tax document" },
+  { value: "permit", label: "Permit" },
+  { value: "vendor_application", label: "Vendor application" },
+  { value: "inspection", label: "Inspection" },
+  { value: "deposit_receipt", label: "Deposit receipt" },
+  { value: "operational_template", label: "Operational template" },
+  { value: "marketing", label: "Marketing" },
+  { value: "other", label: "Other" },
+];
 
 export function DocumentReviewQueue() {
   const [items, setItems] = useState<BusinessDocumentReviewItem[]>([]);
-  const [correctedTarget, setCorrectedTarget] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<Record<string, BusinessDocumentCategory>>({});
+  const [profileQueries, setProfileQueries] = useState<Record<string, string>>({});
+  const [profileResults, setProfileResults] = useState<Record<string, BusinessDocumentProfileOption[]>>({});
+  const [selectedProfiles, setSelectedProfiles] = useState<Record<string, BusinessDocumentProfileOption | undefined>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [searchingId, setSearchingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -25,6 +44,21 @@ export function DocumentReviewQueue() {
   }
 
   useEffect(() => { void load(); }, []);
+
+  async function searchProfiles(item: BusinessDocumentReviewItem) {
+    const query = profileQueries[item.id]?.trim() ?? "";
+    if (!query) return;
+    setSearchingId(item.id);
+    setError(null);
+    try {
+      const results = await businessDocumentsApi.searchProfiles(query);
+      setProfileResults((current) => ({ ...current, [item.id]: results }));
+    } catch {
+      setError("Could not search profiles.");
+    } finally {
+      setSearchingId(null);
+    }
+  }
 
   async function act(item: BusinessDocumentReviewItem, body: Record<string, unknown>) {
     setBusyId(item.id);
@@ -46,8 +80,11 @@ export function DocumentReviewQueue() {
     <section className="grid gap-3" aria-label="Document review queue">
       {error ? <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p> : null}
       {items.map((item) => {
-        const target = correctedTarget[item.id] ?? "";
-        const targetValid = uuidPattern.test(target.trim());
+        const category = categories[item.id] ?? item.category;
+        const profileQuery = profileQueries[item.id] ?? "";
+        const selectedProfile = selectedProfiles[item.id];
+        const results = profileResults[item.id] ?? [];
+        const hasCorrections = category !== item.category || Boolean(selectedProfile);
         return (
           <article className="rounded-xl border border-amber-200 bg-amber-50/50 p-4" key={item.id}>
             <div className="flex items-start gap-3">
@@ -58,13 +95,37 @@ export function DocumentReviewQueue() {
                 {item.reasonCodes.length ? <p className="mt-1 text-xs text-amber-800">{item.reasonCodes.join(", ").replaceAll("_", " ")}</p> : null}
               </div>
             </div>
-            <label className="mt-3 grid max-w-lg gap-1 text-xs font-semibold text-foreground">
-              Correct profile ID
-              <Input aria-label={`Correct profile ID for ${item.displayName}`} onChange={(event) => setCorrectedTarget((current) => ({ ...current, [item.id]: event.target.value }))} placeholder="Profile UUID" value={target} />
-            </label>
+            <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-xs font-semibold text-foreground">
+                Document type
+                <select aria-label={`Document type for ${item.displayName}`} className="h-9 rounded-md border border-input bg-background px-3 text-sm" onChange={(event) => setCategories((current) => ({ ...current, [item.id]: event.target.value as BusinessDocumentCategory }))} value={category}>
+                  {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <div className="grid gap-1 text-xs font-semibold text-foreground">
+                Profile <span className="font-normal text-muted-foreground">(optional)</span>
+                <div className="flex gap-2">
+                  <Input aria-label={`Profile search for ${item.displayName}`} onChange={(event) => {
+                    setProfileQueries((current) => ({ ...current, [item.id]: event.target.value }));
+                    setSelectedProfiles((current) => ({ ...current, [item.id]: undefined }));
+                    setProfileResults((current) => ({ ...current, [item.id]: [] }));
+                  }} placeholder="Search profile name or city" value={profileQuery} />
+                  <Button disabled={!profileQuery.trim() || searchingId === item.id} onClick={() => void searchProfiles(item)} size="sm" type="button" variant="outline">Search profiles</Button>
+                </div>
+              </div>
+            </div>
+            {results.length ? <div className="mt-2 grid max-w-2xl gap-1 rounded-lg border bg-background p-1">{results.map((profile) => <button className={selectedProfile?.id === profile.id ? "rounded-md bg-orange-100 px-3 py-2 text-left text-sm" : "rounded-md px-3 py-2 text-left text-sm hover:bg-muted"} key={profile.id} onClick={() => {
+              setSelectedProfiles((current) => ({ ...current, [item.id]: profile }));
+              setProfileQueries((current) => ({ ...current, [item.id]: profile.name }));
+              setProfileResults((current) => ({ ...current, [item.id]: [] }));
+            }} type="button"><strong>{profile.name}</strong>{profile.city || profile.region ? <span className="ml-2 text-muted-foreground">{[profile.city, profile.region].filter(Boolean).join(", ")}</span> : null}</button>)}</div> : null}
+            {selectedProfile ? <p className="mt-2 text-xs font-semibold text-emerald-700">Selected profile: {selectedProfile.name}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
-              <Button disabled={busyId === item.id} onClick={() => void act(item, { action: "approve" })} size="sm"><Check className="mr-1.5 h-3.5 w-3.5" />Approve</Button>
-              <Button disabled={!targetValid || busyId === item.id} onClick={() => void act(item, { action: "correct_and_approve", corrections: { targets: [{ targetKind: "profile", targetId: target.trim() }] } })} size="sm" variant="outline">Correct and approve</Button>
+              <Button disabled={hasCorrections || busyId === item.id} onClick={() => void act(item, { action: "approve" })} size="sm"><Check className="mr-1.5 h-3.5 w-3.5" />Approve as shown</Button>
+              <Button disabled={!hasCorrections || busyId === item.id} onClick={() => void act(item, { action: "correct_and_approve", corrections: {
+                category,
+                ...(selectedProfile ? { targets: [{ targetKind: "profile", targetId: selectedProfile.id }] } : {}),
+              } })} size="sm" variant="outline">Save corrections and approve</Button>
               <Button disabled={busyId === item.id} onClick={() => void act(item, { action: "non_business" })} size="sm" variant="ghost"><X className="mr-1.5 h-3.5 w-3.5" />Not a business document</Button>
               <Button disabled={busyId === item.id} onClick={() => void act(item, { action: "defer", deferredUntil: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() })} size="sm" variant="ghost"><Clock3 className="mr-1.5 h-3.5 w-3.5" />Defer one day</Button>
               {item.kind === "source_failure" && item.lastErrorCode === "retry_required" ? <Button disabled={busyId === item.id} onClick={() => void act(item, { action: "retry" })} size="sm" variant="ghost"><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Retry</Button> : null}
