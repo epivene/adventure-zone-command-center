@@ -1,21 +1,16 @@
-import type { ContractValues } from "@/features/contracts/contract-types";
+import type { ContractOperationalTerms, ContractValues } from "@/features/contracts/contract-types";
+
+function Field({ label, value, onChange, type = "text", multiline = false }: { label: string; value: string | number; onChange(value: string): void; type?: string; multiline?: boolean }) {
+  return <label className="grid gap-1 text-sm font-semibold">{label}{multiline ? <textarea aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} /> : <input aria-label={label} min={type === "number" ? "0" : undefined} type={type} value={value} onChange={(event) => onChange(event.target.value)} />}</label>;
+}
 
 export function ContractOperationalFields({ values, onChange }: { values: ContractValues; onChange(values: ContractValues): void }) {
   const terms = values.operationalTerms;
-  const update = (patch: Partial<typeof terms>) => onChange({ ...values, operationalTerms: { ...terms, ...patch } });
-  return (
-    <section className="grid gap-3 rounded-xl border bg-white p-4">
-      <h2 className="text-lg font-bold">Operating responsibilities</h2>
-      {([
-        ["powerConfirmed", "Power requirements confirmed"],
-        ["siteAccessConfirmed", "Site access confirmed"],
-        ["staffingConfirmed", "Staffing responsibilities confirmed"],
-      ] as const).map(([key, label]) => (
-        <label className="flex min-h-11 items-center gap-3 text-sm font-semibold" key={key}>
-          <input checked={terms[key]} onChange={(event) => update({ [key]: event.target.checked })} type="checkbox" />
-          {label}
-        </label>
-      ))}
-    </section>
-  );
+  const update = (patch: Partial<ContractOperationalTerms>) => onChange({ ...values, operationalTerms: { ...terms, ...patch } });
+  return <section className="grid gap-3 rounded-xl border bg-white p-4">
+    <h2 className="text-lg font-bold">Operating responsibilities</h2>
+    <div className="grid gap-3 sm:grid-cols-2"><Field label="Operating start date" type="date" value={terms.operatingStartDate} onChange={(v) => update({ operatingStartDate: v })} /><Field label="Operating end date" type="date" value={terms.operatingEndDate} onChange={(v) => update({ operatingEndDate: v })} /><Field label="Daily operating hours" value={terms.dailyHours} onChange={(v) => update({ dailyHours: v })} /><Field label="Work-day count" type="number" value={terms.workDayCount} onChange={(v) => update({ workDayCount: Number(v) || 0 })} /><Field label="Arrival date" type="date" value={terms.arrivalDate} onChange={(v) => update({ arrivalDate: v })} /><Field label="Departure date" type="date" value={terms.departureDate} onChange={(v) => update({ departureDate: v })} /></div>
+    <Field label="Date override reason" value={terms.dateOverrideReason} onChange={(v) => update({ dateOverrideReason: v })} /><Field label="Attractions or package" multiline value={terms.attractionDescription} onChange={(v) => update({ attractionDescription: v })} /><Field label="Space requirement" multiline value={terms.spaceRequirement} onChange={(v) => update({ spaceRequirement: v })} /><Field label="Exclusivity" multiline value={terms.exclusivity} onChange={(v) => update({ exclusivity: v })} /><Field label="Power requirement" multiline value={terms.powerRequirement} onChange={(v) => update({ powerRequirement: v })} /><Field label="Water requirement" multiline value={terms.waterRequirement} onChange={(v) => update({ waterRequirement: v })} /><Field label="Forklift requirement" multiline value={terms.forkliftRequirement} onChange={(v) => update({ forkliftRequirement: v })} /><Field label="Lodging requirement" multiline value={terms.lodgingRequirement} onChange={(v) => update({ lodgingRequirement: v })} /><Field label="Restroom access" multiline value={terms.restroomAccess} onChange={(v) => update({ restroomAccess: v })} /><Field label="Licensing responsibilities" multiline value={terms.licensingResponsibilities} onChange={(v) => update({ licensingResponsibilities: v })} /><Field label="Setup and teardown terms" multiline value={terms.setupTeardownClause} onChange={(v) => update({ setupTeardownClause: v })} /><Field label="Additional operating terms" multiline value={terms.additionalTerms} onChange={(v) => update({ additionalTerms: v })} />
+    <label className="flex min-h-11 items-center gap-3 text-sm font-semibold"><input aria-label="Operational terms confirmed" checked={terms.confirmed} type="checkbox" onChange={(event) => update({ confirmed: event.target.checked })} />Operational terms confirmed</label>
+  </section>;
 }
