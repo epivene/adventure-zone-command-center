@@ -35,7 +35,13 @@ export type GoogleProfileLabelSyncServicePort = {
 
 type MutationRepository = Pick<
   PostgresGoogleGmailMutationRepository,
-  "createOrLoad" | "get" | "retryNow" | "claim" | "complete" | "fail"
+  | "createOrLoad"
+  | "get"
+  | "retryNow"
+  | "claim"
+  | "complete"
+  | "fail"
+  | "withThreadLock"
 >;
 
 function safeCode(error: unknown): string {
@@ -151,7 +157,13 @@ implements GoogleProfileLabelSyncServicePort {
       };
     }
 
-    const claimed = await this.dependencies.mutations.claim(mutation.id, now);
+    return this.dependencies.mutations.withThreadLock(
+      {
+        connectionId: mutation.connectionId,
+        threadId: mutation.threadId,
+      },
+      async () => {
+        const claimed = await this.dependencies.mutations.claim(mutation.id, now);
     if (!claimed) {
       const current = await this.dependencies.mutations.get(mutation.id);
       if (!current) throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
@@ -242,7 +254,9 @@ implements GoogleProfileLabelSyncServicePort {
         gmailLabelName: null,
         errorCode: code,
       };
-    }
+        }
+      },
+    );
   }
 
   private view(mutation: GoogleGmailMutationRecord): GoogleProfileLabelSyncResult {
