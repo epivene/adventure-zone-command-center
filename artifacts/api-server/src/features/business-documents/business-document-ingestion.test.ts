@@ -46,6 +46,27 @@ describe("BusinessDocumentIngestion", () => {
     expect(storage.putIfAbsent).not.toHaveBeenCalled();
   });
 
+  it("does not let manual metadata bypass temporary-file safety", async () => {
+    const storage = { putIfAbsent: vi.fn() };
+    const repository = { ingest: vi.fn() };
+    const ingestion = new BusinessDocumentIngestion({ storage, repository });
+
+    await expect(ingestion.ingest({
+      bytes,
+      filename: "desktop.ini",
+      mimeType: "application/octet-stream",
+      subject: "",
+      bodyText: "",
+      source: { ...source, sourceKind: "manual", externalId: "manual-temp" },
+      evidence: { approvedThreadProfileId: null, exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] },
+      actor: "boss:dave",
+      uploadMetadata: { displayName: "Contract", category: "contract" },
+    })).resolves.toEqual({ outcome: "skipped", errorCode: "business_document_temporary_file" });
+
+    expect(storage.putIfAbsent).not.toHaveBeenCalled();
+    expect(repository.ingest).not.toHaveBeenCalled();
+  });
+
   it("reuses a previously copied blob without writing storage again", async () => {
     const storedBlob = { sha256Hex: "b".repeat(64), storageKey: "profile-files/b", mimeType: "application/pdf", sizeBytes: 3 };
     const storage = { putIfAbsent: vi.fn() };
