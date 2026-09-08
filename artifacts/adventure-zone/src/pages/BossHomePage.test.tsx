@@ -69,6 +69,31 @@ describe("BossHomePage", () => {
     });
   });
 
+  it("shows only the three latest completed events across all legs", async () => {
+    mockBossGet.mockResolvedValueOnce({
+      ...EMPTY_DASHBOARD,
+      checklistAndMaintenance: [],
+      recentCompletedMaintenanceEvents: [
+        { id: "unable", bookingId: "booking-unable", title: "Unable Event", status: "unable_to_complete", completedAt: "2026-09-08T12:00:00.000Z" },
+        { id: "a-post", bookingId: "booking-a", title: "Newest Event", status: "completed", completedAt: "2026-09-07T12:00:00.000Z" },
+        { id: "b-post", bookingId: "booking-b", title: "Second Event", status: "completed", completedAt: "2026-09-05T12:00:00.000Z" },
+        { id: "c-post", bookingId: "booking-c", title: "Third Event", status: "completed", completedAt: "2026-09-04T12:00:00.000Z" },
+      ],
+    });
+
+    render(<BossHomePage />);
+
+    const rows = await screen.findAllByTestId(/maintenance-row-/);
+    expect(rows).toHaveLength(3);
+    expect(screen.getAllByText("Newest Event")).toHaveLength(1);
+    expect(screen.getByText("Second Event")).toBeVisible();
+    expect(screen.getByText("Third Event")).toBeVisible();
+    expect(screen.queryByText("Older Event")).not.toBeInTheDocument();
+    expect(screen.queryByText("Unable Event")).not.toBeInTheDocument();
+    expect(rows[0]).toHaveAttribute("href", "/boss/maintenance?bookingId=booking-a");
+    expect(screen.queryByText("post_event")).not.toBeInTheDocument();
+  });
+
   it("shows error state when fetch fails", async () => {
     mockBossGet.mockRejectedValueOnce(new Error("Network error"));
     render(<BossHomePage />);

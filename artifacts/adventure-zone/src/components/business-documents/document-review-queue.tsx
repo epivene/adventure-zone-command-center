@@ -24,7 +24,11 @@ const categoryOptions: Array<{ value: BusinessDocumentCategory; label: string }>
   { value: "other", label: "Other" },
 ];
 
-export function DocumentReviewQueue() {
+type DocumentReviewQueueProps = {
+  api?: Pick<typeof businessDocumentsApi, "reviewItems" | "searchProfiles" | "reviewAction" | "open">;
+};
+
+export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentReviewQueueProps = {}) {
   const [items, setItems] = useState<BusinessDocumentReviewItem[]>([]);
   const [categories, setCategories] = useState<Record<string, BusinessDocumentCategory>>({});
   const [profileQueries, setProfileQueries] = useState<Record<string, string>>({});
@@ -39,7 +43,7 @@ export function DocumentReviewQueue() {
   async function load() {
     setLoading(true);
     setError(null);
-    try { setItems((await businessDocumentsApi.reviewItems()).items); }
+    try { setItems((await api.reviewItems()).items); }
     catch { setError("Could not load document reviews."); }
     finally { setLoading(false); }
   }
@@ -52,7 +56,7 @@ export function DocumentReviewQueue() {
     setSearchingId(item.id);
     setError(null);
     try {
-      const results = await businessDocumentsApi.searchProfiles(query);
+      const results = await api.searchProfiles(query);
       setProfileResults((current) => ({ ...current, [item.id]: results }));
     } catch {
       setError("Could not search profiles.");
@@ -65,7 +69,7 @@ export function DocumentReviewQueue() {
     setBusyId(item.id);
     setError(null);
     try {
-      await businessDocumentsApi.reviewAction(item.id, body);
+      await api.reviewAction(item.id, body);
       const remaining = items.filter((candidate) => candidate.id !== item.id);
       setItems(remaining);
       window.dispatchEvent(new CustomEvent("business-document-review-count-changed", { detail: remaining.length }));
@@ -78,7 +82,7 @@ export function DocumentReviewQueue() {
     setOpeningId(item.id);
     setError(null);
     try {
-      const url = await businessDocumentsApi.open(item.documentId);
+      const url = await api.open(item.documentId);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch {
       setError("That protected file is not available right now.");

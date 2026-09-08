@@ -14,6 +14,8 @@ import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { listCertificateRecords } from "./coi-certificates";
 import { createBusinessDocumentsRouter } from "./business-documents";
+import { listOrganizationDirectoryPage } from "@/features/organizations/organization-directory-page";
+import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
@@ -111,6 +113,35 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ err: error }, "Failed to load Boss business documents");
     res.status(500).json({ error: "Could not load business documents." });
+  }
+});
+
+router.get("/boss/business-documents/profiles", requireBoss, async (req, res): Promise<void> => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!query) {
+    res.json({ profiles: [] });
+    return;
+  }
+
+  try {
+    const directoryQuery = organizationListQuerySchema.parse({
+      q: query,
+      page: 1,
+      pageSize: 10,
+      showMembers: "yes",
+    });
+    const page = await listOrganizationDirectoryPage(db, directoryQuery);
+    res.json({
+      profiles: page.records.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        city: profile.matchedLocation?.city ?? profile.city,
+        region: profile.matchedLocation?.region ?? profile.region,
+      })),
+    });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to search profiles for Boss document review");
+    res.status(500).json({ error: "Could not search profiles." });
   }
 });
 

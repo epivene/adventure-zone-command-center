@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   archive: vi.fn(),
   delete: vi.fn(),
+  deleteDocument: vi.fn(),
+  update: vi.fn(),
+  reviewItems: vi.fn(),
+  searchProfiles: vi.fn(),
+  reviewAction: vi.fn(),
 }));
 
 vi.mock("@/lib/boss-documents-api", () => ({
@@ -45,9 +50,25 @@ beforeEach(() => {
     ],
   });
   mocks.upload.mockResolvedValue({ outcome: "imported" });
+  mocks.reviewItems.mockResolvedValue({ items: [] });
 });
 
 describe("BossTemplatesFilesPage", () => {
+  it("matches the Admin/Des library layout and controls", async () => {
+    render(<BossTemplatesFilesPage />);
+
+    expect(await screen.findByRole("tab", { name: "All Documents" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Contracts" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Vendor Applications" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Templates" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "COIs & Insurance" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Needs Review" })).toBeVisible();
+    expect(screen.getByText("Filters")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Edit Zebra Contract" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Delete Zebra Contract" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Upload document" })).toBeVisible();
+  });
+
   it("loads Dave's files from the canonical business document library", async () => {
     render(<BossTemplatesFilesPage />);
 

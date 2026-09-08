@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { FileText, FolderOpen, Pencil, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { Link, useSearch } from "wouter";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
@@ -10,6 +10,18 @@ import {
 import { DocumentReviewQueue } from "@/components/business-documents/document-review-queue";
 
 type View = "all" | "contracts" | "vendor_applications" | "templates" | "insurance" | "review";
+type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
+
+export type BusinessDocumentsClient = Pick<typeof businessDocumentsApi,
+  "listAll" | "open" | "update" | "deleteDocument" | "reviewItems" | "searchProfiles" | "reviewAction"
+>;
+
+type BusinessDocumentsPageProps = {
+  api?: BusinessDocumentsClient;
+  eyebrow?: string;
+  headerAction?: ReactNode;
+  reloadToken?: number;
+};
 
 const views: Array<{ id: View; label: string }> = [
   { id: "all", label: "All Documents" },
@@ -45,7 +57,12 @@ function yearsFor(document: BusinessDocumentRecord) {
   return years;
 }
 
-export default function BusinessDocumentsPage() {
+export default function BusinessDocumentsPage({
+  api = businessDocumentsApi,
+  eyebrow = "Owner file system",
+  headerAction,
+  reloadToken = 0,
+}: BusinessDocumentsPageProps = {}) {
   const search = useSearch();
   const searchParams = new URLSearchParams(search);
   const profileId = searchParams.get("profileId") ?? undefined;
@@ -66,23 +83,24 @@ export default function BusinessDocumentsPage() {
   const [source, setSource] = useState("");
   const [linkState, setLinkState] = useState("");
   const [year, setYear] = useState("");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
 
   useEffect(() => {
     let current = true;
     setLoading(true);
     setError(null);
-    businessDocumentsApi.listAll({ profileId })
+    api.listAll({ profileId })
       .then((result) => { if (current) setDocuments(result.documents); })
       .catch(() => { if (current) setError("Could not load business documents."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [profileId]);
+  }, [api, profileId, reloadToken]);
 
   async function openDocument(document: BusinessDocumentRecord) {
     setOpeningId(document.id);
     setError(null);
     try {
-      const url = await businessDocumentsApi.open(document.id);
+      const url = await api.open(document.id);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch {
       setError("That protected file is not available right now.");
@@ -103,6 +121,11 @@ export default function BusinessDocumentsPage() {
     if (linkState === "unlinked" && document.links.length) return false;
     if (year && !yearsFor(document).has(year)) return false;
     return true;
+  }).sort((left, right) => {
+    if (sortOrder === "name_asc") return left.displayName.localeCompare(right.displayName);
+    if (sortOrder === "name_desc") return right.displayName.localeCompare(left.displayName);
+    const difference = new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    return sortOrder === "oldest" ? -difference : difference;
   });
   const activeFilterCount = [category, reviewState, source, linkState, year].filter(Boolean).length;
 
@@ -132,7 +155,7 @@ export default function BusinessDocumentsPage() {
     setSavingId(document.id);
     setError(null);
     try {
-      const result = await businessDocumentsApi.update(document.id, {
+      const result = await api.update(document.id, {
         displayName,
         category: editCategory,
         notes: editNotes.trim() || null,
@@ -151,7 +174,7 @@ export default function BusinessDocumentsPage() {
     setDeletingId(document.id);
     setError(null);
     try {
-      await businessDocumentsApi.deleteDocument(document.id);
+      await api.deleteDocument(document.id);
       setDocuments((current) => current.filter((item) => item.id !== document.id));
       if (editingId === document.id) setEditingId(null);
     } catch {
@@ -165,15 +188,17 @@ export default function BusinessDocumentsPage() {
     <main className="mx-auto grid w-full max-w-7xl gap-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Owner file system</p>
+          <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{eyebrow}</p>
           <h1 className="text-3xl font-bold text-foreground">Business Documents</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Contracts, certificates, templates, and other Adventure Zone business files in one protected library.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/business-documents/import"><Upload className="mr-2 h-4 w-4" />Import business documents</Link>
-        </Button>
+{headerAction ?? (
+          <Button asChild>
+            <Link href="/business-documents/import"><Upload className="mr-2 h-4 w-4" />Import business documents</Link>
+          </Button>
+        )}
       </header>
 
       <div aria-label="Business document views" className="flex flex-wrap gap-2" role="tablist">
@@ -204,6 +229,14 @@ export default function BusinessDocumentsPage() {
               type="search"
               value={query}
             />
+          </label>
+          <label className="grid max-w-xs gap-1 text-xs font-semibold">Sort documents
+            <select aria-label="Sort documents" className="rounded-md border border-input bg-background px-2 py-2 text-sm" onChange={(event) => setSortOrder(event.target.value as SortOrder)} value={sortOrder}>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="name_asc">Name A–Z</option>
+              <option value="name_desc">Name Z–A</option>
+            </select>
           </label>
           <details className="rounded-lg border border-border bg-background p-3">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-bold">
@@ -246,7 +279,7 @@ export default function BusinessDocumentsPage() {
       {error ? <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading documents…</p> : null}
 
-      {view === "review" ? <DocumentReviewQueue /> : null}
+      {view === "review" ? <DocumentReviewQueue api={api} /> : null}
 
       {view !== "review" && !loading && !visibleDocuments.length ? (
         <section className="rounded-2xl border border-dashed border-border bg-card p-10 text-center">
