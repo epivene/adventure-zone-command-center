@@ -59,6 +59,13 @@ function canRetryMapping(state?: RouteMappingState) {
   return state === "needs_mapping_no_results" || state === "needs_mapping_provider_unavailable";
 }
 
+function eventDetailsHref(event: MapEvent, profileBasePath: string) {
+  if (event.organizationId) {
+    return `${profileBasePath}/${encodeURIComponent(event.organizationId)}`;
+  }
+  return profileBasePath === "/profiles" ? `/bookings/${encodeURIComponent(event.id)}` : null;
+}
+
 type PlanningEvent = MapEvent & {
   planningEmphasis: Exclude<RouteEmphasis, "hidden">;
   routeStopNumber: number | null;
@@ -122,6 +129,7 @@ function EventRows({
   onRetry,
   onFocus,
   showBookingLinks,
+  profileBasePath,
 }: {
   events: PlanningEvent[];
   unmapped: boolean;
@@ -130,6 +138,7 @@ function EventRows({
   onRetry?: (event: PlanningEvent) => void;
   onFocus?: (event: PlanningEvent) => void;
   showBookingLinks: boolean;
+  profileBasePath: string;
 }) {
   return (
     <ul className="grid gap-2">
@@ -151,8 +160,8 @@ function EventRows({
                 </span>
               ) : null}
               <div>
-                {showBookingLinks ? (
-                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={`/bookings/${event.id}`}>
+                {showBookingLinks && eventDetailsHref(event, profileBasePath) ? (
+                  <Link className="font-bold text-slate-950 hover:text-orange-700" href={eventDetailsHref(event, profileBasePath)!}>
                     {event.name}
                   </Link>
                 ) : <span className="font-bold text-slate-950">{event.name}</span>}
@@ -213,6 +222,7 @@ function EventList({
   groupByLeg = false,
   legOrderById,
   showBookingLinks = true,
+  profileBasePath,
 }: {
   events: PlanningEvent[];
   title: string;
@@ -224,6 +234,7 @@ function EventList({
   groupByLeg?: boolean;
   legOrderById?: ReadonlyMap<string, number>;
   showBookingLinks?: boolean;
+  profileBasePath: string;
 }) {
   const groups = groupByLeg
     ? [...events.reduce((byLeg, event) => {
@@ -260,11 +271,11 @@ function EventList({
             <span aria-hidden="true" className="text-slate-400 transition group-open:rotate-180">⌄</span>
           </summary>
           <div className="border-t border-slate-100 p-3">
-            <EventRows events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} />
+            <EventRows events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} profileBasePath={profileBasePath} />
           </div>
         </details>
       ) : (
-        <EventRows key={group.id} events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} />
+        <EventRows key={group.id} events={group.events} unmapped={unmapped} retryingId={retryingId} focusedEventId={focusedEventId} onRetry={onRetry} onFocus={onFocus} showBookingLinks={showBookingLinks} profileBasePath={profileBasePath} />
       ))}
     </div>
   ) : <p className="text-sm text-slate-600">No events in this group.</p>;
@@ -298,6 +309,7 @@ export function EventMap({
   onClearTripFocus,
   readOnly = false,
   requestedSeasonYear,
+  profileBasePath = "/profiles",
 }: {
   events: MapEvent[];
   travelLegs: TravelLeg[];
@@ -307,6 +319,7 @@ export function EventMap({
   onClearTripFocus?: () => void;
   readOnly?: boolean;
   requestedSeasonYear?: number;
+  profileBasePath?: string;
 }) {
   const currentYear = new Date().getFullYear();
   const [filters, setFilters] = useState<MapFilters>(initialFilters);
@@ -670,7 +683,8 @@ export function EventMap({
             managerMode="on-road"
             focusedTrip={focusedTrip}
             onFocusEvent={setFocusedEventId}
-            showBookingDetailsLink={!readOnly}
+            profileBasePath={profileBasePath}
+            showBookingDetailsLink
           />
         </ManagerRouteMapShell>
       </div>
@@ -678,14 +692,15 @@ export function EventMap({
       <ManagerTripNavigationActions trip={focusedTrip} mode="on-road" />
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} showBookingLinks={!readOnly} />
+        <EventList events={mappedEvents} title="Route events · travel order" groupByLeg legOrderById={legOrderById} focusedEventId={focusedEventId} onFocus={(event) => setFocusedEventId(event.id)} profileBasePath={profileBasePath} showBookingLinks />
         <EventList
           events={unmappedEvents}
           title="Location needs mapping"
           unmapped
           retryingId={retryingId}
           onRetry={readOnly ? undefined : (event) => { void retryLocation(event); }}
-          showBookingLinks={!readOnly}
+          profileBasePath={profileBasePath}
+          showBookingLinks
         />
       </div>
     </div>
