@@ -7,6 +7,46 @@ import { ContractPreview } from "@/components/contracts/contract-preview";
 import { contractClient } from "@/features/contracts/contract-client";
 import type { ContractDraft, ContractValues } from "@/features/contracts/contract-types";
 
+const blankSigner = { name: "", role: "", email: "", phone: "", order: 1 };
+
+function editableContractValues(partial: Partial<ContractValues>): ContractValues {
+  return {
+    organizationId: partial.organizationId ?? "",
+    organizationName: partial.organizationName ?? "",
+    bookingId: partial.bookingId ?? "",
+    eventName: partial.eventName ?? "",
+    venueName: partial.venueName ?? "",
+    venueAddress: partial.venueAddress ?? { address1: "", city: "", region: "", postalCode: "" },
+    eventStartDate: partial.eventStartDate ?? "",
+    eventEndDate: partial.eventEndDate ?? "",
+    arrivalDate: partial.arrivalDate ?? "",
+    departureDate: partial.departureDate ?? "",
+    eventSigner: partial.eventSigner ?? blankSigner,
+    internalSigner: partial.internalSigner ?? { ...blankSigner, order: 2 },
+    packages: partial.packages ?? [],
+    physicalAttractionTotal: partial.physicalAttractionTotal ?? 0,
+    travelLegName: partial.travelLegName ?? "",
+    arrangement: partial.arrangement ?? "guaranteed_fee",
+    commercialTerms: partial.commercialTerms ?? {
+      guaranteedFeeCents: null,
+      depositCents: null,
+      balanceCents: null,
+      eventPercentageBasisPoints: null,
+      percentageBase: null,
+      admissionPriceCents: null,
+    },
+    operationalTerms: partial.operationalTerms ?? {
+      ticketsPerRide: 0,
+      hoursPerDay: 0,
+      operatingDays: 0,
+      powerConfirmed: false,
+      siteAccessConfirmed: false,
+      staffingConfirmed: false,
+    },
+    coi: partial.coi ?? { certificateHolderName: "", certificateHolderAddress: "", additionalInsuredWording: "" },
+  };
+}
+
 export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: { draftId: string; autosaveDelayMs?: number }) {
   const [, setLocation] = useLocation();
   const [draft, setDraft] = useState<ContractDraft | null>(null);
@@ -22,7 +62,7 @@ export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: 
     contractClient.getDraft(draftId).then(({ draft: loadedDraft }) => {
       if (cancelled) return;
       setDraft(loadedDraft);
-      setValues(loadedDraft.storedValues.contract as ContractValues);
+      setValues(editableContractValues(loadedDraft.storedValues.contract));
       loaded.current = true;
     }).catch((reason: Error) => setError(reason.message));
     return () => { cancelled = true; };
