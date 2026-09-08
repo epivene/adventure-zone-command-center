@@ -212,18 +212,30 @@ export class PostgresGoogleGmailMutationRepository {
   async claim(id: string, now: Date): Promise<GoogleGmailMutationRecord | null> {
     const result = await this.pool.query(
       `WITH candidate AS (
-         SELECT id
-           FROM google_workspace_gmail_mutations
-          WHERE id = $1
+         SELECT candidate_mutation.id
+           FROM google_workspace_gmail_mutations candidate_mutation
+          WHERE candidate_mutation.id = $1
             AND (
-              state IN ('pending','retryable_error')
+              candidate_mutation.state IN ('pending','retryable_error')
               OR (
-                state = 'processing'
-                AND processing_lease_expires_at <= $2
+                candidate_mutation.state = 'processing'
+                AND candidate_mutation.processing_lease_expires_at <= $2
               )
             )
-            AND (next_attempt_at IS NULL OR next_attempt_at <= $2)
-          FOR UPDATE SKIP LOCKED
+            AND (
+              candidate_mutation.next_attempt_at IS NULL
+              OR candidate_mutation.next_attempt_at <= $2
+            )
+            AND NOT EXISTS (
+              SELECT 1
+                FROM google_workspace_gmail_mutations active
+               WHERE active.connection_id = candidate_mutation.connection_id
+                 AND active.thread_id = candidate_mutation.thread_id
+                 AND active.id <> candidate_mutation.id
+                 AND active.state = 'processing'
+                 AND active.processing_lease_expires_at > $2
+            )
+          FOR UPDATE OF candidate_mutation SKIP LOCKED
        )
        UPDATE google_workspace_gmail_mutations AS mutation
           SET state = 'processing',
@@ -241,11 +253,12 @@ export class PostgresGoogleGmailMutationRepository {
 
   async complete(input: {
     id: string;
+    expectedAttemptCount: number;
     targetLabelId: string;
     removeLabelIds: string[];
     now: Date;
-  }): Promise<void> {
-    await this.pool.query(
+  }): Promise<GoogleGmailMutationRecord | null> {
+    const result = await this.pool.query(
       `UPDATE google_workspace_gmail_mutations
           SET state = 'completed',
               target_label_id = $2,
@@ -254,59 +267,56 @@ export class PostgresGoogleGmailMutationRepository {
               next_attempt_at = NULL,
               processing_lease_expires_at = NULL,
               updated_at = $4
-        WHERE id = $1`,
+        WHERE id = $1
+          AND state = 'processing'
+          AND attempt_count = $5
+        ${returning}`,
       [
         input.id,
         input.targetLabelId,
         JSON.stringify(input.removeLabelIds),
         input.now,
+        input.expectedAttemptCount,
       ],
     );
+    return result.rows[0] ? record(result.rows[0]) : this.get(input.id);
   }
 
   async fail(input: {
     id: string;
+    expectedAttemptCount?: number;
     state: "retryable_error" | "permanent_error" | "conflict";
     errorCode: string;
     nextAttemptAt: Date | null;
     now: Date;
   }): Promise<GoogleGmailMutationRecord | null> {
     const result = await this.pool.query(
-      `WITH changed AS (
-         UPDATE google_workspace_gmail_mutations
-            SET state = $2,
-                last_error_code = $3,
-                next_attempt_at = $4,
-                processing_lease_expires_at = NULL,
-                updated_at = $5
-          WHERE id = $1
-            AND state <> 'completed'
-          RETURNING id::text, connection_id::text, message_id, thread_id,
-                    organization_id::text, operation, target_label_id,
-                    remove_label_ids, idempotency_key, state, attempt_count,
-                    last_error_code
-       ),
-       current AS (
-         SELECT id::text, connection_id::text, message_id, thread_id,
-                organization_id::text, operation, target_label_id,
-                remove_label_ids, idempotency_key, state, attempt_count,
-                last_error_code
-           FROM google_workspace_gmail_mutations
-          WHERE id = $1
-            AND NOT EXISTS (SELECT 1 FROM changed)
-       )
-       SELECT * FROM changed
-       UNION ALL
-       SELECT * FROM current
-       LIMIT 1`,
+      `UPDATE google_workspace_gmail_mutations
+          SET state = $2,
+              last_error_code = $3,
+              next_attempt_at = $4,
+              processing_lease_expires_at = NULL,
+              updated_at = $5
+        WHERE id = $1
+          AND state <> 'completed'
+          AND (
+            ($6::integer IS NULL AND state IN ('pending','retryable_error'))
+            OR (
+              $6::integer IS NOT NULL
+              AND state = 'processing'
+              AND attempt_count = $6
+            )
+          )
+        ${returning}`,
       [
         input.id,
         input.state,
         input.errorCode,
         input.nextAttemptAt,
         input.now,
+        input.expectedAttemptCount ?? null,
       ],
     );
-    return result.rows[0] ? record(result.rows[0]) : null;
+    return result.rows[0] ? record(result.rows[0]) : this.get(input.id);
   }
 }
