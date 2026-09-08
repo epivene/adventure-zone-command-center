@@ -41,7 +41,9 @@ async function fixture(options?: { failMutation?: boolean }) {
         options?.failMutation &&
         text.includes("INSERT INTO google_workspace_gmail_mutations")
       ) throw Object.assign(new Error("forced mutation failure"), { code: "XX001" });
-      return db.query(text, values as never[]);
+      return values === undefined
+        ? db.query(text)
+        : db.query(text, values as never[]);
     },
     release() {},
   };
