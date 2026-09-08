@@ -113,7 +113,7 @@ export class GoogleValidationLearningRepository {
       mailboxEmails.add(normalizeEmail(row.account_email));
     }
 
-    const [mappingResult, reviewResult] = await Promise.all([
+    const [mappingResult, reviewResult, intentResult] = await Promise.all([
       this.pool.query(
         `SELECT m.thread_id,
                 m.organization_id,
@@ -147,6 +147,18 @@ export class GoogleValidationLearningRepository {
             AND r.resolved_organization_id IS NOT NULL`,
         [connectionId],
       ),
+      this.pool.query(
+        `SELECT intent.thread_id,
+                intent.intent_kind,
+                intent.organization_id,
+                organization.name AS organization_name
+           FROM google_workspace_gmail_thread_intents intent
+           LEFT JOIN organizations organization
+             ON organization.id = intent.organization_id
+            AND organization.consolidated_into_id IS NULL
+          WHERE intent.connection_id = $1`,
+        [connectionId],
+      ),
     ]);
 
     const threadRows: ThreadRow[] = mappingResult.rows.flatMap((entry) => {
@@ -167,9 +179,25 @@ export class GoogleValidationLearningRepository {
       }];
     });
 
+    const threadTargets = learnedThreadTargets(threadRows);
+    for (const intent of intentResult.rows) {
+      if (typeof intent.thread_id !== "string") continue;
+      threadTargets.delete(intent.thread_id);
+      if (
+        intent.intent_kind === "assign" &&
+        typeof intent.organization_id === "string" &&
+        typeof intent.organization_name === "string"
+      ) {
+        threadTargets.set(intent.thread_id, {
+          id: intent.organization_id,
+          name: intent.organization_name,
+        });
+      }
+    }
+
     return {
       mailboxEmails,
-      threadTargets: learnedThreadTargets(threadRows),
+      threadTargets,
       addressTargets: learnedAddressTargets({
         rows: reviewResult.rows,
         mailboxEmails,
