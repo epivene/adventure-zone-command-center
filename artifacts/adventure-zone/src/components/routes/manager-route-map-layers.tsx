@@ -67,7 +67,7 @@ function warningText(event: RenderEvent) {
   return null;
 }
 
-function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBookingDetailsLink: boolean) {
+function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBookingDetailsLink: boolean, profileBasePath: string) {
   const destination = event.latitude !== null && event.longitude !== null
     ? ([event.longitude, event.latitude] as [number, number])
     : [event.city, event.region].filter(Boolean).join(", ");
@@ -77,6 +77,11 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBooking
     : "Date not set";
   const assignmentLabel = event.travelLegAssignmentKind === "suggested" ? "Suggested leg" : "Leg";
   const warning = warningText(event);
+  const detailsHref = event.organizationId
+    ? `${profileBasePath}/${encodeURIComponent(event.organizationId)}`
+    : showBookingDetailsLink && profileBasePath === "/profiles"
+      ? `/bookings/${encodeURIComponent(event.id)}`
+      : null;
   return `<div class="az-route-popup">
     <strong>${escapeHtml(event.name)}</strong>
     <div>${escapeHtml([event.city, event.region].filter(Boolean).join(", "))}</div>
@@ -85,7 +90,7 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBooking
     ${warning ? `<div><strong>${escapeHtml(warning)}</strong></div>` : ""}
     ${event.legAssignmentExplanation ? `<div>${escapeHtml(event.legAssignmentExplanation)}</div>` : ""}
     <div class="az-route-popup__actions">
-      ${showBookingDetailsLink ? `<a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>` : ""}
+      ${detailsHref ? `<a href="${escapeHtml(detailsHref)}">${event.organizationId ? "Event profile" : "Booking details"}</a>` : ""}
       <a href="${escapeHtml(directions)}" target="_blank" rel="noreferrer">${managerMode === "on-road" ? "Directions" : "Directions to event"}</a>
     </div>
   </div>`;
@@ -133,6 +138,7 @@ export function ManagerRouteMapLayers({
   focusedTrip,
   onFocusEvent,
   showBookingDetailsLink = true,
+  profileBasePath = "/profiles",
 }: {
   events: RenderEvent[];
   handoffs: EquipmentHandoffView[];
@@ -142,6 +148,7 @@ export function ManagerRouteMapLayers({
   focusedTrip?: FocusedTripMapData | null;
   onFocusEvent?: (id: string) => void;
   showBookingDetailsLink?: boolean;
+  profileBasePath?: string;
 }) {
   const map = useManagerRouteMap();
 
@@ -183,7 +190,7 @@ export function ManagerRouteMapLayers({
         keyboard: true,
         title: event.name,
       }).addTo(group);
-      marker.bindPopup(eventPopup(event, managerMode, showBookingDetailsLink));
+      marker.bindPopup(eventPopup(event, managerMode, showBookingDetailsLink, profileBasePath));
       marker.on("click", () => onFocusEvent?.(event.id));
     }
 
@@ -199,7 +206,7 @@ export function ManagerRouteMapLayers({
     return () => {
       group.remove();
     };
-  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines, showBookingDetailsLink]);
+  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, profileBasePath, routeLines, showBookingDetailsLink]);
 
   return null;
 }
