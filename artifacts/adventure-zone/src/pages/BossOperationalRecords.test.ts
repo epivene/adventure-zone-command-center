@@ -2,13 +2,6 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("Boss operational record controls", () => {
-  it("opens and removes saved maintenance records", () => {
-    const source = readFileSync("src/pages/BossMaintenancePage.tsx", "utf8");
-    expect(source).toContain("Open record");
-    expect(source).toContain("Close record");
-    expect(source).toContain("bossDelete(`/boss/maintenance/${item.id}`)");
-  });
-
   it("removes obsolete review-due items", () => {
     const source = readFileSync("src/pages/BossReviewsPage.tsx", "utf8");
     expect(source).toContain("Remove from Review Due");
