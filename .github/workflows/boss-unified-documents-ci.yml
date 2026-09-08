@@ -24,7 +24,7 @@ on:
       - "artifacts/api-server/src/routes/office-documents.ts"
       - "artifacts/api-server/src/routes/office-documents.test.ts"
       - "artifacts/api-server/src/features/business-documents/business-document-ingestion.ts"
-      - "artifacts/api-server/src/features/business-documents/business-document-ingestion.test.ts src/features/business-documents/business-document-repository.test.ts"
+      - "artifacts/api-server/src/features/business-documents/business-document-ingestion.test.ts"
       - "artifacts/api-server/src/features/business-documents/business-document-types.ts"
       - "artifacts/api-server/src/features/business-documents/business-document-repository.ts"
       - "artifacts/api-server/src/features/business-documents/business-document-repository.test.ts"
@@ -51,6 +51,6 @@ jobs:
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
       - name: Business document route tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts src/features/business-documents/business-document-repository.test.ts
       - name: Build API and frontend
         run: pnpm --filter @workspace/api-server --filter @workspace/adventure-zone build
