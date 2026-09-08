@@ -14,6 +14,17 @@ const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository
 const uuid = z.string().uuid();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 const receiptStorage = new GoogleCloudLegManagerObjectStorage();
+type RecentCompletedMaintenanceRow = {
+  id: string;
+  bookingId: string;
+  title: string;
+  legId: string;
+  legName: string;
+  phase: string;
+  status: string;
+  completedAt: Date;
+};
+
 const reviewPatchSchema = z.object({
   rating: z.number().int().min(0).max(5).optional(),
   feedback: z.string().trim().max(12000).nullable().optional(),
@@ -112,7 +123,7 @@ router.delete("/boss/reviews/:reviewId", requireBoss, async (req, res): Promise<
 
 router.get("/boss/dashboard", requireBoss, async (req, res) => {
   const officeAccountId = req.bossAccount!.studioOfficeAccountId;
-  const [receipts, submittedDrafts, assignments, reviews, reviewsDue, checklists, lifecycle, businessDocumentCounts] = await Promise.all([
+  const [receipts, submittedDrafts, assignments, reviews, reviewsDue, checklists, recentCompletedChecklists, lifecycle, businessDocumentCounts] = await Promise.all([
     db.select({
       id: legReceipts.id,
       legId: legReceipts.legId,
@@ -158,6 +169,27 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       )).orderBy(desc(bookings.endsAt)).limit(25),
     db.select({ id: eventChecklistRuns.id, bookingId: eventChecklistRuns.bookingId, bookingName: bookings.name, legId: eventChecklistRuns.legId, legName: travelLegs.name, phase: eventChecklistRuns.phase, state: eventChecklistRuns.state, startedAt: eventChecklistRuns.startedAt, completedAt: eventChecklistRuns.completedAt, unableReason: eventChecklistRuns.unableReason })
       .from(eventChecklistRuns).innerJoin(bookings, eq(bookings.id, eventChecklistRuns.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventChecklistRuns.legId)).orderBy(desc(eventChecklistRuns.updatedAt)).limit(50),
+    db.execute<RecentCompletedMaintenanceRow>(sql`
+      select *
+      from (
+        select distinct on (run.booking_id)
+          run.id,
+          run.booking_id as "bookingId",
+          event.name as title,
+          run.leg_id as "legId",
+          leg.name as "legName",
+          run.phase,
+          run.state as status,
+          run.completed_at as "completedAt"
+        from event_checklist_runs run
+        inner join bookings event on event.id = run.booking_id
+        inner join travel_legs leg on leg.id = run.leg_id
+        where run.state = 'completed' and run.completed_at is not null
+        order by run.booking_id, run.completed_at desc
+      ) recent
+      order by recent."completedAt" desc
+      limit 3
+    `),
     (db as any).select({ bookingId: eventLegLifecycle.bookingId, bookingName: bookings.name, legId: eventLegLifecycle.legId, legName: travelLegs.name, checkedOutAt: eventLegLifecycle.checkedOutAt, wrapUpStatus: eventLegLifecycle.wrapUpStatus, wrapUpFinishedAt: eventLegLifecycle.wrapUpFinishedAt, updatedAt: eventLegLifecycle.updatedAt })
       .from(eventLegLifecycle).innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId)).innerJoin(travelLegs, eq(travelLegs.id, eventLegLifecycle.legId)).orderBy(desc(eventLegLifecycle.updatedAt)).limit(25),
      officeAccountId
@@ -208,6 +240,10 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       recommendReturn: item.recommendReturn,
     })),
   ];
+  const recentCompletedMaintenanceEvents = recentCompletedChecklists.rows.map((item) => ({
+    ...item,
+    completedAt: item.completedAt.toISOString(),
+  }));
   const checklistAndMaintenance = checklists.map((item) => ({
     id: item.id,
     bookingId: item.bookingId,
@@ -236,6 +272,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
     assignments,
     reviewAndWrapUp,
     checklistAndMaintenance,
+    recentCompletedMaintenanceEvents,
   });
 });
 export default router;
