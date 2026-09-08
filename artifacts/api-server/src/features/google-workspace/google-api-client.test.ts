@@ -212,7 +212,7 @@ describe("GoogleWorkspaceReadClient", () => {
     });
   });
 
-  it("exposes only Gmail draft creation as a mutation and no send method", () => {
+  it("exposes the bounded Gmail and Drive capabilities and no send method", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
@@ -222,16 +222,25 @@ describe("GoogleWorkspaceReadClient", () => {
       "accountIdentity",
       "authorizationUrl",
       "createGmailDraft",
+      "createLabel",
+      "downloadDriveFile",
       "exchangeCode",
       "getAttachment",
       "getMessageMetadata",
       "getThreadDetail",
       "listCalendarEvents",
       "listCalendars",
+      "listDriveFiles",
       "listLabels",
       "listMessagePage",
       "listRecentMessageRefs",
+      "modifyMessageLabels",
+      "modifyThreadLabels",
+      "renameLabel",
     ]);
     expect(Object.keys(client).some((name) => /send/i.test(name))).toBe(false);
+    const scopes = GOOGLE_WORKSPACE_REQUIRED_SCOPES as readonly string[];
+    expect(scopes).toContain("https://www.googleapis.com/auth/gmail.modify");
+    expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.readonly");
   });
 });

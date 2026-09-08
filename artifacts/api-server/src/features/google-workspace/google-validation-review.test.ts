@@ -60,6 +60,9 @@ describe("Google validation review repository", () => {
         hasAttachments: true,
         state: "pending",
         resolvedOrganizationId: null,
+        gmailSyncState: "not_requested",
+        gmailSyncErrorCode: null,
+        gmailSyncMutationId: null,
       },
     ]);
   });

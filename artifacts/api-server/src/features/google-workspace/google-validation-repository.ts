@@ -30,11 +30,24 @@ export type GoogleValidationReviewItem = {
   hasAttachments: boolean;
   state: GoogleValidationReviewState;
   resolvedOrganizationId: string | null;
+  gmailSyncState:
+    | "not_requested"
+    | "pending"
+    | "completed"
+    | "retryable_error"
+    | "permanent_error"
+    | "conflict";
+  gmailSyncErrorCode: string | null;
+  gmailSyncMutationId: string | null;
 };
 
 export type GoogleValidationReviewInput = Omit<
   GoogleValidationReviewItem,
-  "state" | "resolvedOrganizationId"
+  | "state"
+  | "resolvedOrganizationId"
+  | "gmailSyncState"
+  | "gmailSyncErrorCode"
+  | "gmailSyncMutationId"
 >;
 
 type QueryResult = {
@@ -59,6 +72,18 @@ function candidates(value: unknown): Array<{ id: string; name: string }> {
     if (typeof item.id !== "string" || typeof item.name !== "string") return [];
     return [{ id: item.id, name: item.name }];
   });
+}
+
+function gmailSyncState(
+  value: unknown,
+): GoogleValidationReviewItem["gmailSyncState"] {
+  return value === "pending" ||
+    value === "completed" ||
+    value === "retryable_error" ||
+    value === "permanent_error" ||
+    value === "conflict"
+    ? value
+    : "not_requested";
 }
 
 function internalDateMs(value: unknown): number | null {
@@ -231,7 +256,10 @@ export class PostgresGoogleValidationRepository {
               candidate_organizations,
               has_attachments,
               review_state,
-              resolved_organization_id
+              resolved_organization_id,
+              gmail_sync_state,
+              gmail_sync_error_code,
+              gmail_sync_mutation_id::text
          FROM google_workspace_validation_review_items
         WHERE connection_id = $1
         ORDER BY CASE review_state
@@ -270,6 +298,15 @@ export class PostgresGoogleValidationRepository {
         resolvedOrganizationId:
           typeof row.resolved_organization_id === "string"
             ? row.resolved_organization_id
+            : null,
+        gmailSyncState: gmailSyncState(row.gmail_sync_state),
+        gmailSyncErrorCode:
+          typeof row.gmail_sync_error_code === "string"
+            ? row.gmail_sync_error_code
+            : null,
+        gmailSyncMutationId:
+          typeof row.gmail_sync_mutation_id === "string"
+            ? row.gmail_sync_mutation_id
             : null,
       }];
     });
@@ -376,6 +413,9 @@ export class PostgresGoogleValidationRepository {
               resolved_organization_id = NULL,
               reviewed_by = $3,
               reviewed_at = $4,
+              gmail_sync_state = 'not_requested',
+              gmail_sync_error_code = NULL,
+              gmail_sync_mutation_id = NULL,
               updated_at = $4
         WHERE connection_id = $1
           AND message_id = $2

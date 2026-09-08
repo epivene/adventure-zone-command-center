@@ -2,6 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
 import { GoogleMatchedEmailCorrectionService } from "@/features/google-workspace/google-matched-email-correction-service";
+import { GoogleReviewProfileAssignmentService, type GoogleReviewAssignmentView } from "@/features/google-workspace/google-review-profile-assignment-service";
 
 const metadataSchema = z.object({
   threadId: z.string().min(1),
@@ -25,17 +26,32 @@ function safeError(error: unknown): string {
 }
 function status(code: string): number {
   if (code === "GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND") return 404;
-  if (code === "GOOGLE_WORKSPACE_NOT_CONNECTED") return 409;
+  if (
+    code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
+    code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_LABEL_CONFLICT" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_CONNECTION_CHANGED"
+  ) return 409;
   if (code === "GOOGLE_WORKSPACE_MATCHED_CORRECTION_INVALID") return 400;
   return 500;
 }
 
 export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
   service?: GoogleMatchedEmailCorrectionService;
+  assignmentService?: {
+    assignMatched(input: Parameters<GoogleMatchedEmailCorrectionService["assign"]>[0]):
+      Promise<GoogleReviewAssignmentView | void>;
+  };
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
   const service = options?.service ?? new GoogleMatchedEmailCorrectionService();
+  const assignmentService = options?.assignmentService ??
+    (options?.service
+      ? { assignMatched: service.assign.bind(service) }
+      : new GoogleReviewProfileAssignmentService({ matchedPersistence: service }));
   const now = options?.now ?? (() => new Date());
 
   router.put("/google-workspace/validation/matched/:messageId", async (req, res) => {
@@ -45,13 +61,13 @@ export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
       return;
     }
     try {
-      await service.assign({
+      const assignment = await assignmentService.assignMatched({
         messageId: req.params.messageId,
         ...parsed.data,
         actorId: actorId(req),
         now: now(),
       });
-      res.json({ ok: true });
+      res.json({ ok: true, ...(assignment ?? {}) });
     } catch (error) {
       const code = safeError(error);
       res.status(status(code)).json({ error: code });

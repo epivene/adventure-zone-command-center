@@ -10,6 +10,8 @@ import {
   getGoogleWorkspaceValidationReview,
   ignoreGoogleWorkspaceValidationReview,
   resolveGoogleWorkspaceValidationReview,
+  retryGoogleWorkspaceGmailMutation,
+  type GoogleProfileLabelSyncResult,
   type GoogleValidationReviewItem,
 } from "@/features/google-workspace/google-workspace-client";
 import {
@@ -25,6 +27,48 @@ type SearchState = {
 
 type CreateState = GoogleReviewNewProfileInput & { open: boolean };
 
+type GmailNotice = {
+  message: string;
+  mutationId: string | null;
+  needsRetry: boolean;
+};
+
+function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
+  if (result?.errorCode === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+    return {
+      message: "Profile assigned. Reconnect the company Google account in Settings, then retry Gmail.",
+      mutationId: result.mutationId,
+      needsRetry: true,
+    };
+  }
+  if (!result || result.state === "completed") {
+    return {
+      message: "Assigned to the profile and archived in Gmail.",
+      mutationId: null,
+      needsRetry: false,
+    };
+  }
+  if (result.state === "retryable_error") {
+    return {
+      message: "Profile assigned. The Gmail update needs a retry.",
+      mutationId: result.mutationId,
+      needsRetry: true,
+    };
+  }
+  if (result.state === "conflict") {
+    return {
+      message: "Profile assigned, but Gmail has conflicting profile labels. No duplicate label was created.",
+      mutationId: null,
+      needsRetry: false,
+    };
+  }
+  return {
+    message: "Profile assigned, but Gmail could not be updated. Reconnect Gmail if prompted.",
+    mutationId: null,
+    needsRetry: false,
+  };
+}
+
 export function GoogleValidationReview({
   onPendingCountChange,
   showHistory = false,
@@ -36,6 +80,8 @@ export function GoogleValidationReview({
   const [loading, setLoading] = useState(true);
   const [busyMessageId, setBusyMessageId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [gmailStatus, setGmailStatus] = useState<GmailNotice | null>(null);
+  const [retryingMutationId, setRetryingMutationId] = useState<string | null>(null);
   const [searchByMessage, setSearchByMessage] = useState<Record<string, SearchState>>({});
   const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -71,7 +117,11 @@ export function GoogleValidationReview({
     setBusyMessageId(item.messageId);
     setError(null);
     try {
-      await resolveGoogleWorkspaceValidationReview(item.messageId, organizationId);
+      const result = await resolveGoogleWorkspaceValidationReview(
+        item.messageId,
+        organizationId,
+      );
+      setGmailStatus(gmailNotice(result.gmailSync));
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not assign this email.");
@@ -85,6 +135,11 @@ export function GoogleValidationReview({
     setError(null);
     try {
       await ignoreGoogleWorkspaceValidationReview(item.messageId);
+      setGmailStatus({
+        message: "Ignored in Email Review. Gmail was left unchanged and the thread stays in Inbox.",
+        mutationId: null,
+        needsRetry: false,
+      });
       await load();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not ignore this email.");
@@ -142,7 +197,8 @@ export function GoogleValidationReview({
     setBusyMessageId(item.messageId);
     setError(null);
     try {
-      await createGoogleReviewNewProfile(item, createState);
+      const created = await createGoogleReviewNewProfile(item, createState);
+      setGmailStatus(gmailNotice(created.gmailSync));
       setCreateByMessage((current) => {
         const next = { ...current };
         delete next[item.messageId];
@@ -153,6 +209,20 @@ export function GoogleValidationReview({
       setError(caught instanceof Error ? caught.message : "Could not create the new profile.");
     } finally {
       setBusyMessageId(null);
+    }
+  }
+
+  async function retryGmail(mutationId: string) {
+    setRetryingMutationId(mutationId);
+    setError(null);
+    try {
+      const result = await retryGoogleWorkspaceGmailMutation(mutationId);
+      setGmailStatus(gmailNotice(result.gmailSync));
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not retry the Gmail update.");
+    } finally {
+      setRetryingMutationId(null);
     }
   }
 
@@ -215,6 +285,21 @@ export function GoogleValidationReview({
       </div>
 
       {error ? <p className="text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
+      {gmailStatus ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-200" role="status">
+          <span>{gmailStatus.message}</span>
+          {gmailStatus.needsRetry && gmailStatus.mutationId ? (
+            <button
+              className="button-secondary px-3 py-1.5 text-sm"
+              disabled={retryingMutationId === gmailStatus.mutationId}
+              onClick={() => void retryGmail(gmailStatus.mutationId!)}
+              type="button"
+            >
+              {retryingMutationId === gmailStatus.mutationId ? "Retrying…" : "Retry Gmail"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {pending.length === 0 ? (
         <p className="rounded-lg bg-white p-3 text-sm text-slate-600 dark:bg-slate-950/40 dark:text-slate-300">
@@ -428,9 +513,35 @@ export function GoogleValidationReview({
                       <p className="font-semibold text-slate-900 dark:text-slate-100">{item.subject || "(No subject)"}</p>
                       <p className="mt-1 text-xs text-slate-500">{item.from || "Unknown sender"}</p>
                     </div>
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {item.state}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {item.state === "ignored"
+                          ? "Ignored · Gmail unchanged"
+                          : item.gmailSyncState === "completed"
+                            ? "Assigned · archived in Gmail"
+                            : item.gmailSyncErrorCode ===
+                                "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+                              ? "Assigned · reconnect Gmail"
+                              : item.gmailSyncState === "retryable_error"
+                                ? "Assigned · Gmail retry needed"
+                              : item.gmailSyncState === "conflict"
+                                ? "Assigned · label conflict"
+                                : "Assigned"}
+                      </span>
+                      {item.gmailSyncState === "retryable_error" &&
+                      item.gmailSyncMutationId ? (
+                        <button
+                          className="button-secondary px-2 py-1 text-xs"
+                          disabled={retryingMutationId === item.gmailSyncMutationId}
+                          onClick={() => void retryGmail(item.gmailSyncMutationId!)}
+                          type="button"
+                        >
+                          {retryingMutationId === item.gmailSyncMutationId
+                            ? "Retrying…"
+                            : "Retry Gmail"}
+                        </button>
+                      ) : null}
+                    </div>
                   </div>
                 </article>
               ))}

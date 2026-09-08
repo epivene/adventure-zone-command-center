@@ -2,7 +2,7 @@ import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
-import { GoogleReviewAssignmentDiagnosticService } from "@/features/google-workspace/google-review-assignment-diagnostic-service";
+import { GoogleReviewProfileAssignmentService, type GoogleReviewAssignmentView } from "@/features/google-workspace/google-review-profile-assignment-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
   PostgresGoogleValidationRepository,
@@ -55,7 +55,7 @@ type ReviewAssignmentService = {
     organizationId: string;
     actorId: string;
     now: Date;
-  }): Promise<void>;
+  }): Promise<GoogleReviewAssignmentView | void>;
 };
 
 type ValidationRepository = {
@@ -104,7 +104,11 @@ function diagnosticFields(error: unknown): {
 function errorStatus(code: string): number {
   if (
     code === "GOOGLE_WORKSPACE_NOT_CONNECTED" ||
-    code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+    code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_LABEL_CONFLICT" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_CONNECTION_CHANGED"
   ) {
     return 409;
   }
@@ -181,8 +185,11 @@ export function createGoogleWorkspaceValidationRouter(options?: {
     options?.mappingReconciler ?? new GoogleValidationMappingReconciler();
   const reviewReconciler =
     options?.reviewReconciler ?? new GoogleValidationReviewReconciler();
+  const defaultReviewAssignment = new GoogleReviewProfileAssignmentService();
   const reviewAssignmentService =
-    options?.reviewAssignmentService ?? new GoogleReviewAssignmentDiagnosticService();
+    options?.reviewAssignmentService ?? {
+      resolve: defaultReviewAssignment.resolveReview.bind(defaultReviewAssignment),
+    };
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const now = options?.now ?? (() => new Date());
@@ -230,13 +237,13 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        await reviewAssignmentService.resolve({
+        const assignment = await reviewAssignmentService.resolve({
           messageId: req.params.messageId,
           organizationId: parsed.data.organizationId,
           actorId: ownerActorId(req),
           now: now(),
         });
-        res.json({ ok: true });
+        res.json({ ok: true, ...(assignment ?? {}) });
       } catch (error) {
         const code = safeError(error);
         const diagnostics = diagnosticFields(error);

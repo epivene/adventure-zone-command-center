@@ -23,6 +23,7 @@ import {
   GoogleValidationLearningRepository,
   type GoogleValidationLearningSnapshot,
 } from "./google-validation-learning-repository";
+import { GoogleInboundProfileLabeler } from "./google-inbound-profile-labeler";
 import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
@@ -113,6 +114,10 @@ type ValidationRepositoryAccess = {
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
+};
+
+type InboundLabelerAccess = {
+  labelNewThreadMatches(messages: GoogleValidationRow[]): Promise<void>;
 };
 
 type DrizzleDb = typeof defaultDb;
@@ -331,6 +336,7 @@ export class GoogleRecentValidationService {
   private readonly learning: LearningAccess;
   private readonly contactProfileResolver: ContactProfileResolverAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
+  private readonly inboundLabeler: InboundLabelerAccess;
 
   constructor(options?: {
     connection?: ConnectionAccess;
@@ -339,6 +345,7 @@ export class GoogleRecentValidationService {
     learning?: LearningAccess;
     contactProfileResolver?: ContactProfileResolverAccess;
     validationRepository?: ValidationRepositoryAccess;
+    inboundLabeler?: InboundLabelerAccess;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
@@ -352,6 +359,11 @@ export class GoogleRecentValidationService {
       options?.contactProfileResolver ?? new GoogleContactProfileResolver();
     this.validationRepository =
       options?.validationRepository ?? new PostgresGoogleValidationRepository();
+    this.inboundLabeler =
+      options?.inboundLabeler ??
+      (options
+        ? { labelNewThreadMatches: async () => undefined }
+        : new GoogleInboundProfileLabeler());
   }
 
   async run(
@@ -485,6 +497,12 @@ export class GoogleRecentValidationService {
     }
 
     await this.validationRepository.upsertRows(persistableMappings(matched));
+    try {
+      await this.inboundLabeler.labelNewThreadMatches(matched);
+    } catch {
+      // CRM ingestion remains authoritative and visible even when Gmail label
+      // mutation is disabled, needs reauthorization, or is temporarily unavailable.
+    }
     await this.validationRepository.upsertReviewItems(
       persistableReviewItems(needsReview),
     );

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
+  GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE,
   GOOGLE_WORKSPACE_REQUIRED_SCOPES,
   buildGmailRawMessage,
   createGoogleWorkspaceReadClient,
@@ -16,14 +16,14 @@ const environment = {
 };
 
 describe("Google Gmail draft-only client", () => {
-  it("requires an explicit Gmail compose reauthorization without broader mutation scopes", () => {
+  it("requires explicit Gmail modify authorization without full mailbox access", () => {
     const client = createGoogleWorkspaceReadClient({ environment });
     const url = new URL(client.authorizationUrl({ state: "safe-state" }));
     const scopes = new Set((url.searchParams.get("scope") ?? "").split(" "));
 
     expect(scopes).toEqual(new Set(GOOGLE_WORKSPACE_REQUIRED_SCOPES));
-    expect(scopes.has(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)).toBe(true);
-    expect(scopes.has("https://www.googleapis.com/auth/gmail.modify")).toBe(false);
+    expect(scopes.has(GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE)).toBe(true);
+    expect(scopes.has("https://www.googleapis.com/auth/gmail.compose")).toBe(false);
     expect(scopes.has("https://mail.google.com/")).toBe(false);
     expect(url.searchParams.get("prompt")).toBe("consent");
     expect(url.searchParams.get("include_granted_scopes")).toBe("false");

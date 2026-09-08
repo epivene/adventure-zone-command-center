@@ -142,7 +142,7 @@ describe("Google Workspace OAuth callback", () => {
     const exchangeCode = vi.fn(async () => ({
       refreshToken: "1//refresh-token",
       scopes: GOOGLE_WORKSPACE_REQUIRED_SCOPES.filter(
-        (scope) => scope !== "https://www.googleapis.com/auth/drive.readonly",
+        (scope) => scope !== "https://www.googleapis.com/auth/gmail.modify",
       ),
     }));
     const { app, upsertConnected } = testApp({ exchangeCode });
@@ -174,12 +174,12 @@ describe("Google Workspace OAuth callback", () => {
     expect(upsertConnected).not.toHaveBeenCalled();
   });
 
-  it("refuses a grant that includes any Google write scope", async () => {
+  it("refuses a grant that includes an unexpected Google scope", async () => {
     const exchangeCode = vi.fn(async () => ({
       refreshToken: "1//refresh-token",
       scopes: [
         ...GOOGLE_WORKSPACE_REQUIRED_SCOPES,
-        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/gmail.settings.basic",
       ],
     }));
     const { app, upsertConnected } = testApp({ exchangeCode });

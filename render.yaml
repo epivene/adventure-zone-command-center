@@ -54,7 +54,7 @@ services:
       # Full service-account JSON for private uploads/signing. Keep this server-only.
       - key: GOOGLE_SERVICE_ACCOUNT_JSON
         sync: false
-      # Read-only Google Workspace OAuth. Configure all five secret values together.
+      # Least-privilege Google Workspace OAuth. Configure all five secret values together.
       # REDIRECT_URI is the API callback; APP_ORIGIN is the separate static web origin
       # (for example https://adventure-zone-web.onrender.com, with no trailing slash).
       - key: GOOGLE_WORKSPACE_CLIENT_ID
@@ -70,6 +70,10 @@ services:
       # Historical processing remains disabled. The bounded recent-email safety check
       # may use the app's existing AI provider for MATCH / IGNORE / NEEDS REVIEW triage.
       - key: GOOGLE_WORKSPACE_SYNC_ENABLED
+        value: "false"
+      # Roll out profile-label/archive mutations separately after reconnecting
+      # the company account with Gmail modify permission.
+      - key: GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED
         value: "false"
       - key: GOOGLE_WORKSPACE_AI_ENABLED
         value: "true"

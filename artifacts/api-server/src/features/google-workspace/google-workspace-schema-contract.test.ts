@@ -15,6 +15,10 @@ const operationalCalendarMigrationPath = path.join(
   repositoryRoot,
   "lib/db/migrations/20260828_operational_calendar_connection.sql",
 );
+const profileLabelMigrationPath = path.join(
+  repositoryRoot,
+  "lib/db/migrations/20260908_gmail_profile_label_sync.sql",
+);
 const renderPath = path.join(repositoryRoot, "render.yaml");
 
 function source(pathname: string) {
@@ -54,6 +58,26 @@ describe("Google Workspace foundation schema", () => {
     expect(migration).toContain("drop constraint if exists google_workspace_connections_account_email_unique");
     expect(migration).toContain("google_workspace_connections_account_email_role_unique");
     expect(migration).toContain("unique (account_email, role)");
+  });
+
+
+  it("enforces one stable Gmail label per profile and retryable mutations", () => {
+    const schema = source(schemaPath);
+    const migration = source(profileLabelMigrationPath).toLowerCase();
+
+    expect(schema).toContain("export const googleWorkspaceProfileLabels");
+    expect(schema).toContain("export const googleWorkspaceGmailMutations");
+    expect(migration).toContain(
+      "google_workspace_profile_labels_connection_organization_unique",
+    );
+    expect(migration).toContain(
+      "google_workspace_profile_labels_connection_label_unique",
+    );
+    expect(migration).toContain(
+      "google_workspace_gmail_mutations_idempotency_unique",
+    );
+    expect(migration).toContain("google_workspace_gmail_mutations_retry_idx");
+    expect(migration).toContain("gmail_sync_state");
   });
 
   it("stores only encrypted credentials", () => {

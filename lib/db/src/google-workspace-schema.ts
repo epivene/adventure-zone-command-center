@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -11,6 +12,8 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+
+import { organizations } from "./schema/index";
 
 export const googleWorkspaceConnectionStatusValues = [
   "connected",
@@ -249,6 +252,147 @@ export const googleWorkspaceAuditEvents = pgTable(
     check(
       "google_workspace_audit_events_metadata_object",
       sql`jsonb_typeof(${table.metadata}) = 'object'`,
+    ),
+  ],
+);
+
+
+export const googleWorkspaceProfileLabelStateValues = [
+  "active",
+  "conflict",
+  "unavailable",
+] as const;
+export type GoogleWorkspaceProfileLabelState =
+  (typeof googleWorkspaceProfileLabelStateValues)[number];
+
+export const googleWorkspaceGmailMutationStateValues = [
+  "pending",
+  "processing",
+  "completed",
+  "retryable_error",
+  "permanent_error",
+  "conflict",
+] as const;
+export type GoogleWorkspaceGmailMutationState =
+  (typeof googleWorkspaceGmailMutationStateValues)[number];
+
+export const googleWorkspaceGmailMutationOperationValues = [
+  "assign_thread",
+  "label_inbound_message",
+] as const;
+export type GoogleWorkspaceGmailMutationOperation =
+  (typeof googleWorkspaceGmailMutationOperationValues)[number];
+
+export const googleWorkspaceProfileLabels = pgTable(
+  "google_workspace_profile_labels",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => googleWorkspaceConnections.id, { onDelete: "cascade" }),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    gmailLabelId: text("gmail_label_id").notNull(),
+    gmailLabelName: text("gmail_label_name").notNull(),
+    state: text("state")
+      .$type<GoogleWorkspaceProfileLabelState>()
+      .default("active")
+      .notNull(),
+    lastErrorCode: text("last_error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique(
+      "google_workspace_profile_labels_connection_organization_unique",
+    ).on(table.connectionId, table.organizationId),
+    unique("google_workspace_profile_labels_connection_label_unique").on(
+      table.connectionId,
+      table.gmailLabelId,
+    ),
+    check(
+      "google_workspace_profile_labels_identity_nonblank",
+      sql`btrim(${table.gmailLabelId}) <> '' and btrim(${table.gmailLabelName}) <> ''`,
+    ),
+    check(
+      "google_workspace_profile_labels_state_valid",
+      sql`${table.state} in ('active', 'conflict', 'unavailable')`,
+    ),
+  ],
+);
+
+export const googleWorkspaceGmailMutations = pgTable(
+  "google_workspace_gmail_mutations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    connectionId: uuid("connection_id")
+      .notNull()
+      .references(() => googleWorkspaceConnections.id, { onDelete: "cascade" }),
+    messageId: text("message_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "restrict" }),
+    operation: text("operation")
+      .$type<GoogleWorkspaceGmailMutationOperation>()
+      .notNull(),
+    targetLabelId: text("target_label_id"),
+    removeLabelIds: jsonb("remove_label_ids")
+      .$type<string[]>()
+      .default(sql`'[]'::jsonb`)
+      .notNull(),
+    idempotencyKey: text("idempotency_key").notNull(),
+    state: text("state")
+      .$type<GoogleWorkspaceGmailMutationState>()
+      .default("pending")
+      .notNull(),
+    attemptCount: integer("attempt_count").default(0).notNull(),
+    lastErrorCode: text("last_error_code"),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    processingLeaseExpiresAt: timestamp("processing_lease_expires_at", {
+      withTimezone: true,
+    }),
+    actorId: text("actor_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    unique("google_workspace_gmail_mutations_idempotency_unique").on(
+      table.idempotencyKey,
+    ),
+    index("google_workspace_gmail_mutations_retry_idx").on(
+      table.state,
+      table.nextAttemptAt,
+      table.processingLeaseExpiresAt,
+    ),
+    check(
+      "google_workspace_gmail_mutations_identity_nonblank",
+      sql`btrim(${table.messageId}) <> '' and btrim(${table.threadId}) <> '' and btrim(${table.idempotencyKey}) <> ''`,
+    ),
+    check(
+      "google_workspace_gmail_mutations_operation_valid",
+      sql`${table.operation} in ('assign_thread', 'label_inbound_message')`,
+    ),
+    check(
+      "google_workspace_gmail_mutations_state_valid",
+      sql`${table.state} in ('pending', 'processing', 'completed', 'retryable_error', 'permanent_error', 'conflict')`,
+    ),
+    check(
+      "google_workspace_gmail_mutations_remove_labels_array",
+      sql`jsonb_typeof(${table.removeLabelIds}) = 'array'`,
+    ),
+    check(
+      "google_workspace_gmail_mutations_attempt_nonnegative",
+      sql`${table.attemptCount} >= 0`,
     ),
   ],
 );

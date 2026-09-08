@@ -5,8 +5,8 @@ import {
   encryptGoogleSecret,
   type EncryptedGoogleSecretV1,
 } from "./encrypted-google-secret";
-import { GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE, createGoogleWorkspaceReadClient } from "./google-api-client";
-import type { GoogleGmailDraftClient, GoogleWorkspaceReadClient } from "./google-api-types";
+import { GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE, GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE, createGoogleWorkspaceReadClient } from "./google-api-client";
+import type { GoogleGmailDraftClient, GoogleGmailLabelMutationClient, GoogleWorkspaceReadClient } from "./google-api-types";
 import {
   createGoogleGmailDeliveryClient,
   type GoogleGmailDeliveryClient,
@@ -119,17 +119,17 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
 
 function toView(row: ConnectionRow): GoogleConnectionView {
   const granted = scopes(row.granted_scopes);
-  const missingCompose = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
+  const missingGmailModify = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE);
   const missingCalendarWrite = row.role === "operational_calendar" && !granted.includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE);
   const base: GoogleConnectionView = {
     id: row.id,
     email: row.account_email,
-    status: row.status === "connected" && (missingCompose || missingCalendarWrite) ? "reauthorization_required" : row.status,
+    status: row.status === "connected" && (missingGmailModify || missingCalendarWrite) ? "reauthorization_required" : row.status,
     grantedScopes: granted,
     connectedAt: dateIso(row.connected_at) as string,
     lastVerifiedAt: dateIso(row.last_verified_at),
-    lastErrorCode: missingCompose
-      ? "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED"
+    lastErrorCode: missingGmailModify
+      ? "GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE_REQUIRED"
       : missingCalendarWrite
         ? "GOOGLE_OPERATIONAL_CALENDAR_WRITE_SCOPE_REQUIRED"
         : row.last_error_code,
@@ -303,7 +303,7 @@ export class PostgresGoogleConnectionRepository {
   async createGmailDraftClient(): Promise<{ connectionId: string; client: GoogleGmailDraftClient } | null> {
     const row = await this.currentRow("workspace");
     if (!row) return null;
-    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) {
+    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).some((scope) => scope === GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE || scope === GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE)) {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
     }
     const environment = this.requireEnvironment();
@@ -313,10 +313,70 @@ export class PostgresGoogleConnectionRepository {
     return { connectionId: row.id, client: { createGmailDraft: client.createGmailDraft.bind(client) } };
   }
 
+  async createGmailLabelMutationClient(): Promise<{ connectionId: string; client: GoogleGmailLabelMutationClient } | null> {
+    const row = await this.currentRow("workspace");
+    if (!row) return null;
+    if (
+      row.status === "reauthorization_required" ||
+      !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE)
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    const environment = this.requireEnvironment();
+    const refreshToken = decryptGoogleSecret(
+      row.encrypted_refresh_token,
+      environment.tokenEncryptionKey,
+    );
+    const client = this.createClient({ environment, refreshToken });
+    if (
+      !client.createLabel ||
+      !client.renameLabel ||
+      !client.modifyThreadLabels ||
+      !client.modifyMessageLabels
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CLIENT_UNAVAILABLE");
+    }
+    const guardReauthorization = async <T>(
+      operation: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await operation();
+      } catch (error) {
+        const code =
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof (error as { code?: unknown }).code === "string"
+            ? (error as { code: string }).code
+            : error instanceof Error
+              ? error.message
+              : "";
+        if (code === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+          await this.markReauthorizationRequired(code);
+        }
+        throw error;
+      }
+    };
+    return {
+      connectionId: row.id,
+      client: {
+        listLabels: () => guardReauthorization(() => client.listLabels()),
+        createLabel: (name) =>
+          guardReauthorization(() => client.createLabel!(name)),
+        renameLabel: (input) =>
+          guardReauthorization(() => client.renameLabel!(input)),
+        modifyThreadLabels: (input) =>
+          guardReauthorization(() => client.modifyThreadLabels!(input)),
+        modifyMessageLabels: (input) =>
+          guardReauthorization(() => client.modifyMessageLabels!(input)),
+      },
+    };
+  }
+
   async createGmailDeliveryClient(): Promise<{ connectionId: string; client: GoogleGmailDeliveryClient } | null> {
     const row = await this.currentRow("workspace");
     if (!row) return null;
-    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) {
+    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).some((scope) => scope === GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE || scope === GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE)) {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
     }
     const environment = this.requireEnvironment();

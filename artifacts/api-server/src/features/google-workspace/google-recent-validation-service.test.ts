@@ -287,6 +287,71 @@ describe("GoogleRecentValidationService", () => {
     expect(resolve).not.toHaveBeenCalled();
   });
 
+  it("labels a later Inbox reply only after its inherited CRM mapping is saved", async () => {
+    const order: string[] = [];
+    const inboundLabeler = {
+      labelNewThreadMatches: vi.fn(async () => { order.push("label"); }),
+    };
+    const repository = validationRepository(
+      vi.fn(async () => { order.push("mapping"); }),
+    );
+    const client: GoogleWorkspaceReadClient = {
+      authorizationUrl: () => "",
+      exchangeCode: async () => ({ refreshToken: "", scopes: [] }),
+      accountIdentity: async () => ({ subject: null, email: "zone@example.com" }),
+      listLabels: async () => [],
+      listCalendars: async () => [],
+      listRecentMessageRefs: async () => [{
+        id: "new-reply",
+        threadId: "known-thread",
+      }],
+      getMessageMetadata: async () => ({
+        ...message("new-reply", "fair@example.org", "Re: County Fair", ["INBOX", "UNREAD"]),
+        threadId: "known-thread",
+      }),
+    };
+    const service = new GoogleRecentValidationService({
+      connection: { createReadClient: async () => client },
+      scope: { getSaved: async () => ({ labels: [], calendars: [] }) },
+      evidence: {
+        load: async () => ({ contacts: [], organizations: [], profiles: [] }),
+      },
+      learning: {
+        load: async () => ({
+          mailboxEmails: new Set(["zone@example.com"]),
+          threadTargets: new Map([[
+            "known-thread",
+            { id: "org-1", name: "County Fair" },
+          ]]),
+          addressTargets: new Map(),
+        }),
+      },
+      contactProfileResolver: {
+        resolve: async () => ({
+          contactId: "unused",
+          status: "unresolved" as const,
+          organization: null,
+          candidates: [],
+        }),
+      },
+      validationRepository: repository,
+      inboundLabeler,
+    });
+
+    await service.run(100);
+
+    expect(order).toEqual(["mapping", "label"]);
+    expect(inboundLabeler.labelNewThreadMatches).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "new-reply",
+        threadId: "known-thread",
+        labelIds: ["INBOX", "UNREAD"],
+        evidenceCodes: expect.arrayContaining(["existing_thread_association"]),
+        resolvedOrganization: { id: "org-1", name: "County Fair" },
+      }),
+    ]);
+  });
+
   it("fails closed when the connected Google client does not support Gmail metadata validation", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",

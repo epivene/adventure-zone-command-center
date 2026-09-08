@@ -16,15 +16,16 @@ import type {
 import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
 
 export const GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
+export const GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
 
 export const GOOGLE_WORKSPACE_READ_SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/gmail.readonly",
+  GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE,
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.readonly",
 ] as const;
-export const GOOGLE_WORKSPACE_REQUIRED_SCOPES = [...GOOGLE_WORKSPACE_READ_SCOPES, GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE] as const;
+export const GOOGLE_WORKSPACE_REQUIRED_SCOPES = [...GOOGLE_WORKSPACE_READ_SCOPES] as const;
 
 const authorizationEndpoint = "https://accounts.google.com/o/oauth2/v2/auth";
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
@@ -84,6 +85,72 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
   } catch {
     return {};
   }
+}
+
+
+function googleForbiddenCode(
+  payload: Record<string, unknown>,
+  fallback: string,
+): string {
+  const error =
+    payload.error && typeof payload.error === "object"
+      ? payload.error as Record<string, unknown>
+      : {};
+  const reasons = Array.isArray(error.errors)
+    ? error.errors.flatMap((entry) =>
+        entry &&
+        typeof entry === "object" &&
+        typeof (entry as Record<string, unknown>).reason === "string"
+          ? [String((entry as Record<string, unknown>).reason)]
+          : [],
+      )
+    : [];
+  if (reasons.some((reason) =>
+    /^(rateLimitExceeded|userRateLimitExceeded|quotaExceeded|dailyLimitExceeded)$/i
+      .test(reason)
+  )) {
+    return "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED";
+  }
+  if (reasons.some((reason) =>
+    /^(authError|insufficientPermissions)$/i.test(reason)
+  )) {
+    return "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED";
+  }
+  return fallback;
+}
+
+function googleLabelSummary(value: unknown): GoogleLabelSummary {
+  if (!value || typeof value !== "object") {
+    throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_RESPONSE_INVALID");
+  }
+  const label = value as Record<string, unknown>;
+  if (
+    typeof label.id !== "string" ||
+    !label.id.trim() ||
+    typeof label.name !== "string" ||
+    !label.name.trim()
+  ) {
+    throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_RESPONSE_INVALID");
+  }
+  return {
+    id: label.id.trim(),
+    name: label.name.trim(),
+    type: label.type === "system" ? "system" : "user",
+  };
+}
+
+function gmailMutationLabelIds(input: {
+  addLabelIds: string[];
+  removeLabelIds: string[];
+}): { addLabelIds: string[]; removeLabelIds: string[] } {
+  const clean = (values: string[]) =>
+    [...new Set(values.map((value) => value.trim()).filter(Boolean))].sort();
+  const addLabelIds = clean(input.addLabelIds);
+  const removeLabelIds = clean(input.removeLabelIds);
+  if (addLabelIds.some((id) => removeLabelIds.includes(id))) {
+    throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_MUTATION_INVALID");
+  }
+  return { addLabelIds, removeLabelIds };
 }
 
 function partHasAttachment(value: unknown): boolean {
@@ -306,10 +373,66 @@ export function createGoogleWorkspaceReadClient(input: {
       accessToken = null;
       return authorizedJson(url, false);
     }
+    if (response.status === 401) {
+      throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 403) {
+      throw clientError(googleForbiddenCode(
+        await responseJson(response),
+        "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
+      ));
+    }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
     }
     return responseJson(response);
+  }
+
+
+  async function authorizedMutation(
+    url: string,
+    method: "POST" | "PATCH",
+    body: Record<string, unknown>,
+    retryUnauthorized = true,
+  ): Promise<Record<string, unknown>> {
+    const token = await currentAccessToken(!retryUnauthorized);
+    const response = await fetcher(url, {
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+    if (response.status === 401 && retryUnauthorized) {
+      accessToken = null;
+      return authorizedMutation(url, method, body, false);
+    }
+    if (response.status === 401) {
+      throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 403) {
+      throw clientError(googleForbiddenCode(
+        await responseJson(response),
+        "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
+      ));
+    }
+    if (response.status === 404) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+    }
+    if (response.status === 409) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT");
+    }
+    if (response.status === 429) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED");
+    }
+    if (response.status >= 500) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE");
+    }
+    if (!response.ok) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED");
+    }
+    return response.status === 204 ? {} : responseJson(response);
   }
 
   async function authorizedBytes(url: string, retryUnauthorized = true): Promise<Uint8Array> {
@@ -433,6 +556,54 @@ export function createGoogleWorkspaceReadClient(input: {
           type: label.type === "system" ? "system" as const : "user" as const,
         }];
       });
+    },
+
+
+    async createLabel(name: string): Promise<GoogleLabelSummary> {
+      const value = name.normalize("NFC").trim();
+      if (!value || value.length > 225 || /[\r\n\0]/.test(value)) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_NAME_INVALID");
+      }
+      return googleLabelSummary(await authorizedMutation(labelsEndpoint, "POST", {
+        name: value,
+        labelListVisibility: "labelShow",
+        messageListVisibility: "show",
+      }));
+    },
+
+    async renameLabel(input): Promise<GoogleLabelSummary> {
+      const labelId = input.labelId.trim();
+      const name = input.name.normalize("NFC").trim();
+      if (!labelId || !name || name.length > 225 || /[\r\n\0]/.test(name)) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_NAME_INVALID");
+      }
+      return googleLabelSummary(await authorizedMutation(
+        `${labelsEndpoint}/${encodeURIComponent(labelId)}`,
+        "PATCH",
+        { name },
+      ));
+    },
+
+    async modifyThreadLabels(input): Promise<void> {
+      const threadId = input.threadId.trim();
+      if (!threadId) throw clientError("GOOGLE_WORKSPACE_GMAIL_THREAD_ID_INVALID");
+      const labels = gmailMutationLabelIds(input);
+      await authorizedMutation(
+        `${gmailBaseEndpoint}/threads/${encodeURIComponent(threadId)}/modify`,
+        "POST",
+        labels,
+      );
+    },
+
+    async modifyMessageLabels(input): Promise<void> {
+      const messageId = input.messageId.trim();
+      if (!messageId) throw clientError("GOOGLE_WORKSPACE_MESSAGE_ID_INVALID");
+      const labels = gmailMutationLabelIds(input);
+      await authorizedMutation(
+        `${gmailBaseEndpoint}/messages/${encodeURIComponent(messageId)}/modify`,
+        "POST",
+        labels,
+      );
     },
 
     async listCalendars(): Promise<GoogleCalendarSummary[]> {

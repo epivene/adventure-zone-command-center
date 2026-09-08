@@ -20,11 +20,13 @@ on:
       - "lib/db/src/schema/index.ts"
       - "lib/db/package.json"
       - "lib/db/migrations/*google_workspace*"
+      - "lib/db/migrations/*gmail_profile_label*"
       - "docs/operations/google-workspace-readonly-setup.md"
       - "render.yaml"
   push:
     branches:
       - feature/google-workspace-connection-scope
+      - feature/gmail-profile-label-sync
     paths:
       - ".github/workflows/google-workspace-sync-ci.yml"
       - "artifacts/api-server/src/features/google-workspace/**"
@@ -43,6 +45,7 @@ on:
       - "lib/db/src/schema/index.ts"
       - "lib/db/package.json"
       - "lib/db/migrations/*google_workspace*"
+      - "lib/db/migrations/*gmail_profile_label*"
       - "docs/operations/google-workspace-readonly-setup.md"
       - "render.yaml"
 

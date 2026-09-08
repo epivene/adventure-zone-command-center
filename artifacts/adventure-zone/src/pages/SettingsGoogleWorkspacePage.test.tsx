@@ -87,11 +87,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("SettingsGoogleWorkspacePage", () => {
-  it("shows the connected account, read-only guarantee, saved business scope, David calendar control, and recent check control", async () => {
+  it("shows the connected account, narrow Gmail mutation boundary, saved business scope, David calendar control, and recent check control", async () => {
     render(<SettingsGoogleWorkspacePage />);
     expect(await screen.findByRole("heading", { name: "Google Workspace" })).toBeInTheDocument();
     expect(screen.getByText("zone.pirate.warrior@gmail.com")).toBeInTheDocument();
-    expect(screen.getByText(/Gmail and Google Calendar will not be changed/i)).toBeInTheDocument();
+    expect(screen.getByText(/Ignore never changes Gmail, and later replies stay visible in Inbox and unread/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "David operational calendar" })).toBeInTheDocument();
     expect(screen.getByText("Shows")).toBeInTheDocument();
     expect(screen.getByText("Adventure Zone Calendar")).toBeInTheDocument();
