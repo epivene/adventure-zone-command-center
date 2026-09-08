@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, ilike } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   bookings,
@@ -14,6 +14,8 @@ import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { listCertificateRecords } from "./coi-certificates";
 import { createBusinessDocumentsRouter } from "./business-documents";
+import { listOrganizationDirectoryPage } from "@/features/organizations/organization-directory-page";
+import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
@@ -122,15 +124,21 @@ router.get("/boss/business-documents/profiles", requireBoss, async (req, res): P
   }
 
   try {
-    const profiles = await db.select({
-      id: organizations.id,
-      name: organizations.name,
-    })
-      .from(organizations)
-      .where(ilike(organizations.name, `%${query}%`))
-      .orderBy(asc(organizations.name))
-      .limit(10);
-    res.json({ profiles: profiles.map((profile) => ({ ...profile, city: null, region: null })) });
+    const directoryQuery = organizationListQuerySchema.parse({
+      q: query,
+      page: 1,
+      pageSize: 10,
+      showMembers: "yes",
+    });
+    const page = await listOrganizationDirectoryPage(db, directoryQuery);
+    res.json({
+      profiles: page.records.map((profile) => ({
+        id: profile.id,
+        name: profile.name,
+        city: profile.matchedLocation?.city ?? profile.city,
+        region: profile.matchedLocation?.region ?? profile.region,
+      })),
+    });
   } catch (error) {
     req.log.error({ err: error }, "Failed to search profiles for Boss document review");
     res.status(500).json({ error: "Could not search profiles." });
