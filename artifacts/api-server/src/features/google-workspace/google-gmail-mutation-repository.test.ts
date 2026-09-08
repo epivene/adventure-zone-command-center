@@ -42,6 +42,36 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     expect(queries[0]?.text).toContain("ON CONFLICT (idempotency_key)");
   });
 
+  it("never downgrades a completed mutation", async () => {
+    const queries: string[] = [];
+    const repository = new PostgresGoogleGmailMutationRepository({
+      async query(text: string) {
+        queries.push(text);
+        return {
+          rows: [{
+            ...row,
+            state: "completed",
+            target_label_id: "Label_10",
+          }],
+        };
+      },
+    });
+
+    await expect(repository.fail({
+      id: "mutation-1",
+      state: "retryable_error",
+      errorCode: "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
+      nextAttemptAt: null,
+      now: new Date("2026-09-08T12:00:00Z"),
+    })).resolves.toMatchObject({
+      state: "completed",
+      targetLabelId: "Label_10",
+    });
+
+    expect(queries[0]).toContain("state <> 'completed'");
+    expect(queries[0]).toContain("RETURNING");
+  });
+
   it("claims retryable work with a bounded lease", async () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
