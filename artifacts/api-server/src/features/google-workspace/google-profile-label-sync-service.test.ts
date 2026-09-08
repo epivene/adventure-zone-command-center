@@ -26,6 +26,11 @@ function harness(enabled = true) {
       return row;
     }),
     get: vi.fn(async () => row),
+    retryNow: vi.fn(async () => {
+      if (!row || row.state !== "retryable_error") return null;
+      row = { ...row, state: "pending" };
+      return row;
+    }),
     claim: vi.fn(async () => {
       if (!row || row.state === "completed") return null;
       row = { ...row, state: "processing", attemptCount: row.attemptCount + 1 };
