@@ -1,4 +1,9 @@
-import type { BusinessDocumentRecord } from "@/lib/business-documents-api";
+import type {
+  BusinessDocumentCategory,
+  BusinessDocumentProfileOption,
+  BusinessDocumentRecord,
+  BusinessDocumentReviewItem,
+} from "@/lib/business-documents-api";
 import { bossFetch, bossGet } from "@/lib/boss-auth-context";
 
 export type BossContractDocument = {
@@ -43,19 +48,30 @@ export const bossDocumentsApi = {
 };
 
 export const bossBusinessDocumentsApi = {
-  list(filters: { limit?: number; offset?: number } = {}) {
+  list(filters: {
+    profileId?: string;
+    category?: BusinessDocumentCategory;
+    reviewState?: "accepted" | "needs_review" | "rejected";
+    limit?: number;
+    offset?: number;
+  } = {}) {
     const query = new URLSearchParams();
-    if (filters.limit !== undefined) query.set("limit", String(filters.limit));
-    if (filters.offset !== undefined) query.set("offset", String(filters.offset));
+    Object.entries(filters).forEach(([key, value]) => {
+      if (value !== undefined && value !== "") query.set(key, String(value));
+    });
     const suffix = query.size ? `?${query.toString()}` : "";
     return bossGet<{ documents: BusinessDocumentRecord[] }>(`/boss/business-documents${suffix}`);
   },
 
-  async listAll() {
+  async listAll(filters: {
+    profileId?: string;
+    category?: BusinessDocumentCategory;
+    reviewState?: "accepted" | "needs_review" | "rejected";
+  } = {}) {
     const documents: BusinessDocumentRecord[] = [];
     const limit = 100;
     for (let offset = 0; ; offset += limit) {
-      const page = await this.list({ limit, offset });
+      const page = await this.list({ ...filters, limit, offset });
       documents.push(...page.documents);
       if (page.documents.length < limit) return { documents };
     }
@@ -64,6 +80,17 @@ export const bossBusinessDocumentsApi = {
   async open(documentId: string) {
     const result = await bossFetch(`/boss/business-documents/${documentId}/open`, { method: "POST", body: "{}" }).then(responseJson<{ url: string }>);
     return result.url;
+  },
+
+  update(documentId: string, input: {
+    displayName: string;
+    category: BusinessDocumentCategory;
+    notes: string | null;
+  }) {
+    return bossFetch(`/boss/business-documents/${documentId}`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    }).then(responseJson<{ document: BusinessDocumentRecord }>);
   },
 
   upload(file: File) {
@@ -81,10 +108,35 @@ export const bossBusinessDocumentsApi = {
     return bossFetch(`/boss/business-documents/${documentId}/archive`, { method: "POST", body: "{}" }).then(responseJson<{ ok: true }>);
   },
 
-  delete(documentId: string) {
+  deleteDocument(documentId: string) {
     return bossFetch(`/boss/business-documents/${documentId}`, {
       method: "DELETE",
       body: JSON.stringify({ confirmation: "DELETE" }),
+    }).then(responseJson<{ ok: true }>);
+  },
+
+  delete(documentId: string) {
+    return this.deleteDocument(documentId);
+  },
+
+  reviewItems() {
+    return bossGet<{ items: BusinessDocumentReviewItem[] }>("/boss/business-documents/reviews");
+  },
+
+  reviewCount() {
+    return bossGet<{ count: number }>("/boss/business-documents/review-count");
+  },
+
+  searchProfiles(query: string) {
+    return bossGet<{ profiles: BusinessDocumentProfileOption[] }>(
+      `/boss/business-documents/profiles?q=${encodeURIComponent(query)}`,
+    ).then((response) => response.profiles);
+  },
+
+  reviewAction(reviewId: string, body: Record<string, unknown>) {
+    return bossFetch(`/boss/business-documents/reviews/${reviewId}/actions`, {
+      method: "POST",
+      body: JSON.stringify(body),
     }).then(responseJson<{ ok: true }>);
   },
 };
