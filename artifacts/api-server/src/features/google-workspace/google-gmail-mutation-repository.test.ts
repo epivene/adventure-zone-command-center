@@ -43,6 +43,7 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     expect(queries[0]?.text).toContain("ON CONFLICT (idempotency_key)");
     expect(queries[0]?.text).toContain("intent_generation");
     expect(queries[0]?.text).toContain("intent.organization_id = $4");
+    expect(queries[0]?.text).toContain("EXCLUDED.intent_generation");
   });
 
   it("never downgrades a completed mutation", async () => {
@@ -155,5 +156,32 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     );
 
     expect(events).toEqual(["lock", "gmail", "unlock", "release"]);
+  });
+
+  it("evicts a pooled session when advisory unlock fails", async () => {
+    const release = vi.fn();
+    const repository = new PostgresGoogleGmailMutationRepository({
+      async query() {
+        return { rows: [] };
+      },
+      async connect() {
+        return {
+          async query(text: string) {
+            if (text.includes("advisory_unlock")) {
+              throw new Error("connection lost during unlock");
+            }
+            return { rows: [] };
+          },
+          release,
+        };
+      },
+    });
+
+    await expect(repository.withThreadLock(
+      { connectionId: "conn-1", threadId: "thread-1" },
+      async () => "completed",
+    )).resolves.toBe("completed");
+
+    expect(release).toHaveBeenCalledWith(expect.any(Error));
   });
 });
