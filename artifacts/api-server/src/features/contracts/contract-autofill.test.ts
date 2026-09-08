@@ -23,7 +23,7 @@ const source: ContractAutofillSource = {
 };
 
 describe("buildContractAutofill", () => {
-  it("maps booking, package, signer, and settings data without commercial guesses", () => {
+  it("maps source data and supplies safe editable defaults for every builder section", () => {
     const result = buildContractAutofill(source);
     expect(result.values.eventSigner).toEqual({
       name: "Pat Organizer", role: "Event Director", email: "pat@example.com", phone: "307-555-0100", order: 1,
@@ -34,7 +34,23 @@ describe("buildContractAutofill", () => {
     expect(result.values.packages).toEqual([{ id: "33333333-3333-4333-8333-333333333333", name: "Adventure Zone" }]);
     expect(result.values.physicalAttractionTotal).toBe(10);
     expect(result.values.travelLegName).toBe("Colorado");
-    expect(result.values.commercialTerms).toBeUndefined();
+    expect(result.values.arrangement).toBe("guaranteed_fee");
+    expect(result.values.commercialTerms).toEqual({
+      guaranteedFeeCents: null,
+      depositCents: null,
+      balanceCents: null,
+      eventPercentageBasisPoints: null,
+      percentageBase: null,
+      admissionPriceCents: null,
+    });
+    expect(result.values.operationalTerms).toEqual({
+      ticketsPerRide: 0,
+      hoursPerDay: 0,
+      operatingDays: 0,
+      powerConfirmed: false,
+      siteAccessConfirmed: false,
+      staffingConfirmed: false,
+    });
     expect(result.insuranceRecipient).toEqual({ name: "Sara Toone", email: "sara@protectiveins.net" });
   });
 
