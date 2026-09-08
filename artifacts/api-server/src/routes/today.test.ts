@@ -10,7 +10,7 @@ import { createTodayWorkRouter } from "./today-work";
 const OPPORTUNITY_ID = "10000000-0000-4000-8000-000000000001";
 const SECOND_ID = "10000000-0000-4000-8000-000000000002";
 const BUSINESS_DATE = "2026-08-26";
-const SNOOZE_UNTIL = "2026-08-27T15:00:00.000Z";
+const SNOOZE_UNTIL = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
 function ownerToken(): string {
   const issued = issueToken();
@@ -128,7 +128,7 @@ describe("Today master queue controls", () => {
   });
 
   it("rejects reordering IDs outside the visible Booking queue", async () => {
-    const { app } = testApp({ reorder: vi.fn(async () => false) });
+    const { app } = testApp(controls({ reorder: vi.fn(async () => false) }));
     const response = await request(app)
       .post("/api/today/work/reorder")
       .set("Authorization", `Bearer ${ownerToken()}`)

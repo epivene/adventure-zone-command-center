@@ -1,6 +1,5 @@
 import { Link } from "wouter";
 
-import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
 import type {
   ContactListPage,
   ContactListQuery,
@@ -16,7 +15,6 @@ function contactListHref(
 ) {
   const params = new URLSearchParams(fixedParams);
   if (query.search) params.set("q", query.search);
-  if (query.state !== "all") params.set("state", query.state);
   if (page > 1) params.set("page", String(page));
   const suffix = params.toString();
   return suffix ? `${basePath}?${suffix}` : basePath;
@@ -44,7 +42,7 @@ export function ContactList({
     <div className="grid gap-5">
       <form
         action={basePath}
-        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_14rem_auto]"
+        className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_auto]"
         method="get"
       >
         {Object.entries(fixedParams).map(([name, value]) => (
@@ -58,16 +56,6 @@ export function ContactList({
             placeholder="Name, company, email, phone, or location"
             type="search"
           />
-        </label>
-        <label className="grid gap-1 text-sm font-semibold">
-          Sync status
-          <select defaultValue={query.state} name="state">
-            <option value="all">All contacts</option>
-            <option value="waiting">Waiting to sync</option>
-            <option value="conflict">Needs review</option>
-            <option value="synced">Synced</option>
-            <option value="unlinked">Not linked</option>
-          </select>
         </label>
         <div className="flex items-end gap-2">
           <button className="button-primary" type="submit">
@@ -92,12 +80,9 @@ export function ContactList({
               <li className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm" key={contact.id}>
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link className="text-lg font-bold text-slate-950 hover:text-orange-700" href={`/contacts/${contact.id}`}>
-                        {fullName}
-                      </Link>
-                      <SyncStateBadge state={contact.syncState} />
-                    </div>
+                    <Link className="text-lg font-bold text-slate-950 hover:text-orange-700" href={`/contacts/${contact.id}`}>
+                      {fullName}
+                    </Link>
                     <p className="mt-1 text-sm text-slate-600">
                       <span>{contact.organizationName || "No organization"}</span>
                       {contact.jobTitle ? <span> · {contact.jobTitle}</span> : null}

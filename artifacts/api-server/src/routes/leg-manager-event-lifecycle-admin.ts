@@ -5,10 +5,15 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import {
   eventChecklistOverrides,
+  eventChecklistItemResults,
   eventChecklistRuns,
+  eventManagerReviews,
+  bookings,
+  travelLegs,
   resourceConditionIssues,
 } from "@/db/schema";
 import { EventLifecycleRepository } from "@/features/leg-manager/event-lifecycle-repository";
+import { deleteChecklistRun } from "@/features/leg-manager/delete-checklist-run";
 
 const router: IRouter = Router();
 const lifecycle = new EventLifecycleRepository(db);
@@ -20,6 +25,13 @@ const overrideSchema = z.object({
 const resolveIssueSchema = z.object({
   resolutionNote: z.string().trim().min(1).max(8000),
 }).strict();
+const reviewPatchSchema = z.object({
+  rating: z.number().int().min(0).max(5).optional(),
+  feedback: z.string().trim().max(12000).nullable().optional(),
+  organizerSiteNotes: z.string().trim().max(12000).nullable().optional(),
+  crewNotes: z.string().trim().max(12000).nullable().optional(),
+  recommendReturn: z.enum(["yes", "no", "unsure"]).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "No review changes provided.");
 
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -73,6 +85,116 @@ router.get("/manager-admin/events/checklists", async (req, res): Promise<void> =
     req.log.error({ error }, "Failed to list event checklists for owner");
     res.status(500).json({ error: "Could not load event safety checklists." });
   }
+});
+
+router.get("/manager-admin/events/checklists/:runId", async (req, res): Promise<void> => {
+  const runId = param(req.params.runId);
+  if (!uuid.safeParse(runId).success) { res.status(400).json({ error: "Invalid checklist ID." }); return; }
+  const [run] = await db.select({
+    id: eventChecklistRuns.id, bookingId: eventChecklistRuns.bookingId, bookingName: bookings.name,
+    legId: eventChecklistRuns.legId, legName: travelLegs.name, phase: eventChecklistRuns.phase,
+    state: eventChecklistRuns.state, startedAt: eventChecklistRuns.startedAt,
+    completedAt: eventChecklistRuns.completedAt, unableReason: eventChecklistRuns.unableReason,
+  }).from(eventChecklistRuns)
+    .innerJoin(bookings, eq(bookings.id, eventChecklistRuns.bookingId))
+    .innerJoin(travelLegs, eq(travelLegs.id, eventChecklistRuns.legId))
+    .where(eq(eventChecklistRuns.id, runId)).limit(1);
+  if (!run) { res.status(404).json({ error: "Checklist not found." }); return; }
+  const items = await db.select({
+    id: eventChecklistItemResults.id, label: eventChecklistItemResults.itemLabelSnapshot,
+    resourceName: eventChecklistItemResults.resourceNameSnapshot, result: eventChecklistItemResults.result,
+    note: eventChecklistItemResults.note, followUpSyncState: eventChecklistItemResults.followUpSyncState,
+  }).from(eventChecklistItemResults).where(eq(eventChecklistItemResults.runId, runId));
+  res.json({ record: { ...run, items } });
+});
+
+router.delete("/manager-admin/events/checklists/:runId", async (req, res): Promise<void> => {
+  const runId = param(req.params.runId);
+  if (!uuid.safeParse(runId).success) { res.status(400).json({ error: "Invalid checklist ID." }); return; }
+  const deleted = await deleteChecklistRun(db, runId);
+  if (!deleted) { res.status(404).json({ error: "Checklist not found." }); return; }
+  res.json({ ok: true });
+});
+
+router.get("/manager-admin/reviews/due", async (_req, res) => {
+  const result = await db.execute(sql`
+    select b.id as "bookingId", b.name as "bookingName", b.ends_at as "endsAt",
+           b.travel_leg_id as "legId", l.name as "legName"
+      from bookings b
+      join travel_legs l on l.id=b.travel_leg_id
+      left join event_manager_reviews r on r.booking_id=b.id
+     where b.ends_at <= now() and r.id is null
+       and not exists (
+         select 1 from event_manager_review_dismissals d
+          where d.booking_id=b.id and d.leg_id=b.travel_leg_id
+       )
+     order by b.ends_at desc
+     limit 100
+  `);
+  res.json({ reviewsDue: rowsOf(result) });
+});
+
+router.delete("/manager-admin/reviews/due/:bookingId", async (req, res): Promise<void> => {
+  const bookingId = param(req.params.bookingId);
+  if (!uuid.safeParse(bookingId).success) { res.status(400).json({ error: "Invalid booking ID." }); return; }
+  const [booking] = await db.select({ legId: bookings.travelLegId }).from(bookings).where(eq(bookings.id, bookingId)).limit(1);
+  if (!booking?.legId) { res.status(404).json({ error: "Review-due item not found." }); return; }
+  await db.execute(sql`
+    insert into event_manager_review_dismissals (booking_id, leg_id, reason, dismissed_by)
+    values (${bookingId}::uuid, ${booking.legId}::uuid, 'Removed from review-due by admin', 'owner')
+    on conflict (booking_id, leg_id) do update set
+      reason=excluded.reason, dismissed_by=excluded.dismissed_by, dismissed_at=now(), updated_at=now()
+  `);
+  res.json({ ok: true });
+});
+
+router.get("/manager-admin/reviews", async (_req, res) => {
+  const result = await db.execute(sql`
+    select r.id, r.booking_id as "bookingId", b.name as "bookingName",
+           r.leg_id as "legId", l.name as "legName", r.rating,
+           r.feedback, r.organizer_site_notes as "organizerSiteNotes",
+           r.crew_notes as "crewNotes", r.recommend_return as "recommendReturn",
+           r.created_at as "createdAt", r.updated_at as "updatedAt"
+      from event_manager_reviews r
+      join bookings b on b.id=r.booking_id
+      join travel_legs l on l.id=r.leg_id
+     order by r.created_at desc
+     limit 100
+  `);
+  res.json({ reviews: rowsOf(result) });
+});
+
+router.patch("/manager-admin/reviews/:reviewId", async (req, res): Promise<void> => {
+  const reviewId = param(req.params.reviewId);
+  const parsed = reviewPatchSchema.safeParse(req.body);
+  if (!uuid.safeParse(reviewId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid review ID." : parsed.error.issues[0]?.message ?? "Review the changes." });
+    return;
+  }
+  const [review] = await db.update(eventManagerReviews)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(eq(eventManagerReviews.id, reviewId))
+    .returning();
+  if (!review) { res.status(404).json({ error: "Review not found." }); return; }
+  res.json({ review });
+});
+
+router.delete("/manager-admin/reviews/:reviewId", async (req, res): Promise<void> => {
+  const reviewId = param(req.params.reviewId);
+  if (!uuid.safeParse(reviewId).success) { res.status(400).json({ error: "Invalid review ID." }); return; }
+  const [review] = await db.delete(eventManagerReviews).where(eq(eventManagerReviews.id, reviewId)).returning({
+    id: eventManagerReviews.id,
+    bookingId: eventManagerReviews.bookingId,
+    legId: eventManagerReviews.legId,
+  });
+  if (!review) { res.status(404).json({ error: "Review not found." }); return; }
+  await db.execute(sql`
+    insert into event_manager_review_dismissals (booking_id, leg_id, reason, dismissed_by)
+    values (${review.bookingId}::uuid, ${review.legId}::uuid, 'Saved review deleted by admin', 'owner')
+    on conflict (booking_id, leg_id) do update set
+      reason=excluded.reason, dismissed_by=excluded.dismissed_by, dismissed_at=now(), updated_at=now()
+  `);
+  res.json({ ok: true });
 });
 
 router.get("/manager-admin/resource-condition-issues", async (req, res): Promise<void> => {

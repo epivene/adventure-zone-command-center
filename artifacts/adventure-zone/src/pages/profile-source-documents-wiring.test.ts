@@ -5,9 +5,9 @@ const owner = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
 const office = readFileSync("src/pages/OfficeProfilePage.tsx", "utf8");
 
 describe("profile source document wiring", () => {
-  it("renders owner source documents with owner scope", () => {
-    expect(owner).toContain("ProfileSourceDocuments");
-    expect(owner).toContain('<ProfileSourceDocuments mode="owner" profileId={profileId} />');
+  it("renders the canonical owner document library on a profile", () => {
+    expect(owner).toContain("ProfileDocuments");
+    expect(owner).toContain('<ProfileDocuments profileId={profileId} />');
   });
 
   it("renders only Office-scoped source documents in Office Coordinator", () => {

@@ -22,7 +22,7 @@ const workspaces = [
     title: "Legs & Operations",
     description: "Route it, set it up, run it.",
     detail: "Legs, trips, routes, crews, finances, equipment movement, reviews, and event execution.",
-    href: "/routes",
+    href: "/operations/legs",
     icon: Truck,
   },
 ] as const;

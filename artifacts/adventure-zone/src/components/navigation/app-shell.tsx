@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { ArrowLeft, CalendarDays, House, MapPinned, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
+import { ArrowLeft, CalendarDays, House, Inbox, MailQuestion, MapPinned, Megaphone, MessageSquare, Palette, UsersRound, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import { AddMenu, AppMenu } from "./app-menu";
 import { MobileBottomNav } from "./mobile-bottom-nav";
@@ -13,6 +13,10 @@ import { rememberProfileOrigin } from "@/lib/profile-navigation";
 import type { OfficeCoordinatorAttentionData } from "@/components/today/office-coordinator-attention";
 import { apiGet } from "@/lib/auth-token";
 import { adminWorkspaceForPath, readBookingReturnPath, type AdminWorkspace } from "@/lib/admin-workspace";
+import { IncomingCallingProvider } from "@/features/calls/incoming-calling-context";
+import { IncomingAvailabilityControl } from "@/components/calls/incoming-availability-control";
+import { IncomingCallPanel } from "@/components/calls/incoming-call-panel";
+import { getGoogleWorkspaceValidationReview } from "@/features/google-workspace/google-workspace-client";
 
 type PrimaryNavigationItem = { href: string; label: string; icon: LucideIcon };
 
@@ -25,7 +29,9 @@ function primaryNavigation(workspace: AdminWorkspace, bookingReturnPath: string 
     return [
       { href: "/today", label: "Today", icon: House },
       { href: "/profiles", label: "Profiles", icon: UsersRound },
+      { href: "/email-review", label: "Email Review", icon: MailQuestion },
       { href: "/schedule", label: "Schedule", icon: CalendarDays },
+      { href: "/website-inquiries", label: "Website Inquiries", icon: Inbox },
     ];
   }
   if (workspace === "operations") {
@@ -53,6 +59,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const primaryItems = primaryNavigation(workspace, bookingReturnPath);
   const [assistantRequested, setAssistantRequested] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [websiteInquiryCount, setWebsiteInquiryCount] = useState(0);
+  const [pendingEmailReviewCount, setPendingEmailReviewCount] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
@@ -72,6 +80,39 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location]);
 
   useEffect(() => {
+    let active = true;
+    const refresh = () =>
+      apiGet<{ newCount: number }>("/website-inquiries/count")
+        .then((data) => { if (active) setWebsiteInquiryCount(data.newCount ?? 0); })
+        .catch(() => {});
+    void refresh();
+    const id = window.setInterval(refresh, 15000);
+    return () => { active = false; window.clearInterval(id); };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () =>
+      getGoogleWorkspaceValidationReview()
+        .then((data) => {
+          if (active) setPendingEmailReviewCount(data.items.filter((item) => item.state === "pending").length);
+        })
+        .catch(() => {});
+    const updateFromReview = (event: Event) => {
+      const count = (event as CustomEvent<number>).detail;
+      if (active && Number.isFinite(count)) setPendingEmailReviewCount(count);
+    };
+    void refresh();
+    const id = window.setInterval(refresh, 60000);
+    window.addEventListener("email-review-count-changed", updateFromReview);
+    return () => {
+      active = false;
+      window.clearInterval(id);
+      window.removeEventListener("email-review-count-changed", updateFromReview);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!immersiveProfile) rememberProfileOrigin(location);
   }, [immersiveProfile, location]);
 
@@ -89,7 +130,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location]);
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground">
+    <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground">
       <AssistantNavigationContextSync />
       {!immersiveProfile ? (
         <header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block">
@@ -104,7 +145,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <Link
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition lg:px-3",
+                        "relative inline-flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold transition lg:px-3",
                         active
                           ? "bg-secondary text-secondary-foreground"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -114,14 +155,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                     >
                       <Icon className="h-4 w-4" />
                       <span className="hidden lg:inline">{item.label}</span>
+                      {item.href === "/website-inquiries" && websiteInquiryCount > 0 ? (
+                        <span aria-label={`${websiteInquiryCount} new inquiries`} className="rounded-full bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                          {websiteInquiryCount > 99 ? "99+" : websiteInquiryCount}
+                        </span>
+                      ) : null}
+                      {item.href === "/email-review" && pendingEmailReviewCount > 0 ? (
+                        <span aria-label={`${pendingEmailReviewCount} pending email reviews`} className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-950">
+                          {pendingEmailReviewCount > 99 ? "99+" : pendingEmailReviewCount}
+                        </span>
+                      ) : null}
                     </Link>
                   );
                 })}
               </nav>
             ) : null}
             <div className="ml-auto flex items-center gap-1.5">
+              {workspace === "booking" ? <IncomingAvailabilityControl /> : null}
               {workspace === "booking" ? <AddMenu /> : null}
-              <AppMenu workspace={workspace} unreadMessages={unreadMessages} />
+              <AppMenu workspace={workspace} unreadMessages={unreadMessages} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} />
             </div>
           </div>
         </header>
@@ -136,12 +188,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8">
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
+        <IncomingCallPanel />
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
       {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
       {assistantRequested ? <Suspense fallback={null}><AssistantDrawer /></Suspense> : null}
-      {!immersiveProfile ? <MobileBottomNav workspace={workspace} /> : null}
-    </div>
+      {!immersiveProfile ? <MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /> : null}
+    </div></IncomingCallingProvider>
   );
 }

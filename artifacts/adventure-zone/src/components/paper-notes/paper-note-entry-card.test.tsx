@@ -110,12 +110,12 @@ describe("PaperNoteEntryCard", () => {
     expect(screen.getByText(/Emmett Cherry Festival — Tina — ext 3115/)).toBeInTheDocument();
     expect(screen.getByLabelText("Phone number")).toHaveValue("208-555-0142");
     expect(screen.getByLabelText("Extension")).toHaveValue("3115");
-    expect(screen.getByLabelText("Phone type")).toHaveValue("office");
-    expect(screen.getByLabelText("Phone label")).toHaveValue("fair office");
-    expect(screen.getByLabelText("Phone status")).toHaveValue("active");
-    expect(screen.getByLabelText("Import as structured phone")).toBeChecked();
-    expect(screen.getByLabelText("Primary phone")).toBeChecked();
-    expect(screen.getByLabelText("Organization primary phone")).not.toBeChecked();
+    expect(screen.getByRole("combobox", { name: "Phone type" })).toHaveValue("office");
+    expect(screen.getByRole("textbox", { name: "Phone label" })).toHaveValue("fair office");
+    expect(screen.getByRole("combobox", { name: "Phone status" })).toHaveValue("active");
+    expect(screen.getByRole("checkbox", { name: "Import as structured phone" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Primary phone" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Organization primary phone" })).not.toBeChecked();
     expect(screen.getByLabelText("Old reminder from paper")).toHaveValue("Call Monday");
     expect(screen.getByLabelText("Starred on original paper")).toBeChecked();
     expect(screen.getByText("Organization / main office phones")).toBeInTheDocument();

@@ -1,0 +1,221 @@
+{
+  "auditedAt": "2026-09-03T23:40:53.487Z",
+  "searches": {
+    "Craft Lake City": {
+      "ok": true,
+      "query": "Craft Lake City",
+      "results": [
+        {
+          "id": "d106ee40-669b-40ef-8679-0ea5ca01ad93",
+          "kind": "contact",
+          "label": "Craft Lake City",
+          "secondaryLabel": "DIY Craft Fest (SLC) UT",
+          "city": "Salt Lake City",
+          "region": "UT",
+          "status": null,
+          "lastContactAt": null,
+          "bookingCount": null,
+          "matchedOn": [
+            "contact"
+          ]
+        },
+        {
+          "id": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+          "kind": "organization",
+          "label": "DIY Craft Fest (SLC) UT",
+          "secondaryLabel": null,
+          "city": "Salt Lake City",
+          "region": "UT",
+          "status": null,
+          "lastContactAt": null,
+          "bookingCount": 0,
+          "matchedOn": [
+            "contact"
+          ]
+        }
+      ]
+    },
+    "DIY Craft Fest": {
+      "ok": true,
+      "query": "DIY Craft Fest",
+      "results": [
+        {
+          "id": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+          "kind": "organization",
+          "label": "DIY Craft Fest (SLC) UT",
+          "secondaryLabel": null,
+          "city": "Salt Lake City",
+          "region": "UT",
+          "status": null,
+          "lastContactAt": null,
+          "bookingCount": 0,
+          "matchedOn": [
+            "name"
+          ]
+        }
+      ]
+    },
+    "tiana@craftlakecity.com": {
+      "ok": true,
+      "query": "tiana@craftlakecity.com",
+      "results": []
+    },
+    "artisancoordinator@craftlakecity.com": {
+      "ok": true,
+      "query": "artisancoordinator@craftlakecity.com",
+      "results": []
+    },
+    "Liz Amato": {
+      "ok": true,
+      "query": "Liz Amato",
+      "results": []
+    }
+  },
+  "profiles": [
+    {
+      "searchResult": {
+        "id": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+        "kind": "organization",
+        "label": "DIY Craft Fest (SLC) UT",
+        "secondaryLabel": null,
+        "city": "Salt Lake City",
+        "region": "UT",
+        "status": null,
+        "lastContactAt": null,
+        "bookingCount": 0,
+        "matchedOn": [
+          "name"
+        ]
+      },
+      "history": {
+        "ok": true,
+        "profileId": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+        "place": {
+          "id": "30029d95-556e-4f23-9f91-c6b76a3c8835",
+          "name": "DIY Craft Fest (SLC) UT",
+          "placeType": "festival_event",
+          "phone": "801-906-8521",
+          "address1": "155 1000 W",
+          "address2": null,
+          "city": "Salt Lake City",
+          "region": "UT",
+          "postalCode": "84116",
+          "website": "https://craftlakecity.com/diy-festival-2026/",
+          "lastResort": false,
+          "lastResortReason": null,
+          "actRecordId": "f4c4246e-269b-476c-a059-66104a3347f3"
+        },
+        "contacts": [
+          {
+            "id": "d106ee40-669b-40ef-8679-0ea5ca01ad93",
+            "name": "Craft Lake City",
+            "role": "Current organization contact",
+            "isPrimary": true,
+            "phone": "801-906-8521",
+            "email": "info@craftlakecity.com",
+            "source": "local",
+            "actRecordId": null,
+            "locationName": null,
+            "locationCity": null,
+            "locationRegion": null
+          },
+          {
+            "id": "c5e73f33-f770-40c1-8667-526038e9d3c7",
+            "name": "Liz Vowles",
+            "role": null,
+            "isPrimary": false,
+            "phone": null,
+            "email": "liz@craftlakecity.com",
+            "source": "act_recovery",
+            "actRecordId": "8188f904-6951-49a9-958b-5c0237519726",
+            "locationName": null,
+            "locationCity": null,
+            "locationRegion": null
+          }
+        ],
+        "bookings": [],
+        "followUps": [
+          {
+            "id": "19ed6040-55f8-4294-af5c-42a463a11d05",
+            "contactId": null,
+            "bookingId": null,
+            "kind": "Verify Craft Lake City partnership fit",
+            "dueAt": "2027-01-15T16:00:00.000Z",
+            "completedAt": null
+          }
+        ],
+        "notes": [
+          {
+            "id": "8ca4eef4-c475-456f-9a9d-35a8cd5cc017",
+            "contactId": null,
+            "bookingId": null,
+            "kind": "note",
+            "subject": "Verify Craft Lake City partnership fit",
+            "body": "Confirm the 2027 partnership/sponsorship channel and whether Adventure Zone fits before any outreach.",
+            "occurredAt": "2026-08-31T13:59:38.643Z",
+            "createdAt": "2026-08-31T13:59:38.643Z",
+            "updatedAt": "2026-08-31T13:59:38.643Z",
+            "importedFromAct": false,
+            "actSourceType": null,
+            "historicalDateUnknown": false,
+            "paperNoteSource": null
+          },
+          {
+            "id": "90fdc309-0e17-4dcb-ba6d-45179c2a87ee",
+            "contactId": null,
+            "bookingId": null,
+            "kind": "note",
+            "subject": "Contact and positioning correction",
+            "body": "Liz Amato left Craft Lake City and moved out of Utah, so she should remain historical. If Adventure Zone pursues this event, use the current partnership/sponsorship channel rather than a standard artisan exhibitor application.",
+            "occurredAt": "2026-08-31T13:59:38.532Z",
+            "createdAt": "2026-08-31T13:59:38.532Z",
+            "updatedAt": "2026-08-31T13:59:38.532Z",
+            "importedFromAct": false,
+            "actSourceType": null,
+            "historicalDateUnknown": false,
+            "paperNoteSource": null
+          }
+        ],
+        "history": [
+          {
+            "id": "b572dc7d-ab6c-4b7b-ac7c-49f92c500385",
+            "contactId": null,
+            "bookingId": null,
+            "kind": "act_history",
+            "subject": "Contact Liz Vowles linked",
+            "body": "Contact Liz Vowles linked",
+            "occurredAt": "2023-01-13T16:35:00.000Z",
+            "createdAt": "2026-08-14T14:20:49.911Z",
+            "updatedAt": "2026-08-14T14:20:49.911Z",
+            "importedFromAct": true,
+            "actSourceType": "history",
+            "historicalDateUnknown": false,
+            "paperNoteSource": null
+          },
+          {
+            "id": "b918c7fd-842d-4790-9276-96d942345e92",
+            "contactId": null,
+            "bookingId": null,
+            "kind": "act_history",
+            "subject": "Linked to company Craft - DIY Fest",
+            "body": "Linked to company Craft - DIY Fest",
+            "occurredAt": "2023-01-13T16:35:00.000Z",
+            "createdAt": "2026-08-14T15:54:19.925Z",
+            "updatedAt": "2026-08-14T15:54:19.925Z",
+            "importedFromAct": true,
+            "actSourceType": "history",
+            "historicalDateUnknown": false,
+            "paperNoteSource": null
+          }
+        ],
+        "migrationHistory": {
+          "contactSourceIds": [],
+          "phones": [],
+          "notes": [],
+          "bookingSourceIds": [],
+          "groupSourceIds": []
+        }
+      }
+    }
+  ]
+}

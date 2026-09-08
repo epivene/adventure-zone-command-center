@@ -14,8 +14,7 @@ describe("Marketing page copy density", () => {
 
   it("uses shorter scan-friendly labels", () => {
     expect(source).toContain("Email campaigns");
-    expect(source).toContain(">Profiles<");
-    expect(source).toContain(">Research<");
+    expect(source).toContain("Design Studio");
     expect(source).toContain(">Marketing setup<");
   });
 });

@@ -17,13 +17,18 @@
     "./resource-source-candidate-schema": "./src/resource-source-candidate-schema.ts",
     "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",
     "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
+    "./boss-schema": "./src/boss-schema.ts",
+    "./website-inquiry-schema": "./src/website-inquiry-schema.ts",
     "./google-workspace-schema": "./src/google-workspace-schema.ts",
     "./operational-calendar-schema": "./src/operational-calendar-schema.ts",
     "./lead-intake-schema": "./src/lead-intake-schema.ts",
     "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts",
     "./booking-opportunity-email-schema": "./src/booking-opportunity-email-schema.ts",
     "./leg-assignment-schema": "./src/leg-assignment-schema.ts",
-    "./design-studio-schema": "./src/design-studio-schema.ts"
+    "./design-studio-schema": "./src/design-studio-schema.ts",
+    "./contract-schema": "./src/contract-schema.ts",
+    "./business-document-schema": "./src/business-document-schema.ts"
+    ,"./marketing-schema": "./src/marketing-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

@@ -410,6 +410,49 @@ const migrationFiles = [
           'territory_exception_approved'
         )`,
   },
+  {
+    name: "20260903_website_inquiry_inbox.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.website_inquiries') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'office_accounts'
+          AND column_name = 'can_review_website_inquiries'
+      ) AS ready`,
+  },
+  {
+    name: "20260905_boss_workspace.sql",
+    markerSql: "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
+  },
+  {
+    name: "20260906_adobe_contracts.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.contract_agreements') IS NOT NULL
+      AND to_regclass(current_schema() || '.contract_provider_events') IS NOT NULL
+      AS ready`,
+  },
+  {
+    name: "20260907_marketing_campaigns.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.marketing_audiences') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_audience_members') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaigns') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_recipients') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_deliveries') IS NOT NULL
+      AND to_regclass(current_schema() || '.marketing_campaign_events') IS NOT NULL
+      AND (SELECT COUNT(*) = 2 FROM information_schema.columns
+           WHERE table_schema = current_schema() AND table_name = 'marketing_campaigns'
+             AND column_name IN ('subject_template', 'body_template'))
+      AS ready`,
+  },
+  {
+    name: "20260907_coi_expiration.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.design_certificates') IS NOT NULL
+      AND to_regclass(current_schema() || '.design_certificates_asset_unique') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

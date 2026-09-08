@@ -20,6 +20,7 @@ describe("ensureDesignStudioSchemaBeforeListen", () => {
     expect(queries[1]).toContain("CREATE TABLE IF NOT EXISTS design_projects");
     expect(queries[1]).toContain("CREATE TABLE IF NOT EXISTS design_project_versions");
     expect(queries[1]).toContain("CREATE TABLE IF NOT EXISTS design_outputs");
+    expect(queries[1]).toContain("CREATE TABLE IF NOT EXISTS design_certificates");
     expect(queries[2]).toBe("RESET lock_timeout");
     expect(client.release).toHaveBeenCalledOnce();
   });

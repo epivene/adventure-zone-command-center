@@ -1,0 +1,70 @@
+name: Audit Craft Lake City profile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/audit-2026-09-03-craft-lake-city.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit live Craft Lake City profile
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const headers = { Authorization: `Bearer ${token}` };
+
+          async function request(path) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, { headers });
+            const body = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${body.slice(0, 700)}`);
+            return JSON.parse(body);
+          }
+
+          (async () => {
+            const queries = ["Craft Lake City", "DIY Craft Fest", "tiana@craftlakecity.com", "artisancoordinator@craftlakecity.com", "Liz Amato"];
+            const searches = {};
+            for (const query of queries) searches[query] = await request(`profile-search?q=${encodeURIComponent(query)}&limit=20`);
+            const candidates = Object.values(searches)
+              .flatMap((value) => value.results ?? [])
+              .filter((item) => item.kind === "organization");
+            const unique = [...new Map(candidates.map((item) => [item.id, item])).values()];
+            const profiles = [];
+            for (const item of unique) {
+              profiles.push({ searchResult: item, history: await request(`profile-history/${item.id}`) });
+            }
+            const receipt = { auditedAt: new Date().toISOString(), searches, profiles };
+            fs.mkdirSync("imports/receipts", { recursive: true });
+            fs.writeFileSync("imports/receipts/2026-09-03-craft-lake-city-audit.json", JSON.stringify(receipt, null, 2));
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Commit audit receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add imports/receipts/2026-09-03-craft-lake-city-audit.json
+          if git diff --cached --quiet; then
+            echo "Receipt unchanged"
+          else
+            git commit -m "Audit Craft Lake City live profile"
+            git push
+          fi

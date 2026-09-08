@@ -12,7 +12,7 @@ const environment = {
   clientSecret: "client-secret",
   redirectUri: "https://example.test/api/google-workspace/oauth/callback",
   appOrigin: "https://example.test",
-  tokenEncryptionKey: "x".repeat(32),
+  tokenEncryptionKey: Buffer.alloc(32, 1),
 };
 
 describe("Google Gmail draft-only client", () => {

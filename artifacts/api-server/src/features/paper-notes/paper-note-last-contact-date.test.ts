@@ -19,7 +19,7 @@ const entry = JSON.stringify({
 
 describe("paper note page contact date rule", () => {
   it("treats the date at the top of the paper as the entries' last-contact date, never the event date", async () => {
-    const completeImage = vi.fn(async () => entry);
+    const completeImage = vi.fn(async (_input: Parameters<NonNullable<AiCompletionClient["completeImage"]>>[0]) => entry);
     const client: AiCompletionClient = {
       providerName: "Fake vision",
       complete: vi.fn(async () => "{}"),

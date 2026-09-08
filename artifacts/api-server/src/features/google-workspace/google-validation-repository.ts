@@ -90,6 +90,27 @@ export class PostgresGoogleValidationRepository {
     return id;
   }
 
+  async processedMessageIds(messageIds: string[]): Promise<Set<string>> {
+    const ids = [...new Set(messageIds.filter((id) => id.trim()))];
+    if (!ids.length) return new Set();
+    const connectionId = await this.currentConnectionId();
+    const result = await this.pool.query(
+      `SELECT message_id
+         FROM google_workspace_validation_mappings
+        WHERE connection_id = $1
+          AND message_id = ANY($2::text[])
+       UNION
+       SELECT message_id
+         FROM google_workspace_validation_review_items
+        WHERE connection_id = $1
+          AND message_id = ANY($2::text[])`,
+      [connectionId, ids],
+    );
+    return new Set(result.rows.flatMap((row) =>
+      typeof row.message_id === "string" ? [row.message_id] : []
+    ));
+  }
+
   async upsertRows(rows: GoogleValidationMappingInput[]): Promise<void> {
     const connectionId = await this.currentConnectionId();
 

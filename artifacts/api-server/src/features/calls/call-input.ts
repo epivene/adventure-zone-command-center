@@ -26,10 +26,7 @@ const callDispositionSchema = z.enum([
 ]);
 
 const nullableText = z.union([z.string(), z.null()]).transform((value) => value?.trim() || null);
-const nullableEmail = z
-  .union([z.string(), z.null()])
-  .transform((value) => value ?? "")
-  .pipe(nullableContactEmailSchema);
+const nullableEmail = nullableContactEmailSchema;
 const transportDate = z.union([
   z.date(),
   z.string().datetime({ offset: true }).transform((value) => new Date(value)),
@@ -87,7 +84,7 @@ export const completeCallInputSchema = z.object({
   approvedContactUpdates: approvedContactUpdatesSchema.nullable(),
   approvedBookingUpdates: approvedBookingUpdatesSchema.nullable(),
   direction: z.enum(["incoming", "outgoing"]),
-  method: z.enum(["standard_call", "office_call", "individual_voicemail", "mobile_log"]),
+  method: z.enum(["standard_call", "office_call", "individual_voicemail", "mobile_log", "browser_voip"]),
   phoneId: z.string().uuid().nullable(),
   scriptKind: z.enum(["first_outreach", "follow_up", "contract_follow_up", "incoming_inquiry"]),
   doNotCallConfirmed: z.boolean(),

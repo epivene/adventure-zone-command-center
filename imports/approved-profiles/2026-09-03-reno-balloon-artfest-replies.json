@@ -1,0 +1,127 @@
+[
+  {
+    "importRevision": 2,
+    "matchExisting": true,
+    "aliases": [
+      "Great Reno Balloon Race Reno NV",
+      "The Great Reno Balloon Race",
+      "GRBR"
+    ],
+    "event": {
+      "id": null,
+      "name": "Great Reno Balloon Race",
+      "city": "Reno",
+      "region": "NV"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "website": "https://renoballoon.com/",
+      "description": "Annual Reno hot-air-balloon event. The 2026 event runs Sept. 10-13. The organizer said vending was already full for 2026 and confirmed on Sept. 4, 2026 that applications open in spring 2027. Treat this as a timing issue and reconnect at the beginning of March so Adventure Zone is ready before the application window opens."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "GRBR Admin",
+        "phone": "",
+        "email": "admin@renoballoon.com",
+        "role": "Great Reno Balloon Race administration / vending contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Great Reno Balloon Race 2026",
+      "status": "declined",
+      "startsAt": "2026-09-10",
+      "endsAt": "2026-09-13",
+      "nextActionKind": "email",
+      "nextActionDueAt": "2027-03-01T16:00:00.000Z",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Sept. 3, 2026 reply — vending full for 2026",
+        "body": "GRBR Admin replied that the Great Reno Balloon Race is full on vending for Sept. 10-13, 2026. This is a capacity/timing decline, not a permanent lack of fit. Contact: admin@renoballoon.com."
+      },
+      {
+        "subject": "UNSENT REPLY DRAFT — thank you and ask about 2027 timing",
+        "body": "Hello,\n\nThank you for letting me know! I completely understand. When would be the best time for me to reach out about the 2027 Great Reno Balloon Race before vending fills up?\n\nIf anything opens up unexpectedly for this year, please feel free to keep us in mind.\n\nBest,\nDesiree\nThe Adventure Zone"
+      },
+      {
+        "subject": "Sept. 4, 2026 reply — applications open spring 2027",
+        "body": "GRBR Admin confirmed that applications for the 2027 Great Reno Balloon Race open in spring 2027. Replace the earlier January placeholder with a real early-spring outreach task. Contact admin@renoballoon.com at the beginning of March to ask for the application opening date and be ready to apply promptly."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 Great Reno Balloon Race application follow-up",
+        "reason": "GRBR Admin confirmed applications open in spring 2027. Contact admin@renoballoon.com at the beginning of March to confirm the opening date and submit early before vending fills.",
+        "dueAt": "2027-03-01T16:00:00.000Z"
+      }
+    ],
+    "requireExisting": true
+  },
+  {
+    "importRevision": 2,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Castle Rock Artfest (Castle Rock) CO",
+      "Castle Rock Artfest",
+      "Artfest"
+    ],
+    "event": {
+      "id": null,
+      "name": "Castle Rock Artfest",
+      "city": "Castle Rock",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "303-688-4597",
+      "website": "https://castlerock.org/castle-rock-artfest/",
+      "description": "Two-day downtown arts festival with a kids zone. The full Adventure Zone footprint does not fit the Perry Street/Festival Park layout, but Kevin McHugh invited early-April outreach about the smaller Mini Zone for a future Artfest."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Kevin McHugh",
+        "phone": "303-688-4597",
+        "email": "kevin@castlerock.org",
+        "role": "Castle Rock Chamber / Artfest contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": false,
+      "name": "",
+      "status": "renewal_due",
+      "startsAt": "",
+      "endsAt": "",
+      "nextActionKind": "email",
+      "nextActionDueAt": "",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Sept. 3, 2026 reply — plan Mini Zone outreach in early April",
+        "body": "Kevin McHugh thanked Desiree for the Mini Zone information and said Artfest begins planning in early April. He specifically said that is the best time to reach out. This changes the prior no-room conclusion: do not pitch the full Adventure Zone footprint, but follow up in early April 2027 with the smaller Mini Zone as the potential fit. Current contact: Kevin McHugh, kevin@castlerock.org."
+      },
+      {
+        "subject": "UNSENT REPLY DRAFT — confirm early-April follow-up",
+        "body": "Hi Kevin,\n\nPerfect, thank you! I’ll make a note to reach back out in early April. I appreciate you keeping the Mini Zone in mind, and I hope we can find a way to make it work for Artfest.\n\nBest always,\nDesiree"
+      }
+    ],
+    "followUps": [
+      {
+        "label": "2027 Castle Rock Artfest Mini Zone follow-up",
+        "reason": "Kevin McHugh said Artfest begins planning in early April and that is the best time to reconnect. Lead with the smaller Mini Zone because the full Adventure Zone footprint does not fit the event layout.",
+        "dueAt": "2027-04-01T15:00:00.000Z"
+      }
+    ]
+  }
+]

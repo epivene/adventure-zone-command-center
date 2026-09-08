@@ -27,8 +27,10 @@ type CreateState = GoogleReviewNewProfileInput & { open: boolean };
 
 export function GoogleValidationReview({
   onPendingCountChange,
+  showHistory = false,
 }: {
   onPendingCountChange?(count: number): void;
+  showHistory?: boolean;
 } = {}) {
   const [items, setItems] = useState<GoogleValidationReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -36,15 +38,16 @@ export function GoogleValidationReview({
   const [error, setError] = useState<string | null>(null);
   const [searchByMessage, setSearchByMessage] = useState<Record<string, SearchState>>({});
   const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   async function load() {
     setError(null);
     try {
       const result = await getGoogleWorkspaceValidationReview();
       setItems(result.items);
-      onPendingCountChange?.(
-        result.items.filter((item) => item.state === "pending").length,
-      );
+      const pendingCount = result.items.filter((item) => item.state === "pending").length;
+      onPendingCountChange?.(pendingCount);
+      window.dispatchEvent(new CustomEvent("email-review-count-changed", { detail: pendingCount }));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load email review items.");
     } finally {
@@ -62,6 +65,7 @@ export function GoogleValidationReview({
   );
   const resolvedCount = items.filter((item) => item.state === "resolved").length;
   const ignoredCount = items.filter((item) => item.state === "ignored").length;
+  const history = items.filter((item) => item.state !== "pending");
 
   async function assign(item: GoogleValidationReviewItem, organizationId: string) {
     setBusyMessageId(item.messageId);
@@ -404,6 +408,36 @@ export function GoogleValidationReview({
           })}
         </div>
       )}
+
+      {showHistory && history.length > 0 ? (
+        <div className="border-t border-amber-200 pt-3 dark:border-amber-900">
+          <button
+            aria-expanded={historyOpen}
+            className="text-sm font-semibold text-orange-700 hover:underline dark:text-orange-300"
+            onClick={() => setHistoryOpen((current) => !current)}
+            type="button"
+          >
+            {historyOpen ? "Hide review history" : "Show review history"}
+          </button>
+          {historyOpen ? (
+            <div className="mt-3 grid gap-2">
+              {history.map((item) => (
+                <article className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40" key={item.messageId}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">{item.subject || "(No subject)"}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.from || "Unknown sender"}</p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold capitalize text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                      {item.state}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }

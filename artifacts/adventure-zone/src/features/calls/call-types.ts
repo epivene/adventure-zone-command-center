@@ -4,7 +4,7 @@ import type { ContactFields } from "@/features/contacts/contact-types";
 import type { callDispositionValues } from "@/db/schema";
 
 export type CallDirection = "incoming" | "outgoing";
-export type CallMethod = "standard_call" | "office_call" | "individual_voicemail" | "mobile_log";
+export type CallMethod = "standard_call" | "office_call" | "individual_voicemail" | "mobile_log" | "browser_voip";
 export type CallScriptKind = "first_outreach" | "follow_up" | "contract_follow_up" | "incoming_inquiry";
 export type GuidedCallScriptKind =
   | "first_outreach"

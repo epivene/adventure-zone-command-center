@@ -91,6 +91,20 @@ router.patch("/office-admin/tasks/:taskId", async (req, res): Promise<void> => {
   res.json({ task });
 });
 
+router.delete("/office-admin/tasks/:taskId", async (req, res): Promise<void> => {
+  const taskId = param(req.params.taskId);
+  if (!uuid.safeParse(taskId).success) {
+    res.status(400).json({ error: "Invalid task ID." });
+    return;
+  }
+  const deleted = await tasks.deleteForOwner(taskId);
+  if (!deleted) {
+    res.status(404).json({ error: "Task not found." });
+    return;
+  }
+  res.json({ ok: true });
+});
+
 router.post("/office-admin/tasks/reorder", async (req, res): Promise<void> => {
   const parsed = z.object({ accountId: uuid, taskIds: z.array(uuid).min(1).max(500) }).strict().safeParse(req.body);
   if (!parsed.success || new Set(parsed.success ? parsed.data.taskIds : []).size !== (parsed.success ? parsed.data.taskIds.length : 0)) {

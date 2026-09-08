@@ -1,0 +1,10 @@
+import { useEffect, useState } from "react";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import { incomingCallingApi, type VoicemailPage } from "@/features/calls/incoming-calling-api";
+import { VoicemailCard } from "@/components/calls/voicemail-card";
+export default function VoicemailInboxPage() {
+  const [filter, setFilter] = useState<"new" | "handled">("new"); const [data, setData] = useState<VoicemailPage | null>(null); const [error, setError] = useState("");
+  const load = () => void incomingCallingApi.listVoicemail(new URLSearchParams({ status: filter })).then(setData).catch(() => setError("Could not load voicemail."));
+  useEffect(load, [filter]);
+  return <div className="mx-auto grid max-w-5xl gap-5"><header><p className="text-sm font-bold uppercase tracking-[0.16em] text-primary">Calls</p><h1 className="text-3xl font-bold">Voicemail</h1><p className="mt-1 text-muted-foreground">Private voicemail audio is available for 30 days. No transcription is created.</p></header><div className="flex gap-2"><Button onClick={() => setFilter("new")} variant={filter === "new" ? "default" : "outline"}>New ({data?.newCount ?? 0})</Button><Button onClick={() => setFilter("handled")} variant={filter === "handled" ? "default" : "outline"}>Handled ({data?.handledCount ?? 0})</Button></div>{error ? <p role="alert" className="text-destructive">{error}</p> : null}{!data ? <p>Loading voicemail…</p> : data.items.length ? data.items.map((voicemail) => <VoicemailCard key={voicemail.id} voicemail={voicemail} onDelete={async () => { await incomingCallingApi.deleteVoicemailAudio(voicemail.id); load(); }} onHandled={async () => { await incomingCallingApi.markVoicemailHandled(voicemail.id); load(); }} />) : <p className="rounded-xl border border-border bg-card p-5 text-muted-foreground">No {filter} voicemail.</p>}</div>;
+}

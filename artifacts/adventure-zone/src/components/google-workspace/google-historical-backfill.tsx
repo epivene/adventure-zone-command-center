@@ -110,7 +110,7 @@ export function GoogleHistoricalBackfill() {
   }
 
   const { state } = view;
-  const retryingFirst = state.status === "error" && state.cumulative.processed === 0;
+  const retryingFirst = state.status === "error" && !state.firstBatchApproved;
   const retryingLater =
     state.status === "error" &&
     state.firstBatchApproved &&
@@ -136,7 +136,7 @@ export function GoogleHistoricalBackfill() {
       <div>
         <h2 className="text-xl font-bold">Historical Gmail backfill</h2>
         <p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">
-          Process Gmail history in controlled batches of 250 messages. The first batch always stops for your approval before anything older can continue.
+          Process Gmail history in memory-safe batches of 100 messages. The first batch always stops for your approval before anything older can continue.
         </p>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Gmail stays read-only. Spam and Trash are excluded. Google Calendar history is not part of this step.
@@ -211,7 +211,7 @@ export function GoogleHistoricalBackfill() {
 
       {awaitingApproval ? (
         <div className="rounded-lg border border-orange-200 bg-orange-50 p-4 dark:border-orange-900 dark:bg-orange-950/30">
-          <p className="font-bold text-orange-900 dark:text-orange-200">First 250 are parked for review</p>
+          <p className="font-bold text-orange-900 dark:text-orange-200">First 100 are parked for review</p>
           <p className="mt-1 text-sm text-orange-800 dark:text-orange-300">
             Review the profile matches and Needs Review queue. Nothing older will run until you approve this first historical batch. You can leave this page and come back later; the batch stays parked.
           </p>
@@ -227,19 +227,19 @@ export function GoogleHistoricalBackfill() {
         {canRunFirst ? (
           <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void runNext()} type="button">
             {busy === "run"
-              ? "Processing first 250…"
+              ? "Processing first 100…"
               : retryingFirst
-                ? "Retry first 250"
-                : "Run first 250"}
+                ? "Retry first 100"
+                : "Run first 100"}
           </button>
         ) : null}
         {canContinue ? (
           <button className="button-primary px-4 py-2" disabled={busy !== null} onClick={() => void runNext()} type="button">
             {busy === "run"
-              ? "Processing next 250…"
+              ? "Processing next 100…"
               : retryingLater
-                ? "Retry current 250"
-                : "Continue next 250"}
+                ? "Retry current 100"
+                : "Continue next 100"}
           </button>
         ) : null}
         {canRetryFailures ? (
@@ -251,7 +251,7 @@ export function GoogleHistoricalBackfill() {
 
       {state.status === "error" ? (
         <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
-          This batch stopped before its cursor advanced. Reconnect Google if needed, then retry the same 250 safely.
+          This batch stopped before its cursor advanced. Reconnect Google if needed, then retry the same batch safely.
         </p>
       ) : null}
       {state.status === "complete" ? (

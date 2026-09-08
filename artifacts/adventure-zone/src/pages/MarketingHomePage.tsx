@@ -1,17 +1,35 @@
 import { ArrowLeft, FileText, Mail, Megaphone, Settings2, UsersRound } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
+import type { MouseEvent } from "react";
 
 import { readBookingReturnPath } from "@/lib/admin-workspace";
+import MarketingCampaignsPage from "@/pages/MarketingCampaignsPage";
 
-const futureAreas = [
-  { title: "Email campaigns", description: "Promotional email runs.", icon: Mail },
-  { title: "Brochures & promos", description: "Brochures, promos, and mailed-date tracking.", icon: FileText },
-  { title: "Audiences & lists", description: "Reusable groups from shared profiles and contacts.", icon: UsersRound },
-  { title: "Campaign history", description: "Completed campaigns and results.", icon: Megaphone },
+const campaignAreas = [
+  { title: "Email campaigns", description: "Build and save reviewed promotional email campaigns.", icon: Mail, href: "/marketing?area=email" },
+  { title: "Brochures & promos", description: "Keep brochures, promos, and reusable marketing pieces organized.", icon: FileText, href: "/marketing?area=promos" },
+  { title: "Audiences & lists", description: "Build reusable groups from the same shared profiles and contacts.", icon: UsersRound, href: "/marketing?area=audiences" },
+  { title: "Campaign history", description: "Review campaign drafts, sent dates, audiences, and saved copy.", icon: Megaphone, href: "/marketing?area=history" },
 ] as const;
 
 export default function MarketingHomePage() {
+  const search = useSearch();
+  const [, setLocation] = useLocation();
+  const campaignArea = new URLSearchParams(search).get("area");
   const bookingReturnPath = readBookingReturnPath();
+
+  function keepCampaignNavigationOnMarketing(event: MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    const anchor = target.closest("a");
+    if (!anchor) return;
+    const href = anchor.getAttribute("href") ?? "";
+    const marker = "/marketing/campaigns?area=";
+    if (!href.includes(marker)) return;
+    event.preventDefault();
+    setLocation(`/marketing?area=${href.split(marker)[1] ?? "email"}`);
+  }
+
+  if (campaignArea) return <div onClickCapture={keepCampaignNavigationOnMarketing}><MarketingCampaignsPage /></div>;
 
   return (
     <div className="mx-auto grid max-w-6xl gap-6">
@@ -28,11 +46,8 @@ export default function MarketingHomePage() {
       </header>
 
       <section aria-labelledby="marketing-now" className="grid gap-3">
-        <div><h2 className="text-xl font-bold" id="marketing-now">Use now</h2></div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/profiles"><h3 className="font-bold">Profiles</h3><p className="mt-1 text-sm text-muted-foreground">Event families, contacts, and cities.</p></Link>
-          <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/office-coordinator"><h3 className="font-bold">Office Coordinator</h3><p className="mt-1 text-sm text-muted-foreground">Brochures, mail, and submitted outreach.</p></Link>
-          <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm hover:border-orange-300" href="/research-sources"><h3 className="font-bold">Research</h3><p className="mt-1 text-sm text-muted-foreground">Lead and event research.</p></Link>
+        <div><h2 className="text-xl font-bold" id="marketing-now">Marketing tools</h2></div>
+        <div className="grid gap-3 sm:grid-cols-2">
           <Link className="rounded-xl border border-primary/40 bg-primary/5 p-4 text-card-foreground shadow-sm hover:border-primary" data-testid="link-design-studio" href="/design-studio"><h3 className="font-bold">Design Studio</h3><p className="mt-1 text-sm text-muted-foreground">Create flyers, emails, contracts, and more.</p></Link>
         </div>
       </section>
@@ -40,10 +55,10 @@ export default function MarketingHomePage() {
       <section aria-labelledby="marketing-organized" className="grid gap-3">
         <div><h2 className="text-xl font-bold" id="marketing-organized">Campaigns</h2></div>
         <div className="grid gap-3 sm:grid-cols-2">
-          {futureAreas.map(({ title, description, icon: Icon }) => (
-            <article className="rounded-xl border border-dashed border-border bg-card p-4 text-card-foreground" key={title}>
+          {campaignAreas.map(({ title, description, icon: Icon, href }) => (
+            <Link className="rounded-xl border border-border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:border-primary/50 hover:bg-primary/5" href={href} key={title}>
               <div className="flex items-start gap-3"><span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400"><Icon className="h-5 w-5" /></span><div><h3 className="font-bold">{title}</h3><p className="mt-1 text-sm text-muted-foreground">{description}</p></div></div>
-            </article>
+            </Link>
           ))}
         </div>
       </section>

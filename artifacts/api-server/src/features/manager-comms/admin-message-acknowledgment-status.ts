@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import type { db as database } from "@/db/client";
+import type { db as databaseClient } from "@/db/client";
 
 function rows<T>(value: unknown): T[] {
   return ((value as { rows?: T[] }).rows ?? []) as T[];
@@ -14,7 +14,7 @@ export type AdminMessageAcknowledgmentStatus = {
 };
 
 export async function listAdminMessageAcknowledgments(
-  database: typeof database,
+  database: typeof databaseClient,
   messageId: string,
 ): Promise<AdminMessageAcknowledgmentStatus[]> {
   const result = await database.execute(sql`

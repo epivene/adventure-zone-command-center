@@ -117,10 +117,14 @@ export async function triageGoogleEmailWithAi(input: {
   deterministicEvidence: string[];
   matchedContactName: string | null;
   candidateProfiles: CandidateProfile[];
+  timeoutMs?: number;
 }): Promise<GoogleAiEmailTriageResult> {
   const providerName = input.ai.providerName;
   try {
-    const raw = await input.ai.complete(promptFor(input));
+    const raw = await withGoogleTimeout(
+      input.ai.complete(promptFor(input)),
+      input.timeoutMs ?? 15_000,
+    );
     const parsed = parsedDecision(jsonObject(raw));
     if (!parsed) {
       return {
@@ -190,3 +194,4 @@ export async function triageGoogleEmailWithAi(input: {
     };
   }
 }
+import { withGoogleTimeout } from "./google-async-timeout";

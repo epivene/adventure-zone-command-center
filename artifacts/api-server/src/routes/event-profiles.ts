@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import {
@@ -124,8 +124,13 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
       if (parent) familyContext = { kind: "organization_group", id: parent.id, name: parent.name };
     }
     const bookingIds = profile.bookings.map((booking) => booking.id);
-    const allReviews = await db.select().from(eventManagerReviews);
-    const managerReviews = allReviews.filter((review) => bookingIds.includes(review.bookingId));
+    const managerReviews = bookingIds.length
+      ? await db
+          .select()
+          .from(eventManagerReviews)
+          .where(inArray(eventManagerReviews.bookingId, bookingIds))
+          .orderBy(desc(eventManagerReviews.createdAt))
+      : [];
     const managerReviewAverage = managerReviews.length ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length : null;
     res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {

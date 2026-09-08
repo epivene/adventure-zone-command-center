@@ -27,7 +27,7 @@ const bookingStatusValues = [
 ] as const;
 export type BookingStatus = (typeof bookingStatusValues)[number];
 
-const probabilityValues = ["likely","possible","unlikely"] as const;
+const probabilityValues = ["definite","likely","possible","unlikely"] as const;
 export type Probability = (typeof probabilityValues)[number];
 
 const placeTypeValues = [
@@ -183,6 +183,7 @@ export const callDispositionValues = [
   "spoke_with_contact",
   "wrong_number",
   "do_not_call",
+  "email_requested",
 ] as const;
 export const activityKindEnum = pgEnum("activity_kind", activityKindValues);
 export const callDispositionEnum = pgEnum(
@@ -950,7 +951,7 @@ export const callSessions = pgTable(
     ),
     check(
       "call_sessions_method_valid",
-      sql`${table.method} in ('standard_call', 'office_call', 'individual_voicemail', 'mobile_log')`,
+      sql`${table.method} in ('standard_call', 'office_call', 'individual_voicemail', 'mobile_log', 'browser_voip')`,
     ),
     check(
       "call_sessions_script_kind_valid",
@@ -962,6 +963,84 @@ export const callSessions = pgTable(
     ),
   ],
 );
+
+export const computerCallSessions = pgTable(
+  "computer_call_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    ownerId: text("owner_id").notNull(),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id),
+    phoneId: uuid("phone_id").notNull().references(() => contactPhones.id),
+    provider: text("provider").$type<"twilio">().notNull(),
+    providerCallSid: text("provider_call_sid").unique(),
+    direction: text("direction").$type<"outbound">().default("outbound").notNull(),
+    method: text("method").$type<"browser_voip">().default("browser_voip").notNull(),
+    status: text("status").$type<
+      | "created"
+      | "queued"
+      | "ringing"
+      | "in-progress"
+      | "completed"
+      | "busy"
+      | "no-answer"
+      | "canceled"
+      | "failed"
+      | "unknown"
+    >().notNull(),
+    callerIdSnapshot: text("caller_id_snapshot").notNull(),
+    destinationNumberSnapshot: text("destination_number_snapshot").notNull(),
+    intentExpiresAt: timestamp("intent_expires_at", { withTimezone: true }).notNull(),
+    intentConsumedAt: timestamp("intent_consumed_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+    durationSeconds: integer("duration_seconds"),
+    errorCode: text("error_code"),
+    errorSummary: text("error_summary"),
+  },
+  (table) => [
+    check("computer_call_sessions_provider_valid", sql`${table.provider} = 'twilio'`),
+    check("computer_call_sessions_direction_valid", sql`${table.direction} = 'outbound'`),
+    check("computer_call_sessions_method_valid", sql`${table.method} = 'browser_voip'`),
+    check(
+      "computer_call_sessions_status_valid",
+      sql`${table.status} in ('created', 'queued', 'ringing', 'in-progress', 'completed', 'busy', 'no-answer', 'canceled', 'failed', 'unknown')`,
+    ),
+    check(
+      "computer_call_sessions_duration_seconds_nonnegative",
+      sql`${table.durationSeconds} is null or ${table.durationSeconds} >= 0`,
+    ),
+    index("computer_call_sessions_owner_created_at_idx").on(
+      table.ownerId,
+      table.createdAt.desc(),
+    ),
+    index("computer_call_sessions_phone_id_idx").on(table.phoneId),
+    index("computer_call_sessions_provider_call_sid_idx").on(table.providerCallSid),
+  ],
+);
+
+export const incomingCallAvailabilityLeases = pgTable("incoming_call_availability_leases", {
+  id: uuid("id").defaultRandom().primaryKey(), ownerId: text("owner_id").notNull().unique(),
+  clientIdentity: text("client_identity").notNull().unique(), leaseTokenHash: text("lease_token_hash").notNull(),
+  browserSessionId: text("browser_session_id").notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+  activeInboundSessionId: uuid("active_inbound_session_id"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
+export const inboundCallSessions = pgTable("inbound_call_sessions", {
+  id: uuid("id").defaultRandom().primaryKey(), ownerId: text("owner_id").notNull(),
+  providerParentCallSid: text("provider_parent_call_sid").notNull().unique(), providerBrowserCallSid: text("provider_browser_call_sid").unique(),
+  provider: text("provider").$type<"twilio">().notNull(), direction: text("direction").$type<"inbound">().notNull(), method: text("method").$type<"browser_voip">().notNull(),
+  ingressNumberSnapshot: text("ingress_number_snapshot").notNull(), callerNumberSnapshot: text("caller_number_snapshot"),
+  organizationId: uuid("organization_id").references(() => organizations.id), contactId: uuid("contact_id").references(() => contacts.id), phoneId: uuid("phone_id").references(() => contactPhones.id),
+  status: text("status").notNull(), browserResult: text("browser_result"), voicemailRequestedAt: timestamp("voicemail_requested_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), ringingAt: timestamp("ringing_at", { withTimezone: true }), answeredAt: timestamp("answered_at", { withTimezone: true }), endedAt: timestamp("ended_at", { withTimezone: true }), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(), errorCode: text("error_code"), errorSummary: text("error_summary"),
+});
+export const inboundVoicemails = pgTable("inbound_voicemails", {
+ id: uuid("id").defaultRandom().primaryKey(), inboundSessionId: uuid("inbound_session_id").notNull().unique().references(() => inboundCallSessions.id), recordingSid: text("recording_sid").unique(), status: text("status").notNull(), durationSeconds: integer("duration_seconds"), contentType: text("content_type"), retentionDeadline: timestamp("retention_deadline",{withTimezone:true}), handledAt: timestamp("handled_at",{withTimezone:true}), handledBy:text("handled_by"), organizationId:uuid("organization_id").references(()=>organizations.id), contactId:uuid("contact_id").references(()=>contacts.id), phoneId:uuid("phone_id").references(()=>contactPhones.id), deletionAttemptedAt:timestamp("deletion_attempted_at",{withTimezone:true}), deletionLeaseExpiresAt:timestamp("deletion_lease_expires_at",{withTimezone:true}), deletionAttempts:integer("deletion_attempts").notNull(), deletionError:text("deletion_error"), callSessionId:uuid("call_session_id").unique().references(()=>callSessions.id), createdAt:timestamp("created_at",{withTimezone:true}).defaultNow().notNull(), updatedAt:timestamp("updated_at",{withTimezone:true}).defaultNow().notNull(),
+});
 
 export const auditEntries = pgTable("audit_entries", {
   id: uuid("id").defaultRandom().primaryKey(),

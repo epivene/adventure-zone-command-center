@@ -1,0 +1,154 @@
+name: Apply Gmail profile CRM reconciliation
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/apply-gmail-profile-crm-reconciliation.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+      ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Apply idempotent CRM profile imports
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const baseUrl = process.env.API_URL.replace(/\/$/, '');
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const source = 'imports/approved-profiles/gmail-profile-label-gaps-2026-09-02.json';
+          const payloads = JSON.parse(fs.readFileSync(source, 'utf8'));
+
+          async function main() {
+            const applied = [];
+            for (const payload of payloads) {
+              let last = '';
+              let response;
+              for (let attempt = 1; attempt <= 20; attempt += 1) {
+                response = await fetch(`${baseUrl}/api/assistant-import/event-profiles`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(payload),
+                });
+                last = await response.text();
+                if (response.ok) break;
+                if (response.status !== 502 && response.status !== 503) break;
+                await new Promise((resolve) => setTimeout(resolve, 15_000));
+              }
+              if (!response?.ok) {
+                throw new Error(`Import failed for ${payload.event.name}: HTTP ${response?.status} ${last.slice(0, 500)}`);
+              }
+              const result = JSON.parse(last);
+              if (!result.profileId) throw new Error(`No profile ID returned for ${payload.event.name}`);
+              applied.push({
+                gmailProfileLabel: `Z - AdventureZone/Profiles/${payload.event.name} - ${payload.event.city} ${payload.event.region}`,
+                organizationId: result.profileId,
+                organizationName: payload.event.name,
+                city: payload.event.city,
+                region: payload.event.region,
+                action: result.action,
+              });
+            }
+            fs.writeFileSync('gmail-profile-crm-applied.json', JSON.stringify(applied, null, 2) + '\n');
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Verify all counterparts in live CRM audit
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const baseUrl = process.env.API_URL.replace(/\/$/, '');
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const expected = JSON.parse(fs.readFileSync('gmail-profile-crm-applied.json', 'utf8'));
+
+          async function main() {
+            let report;
+            for (let attempt = 1; attempt <= 40; attempt += 1) {
+              const response = await fetch(`${baseUrl}/api/assistant-import/profile-integrity-audit`, {
+                headers: { Authorization: `Bearer ${token}` },
+              });
+              if (response.ok) {
+                report = await response.json();
+                const keys = new Set(report.profiles.map((profile) =>
+                  [profile.name, profile.city || '', profile.region || ''].join('|')
+                ));
+                const missing = expected.filter((item) =>
+                  !keys.has([item.organizationName, item.city, item.region].join('|'))
+                );
+                if (missing.length === 0) break;
+                console.log(`Verification attempt ${attempt}: ${missing.length} profiles still missing`);
+              }
+              await new Promise((resolve) => setTimeout(resolve, 15_000));
+            }
+            if (!report) throw new Error('Live CRM audit could not be loaded');
+            const byId = new Map(report.profiles.map((profile) => [profile.id, profile]));
+            const verified = expected.map((item) => ({
+              ...item,
+              verified: Boolean(byId.get(item.organizationId)),
+            }));
+            if (verified.some((item) => !item.verified)) {
+              throw new Error('One or more returned CRM profile IDs were absent from the live audit');
+            }
+            const receipt = {
+              generatedAt: new Date().toISOString(),
+              source: 'gmail-profile-label-gaps-2026-09-02.json',
+              requested: expected.length,
+              verified: verified.length,
+              profiles: verified,
+            };
+            fs.mkdirSync('.audits', { recursive: true });
+            fs.writeFileSync(
+              '.audits/gmail-profile-crm-reconciliation-2026-09-02.json',
+              JSON.stringify(receipt, null, 2) + '\n',
+            );
+            const catalog = {
+              generatedAt: report.generatedAt,
+              summary: report.summary,
+              profiles: report.profiles.map((profile) => ({
+                id: profile.id,
+                name: profile.name,
+                city: profile.city,
+                region: profile.region,
+                gmailThreadCount: profile.gmailThreadCount,
+              })),
+            };
+            fs.writeFileSync('.audits/live-crm-profile-catalog.json', JSON.stringify(catalog, null, 2) + '\n');
+          }
+
+          main().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Commit sanitized reconciliation receipt
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/gmail-profile-crm-reconciliation-2026-09-02.json .audits/live-crm-profile-catalog.json
+          git commit -m "audit: verify Gmail profile CRM reconciliation" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main

@@ -20,7 +20,10 @@ export type PlanningRouteLine = {
   emphasis: "primary" | "dimmed";
 };
 
-type RenderEvent = MapEvent & { planningEmphasis?: "primary" | "dimmed" };
+type RenderEvent = MapEvent & {
+  planningEmphasis?: "primary" | "dimmed";
+  routeStopNumber?: number | null;
+};
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>'\"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '\"': "&quot;" })[char]!);
@@ -28,17 +31,23 @@ function escapeHtml(value: string) {
 
 function eventIcon(event: RenderEvent, focused: boolean) {
   const color = event.travelLegColor || "#64748b";
-  const isPotential = event.routeBucket !== "confirmed";
-  const isDimmed = isPotential || event.planningEmphasis === "dimmed";
-  const classes = ["az-route-pin", focused ? "az-route-pin--focused" : "", event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : ""]
-    .filter(Boolean)
-    .join(" ");
+  const isContext = event.routeBucket !== "confirmed" || event.routeStopNumber == null;
+  const isDimmed = isContext || event.planningEmphasis === "dimmed";
+  const classes = [
+    "az-route-pin",
+    isContext ? "az-route-pin--context" : "",
+    focused ? "az-route-pin--focused" : "",
+    event.planningEmphasis === "dimmed" ? "az-route-pin--dimmed" : "",
+  ].filter(Boolean).join(" ");
+  const contents = isContext
+    ? '<span class="az-route-pin__dot"></span>'
+    : `<span class="az-route-pin__stop-number">${event.routeStopNumber}</span>`;
   return L.divIcon({
     className: "az-route-marker-wrap",
-    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};width:22px;height:22px;opacity:${isDimmed ? "0.62" : "1"}"><span class="az-route-pin__dot"></span></span>`,
-    iconSize: [26, 32],
-    iconAnchor: [13, 30],
-    popupAnchor: [0, -28],
+    html: `<span class="${classes}" style="--az-pin-color:${escapeHtml(color)};opacity:${isDimmed ? "0.62" : "1"}">${contents}</span>`,
+    iconSize: isContext ? [20, 24] : [30, 38],
+    iconAnchor: isContext ? [10, 22] : [15, 36],
+    popupAnchor: isContext ? [0, -20] : [0, -34],
   });
 }
 
@@ -47,8 +56,8 @@ function handoffIcon(handoff: EquipmentHandoffView) {
   return L.divIcon({
     className: "az-handoff-marker-wrap",
     html: `<span class="az-handoff-marker ${approved ? "az-handoff-marker--approved" : "az-handoff-marker--suggested"}">↔</span>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
 }
 
@@ -58,7 +67,7 @@ function warningText(event: RenderEvent) {
   return null;
 }
 
-function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
+function eventPopup(event: RenderEvent, managerMode: ManagerMapMode, showBookingDetailsLink: boolean) {
   const destination = event.latitude !== null && event.longitude !== null
     ? ([event.longitude, event.latitude] as [number, number])
     : [event.city, event.region].filter(Boolean).join(", ");
@@ -72,11 +81,11 @@ function eventPopup(event: RenderEvent, managerMode: ManagerMapMode) {
     <strong>${escapeHtml(event.name)}</strong>
     <div>${escapeHtml([event.city, event.region].filter(Boolean).join(", "))}</div>
     <div>${escapeHtml(dates)}</div>
-    <div>${escapeHtml(assignmentLabel)}: ${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
+    <div>${event.routeStopNumber ? `Stop ${event.routeStopNumber} · ` : ""}${escapeHtml(assignmentLabel)}: ${escapeHtml(event.travelLegName || "No leg")} · ${escapeHtml(event.status)}</div>
     ${warning ? `<div><strong>${escapeHtml(warning)}</strong></div>` : ""}
     ${event.legAssignmentExplanation ? `<div>${escapeHtml(event.legAssignmentExplanation)}</div>` : ""}
     <div class="az-route-popup__actions">
-      <a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>
+      ${showBookingDetailsLink ? `<a href="/bookings/${encodeURIComponent(event.id)}">Booking details</a>` : ""}
       <a href="${escapeHtml(directions)}" target="_blank" rel="noreferrer">${managerMode === "on-road" ? "Directions" : "Directions to event"}</a>
     </div>
   </div>`;
@@ -123,6 +132,7 @@ export function ManagerRouteMapLayers({
   managerMode,
   focusedTrip,
   onFocusEvent,
+  showBookingDetailsLink = true,
 }: {
   events: RenderEvent[];
   handoffs: EquipmentHandoffView[];
@@ -131,6 +141,7 @@ export function ManagerRouteMapLayers({
   managerMode: ManagerMapMode;
   focusedTrip?: FocusedTripMapData | null;
   onFocusEvent?: (id: string) => void;
+  showBookingDetailsLink?: boolean;
 }) {
   const map = useManagerRouteMap();
 
@@ -172,7 +183,7 @@ export function ManagerRouteMapLayers({
         keyboard: true,
         title: event.name,
       }).addTo(group);
-      marker.bindPopup(eventPopup(event, managerMode));
+      marker.bindPopup(eventPopup(event, managerMode, showBookingDetailsLink));
       marker.on("click", () => onFocusEvent?.(event.id));
     }
 
@@ -188,7 +199,7 @@ export function ManagerRouteMapLayers({
     return () => {
       group.remove();
     };
-  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines]);
+  }, [events, focusedEventId, focusedTrip, handoffs, managerMode, map, onFocusEvent, routeLines, showBookingDetailsLink]);
 
   return null;
 }

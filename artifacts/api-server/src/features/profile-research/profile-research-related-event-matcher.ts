@@ -120,14 +120,16 @@ export async function matchRelatedEventsAgainstCrm(
       city: row.city,
       region: row.region,
     })),
-    ...bookingRows.map((row) => ({
-      kind: "booking" as const,
-      id: row.id,
-      organizationId: row.organizationId,
-      name: row.name,
-      city: row.city,
-      region: row.region,
-    })),
+    ...bookingRows
+      .filter((row): row is typeof row & { organizationId: string } => row.organizationId !== null)
+      .map((row) => ({
+        kind: "booking" as const,
+        id: row.id,
+        organizationId: row.organizationId,
+        name: row.name,
+        city: row.city,
+        region: row.region,
+      })),
   ];
 
   return events.map((event) => ({

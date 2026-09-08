@@ -3,6 +3,7 @@ import type { GoogleWorkspaceFetch } from "./google-api-types";
 
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
 const gmailDraftsEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me/drafts";
+const gmailMessagesEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 
 type GoogleDeliveryClientError = Error & { code: string };
 
@@ -35,6 +36,10 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
 }
 
 export type GoogleGmailDeliveryClient = {
+  sendGmailMessage(input: { raw: string }): Promise<{
+    messageId: string;
+    threadId: string | null;
+  }>;
   updateGmailDraft(input: { draftId: string; raw: string }): Promise<{
     draftId: string;
     messageId: string;
@@ -117,6 +122,30 @@ export function createGoogleGmailDeliveryClient(input: {
   }
 
   return {
+    async sendGmailMessage({ raw }) {
+      const safeRaw = validRaw(raw);
+      return bounded("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN", async (token, signal) => {
+        const response = await fetcher(`${gmailMessagesEndpoint}/send`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ raw: safeRaw }),
+          signal,
+        });
+        const payload = await responseJson(response);
+        if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_FAILED");
+        if (typeof payload.id !== "string" || !payload.id) {
+          throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
+        }
+        return {
+          messageId: payload.id,
+          threadId: typeof payload.threadId === "string" && payload.threadId ? payload.threadId : null,
+        };
+      });
+    },
+
     async updateGmailDraft({ draftId, raw }) {
       const safeDraftId = validDraftId(draftId);
       const safeRaw = validRaw(raw);

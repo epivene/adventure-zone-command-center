@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, MapPinned, Shield } from "lucide-react";
+import { BriefcaseBusiness, Briefcase, MapPinned, Shield } from "lucide-react";
 import { Link } from "wouter";
 
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -9,6 +9,12 @@ const workspaces: Array<{
   href: string;
   icon: typeof BriefcaseBusiness;
 }> = [
+  {
+    label: "Boss",
+    detail: "Bookings, schedule, assignments, and documents",
+    href: "/boss/sign-in",
+    icon: Briefcase,
+  },
   {
     label: "Office Coordinator",
     detail: "Bookings, contacts, routes, and calls",
@@ -224,7 +230,7 @@ export function CommandTerminalLanding() {
           <div aria-label="Workspace selection" className="ctl-role-list">
             {workspaces.map(({ label, detail, href, icon: Icon }) => {
               return (
-                <Button asChild className="ctl-role-link" data-active={label === "Office Coordinator"} key={label} variant={label === "Office Coordinator" ? "default" : "outline"}>
+                <Button asChild className="ctl-role-link" data-active={label === "Boss"} key={label} variant={label === "Boss" ? "default" : "outline"}>
                   <Link href={href}>
                     <span className="ctl-role-icon"><Icon aria-hidden="true" size={18} strokeWidth={1.8} /></span>
                     <span className="ctl-role-copy">

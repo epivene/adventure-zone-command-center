@@ -137,7 +137,11 @@ export function classifyGoogleMessageRelevance(input: {
     profiles: evidence.profiles,
   });
   if (weighted.status === "matched") {
-    return weighted;
+    return {
+      status: "matched",
+      evidenceCodes: weighted.evidenceCodes,
+      candidates: weighted.candidates,
+    };
   }
   if (weighted.status === "review") {
     for (const code of weighted.evidenceCodes) evidenceCodes.push(code);

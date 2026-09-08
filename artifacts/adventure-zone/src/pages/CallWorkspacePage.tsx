@@ -8,8 +8,10 @@ import { AssistedCallingUnavailable } from "@/components/calls/assisted-calling-
 import { CallAssistantPanel } from "@/components/calls/call-assistant-panel";
 import { CallerFinder } from "@/components/calls/caller-finder";
 import { CallWorkspace } from "@/components/calls/call-workspace";
+import type { ComputerCallingCapability } from "@/components/calls/phone-actions";
 import { QuickAddCaller, type QuickAddCallerSubmission } from "@/components/contacts/quick-add-caller";
 import { GuidedCallScriptOverridesProvider } from "@/features/calls/guided-call-script-settings-context";
+import type { InboundSession } from "@/features/calls/incoming-calling-api";
 import { apiGet, apiPost } from "@/lib/auth-token";
 
 function toDate(value: unknown): Date | null {
@@ -28,6 +30,13 @@ function coerceTimeline(items: any[]): any[] {
 type CallingConfig = {
   assistedCallingEnabled: boolean;
   voicemailLauncherUrl: string | null;
+  computerCalling: ComputerCallingCapability;
+};
+
+const disabledComputerCalling: ComputerCallingCapability = {
+  enabled: false,
+  reason: "disabled",
+  callerIdDisplay: null,
 };
 
 type QuickAddResult =
@@ -51,15 +60,17 @@ export default function CallWorkspacePage() {
   const bookingId = params.get("bookingId") ?? undefined;
   const contactId = params.get("contactId") ?? undefined;
   const organizationId = params.get("organizationId") ?? undefined;
+  const inboundSessionId = params.get("inboundSessionId") ?? undefined;
   const addMode = params.get("mode") === "add";
   const initialPhone = params.get("phone") ?? "";
   const initialQuery = params.get("q") ?? "";
-  const hasContext = Boolean(followUpId || bookingId || contactId || organizationId);
+  const hasContext = Boolean(followUpId || bookingId || contactId || organizationId || inboundSessionId);
 
   const [data, setData] = useState<any>(null);
   const [config, setConfig] = useState<CallingConfig>({
     assistedCallingEnabled: false,
     voicemailLauncherUrl: null,
+    computerCalling: disabledComputerCalling,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,12 +86,14 @@ export default function CallWorkspacePage() {
     if (bookingId) query.set("bookingId", bookingId);
     if (contactId) query.set("contactId", contactId);
     if (organizationId) query.set("organizationId", organizationId);
+    if (inboundSessionId) query.set("inboundSessionId", inboundSessionId);
 
     setLoading(true);
     setError(null);
     apiGet<CallingConfig>("/calls/config").catch(() => ({
         assistedCallingEnabled: false,
         voicemailLauncherUrl: null,
+        computerCalling: disabledComputerCalling,
       }))
       .then(async (callingConfig) => {
         setConfig(callingConfig);
@@ -88,6 +101,14 @@ export default function CallWorkspacePage() {
           setData(null);
           setLoading(false);
           return;
+        }
+        if (inboundSessionId) {
+          const session = await apiGet<InboundSession>(
+            `/calls/incoming/sessions/${encodeURIComponent(inboundSessionId)}`,
+          );
+          query.delete("inboundSessionId");
+          if (session.caller.contactId) query.set("contactId", session.caller.contactId);
+          else if (session.caller.organizationId) query.set("organizationId", session.caller.organizationId);
         }
         const workspace = await apiGet<any>(`/calls/workspace?${query.toString()}`);
         setData(workspace);
@@ -155,9 +176,11 @@ export default function CallWorkspacePage() {
           booking={booking}
           briefing={data.briefing ?? null}
           contact={contact}
+          computerCalling={config.computerCalling}
           contextSummary={data.contextSummary ?? null}
           createActivity={createActivityAction}
           defaultScriptKind={data.defaultScriptKind}
+          direction={inboundSessionId ? "incoming" : "outgoing"}
           editActivity={editActivityAction}
           followUp={followUp}
           loadRevisions={listActivityRevisionsAction}
@@ -168,6 +191,7 @@ export default function CallWorkspacePage() {
           phones={data.phones ?? []}
           recommendedGuidedScriptKind={data.recommendedGuidedScriptKind ?? null}
           scriptPrompts={data.scriptPrompts ?? []}
+          inboundSessionId={inboundSessionId}
           timeline={coerceTimeline(data.timeline)}
           voicemailLauncherUrl={config.voicemailLauncherUrl}
         />

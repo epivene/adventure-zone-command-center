@@ -1,6 +1,8 @@
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
+import { BossAuthProvider, useBossAuth } from "@/lib/boss-auth-context";
+import { BOSS_PROTECTED_PATH } from "@/lib/boss-route-pattern";
 import { lazy, Suspense, useState, type ComponentType, type FormEvent, type LazyExoticComponent } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Link, Route, Switch, Router as WouterRouter, Redirect, useLocation, useSearch } from "wouter";
@@ -66,6 +68,7 @@ const SchedulePage = lazy(() => import("@/pages/SchedulePage"));
 const LegManagementPage = lazy(() => import("@/pages/RoutesPage").then(({ LegManagementPage }) => ({ default: LegManagementPage })));
 const TripDetailPage = lazy(() => import("@/pages/TripDetailPage"));
 const CallWorkspacePage = lazy(() => import("@/pages/CallWorkspacePage"));
+const VoicemailInboxPage = lazy(() => import("@/pages/VoicemailInboxPage"));
 const MobileCallLogPage = lazy(() => import("@/pages/MobileCallLogPage")) as LazyExoticComponent<ComponentType<any>>;
 const NeedsAnswerPage = lazy(() => import("@/pages/NeedsAnswerPage"));
 const EventProfilePage = lazy(() => import("@/pages/EventProfilePage"));
@@ -82,9 +85,26 @@ const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPa
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
 const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
+const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
+const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
+const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
+
+const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
+const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
+const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
+const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
+const BossContactDetailPage = lazy(() => import("@/pages/BossContactDetailPage"));
+const BossReceiptsPage = lazy(() => import("@/pages/BossReceiptsPage"));
+const BossReviewsPage = lazy(() => import("@/pages/BossReviewsPage"));
+const BossMaintenancePage = lazy(() => import("@/pages/BossMaintenancePage"));
+const BossAssignmentsPage = lazy(() => import("@/pages/BossAssignmentsPage"));
+const BossTemplatesFilesPage = lazy(() => import("@/pages/BossTemplatesFilesPage"));
+const BossAccessPage = lazy(() => import("@/pages/BossAccessPage"));
+const CoiManagementPage = lazy(() => import("@/pages/CoiManagementPage"));
+const BossShell = lazy(() => import("@/components/boss/boss-shell").then(({ BossShell }) => ({ default: BossShell })));
 
 const OfficeSignInPage = lazy(() => import("@/pages/OfficeSignInPage"));
 const OfficeTodayPage = lazy(() => import("@/pages/OfficeTodayPage"));
@@ -94,8 +114,10 @@ const OfficeProfilePage = lazy(() => import("@/pages/OfficeProfilePage"));
 const OfficeMailPage = lazy(() => import("@/pages/OfficeMailPage"));
 const OfficeEmailDraftsPage = lazy(() => import("@/pages/OfficeEmailDraftsPage"));
 const OfficeMessagesPage = lazy(() => import("@/pages/OfficeMessagesPage"));
+const OfficeWebsiteInquiriesPage = lazy(() => import("@/pages/OfficeWebsiteInquiriesPage"));
 const OfficeCoordinatorAdminPage = lazy(() => import("@/pages/OfficeCoordinatorAdminPage"));
 const OfficeShell = lazy(() => import("@/components/office/office-shell").then(({ OfficeShell }) => ({ default: OfficeShell })));
+const WebsiteInquiriesPage = lazy(() => import("@/pages/WebsiteInquiriesPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -205,6 +227,7 @@ function ActMigrationRedirect() {
 function SettingsStub() {
   const tools = [
     ["Business sources", "/settings/business-sources", "Review protected business source files, conflicts, links, and historical terms."],
+    ["Certificates of insurance", "/settings/coi", "Create, review, and renew workspace-scoped certificates linked to Studio files."],
     ["Excel lead lists", "/imports/leads", "Import Amy's event lists and review every source row before research or drafting."],
     ["Attendance history", "/imports/attendance-history", "Review historical attendance records before attaching them to profiles."],
     ["Email templates", "/settings/communication-templates", "Maintain reviewed communication templates and placeholder wording."],
@@ -270,6 +293,9 @@ function OfficeProtectedApp() {
   return (
     <OfficeShell>
       <Switch>
+        <Route path="/office/website-inquiries">
+          {office.canReviewWebsiteInquiries ? <OfficeWebsiteInquiriesPage /> : <Redirect to="/office" />}
+        </Route>
         <Route path="/office/profiles/:profileId">{(params)=><OfficeProfilePage profileId={params.profileId}/>}</Route>
         <Route path="/office/profiles" component={OfficeProfilesPage} />
         <Route path="/office/mail" component={OfficeMailPage} />
@@ -279,6 +305,35 @@ function OfficeProtectedApp() {
         <Route path="/office" component={OfficeTodayPage} />
       </Switch>
     </OfficeShell>
+  );
+}
+
+function BossProtectedApp() {
+  const { boss, loading } = useBossAuth();
+  if (loading) return <div className="flex min-h-[100dvh] items-center justify-center bg-background"><p className="text-sm font-medium text-muted-foreground">Loading Boss Workspace…</p></div>;
+  if (!boss) return <Redirect to="/boss/sign-in" />;
+  return (
+    <BossShell>
+      <Switch>
+        <Route path="/boss/bookings/:id"><Redirect to="/boss/schedule" /></Route>
+        <Route path="/boss/bookings"><Redirect to="/boss/schedule" /></Route>
+        <Route path="/boss/schedule" component={BossSchedulePage} />
+        <Route path="/boss/contacts/:id">{(params) => <BossContactDetailPage contactId={params.id} />}</Route>
+        <Route path="/boss/contacts" component={BossContactsPage} />
+        <Route path="/boss/receipts" component={BossReceiptsPage} />
+        <Route path="/boss/reviews" component={BossReviewsPage} />
+        <Route path="/boss/maintenance" component={BossMaintenancePage} />
+        <Route path="/boss/assignments" component={BossAssignmentsPage} />
+        <Route path="/boss/design-studio/:id"><Redirect to="/boss" /></Route>
+        <Route path="/boss/design-studio"><Redirect to="/boss" /></Route>
+        <Route path="/boss/templates-files" component={BossTemplatesFilesPage} />
+        <Route path="/boss/coi"><CoiManagementPage mode="boss" /></Route>
+        {/* Redirect away from disallowed paths */}
+        <Route path="/boss/today"><Redirect to="/boss" /></Route>
+        <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
+        <Route path="/boss"><BossHomePage /></Route>
+      </Switch>
+    </BossShell>
   );
 }
 
@@ -292,6 +347,8 @@ function AdminProtectedApp() {
           <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
           <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
+          <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
+          <Route path="/email-review" component={EmailReviewPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
@@ -305,6 +362,8 @@ function AdminProtectedApp() {
           <Route path="/profiles" component={OrganizationsPage} />
           <Route path="/organizations"><ProfilesRedirect /></Route>
           <Route path="/event-families/:id"><EventFamilyPage /></Route>
+          <Route path="/business-documents/import" component={BusinessDocumentImportPage} />
+          <Route path="/business-documents" component={BusinessDocumentsPage} />
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar"><ScheduleRedirect /></Route>
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>
@@ -316,6 +375,7 @@ function AdminProtectedApp() {
           <Route path="/calls/new"><CallsRedirect /></Route>
           <Route path="/calls/log" component={MobileCallLogPage} />
           <Route path="/calls/workspace" component={CallWorkspacePage} />
+          <Route path="/calls/voicemail" component={VoicemailInboxPage} />
           <Route path="/calls/mobile"><CallLogRedirect /></Route>
           <Route path="/needs-answer" component={NeedsAnswerPage} />
           <Route path="/event-profiles/new" component={EventProfileNewPage} />
@@ -324,6 +384,7 @@ function AdminProtectedApp() {
           <Route path="/settings/paper-notes/:batchId">{(params)=><PaperNoteBatchReviewPage batchId={params.batchId}/>}</Route>
           <Route path="/settings/paper-notes" component={PaperNotesInboxPage} />
           <Route path="/settings/business-sources" component={SettingsBusinessSourcesPage} />
+          <Route path="/settings/coi"><CoiManagementPage mode="admin" /></Route>
           <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
@@ -335,6 +396,7 @@ function AdminProtectedApp() {
           <Route path="/act-migration"><ActMigrationRedirect /></Route>
           <Route path="/quick-add"><CallsRedirect addMode /></Route>
           <Route path="/office-coordinator" component={OfficeCoordinatorAdminPage} />
+          <Route path="/boss-access" component={BossAccessPage} />
           <Route path="/manager-finance" component={ManagerFinanceAdminPage} />
           <Route path="/manager-communications" component={ManagerCommunicationsAdminPage} />
           <Route path="/manager-crew" component={ManagerCrewAdminPage} />
@@ -360,6 +422,9 @@ function AppRoutes() {
         <Route path="/manager/sign-in"><ManagerAuthProvider><ManagerSignInPage /></ManagerAuthProvider></Route>
         <Route path={MANAGER_PROTECTED_PATH}><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
         <Route path="/manager"><ManagerAuthProvider><ManagerProtectedApp /></ManagerAuthProvider></Route>
+        <Route path="/boss/sign-in"><BossAuthProvider><BossSignInPage /></BossAuthProvider></Route>
+        <Route path={BOSS_PROTECTED_PATH}><BossAuthProvider><BossProtectedApp /></BossAuthProvider></Route>
+        <Route path="/boss"><BossAuthProvider><BossProtectedApp /></BossAuthProvider></Route>
         <Route><Protected><AdminProtectedApp /></Protected></Route>
       </Switch>
     </Suspense>

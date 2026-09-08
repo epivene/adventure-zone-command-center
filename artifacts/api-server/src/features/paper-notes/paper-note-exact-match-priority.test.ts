@@ -27,7 +27,14 @@ describe("paper note candidate priority", () => {
     expect(where).not.toMatch(/\bor\s+upper\(coalesce\(org\.region/);
     expect(where).toContain("lower(coalesce(org.city, '')) = lower(");
     expect(where).toContain("upper(coalesce(org.region, '')) =");
-    expect(sql).toMatch(/order by\s+case when lower\(regexp_replace\(trim\(org\.name\)/);
+    const outerOrderBy = sql.slice(sql.lastIndexOf("order by"));
+    expect(outerOrderBy).toContain("case when");
+    expect(outerOrderBy).toContain("lower(regexp_replace(trim(org.name)");
+    expect(outerOrderBy).toContain("then 0 else 1 end");
+    expect(compiled.params.slice(-2)).toEqual([
+      "4th of july island park",
+      "4th of july island park",
+    ]);
   });
 
   it("does not combine SELECT DISTINCT with a non-selected exact-name ORDER BY expression", () => {

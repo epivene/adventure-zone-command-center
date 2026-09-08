@@ -1,0 +1,13 @@
+import { and, eq } from "drizzle-orm";
+import type { db as Database } from "@/db/client";
+import { inboundCallSessions } from "@/db/schema";
+import type { InboundCallRepository, InboundSession } from "./inbound-call-service";
+const terminal=new Set(["completed","busy","no-answer","failed","canceled"]);
+const view=(r:any):InboundSession=>({id:r.id,ownerId:r.ownerId,providerParentCallSid:r.providerParentCallSid,status:r.status,answeredAt:r.answeredAt,caller:{callerNumber:r.callerNumberSnapshot,organizationId:r.organizationId,contactId:r.contactId,phoneId:r.phoneId}});
+export class DrizzleInboundCallRepository implements InboundCallRepository {
+ constructor(private database:typeof Database) {}
+ async begin(i:Parameters<InboundCallRepository["begin"]>[0]) { const [r]=await this.database.insert(inboundCallSessions).values({ownerId:i.ownerId,providerParentCallSid:i.providerParentCallSid,provider:"twilio",direction:"inbound",method:"browser_voip",ingressNumberSnapshot:i.ingressNumber,callerNumberSnapshot:i.caller.callerNumber,organizationId:i.caller.organizationId,contactId:i.caller.contactId,phoneId:i.caller.phoneId,status:"ringing",createdAt:i.now,ringingAt:i.now,updatedAt:i.now}).onConflictDoNothing().returning(); if(r)return view(r); const [old]=await this.database.select().from(inboundCallSessions).where(eq(inboundCallSessions.providerParentCallSid,i.providerParentCallSid)); if(!old)throw new Error("inbound_session_missing"); return view(old); }
+ async setDialResult(i:Parameters<InboundCallRepository["setDialResult"]>[0]) { const [old]=await this.database.select().from(inboundCallSessions).where(eq(inboundCallSessions.providerParentCallSid,i.parentSid)); if(!old)return null; if(terminal.has(old.status))return view(old); const answered=i.status==="completed" ? old.answeredAt : null; const [r]=await this.database.update(inboundCallSessions).set({status:i.status,answeredAt:answered??undefined,endedAt:terminal.has(i.status)?i.now:undefined,updatedAt:i.now}).where(eq(inboundCallSessions.id,old.id)).returning(); return r?view(r):null; }
+ async find(i:Parameters<InboundCallRepository["find"]>[0]) { const [r]=await this.database.select().from(inboundCallSessions).where(and(eq(inboundCallSessions.id,i.id),eq(inboundCallSessions.ownerId,i.ownerId)));return r?view(r):null; }
+ async requestVoicemail(i:Parameters<InboundCallRepository["requestVoicemail"]>[0]) { const [r]=await this.database.update(inboundCallSessions).set({voicemailRequestedAt:i.now,browserResult:"declined",updatedAt:i.now}).where(and(eq(inboundCallSessions.id,i.id),eq(inboundCallSessions.ownerId,i.ownerId),eq(inboundCallSessions.status,"ringing"))).returning();return r?view(r):null; }
+}

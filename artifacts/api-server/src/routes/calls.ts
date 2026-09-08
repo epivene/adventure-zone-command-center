@@ -5,6 +5,8 @@ import { DrizzleCallRepository } from "@/features/calls/call-repository";
 import { CallService } from "@/features/calls/call-service";
 import { completeCallInputSchema } from "@/features/calls/call-input";
 import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
+import { readComputerCallingConfig } from "@/features/calls/computer-calling-config";
+import { readInboundCallingConfig } from "@/features/calls/inbound-calling-config";
 import {
   DrizzleCallWorkspaceContextRepository,
   activityTimelineParent,
@@ -30,9 +32,16 @@ function requireAssistedCalling(_req: Request, res: Response, next: NextFunction
 }
 
 router.get("/calls/config", (_req, res): void => {
+  const assistedCallingEnabled = isAssistedCallingEnabled();
   res.json({
-    assistedCallingEnabled: isAssistedCallingEnabled(),
+    assistedCallingEnabled,
     voicemailLauncherUrl: process.env.VOICEMAIL_LAUNCH_URL || null,
+    computerCalling: assistedCallingEnabled
+      ? readComputerCallingConfig(process.env).capability
+      : { enabled: false, reason: "disabled", callerIdDisplay: null },
+    inboundCalling: assistedCallingEnabled
+      ? readInboundCallingConfig(process.env).capability
+      : { enabled: false, reason: "disabled", inboundNumberDisplay: null, retentionDays: 30, maxSeconds: 120 },
   });
 });
 

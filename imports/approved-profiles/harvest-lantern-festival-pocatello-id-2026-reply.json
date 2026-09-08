@@ -1,0 +1,46 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "requireExisting": true,
+  "event": {
+    "id": null,
+    "name": "Harvest Lantern Festival",
+    "city": "Pocatello",
+    "region": "ID"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Harvest Lantern Festival is a sponsorship-funded community festival at the Portneuf Wellness Complex. Festival proceeds support student scholarships, athletics and the following year's festival. Drurene Bybee said the 2026 sponsorship budget cannot cover Adventure Zone, but the organizers would love to have the attractions and want to do something big for the festival's fifth year in 2027. Treat this as a warm future opportunity dependent on early sponsorship planning, not a permanent rejection.",
+    "phone": "208-339-1605"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Drurene Bybee",
+      "phone": "208-339-1605",
+      "email": "harvestlanternfestival@gmail.com",
+      "role": "Harvest Lantern Festival organizer",
+      "primary": true
+    }
+  ],
+  "booking": {
+    "enabled": true,
+    "name": "Harvest Lantern Festival 2026",
+    "status": "declined",
+    "startsAt": "2026-09-26",
+    "endsAt": "2026-09-26",
+    "nextActionKind": "review",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Sept. 2, 2026 reply — sponsorship-funded; strong 2027 interest",
+      "body": "Drurene Bybee explained that the festival's game area, hot chocolate, s'mores, gift baskets, photo booth, lantern swag, lighted pathway and live entertainment are funded through sponsors. Festival proceeds support student scholarships, athletics and the following year's event. Their 2026 sponsorships do not cover Adventure Zone, but Drurene said they would love to have us, believe it would be fun for attendees, and plan to do something big for their fifth year in 2027. Desiree prepared an unsent reply draft saying next year sounds amazing and asking when sponsorship and entertainment planning begins and when to reach back out. Set the 2027 follow-up after Drurene answers."
+    }
+  ],
+  "clearFollowUps": true,
+  "followUps": []
+}

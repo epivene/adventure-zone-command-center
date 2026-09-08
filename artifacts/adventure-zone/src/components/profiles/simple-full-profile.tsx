@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   Sparkles,
+  Star,
   StickyNote,
   X,
   UsersRound,
@@ -45,6 +46,16 @@ import { normalizeExternalWebsite } from "@/features/organizations/website-url";
 import { getPaperNoteActivitySource } from "@/features/paper-notes/paper-note-client";
 
 type OpenSection = "contacts" | "events" | "notes" | "emails" | null;
+type ProfileManagerReview = {
+  id: string;
+  bookingId: string;
+  rating: number;
+  feedback: string | null;
+  organizerSiteNotes: string | null;
+  crewNotes: string | null;
+  recommendReturn: string | null;
+  createdAt: Date | string;
+};
 
 function formatShortDate(value: Date | string | null | undefined) {
   if (!value) return null;
@@ -184,8 +195,12 @@ export function SimpleFullProfile({
   );
   const nextFollowUp = openFollowUps[0] ?? null;
   const followUpOverdue = Boolean(nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now());
-  const average = ratingSummary?.average ?? 0;
-  const ratingCount = ratingSummary?.count ?? 0;
+  const managerReviews = ((profile as EventProfile & { managerReviews?: ProfileManagerReview[] }).managerReviews ?? []);
+  const managerReviewAverage = managerReviews.length
+    ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length
+    : null;
+  const ratingCount = managerReviews.length || ratingSummary?.count || 0;
+  const average = managerReviewAverage ?? ratingSummary?.average ?? 0;
   const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
   const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
   const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({
@@ -849,6 +864,42 @@ export function SimpleFullProfile({
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Yearly booking records</p>
           <h2 className="mt-1 text-xl font-bold text-[#173b48]">Bookings & opportunities</h2>
+          {managerReviews.length ? (
+            <div className="mt-5 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] p-4">
+              <div className="flex items-center gap-2">
+                <Star className="h-4 w-4 fill-[#d4874f] text-[#d4874f]" />
+                <h3 className="font-bold text-[#173b48]">Event reviews</h3>
+                <span className="text-xs text-[#71848a]">({managerReviews.length})</span>
+              </div>
+              <div className="mt-3 grid gap-3">
+                {managerReviews.map((review) => {
+                  const booking = profile.bookings.find((item) => item.id === review.bookingId);
+                  const notes = [
+                    review.feedback,
+                    review.organizerSiteNotes,
+                    review.crewNotes,
+                  ].filter((value): value is string => Boolean(value?.trim()));
+                  return (
+                    <article className="rounded-lg border border-[#dce6e0] bg-[#fbfcf8] p-3" key={review.id}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Link className="font-bold text-[#315b66] hover:text-[#244f47]" href={`/bookings/${review.bookingId}`}>
+                          Review for {booking?.name ?? "event"}
+                        </Link>
+                        <span aria-label={`${review.rating} out of 5 stars`} className="font-bold tracking-[0.08em] text-[#d4874f]">
+                          {"★".repeat(Math.max(0, Math.min(5, review.rating)))}{"☆".repeat(5 - Math.max(0, Math.min(5, review.rating)))}
+                        </span>
+                      </div>
+                      {notes.length ? <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#4d666d]">{notes.join("\n\n")}</p> : null}
+                      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#829696]">
+                        <time>{formatShortDate(review.createdAt) ?? "Date not recorded"}</time>
+                        {review.recommendReturn ? <span>Recommend return: {review.recommendReturn}</span> : null}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
           {profile.bookings.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.bookings.map((booking) => (

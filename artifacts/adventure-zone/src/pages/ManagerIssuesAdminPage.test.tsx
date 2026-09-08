@@ -18,4 +18,13 @@ describe("ManagerIssuesAdminPage safety oversight", () => {
     expect(source).toContain("Allow checkout");
     expect(source).toContain("Override reason");
   });
+
+  it("lets the admin open and remove saved checklist records and review-due items", () => {
+    expect(source).toContain("Open record");
+    expect(source).toContain("Remove from Review Due");
+    expect(source).toContain("apiDelete(`/manager-admin/events/checklists/${run.id}`)");
+    expect(source).toContain("apiDelete(`/manager-admin/reviews/due/${item.bookingId}`)");
+    expect(source).toContain("apiPatch(`/manager-admin/reviews/${review.id}`");
+    expect(source).toContain("apiDelete(`/manager-admin/reviews/${review.id}`)");
+  });
 });

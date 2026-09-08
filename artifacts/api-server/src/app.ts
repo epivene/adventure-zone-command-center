@@ -16,8 +16,15 @@ import assistantManagerReviewAuditRouter from "./routes/assistant-manager-review
 import assistantKristyReviewCorrectionRouter from "./routes/assistant-kristy-review-correction";
 import managerReviewOverviewRouter from "./routes/manager-review-overview";
 import organizationFillerRouter from "./routes/organization-filler";
+import { requireStartupReadiness } from "./lib/startup-readiness";
+import {
+  createWebsiteInquiryCorsMiddleware,
+  websiteInquiryBodyErrorHandler,
+  websiteInquiryJsonParser,
+} from "./routes/public-website-inquiries";
 
 const app: Express = express();
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -38,11 +45,19 @@ app.use(
     },
   }),
 );
+app.use(requireStartupReadiness);
+
+app.use(
+  "/api/public/website-inquiries",
+  createWebsiteInquiryCorsMiddleware(),
+  websiteInquiryJsonParser,
+  websiteInquiryBodyErrorHandler,
+);
 
 app.use(
   cors({
     origin: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-File-Name"],
   }),
 );
 app.use(express.json({ limit: "1mb" }));

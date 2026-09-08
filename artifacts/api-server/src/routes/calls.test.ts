@@ -231,23 +231,77 @@ describe("assisted calling configuration route", () => {
   const app = callsApp();
   const originalEnabled = process.env.ASSISTED_CALLING_ENABLED;
   const originalLauncher = process.env.VOICEMAIL_LAUNCH_URL;
+  const twilioEnvironmentNames = [
+    "TWILIO_VOICE_ENABLED",
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_API_KEY_SID",
+    "TWILIO_API_KEY_SECRET",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_TWIML_APP_SID",
+    "TWILIO_VERIFIED_CALLER_ID",
+    "TWILIO_WEBHOOK_BASE_URL",
+  ] as const;
+  const originalTwilioEnvironment = Object.fromEntries(
+    twilioEnvironmentNames.map((name) => [name, process.env[name]]),
+  );
+
+  function enableTwilioCalling(): void {
+    Object.assign(process.env, {
+      TWILIO_VOICE_ENABLED: "true",
+      TWILIO_ACCOUNT_SID: "AC123",
+      TWILIO_API_KEY_SID: "SK123",
+      TWILIO_API_KEY_SECRET: "secret",
+      TWILIO_AUTH_TOKEN: "auth",
+      TWILIO_TWIML_APP_SID: "AP123",
+      TWILIO_VERIFIED_CALLER_ID: "+15551234567",
+      TWILIO_WEBHOOK_BASE_URL: "https://calls.example.test",
+    });
+  }
 
   afterEach(() => {
     if (originalEnabled === undefined) delete process.env.ASSISTED_CALLING_ENABLED;
     else process.env.ASSISTED_CALLING_ENABLED = originalEnabled;
     if (originalLauncher === undefined) delete process.env.VOICEMAIL_LAUNCH_URL;
     else process.env.VOICEMAIL_LAUNCH_URL = originalLauncher;
+    for (const name of twilioEnvironmentNames) {
+      const value = originalTwilioEnvironment[name];
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 
-  it("returns only the enabled flag and configured voicemail launch target", async () => {
+  it("returns the enabled computer-calling capability with existing config fields", async () => {
     process.env.ASSISTED_CALLING_ENABLED = "true";
     process.env.VOICEMAIL_LAUNCH_URL = "https://launcher.example.test/voicemail";
+    enableTwilioCalling();
 
     const response = await request(app).get("/calls/config").expect(200);
 
     expect(response.body).toEqual({
       assistedCallingEnabled: true,
       voicemailLauncherUrl: "https://launcher.example.test/voicemail",
+      computerCalling: {
+        enabled: true,
+        reason: "available",
+        callerIdDisplay: "+15551234567",
+      },
+    });
+  });
+
+  it("keeps computer calling disabled when the assisted-calling product gate is off", async () => {
+    process.env.ASSISTED_CALLING_ENABLED = "false";
+    enableTwilioCalling();
+
+    const response = await request(app).get("/calls/config").expect(200);
+
+    expect(response.body).toEqual({
+      assistedCallingEnabled: false,
+      voicemailLauncherUrl: null,
+      computerCalling: {
+        enabled: false,
+        reason: "disabled",
+        callerIdDisplay: null,
+      },
     });
   });
 
@@ -260,6 +314,11 @@ describe("assisted calling configuration route", () => {
     expect(response.body).toEqual({
       assistedCallingEnabled: false,
       voicemailLauncherUrl: null,
+      computerCalling: {
+        enabled: false,
+        reason: "disabled",
+        callerIdDisplay: null,
+      },
     });
   });
 });

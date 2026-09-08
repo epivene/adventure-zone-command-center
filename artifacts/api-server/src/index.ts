@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
+import { exitAfterRequiredStartupFailure } from "./lib/required-startup-shutdown";
 import { validateOwnerConfig } from "./lib/auth";
 import { db } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
@@ -14,6 +15,8 @@ import {
   cleanupKnownEmptyTestProfiles,
   enrichKnownBlankProfiles,
 } from "./features/organizations/known-empty-test-profile-cleanup";
+import { applyWyo131DuplicateCleanup } from "./features/organizations/wyo131-duplicate-cleanup";
+import { PostgresWyo131DuplicateRepository } from "./features/organizations/wyo131-duplicate-postgres";
 import { ensureEventFamilySchema } from "./features/event-families/event-family-repository";
 import { ensureBookingProbabilitySchema } from "./features/bookings/booking-probability-schema";
 import { ensureActivityDeleteSchema } from "./features/activities/activity-delete-schema";
@@ -24,6 +27,8 @@ import { ensureBusinessSourceSeed } from "./features/business-sources/business-s
 import { ensureCommercialOfferSeed } from "./features/commercial-offers/commercial-offer-seed";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
+import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./features/approved-profile-import/startup-config";
+import { runMaintenanceAndStartWorkers } from "./features/approved-profile-import/post-listen-startup";
 import { LeadScoutWorker } from "./features/assistant/lead-scout-worker";
 import {
   LeadScoutWorkerLoop,
@@ -52,7 +57,13 @@ import {
   systemPaperNoteWorkerLoopScheduler,
 } from "./features/paper-notes/paper-note-worker-loop";
 import { createOpportunityEmailWorkerLoop } from "./features/opportunity-email/opportunity-email-worker-runtime";
+import { readInboundCallingConfig } from "./features/calls/inbound-calling-config";
+import { TwilioComputerVoiceProvider } from "./features/calls/twilio-computer-voice-provider";
+import { readComputerCallingConfig } from "./features/calls/computer-calling-config";
+import { VoicemailRetentionWorker } from "./features/calls/voicemail-retention-worker";
+import { VoicemailRetentionWorkerLoop } from "./features/calls/voicemail-retention-worker-loop";
 import { GoogleSentProfileLinkSweepService } from "./features/google-workspace/google-sent-profile-link-sweep-service";
+import { GoogleRecentValidationService } from "./features/google-workspace/google-recent-validation-service";
 import {
   GoogleSentProfileLinkSweepLoop,
   systemGoogleSentProfileLinkSweepLoopScheduler,
@@ -63,6 +74,21 @@ import {
   shouldStartActBackgroundWorkers,
   type ActExtractionRuntime,
 } from "./features/act-replacement/runtime";
+import { DrizzleWebsiteInquiryRepository } from "./features/website-inquiries/website-inquiry-repository";
+import { WebsiteInquiryAlertWorker } from "./features/website-inquiries/website-inquiry-alert-worker";
+import { createGoogleWorkspaceMailDelivery } from "./features/website-inquiries/google-workspace-mail-delivery";
+import { PostgresGoogleConnectionRepository } from "./features/google-workspace/google-connection-repository";
+import {
+  WebsiteInquiryAlertWorkerLoop,
+  systemWebsiteInquiryAlertWorkerLoopScheduler,
+} from "./features/website-inquiries/website-inquiry-alert-worker-loop";
+import { markAppReady, markAppStarting } from "./lib/startup-readiness";
+import { MarketingService } from "./features/marketing/marketing-service";
+import { MarketingCampaignWorkerLoop } from "./features/marketing/marketing-campaign-worker-loop";
+import { BusinessDocumentIngestion } from "./features/business-documents/business-document-ingestion";
+import { GoogleGmailDocumentSource, PostgresExistingGoogleProfileFileLookup } from "./features/business-documents/google-gmail-document-source";
+import { GoogleDocumentWorker, PostgresGoogleDocumentWorkerState } from "./features/business-documents/google-document-worker";
+import { GoogleDocumentWorkerLoop, systemGoogleDocumentWorkerLoopScheduler } from "./features/business-documents/google-document-worker-loop";
 
 validateOwnerConfig();
 
@@ -85,6 +111,18 @@ const scoutAlertLoop = new ScoutAlertWorkerLoop({
   scheduler: systemScoutAlertWorkerLoopScheduler,
 });
 
+const websiteInquiryAlertLoop = new WebsiteInquiryAlertWorkerLoop({
+  worker: new WebsiteInquiryAlertWorker({
+    repository: new DrizzleWebsiteInquiryRepository(db),
+    createMailDelivery: () => createGoogleWorkspaceMailDelivery(
+      new PostgresGoogleConnectionRepository(),
+    ),
+  }),
+  workerId: `website-inquiry-alert-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemWebsiteInquiryAlertWorkerLoopScheduler,
+});
+
 const assistantJobLoop = new AssistantJobWorkerLoop({
   worker: new AssistantJobWorker(),
   workerId: `assistant-job-${randomUUID()}`,
@@ -104,9 +142,23 @@ const paperNoteLoop = new PaperNoteWorkerLoop({
 });
 
 const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
-  sweep: new GoogleSentProfileLinkSweepService(),
+  recent: new GoogleRecentValidationService(),
+  sentSweep: new GoogleSentProfileLinkSweepService(),
   clock: { now: () => new Date() },
   scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
+});
+
+const googleConnectionRepository = new PostgresGoogleConnectionRepository();
+const googleDocumentLoop = new GoogleDocumentWorkerLoop({
+  worker: new GoogleDocumentWorker({
+    connection: googleConnectionRepository,
+    sourceFactory: (client) => new GoogleGmailDocumentSource(client, new PostgresExistingGoogleProfileFileLookup()),
+    ingestion: new BusinessDocumentIngestion(),
+    state: new PostgresGoogleDocumentWorkerState(),
+    accountKey: "workspace",
+  }),
+  clock: { now: () => new Date() },
+  scheduler: systemGoogleDocumentWorkerLoopScheduler,
 });
 
 let extractionRuntime: ActExtractionRuntime | null = null;
@@ -114,23 +166,24 @@ let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
   Awaited<ReturnType<typeof createOpportunityEmailWorkerLoop>> | null = null;
 let shutdownRequested = false;
-
-await runRequiredSchemaStartup();
-await runStartupStep(
-  "development sample account seed",
-  ensureDevelopmentSampleAccounts,
+const voicemailRetentionLoop = new VoicemailRetentionWorkerLoop(
+  new VoicemailRetentionWorker(db, () => {
+    const config = readInboundCallingConfig(process.env);
+    if (!config.enabled) throw new Error("Inbound provider unavailable");
+    return new TwilioComputerVoiceProvider(config.config.voiceConfig);
+  }),
+  () => readInboundCallingConfig(process.env).enabled,
+  (err) => logger.error({ err }, "Inbound voicemail retention pass failed"),
+);
+const marketingCampaignLoop = new MarketingCampaignWorkerLoop(
+  new MarketingService(db),
+  (err) => logger.error({ err }, "Marketing scheduled-send pass failed"),
 );
 
+markAppStarting();
 const server = app.listen(port, () => {
   logger.info({ port }, "Server listening");
-  void runPostListenMaintenance()
-    .then(() => startBackgroundWorkers())
-    .catch((err) => {
-      logger.error(
-        { err },
-        "Post-listen database maintenance failed; server remains available",
-      );
-    });
+  void completeRequiredStartup();
 });
 
 server.on("error", (err) => {
@@ -147,9 +200,13 @@ const shutdown = createActServerShutdown({
       opportunityEmailLoop?.close(),
       leadScoutLoop.close(),
       scoutAlertLoop.close(),
+      websiteInquiryAlertLoop.close(),
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      googleDocumentLoop.close(),
+      voicemailRetentionLoop.close(),
+      marketingCampaignLoop.close(),
     ]);
   },
   closeServer() {
@@ -170,6 +227,50 @@ process.once("SIGTERM", () => {
   shutdownRequested = true;
   void shutdown();
 });
+
+async function completeRequiredStartup(): Promise<void> {
+  try {
+    await runRequiredSchemaStartup();
+    await runStartupStep(
+      "development sample account seed",
+      ensureDevelopmentSampleAccounts,
+    );
+  } catch (err) {
+    logger.fatal(
+      { err },
+      "Required startup checks failed; shutting down without serving API traffic",
+    );
+    shutdownRequested = true;
+    await exitAfterRequiredStartupFailure({
+      shutdown,
+      exit: (code) => process.exit(code),
+    });
+  }
+
+  if (shutdownRequested) return;
+  await runMaintenanceAndStartWorkers({
+    runMaintenance: runPostListenMaintenance,
+    startBackgroundWorkers,
+    onMaintenanceError(err) {
+      logger.error(
+        { err },
+        "Post-listen database maintenance failed; server remains available",
+      );
+    },
+    onReady() {
+      if (shutdownRequested) return;
+      markAppReady();
+      logger.info(
+        "Required database startup settled; API traffic enabled",
+      );
+    },
+  }).catch((err) => {
+    logger.error(
+      { err },
+      "Background worker startup failed; server remains available",
+    );
+  });
+}
 
 async function runPostListenMaintenance() {
   const staleLockRecovery = await runStartupStep(
@@ -271,8 +372,29 @@ async function runPostListenMaintenance() {
       "Known blank profile enrichment deferred; startup will continue",
     );
   }
-  await runStartupStep("approved profile startup import", () =>
-    importApprovedProfilesAtStartup(port),
+  try {
+    const wyo131Cleanup = await runStartupStep(
+      "reviewed WYO131 duplicate cleanup",
+      () => applyWyo131DuplicateCleanup(
+        new PostgresWyo131DuplicateRepository(),
+      ),
+    );
+    logger.info(
+      wyo131Cleanup,
+      wyo131Cleanup.outcome === "merged"
+        ? "Merged the reviewed WYO131 duplicate profiles"
+        : "Reviewed WYO131 duplicate profiles were already merged or safely skipped",
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Reviewed WYO131 duplicate cleanup deferred; startup will continue",
+    );
+  }
+  await runStartupStep(
+    "approved profile startup import",
+    () => importApprovedProfilesAtStartup(port),
+    APPROVED_PROFILE_STARTUP_TIMEOUT_MS,
   );
   await runStartupStep("booking assistant business knowledge seed", () =>
     new PostgresBusinessKnowledgeRepository().upsertInitialSeed(
@@ -335,9 +457,13 @@ async function startBackgroundWorkers() {
   if (shutdownRequested) return;
   leadScoutLoop.start();
   scoutAlertLoop.start();
+  websiteInquiryAlertLoop.start();
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  googleDocumentLoop.start();
+  voicemailRetentionLoop.start();
+  marketingCampaignLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();

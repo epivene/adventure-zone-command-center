@@ -4,7 +4,6 @@ import { apiGet } from "@/lib/auth-token";
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
-import { SyncStateBadge } from "@/components/contacts/sync-state-badge";
 import {
   createActivityAction,
   deleteActivityAction,
@@ -81,10 +80,7 @@ export default function ContactDetailPage({ contactId }: { contactId: string }) 
       <AssistantContextRegistration kind="contact" label={fullName} recordId={contactId} />
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold tracking-tight">{fullName}</h1>
-            <SyncStateBadge state={contact.syncState ?? "unlinked"} />
-          </div>
+          <h1 className="text-3xl font-bold tracking-tight">{fullName}</h1>
           {contact.jobTitle && <p className="mt-1 text-slate-600">{contact.jobTitle}</p>}
         </div>
         <div className="flex flex-wrap gap-3">

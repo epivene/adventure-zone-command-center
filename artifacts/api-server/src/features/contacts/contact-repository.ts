@@ -362,6 +362,12 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       syncState: actContactSyncStates.state,
       lastSyncedAt: actContactSyncStates.lastSyncedAt,
     };
+    const lastContactActivityAt = sql<Date>`(
+      select max(${activities.timelineSortAt})
+      from ${activities}
+      where ${activities.contactId} = ${contacts.id}
+        and ${activities.deletedAt} is null
+    )`;
 
     const [records, totals] = await Promise.all([
       this.database
@@ -377,6 +383,7 @@ export class DrizzleContactRepository implements CallerFinderRepository {
         )
         .where(condition)
         .orderBy(
+          desc(sql`greatest(${contacts.updatedAt}, coalesce(${lastContactActivityAt}, ${contacts.updatedAt}))`),
           asc(contacts.lastName),
           asc(contacts.firstName),
           asc(contacts.id),

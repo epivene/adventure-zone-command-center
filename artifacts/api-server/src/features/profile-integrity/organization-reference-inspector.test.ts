@@ -21,12 +21,12 @@ class FakeExecutor implements ReferenceInspectorExecutor {
           { schemaName: "public", tableName: "organizations", columnName: "consolidated_into_id" },
           { schemaName: "public", tableName: "activities", columnName: "organization_id" },
           { schemaName: "odd-schema", tableName: "quoted\"table", columnName: "org\"id" },
-        ] as Row[],
+        ] as unknown as Row[],
       };
     }
-    if (this.count === 2) return { rows: [{ count: 2 }] as Row[] };
-    if (this.count === 3) return { rows: [{ count: 0 }] as Row[] };
-    return { rows: [{ count: 1 }] as Row[] };
+    if (this.count === 2) return { rows: [{ count: 2 }] as unknown as Row[] };
+    if (this.count === 3) return { rows: [{ count: 0 }] as unknown as Row[] };
+    return { rows: [{ count: 1 }] as unknown as Row[] };
   }
 }
 

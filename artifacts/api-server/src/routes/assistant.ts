@@ -109,7 +109,7 @@ router.post("/assistant/general/ask", async (req, res): Promise<void> => {
         actorId,
         question: parsed.data.question,
       });
-      if ("kind" in discovery && discovery.kind === "needs_clarification") {
+      if (!("crmMatches" in discovery)) {
         res.json({
           kind: "lead_discovery_clarification",
           text: discovery.message,

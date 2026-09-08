@@ -29,8 +29,8 @@ export const ADVENTURE_ZONE_EMAIL_RULES = {
   },
   pricing: {
     adventureZone: "$9,000 / 1–4 days",
-    piratesRebellion: "$7,500 / 1–4 days",
-    warriorsPlayground: "$7,500 / 1–4 days (ammo extra)",
+    piratesRebellion: "$8,000 / 1–4 days",
+    warriorsPlayground: "$8,000 / 1–4 days (ammo extra)",
   },
   insurance: "$2M",
   payForPlay:

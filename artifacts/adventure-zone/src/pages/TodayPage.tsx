@@ -57,6 +57,7 @@ export default function TodayPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [callingConfig, setCallingConfig] = useState<CallingConfig>(disabledCallingConfig);
+  const [documentReviewCount, setDocumentReviewCount] = useState(0);
   const [scoutAlerts, setScoutAlerts] = useState<ScoutAlertView[]>([]);
   const [manageNextSteps, setManageNextSteps] = useState(false);
   const [selectedNextSteps, setSelectedNextSteps] = useState<Set<string>>(new Set());
@@ -69,11 +70,16 @@ export default function TodayPage() {
   const now = new Date();
 
   useEffect(() => {
-    Promise.all([apiGet<any>("/today"), apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig)])
-      .then(([d, config]) => {
+    Promise.all([
+      apiGet<any>("/today"),
+      apiGet<CallingConfig>("/calls/config").catch(() => disabledCallingConfig),
+      apiGet<{ count: number }>("/business-documents/review-count").catch(() => ({ count: 0 })),
+    ])
+      .then(([d, config, documentReviews]) => {
         setDashboard(d);
         setScoutAlerts(Array.isArray(d.scoutAlerts) ? d.scoutAlerts : []);
         setCallingConfig(config);
+        setDocumentReviewCount(documentReviews.count);
         setLoading(false);
       })
       .catch((e) => { setError(e.message); setLoading(false); });
@@ -201,6 +207,16 @@ export default function TodayPage() {
         </div>
       </section>
 
+      {documentReviewCount > 0 ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Document attention">
+          <div>
+            <h2 className="font-bold text-amber-950">{documentReviewCount} {documentReviewCount === 1 ? "document needs" : "documents need"} review</h2>
+            <p className="text-sm text-amber-800">This is document filing work and is separate from calls and follow-ups.</p>
+          </div>
+          <Link className="rounded-lg bg-amber-700 px-3 py-2 text-sm font-bold text-white hover:bg-amber-800" href="/business-documents?view=review">Review documents</Link>
+        </section>
+      ) : null}
+
       <section className="grid gap-3" aria-labelledby="my-work-title">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-2xl font-bold" id="my-work-title">My Work</h2>
@@ -228,7 +244,7 @@ export default function TodayPage() {
             <summary className="cursor-pointer font-bold">Contracts <span className="ml-1 text-slate-500">({contractCount})</span></summary>
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
               <p className="text-sm text-slate-600">Booking and contract work that needs your attention.</p>
-              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/profiles">Open booking work</Link>
+              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/bookings?attention=contracts">Open contract work</Link>
             </div>
           </details>
         ) : null}
@@ -255,9 +271,10 @@ export default function TodayPage() {
 
             {nextStepItems.length ? <ul className="mt-3 divide-y divide-slate-100">{displayedNextStepItems.map((booking: any) => {
               const href = eventProfileHref({ organizationId: booking.organizationId ?? null, contactId: booking.primaryContactId, bookingId: booking.id, mode: booking.status === "new_lead" ? "prospect" : undefined }) ?? `/bookings/${booking.id}`;
+              const suggestedLeg = (dashboard.travelLegs ?? []).find((leg: any) => leg.id === booking.legAssignment?.suggestedLegId);
               return <li className="relative flex items-start gap-3 py-3 first:pt-1 last:pb-0" key={booking.id}>
                 {manageNextSteps ? <input className="mt-1 h-4 w-4" type="checkbox" aria-label={`Select ${booking.name}`} checked={selectedNextSteps.has(booking.id)} onChange={(event) => setSelectedNextSteps((current) => { const next = new Set(current); if (event.target.checked) next.add(booking.id); else next.delete(booking.id); return next; })} /> : null}
-                <div className="min-w-0 flex-1"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={href}>{booking.name}</Link><p className="mt-0.5 text-sm text-slate-600">{booking.planReason === "post_event" ? "Past event · Needs follow-up decision" : `${statusLabel(booking.status)} · Needs follow-up decision`}</p>{booking.copilot?.headline ? <p className="mt-1 text-xs font-semibold text-orange-700">{booking.copilot.headline}</p> : null}</div>
+                <div className="min-w-0 flex-1"><Link className="font-semibold text-slate-950 hover:text-orange-700" href={href}>{booking.name}</Link><p className="mt-0.5 text-sm text-slate-600">{booking.planReason === "post_event" ? "Past event · Needs follow-up decision" : `${statusLabel(booking.status)} · Needs follow-up decision`}</p>{suggestedLeg ? <p className="mt-1 text-xs font-bold text-emerald-700">Suggested leg: {suggestedLeg.name}</p> : booking.status === "new_lead" ? <p className="mt-1 text-xs font-semibold text-amber-700">Leg suggestion needs dates and location</p> : null}{booking.copilot?.headline ? <p className="mt-1 text-xs font-semibold text-orange-700">{booking.copilot.headline}</p> : null}</div>
                 {!manageNextSteps ? <div className="relative"><button className="rounded-lg px-2 py-1 text-lg leading-none text-slate-500 hover:bg-slate-100" type="button" aria-label={`More actions for ${booking.name}`} onClick={() => setActionOpenId((current) => current === booking.id ? null : booking.id)}>⋯</button>{actionOpenId === booking.id ? <div className="absolute right-0 z-20 mt-1 w-52 rounded-xl border border-slate-200 bg-white p-1 shadow-xl"><Link className="block rounded-lg px-3 py-2 text-sm hover:bg-slate-50" href={href}>Open profile</Link><button className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50" type="button" onClick={() => snoozeNextSteps([booking.id])}>Snooze 1 week</button><button className="block w-full rounded-lg px-3 py-2 text-left text-sm text-rose-700 hover:bg-rose-50" type="button" onClick={() => clearNextSteps([booking.id])}>No follow-up needed</button></div> : null}</div> : null}
               </li>;
             })}</ul> : <p className="mt-4 text-sm text-slate-600">Nothing needs a next step right now.</p>}

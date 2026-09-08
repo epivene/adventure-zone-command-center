@@ -1,6 +1,9 @@
 "use client";
 
 import {
+  lazy,
+  Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,7 +19,8 @@ import { CallBriefingCard } from "@/components/calls/call-briefing-card";
 import { CallContextRow } from "@/components/calls/call-context-row";
 import { CallScriptCard } from "@/components/calls/call-script-card";
 import { GuidedCallScriptCard } from "@/components/calls/guided-call-script-card";
-import { PhoneActions } from "@/components/calls/phone-actions";
+import type { ComputerCallTerminal } from "@/components/calls/computer-call-panel";
+import { PhoneActions, type ComputerCallingCapability } from "@/components/calls/phone-actions";
 import type {
   ActivityParent,
   ActivityTimelineItem,
@@ -54,6 +58,10 @@ import {
   BUSINESS_TIME_ZONE,
   parseBusinessDate,
 } from "@/lib/business-date";
+
+const ComputerCallPanel = lazy(async () => ({
+  default: (await import("@/components/calls/computer-call-panel")).ComputerCallPanel,
+}));
 
 export type CompleteCallResult = { ok: true } | { ok: false; error: string };
 export type CallWorkspaceMode = "full" | "compact" | "mobile";
@@ -121,6 +129,11 @@ function normalizeSuggestedAction(value: string | null) {
   return aliases[value] ?? value;
 }
 
+function maskedPhone(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits.length >= 4 ? `•••-•••-${digits.slice(-4)}` : "•••";
+}
+
 type WorkspaceContact = {
   id: string;
   name: string;
@@ -141,6 +154,9 @@ type WorkspaceBooking = {
 
 type WorkspaceProps = {
   mode?: CallWorkspaceMode;
+  /** Inbound sessions are never allowed to initiate another outbound call. */
+  direction?: CallDirection;
+  inboundSessionId?: string | null;
   organization: { id: string; name: string; lastResort: boolean; lastResortReason: string | null } | null;
   contact: WorkspaceContact | null;
   booking: WorkspaceBooking | null;
@@ -157,6 +173,7 @@ type WorkspaceProps = {
   recommendedGuidedScriptKind?: GuidedCallScriptKind | null;
   assistedCallingEnabled?: boolean;
   voicemailLauncherUrl?: string | null;
+  computerCalling?: ComputerCallingCapability;
   timeline: ActivityTimelineItem[];
   onComplete: (input: CompleteCallInput) => Promise<CompleteCallResult>;
   activityParent?: ActivityParent;
@@ -168,6 +185,8 @@ type WorkspaceProps = {
 
 export function CallWorkspace({
   mode = "full",
+  direction: workspaceDirection = "outgoing",
+  inboundSessionId = null,
   organization,
   contact,
   booking,
@@ -180,6 +199,7 @@ export function CallWorkspace({
   recommendedGuidedScriptKind = null,
   assistedCallingEnabled = false,
   voicemailLauncherUrl = null,
+  computerCalling,
   timeline,
   onComplete,
   activityParent,
@@ -189,14 +209,15 @@ export function CallWorkspace({
   operations = null,
 }: WorkspaceProps) {
   const isMobileLog = mode === "mobile";
+  const isInbound = workspaceDirection === "incoming";
   const primaryPhone = phones.find((phone) => phone.primary) ?? phones[0] ?? null;
   const initialGuidedKind: GuidedCallScriptKind =
     recommendedGuidedScriptKind ??
     (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
-  const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog ? new Date() : null);
-  const [requestKey, setRequestKey] = useState<string | null>(() => isMobileLog ? crypto.randomUUID() : null);
+  const [startedAt, setStartedAt] = useState<Date | null>(() => isMobileLog || isInbound ? new Date() : null);
+  const [requestKey, setRequestKey] = useState<string | null>(() => inboundSessionId ?? (isMobileLog ? crypto.randomUUID() : null));
   const [selectedPhoneId, setSelectedPhoneId] = useState<string | null>(primaryPhone?.id ?? null);
-  const [direction, setDirection] = useState<CallDirection>(isMobileLog ? "incoming" : "outgoing");
+  const [direction, setDirection] = useState<CallDirection>(isInbound || isMobileLog ? "incoming" : "outgoing");
   const [method, setMethod] = useState<CallMethod>(() => methodForPhone(isMobileLog, primaryPhone));
   const [scriptKind, setScriptKind] = useState<CallScriptKind>(() => scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
   const [guidedKind, setGuidedKind] = useState<GuidedCallScriptKind>(initialGuidedKind);
@@ -217,6 +238,12 @@ export function CallWorkspace({
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
+  const [computerPanelOpen, setComputerPanelOpen] = useState(false);
+  const [computerCall, setComputerCall] = useState<ComputerCallTerminal | null>(null);
+  const [computerCallActive, setComputerCallActive] = useState(false);
+  const [computerCallLive, setComputerCallLive] = useState(false);
+  const [computerTechnicalPending, setComputerTechnicalPending] = useState(false);
+  const awaitingComputerReconciliation = computerPanelOpen && !computerCall && (computerCallActive || computerTechnicalPending);
 
   const draftKey = useMemo(() => buildCallDraftKey({
     organizationId: organization?.id ?? null,
@@ -235,6 +262,65 @@ export function CallWorkspace({
       }
     : selectedPhoneRecord;
 
+  useEffect(() => {
+    if (!computerCallLive) return;
+
+    const message = "A computer call is still in progress. Leave this page?";
+    const workspaceUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    const workspaceHistoryState = window.history.state;
+    let armed = true;
+    const confirmBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const cleanup = () => {
+      if (!armed) return;
+      armed = false;
+      window.removeEventListener("beforeunload", confirmBeforeUnload);
+      window.removeEventListener("popstate", confirmHistoryNavigation);
+      document.removeEventListener("click", confirmInternalNavigation, true);
+    };
+    const confirmInternalNavigation = (event: MouseEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) return;
+      const target = event.target instanceof Element
+        ? event.target.closest<HTMLAnchorElement>("a[href]")
+        : null;
+      if (!target || target.target === "_blank" || target.hasAttribute("download")) return;
+      const href = target.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      if (!window.confirm(message)) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      cleanup();
+    };
+    const confirmHistoryNavigation = () => {
+      if (!armed) return;
+      if (window.confirm(message)) {
+        cleanup();
+        return;
+      }
+
+      // A popstate event fires after traversal. Add the captured workspace back
+      // at the current end of history so Wouter sees the original URL/state
+      // again without a compensating history.go() loop.
+      window.history.pushState(workspaceHistoryState, "", workspaceUrl);
+    };
+
+    window.addEventListener("beforeunload", confirmBeforeUnload);
+    window.addEventListener("popstate", confirmHistoryNavigation);
+    document.addEventListener("click", confirmInternalNavigation, true);
+    return cleanup;
+  }, [computerCallLive]);
+
   const guidedRenderContext: GuidedCallRenderContext = {
     contactName: contact?.name ?? null,
     eventName: briefing?.eventName ?? booking?.name ?? organization?.name ?? null,
@@ -249,10 +335,10 @@ export function CallWorkspace({
       (isMobileLog ? "incoming_inquiry" : defaultScriptKind === "contract_follow_up" ? "proposal_contract" : defaultScriptKind);
     setDraftReady(false);
     setActiveDraftKey(null);
-    setStartedAt(isMobileLog ? new Date() : null);
-    setRequestKey(isMobileLog ? crypto.randomUUID() : null);
+    setStartedAt(isMobileLog || isInbound ? new Date() : null);
+    setRequestKey(inboundSessionId ?? (isMobileLog ? crypto.randomUUID() : null));
     setSelectedPhoneId(primaryPhone?.id ?? null);
-    setDirection(isMobileLog ? "incoming" : "outgoing");
+    setDirection(isInbound || isMobileLog ? "incoming" : "outgoing");
     setMethod(methodForPhone(isMobileLog, primaryPhone));
     setScriptKind(scriptForDirection(isMobileLog ? "incoming" : "outgoing", defaultScriptKind));
     setGuidedKind(nextGuidedKind);
@@ -271,6 +357,11 @@ export function CallWorkspace({
     setError("");
     setIsSubmitting(false);
     setIsSaved(false);
+    setComputerPanelOpen(false);
+    setComputerCall(null);
+    setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
 
     const draft = loadCallDraft(draftKey);
     if (draft) {
@@ -282,7 +373,7 @@ export function CallWorkspace({
       setSelectedPhoneId(restoredPhoneId);
       setDirection(draft.direction);
       setMethod(isMobileLog ? "mobile_log" : draft.method);
-      setScriptKind(draft.scriptKind);
+      setScriptKind(scriptForDirection(draft.direction, draft.scriptKind));
       setNote(draft.note);
       setDisposition(draft.disposition);
       setNextActionKind(draft.nextActionKind);
@@ -297,7 +388,7 @@ export function CallWorkspace({
     }
     setActiveDraftKey(draftKey);
     setDraftReady(true);
-  }, [draftKey, isMobileLog, defaultScriptKind, recommendedGuidedScriptKind]);
+  }, [draftKey, isMobileLog, isInbound, inboundSessionId, defaultScriptKind, recommendedGuidedScriptKind]);
 
   useEffect(() => {
     if (!draftReady || activeDraftKey !== draftKey || !startedAt || !requestKey || isSaved) return;
@@ -353,6 +444,14 @@ export function CallWorkspace({
     setDoNotCallPhoneId(null);
     setDraftRestored(false);
     setError("");
+    setComputerCall(null);
+    setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
+    setComputerPanelOpen(false);
+    if (!isMobileLog) {
+      setMethod(methodForPhone(false, selectedPhone));
+    }
   }
 
   function chooseDisposition(value: CallDisposition) {
@@ -374,6 +473,48 @@ export function CallWorkspace({
     setScriptKind(persistedScriptKind(kind));
   }
 
+  const startComputerCall = useCallback(() => {
+    setComputerPanelOpen(true);
+    setComputerTechnicalPending(true);
+    setError("");
+  }, []);
+
+  const completeComputerCall = useCallback((call: ComputerCallTerminal) => {
+    clearCallDraft(draftKey);
+    setDraftRestored(false);
+    setComputerCall(call);
+    setStartedAt(new Date(call.startedAt));
+    setRequestKey(call.sessionId);
+    setMethod("browser_voip");
+    setDirection("outgoing");
+  }, [draftKey]);
+
+  const resetComputerCall = useCallback(() => {
+    setComputerPanelOpen(false);
+    setComputerCall(null);
+    setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
+    if (!isMobileLog) {
+      setStartedAt(null);
+      setRequestKey(null);
+      setMethod(methodForPhone(false, selectedPhone));
+    }
+  }, [isMobileLog, selectedPhone]);
+
+  const cancelComputerCall = useCallback(() => {
+    setComputerPanelOpen(false);
+    setComputerCall(null);
+    setComputerCallActive(false);
+    setComputerCallLive(false);
+    setComputerTechnicalPending(false);
+    if (!isMobileLog) {
+      setStartedAt(null);
+      setRequestKey(null);
+      setMethod(methodForPhone(false, selectedPhone));
+    }
+  }, [isMobileLog, selectedPhone]);
+
   function chooseGuided(responseId: string) {
     const script = getGuidedCallScript(guidedKind);
     const next = chooseGuidedResponse(script, guidedState, responseId);
@@ -393,6 +534,10 @@ export function CallWorkspace({
     event.preventDefault();
     if (!startedAt || !requestKey) {
       setError("Start the call note before saving.");
+      return;
+    }
+    if (method === "browser_voip" && !computerCall) {
+      setError("Computer call details need to be verified before recording this outcome.");
       return;
     }
     const dueAt = nextActionDueAt ? parseBusinessDate(nextActionDueAt) : null;
@@ -426,7 +571,7 @@ export function CallWorkspace({
         disposition,
         resultingBookingStatus: null,
         startedAt,
-        endedAt: new Date(),
+        endedAt: computerCall ? new Date(computerCall.endedAt) : new Date(),
         nextAction: nextActionKind && dueAt ? { kind: nextActionKind, dueAt } : null,
         lastResortReason:
           disposition === "move_to_last_resort"
@@ -438,7 +583,7 @@ export function CallWorkspace({
         approvedBookingUpdates: null,
         direction,
         method,
-        phoneId: selectedPhone?.id ?? null,
+        phoneId: computerCall?.phoneId ?? selectedPhone?.id ?? null,
         scriptKind,
         doNotCallConfirmed:
           disposition === "do_not_call" && doNotCallConfirmed,
@@ -457,6 +602,14 @@ export function CallWorkspace({
         clearCallDraft(draftKey);
         if (disposition === "do_not_call" && selectedPhone) {
           setLocallySuppressedPhoneIds((ids) => new Set(ids).add(selectedPhone.id));
+        }
+        if (computerCall) {
+          setComputerPanelOpen(false);
+          setComputerCall(null);
+          setComputerCallActive(false);
+          setComputerCallLive(false);
+          setComputerTechnicalPending(false);
+          if (!isMobileLog) setMethod(methodForPhone(false, selectedPhone));
         }
         setIsSaved(true);
       }
@@ -517,14 +670,16 @@ export function CallWorkspace({
 
       <div className={`grid gap-5 ${twoColumn} lg:items-start`}>
         <div className="grid gap-5">
-          <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="phone-actions-title">
+          {!isInbound ? <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="phone-actions-title">
             <h2 className="text-xl font-bold" id="phone-actions-title">Phone</h2>
             {phones.length ? (
               <div className="mt-3 grid gap-3">
                 <label className="grid gap-1.5 font-medium">
                   Phone number
                   <select
+                    disabled={computerCallActive || Boolean(computerCall)}
                     onChange={(event) => {
+                      if (computerCallActive || computerCall) return;
                       const nextPhoneId = event.target.value;
                       const nextPhone = phones.find((phone) => phone.id === nextPhoneId) ?? null;
                       setSelectedPhoneId(nextPhoneId);
@@ -537,7 +692,7 @@ export function CallWorkspace({
                   >
                     {phones.map((phone) => (
                       <option key={phone.id} value={phone.id}>
-                        {phone.label ?? phone.type} · {phone.number}{phone.extension ? ` ext. ${phone.extension}` : ""}
+                        {phone.label ?? phone.type} · {maskedPhone(phone.number)}{phone.extension ? ` ext. ${phone.extension}` : ""}
                       </option>
                     ))}
                   </select>
@@ -545,10 +700,28 @@ export function CallWorkspace({
                 {selectedPhone ? (
                   <PhoneActions
                     assistedCallingEnabled={assistedCallingEnabled}
-                    onSelectMethod={isMobileLog ? undefined : setMethod}
+                    computerCalling={computerCalling}
+                    onSelectMethod={isMobileLog || computerCall ? undefined : setMethod}
+                    onStartComputerCall={computerCalling?.enabled && organization && contact ? startComputerCall : undefined}
                     phone={selectedPhone}
                     voicemailLauncherUrl={voicemailLauncherUrl}
                   />
+                ) : null}
+                {computerPanelOpen && selectedPhone && organization && contact && computerCalling?.enabled && computerCalling.callerIdDisplay ? (
+                  <Suspense fallback={<p className="text-sm text-slate-600" role="status">Loading computer call controls…</p>}>
+                    <ComputerCallPanel
+                      callerIdDisplay={computerCalling.callerIdDisplay}
+                      contact={contact}
+                      onPhaseChange={setComputerCallActive}
+                      onLivePhaseChange={setComputerCallLive}
+                      onTechnicalPendingChange={setComputerTechnicalPending}
+                      onClose={cancelComputerCall}
+                      onReset={resetComputerCall}
+                      onTerminal={completeComputerCall}
+                      organizationId={organization.id}
+                      phone={selectedPhone}
+                    />
+                  </Suspense>
                 ) : null}
               </div>
             ) : (
@@ -556,11 +729,15 @@ export function CallWorkspace({
                 No phone is linked to this contact.
               </p>
             )}
-          </section>
+          </section> : null}
 
           <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="call-details-title">
             <h2 className="text-xl font-bold" id="call-details-title">{isMobileLog ? "Call details" : "Record call"}</h2>
-            {isSaved ? (
+            {awaitingComputerReconciliation ? (
+              <p className="mt-4 text-sm text-slate-600" role="status">
+                Waiting for authoritative call details before recording the outcome.
+              </p>
+            ) : isSaved ? (
               <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                 <p className="font-semibold text-emerald-950" role="status">Call note saved.</p>
                 <p className="mt-1 text-sm text-emerald-900">
@@ -598,8 +775,11 @@ export function CallWorkspace({
                       onChange={(event) => {
                         const nextDirection = event.target.value as CallDirection;
                         setDirection(nextDirection);
-                        setScriptKind(scriptForDirection(nextDirection, defaultScriptKind));
-                        changeGuidedKind(nextDirection === "incoming" ? "incoming_inquiry" : initialGuidedKind);
+                        const nextScriptKind = scriptForDirection(nextDirection, defaultScriptKind);
+                        const nextGuidedKind = nextScriptKind === "contract_follow_up"
+                          ? "proposal_contract"
+                          : nextScriptKind;
+                        changeGuidedKind(nextGuidedKind);
                       }}
                       value={direction}
                     >
@@ -728,7 +908,7 @@ export function CallWorkspace({
             {contact ? (
               <div className="mt-3 grid gap-1 text-sm">
                 <p className="font-semibold text-base">{contact.name}</p>
-                <p>{contact.phone || "No phone recorded"}</p>
+                <p>{contact.phone ? maskedPhone(contact.phone) : "No phone recorded"}</p>
                 <p className="break-all">{contact.email || "No email recorded"}</p>
                 {contact.city || contact.region ? <p>{[contact.city, contact.region].filter(Boolean).join(", ")}</p> : null}
               </div>

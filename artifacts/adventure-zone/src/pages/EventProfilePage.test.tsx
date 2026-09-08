@@ -261,4 +261,31 @@ describe("EventProfilePage ratings", () => {
     expect(screen.getByText("0.0")).toBeVisible();
     expect(screen.getByText("0 rated occurrences")).toBeVisible();
   });
+
+  it("shows saved event reviews on the linked profile", async () => {
+    const reviewedProfile = {
+      ...profile,
+      managerReviews: [{
+        id: "review-1",
+        bookingId,
+        rating: 4,
+        feedback: "The organizer was happy with the event.",
+        organizerSiteNotes: "Easy load-in.",
+        crewNotes: null,
+        recommendReturn: "yes",
+        createdAt: "2026-08-20T12:00:00.000Z",
+      }],
+    };
+    apiGet.mockImplementation((path: string) => profileApi(path, reviewedProfile));
+    render(<EventProfilePage />);
+
+    expect(await screen.findByRole("heading", { name: "Event reviews" })).toBeVisible();
+    expect(screen.getAllByText(/The organizer was happy with the event/)[0]).toBeVisible();
+    expect(screen.getByRole("link", { name: "Review for Prairie Days 2027" })).toHaveAttribute("href", `/bookings/${bookingId}`);
+    expect(screen.getAllByText("Recommend return: yes")[0]).toBeVisible();
+    expect(screen.getByLabelText("4.0 out of 5 stars from 1 reviews")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "1Bookings" }));
+    expect(screen.getByText("Good standing")).toBeVisible();
+    expect(screen.getByText("1 rated occurrence")).toBeVisible();
+  });
 });

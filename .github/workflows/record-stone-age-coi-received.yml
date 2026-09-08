@@ -1,0 +1,61 @@
+name: Record Stone Age COI received
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/record-stone-age-coi-received.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add COI receipt note and verify
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs=require("node:fs");
+          const root=process.env.API_URL.replace(/\/$/,"")+"/api/assistant-import";
+          const token=process.env.ASSISTANT_IMPORT_TOKEN;
+          const profileId="b453e452-4665-44a1-80b5-3d1c8a96d2f2";
+          const subject="COI received — send-ready draft prepared";
+          const body="Received the requested three-page COI from Sara Toone at Protective Insurance on September 4, 2026. Verified that it covers the September 11–12, 2026 Stone Age Stampede and names the Town of Dinosaur, Dinosaur Stone Age Stampede Committee, and their volunteers as additional insured. A reply draft with the exact PDF attached is ready in Gmail thread 1a041514745b7e44 for finance@townofdinosaur.org. Keep the COI follow-up open until the draft is actually sent.";
+          async function call(path,options={}){
+            const response=await fetch(root+"/"+path,{...options,headers:{Authorization:"Bearer "+token,...(options.body?{"Content-Type":"application/json"}:{})}});
+            const text=await response.text(); let data; try{data=JSON.parse(text)}catch{data={raw:text}}
+            return {ok:response.ok,status:response.status,body:data};
+          }
+          (async()=>{
+            const before=await call("profile-history/"+profileId);
+            if(!before.ok) throw new Error("Active Stone Age profile not found");
+            const existing=(before.body.notes||[]).find(x=>x.subject===subject);
+            let write={ok:true,status:200,body:{action:"already_present"}};
+            if(!existing){
+              write=await call("profile-notes",{method:"POST",body:JSON.stringify({organizationId:profileId,subject,body})});
+              if(!write.ok) throw new Error("Note failed HTTP "+write.status);
+            }
+            const after=await call("profile-history/"+profileId);
+            const note=(after.body.notes||[]).find(x=>x.subject===subject);
+            if(!note||note.body!==body) throw new Error("COI note verification failed");
+            const open=(after.body.followUps||[]).filter(x=>!x.completedAt);
+            const receipt={recordedAt:new Date().toISOString(),profileId,profileName:after.body.place?.name,noteId:note.id,openFollowUps:open.map(x=>({id:x.id,kind:x.kind,dueAt:x.dueAt})),gmailThreadId:"1a041514745b7e44",gmailDraftId:"r-7235004663781123663",attachment:"COI 2627 - Town of Dinosaur.pdf"};
+            fs.writeFileSync("stone-age-coi-profile-receipt.json",JSON.stringify(receipt,null,2));
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,"# Stone Age COI recorded\n\n- Active profile updated: "+receipt.profileName+"\n- Gmail draft and attached COI recorded\n- Open follow-up retained until send\n");
+          })().catch(e=>{console.error(e);process.exit(1)});
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stone-age-coi-profile-receipt
+          path: stone-age-coi-profile-receipt.json
+          retention-days: 7
+
+# Registered workflow trigger.

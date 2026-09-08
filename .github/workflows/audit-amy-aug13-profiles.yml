@@ -1,0 +1,86 @@
+name: Audit Amy Aug 13 profiles
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/audit-amy-aug13-profiles.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Export matching live profiles
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const targets = [
+            { name: "CSU Ag Day BBQ", query: "CSU Ag Day" },
+            { name: "Navajo County Fair", query: "Navajo County Fair" },
+            { name: "Latah County Fair", query: "Latah County Fair" },
+            { name: "World Village Boise", query: "World Village" },
+            { name: "Wagon Days", query: "Wagon Days" },
+            { name: "Tri County Fair Winnemucca", query: "Tri County Fair" },
+            { name: "Poplar Indian Days", query: "Poplar Indian Days" },
+            { name: "Navajo County Fair — Holbrook alias search", query: "Holbrook" },
+            { name: "Tri County Fair — Winnemucca alias search", query: "Winnemucca" },
+          ];
+          const headers = { Authorization: `Bearer ${token}` };
+
+          async function get(path) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, { headers });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 300)}`);
+            return JSON.parse(text);
+          }
+
+          (async () => {
+            const audit = { generatedAt: new Date().toISOString(), targets: [] };
+            for (const target of targets) {
+              const search = await get(`profile-search?q=${encodeURIComponent(target.query)}&limit=20`);
+              const organizations = (search.results ?? []).filter((item) => item.kind === "organization" && item.id);
+              const histories = [];
+              for (const profile of organizations) {
+                histories.push(await get(`profile-history/${profile.id}`));
+              }
+              audit.targets.push({ ...target, searchResults: search.results ?? [], histories });
+            }
+            fs.writeFileSync("amy-aug13-profile-audit.json", JSON.stringify(audit, null, 2));
+            const lines = ["# Amy Aug. 13 live-profile audit", ""];
+            for (const target of audit.targets) {
+              lines.push(`- ${target.name}: ${target.histories.length} matching live profile(s)`);
+            }
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload protected audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: amy-aug13-profile-audit
+          path: amy-aug13-profile-audit.json
+          retention-days: 2

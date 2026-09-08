@@ -7,7 +7,7 @@ const environment = {
   clientSecret: "client-secret",
   redirectUri: "https://example.test/api/google-workspace/oauth/callback",
   appOrigin: "https://example.test",
-  tokenEncryptionKey: "x".repeat(32),
+  tokenEncryptionKey: Buffer.alloc(32, 1),
 };
 
 function tokenResponse() {
@@ -45,6 +45,24 @@ describe("Google Gmail delivery client", () => {
     const client = createGoogleGmailDeliveryClient({ environment, refreshToken: "refresh", fetcher });
 
     await expect(client.sendGmailDraft({ draftId: "draft-1" })).resolves.toEqual({
+      messageId: "message-sent",
+      threadId: "thread-1",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends a raw Gmail message without requiring an SMTP password", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("oauth2.googleapis.com/token")) return tokenResponse();
+      expect(url).toBe("https://gmail.googleapis.com/gmail/v1/users/me/messages/send");
+      expect(init?.method).toBe("POST");
+      expect(JSON.parse(String(init?.body))).toEqual({ raw: "cmF3" });
+      return new Response(JSON.stringify({ id: "message-sent", threadId: "thread-1", labelIds: ["SENT"] }), { status: 200 });
+    });
+    const client = createGoogleGmailDeliveryClient({ environment, refreshToken: "refresh", fetcher });
+
+    await expect(client.sendGmailMessage({ raw: "cmF3" })).resolves.toEqual({
       messageId: "message-sent",
       threadId: "thread-1",
     });

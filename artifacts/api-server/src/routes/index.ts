@@ -53,6 +53,13 @@ import opportunityEmailLiveRuntimeRouter from "./opportunity-email-live-runtime"
 import authRouter from "./auth";
 import developmentSampleLoginsRouter from "./development-sample-logins";
 import officeAuthRouter from "./office-auth";
+import bossAuthRouter from "./boss-auth";
+import bossDashboardRouter from "./boss-dashboard";
+import bossAssignmentsRouter from "./boss-assignments";
+import bossOperationsRouter from "./boss-operations";
+import bossDocumentsRouter from "./boss-documents";
+import publicWebsiteInquiriesRouter from "./public-website-inquiries";
+import websiteInquiriesRouter from "./website-inquiries";
 import officeTasksRouter from "./office-tasks";
 import officeProfilesRouter from "./office-profiles";
 import officeAttendanceHistoryRouter from "./office-attendance-history";
@@ -62,12 +69,14 @@ import officeMailRouter from "./office-mail";
 import officeEmailDraftsRouter from "./office-email-drafts";
 import officeMessagesRouter from "./office-messages";
 import officeAdminAccountsRouter from "./office-admin-accounts";
+import bossAdminAccountsRouter from "./boss-admin-accounts";
 import officeAdminTasksRouter from "./office-admin-tasks";
 import officeAdminMailRouter from "./office-admin-mail";
 import officeAdminEmailDraftsRouter from "./office-admin-email-drafts";
 import officeAdminMessagesRouter from "./office-admin-messages";
 import officeDesignStudioRouter from "./office-design-studio";
 import officeDesignStudioCanvaRouter from "./office-design-studio-canva";
+import officeContractsRouter from "./office-contracts";
 import officeAdminHistoryRouter from "./office-admin-history";
 import managerAuthRouter from "./leg-manager-auth";
 import managerMapRouter from "./leg-manager-map";
@@ -87,23 +96,83 @@ import managerAdminRouter from "./leg-manager-admin";
 import managerFinanceAdminRouter from "./manager-finance-admin";
 import managerWorkerDeleteAdminRouter from "./leg-manager-worker-delete-admin";
 import managerEventLifecycleAdminRouter from "./leg-manager-event-lifecycle-admin";
-import managerTravelAdminRouter from "./leg-manager-travel-admin";
+import managerTravelAdminRouter from "./manager-travel-admin";
 import eventWrapUpAdminRouter from "./event-wrap-up-admin";
 import managerCommunicationsAdminRouter from "./manager-communications-admin";
 import managerMeetupsAdminRouter from "./manager-meetups-admin";
 import managerAssistantAdminRouter from "./manager-assistant-admin";
+import { createComputerCallingRouter } from "./computer-calling";
+import { createTwilioVoiceWebhooksRouter } from "./twilio-voice-webhooks";
+import { createInboundComputerCallingRouter } from "./inbound-computer-calling";
+import { createTwilioInboundVoiceWebhooksRouter } from "./twilio-inbound-voice-webhooks";
 import { cleanupLeakedConsolidationTestFixtures } from "@/features/organizations/test-fixture-cleanup";
+import { isAssistedCallingEnabled } from "@/features/calls/assisted-calling-enabled";
+import { readComputerCallingConfig } from "@/features/calls/computer-calling-config";
+import {
+  DefaultComputerCallingService,
+  DrizzleComputerCallingPhoneContextRepository,
+} from "@/features/calls/computer-calling-service";
+import { DrizzleComputerCallRepository } from "@/features/calls/computer-call-repository";
+import { FixedWindowRateLimiter } from "@/features/calls/computer-calling-rate-limit";
+import { TwilioComputerVoiceProvider } from "@/features/calls/twilio-computer-voice-provider";
+import { readInboundCallingConfig } from "@/features/calls/inbound-calling-config";
+import { DrizzleIncomingAvailabilityRepository } from "@/features/calls/incoming-availability-repository";
+import { IncomingAvailabilityService } from "@/features/calls/incoming-availability-service";
+import { DrizzleInboundCallRepository } from "@/features/calls/inbound-call-repository";
+import { DrizzleInboundCallerMatcher } from "@/features/calls/inbound-caller-matcher";
+import { InboundCallService } from "@/features/calls/inbound-call-service";
+import { InboundVoicemailService } from "@/features/calls/inbound-voicemail-service";
 import { requireOwnerMiddleware } from "../lib/auth";
+import marketingRouter from "./marketing";
+import coiCertificatesRouter from "./coi-certificates";
+import businessDocumentsRouter from "./business-documents";
+import businessDocumentImportsRouter from "./business-document-imports";
 
 const router: IRouter = Router();
 let leakedFixtureCleanup: Promise<void> | null = null;
+
+const computerCallingConfig = () => readComputerCallingConfig(process.env);
+const computerCallingAvailable = () => {
+  const result = computerCallingConfig();
+  return isAssistedCallingEnabled() && result.enabled
+    ? { enabled: true as const, callerId: result.config.verifiedCallerId }
+    : { enabled: false as const };
+};
+const computerCallingService = new DefaultComputerCallingService(
+  new DrizzleComputerCallRepository(db),
+  new DrizzleComputerCallingPhoneContextRepository(db),
+  computerCallingAvailable,
+);
+const computerCallingProvider = (config: Extract<ReturnType<typeof computerCallingConfig>, { enabled: true }> ["config"]) =>
+  new TwilioComputerVoiceProvider(config);
+const computerCallingLimiter = new FixedWindowRateLimiter({
+  limit: 10,
+  windowMs: 5 * 60 * 1_000,
+});
+const inboundAvailabilityService = new IncomingAvailabilityService(
+  new DrizzleIncomingAvailabilityRepository(db),
+);
+const inboundCallService = new InboundCallService(new DrizzleInboundCallRepository(db), new DrizzleInboundCallerMatcher(db));
+const inboundVoicemailService = new InboundVoicemailService(db, () => {
+  const config = readInboundCallingConfig(process.env);
+  if (!config.enabled) throw new Error("Inbound voice provider unavailable");
+  return new TwilioComputerVoiceProvider(config.config.voiceConfig);
+});
 
 router.use(healthRouter);
 router.use(authRouter);
 router.use(developmentSampleLoginsRouter);
 router.use(googleWorkspaceOAuthCallbackRouter);
 router.use(officeAuthRouter);
+router.use(bossAuthRouter);
+router.use(publicWebsiteInquiriesRouter);
+router.use(websiteInquiriesRouter);
 router.use(officeTasksRouter);
+router.use(bossDashboardRouter);
+router.use(bossAssignmentsRouter);
+router.use(bossOperationsRouter);
+router.use(bossDocumentsRouter);
+router.use(coiCertificatesRouter);
 router.use(officeProfilesRouter);
 router.use(officeAttendanceHistoryRouter);
 router.use(officeProfileSourceDocumentsRouter);
@@ -111,6 +180,7 @@ router.use(officeEventFamiliesRouter);
 router.use(officeMailRouter);
 router.use(officeEmailDraftsRouter);
 router.use(officeMessagesRouter);
+router.use(officeContractsRouter);
 // Design Studio accepts either an Office session or an owner session and
 // enforces that boundary internally. Mount it before the owner-only gate so
 // Office coordinators can load projects, templates, assets, and editor tools.
@@ -130,6 +200,20 @@ router.use(managerWrapUpsRouter);
 router.use(managerCommunicationsRouter);
 router.use(managerMeetupsRouter);
 router.use(managerAssistantRouter);
+router.use(createTwilioVoiceWebhooksRouter({
+  service: computerCallingService,
+  providerForConfig: computerCallingProvider,
+  getConfig: computerCallingConfig,
+  isAssistedCallingEnabled: isAssistedCallingEnabled,
+}));
+router.use(createTwilioInboundVoiceWebhooksRouter({
+  getInboundConfig: () => readInboundCallingConfig(process.env),
+  isAssistedCallingEnabled,
+  providerForConfig: computerCallingProvider,
+  availability: inboundAvailabilityService,
+  calls: inboundCallService,
+  voicemails: inboundVoicemailService,
+}));
 
 router.use(requireOwnerMiddleware);
 router.use(async (req, _res, next) => {
@@ -143,6 +227,8 @@ router.use(async (req, _res, next) => {
   next();
 });
 router.use(officeAdminAccountsRouter);
+router.use(marketingRouter);
+router.use(bossAdminAccountsRouter);
 router.use(officeAdminTasksRouter);
 router.use(officeAdminMailRouter);
 router.use(officeAdminEmailDraftsRouter);
@@ -162,6 +248,8 @@ router.use(attendanceHistoryImportRouter);
 router.use(attendanceHistoryProfileRouter);
 router.use(businessSourceDocumentFilesRouter);
 router.use(businessSourceDocumentLinksRouter);
+router.use(businessDocumentsRouter);
+router.use(businessDocumentImportsRouter);
 router.use(profileSourceDocumentsRouter);
 router.use(todayRouter);
 router.use(opportunityEmailLiveRuntimeRouter);
@@ -182,6 +270,25 @@ router.use(tripsRouter);
 router.use(handoffsRouter);
 router.use(activitiesRouter);
 router.use(callsRouter);
+router.use(createComputerCallingRouter({
+  service: computerCallingService,
+  providerForConfig: computerCallingProvider,
+  getConfig: computerCallingConfig,
+  isAssistedCallingEnabled: isAssistedCallingEnabled,
+  limiter: computerCallingLimiter,
+}));
+router.use(createInboundComputerCallingRouter({
+  service: inboundAvailabilityService,
+  getConfig: () => readInboundCallingConfig(process.env),
+  isAssistedCallingEnabled,
+  providerForConfig: () => {
+    const config = readInboundCallingConfig(process.env);
+    if (!config.enabled) throw new Error("Inbound voice provider unavailable");
+    return new TwilioComputerVoiceProvider(config.config.voiceConfig);
+  },
+  calls: inboundCallService,
+  voicemails: inboundVoicemailService,
+}));
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);
 router.use(eventProfileDescriptionRouter);

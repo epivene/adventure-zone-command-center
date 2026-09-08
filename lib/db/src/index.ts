@@ -9,6 +9,8 @@ import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
+import * as bossSchema from "./boss-schema";
+import * as websiteInquirySchema from "./website-inquiry-schema";
 import * as googleWorkspaceSchema from "./google-workspace-schema";
 import * as operationalCalendarSchema from "./operational-calendar-schema";
 import * as leadIntakeSchema from "./lead-intake-schema";
@@ -16,9 +18,14 @@ import * as bookingOpportunitySchema from "./booking-opportunity-schema";
 import * as bookingOpportunityEmailSchema from "./booking-opportunity-email-schema";
 import * as legAssignmentSchema from "./leg-assignment-schema";
 import * as designStudioCanvaSchema from "./design-studio-canva-schema";
+import * as contractSchema from "./contract-schema";
+import * as marketingSchema from "./marketing-schema";
+import * as businessDocumentSchema from "./business-document-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
+import { databasePoolTimeouts } from "./pool-config";
 import {
   designAssets,
+  designCertificates,
   designOutputs,
   designProjectVersions,
   designProjects,
@@ -47,8 +54,7 @@ const finalConnectionString = normalizeDatabaseConnectionString(connectionString
 export const pool = new Pool({
   connectionString: finalConnectionString,
   application_name: "adventure-zone-command-center-api",
-  connectionTimeoutMillis: 5_000,
-  statement_timeout: 15 * 60_000,
+  ...databasePoolTimeouts(),
 });
 const schema = {
   ...coreSchema,
@@ -60,6 +66,8 @@ const schema = {
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
   ...officeCoordinatorSchema,
+  ...bossSchema,
+  ...websiteInquirySchema,
   ...googleWorkspaceSchema,
   ...operationalCalendarSchema,
   ...leadIntakeSchema,
@@ -67,7 +75,11 @@ const schema = {
   ...bookingOpportunityEmailSchema,
   ...legAssignmentSchema,
   ...designStudioCanvaSchema,
+  ...contractSchema,
+  ...marketingSchema,
+  ...businessDocumentSchema,
   designAssets,
+  designCertificates,
   designOutputs,
   designProjectVersions,
   designProjects,
@@ -86,6 +98,8 @@ export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
 export * from "./office-coordinator-schema";
+export * from "./boss-schema";
+export * from "./website-inquiry-schema";
 export * from "./google-workspace-schema";
 export * from "./operational-calendar-schema";
 export * from "./lead-intake-schema";
@@ -93,4 +107,7 @@ export * from "./booking-opportunity-schema";
 export * from "./booking-opportunity-email-schema";
 export * from "./leg-assignment-schema";
 export * from "./design-studio-schema";
+export * from "./contract-schema";
 export * from "./design-studio-canva-schema";
+export * from "./marketing-schema";
+export * from "./business-document-schema";

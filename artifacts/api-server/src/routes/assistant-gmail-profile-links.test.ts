@@ -36,6 +36,7 @@ function appFor() {
     ignored: [],
     failed: [],
   }));
+  const upsertRows = vi.fn(async () => undefined);
   const listApprovedForOrganization = vi.fn(async () => [{
     messageId: "1a03f76015409bfa",
     threadId: "1a03f6d13a293ebf",
@@ -47,9 +48,9 @@ function appFor() {
   app.use(express.json());
   app.use(createAssistantGmailProfileLinksRouter({
     sweep: { run },
-    validation: { listApprovedForOrganization },
+    validation: { listApprovedForOrganization, upsertRows },
   }));
-  return { app, run, listApprovedForOrganization };
+  return { app, run, listApprovedForOrganization, upsertRows };
 }
 
 const authorization = { Authorization: "Bearer test-assistant-token" };
@@ -93,6 +94,30 @@ describe("assistant Gmail profile-link routes", () => {
           threadId: "1a03f6d13a293ebf",
         }),
       ],
+    });
+  });
+
+  it("links one exact Gmail message to one exact profile", async () => {
+    const { app, upsertRows } = appFor();
+    const profileId = "b447c83c-6348-4fab-b850-0db7a5576a83";
+    const response = await request(app)
+      .put(`/gmail-profile-links/profile/${profileId}/messages/1a0683a8fcaeda83`)
+      .set(authorization)
+      .send({ threadId: "1a0683a8fcaeda83" });
+
+    expect(response.status).toBe(200);
+    expect(upsertRows).toHaveBeenCalledWith([{
+      messageId: "1a0683a8fcaeda83",
+      threadId: "1a0683a8fcaeda83",
+      organizationId: profileId,
+      contactId: null,
+      evidenceCodes: ["assistant_approved_gmail_profile_link"],
+    }]);
+    expect(response.body).toEqual({
+      ok: true,
+      organizationId: profileId,
+      messageId: "1a0683a8fcaeda83",
+      threadId: "1a0683a8fcaeda83",
     });
   });
 

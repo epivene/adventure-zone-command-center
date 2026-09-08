@@ -53,7 +53,7 @@ export function ExportSheet({
               </div>
               <div>
                 <p className="font-black">PDF design</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Best for printing and the future editable Canva handoff.</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Best for printing and document sharing.</p>
               </div>
             </div>
           </button>
@@ -61,7 +61,7 @@ export function ExportSheet({
 
         <div className="mt-4 flex items-center gap-2 rounded-xl border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
           <Download className="h-4 w-4 shrink-0" />
-          Exports use the current Command Center canvas. Canva is not required.
+          Exports use the current Command Center design.
         </div>
       </div>
     </div>

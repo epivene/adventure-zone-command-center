@@ -18,6 +18,8 @@ const bookingPrefixes = [
   "/needs-answer",
   "/quick-add",
   "/office-coordinator",
+  "/website-inquiries",
+  "/email-review",
 ] as const;
 
 const operationsPrefixes = [

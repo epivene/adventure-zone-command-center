@@ -5,13 +5,31 @@ import { ensureGoogleWorkspaceSchemaBeforeListen } from "./google-workspace-requ
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 import { ensureLegAssignmentSchemaBeforeListen } from "./leg-assignment-required-startup";
 import { ensureOfficeCoordinatorSchemaBeforeListen } from "./office-coordinator-required-startup";
+import { ensureBossSchemaBeforeListen } from "./boss-required-startup";
+import { ensureWebsiteInquirySchemaBeforeListen } from "./website-inquiry-required-startup";
 import { ensureOrganizerFeedbackSchemaBeforeListen } from "./organizer-feedback-required-startup";
+import { ensureComputerCallingSchemaBeforeListen } from "./computer-calling-required-startup";
+import { ensureInboundCallingSchemaBeforeListen } from "./inbound-calling-required-startup";
 import { ensurePaperNotesSchemaBeforeListen } from "./paper-notes-required-startup";
 import { ensureProfileTouchSchema } from "../features/organizations/profile-touch-schema";
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
+import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
+import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
+
+const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
 
 type RequiredStep = () => Promise<unknown>;
-type RequiredStepRunner = (name: string, step: RequiredStep) => Promise<unknown>;
+type RequiredStepRunner = (
+  name: string,
+  step: RequiredStep,
+  timeoutMs?: number,
+  onTimeout?: (error: Error) => void,
+) => Promise<unknown>;
+
+function isDroppedDatabaseConnection(error: unknown): boolean {
+  return error instanceof Error
+    && /connection (?:terminated|closed) unexpectedly|econnreset/i.test(error.message);
+}
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
@@ -22,49 +40,93 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureEventReviewDismissals?: RequiredStep;
   ensureFollowUpDismissals?: RequiredStep;
   ensureOrganizerFeedback?: RequiredStep;
+  ensureComputerCalling?: RequiredStep;
+  ensureInboundCalling?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
+  ensureBoss?: RequiredStep;
+  ensureWebsiteInquiries?: RequiredStep;
+  ensureProfileFiller?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
+  ensureBusinessDocuments?: RequiredStep;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
-  await run(
+  const runRequired = async (
+    name: string,
+    step: RequiredStep,
+    onTimeout?: (error: Error) => void,
+  ) => {
+    try {
+      return await run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+    } catch (error) {
+      if (!isDroppedDatabaseConnection(error)) throw error;
+      return run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+    }
+  };
+  await runRequired(
     "required paper notes schema",
     dependencies?.ensurePaperNotes ?? ensurePaperNotesSchemaBeforeListen,
   );
-  await run(
+  await runRequired("required inbound calling schema", dependencies?.ensureInboundCalling ?? ensureInboundCallingSchemaBeforeListen);
+  await runRequired(
     "required Google Workspace schema",
     dependencies?.ensureGoogleWorkspace ?? ensureGoogleWorkspaceSchemaBeforeListen,
   );
-  await run(
+  const leadIntakeAbortController = new AbortController();
+  await runRequired(
     "required lead intake schema",
-    dependencies?.ensureLeadIntake ?? ensureLeadIntakeSchemaBeforeListen,
+    dependencies?.ensureLeadIntake
+      ?? (() => ensureLeadIntakeSchemaBeforeListen({
+        signal: leadIntakeAbortController.signal,
+      })),
+    (error) => leadIntakeAbortController.abort(error),
   );
-  await run(
+  await runRequired(
     "required leg assignment schema",
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required event review dismissal schema",
     dependencies?.ensureEventReviewDismissals ?? ensureEventReviewDismissalSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required follow-up dismissal persistence",
     dependencies?.ensureFollowUpDismissals ?? ensureFollowUpDismissalPersistenceBeforeListen,
   );
-  await run(
+  await runRequired(
     "required organizer feedback schema",
     dependencies?.ensureOrganizerFeedback ?? ensureOrganizerFeedbackSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
+    "required computer calling schema",
+    dependencies?.ensureComputerCalling ?? ensureComputerCallingSchemaBeforeListen,
+  );
+  await runRequired(
     "required office coordinator schema",
     dependencies?.ensureOfficeCoordinator ?? ensureOfficeCoordinatorSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
+    "required Boss schema",
+    dependencies?.ensureBoss ?? ensureBossSchemaBeforeListen,
+  );
+  await runRequired(
+    "required website inquiry schema",
+    dependencies?.ensureWebsiteInquiries ?? ensureWebsiteInquirySchemaBeforeListen,
+  );
+  await runRequired(
+    "required profile filler schema",
+    dependencies?.ensureProfileFiller ?? ensureProfileFillerSchemaBeforeListen,
+  );
+  await runRequired(
     "required profile touch schema",
     dependencies?.ensureProfileTouch ?? ensureProfileTouchSchema,
   );
-  await run(
+  await runRequired(
     "required Design Studio schema",
     dependencies?.ensureDesignStudio ?? ensureDesignStudioSchemaBeforeListen,
+  );
+  await runRequired(
+    "required business document schema",
+    dependencies?.ensureBusinessDocuments ?? ensureBusinessDocumentSchemaBeforeListen,
   );
 }

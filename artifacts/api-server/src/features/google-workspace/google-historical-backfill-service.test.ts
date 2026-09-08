@@ -68,7 +68,7 @@ function validationRepository() {
 }
 
 describe("GoogleHistoricalBackfillService", () => {
-  it("processes at most 250 messages and parks the first batch for approval", async () => {
+  it("limits a batch to 100 messages so the service stays within its memory budget", async () => {
     const client = readClient(Array.from({ length: 300 }, (_, index) => `m${index + 1}`));
     const repo = repository();
     const mappings = validationRepository();
@@ -87,9 +87,9 @@ describe("GoogleHistoricalBackfillService", () => {
 
     const result = await service.runNextBatch();
 
-    expect(client.listMessagePage).toHaveBeenCalledWith({ maxResults: 250, pageToken: null });
-    expect(result.processed).toBe(250);
-    expect(result.attached).toBe(250);
+    expect(client.listMessagePage).toHaveBeenCalledWith({ maxResults: 100, pageToken: null });
+    expect(result.processed).toBe(100);
+    expect(result.attached).toBe(100);
     expect(result.state).toBe("awaiting_approval");
     expect(repo.finishBatch).toHaveBeenCalledWith(expect.objectContaining({
       firstBatch: true,
@@ -157,5 +157,139 @@ describe("GoogleHistoricalBackfillService", () => {
       outcome: "failed",
     }));
     expect(repo.finishBatch).not.toHaveBeenCalled();
+  });
+
+  it("does not let a stalled Drive attachment copy freeze the Gmail batch", async () => {
+    const client = readClient(["m1"], null);
+    client.getMessageMetadata = vi.fn(async (id) => ({
+      ...message(id),
+      hasAttachments: true,
+    }));
+    const repo = repository();
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => client },
+      repository: repo,
+      classifier: {
+        classify: async () => ({
+          outcome: "attached" as const,
+          organization: { id: "org-1", name: "Known Event" },
+          evidenceCodes: ["existing_thread_association"],
+        }),
+      },
+      validationRepository: validationRepository(),
+      fileService: {
+        copyApprovedThreadAttachments: async () => new Promise<never>(() => undefined),
+      },
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 1,
+      attached: 1,
+      state: "awaiting_approval",
+    });
+    expect(repo.finishBatch).toHaveBeenCalledOnce();
+  });
+
+  it("does not start a Drive copy for a matched message without attachments", async () => {
+    const copyApprovedThreadAttachments = vi.fn(async () => []);
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["m1"], null) },
+      repository: repository(),
+      classifier: {
+        classify: async () => ({
+          outcome: "attached" as const,
+          organization: { id: "org-1", name: "Known Event" },
+          evidenceCodes: ["existing_thread_association"],
+        }),
+      },
+      validationRepository: validationRepository(),
+      fileService: { copyApprovedThreadAttachments },
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 1,
+      attached: 1,
+    });
+    expect(copyApprovedThreadAttachments).not.toHaveBeenCalled();
+  });
+
+  it("records a stalled Gmail metadata fetch as failed and continues", async () => {
+    const gmail = readClient(["stalled", "next"], null);
+    gmail.getMessageMetadata = vi.fn(async (id) => {
+      if (id === "stalled") return new Promise<never>(() => undefined);
+      return message(id);
+    });
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => gmail },
+      repository: repo,
+      classifier: { classify: async () => ({ outcome: "ignored" as const, evidenceCodes: [] }) },
+      validationRepository: validationRepository(),
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
+    expect(repo.recordOutcome).toHaveBeenCalledWith(expect.objectContaining({
+      messageId: "stalled",
+      outcome: "failed",
+      errorCode: "GOOGLE_WORKSPACE_OPERATION_TIMEOUT",
+    }));
+  });
+
+  it("records a stalled classifier as failed and continues", async () => {
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["stalled", "next"], null) },
+      repository: repo,
+      classifier: {
+        classify: async (item) => {
+          if (item.id === "stalled") return new Promise<never>(() => undefined);
+          return { outcome: "ignored" as const, evidenceCodes: [] };
+        },
+      },
+      validationRepository: validationRepository(),
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
+  });
+
+  it("records a stalled CRM mapping write as failed and continues", async () => {
+    const repo = repository({ firstBatchApproved: true, processed: 250, status: "ready" });
+    const mappings = validationRepository();
+    mappings.upsertRows = vi.fn(async () => new Promise<never>(() => undefined));
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["stalled", "next"], null) },
+      repository: repo,
+      classifier: {
+        classify: async (item) => item.id === "stalled"
+          ? {
+              outcome: "attached" as const,
+              organization: { id: "org-1", name: "Known Event" },
+              evidenceCodes: ["existing_thread_association"],
+            }
+          : { outcome: "ignored" as const, evidenceCodes: [] },
+      },
+      validationRepository: mappings,
+      ioTimeoutMs: 20,
+    });
+
+    await expect(service.runNextBatch()).resolves.toMatchObject({
+      processed: 2,
+      failed: 1,
+      ignored: 1,
+      state: "complete",
+    });
   });
 });

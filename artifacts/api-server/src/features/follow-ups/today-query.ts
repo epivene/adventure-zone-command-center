@@ -17,6 +17,7 @@ import {
   callSessions,
   contacts,
   followUps,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import {
@@ -89,6 +90,7 @@ export type TodayDashboardFollowUpRecord = {
 export type TodayDashboardFollowUpRow = {
   booking: TodayDashboardBookingRecord | null;
   contact: {
+    id?: string;
     organizationId: string | null;
     firstName: string;
     lastName: string;
@@ -263,6 +265,7 @@ export const currentSeasonPlanStatuses = bookingStatusValues.filter(
 const followUpSelection = {
   booking: bookings,
   contact: {
+    id: contacts.id,
     organizationId: contacts.organizationId,
     firstName: contacts.firstName,
     lastName: contacts.lastName,
@@ -376,7 +379,8 @@ function toFollowUpSummary(
       booking?.organizationId ??
       contact?.organizationId ??
       null,
-    contactId: followUp.contactId ?? booking?.primaryContactId ?? null,
+    contactId:
+      followUp.contactId ?? booking?.primaryContactId ?? contact?.id ?? null,
     bookingId: booking?.id ?? null,
     bookingName:
       booking?.name ??
@@ -466,6 +470,21 @@ type DrizzleDatabase = typeof database;
 export function createDrizzleTodayDashboardRepository(
   db: DrizzleDatabase,
 ): TodayDashboardRepository {
+  const profileContactId = sql<string | null>`(
+    select ${organizationContacts.contactId}
+    from ${organizationContacts}
+    where ${organizationContacts.organizationId} = coalesce(
+      ${followUps.organizationId},
+      ${bookings.organizationId}
+    )
+      and ${organizationContacts.active} = true
+    order by
+      ${organizationContacts.isPrimary} desc,
+      ${organizationContacts.updatedAt} desc,
+      ${organizationContacts.contactId} asc
+    limit 1
+  )`;
+
   function followUpRows(condition: ReturnType<typeof and>, now: Date) {
     return db
       .select(followUpSelection)
@@ -475,7 +494,11 @@ export function createDrizzleTodayDashboardRepository(
         contacts,
         eq(
           contacts.id,
-          sql<string>`coalesce(${followUps.contactId}, ${bookings.primaryContactId})`,
+          sql<string>`coalesce(
+            ${followUps.contactId},
+            ${bookings.primaryContactId},
+            ${profileContactId}
+          )`,
         ),
       )
       .leftJoin(

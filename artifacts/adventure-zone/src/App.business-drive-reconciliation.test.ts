@@ -15,5 +15,9 @@ describe("App Business Drive reconciliation", () => {
     expect(source).toContain('path="/imports/attendance-history" component={AttendanceHistoryImportPage}');
     expect(source).toContain('path="/settings/business-sources" component={SettingsBusinessSourcesPage}');
     expect(source).toContain('path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage}');
+    expect(source).toContain('path="/business-documents" component={BusinessDocumentsPage}');
+    expect(source).toContain('path="/business-documents/import" component={BusinessDocumentImportPage}');
+    const profileSource = readFileSync("src/pages/EventProfilePage.tsx", "utf8");
+    expect(profileSource).toContain("<ProfileDocuments profileId={profileId} />");
   });
 });

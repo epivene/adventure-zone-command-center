@@ -1,0 +1,71 @@
+{
+  "importRevision": 1,
+  "matchExisting": true,
+  "aliases": [
+    "Niobrara County Fair & Rodeo",
+    "County Fair - Niobrara (Lusk) WY",
+    "Niobrara Fair"
+  ],
+  "event": {
+    "id": null,
+    "name": "Niobrara County Fair",
+    "city": "Lusk",
+    "region": "WY"
+  },
+  "profile": {
+    "placeType": "fair",
+    "description": "Annual county fair centered on Niobrara County 4-H and FFA in Lusk. The 2026 community calendar listed the fair for July 20-August 1, 2026; 2027 dates were not published when reviewed September 7, 2026. Adventure Zone has targeted outreach history from 2023 and 2025, including a post-WAF Convention follow-up, but no reply was found in the matched Gmail threads. Treat as a prior-contact 2027 renewal lead, not a cold lead.",
+    "phone": "307-334-3534",
+    "website": "https://wyoextension.org/niobraracounty/niobrara-county-fair/",
+    "address1": "4080 US Hwy 20",
+    "address2": "",
+    "postalCode": "82225"
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Kellie Chichester",
+      "phone": "307-334-3534",
+      "email": "kelliec@uwyo.edu",
+      "role": "Niobrara County Extension / fair contact",
+      "primary": true
+    },
+    {
+      "id": null,
+      "name": "Niobrara County Fair Office",
+      "phone": "307-334-3534",
+      "email": "niobraracounty@uwyo.edu",
+      "role": "General fair and Extension inbox",
+      "primary": false
+    }
+  ],
+  "booking": {
+    "enabled": false,
+    "name": "",
+    "status": "renewal_due",
+    "startsAt": "",
+    "endsAt": "",
+    "nextActionKind": "email",
+    "nextActionDueAt": "",
+    "travelLegId": null
+  },
+  "familyId": null,
+  "parentOrganizationId": null,
+  "notes": [
+    {
+      "subject": "Gmail outreach history through September 2026",
+      "body": "Adventure Zone emailed the Lusk Chamber/Visit Lusk about the fair on April 5, 2023; emailed Kellie Chichester on November 21, 2023; introduced Adventure Zone to the fair board ahead of the WAF Convention on September 29, 2025; and sent the latest targeted follow-up to niobraracounty@uwyo.edu on October 14, 2025 after missing Kellie at the convention. The latest email recapped the three packages and 2026 pricing. No reply appears in the matched threads. Gmail also confirms both kelliec@uwyo.edu and niobraracounty@uwyo.edu on the 2026 Wyoming Association of Fairs distribution."
+    },
+    {
+      "subject": "2027 timing and source review",
+      "body": "The 2026 fair occurred July 20-August 1, so routine 2026 outreach is closed. Schedule the next individual follow-up for April 20, 2027, approximately three months before the expected 2027 fair window, unless the organizer is contacted sooner through the convention campaign. Confirm official 2027 dates before putting dates in outreach. Sources reviewed September 7, 2026: University of Wyoming Extension Niobrara County Fair page and Niobrara County Extension contact page; Explore Niobrara 2026 community calendar."
+    }
+  ],
+  "followUps": [
+    {
+      "label": "2027 Niobrara County Fair outreach",
+      "reason": "About three months before the expected annual fair window, confirm the official 2027 dates and prepare individualized outreach if no earlier contact occurred through the convention campaign.",
+      "dueAt": "2027-04-20T16:00:00.000Z"
+    }
+  ]
+}

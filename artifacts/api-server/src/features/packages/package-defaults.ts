@@ -27,7 +27,7 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
   },
   weekend_warriors: {
     name: "Warrior's Playground",
-    basePriceCents: 750000,
+    basePriceCents: 800000,
     baseAttractionCount: 5,
     normalCapacity: 1,
     temporaryUnavailableQuantity: 0,
@@ -47,7 +47,7 @@ export const REVIEWED_PACKAGE_DEFAULTS = {
   },
   pirates_rebellion: {
     name: "Pirate's Rebellion",
-    basePriceCents: 750000,
+    basePriceCents: 800000,
     baseAttractionCount: 3,
     normalCapacity: 3,
     temporaryUnavailableQuantity: 0,
@@ -115,7 +115,7 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'weekend_warriors', 'Warrior''s Playground', 750000, 5, 1, 0, 5, 5, 1, 4,
+    'weekend_warriors', 'Warrior''s Playground', 800000, 5, 1, 0, 5, 5, 1, 4,
     'A competition-focused package built around five main adrenaline attractions, including an obstacle course and action-pursuit style options, plus carnival-style games.',
     'Strong fit for older kids, teens, adults, team competition, and events that want more adrenaline than bounce-house variety. Confirm action-pursuit equipment and consumables separately because shared equipment availability must be checked.',
     'Plan for about 8,000–10,000 sq ft. Power within 75 ft: 2 x 50A/220V outlets, 12 x 110V outlets, or an approved equivalent/generator. Water is not required to operate the attractions, but access to a faucet/hose is useful for cleaning. If stakes cannot be used, approved ballast is required; the reviewed source lists about 75 water barrels for this unit.',
@@ -134,7 +134,7 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
     operational_requirements, setup_notes, knowledge_review_note, active
   )
   SELECT
-    'pirates_rebellion', 'Pirate''s Rebellion', 750000, 3, 3, 0, 3, 3, 1, 4,
+    'pirates_rebellion', 'Pirate''s Rebellion', 800000, 3, 3, 0, 3, 3, 1, 4,
     'A water-focused pirate package with pedal-style bumper boats, a super slide, a pirate-themed bounce-house combo, and carnival-style games.',
     'Best fit for warm-weather events. Confirm footprint, power, water access, and fill timing early for the ordinary three-unit package.',
     'Confirm ordinary three-unit package footprint, power, water access, ballast, and setup details before contracting.',
@@ -166,12 +166,14 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
   WHERE code = 'adventure_zone' AND base_price_cents = 800000;
 
   UPDATE package_templates
-  SET base_price_cents = 750000, updated_at = now()
-  WHERE code IN ('pirates_rebellion', 'pirate_rebellion') AND base_price_cents = 700000;
+  SET base_price_cents = 800000, updated_at = now()
+  WHERE code IN ('pirates_rebellion', 'pirate_rebellion')
+    AND base_price_cents IN (700000, 750000);
 
   UPDATE package_templates
-  SET base_price_cents = 750000, updated_at = now()
-  WHERE code IN ('weekend_warriors', 'warriors_playground') AND base_price_cents IS NULL;
+  SET base_price_cents = 800000, updated_at = now()
+  WHERE code IN ('weekend_warriors', 'warriors_playground')
+    AND (base_price_cents IS NULL OR base_price_cents = 750000);
 
   UPDATE package_templates
   SET base_duration_min_days = 1,

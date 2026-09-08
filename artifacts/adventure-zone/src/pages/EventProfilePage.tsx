@@ -6,7 +6,7 @@ import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
 import { AttendanceHistoryPanel } from "@/components/profiles/attendance-history-panel";
-import { ProfileSourceDocuments } from "@/components/profiles/profile-source-documents";
+import { ProfileDocuments } from "@/components/profiles/profile-documents";
 import { HistoricalEventDates } from "@/components/profiles/historical-event-dates";
 import { simplifyHistoryText } from "@/components/profiles/history-summary";
 import { PaperNoteHistorySources } from "@/components/paper-notes/paper-note-history-sources";
@@ -215,7 +215,7 @@ export default function EventProfilePage() {
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
-        {!profileEditing && profileId ? <ProfileSourceDocuments mode="owner" profileId={profileId} /> : null}
+        {!profileEditing && profileId ? <ProfileDocuments profileId={profileId} /> : null}
 
         {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
 

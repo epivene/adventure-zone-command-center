@@ -124,6 +124,27 @@ function validCall(overrides: Record<string, unknown> = {}) {
 }
 
 describe("CallService call metadata", () => {
+  it("accepts browser VoIP completion metadata", async () => {
+    const repository = new CallTestRepository();
+    const service = new CallService(repository as never, {
+      now: () => new Date("2026-08-12T16:00:00.000Z"),
+    });
+
+    const result = await service.complete(validCall({
+      requestKey: "70000000-0000-4000-8000-000000000007",
+      method: "browser_voip",
+      startedAt: new Date("2026-09-01T10:00:00.000Z"),
+      endedAt: new Date("2026-09-01T10:03:15.000Z"),
+    }));
+
+    expect(result.ok).toBe(true);
+    expect(repository.createdSession).toMatchObject({
+      method: "browser_voip",
+      startedAt: new Date("2026-09-01T10:00:00.000Z"),
+      endedAt: new Date("2026-09-01T10:03:15.000Z"),
+    });
+  });
+
   it("persists the selected phone snapshot and call method", async () => {
     const repository = new CallTestRepository();
     const service = new CallService(repository as never, {

@@ -23,6 +23,13 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # Public Wix inquiry intake. Keep alert recipients in Render only.
+      - key: WEBSITE_INQUIRY_ALLOWED_ORIGINS
+        value: https://the-adventure-zone.com,https://www.the-adventure-zone.com
+      - key: WEBSITE_INQUIRY_ALERT_RECIPIENTS
+        sync: false
+      - key: WEBSITE_INQUIRY_INBOX_BASE_URL
+        value: https://adventure-zone-command-center-1.onrender.com
       # Owner-authorized outbound email. These stay server-only; Office users
       # never receive SMTP credentials and never have a send endpoint.
       - key: OFFICE_MAIL_SMTP_HOST
@@ -84,6 +91,26 @@ services:
         value: "false"
       # Optional private launcher value; configure it in Render, not source.
       - key: VOICEMAIL_LAUNCH_URL
+        sync: false
+      # Computer calling is opt-in. Keep it disabled through deployment and
+      # smoke checks; it also remains gated by ASSISTED_CALLING_ENABLED.
+      - key: TWILIO_VOICE_ENABLED
+        value: "false"
+      # Twilio credentials and public caller-ID/webhook values are configured
+      # only in Render. Do not commit any account details or secret values.
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_TWIML_APP_SID
+        sync: false
+      - key: TWILIO_VERIFIED_CALLER_ID
+        sync: false
+      - key: TWILIO_WEBHOOK_BASE_URL
         sync: false
 
   # ── Vite static frontend ─────────────────────────────────────────────────────

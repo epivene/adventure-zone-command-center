@@ -17,7 +17,6 @@ export function ContactDirectoryView({
   const params = new URLSearchParams(search);
   const query = contactListQuerySchema.parse({
     q: params.get("q") ?? undefined,
-    state: params.get("state") ?? undefined,
     page: params.get("page") ?? undefined,
   });
   const [contacts, setContacts] = useState<ContactListPage | null>(null);
@@ -27,7 +26,6 @@ export function ContactDirectoryView({
   useEffect(() => {
     const qs = new URLSearchParams();
     if (query.search) qs.set("q", query.search);
-    if (query.state !== "all") qs.set("state", query.state);
     if (query.page > 1) qs.set("page", String(query.page));
     setLoading(true);
     setError(null);
@@ -35,7 +33,7 @@ export function ContactDirectoryView({
       .then((data) => setContacts(data))
       .catch((cause) => setError(cause instanceof Error ? cause.message : "Failed to load contacts"))
       .finally(() => setLoading(false));
-  }, [query.search, query.state, query.page]);
+  }, [query.search, query.page]);
 
   if (loading) return <p className="text-slate-500">Loading contacts…</p>;
   if (error) return <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div>;

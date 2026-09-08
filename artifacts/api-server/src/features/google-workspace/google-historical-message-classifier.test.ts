@@ -160,4 +160,21 @@ describe("GoogleHistoricalMessageClassifier", () => {
     expect(result).toMatchObject({ outcome: "ignored" });
     expect(JSON.stringify(result)).not.toContain("personal order is on the way");
   });
+
+  it("continues safely when Gmail never returns a thread body", async () => {
+    const hangingClient = {
+      ...client(),
+      getThreadDetail: async () => new Promise<never>(() => undefined),
+    };
+    const classifier = new GoogleHistoricalMessageClassifier({
+      contextLoader: async () => context(),
+      aiEnabled: false,
+      ioTimeoutMs: 20,
+    });
+
+    await expect(classifier.classify(
+      message({ id: "m5", threadId: "thread-5", from: "unknown@example.com", subject: "Hello" }),
+      hangingClient,
+    )).resolves.toMatchObject({ outcome: "ignored" });
+  });
 });

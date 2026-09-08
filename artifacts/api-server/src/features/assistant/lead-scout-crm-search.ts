@@ -181,7 +181,7 @@ export class PostgresLeadScoutCrmSearch implements LeadScoutCrmSearch {
     const groups = new Map<string, OrganizationGroup>();
     for (const row of result.rows) {
       const id = String(row.organization_id);
-      const group = groups.get(id) ?? {
+      const group: OrganizationGroup = groups.get(id) ?? {
         id,
         name: String(row.organization_name),
         city: row.organization_city ?? null,

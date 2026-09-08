@@ -12,7 +12,7 @@ on:
       - "artifacts/api-server/src/app.ts"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   export:
@@ -44,7 +44,7 @@ jobs:
               --write-out "%{http_code}" \
               "${BASE_URL}/api/assistant-import/profile-integrity-audit" || true)
 
-            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('profile-integrity-audit.json','utf8')); if(x.ok!==true || x.mode!=='read_only' || !x.summary || !Array.isArray(x.profiles) || !Array.isArray(x.issues)) process.exit(1)"; then
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('profile-integrity-audit.json','utf8')); if(x.ok!==true || x.mode!=='read_only' || !x.summary || !Array.isArray(x.profiles) || !Array.isArray(x.issues)) process.exit(1); const expected=["Peach Festival","4th of July","Watford City Event","Enumclaw Expo","Art & Living History Festival","Fish Fest","Owyhee County Fair","Forever West Fest","Winter Magic","Moody County Fair","River Town Farmers Market"]; const have=new Set(x.profiles.map(p=>p.name)); if(expected.some(name=>!have.has(name))) process.exit(1)"; then
               echo "Live audit exported on attempt ${attempt}."
               exit 0
             fi
@@ -99,6 +99,35 @@ jobs:
           fs.writeFileSync('profile-integrity-issues.csv', rows.map((row) => row.map(quote).join(',')).join('\n') + '\n');
           NODE
 
+      - name: Commit sanitized CRM profile catalog
+        run: |
+          mkdir -p .audits
+          node <<'NODE'
+          const fs = require('fs');
+          const report = JSON.parse(fs.readFileSync('profile-integrity-audit.json', 'utf8'));
+          const catalog = {
+            generatedAt: report.generatedAt,
+            summary: report.summary,
+            profiles: report.profiles.map((profile) => ({
+              id: profile.id,
+              name: profile.name,
+              city: profile.city,
+              region: profile.region,
+              gmailThreadCount: profile.gmailThreadCount,
+            })),
+          };
+          fs.writeFileSync(
+            '.audits/live-crm-profile-catalog.json',
+            JSON.stringify(catalog, null, 2) + '\n',
+          );
+          NODE
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .audits/live-crm-profile-catalog.json
+          git commit -m "audit: refresh sanitized CRM profile catalog" || exit 0
+          git pull --rebase origin main
+          git push origin HEAD:main
+
       - name: Upload complete protected report
         uses: actions/upload-artifact@v4
         with:
@@ -107,3 +136,9 @@ jobs:
             profile-integrity-audit.json
             profile-integrity-issues.csv
           retention-days: 7
+
+# Triggered after Gmail profile CRM reconciliation on 2026-09-02.
+# Second post-import verification pass.
+# Waits for all Gmail-profile CRM counterparts before exporting.
+
+# Refreshed for Sept. 4 inbox reconciliation.

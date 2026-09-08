@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  date,
   index,
   jsonb,
   pgTable,
@@ -268,6 +269,46 @@ export const designAssets = pgTable(
     ),
     index("design_assets_scope_created_idx").on(table.scope, table.createdAt),
     index("design_assets_project_idx").on(table.projectId),
+  ],
+);
+
+export const coiReviewStateValues = ["needs_review", "reviewed"] as const;
+export type CoiReviewState = (typeof coiReviewStateValues)[number];
+
+export const designCertificates = pgTable(
+  "design_certificates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    officeAccountId: uuid("office_account_id")
+      .notNull()
+      .references(() => officeAccounts.id, { onDelete: "restrict" }),
+    name: text("name").notNull(),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "set null" }),
+    assetId: uuid("asset_id").references(() => designAssets.id, { onDelete: "set null" }),
+    issueDate: date("issue_date", { mode: "string" }),
+    expirationDate: date("expiration_date", { mode: "string" }),
+    reviewState: text("review_state")
+      .$type<CoiReviewState>()
+      .default("needs_review")
+      .notNull(),
+    // The migration adds the FK to business_documents; keeping this declaration
+    // unreferenced avoids a circular schema import through office_accounts.
+    documentId: uuid("document_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    check("design_certificates_review_state_valid", sql`${table.reviewState} in ('needs_review','reviewed')`),
+    check(
+      "design_certificates_dates_valid",
+      sql`${table.issueDate} is null or ${table.expirationDate} is null or ${table.issueDate} <= ${table.expirationDate}`,
+    ),
+    uniqueIndex("design_certificates_asset_unique").on(table.assetId),
+    uniqueIndex("design_certificates_document_unique").on(table.documentId),
+    index("design_certificates_account_expiration_idx").on(table.officeAccountId, table.expirationDate),
+    index("design_certificates_booking_idx").on(table.bookingId),
+    index("design_certificates_organization_idx").on(table.organizationId),
   ],
 );
 

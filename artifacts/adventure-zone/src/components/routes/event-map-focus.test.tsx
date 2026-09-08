@@ -1,13 +1,19 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MapEvent } from "@/features/routes/map-data";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 
+const mapShellRender = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/auth-token", () => ({ apiPost: vi.fn() }));
 vi.mock("./manager-route-map-shell", () => ({
-  ManagerRouteMapShell: ({ children }: any) => <div data-testid="route-map-shell">{children}</div>,
+  ManagerRouteMapShell: (props: any) => {
+    mapShellRender(props);
+    return <div data-testid="route-map-shell">{props.children}</div>;
+  },
 }));
 vi.mock("./manager-route-map-layers", () => ({
   ManagerRouteMapLayers: () => <div data-testid="route-map-layers" />,
@@ -51,7 +57,10 @@ const events = [
   event({ id: "wyoming", name: "Wyoming Event", city: "Sheridan", region: "WY", longitude: -106.9562, latitude: 44.7972 }),
 ];
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  mapShellRender.mockClear();
+});
 
 describe("EventMap planning interactions", () => {
   it("shows the full scope by default and refines it as filters change", () => {
@@ -70,6 +79,68 @@ describe("EventMap planning interactions", () => {
     expect(screen.getByText("Showing Kristy · 2026")).toBeInTheDocument();
     expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
     expect(screen.getByText("Eastern Montana Fair").closest("li")).toHaveAttribute("data-emphasis", "primary");
+  });
+
+  it("offers one-tap, color-coded leg route controls above the map", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+
+    expect(screen.getByRole("button", { name: "All routes" })).toHaveAttribute("aria-pressed", "true");
+    const kristy = screen.getByRole("button", { name: "Kristy route" });
+    const hulk = screen.getByRole("button", { name: "Hulk route" });
+    expect(kristy).toHaveStyle({ borderColor: "#ef4444" });
+    expect(hulk).toHaveStyle({ borderColor: "#2563eb" });
+
+    fireEvent.click(kristy);
+    expect(kristy).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Showing Kristy · 2026")).toBeInTheDocument();
+    expect(screen.getByText("Billings Possible").closest("li")).toHaveAttribute("data-emphasis", "dimmed");
+  });
+
+  it("orders route groups using the configured leg order and keeps them collapsed by default", () => {
+    render(<EventMap events={events} travelLegs={legs} />);
+    const groups = screen.getAllByTestId(/^route-event-leg-/);
+    expect(groups.map((group) => group.dataset.testid)).toEqual([
+      "route-event-leg-leg-kristy",
+      "route-event-leg-leg-hulk",
+    ]);
+    expect(groups.every((group) => group.tagName === "DETAILS" && !group.hasAttribute("open"))).toBe(true);
+    expect(screen.getAllByRole("heading", { level: 3 }).map((heading) => heading.textContent)).toEqual([
+      "Kristy",
+      "Hulk",
+    ]);
+  });
+
+  it("makes a tapped leg supersede an already-focused trip", () => {
+    function FocusHarness() {
+      const [tripCoordinates, setTripCoordinates] = useState<[number, number][] | null>([
+        [-111.891, 40.7608],
+        [-105.8406, 46.4083],
+      ]);
+      return (
+        <EventMap
+          events={events}
+          travelLegs={legs}
+          focusedTripCoordinates={tripCoordinates}
+          onClearTripFocus={() => setTripCoordinates(null)}
+        />
+      );
+    }
+
+    render(<FocusHarness />);
+    expect(mapShellRender.mock.calls.at(-1)?.[0].viewport.coordinates).toEqual([
+      [-111.891, 40.7608],
+      [-105.8406, 46.4083],
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Kristy route" }));
+
+    expect(mapShellRender.mock.calls.at(-1)?.[0].viewport).toEqual({
+      kind: "bounds",
+      coordinates: [
+        [-105.8406, 46.4083],
+        [-106.9562, 44.7972],
+      ],
+    });
   });
 
   it("supports explicit event focus without changing the active filters", () => {

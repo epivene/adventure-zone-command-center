@@ -1,0 +1,12 @@
+import { Link } from "wouter";
+import { Button } from "@workspace/avz-crm/components/ui/button";
+import type { Voicemail } from "@/features/calls/incoming-calling-api";
+import { PrivateAudioPlayer } from "./private-audio-player";
+export function VoicemailCard({ voicemail, onHandled, onDelete }: { voicemail: Voicemail; onHandled: () => Promise<void>; onDelete: () => Promise<void> }) {
+  const deleted = voicemail.status === "audio-deleted"; const processing = voicemail.status === "processing";
+  return <article className="rounded-xl border border-border bg-card p-4"><div className="flex justify-between gap-3"><div><h2 className="font-bold">{voicemail.matched ? voicemail.callerDisplay : "Unknown caller"}</h2><p className="text-sm text-muted-foreground">{new Date(voicemail.receivedAt).toLocaleString()} · {voicemail.durationSeconds ?? "—"} seconds</p></div><span className="text-sm font-semibold capitalize">{voicemail.status.replace("-", " ")}</span></div>
+    <div className="mt-3">{processing ? <p className="text-sm text-muted-foreground">Audio is processing.</p> : <PrivateAudioPlayer available={!deleted && voicemail.status === "available" || voicemail.status === "handled"} voicemailId={voicemail.id} />}</div>
+    <div className="mt-3 flex flex-wrap gap-2">{voicemail.organizationId ? <Button asChild size="sm" variant="outline"><Link href={`/profiles/${voicemail.organizationId}`}>Open profile</Link></Button> : null}<Button disabled={deleted || voicemail.status === "deleting"} onClick={() => { if (window.confirm("Delete voicemail audio? Call history and notes remain.")) void onDelete(); }} size="sm" type="button" variant="outline">Delete audio</Button><Button disabled={voicemail.status === "handled"} onClick={() => void onHandled()} size="sm" type="button">Mark handled</Button>
+      {voicemail.canCallBack && voicemail.organizationId && voicemail.contactId && voicemail.phoneId ? <Button asChild size="sm" variant="outline"><Link href={`/calls/workspace?organizationId=${encodeURIComponent(voicemail.organizationId)}&contactId=${encodeURIComponent(voicemail.contactId)}&phoneId=${encodeURIComponent(voicemail.phoneId)}`}>Call back</Link></Button> : <span className="text-sm text-muted-foreground">{voicemail.callbackReason ?? "Callback unavailable until linked to an approved stored phone."}</span>}</div>
+  </article>;
+}

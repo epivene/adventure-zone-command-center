@@ -1,0 +1,126 @@
+{
+  "verifiedAt": "2026-09-02T04:05:57.607Z",
+  "sourceCommit": "1f70a9100fefd7bcae2f394069a3bd8200b34ab7",
+  "verified": true,
+  "profiles": [
+    {
+      "name": "United Tribes International Powwow",
+      "profileId": "b8270382-7766-4a3f-91bc-afa4c5863b77",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "contact_due",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Top of Utah Parade of Homes",
+      "profileId": "936e3f41-23ab-4e23-94fc-ff1da5a7f499",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "unlikely",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Springville Art Festival",
+      "profileId": "ad559769-c4aa-40dc-9045-15dd48c8701d",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "contact_due",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "San Luis Valley Potato Festival",
+      "profileId": "62c7f89a-d0a7-42ee-8881-3392d17b3373",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "contact_due",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "One Shot Antelope Hunt",
+      "profileId": "0a09625f-8196-4d18-a326-c43729ad481a",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "unlikely",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Longs Peak Scottish Irish Highland Festival",
+      "profileId": "2eb4c604-efa9-4c31-9815-d0848d5ca1b5",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "contact_due",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Logan Pride Festival",
+      "profileId": "affe8873-3a77-4aad-b951-6cbb5802c69c",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2027-01-15T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "unlikely",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Harvest Moon Hurrah",
+      "profileId": "d2669014-a661-49e0-8193-2e82589ef4ce",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": "contact_due",
+      "bookingStatusPresent": true
+    },
+    {
+      "name": "Orofino Lumberjack Days",
+      "profileId": "ae80fdd6-02ba-48d2-a87b-5db9683c0a1b",
+      "verified": true,
+      "error": null,
+      "openFollowUps": [
+        {
+          "dueAt": "2026-09-02T16:00:00.000Z"
+        }
+      ],
+      "currentContactPresent": true,
+      "expectedBookingStatus": null,
+      "bookingStatusPresent": true
+    }
+  ],
+  "emailsSent": false
+}

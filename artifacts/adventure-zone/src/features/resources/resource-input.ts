@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
+const canonicalUuid = z.string().uuid().transform((value) => value.toLowerCase());
 const actorId = z.string().trim().min(1, "An actor is required.");
 const stableCode = z
   .string()

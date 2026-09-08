@@ -1,4 +1,5 @@
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
+import { withGoogleTimeout } from "./google-async-timeout";
 import type {
   GoogleMessageMetadata,
   GoogleMessageRef,
@@ -24,7 +25,10 @@ import {
   type GoogleValidationReviewInput,
 } from "./google-validation-repository";
 
-const HISTORICAL_BATCH_SIZE = 250;
+// Gmail thread bodies can be large enough to exhaust the Starter instance when
+// 250 are classified in one long-lived request. Smaller pages also make frozen
+// batch recovery cheaper while preserving the same idempotent cursor behavior.
+const HISTORICAL_BATCH_SIZE = 100;
 
 type ConnectionAccess = {
   createReadClient(): Promise<GoogleWorkspaceReadClient | null>;
@@ -147,6 +151,7 @@ export class GoogleHistoricalBackfillService {
   private readonly classifier: ClassifierAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
   private readonly fileService: FileServiceAccess;
+  private readonly ioTimeoutMs: number;
 
   constructor(options?: {
     connection?: ConnectionAccess;
@@ -155,6 +160,7 @@ export class GoogleHistoricalBackfillService {
     classifier?: ClassifierAccess;
     validationRepository?: ValidationRepositoryAccess;
     fileService?: FileServiceAccess;
+    ioTimeoutMs?: number;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
     this.repository = options?.repository ?? new GoogleHistoricalBackfillRepository();
@@ -171,6 +177,7 @@ export class GoogleHistoricalBackfillService {
       (options
         ? { copyApprovedThreadAttachments: async () => undefined }
         : new GoogleProfileFileService());
+    this.ioTimeoutMs = options?.ioTimeoutMs ?? 15_000;
   }
 
   private async attach(
@@ -195,8 +202,10 @@ export class GoogleHistoricalBackfillService {
     organizationId: string,
     threadId: string,
   ): Promise<void> {
-    await this.fileService
-      .copyApprovedThreadAttachments({ organizationId, threadId })
+    await withGoogleTimeout(
+      this.fileService.copyApprovedThreadAttachments({ organizationId, threadId }),
+      this.ioTimeoutMs,
+    )
       .catch(() => undefined);
   }
 
@@ -212,7 +221,8 @@ export class GoogleHistoricalBackfillService {
       state.status === "awaiting_approval" ||
       (state.cumulative.processed > 0 &&
         !state.firstBatchApproved &&
-        state.status !== "error")
+        state.status !== "error" &&
+        state.status !== "running")
     ) {
       throw new Error("GOOGLE_WORKSPACE_HISTORICAL_FIRST_BATCH_APPROVAL_REQUIRED");
     }
@@ -277,7 +287,10 @@ export class GoogleHistoricalBackfillService {
 
       let message: GoogleMessageMetadata;
       try {
-        message = await client.getMessageMetadata(ref.id);
+        message = await withGoogleTimeout(
+          client.getMessageMetadata(ref.id),
+          this.ioTimeoutMs,
+        );
       } catch (error) {
         const code = safeErrorCode(error);
         if (isStopError(code)) {
@@ -303,11 +316,17 @@ export class GoogleHistoricalBackfillService {
               organization: inheritedTarget,
               evidenceCodes: ["existing_thread_association"],
             }
-          : await this.classifier.classify(message, client);
+          : await withGoogleTimeout(
+              this.classifier.classify(message, client),
+              this.ioTimeoutMs,
+            );
 
         if (classification.outcome === "attached") {
           batchThreadTargets.set(message.threadId, classification.organization);
-          await this.attach(message, classification);
+          await withGoogleTimeout(
+            this.attach(message, classification),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId,
             messageId: message.id,
@@ -317,7 +336,7 @@ export class GoogleHistoricalBackfillService {
           });
           counts.attached += 1;
 
-          if (!copiedFileThreads.has(message.threadId)) {
+          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
             await this.copyThreadFiles(
               classification.organization.id,
@@ -325,9 +344,12 @@ export class GoogleHistoricalBackfillService {
             );
           }
         } else if (classification.outcome === "needs_review") {
-          await this.validationRepository.upsertReviewItems([
-            reviewInput(message, classification),
-          ]);
+          await withGoogleTimeout(
+            this.validationRepository.upsertReviewItems([
+              reviewInput(message, classification),
+            ]),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId,
             messageId: message.id,
@@ -407,10 +429,19 @@ export class GoogleHistoricalBackfillService {
 
     for (const failure of failures) {
       try {
-        const message = await client.getMessageMetadata(failure.messageId);
-        const classification = await this.classifier.classify(message, client);
+        const message = await withGoogleTimeout(
+          client.getMessageMetadata(failure.messageId),
+          this.ioTimeoutMs,
+        );
+        const classification = await withGoogleTimeout(
+          this.classifier.classify(message, client),
+          this.ioTimeoutMs,
+        );
         if (classification.outcome === "attached") {
-          await this.attach(message, classification);
+          await withGoogleTimeout(
+            this.attach(message, classification),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId: failure.batchId,
             messageId: message.id,
@@ -419,14 +450,17 @@ export class GoogleHistoricalBackfillService {
             organizationId: classification.organization.id,
           });
           result.attached += 1;
-          if (!copiedFileThreads.has(message.threadId)) {
+          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
             await this.copyThreadFiles(classification.organization.id, message.threadId);
           }
         } else if (classification.outcome === "needs_review") {
-          await this.validationRepository.upsertReviewItems([
-            reviewInput(message, classification),
-          ]);
+          await withGoogleTimeout(
+            this.validationRepository.upsertReviewItems([
+              reviewInput(message, classification),
+            ]),
+            this.ioTimeoutMs,
+          );
           await this.repository.recordOutcome({
             batchId: failure.batchId,
             messageId: message.id,

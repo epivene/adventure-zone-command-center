@@ -1,0 +1,96 @@
+{
+  "generatedAt": "2026-09-02T19:13:38.050Z",
+  "source": "gmail-profile-label-gaps-2026-09-02.json",
+  "requested": 11,
+  "verified": 11,
+  "profiles": [
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Peach Festival - Palisade CO",
+      "organizationId": "0f37f7b3-d1db-41ae-8670-e3afb4664ca5",
+      "organizationName": "Peach Festival",
+      "city": "Palisade",
+      "region": "CO",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/4th of July - Mandan ND",
+      "organizationId": "f14531cb-f9d5-4c66-96eb-2edadc2aa760",
+      "organizationName": "4th of July",
+      "city": "Mandan",
+      "region": "ND",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Watford City Event - Watford City ND",
+      "organizationId": "90b28043-0066-4d5b-afcc-7e0410f15fed",
+      "organizationName": "Watford City Event",
+      "city": "Watford City",
+      "region": "ND",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Enumclaw Expo - Enumclaw WA",
+      "organizationId": "cf39c985-1e35-431d-bb04-26053262c672",
+      "organizationName": "Enumclaw Expo",
+      "city": "Enumclaw",
+      "region": "WA",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Art & Living History Festival - Fillmore UT",
+      "organizationId": "08eb8c02-6163-4733-b5c7-d0a129294605",
+      "organizationName": "Art & Living History Festival",
+      "city": "Fillmore",
+      "region": "UT",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Fish Fest - Whitefish MT",
+      "organizationId": "ac33bfbe-fdc9-4cac-b918-339db36005fb",
+      "organizationName": "Fish Fest",
+      "city": "Whitefish",
+      "region": "MT",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Owyhee County Fair - Homedale ID",
+      "organizationId": "c314700c-d1e1-46a5-8064-1e42127a1b57",
+      "organizationName": "Owyhee County Fair",
+      "city": "Homedale",
+      "region": "ID",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Forever West Fest - Cheyenne WY",
+      "organizationId": "a61720f4-0dd6-4e75-8608-3c0f227cb4a7",
+      "organizationName": "Forever West Fest",
+      "city": "Cheyenne",
+      "region": "WY",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Winter Magic - Augusta MT",
+      "organizationId": "f44759f2-b46c-4e28-ab79-eb26ab67bf40",
+      "organizationName": "Winter Magic",
+      "city": "Augusta",
+      "region": "MT",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/Moody County Fair - Flandreau SD",
+      "organizationId": "ea06ee2c-99c4-4f33-8f18-93801caab7f4",
+      "organizationName": "Moody County Fair",
+      "city": "Flandreau",
+      "region": "SD",
+      "verified": true
+    },
+    {
+      "gmailProfileLabel": "Z - AdventureZone/Profiles/River Town Farmers Market - Drummond MT",
+      "organizationId": "bb22d568-c5de-4dcd-b443-b02a80469018",
+      "organizationName": "River Town Farmers Market",
+      "city": "Drummond",
+      "region": "MT",
+      "verified": true
+    }
+  ]
+}

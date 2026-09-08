@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { ScoutAlertWorker } from "./scout-alert-worker";
+import type { LeadScoutProvider } from "./lead-scout-provider";
 import type {
+  ScoutAlertRepository,
   ScoutAlertWatchClaim,
   ScoutAlertWatchContext,
 } from "./scout-alert-repository";
@@ -120,19 +122,19 @@ function dependencies(input?: {
   enrichment?: any;
   providerError?: Error;
 }) {
-  const claimed = input && "claim" in input ? input.claim : claim();
-  const loaded = input && "context" in input ? input.context : context({ claim: claimed ?? claim() });
+  const claimed: ScoutAlertWatchClaim | null = input && "claim" in input ? input.claim ?? null : claim();
+  const loaded: ScoutAlertWatchContext | null = input && "context" in input ? input.context ?? null : context({ claim: claimed ?? claim() });
   const repository = {
     claimDue: vi.fn(async () => claimed),
     loadContext: vi.fn(async () => loaded),
-    saveSuccess: vi.fn(async () => undefined),
-    recordFailure: vi.fn(async () => undefined),
-    completeWatch: vi.fn(async () => undefined),
+    saveSuccess: vi.fn(async (_input: Parameters<ScoutAlertRepository["saveSuccess"]>[0]) => undefined),
+    recordFailure: vi.fn(async (_input: Parameters<ScoutAlertRepository["recordFailure"]>[0]) => undefined),
+    completeWatch: vi.fn(async (_input: Parameters<ScoutAlertRepository["completeWatch"]>[0]) => undefined),
   };
   const provider = {
     enrichCandidate: input?.providerError
-      ? vi.fn(async () => { throw input.providerError; })
-      : vi.fn(async () => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] })),
+      ? vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => { throw input.providerError; })
+      : vi.fn(async (_input: Parameters<LeadScoutProvider["enrichCandidate"]>[0]) => input?.enrichment ?? ({ facts: [], sources: [], coverageGaps: [] })),
   };
   return { repository, provider };
 }

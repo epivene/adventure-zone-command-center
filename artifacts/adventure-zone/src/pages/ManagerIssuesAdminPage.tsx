@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiGet, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
 type ScheduleIssue = {
   id: string;
@@ -45,27 +45,115 @@ type ChecklistSummary = {
   checkoutOverride: boolean;
 };
 
+type ChecklistRecord = ChecklistSummary & {
+  items: Array<{ id: string; label: string; resourceName: string | null; result: string | null; note: string | null }>;
+};
+
+type ReviewDue = { bookingId: string; bookingName: string; legName: string; endsAt: string | null };
+type SavedReview = {
+  id: string; bookingName: string; legName: string; rating: number; feedback: string | null;
+  organizerSiteNotes: string | null; crewNotes: string | null; recommendReturn: "yes" | "no" | "unsure" | null;
+  createdAt: string;
+};
+
 export default function ManagerIssuesAdminPage() {
   const [issues, setIssues] = useState<ScheduleIssue[]>([]);
   const [safetyIssues, setSafetyIssues] = useState<SafetyIssue[]>([]);
   const [checklists, setChecklists] = useState<ChecklistSummary[]>([]);
+  const [reviewsDue, setReviewsDue] = useState<ReviewDue[]>([]);
+  const [savedReviews, setSavedReviews] = useState<SavedReview[]>([]);
+  const [openRecord, setOpenRecord] = useState<ChecklistRecord | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
 
   async function load() {
     setError("");
     try {
-      const [schedule, safety, checklistData] = await Promise.all([
+      const [schedule, safety, checklistData, reviewData, savedReviewData] = await Promise.all([
         apiGet<{ issues: ScheduleIssue[] }>("/manager-admin/issues?status=open"),
         apiGet<{ issues: SafetyIssue[] }>("/manager-admin/resource-condition-issues?state=open"),
         apiGet<{ checklists: ChecklistSummary[] }>("/manager-admin/events/checklists"),
+        apiGet<{ reviewsDue: ReviewDue[] }>("/manager-admin/reviews/due"),
+        apiGet<{ reviews: SavedReview[] }>("/manager-admin/reviews"),
       ]);
       setIssues(schedule.issues ?? []);
       setSafetyIssues(safety.issues ?? []);
       setChecklists(checklistData.checklists ?? []);
+      setReviewsDue(reviewData.reviewsDue ?? []);
+      setSavedReviews(savedReviewData.reviews ?? []);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load manager issues.");
     }
+  }
+
+  async function toggleChecklist(run: ChecklistSummary) {
+    if (openRecord?.id === run.id) { setOpenRecord(null); return; }
+    setBusy(`open:${run.id}`);
+    try {
+      const data = await apiGet<{ record: ChecklistRecord }>(`/manager-admin/events/checklists/${run.id}`);
+      setOpenRecord(data.record);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not open checklist.");
+    } finally { setBusy(null); }
+  }
+
+  async function removeChecklist(run: ChecklistSummary) {
+    if (!window.confirm(`Remove the saved checklist for “${run.bookingName}”?`)) return;
+    setBusy(`remove:${run.id}`);
+    try {
+      await apiDelete(`/manager-admin/events/checklists/${run.id}`);
+      if (openRecord?.id === run.id) setOpenRecord(null);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove checklist.");
+    } finally { setBusy(null); }
+  }
+
+  async function removeReviewDue(item: ReviewDue) {
+    if (!window.confirm(`Remove “${item.bookingName}” from Review Due?`)) return;
+    setBusy(`review:${item.bookingId}`);
+    try {
+      await apiDelete(`/manager-admin/reviews/due/${item.bookingId}`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove review-due item.");
+    } finally { setBusy(null); }
+  }
+
+  async function editSavedReview(review: SavedReview) {
+    const ratingText = window.prompt("Rating from 0 to 5", String(review.rating));
+    if (ratingText == null) return;
+    const rating = Number(ratingText);
+    if (!Number.isInteger(rating) || rating < 0 || rating > 5) {
+      setError("Rating must be a whole number from 0 to 5.");
+      return;
+    }
+    const feedback = window.prompt("Feedback", review.feedback ?? "");
+    if (feedback == null) return;
+    const crewNotes = window.prompt("Crew notes", review.crewNotes ?? "");
+    if (crewNotes == null) return;
+    setBusy(`saved-review:${review.id}`);
+    try {
+      await apiPatch(`/manager-admin/reviews/${review.id}`, {
+        rating,
+        feedback: feedback.trim() || null,
+        crewNotes: crewNotes.trim() || null,
+      });
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update review.");
+    } finally { setBusy(null); }
+  }
+
+  async function deleteSavedReview(review: SavedReview) {
+    if (!window.confirm(`Delete the saved review for “${review.bookingName}”?`)) return;
+    setBusy(`saved-review:${review.id}`);
+    try {
+      await apiDelete(`/manager-admin/reviews/${review.id}`);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not delete review.");
+    } finally { setBusy(null); }
   }
 
   useEffect(() => { void load(); }, []);
@@ -156,8 +244,47 @@ export default function ManagerIssuesAdminPage() {
               {run.readyOverride ? <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">Ready-to-operate override</span> : null}
               {run.checkoutOverride ? <span className="rounded-full bg-violet-100 px-2 py-1 text-violet-800">Checkout override</span> : null}
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button className="button-secondary" disabled={busy !== null} onClick={() => void toggleChecklist(run)} type="button">{openRecord?.id === run.id ? "Close record" : "Open record"}</button>
+              <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeChecklist(run)} type="button">Remove</button>
+            </div>
+            {openRecord?.id === run.id ? <div className="mt-4 grid gap-2 border-t pt-4">
+              {openRecord.items.map((item) => <div className="rounded-lg bg-slate-50 p-3 text-sm" key={item.id}>
+                <div className="flex justify-between gap-2"><strong>{item.label}</strong><span className="capitalize text-slate-600">{item.result?.replaceAll("_", " ") ?? "Not answered"}</span></div>
+                {item.resourceName ? <p className="text-xs text-slate-500">{item.resourceName}</p> : null}
+                {item.note ? <p className="mt-2 whitespace-pre-wrap">{item.note}</p> : null}
+              </div>)}
+            </div> : null}
           </article>
         )) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No event safety checklists yet.</p>}
+      </section>
+
+      <section className="grid gap-3">
+        <div><h2 className="text-xl font-bold">Review Due</h2><p className="text-sm text-slate-600">Completed events still waiting for a crew review. Remove items that should no longer be requested.</p></div>
+        {reviewsDue.length ? reviewsDue.map((item) => <article className="rounded-xl border bg-white p-4" key={item.bookingId}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><h3 className="font-bold">{item.bookingName}</h3><p className="text-sm text-slate-600">{item.legName}{item.endsAt ? ` · ${new Date(item.endsAt).toLocaleDateString()}` : ""}</p></div>
+            <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeReviewDue(item)} type="button">Remove from Review Due</button>
+          </div>
+        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No reviews are due.</p>}
+      </section>
+
+      <section className="grid gap-3">
+        <div><h2 className="text-xl font-bold">Saved event reviews</h2><p className="text-sm text-slate-600">Correct or delete reviews when operational records need to be updated.</p></div>
+        {savedReviews.length ? savedReviews.map((review) => <article className="rounded-xl border bg-white p-4" key={review.id}>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="font-bold">{review.bookingName}</h3>
+              <p className="text-sm text-slate-600">{review.legName} · {review.rating}/5 · {new Date(review.createdAt).toLocaleDateString()}</p>
+              {review.feedback ? <p className="mt-2 whitespace-pre-wrap text-sm">{review.feedback}</p> : null}
+              {review.crewNotes ? <p className="mt-2 text-sm"><strong>Crew:</strong> {review.crewNotes}</p> : null}
+            </div>
+            <div className="flex gap-2">
+              <button className="button-secondary" disabled={busy !== null} onClick={() => void editSavedReview(review)} type="button">Edit review</button>
+              <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void deleteSavedReview(review)} type="button">Delete review</button>
+            </div>
+          </div>
+        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No saved event reviews.</p>}
       </section>
 
       <section className="grid gap-3">

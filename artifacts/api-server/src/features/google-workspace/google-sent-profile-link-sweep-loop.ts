@@ -1,8 +1,11 @@
 import { logger } from "@/lib/logger";
+import type { GoogleRecentValidationService } from "./google-recent-validation-service";
 import type { GoogleSentProfileLinkSweepService } from "./google-sent-profile-link-sweep-service";
 
 export const GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1_000;
 export const GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS = 60 * 60 * 1_000;
+export const GOOGLE_SENT_PROFILE_LINK_CATCHUP_INTERVAL_MS = 24 * 60 * 60 * 1_000;
+export const GOOGLE_RECENT_EMAIL_SYNC_LIMIT = 100;
 
 export interface GoogleSentProfileLinkSweepLoopScheduler {
   schedule(task: () => void, delayMs: number): unknown;
@@ -20,6 +23,7 @@ GoogleSentProfileLinkSweepLoopScheduler = {
 };
 
 type Sweep = Pick<GoogleSentProfileLinkSweepService, "run">;
+type Recent = Pick<GoogleRecentValidationService, "run">;
 type Clock = { now(): Date };
 
 export class GoogleSentProfileLinkSweepLoop {
@@ -27,9 +31,11 @@ export class GoogleSentProfileLinkSweepLoop {
   private stopped = false;
   private pending: unknown = null;
   private active: Promise<void> | null = null;
+  private lastSentCatchupAtMs: number | null = null;
 
   constructor(private readonly dependencies: {
-    sweep: Sweep;
+    recent: Recent;
+    sentSweep: Sweep;
     clock: Clock;
     scheduler: GoogleSentProfileLinkSweepLoopScheduler;
   }) {}
@@ -72,29 +78,48 @@ export class GoogleSentProfileLinkSweepLoop {
   private async runStep(): Promise<void> {
     const now = this.dependencies.clock.now();
     try {
-      const result = await this.dependencies.sweep.run({
-        after: new Date(now.getTime() - GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS),
-        before: now,
-        repair: true,
-      });
+      const result = await this.dependencies.recent.run(
+        GOOGLE_RECENT_EMAIL_SYNC_LIMIT,
+        { skipProcessed: true },
+      );
       logger.info(
-        {
-          sentInWindow: result.counts.sentInWindow,
-          alreadyLinked: result.counts.alreadyLinked,
-          linked: result.counts.linked,
-          needsReview: result.counts.needsReview,
-          ignored: result.counts.ignored,
-          failed: result.counts.failed,
-        },
-        "Recent sent Gmail profile-link repair completed",
+        result.counts,
+        "Recent Gmail profile-link reconciliation completed",
       );
     } catch (error) {
       logger.warn(
-        {
-          errorCode: error instanceof Error ? error.message : "unknown",
-        },
-        "Recent sent Gmail profile-link repair deferred",
+        { errorCode: error instanceof Error ? error.message : "unknown" },
+        "Recent Gmail profile-link reconciliation deferred",
       );
+    }
+
+    const shouldRunSentCatchup = this.lastSentCatchupAtMs === null
+      || now.getTime() - this.lastSentCatchupAtMs >= GOOGLE_SENT_PROFILE_LINK_CATCHUP_INTERVAL_MS;
+    if (shouldRunSentCatchup) {
+      try {
+        const result = await this.dependencies.sentSweep.run({
+          after: new Date(now.getTime() - GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS),
+          before: now,
+          repair: true,
+        });
+        this.lastSentCatchupAtMs = now.getTime();
+        logger.info(
+          {
+            sentInWindow: result.counts.sentInWindow,
+            alreadyLinked: result.counts.alreadyLinked,
+            linked: result.counts.linked,
+            needsReview: result.counts.needsReview,
+            ignored: result.counts.ignored,
+            failed: result.counts.failed,
+          },
+          "Recent sent Gmail profile-link catch-up completed",
+        );
+      } catch (error) {
+        logger.warn(
+          { errorCode: error instanceof Error ? error.message : "unknown" },
+          "Recent sent Gmail profile-link catch-up deferred",
+        );
+      }
     }
     if (!this.stopped) {
       this.schedule(GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS);

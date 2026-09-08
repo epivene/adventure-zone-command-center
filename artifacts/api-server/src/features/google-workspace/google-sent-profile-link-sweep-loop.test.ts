@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
+import type { GoogleRecentValidationResult } from "./google-recent-validation-service";
 
 import {
+  GOOGLE_RECENT_EMAIL_SYNC_LIMIT,
+  GOOGLE_SENT_PROFILE_LINK_CATCHUP_INTERVAL_MS,
   GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS,
   GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS,
   GoogleSentProfileLinkSweepLoop,
@@ -32,13 +35,32 @@ async function settle(): Promise<void> {
   await Promise.resolve();
 }
 
+function emptyRecentResult(): GoogleRecentValidationResult {
+  return {
+    checkedLimit: 100,
+    aiEnabled: false,
+    historicalImportStarted: false,
+    validationStatus: "approved",
+    counts: { discovered: 0, matched: 0, needsReview: 0, ignored: 0 },
+    matched: [],
+    needsReview: [],
+    ignored: [],
+  };
+}
+
 describe("GoogleSentProfileLinkSweepLoop", () => {
-  it("repairs a rolling recent sent-mail window immediately and on a fixed interval", async () => {
-    const now = new Date("2026-08-31T21:30:00.000Z");
-    const run = vi.fn().mockResolvedValue({ counts: { linked: 2, needsReview: 1, failed: 0 } });
+  it("reconciles recent all-mail hourly and runs the sent-mail catch-up daily", async () => {
+    let now = new Date("2026-08-31T21:30:00.000Z");
+    const recentRun = vi.fn().mockResolvedValue({
+      counts: { discovered: 10, matched: 2, needsReview: 1, ignored: 7 },
+    });
+    const sentRun = vi.fn().mockResolvedValue({
+      counts: { sentInWindow: 20, alreadyLinked: 18, linked: 2, needsReview: 0, ignored: 0, failed: 0 },
+    });
     const scheduler = new FakeScheduler();
     const loop = new GoogleSentProfileLinkSweepLoop({
-      sweep: { run },
+      recent: { run: recentRun },
+      sentSweep: { run: sentRun },
       clock: { now: () => new Date(now) },
       scheduler,
     });
@@ -49,35 +71,51 @@ describe("GoogleSentProfileLinkSweepLoop", () => {
     scheduler.run(0);
     await settle();
 
-    expect(run).toHaveBeenCalledWith({
+    expect(recentRun).toHaveBeenCalledWith(
+      GOOGLE_RECENT_EMAIL_SYNC_LIMIT,
+      { skipProcessed: true },
+    );
+    expect(sentRun).toHaveBeenCalledWith({
       after: new Date(now.getTime() - GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS),
       before: now,
       repair: true,
     });
     expect(scheduler.scheduled[1]?.delayMs).toBe(GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS);
 
+    now = new Date(now.getTime() + GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS);
     scheduler.run(1);
     await settle();
-    expect(run).toHaveBeenCalledTimes(2);
+    expect(recentRun).toHaveBeenCalledTimes(2);
+    expect(sentRun).toHaveBeenCalledTimes(1);
+
+    now = new Date(now.getTime() + GOOGLE_SENT_PROFILE_LINK_CATCHUP_INTERVAL_MS);
+    scheduler.run(2);
+    await settle();
+    expect(recentRun).toHaveBeenCalledTimes(3);
+    expect(sentRun).toHaveBeenCalledTimes(2);
 
     await loop.close();
   });
 
   it("does not overlap a still-running sweep and waits for it during shutdown", async () => {
-    let resolveRun: (() => void) | null = null;
-    const run = vi.fn(() => new Promise<void>((resolve) => {
-      resolveRun = resolve;
-    }));
+    let resolveRun!: () => void;
+    const recentRun = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        resolveRun = resolve;
+      });
+      return emptyRecentResult();
+    });
     const scheduler = new FakeScheduler();
     const loop = new GoogleSentProfileLinkSweepLoop({
-      sweep: { run },
+      recent: { run: recentRun },
+      sentSweep: { run: vi.fn().mockResolvedValue({ counts: {} }) },
       clock: { now: () => new Date("2026-08-31T21:30:00.000Z") },
       scheduler,
     });
 
     loop.start();
     scheduler.run(0);
-    expect(run).toHaveBeenCalledTimes(1);
+    expect(recentRun).toHaveBeenCalledTimes(1);
 
     const closing = loop.close();
     let closed = false;
@@ -85,7 +123,7 @@ describe("GoogleSentProfileLinkSweepLoop", () => {
     await settle();
     expect(closed).toBe(false);
 
-    resolveRun?.();
+    resolveRun();
     await closing;
     expect(closed).toBe(true);
     expect(scheduler.scheduled).toHaveLength(1);
@@ -94,7 +132,8 @@ describe("GoogleSentProfileLinkSweepLoop", () => {
   it("keeps the loop alive after a failed sweep", async () => {
     const scheduler = new FakeScheduler();
     const loop = new GoogleSentProfileLinkSweepLoop({
-      sweep: { run: vi.fn().mockRejectedValue(new Error("temporary")) },
+      recent: { run: vi.fn().mockRejectedValue(new Error("temporary")) },
+      sentSweep: { run: vi.fn().mockRejectedValue(new Error("temporary")) },
       clock: { now: () => new Date("2026-08-31T21:30:00.000Z") },
       scheduler,
     });

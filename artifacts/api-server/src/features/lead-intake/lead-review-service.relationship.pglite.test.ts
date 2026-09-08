@@ -3,7 +3,7 @@ import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import * as schema from "@/db/schema";
-import { LeadReviewService, LeadReviewServiceError } from "./lead-review-service";
+import { LeadReviewService } from "./lead-review-service";
 
 const rowId = "30000000-0000-4000-8000-000000000001";
 const organizationId = "10000000-0000-4000-8000-000000000001";
@@ -104,11 +104,11 @@ describe("LeadReviewService relationship classification", () => {
   it("rejects stale versions and rows without completed recipient verification", async () => {
     const first = await setup(); clients.push(first.client);
     await expect(first.service.classifyRelationship({ rowId, expectedVersion: 0, reviewedBy: "Desiree", now: anchor }))
-      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "VERSION_CONFLICT" });
+      .rejects.toMatchObject({ code: "VERSION_CONFLICT" });
 
     const second = await setup("needs_review"); clients.push(second.client);
     await expect(second.service.classifyRelationship({ rowId, expectedVersion: 1, reviewedBy: "Desiree", now: anchor }))
-      .rejects.toMatchObject<Partial<LeadReviewServiceError>>({ code: "RELATIONSHIP_NOT_READY" });
+      .rejects.toMatchObject({ code: "RELATIONSHIP_NOT_READY" });
   }, 20_000);
 
   it("loads external relationship evidence before opening the row-lock transaction", async () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { runStartupStep } from "./startup-step";
 
 describe("runStartupStep", () => {
@@ -6,6 +6,43 @@ describe("runStartupStep", () => {
     await expect(
       runStartupStep("act review migrations", () => new Promise<never>(() => undefined), 10),
     ).rejects.toThrow("Startup step timed out: act review migrations");
+  });
+
+  it("runs timeout cancellation before rejecting", async () => {
+    const controller = new AbortController();
+    const aborted = vi.fn();
+    await expect(
+      runStartupStep(
+        "blocked schema",
+        () =>
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener(
+              "abort",
+              () => {
+                aborted();
+                reject(controller.signal.reason);
+              },
+              { once: true },
+            );
+          }),
+        10,
+        (error) => controller.abort(error),
+      ),
+    ).rejects.toThrow("Startup step timed out: blocked schema");
+    expect(aborted).toHaveBeenCalledOnce();
+  });
+
+  it("preserves the timeout failure when cancellation throws", async () => {
+    await expect(
+      runStartupStep(
+        "blocked cleanup",
+        () => new Promise<never>(() => undefined),
+        10,
+        () => {
+          throw new Error("cancellation failed");
+        },
+      ),
+    ).rejects.toThrow("Startup step timed out: blocked cleanup");
   });
 
   it("returns successful startup work unchanged", async () => {

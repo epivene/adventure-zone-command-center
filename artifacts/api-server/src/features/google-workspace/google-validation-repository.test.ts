@@ -4,12 +4,31 @@ import { PostgresGoogleValidationRepository } from "./google-validation-reposito
 
 function poolWith(rowsBySql: (sql: string) => Array<Record<string, unknown>>) {
   const query = vi.fn(async (sql: string, _values?: unknown[]) => ({
-    rows: rowsBySql(sql),
+    rows: rowsBySql(sql.replace(/\s+/g, " ").trim()),
   }));
   return { pool: { query }, query };
 }
 
 describe("PostgresGoogleValidationRepository", () => {
+  it("finds message ids already mapped or placed in review", async () => {
+    const { pool, query } = poolWith((sql) => {
+      if (sql.includes("SELECT id FROM google_workspace_connections")) {
+        return [{ id: "connection-1" }];
+      }
+      if (sql.includes("UNION")) {
+        return [{ message_id: "mapped" }, { message_id: "reviewed" }];
+      }
+      return [];
+    });
+    const repository = new PostgresGoogleValidationRepository(pool);
+
+    await expect(
+      repository.processedMessageIds(["mapped", "reviewed", "new", "mapped"]),
+    ).resolves.toEqual(new Set(["mapped", "reviewed"]));
+    const lookup = query.mock.calls.find(([sql]) => String(sql).includes("UNION"));
+    expect(lookup?.[1]).toEqual(["connection-1", ["mapped", "reviewed", "new"]]);
+  });
+
   it("upserts resolved validation rows idempotently for the active connection", async () => {
     const { pool, query } = poolWith((sql) =>
       sql.includes("SELECT id FROM google_workspace_connections")

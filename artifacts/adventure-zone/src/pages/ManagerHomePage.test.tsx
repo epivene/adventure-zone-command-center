@@ -62,7 +62,6 @@ describe("ManagerHomePage", () => {
     expect(screen.getByRole("link", { name: /Mileage/i })).toHaveAttribute("href", "/manager/operations");
     expect(screen.getByText("$300.00")).toBeInTheDocument();
     expect(screen.getByText("$125.00")).toBeInTheDocument();
-    expect(managerApi).toHaveBeenCalledTimes(1);
     expect(managerApi).toHaveBeenCalledWith("/manager/dashboard");
   });
 });

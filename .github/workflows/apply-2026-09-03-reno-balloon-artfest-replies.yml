@@ -1,0 +1,163 @@
+name: Apply Sept 3 Reno Balloon and Artfest replies
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/apply-2026-09-03-reno-balloon-artfest-replies.yml"
+      - "imports/approved-profiles/2026-09-03-reno-balloon-artfest-replies.json"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Apply profile updates and verify
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const source = "imports/approved-profiles/2026-09-03-reno-balloon-artfest-replies.json";
+          const payloads = JSON.parse(fs.readFileSync(source, "utf8"));
+          const headers = { Authorization: `Bearer ${token}` };
+          const normalize = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const fixedProfileIds = {
+            "Castle Rock Artfest": "08a64711-ef24-4e42-865b-bcf5bc525665",
+          };
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, {
+              ...options,
+              headers: {
+                ...headers,
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+                ...(options.headers ?? {}),
+              },
+            });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 500)}`);
+            return JSON.parse(text);
+          }
+
+          async function resolve(payload) {
+            const names = [payload.event.name, ...(payload.aliases ?? [])];
+            const byId = new Map();
+            for (const name of names) {
+              const search = await request(`profile-search?q=${encodeURIComponent(name)}&limit=20`);
+              for (const result of search.results ?? []) {
+                if (result.kind === "organization" && result.id) byId.set(result.id, result);
+              }
+            }
+            const expectedNames = new Set(names.map(normalize));
+            const compatible = [...byId.values()].filter((result) => {
+              const cityOk = !payload.event.city || !result.city || normalize(result.city) === normalize(payload.event.city);
+              const regionOk = !payload.event.region || !result.region || normalize(result.region) === normalize(payload.event.region);
+              return cityOk && regionOk;
+            });
+            const exact = compatible.filter((result) => expectedNames.has(normalize(result.label)));
+            const matches = exact.length ? exact : compatible.filter((result) => {
+              const label = normalize(result.label);
+              return [...expectedNames].some((name) => label.includes(name) || name.includes(label));
+            });
+            const ids = [...new Set(matches.map((item) => item.id))];
+            if (ids.length > 1) throw new Error(`Expected at most one live profile for ${payload.event.name}; found ${ids.length}`);
+            return ids[0] ?? null;
+          }
+
+          (async () => {
+            const receipt = { appliedAt: new Date().toISOString(), profiles: [] };
+            for (const payload of payloads) {
+              const profileId = fixedProfileIds[payload.event.name] ?? await resolve(payload);
+              if (payload.requireExisting && !profileId) {
+                throw new Error(`Required live profile not found for ${payload.event.name}`);
+              }
+              const eventPayload = {
+                ...payload,
+                event: { ...payload.event, ...(profileId ? { id: profileId } : {}) },
+              };
+              const upsert = await request("event-profiles", {
+                method: "POST",
+                body: JSON.stringify(eventPayload),
+              });
+              const appliedProfileId = profileId ?? upsert.profileId;
+              if (!appliedProfileId) throw new Error(`${payload.event.name}: profile ID missing after upsert`);
+
+              const notes = [];
+              for (const note of payload.notes ?? []) {
+                notes.push(await request("profile-notes", {
+                  method: "POST",
+                  body: JSON.stringify({ organizationId: appliedProfileId, ...note }),
+                }));
+              }
+
+              const followUps = [];
+              for (const followUp of payload.followUps ?? []) {
+                followUps.push(await request("today-followups", {
+                  method: "POST",
+                  body: JSON.stringify({ organizationId: appliedProfileId, ...followUp, preserveExisting: false }),
+                }));
+              }
+
+              const history = await request(`profile-history/${appliedProfileId}`);
+              const expectedSubjects = (payload.notes ?? []).map((note) => note.subject);
+              for (const subject of expectedSubjects) {
+                if (!history.notes.some((note) => note.subject === subject)) {
+                  throw new Error(`${payload.event.name}: note verification failed for ${subject}`);
+                }
+              }
+              const openFollowUps = history.followUps.filter((followUp) => !followUp.completedAt);
+              for (const expected of payload.followUps ?? []) {
+                const match = openFollowUps.find((followUp) => followUp.kind === expected.label);
+                if (!match || new Date(match.dueAt).toISOString() !== new Date(expected.dueAt).toISOString()) {
+                  throw new Error(`${payload.event.name}: follow-up verification failed for ${expected.label}`);
+                }
+              }
+
+              receipt.profiles.push({
+                name: payload.event.name,
+                profileId: appliedProfileId,
+                notes: notes.map((item) => ({ created: item.created, activityId: item.activityId })),
+                followUps: followUps.map((item) => ({ created: item.created, followUpId: item.followUpId, dueAt: item.dueAt })),
+              });
+            }
+
+            fs.writeFileSync("sept-3-replies-receipt.json", JSON.stringify(receipt, null, 2));
+            fs.appendFileSync(
+              process.env.GITHUB_STEP_SUMMARY,
+              [
+                "# Sept. 3 CRM reply updates",
+                "",
+                ...receipt.profiles.map((item) => `- ${item.name}: profile updated, reply draft saved, follow-up verified`),
+              ].join("\n") + "\n",
+            );
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload protected receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: sept-3-replies-receipt
+          path: sept-3-replies-receipt.json
+          retention-days: 7

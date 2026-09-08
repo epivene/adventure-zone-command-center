@@ -15,6 +15,13 @@ type MergeCandidateRow = {
   consolidatedIntoId: string | null;
 };
 
+function isMergeCandidateRow(row: Record<string, unknown>): row is MergeCandidateRow {
+  return typeof row.id === "string"
+    && (row.city === null || typeof row.city === "string")
+    && (row.region === null || typeof row.region === "string")
+    && (row.consolidatedIntoId === null || typeof row.consolidatedIntoId === "string");
+}
+
 export async function assertSelectedProfileSubsetMergeable(
   transaction: OrganizationMergeTransaction,
   ids: string[],
@@ -38,7 +45,7 @@ export async function assertSelectedProfileSubsetMergeable(
     order by id
     for update
   `);
-  const rows = ((result as { rows?: MergeCandidateRow[] }).rows ?? []);
+  const rows = result.rows.filter(isMergeCandidateRow);
 
   if (rows.length !== selectedIds.length) {
     throw new OrganizationConflictError(

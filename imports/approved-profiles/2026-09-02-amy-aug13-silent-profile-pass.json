@@ -1,0 +1,343 @@
+[
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "CSU Ag Day BBQ",
+      "Nutrien Ag Day BBQ",
+      "CSU Ag Day"
+    ],
+    "event": {
+      "id": null,
+      "name": "CSU Ag Day &(Fort Collins) CO",
+      "city": "Fort Collins",
+      "region": "CO"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "970-491-6274",
+      "website": "https://agsci.colostate.edu/agday/",
+      "description": "Active Sept. 12, 2026 Nutrien Ag Day BBQ at Colorado State University. The official program includes a separate Youth Activity Zone and family educational activities."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "CSU Ag Day Team",
+        "phone": "970-491-6274",
+        "email": "cas_agday@mail.colostate.edu",
+        "role": "Ag Day event contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "CSU Ag Day BBQ - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-12",
+      "endsAt": "2026-09-12",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 13 outreach — no reply; Youth Activity Zone verified",
+        "body": "Amy emailed cas_agday@mail.colostate.edu on Aug. 13, 2026. The Gmail thread still contains only the sent message, with no reply. Current official CSU information confirms the Sept. 12 event and a separate Youth Activity Zone with family activities. Make one timely phone call to 970-491-6274 asking whether the Youth Activity Zone is already finalized and whether a staffed supplemental attraction could fit. Do not send another full generic package pitch."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call CSU Ag Day about Youth Activity Zone",
+        "reason": "The Aug. 13 email has no reply and the event is Sept. 12. Call 970-491-6274 once, ask whether the Youth Activity Zone is already finalized and whether a staffed supplemental attraction could fit, then log the answer.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Navajo County Fair",
+      "Navajo County Fairgrounds",
+      "County Fair - Navajo AZ"
+    ],
+    "event": {
+      "id": null,
+      "name": "County Fair - Navajo (Holbrook) AZ",
+      "city": "Holbrook",
+      "region": "AZ"
+    },
+    "profile": {
+      "placeType": "fair",
+      "phone": "928-524-4757",
+      "website": "https://navajocountyfair.net/",
+      "description": "Active Sept. 16-19, 2026 county fair in Holbrook. The fair already advertises conventional carnival rides, so Adventure Zone would need a separate or supplemental family-attraction fit."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Navajo County Fair Office",
+        "phone": "928-524-4757",
+        "email": "fairmanager@navajocountyfair.net",
+        "role": "Current fair office / manager contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Navajo County Fair - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-16",
+      "endsAt": "2026-09-19",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 13 outreach — no reply; current manager path added",
+        "body": "Amy emailed navajocountyfair@yahoo.com on Aug. 13, 2026. The Gmail thread still contains only the sent message, with no reply. The current official fair site lists 928-524-4757 and fairmanager@navajocountyfair.net; it also shows a conventional carnival, so do not assume the carnival slot is open. Call once and ask whether a separate staffed family-attraction area is possible. If the carnival contract excludes it, record that and stop current-year outreach."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Navajo County Fair once",
+        "reason": "Call 928-524-4757 using the current fair-manager path. Ask only whether a separate staffed Adventure Zone area could coexist with the conventional carnival; log the answer and do not repeat the introductory email.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "World Village Boise",
+      "Global Lounge World Village"
+    ],
+    "event": {
+      "id": null,
+      "name": "World Village (Boise) ID",
+      "city": "Boise City",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "208-918-7870",
+      "website": "https://www.globallounge.org/world-village",
+      "description": "Active Sept. 11-12, 2026 free, family-friendly multicultural arts festival and Global Lounge fundraiser in Boise."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Global Lounge",
+        "phone": "208-918-7870",
+        "email": "info@globallounge.org",
+        "role": "World Village organizer",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "World Village - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-11",
+      "endsAt": "2026-09-12",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 13 outreach — no reply; one fit-check call",
+        "body": "Amy emailed info@globallounge.org on Aug. 13, 2026. The Gmail thread still contains only the sent message, with no reply. Current official information confirms World Village is Sept. 11-12, free and family-friendly, with vendor registration and fundraising central to the event. Make one phone call to 208-918-7870 to determine whether there is a realistic staffed-attraction and commercial fit. Do not resend the same broad package email."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call World Village for a quick fit check",
+        "reason": "The event is Sept. 11-12 and Amy's Aug. 13 email has no reply. Call 208-918-7870 once to ask whether a staffed attraction area and workable payment model are still possible, then log the outcome.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Wagon Days",
+      "Sun Valley Wagon Days",
+      "City of Ketchum Wagon Days"
+    ],
+    "event": {
+      "id": null,
+      "name": "Wagon Days (Ketchum) ID",
+      "city": "Ketchum",
+      "region": "ID"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "208-726-3841",
+      "website": "https://www.wagondays.com/",
+      "description": "Active Sept. 4-5, 2026 City of Ketchum heritage celebration. The Aug. 13 Adventure Zone email to Eryn Alvey failed because the address no longer exists; current organizer contact is participate@ketchumidaho.org."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "City of Ketchum / Wagon Days",
+        "phone": "208-726-3841",
+        "email": "participate@ketchumidaho.org",
+        "role": "Current Wagon Days organizer contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Wagon Days - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-04",
+      "endsAt": "2026-09-05",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 13 email failed — replace dead Eryn address",
+        "body": "Amy's Aug. 13, 2026 message to ealvey@ketchumidaho.org immediately bounced as an invalid address, so this was not a successful outreach attempt and there was no rejection. Current official event information lists the City of Ketchum at 208-726-3841 and participate@ketchumidaho.org. Because the event is imminent, call only to verify the correct future planning contact and ask when 2027 participation decisions begin; do not make a rushed same-week package pitch."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Wagon Days — correct contact and ask 2027 timing",
+        "reason": "The Aug. 13 address bounced and the event is already imminent. Call 208-726-3841, verify participate@ketchumidaho.org as the working organizer path, and ask when 2027 activity/vendor planning begins.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Tri County Fair",
+      "Tri-County Fair",
+      "Tri County Fair Winnemucca"
+    ],
+    "event": {
+      "id": null,
+      "name": "Tri-County Fair (Winnemucca) NV",
+      "city": "Winnemucca",
+      "region": "NV"
+    },
+    "profile": {
+      "placeType": "fair",
+      "phone": "775-623-5071 x 102",
+      "website": "https://www.labordayfair.com/",
+      "description": "Active Sept. 3-6, 2026 Tri-County Fair in Winnemucca. Official contact remains Darrel Field at darrel@winnemucca.com and 775-623-5071 x 102."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Darrel Field",
+        "phone": "775-623-5071 x 102",
+        "email": "darrel@winnemucca.com",
+        "role": "Tri-County Fair contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Tri-County Fair - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-03",
+      "endsAt": "2026-09-06",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Amy Aug. 13 outreach — no reply; event begins Sept. 3",
+        "body": "Amy emailed Darrel Field at darrel@winnemucca.com on Aug. 13, 2026. The Gmail thread still contains only the sent message, with no reply. Current official information confirms Darrel's email and 775-623-5071 x 102. Since the event begins Sept. 3, make one short call to verify whether there is any future-year fit and ask when 2027 planning opens; do not continue a last-minute 2026 chase if the setup is already final."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Tri-County Fair — ask 2027 planning window",
+        "reason": "The event begins Sept. 3 and the Aug. 13 email received no reply. Call Darrel at 775-623-5071 x 102 once, verify future interest and ask when 2027 planning opens, then log the outcome.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "importRevision": 1,
+    "matchExisting": true,
+    "requireExisting": true,
+    "aliases": [
+      "Poplar Indian Days",
+      "Labor Day - Poplar Indian Days MT",
+      "Fort Peck Indian Rodeo | Poplar Indian Days"
+    ],
+    "event": {
+      "id": null,
+      "name": "Poplar Indian Days (Poplar) MT",
+      "city": "Poplar",
+      "region": "MT"
+    },
+    "profile": {
+      "placeType": "festival_event",
+      "phone": "406-768-2343",
+      "website": "https://fortpecktribes.org/",
+      "description": "Active Labor Day weekend cultural celebration and powwow in Poplar, Montana. Adventure Zone outreach exists from both 2024 and Aug. 13, 2026 without a reply."
+    },
+    "contacts": [
+      {
+        "id": null,
+        "name": "Maureen Dionne",
+        "phone": "406-768-2343",
+        "email": "mdionne@fortpecktribes.net",
+        "role": "Poplar Indian Days contact",
+        "primary": true
+      }
+    ],
+    "booking": {
+      "enabled": true,
+      "name": "Poplar Indian Days - 2026",
+      "status": "contact_due",
+      "startsAt": "2026-09-03",
+      "endsAt": "2026-09-06",
+      "nextActionKind": "call",
+      "nextActionDueAt": "2026-09-02",
+      "travelLegId": null
+    },
+    "familyId": null,
+    "parentOrganizationId": null,
+    "notes": [
+      {
+        "subject": "Repeated outreach without reply — one respectful phone check",
+        "body": "The profile contains Amy's 2024 pitch, and Gmail confirms another package email was sent to Maureen Dionne on Aug. 13, 2026 with no reply. The event begins Labor Day weekend. Make one respectful phone call to 406-768-2343 to ask whether Adventure Zone is a fit for a future year and who handles planning. If there is no interest or no response, do not keep repeating the same annual email without a new contact or changed event need."
+      }
+    ],
+    "followUps": [
+      {
+        "label": "Call Poplar Indian Days once",
+        "reason": "There has been repeated email outreach without a reply. Call Maureen at 406-768-2343 once, ask whether Adventure Zone is appropriate for a future year and who owns planning, then log the answer and avoid repeated generic outreach.",
+        "dueAt": "2026-09-02T16:00:00.000Z"
+      }
+    ]
+  }
+]

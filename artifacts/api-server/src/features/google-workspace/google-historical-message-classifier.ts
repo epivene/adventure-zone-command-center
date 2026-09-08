@@ -29,6 +29,7 @@ import {
   type GoogleLearnedProfileTarget,
 } from "./google-validation-learning-repository";
 import { triageGoogleEmailWithAi } from "./google-ai-email-triage";
+import { withGoogleTimeout } from "./google-async-timeout";
 
 const MAX_BODY_CHARS = 18_000;
 
@@ -99,10 +100,14 @@ function directTarget(result: GoogleRelevanceResult): { id: string; name: string
 async function readableBody(
   client: GoogleWorkspaceReadClient,
   threadId: string,
+  timeoutMs: number,
 ): Promise<string> {
   if (!client.getThreadDetail) return "";
   try {
-    const thread = await client.getThreadDetail(threadId);
+    const thread = await withGoogleTimeout(
+      client.getThreadDetail(threadId),
+      timeoutMs,
+    );
     return thread.messages
       .map((message) => message.bodyText)
       .join("\n")
@@ -163,6 +168,7 @@ export class GoogleHistoricalMessageClassifier {
   private readonly contactResolver: ContactResolverAccess;
   private readonly aiFactory: () => Promise<AiCompletionClient>;
   private readonly aiEnabled: boolean;
+  private readonly ioTimeoutMs: number;
   private contextPromise: Promise<GoogleHistoricalClassifierContext> | null = null;
   private aiPromise: Promise<AiCompletionClient | null> | null = null;
 
@@ -171,11 +177,13 @@ export class GoogleHistoricalMessageClassifier {
     contactResolver?: ContactResolverAccess;
     aiFactory?: () => Promise<AiCompletionClient>;
     aiEnabled?: boolean;
+    ioTimeoutMs?: number;
   }) {
     this.contextLoader = options?.contextLoader ?? defaultContextLoader;
     this.contactResolver = options?.contactResolver ?? new GoogleContactProfileResolver();
     this.aiFactory = options?.aiFactory ?? createAiClient;
     this.aiEnabled = options?.aiEnabled ?? aiEnabledFromEnv();
+    this.ioTimeoutMs = options?.ioTimeoutMs ?? 15_000;
   }
 
   private context(client: GoogleWorkspaceReadClient) {
@@ -215,7 +223,7 @@ export class GoogleHistoricalMessageClassifier {
       result.status === "matched" &&
       result.evidenceCodes.includes("learned_external_email");
     if (result.status !== "matched" || learnedAddressMatch) {
-      bodyText = await readableBody(client, message.threadId);
+      bodyText = await readableBody(client, message.threadId, this.ioTimeoutMs);
       const bodyMatch = matchGoogleBodyToProfiles({
         bodyText,
         profiles: context.profiles,
@@ -283,7 +291,7 @@ export class GoogleHistoricalMessageClassifier {
     const candidates = uniqueProfiles(result.candidates, contactProfileCandidates);
     const ai = await this.ai();
     if (ai) {
-      if (!bodyText) bodyText = await readableBody(client, message.threadId);
+      if (!bodyText) bodyText = await readableBody(client, message.threadId, this.ioTimeoutMs);
       const triage = await triageGoogleEmailWithAi({
         ai,
         subject: message.headers.subject,
@@ -295,6 +303,7 @@ export class GoogleHistoricalMessageClassifier {
         matchedContactName:
           contactCandidates.length === 1 ? contactCandidates[0].name : null,
         candidateProfiles: candidates,
+        timeoutMs: this.ioTimeoutMs,
       });
       if (triage.outcome === "match" && triage.profileId) {
         const target = candidates.find((candidate) => candidate.id === triage.profileId);

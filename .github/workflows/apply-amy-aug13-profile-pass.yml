@@ -1,0 +1,152 @@
+name: Apply Amy Aug 13 profile pass
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/apply-amy-aug13-profile-pass.yml"
+      - "imports/approved-profiles/2026-09-02-amy-aug13-silent-profile-pass.json"
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+
+      - name: Apply approved profile pass and verify
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          node <<'NODE'
+          const fs = require("node:fs");
+          const base = process.env.API_URL.replace(/\/$/, "");
+          const token = process.env.ASSISTANT_IMPORT_TOKEN;
+          const source = "imports/approved-profiles/2026-09-02-amy-aug13-silent-profile-pass.json";
+          const payloads = JSON.parse(fs.readFileSync(source, "utf8"));
+          const headers = { Authorization: `Bearer ${token}` };
+
+          const normalize = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+          async function request(path, options = {}) {
+            const response = await fetch(`${base}/api/assistant-import/${path}`, {
+              ...options,
+              headers: {
+                ...headers,
+                ...(options.body ? { "Content-Type": "application/json" } : {}),
+                ...(options.headers ?? {}),
+              },
+            });
+            const text = await response.text();
+            if (!response.ok) throw new Error(`${path}: HTTP ${response.status} ${text.slice(0, 500)}`);
+            return JSON.parse(text);
+          }
+
+          async function resolve(payload) {
+            const names = [payload.event.name, ...(payload.aliases ?? [])];
+            const byId = new Map();
+            for (const name of names) {
+              const search = await request(`profile-search?q=${encodeURIComponent(name)}&limit=20`);
+              for (const result of search.results ?? []) {
+                if (result.kind === "organization" && result.id) byId.set(result.id, result);
+              }
+            }
+            const expectedNames = new Set(names.map(normalize));
+            const compatible = [...byId.values()].filter((result) => {
+              const cityOk = !payload.event.city || !result.city || normalize(result.city) === normalize(payload.event.city);
+              const regionOk = !payload.event.region || !result.region || normalize(result.region) === normalize(payload.event.region);
+              return cityOk && regionOk;
+            });
+            const exact = compatible.filter((result) => expectedNames.has(normalize(result.label)));
+            const matches = exact.length ? exact : compatible.filter((result) => {
+              const label = normalize(result.label);
+              return [...expectedNames].some((name) => label.includes(name) || name.includes(label));
+            });
+            const ids = [...new Set(matches.map((item) => item.id))];
+            if (ids.length !== 1) throw new Error(`Expected one live profile for ${payload.event.name}; found ${ids.length}`);
+            return ids[0];
+          }
+
+          (async () => {
+            const receipt = { appliedAt: new Date().toISOString(), profiles: [], latah: null };
+            for (const payload of payloads) {
+              const profileId = await resolve(payload);
+              const eventPayload = { ...payload, event: { ...payload.event, id: profileId } };
+              const upsert = await request("event-profiles", { method: "POST", body: JSON.stringify(eventPayload) });
+              const notes = [];
+              for (const note of payload.notes ?? []) {
+                notes.push(await request("profile-notes", {
+                  method: "POST",
+                  body: JSON.stringify({ organizationId: profileId, ...note }),
+                }));
+              }
+              const followUps = [];
+              for (const followUp of payload.followUps ?? []) {
+                followUps.push(await request("today-followups", {
+                  method: "POST",
+                  body: JSON.stringify({ organizationId: profileId, ...followUp, preserveExisting: false }),
+                }));
+              }
+              receipt.profiles.push({
+                name: payload.event.name,
+                profileId,
+                upsert,
+                notes: notes.map((item) => ({ created: item.created, activityId: item.activityId })),
+                followUps: followUps.map((item) => ({ created: item.created, followUpId: item.followUpId, dueAt: item.dueAt })),
+              });
+            }
+
+            const latahId = "4a9c751c-bbf9-4e21-9041-aa5f3302a967";
+            receipt.latah = await request("today-followups", {
+              method: "POST",
+              body: JSON.stringify({
+                organizationId: latahId,
+                label: "Call Latah County Fair once",
+                reason: "Call 208-883-5722 and ask whether the existing carnival arrangement leaves room for a supplemental staffed Adventure Zone attraction. Log the outcome; do not send another introductory email.",
+                dueAt: "2026-09-02T16:00:00.000Z",
+                preserveExisting: false,
+              }),
+            });
+
+            const verification = [];
+            for (const item of [...receipt.profiles, { name: "Latah County Fair", profileId: latahId }]) {
+              const history = await request(`profile-history/${item.profileId}`);
+              verification.push({
+                name: item.name,
+                profileId: item.profileId,
+                contacts: history.contacts,
+                bookings: history.bookings,
+                openFollowUps: history.followUps.filter((followUp) => !followUp.completedAt),
+                notes: history.notes.slice(0, 8),
+              });
+            }
+            fs.writeFileSync("amy-aug13-profile-pass-receipt.json", JSON.stringify({ receipt, verification }, null, 2));
+            const lines = ["# Amy Aug. 13 profile pass", "", `- Applied profiles: ${receipt.profiles.length}`];
+            for (const item of verification) lines.push(`- ${item.name}: ${item.openFollowUps.length} open follow-up(s)`);
+            fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n") + "\n");
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Upload protected receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: amy-aug13-profile-pass-receipt
+          path: amy-aug13-profile-pass-receipt.json
+          retention-days: 7

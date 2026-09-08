@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 const today = fs.readFileSync(path.resolve(__dirname, "TodayPage.tsx"), "utf8");
-const upcoming = fs.readFileSync(path.resolve(__dirname, "../../api-server/src/features/follow-ups/today-upcoming-events.ts"), "utf8");
+const upcoming = fs.readFileSync(path.resolve(__dirname, "../../../api-server/src/features/follow-ups/today-upcoming-events.ts"), "utf8");
 
 describe("Today lead and event labels", () => {
   it("uses queue-scoped new lead count", () => {
