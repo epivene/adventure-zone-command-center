@@ -225,6 +225,57 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
     }
   });
 
+  it("creates a new execution when returning to a previously completed profile", async () => {
+    const { db, repository } = await fixture();
+    try {
+      const first = await repository.resolveReview(
+        assignment(organizationA, "2026-09-08T12:00:00Z"),
+      );
+      await db.query(
+        "UPDATE google_workspace_gmail_mutations SET state = 'completed' WHERE id = $1",
+        [first.mutation.id],
+      );
+      const second = await repository.resolveReview(
+        assignment(organizationB, "2026-09-08T12:01:00Z"),
+      );
+      await db.query(
+        "UPDATE google_workspace_gmail_mutations SET state = 'completed' WHERE id = $1",
+        [second.mutation.id],
+      );
+      const third = await repository.resolveReview(
+        assignment(organizationA, "2026-09-08T12:02:00Z"),
+      );
+
+      expect(third.mutation.id).not.toBe(first.mutation.id);
+      expect(third.mutation.state).toBe("pending");
+      expect(third.mutation.idempotencyKey).toBe(
+        `assign-thread:${connectionId}:thread-1:${organizationA}`,
+      );
+      const mutations = await db.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM google_workspace_gmail_mutations",
+      );
+      expect(mutations.rows[0]?.count).toBe("3");
+    } finally {
+      await db.close();
+    }
+  });
+
+  it("reports connection checkout failures with a safe stage", async () => {
+    const repository = new PostgresGoogleProfileAssignmentTransaction({
+      connect: async () => {
+        throw Object.assign(new Error("connection unavailable"), { code: "08006" });
+      },
+    });
+
+    await expect(repository.resolveReview(
+      assignment(organizationA, "2026-09-08T12:00:00Z"),
+    )).rejects.toMatchObject({
+      message: "GOOGLE_WORKSPACE_PROFILE_ASSIGNMENT_TRANSACTION_FAILED",
+      stage: "connection",
+      postgresCode: "08006",
+    });
+  });
+
   it("atomically upserts a corrected matched email", async () => {
     const { db, repository } = await fixture();
     try {
