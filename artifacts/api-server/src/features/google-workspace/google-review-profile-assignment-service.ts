@@ -74,13 +74,15 @@ export class GoogleReviewProfileAssignmentService {
   }
 
   async resolveReview(input: BaseInput): Promise<GoogleReviewAssignmentView> {
+    const production = await this.syncFactory();
     await this.reviewPersistence.resolve(input);
-    return this.syncSavedDecision(input);
+    return this.syncSavedDecision(input, production);
   }
 
   async assignMatched(input: MatchedInput): Promise<GoogleReviewAssignmentView> {
+    const production = await this.syncFactory();
     await this.matchedPersistence.assign(input);
-    return this.syncSavedDecision(input);
+    return this.syncSavedDecision(input, production);
   }
 
   async retryGmailMutation(
@@ -115,7 +117,13 @@ export class GoogleReviewProfileAssignmentService {
     return gmailSync;
   }
 
-  private async syncSavedDecision(input: BaseInput): Promise<GoogleReviewAssignmentView> {
+  private async syncSavedDecision(
+    input: BaseInput,
+    production: {
+      connectionId: string;
+      service: GoogleProfileLabelSyncServicePort;
+    },
+  ): Promise<GoogleReviewAssignmentView> {
     const result = await this.pool.query(
       `SELECT item.connection_id::text,
               item.thread_id,
@@ -136,7 +144,6 @@ export class GoogleReviewProfileAssignmentService {
       typeof row.decision_revision !== "string"
     ) throw new Error("GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND");
 
-    const production = await this.syncFactory();
     if (production.connectionId !== row.connection_id) {
       throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
     }
