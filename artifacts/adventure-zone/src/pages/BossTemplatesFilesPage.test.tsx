@@ -87,14 +87,21 @@ describe("BossTemplatesFilesPage", () => {
     expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Alpha COI", "Zebra Contract"]);
   });
 
-  it("gives Dave his own upload document control", async () => {
+  it("lets Dave name and categorize a document before uploading it", async () => {
     render(<BossTemplatesFilesPage />);
     await screen.findByText("Zebra Contract");
+    fireEvent.click(screen.getByRole("button", { name: "Upload document" }));
+
     const file = new File(["document"], "new-contract.pdf", { type: "application/pdf" });
+    fireEvent.change(screen.getByLabelText("Document file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Document name"), { target: { value: "County Fair Agreement" } });
+    fireEvent.change(screen.getByLabelText("Upload category"), { target: { value: "contract" } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload selected document" }));
 
-    fireEvent.change(screen.getByLabelText("Choose document to upload"), { target: { files: [file] } });
-
-    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(file));
+    await waitFor(() => expect(mocks.upload).toHaveBeenCalledWith(file, {
+      displayName: "County Fair Agreement",
+      category: "contract",
+    }));
     await waitFor(() => expect(mocks.listAll).toHaveBeenCalledTimes(2));
   });
 });
