@@ -3,7 +3,7 @@ name: Boss Unified Documents CI
 on:
   pull_request:
     paths:
-     -      - "artifacts/adventure-zone/src/lib/boss-documents-api.ts"
+      - "artifacts/adventure-zone/src/lib/boss-documents-api.ts"
       - "artifacts/adventure-zone/src/lib/office-documents-api.ts"
       - "artifacts/adventure-zone/src/components/business-documents/role-business-documents-page.tsx"
       - "artifacts/adventure-zone/src/components/boss/boss-shell.tsx"
