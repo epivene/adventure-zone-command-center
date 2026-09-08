@@ -51,7 +51,7 @@ export function createGoogleWorkspaceMatchedCorrectionsRouter(options?: {
   const assignmentService = options?.assignmentService ??
     (options?.service
       ? { assignMatched: service.assign.bind(service) }
-      : new GoogleReviewProfileAssignmentService({ matchedPersistence: service }));
+      : new GoogleReviewProfileAssignmentService());
   const now = options?.now ?? (() => new Date());
 
   router.put("/google-workspace/validation/matched/:messageId", async (req, res) => {
