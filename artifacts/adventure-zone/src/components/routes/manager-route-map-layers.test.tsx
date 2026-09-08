@@ -46,6 +46,7 @@ import { ManagerRouteMapLayers, ManagerTripNavigationActions } from "./manager-r
 
 const event: MapEvent & { planningEmphasis: "primary" | "dimmed"; routeStopNumber: number | null } = {
   id: "miles",
+  organizationId: "profile-miles",
   name: "Eastern Montana Fair",
   city: "Miles City",
   region: "MT",
@@ -117,6 +118,7 @@ describe("ManagerRouteMapLayers", () => {
         handoffs={[handoff]}
         focusedEventId="miles"
         managerMode="planning"
+        profileBasePath="/boss/profiles"
       />,
     );
 
@@ -133,6 +135,8 @@ describe("ManagerRouteMapLayers", () => {
     expect(handoffIconCall?.[0].html).toContain("az-handoff-marker--suggested");
 
     const popup = mocks.markerObject.bindPopup.mock.calls.map(([html]) => String(html)).find((html) => html.includes("Eastern Montana Fair"));
+    expect(popup).toContain('href="/boss/profiles/profile-miles"');
+    expect(popup).toContain("Event profile");
     expect(popup).toContain("Directions to event");
     expect(popup).toContain("google.com/maps/dir/");
     expect(popup).not.toContain("key=");

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "wouter";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
@@ -76,7 +77,7 @@ function LegCard({ leg }: { leg: ScheduleLeg }) {
             <div className="grid gap-2">
               {bookings.map((booking) => (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" key={booking.id}>
-                  <div><p className="text-sm font-semibold text-slate-900">{booking.name ?? "Event"}</p>{booking.startsAt ? <p className="text-xs text-slate-500">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}</div>
+                  <div>{booking.organizationId ? <Link className="text-sm font-semibold text-slate-900 hover:text-orange-700" href={`/boss/profiles/${encodeURIComponent(booking.organizationId)}`}>{booking.name ?? "Event"}</Link> : <p className="text-sm font-semibold text-slate-900">{booking.name ?? "Event"}</p>}{booking.startsAt ? <p className="text-xs text-slate-500">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}</div>
                   {booking.status ? <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold capitalize text-slate-700">{booking.status.replaceAll("_", " ")}</span> : null}
                 </div>
               ))}
@@ -91,6 +92,7 @@ function LegCard({ leg }: { leg: ScheduleLeg }) {
 function asMapEvent(booking: BossBooking): MapEvent {
   return {
     id: booking.id,
+    organizationId: booking.organizationId ?? booking.organization?.id ?? null,
     name: booking.name ?? "Event",
     city: booking.city ?? "",
     region: booking.region ?? "",
@@ -255,7 +257,7 @@ export default function BossSchedulePage() {
                   </button>
                 </div>
               ) : null}
-              <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} readOnly />
+              <EventCalendar colors={schedule?.displaySettings} events={calendarEvents} initialMonth={activeMonth} onMonthChange={setActiveMonth} profileBasePath="/boss/profiles" readOnly />
             </section>
           ) : (
             <section aria-labelledby="boss-event-map-title" className="grid gap-4">
@@ -264,7 +266,7 @@ export default function BossSchedulePage() {
                 <p className="mt-1 text-sm text-slate-600">Confirmed and potential route context across the selected season and leg.</p>
               </div>
               <RouteConflictWarning conflicts={routeConflicts} readOnly />
-              <EventMap events={scopedEvents} readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
+              <EventMap events={scopedEvents} profileBasePath="/boss/profiles" readOnly requestedSeasonYear={Number(season)} travelLegs={travelLegs} />
             </section>
           )}
 

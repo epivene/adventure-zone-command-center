@@ -19,6 +19,7 @@ export type RouteMappingState =
 
 export type MapEvent = {
   id: string;
+  organizationId?: string | null;
   name: string;
   city: string;
   region: string;
@@ -51,6 +52,7 @@ export type MapFilters = {
 
 export type MapFeatureProperties = {
   id: string;
+  organizationId?: string | null;
   name: string;
   status: MapEvent["status"];
   probability: MapEvent["probability"];
@@ -175,6 +177,7 @@ export function toMapDataset(events: MapEvent[]): MapDataset {
         },
         properties: {
           id: event.id,
+          organizationId: event.organizationId,
           name: event.name,
           status: event.status,
           probability: event.probability,

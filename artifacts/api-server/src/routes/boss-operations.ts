@@ -43,6 +43,7 @@ router.get("/boss/legs", requireBoss, async (_req, res) => {
     const routeMetadata = routeMetadataById.get(event.id);
     return {
       id: event.id,
+      organizationId: event.organizationId,
       name: event.name,
       city: event.city,
       region: event.region,
