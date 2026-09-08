@@ -56,6 +56,16 @@ export const pool = new Pool({
   application_name: "adventure-zone-command-center-api",
   ...databasePoolTimeouts(),
 });
+
+// Session-level Gmail thread locks must not reserve connections from the
+// application query pool. Keeping this pool small bounds Gmail concurrency while
+// leaving the main pool available to resolve labels and persist job state.
+export const gmailThreadLockPool = new Pool({
+  connectionString: finalConnectionString,
+  application_name: "adventure-zone-command-center-gmail-thread-lock",
+  max: 2,
+  ...databasePoolTimeouts(),
+});
 const schema = {
   ...coreSchema,
   ...eventFamilySchema,
