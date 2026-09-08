@@ -52,8 +52,17 @@ type Service = BusinessDocumentService;
 type Ingestion = Pick<BusinessDocumentIngestion, "ingest">;
 
 function actor(req: unknown) {
-  const request = req as { userId?: string; bossAccount?: { accountId: string } };
-  return String(request.userId ?? (request.bossAccount ? `boss:${request.bossAccount.accountId}` : "owner"));
+  const request = req as {
+    userId?: string;
+    bossAccount?: { accountId: string };
+    officeAccount?: { accountId: string };
+  };
+  return String(
+    request.userId
+      ?? (request.bossAccount ? `boss:${request.bossAccount.accountId}` : undefined)
+      ?? (request.officeAccount ? `office:${request.officeAccount.accountId}` : undefined)
+      ?? "owner",
+  );
 }
 
 function idParam(value: string | string[] | undefined) {
@@ -79,6 +88,17 @@ function safeUploadFilename(header: string | string[] | undefined) {
   }
 }
 
+function safeUploadDisplayName(header: string | string[] | undefined) {
+  if (typeof header !== "string") return null;
+  try {
+    const value = decodeURIComponent(header).trim();
+    if (!value || value.length > 255 || /[\u0000-\u001f]/.test(value)) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
 export function createBusinessDocumentsRouter(
   service: Service = new BusinessDocumentService(),
   ingestion: Ingestion = new BusinessDocumentIngestion(),
@@ -90,7 +110,20 @@ export function createBusinessDocumentsRouter(
     const bytes = req.body instanceof Buffer ? new Uint8Array(req.body) : new Uint8Array();
     const rawMimeType = req.headers["content-type"];
     const mimeType = (Array.isArray(rawMimeType) ? rawMimeType[0] : rawMimeType)?.split(";", 1)[0]?.trim() || "application/octet-stream";
+    const rawDisplayName = req.headers["x-document-name"];
+    const rawCategory = req.headers["x-document-category"];
+    const hasUploadMetadata = rawDisplayName !== undefined || rawCategory !== undefined;
+    const uploadMetadata = hasUploadMetadata
+      ? z.object({
+          displayName: z.string().min(1).max(255),
+          category: z.enum(businessDocumentCategoryValues),
+        }).safeParse({
+          displayName: safeUploadDisplayName(rawDisplayName),
+          category: Array.isArray(rawCategory) ? rawCategory[0] : rawCategory,
+        })
+      : null;
     if (!filename || !bytes.length) { res.status(400).json({ error: "Choose a non-empty document with a safe filename." }); return; }
+    if (uploadMetadata && !uploadMetadata.success) { res.status(400).json({ error: "Choose a valid document name and category." }); return; }
     try {
       const result = await ingestion.ingest({
         bytes,
@@ -103,6 +136,13 @@ export function createBusinessDocumentsRouter(
         actor: actor(req),
       });
       if (result.outcome === "skipped") { res.status(422).json({ error: "That file is not an importable business document." }); return; }
+      if (uploadMetadata?.success) {
+        await service.update(result.documentId, {
+          displayName: uploadMetadata.data.displayName,
+          category: uploadMetadata.data.category,
+          notes: null,
+        }, actor(req));
+      }
       res.status(201).json(result);
     } catch {
       res.status(503).json({ error: "Could not store that business document." });
