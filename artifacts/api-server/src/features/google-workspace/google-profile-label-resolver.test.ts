@@ -15,6 +15,7 @@ function harness(input?: {
   mapping?: GoogleProfileLabelMapping | null;
   organizationName?: string;
   otherOwnerLabelId?: string;
+  labelsAfterCreateConflict?: GoogleLabelSummary[];
 }) {
   let mapping = input?.mapping ?? null;
   const labels = input?.labels ?? [];
@@ -53,9 +54,23 @@ function harness(input?: {
     markState: vi.fn(async () => undefined),
     listManagedLabelIds: vi.fn(async () => mapping ? [mapping.gmailLabelId] : []),
   };
+  let listCalls = 0;
   const gmail: GoogleGmailLabelMutationClient = {
-    listLabels: vi.fn(async () => labels),
-    createLabel: vi.fn(async () => created),
+    listLabels: vi.fn(async () => {
+      listCalls += 1;
+      return listCalls > 1 && input?.labelsAfterCreateConflict
+        ? input.labelsAfterCreateConflict
+        : labels;
+    }),
+    createLabel: vi.fn(async () => {
+      if (input?.labelsAfterCreateConflict) {
+        throw Object.assign(
+          new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT"),
+          { code: "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT" },
+        );
+      }
+      return created;
+    }),
     renameLabel: vi.fn(async ({ labelId, name }) => ({
       id: labelId,
       name,
@@ -156,6 +171,55 @@ describe("GoogleProfileLabelResolver", () => {
     });
     expect(h.gmail.createLabel).not.toHaveBeenCalled();
     expect(h.repository.markState).toHaveBeenCalled();
+  });
+
+  it("stops when an exact label and a normalized duplicate coexist", async () => {
+    const h = harness({
+      labels: [
+        {
+          id: "Label_exact",
+          name: "Z - AdventureZone/Profiles/Elko County Fair",
+          type: "user",
+        },
+        {
+          id: "Label_duplicate",
+          name: "Z - AdventureZone/Profiles/ELKO  County Fair",
+          type: "user",
+        },
+      ],
+    });
+
+    await expect(h.resolver.resolve({
+      connectionId: "conn-1",
+      organizationId: "org-1",
+    })).resolves.toMatchObject({
+      status: "conflict",
+      labels: [{ id: "Label_exact" }, { id: "Label_duplicate" }],
+    });
+    expect(h.repository.adopt).not.toHaveBeenCalled();
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
+
+  it("adopts the winning label after a concurrent Gmail create conflict", async () => {
+    const winner = {
+      id: "Label_winner",
+      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      type: "user" as const,
+    };
+    const h = harness({
+      labels: [],
+      labelsAfterCreateConflict: [winner],
+    });
+
+    await expect(h.resolver.resolve({
+      connectionId: "conn-1",
+      organizationId: "org-1",
+    })).resolves.toMatchObject({
+      status: "resolved",
+      mapping: { gmailLabelId: "Label_winner" },
+    });
+    expect(h.gmail.createLabel).toHaveBeenCalledOnce();
+    expect(h.gmail.listLabels).toHaveBeenCalledTimes(2);
   });
 
   it("creates one canonical label only when no compatible label exists", async () => {
