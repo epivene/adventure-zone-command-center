@@ -4,6 +4,35 @@ export type GoogleLabelSummary = {
   type: "system" | "user";
 };
 
+
+export type GoogleGmailLabelMutationClient = {
+  listLabels(): Promise<GoogleLabelSummary[]>;
+  createLabel?(name: string): Promise<GoogleLabelSummary>;
+  renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
+  modifyThreadLabels?(input: {
+    threadId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+  modifyMessageLabels?(input: {
+    messageId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+  createLabel(name: string): Promise<GoogleLabelSummary>;
+  renameLabel(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
+  modifyThreadLabels(input: {
+    threadId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+  modifyMessageLabels(input: {
+    messageId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+};
+
 export type GoogleCalendarSummary = {
   id: string;
   summary: string;
