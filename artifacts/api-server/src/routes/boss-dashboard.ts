@@ -240,10 +240,7 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       recommendReturn: item.recommendReturn,
     })),
   ];
-  const recentCompletedMaintenanceEvents = recentCompletedChecklists.rows.map((item) => ({
-    ...item,
-    completedAt: item.completedAt.toISOString(),
-  }));
+  const recentCompletedMaintenanceEvents = recentCompletedChecklists.rows;
   const checklistAndMaintenance = checklists.map((item) => ({
     id: item.id,
     bookingId: item.bookingId,
