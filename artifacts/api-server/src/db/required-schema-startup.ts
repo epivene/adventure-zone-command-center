@@ -16,7 +16,7 @@ import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-s
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
 
-const REQUIRED_LEAD_INTAKE_TIMEOUT_MS = 120_000;
+const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
 
 type RequiredStep = () => Promise<unknown>;
 type RequiredStepRunner = (
@@ -25,6 +25,11 @@ type RequiredStepRunner = (
   timeoutMs?: number,
   onTimeout?: (error: Error) => void,
 ) => Promise<unknown>;
+
+function isDroppedDatabaseConnection(error: unknown): boolean {
+  return error instanceof Error
+    && /connection (?:terminated|closed) unexpectedly|econnreset/i.test(error.message);
+}
 
 export async function runRequiredSchemaStartup(dependencies?: {
   run?: RequiredStepRunner;
@@ -46,70 +51,81 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureBusinessDocuments?: RequiredStep;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
-  await run(
+  const runRequired = async (
+    name: string,
+    step: RequiredStep,
+    onTimeout?: (error: Error) => void,
+  ) => {
+    try {
+      return await run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+    } catch (error) {
+      if (!isDroppedDatabaseConnection(error)) throw error;
+      return run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+    }
+  };
+  await runRequired(
     "required paper notes schema",
     dependencies?.ensurePaperNotes ?? ensurePaperNotesSchemaBeforeListen,
   );
-  await run("required inbound calling schema", dependencies?.ensureInboundCalling ?? ensureInboundCallingSchemaBeforeListen);
-  await run(
+  await runRequired("required inbound calling schema", dependencies?.ensureInboundCalling ?? ensureInboundCallingSchemaBeforeListen);
+  await runRequired(
     "required Google Workspace schema",
     dependencies?.ensureGoogleWorkspace ?? ensureGoogleWorkspaceSchemaBeforeListen,
   );
   const leadIntakeAbortController = new AbortController();
-  await run(
+  await runRequired(
     "required lead intake schema",
     dependencies?.ensureLeadIntake
       ?? (() => ensureLeadIntakeSchemaBeforeListen({
         signal: leadIntakeAbortController.signal,
       })),
-    REQUIRED_LEAD_INTAKE_TIMEOUT_MS,
     (error) => leadIntakeAbortController.abort(error),
   );
-  await run(
+  await runRequired(
     "required leg assignment schema",
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required event review dismissal schema",
     dependencies?.ensureEventReviewDismissals ?? ensureEventReviewDismissalSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required follow-up dismissal persistence",
     dependencies?.ensureFollowUpDismissals ?? ensureFollowUpDismissalPersistenceBeforeListen,
   );
-  await run(
+  await runRequired(
     "required organizer feedback schema",
     dependencies?.ensureOrganizerFeedback ?? ensureOrganizerFeedbackSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required computer calling schema",
     dependencies?.ensureComputerCalling ?? ensureComputerCallingSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required office coordinator schema",
     dependencies?.ensureOfficeCoordinator ?? ensureOfficeCoordinatorSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required Boss schema",
     dependencies?.ensureBoss ?? ensureBossSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required website inquiry schema",
     dependencies?.ensureWebsiteInquiries ?? ensureWebsiteInquirySchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required profile filler schema",
     dependencies?.ensureProfileFiller ?? ensureProfileFillerSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required profile touch schema",
     dependencies?.ensureProfileTouch ?? ensureProfileTouchSchema,
   );
-  await run(
+  await runRequired(
     "required Design Studio schema",
     dependencies?.ensureDesignStudio ?? ensureDesignStudioSchemaBeforeListen,
   );
-  await run(
+  await runRequired(
     "required business document schema",
     dependencies?.ensureBusinessDocuments ?? ensureBusinessDocumentSchemaBeforeListen,
   );
