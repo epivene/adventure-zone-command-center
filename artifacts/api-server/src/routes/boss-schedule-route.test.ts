@@ -53,6 +53,7 @@ const databaseLegs = routeLegs.map((leg, index) => ({
 
 const rawEvents = [{
   id: "booking-kristy",
+  organizationId: "profile-kristy",
   name: "Moorcroft Jubilee Days",
   city: "Moorcroft",
   region: "WY",
@@ -74,6 +75,7 @@ const rawEvents = [{
   seasonYear: 2026,
 }, {
   id: "booking-hulk",
+  organizationId: "profile-hulk",
   name: "Caribou County Fair",
   city: "Grace",
   region: "ID",
@@ -220,6 +222,7 @@ describe("Boss schedule route parity", () => {
     expect(response.body.bookings).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "booking-kristy",
+        organizationId: "profile-kristy",
         latitude: 44.2633,
         longitude: -104.9505,
         mappingState: "mapped_city",
@@ -230,6 +233,7 @@ describe("Boss schedule route parity", () => {
       }),
       expect.objectContaining({
         id: "booking-hulk",
+        organizationId: "profile-hulk",
         latitude: 42.576,
         longitude: -111.729,
         mappingState: "mapped_city",
