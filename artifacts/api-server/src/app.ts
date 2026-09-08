@@ -57,7 +57,7 @@ app.use(
 app.use(
   cors({
     origin: true,
-    allowedHeaders: ["Content-Type", "Authorization"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-File-Name"],
   }),
 );
 app.use(express.json({ limit: "1mb" }));
