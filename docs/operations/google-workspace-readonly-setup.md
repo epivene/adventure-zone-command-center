@@ -1,6 +1,6 @@
-# Google Workspace Read-Only Setup
+# Google Workspace Setup and Gmail Profile-Label Rollout
 
-This procedure connects the Adventure Zone company Google account to the Command Center for the approved read-only Gmail, Calendar, and Drive work.
+This procedure connects the Adventure Zone company Google account with least-privilege Gmail, Calendar, and Drive access, then safely enables Email Review profile labeling.
 
 Phase 1 only establishes the secure connection and saves exact business-scope IDs. It does **not** import email bodies, attachments, Drive files, or Calendar events.
 
@@ -11,6 +11,7 @@ Deploy the foundation with these switches off:
 ```text
 GOOGLE_WORKSPACE_SYNC_ENABLED=false
 GOOGLE_WORKSPACE_AI_ENABLED=false
+GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED=false
 ```
 
 The Phase 1 application does not start a Google historical worker, even if these values are accidentally present. Keep them false so later phases also begin safely.
@@ -77,7 +78,7 @@ Requirements:
 1. Deploy the API and frontend from the approved Phase 1 release.
 2. Sign in as the Command Center administrator.
 3. Open **Admin Tools → Google Workspace**.
-4. Confirm the page says the connection is read-only.
+4. Confirm the page describes the Email Review label/archive permission.
 5. Select **Connect Google account**.
 6. Sign in to the company Google account and review the requested scopes.
 7. Grant the requested access only when the displayed app and API callback domain are correct.
@@ -88,12 +89,12 @@ The application requests:
 ```text
 openid
 email
-https://www.googleapis.com/auth/gmail.readonly
+https://www.googleapis.com/auth/gmail.modify
 https://www.googleapis.com/auth/calendar.readonly
 https://www.googleapis.com/auth/drive.readonly
 ```
 
-These scopes permit reading the required business data. They do not permit the Command Center to send mail, change Gmail labels, archive messages, or edit Calendar events. The connection is rejected unless Google explicitly reports every required read-only scope. Google may require additional OAuth verification or security review before broader production use of sensitive or restricted scopes.
+The Gmail modify scope permits the Command Center to read mail, create drafts, and perform the narrowly implemented Email Review label changes. Assignment applies one stable profile label to the whole thread and removes `INBOX`; Ignore performs no Gmail mutation. The app never removes `UNREAD`. Calendar and Drive remain read-only. The connection is rejected unless Google explicitly reports every required scope.
 
 ## 6. Preview the business-only scope
 
@@ -138,7 +139,9 @@ Before approving the release, confirm:
 
 - No button exists to start historical backfill.
 - No email body, attachment, Drive file, or Calendar event has been copied.
-- Gmail labels, read state, archive state, and messages are unchanged.
+- Before the rollout flag is enabled, Gmail labels, read state, archive state, and messages are unchanged.
+- After enablement, assigning a review item labels and archives only that entire thread; ignoring leaves Gmail unchanged.
+- A later inbound message is processed at message level so it retains `INBOX` and `UNREAD` while receiving the profile label.
 - Google Calendar events are unchanged.
 - The Office Coordinator workspace has no Google connection settings.
 - Leg-manager accounts have no Google connection settings.
@@ -170,7 +173,7 @@ Generate a new base64 value from exactly 32 random bytes. Do not replace a worki
 
 ### `GOOGLE_WORKSPACE_REQUIRED_SCOPES_MISSING`
 
-The account did not explicitly grant every requested read-only scope. Start the connection flow again through the administrator page and review the consent choices.
+The account did not explicitly grant every requested scope, including Gmail modify. Reconnect once after this release. Start the connection flow again through the administrator page and review the consent choices.
 
 ### `GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED`
 
@@ -179,3 +182,16 @@ Google rejected or revoked the stored refresh credential. Use **Reconnect Google
 ### Expected label or Calendar is missing
 
 Verify the connected account, then inspect the source in Gmail or Google Calendar. The Command Center intentionally does not fuzzy-match a similarly named personal label or Calendar. For a named Calendar, also check for two calendars with the same display name.
+
+
+## 10. Enable profile-label synchronization
+
+1. Deploy with `GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED=false`.
+2. Reconnect the company Google account so the stored grant includes `gmail.modify`.
+3. Confirm the existing Gmail hierarchy `Z - AdventureZone/Profiles` is present.
+4. Enable `GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED=true` and redeploy.
+5. Assign one controlled Email Review thread. Confirm exactly one matching child label exists, the thread is no longer in Inbox, and unread state was not changed.
+6. Send a new reply on that thread. Confirm the new message remains in Inbox and unread, and receives the same profile label.
+7. Use Ignore on a controlled thread and confirm Gmail is unchanged.
+
+If normalized duplicate child labels already exist, the app records a conflict and creates nothing. Resolve the duplicates manually; the rollout never auto-deletes Gmail labels.
