@@ -10,6 +10,7 @@ import { GoogleProfileLabelSyncService } from "./google-profile-label-sync-servi
 
 function harness(enabled = true) {
   let row: GoogleGmailMutationRecord | null = null;
+  const threadLock = vi.fn();
   const mutations = {
     createOrLoad: vi.fn(async (intent: GoogleGmailMutationIntent) => {
       if (!row) {
@@ -20,11 +21,19 @@ function harness(enabled = true) {
           removeLabelIds: [],
           state: "pending",
           attemptCount: 0,
+          intentGeneration: intent.operation === "assign_thread" ? 1 : null,
           lastErrorCode: null,
         };
       }
       return row;
     }),
+    async withThreadLock<T>(
+      input: { connectionId: string; threadId: string },
+      work: () => Promise<T>,
+    ): Promise<T> {
+      threadLock(input);
+      return work();
+    },
     get: vi.fn(async () => row),
     retryNow: vi.fn(async () => {
       if (!row || row.state !== "retryable_error") return null;
@@ -37,6 +46,7 @@ function harness(enabled = true) {
       return row;
     }),
     complete: vi.fn(async (input: {
+      expectedAttemptCount: number;
       targetLabelId: string;
       removeLabelIds: string[];
     }) => {
@@ -47,12 +57,14 @@ function harness(enabled = true) {
         removeLabelIds: input.removeLabelIds,
         lastErrorCode: null,
       };
+      return row;
     }),
     fail: vi.fn(async (input: {
       state: "retryable_error" | "permanent_error" | "conflict";
       errorCode: string;
     }) => {
       row = { ...row!, state: input.state, lastErrorCode: input.errorCode };
+      return row;
     }),
   };
   const gmail: GoogleGmailLabelMutationClient = {
@@ -99,7 +111,15 @@ function harness(enabled = true) {
     gmail,
     now: () => new Date("2026-09-08T12:00:00.000Z"),
   });
-  return { service, mutations, resolver, labels, gmail, current: () => row };
+  return {
+    service,
+    mutations,
+    resolver,
+    labels,
+    gmail,
+    threadLock,
+    current: () => row,
+  };
 }
 
 describe("GoogleProfileLabelSyncService", () => {
@@ -118,6 +138,10 @@ describe("GoogleProfileLabelSyncService", () => {
       gmailLabelId: "Label_target",
     });
 
+    expect(h.threadLock).toHaveBeenCalledWith({
+      connectionId: "conn-1",
+      threadId: "thread-1",
+    });
     expect(h.gmail.modifyThreadLabels).toHaveBeenCalledWith({
       threadId: "thread-1",
       addLabelIds: ["Label_target"],
@@ -164,6 +188,32 @@ describe("GoogleProfileLabelSyncService", () => {
     expect(h.gmail.modifyMessageLabels).not.toHaveBeenCalled();
   });
 
+  it("returns a concurrent completed winner instead of downgrading it", async () => {
+    const h = harness();
+    vi.mocked(h.resolver.resolve).mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED"),
+    );
+    vi.mocked(h.mutations.fail).mockImplementationOnce(async () => ({
+      ...h.current()!,
+      state: "completed",
+      targetLabelId: "Label_10",
+      lastErrorCode: null,
+    }));
+
+    await expect(h.service.assignThread({
+      connectionId: "conn-1",
+      messageId: "message-1",
+      threadId: "thread-1",
+      organizationId: "org-1",
+      actorId: "owner-1",
+      decisionRevision: "revision-1",
+    })).resolves.toMatchObject({
+      state: "completed",
+      gmailLabelId: "Label_10",
+      errorCode: null,
+    });
+  });
+
   it("replays the same operation safely when completion persistence failed", async () => {
     const h = harness();
     vi.mocked(h.mutations.complete)
@@ -176,6 +226,7 @@ describe("GoogleProfileLabelSyncService", () => {
           removeLabelIds: input.removeLabelIds,
           lastErrorCode: null,
         });
+        return current;
       });
 
     const first = await h.service.assignThread({

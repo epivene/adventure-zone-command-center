@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
+import type { GoogleReviewAssignmentView } from "../features/google-workspace/google-review-profile-assignment-service";
 import { createGoogleWorkspaceValidationRouter } from "./google-workspace-validation";
 
 function appWith(options: {
@@ -22,7 +23,7 @@ function appWith(options: {
     organizationId: string;
     actorId: string;
     now: Date;
-  }) => Promise<void>;
+  }) => Promise<void | GoogleReviewAssignmentView>;
   ignoreReviewItem?: (input: {
     messageId: string;
     actorId: string;
@@ -215,6 +216,33 @@ describe("Google Workspace recent validation route", () => {
     expect(response.body.gmailSync).toMatchObject({
       state: "completed",
       gmailLabelId: "Label_10",
+    });
+  });
+
+  it("returns a retryable Gmail mutation without failing the assignment", async () => {
+    const resolveReviewItem = vi.fn(async () => ({
+      organizationId: "10000000-0000-4000-8000-000000000001",
+      threadId: "thread-1",
+      gmailSync: {
+        mutationId: "30000000-0000-4000-8000-000000000001",
+        state: "retryable_error" as const,
+        gmailLabelId: null,
+        gmailLabelName: null,
+        errorCode: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+      },
+    }));
+
+    const response = await request(appWith({ resolveReviewItem }))
+      .put("/google-workspace/validation/review/m1")
+      .send({ organizationId: "10000000-0000-4000-8000-000000000001" });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      ok: true,
+      gmailSync: {
+        mutationId: "30000000-0000-4000-8000-000000000001",
+        state: "retryable_error",
+      },
     });
   });
 

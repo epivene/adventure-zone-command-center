@@ -52,6 +52,38 @@ function fakePool() {
             evidence_codes: ["ai_profile_match"],
             validation_status: "approved",
           },
+          {
+            thread_id: "thread-reassigned",
+            organization_id: "org-a",
+            organization_name: "Lake County Fair",
+            evidence_codes: ["manual_profile_assignment"],
+            validation_status: "approved",
+          },
+          {
+            thread_id: "thread-ignored",
+            organization_id: "org-a",
+            organization_name: "Lake County Fair",
+            evidence_codes: ["manual_profile_assignment"],
+            validation_status: "approved",
+          },
+        ],
+      };
+    }
+    if (text.includes("FROM google_workspace_gmail_thread_intents")) {
+      return {
+        rows: [
+          {
+            thread_id: "thread-reassigned",
+            intent_kind: "assign",
+            organization_id: "org-b",
+            organization_name: "Logan Pride Festival",
+          },
+          {
+            thread_id: "thread-ignored",
+            intent_kind: "ignore",
+            organization_id: null,
+            organization_name: null,
+          },
         ],
       };
     }
@@ -110,6 +142,11 @@ describe("GoogleValidationLearningRepository", () => {
       id: "org-a",
       name: "Lake County Fair",
     });
+    expect(learned.threadTargets.get("thread-reassigned")).toEqual({
+      id: "org-b",
+      name: "Logan Pride Festival",
+    });
+    expect(learned.threadTargets.has("thread-ignored")).toBe(false);
 
     expect(learned.addressTargets.get("fairgrounds@co.lake.or.us")).toEqual({
       id: "org-a",

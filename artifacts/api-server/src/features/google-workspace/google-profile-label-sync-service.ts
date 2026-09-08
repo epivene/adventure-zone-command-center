@@ -35,7 +35,13 @@ export type GoogleProfileLabelSyncServicePort = {
 
 type MutationRepository = Pick<
   PostgresGoogleGmailMutationRepository,
-  "createOrLoad" | "get" | "retryNow" | "claim" | "complete" | "fail"
+  | "createOrLoad"
+  | "get"
+  | "retryNow"
+  | "claim"
+  | "complete"
+  | "fail"
+  | "withThreadLock"
 >;
 
 function safeCode(error: unknown): string {
@@ -92,7 +98,7 @@ implements GoogleProfileLabelSyncServicePort {
       organizationId: input.organizationId,
       operation: "assign_thread",
       idempotencyKey:
-        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}:${input.decisionRevision}`,
+        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`,
       actorId: input.actorId,
     };
     return this.start(intent);
@@ -134,13 +140,14 @@ implements GoogleProfileLabelSyncServicePort {
   ): Promise<GoogleProfileLabelSyncResult> {
     const now = this.dependencies.now?.() ?? new Date();
     if (!this.dependencies.enabled) {
-      await this.dependencies.mutations.fail({
+      const winner = await this.dependencies.mutations.fail({
         id: mutation.id,
         state: "retryable_error",
         errorCode: "GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_DISABLED",
         nextAttemptAt: null,
         now,
       });
+      if (winner?.state === "completed") return this.view(winner);
       return {
         mutationId: mutation.id,
         state: "retryable_error",
@@ -150,7 +157,13 @@ implements GoogleProfileLabelSyncServicePort {
       };
     }
 
-    const claimed = await this.dependencies.mutations.claim(mutation.id, now);
+    return this.dependencies.mutations.withThreadLock(
+      {
+        connectionId: mutation.connectionId,
+        threadId: mutation.threadId,
+      },
+      async () => {
+        const claimed = await this.dependencies.mutations.claim(mutation.id, now);
     if (!claimed) {
       const current = await this.dependencies.mutations.get(mutation.id);
       if (!current) throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
@@ -163,13 +176,15 @@ implements GoogleProfileLabelSyncServicePort {
         organizationId: claimed.organizationId,
       });
       if (resolution.status === "conflict") {
-        await this.dependencies.mutations.fail({
+        const winner = await this.dependencies.mutations.fail({
           id: claimed.id,
+          expectedAttemptCount: claimed.attemptCount,
           state: "conflict",
           errorCode: resolution.code,
           nextAttemptAt: null,
           now,
         });
+        if (winner?.state === "completed") return this.view(winner);
         return {
           mutationId: claimed.id,
           state: "conflict",
@@ -202,24 +217,27 @@ implements GoogleProfileLabelSyncServicePort {
         });
       }
 
-      await this.dependencies.mutations.complete({
+      const winner = await this.dependencies.mutations.complete({
         id: claimed.id,
+        expectedAttemptCount: claimed.attemptCount,
         targetLabelId: target.gmailLabelId,
         removeLabelIds,
         now,
       });
+      if (!winner) {
+        throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
+      }
+      if (winner.state !== "completed") return this.view(winner);
       return {
-        mutationId: claimed.id,
-        state: "completed",
-        gmailLabelId: target.gmailLabelId,
+        ...this.view(winner),
         gmailLabelName: target.gmailLabelName,
-        errorCode: null,
       };
     } catch (error) {
       const code = safeCode(error);
       const state = failureState(code);
-      await this.dependencies.mutations.fail({
+      const winner = await this.dependencies.mutations.fail({
         id: claimed.id,
+        expectedAttemptCount: claimed.attemptCount,
         state,
         errorCode: code,
         nextAttemptAt:
@@ -228,6 +246,7 @@ implements GoogleProfileLabelSyncServicePort {
             : null,
         now,
       });
+      if (winner?.state === "completed") return this.view(winner);
       return {
         mutationId: claimed.id,
         state,
@@ -235,7 +254,9 @@ implements GoogleProfileLabelSyncServicePort {
         gmailLabelName: null,
         errorCode: code,
       };
-    }
+        }
+      },
+    );
   }
 
   private view(mutation: GoogleGmailMutationRecord): GoogleProfileLabelSyncResult {
