@@ -75,6 +75,30 @@ describe("BusinessDocumentRepository", () => {
     }]);
   });
 
+  it("preserves existing metadata when a manual upload deduplicates", async () => {
+    const repo = repository();
+    const first = await repo.ingest(input("gmail", "message-original"));
+    await repo.updateMetadata(first.documentId, {
+      displayName: "Reviewed certificate",
+      category: "coi",
+      notes: "Keep this note",
+    }, "owner");
+
+    const duplicate = input("drive", "manual-duplicate");
+    await repo.ingest({
+      ...duplicate,
+      displayName: "User-entered contract name",
+      category: "contract",
+      preserveMetadataOnDuplicate: true,
+    });
+
+    await expect(repo.getById(first.documentId)).resolves.toMatchObject({
+      displayName: "Reviewed certificate",
+      category: "coi",
+      notes: "Keep this note",
+    });
+  });
+
   it("returns the existing source identity without duplicating provenance", async () => {
     const repo = repository();
     const first = await repo.ingest(input("gmail", "message-1:attachment-1"));

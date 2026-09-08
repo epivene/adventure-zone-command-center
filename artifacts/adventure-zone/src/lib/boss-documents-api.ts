@@ -93,12 +93,14 @@ export const bossBusinessDocumentsApi = {
     }).then(responseJson<{ document: BusinessDocumentRecord }>);
   },
 
-  upload(file: File) {
+  upload(file: File, metadata: { displayName: string; category: BusinessDocumentCategory }) {
     return bossFetch("/boss/business-documents/upload", {
       method: "POST",
       headers: {
         "Content-Type": file.type || "application/octet-stream",
         "X-File-Name": encodeURIComponent(file.name),
+        "X-Document-Name": encodeURIComponent(metadata.displayName),
+        "X-Document-Category": metadata.category,
       },
       body: file,
     }).then(responseJson<{ outcome: string; documentId?: string }>);

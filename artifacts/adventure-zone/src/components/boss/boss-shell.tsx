@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import {
+  Building2,
   Calendar,
   Check,
   ClipboardCheck,
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
   { href: "/boss", label: "Home", icon: House },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
   { href: "/boss/contacts", label: "Contacts", icon: ContactRound },
+  { href: "/boss/profiles", label: "Profiles", icon: Building2 },
   { href: "/boss/receipts", label: "Receipts", icon: Receipt },
   { href: "/boss/reviews", label: "Reviews", icon: Star },
   { href: "/boss/maintenance", label: "Maintenance", icon: Wrench },

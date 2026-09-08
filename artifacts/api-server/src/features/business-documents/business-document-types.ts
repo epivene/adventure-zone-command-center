@@ -41,6 +41,7 @@ export type BusinessDocumentIngestInput = {
   issueDate?: string | null;
   expirationDate?: string | null;
   notes?: string | null;
+  preserveMetadataOnDuplicate?: boolean;
 };
 
 export type DocumentIngestionOutcome = {

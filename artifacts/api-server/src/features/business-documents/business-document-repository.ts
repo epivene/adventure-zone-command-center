@@ -221,7 +221,7 @@ export class BusinessDocumentRepository {
           ],
         );
         await this.addLinks(client, duplicate.document_id, input.links, input.actor);
-        await this.ensureCoiMetadata(client, duplicate.document_id, input);
+        if (!input.preserveMetadataOnDuplicate) await this.ensureCoiMetadata(client, duplicate.document_id, input);
         await client.query(
           "INSERT INTO business_document_audit_events (document_id, action, actor, metadata) VALUES ($1,'source_deduplicated',$2,$3::jsonb)",
           [duplicate.document_id, input.actor, JSON.stringify({ sourceKind: input.source.sourceKind })],

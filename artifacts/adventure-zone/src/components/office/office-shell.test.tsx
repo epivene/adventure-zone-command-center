@@ -30,6 +30,17 @@ beforeEach(() => {
 });
 
 describe("OfficeShell website inquiry access", () => {
+  it("always links Amy to the shared document library", () => {
+    auth.useOfficeAuth.mockReturnValue({
+      office: { accountId: "amy", displayName: "Amy", role: "office_coordinator", canReviewWebsiteInquiries: false },
+      signOut: vi.fn(),
+    });
+    render(<OfficeShell><p>Page</p></OfficeShell>);
+    expect(screen.getAllByRole("link", { name: "Documents" })).not.toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "Documents" })[0]).toHaveAttribute("href", "/office/documents");
+  });
+
+
   it("shows the permission-only link, caps its badge, and polls independently", async () => {
     vi.useFakeTimers();
     auth.useOfficeAuth.mockReturnValue({

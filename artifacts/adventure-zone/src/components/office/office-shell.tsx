@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
-import { Check, ClipboardList, ContactRound, House, Inbox, Mail, MessageCircle, Moon, Palette, Send, Sun, type LucideIcon } from "lucide-react";
+import { Check, ClipboardCheck, ClipboardList, ContactRound, House, Inbox, Mail, MessageCircle, Moon, Palette, Send, Sun, type LucideIcon } from "lucide-react";
 import { cn } from "@workspace/avz-crm/lib/utils";
 import {
   DropdownMenu,
@@ -18,6 +18,7 @@ type OfficeNavItem = { href: string; label: string; icon: LucideIcon };
 const items: OfficeNavItem[] = [
   { href: "/office", label: "Today", icon: House },
   { href: "/office/profiles", label: "Profiles", icon: ContactRound },
+  { href: "/office/documents", label: "Documents", icon: ClipboardCheck },
   { href: "/office/mail", label: "Brochures", icon: Mail },
   { href: "/office/emails", label: "Emails", icon: Send },
   { href: "/office/tasks", label: "Tasks", icon: ClipboardList },

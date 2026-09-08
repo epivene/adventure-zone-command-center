@@ -94,6 +94,27 @@ describe("business document routes", () => {
     }));
   });
 
+  it("passes supplied display name and category into the ingestion transaction", async () => {
+    const { app, service, ingestion } = setup();
+    await request(app)
+      .post("/business-documents/upload")
+      .set(ownerHeader())
+      .set("content-type", "application/pdf")
+      .set("x-file-name", encodeURIComponent("raw-file.pdf"))
+      .set("x-document-name", encodeURIComponent("County Fair Agreement"))
+      .set("x-document-category", "contract")
+      .send(Buffer.from([1, 2, 3]))
+      .expect(201);
+
+    expect(ingestion.ingest).toHaveBeenCalledWith(expect.objectContaining({
+      uploadMetadata: {
+        displayName: "County Fair Agreement",
+        category: "contract",
+      },
+    }));
+    expect(service.update).not.toHaveBeenCalled();
+  });
+
   it("rejects an upload without a safe filename", async () => {
     const { app, ingestion } = setup();
     await request(app)
