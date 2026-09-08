@@ -104,7 +104,7 @@ export const businessDocumentsApi = {
 
   async searchProfiles(query: string) {
     const response = await apiGet<{ organizations: { records: BusinessDocumentProfileOption[] } }>(
-      `/organizations?q=${encodeURIComponent(query)}&pageSize=10&includeRetired=no`,
+      `/organizations?q=${encodeURIComponent(query)}&pageSize=10&showMembers=yes&includeRetired=no`,
     );
     return response.organizations.records;
   },
