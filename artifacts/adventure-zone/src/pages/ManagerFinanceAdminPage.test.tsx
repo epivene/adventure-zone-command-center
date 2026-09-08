@@ -61,7 +61,7 @@ describe("ManagerFinanceAdminPage", () => {
     expect(screen.queryByText(/Leg B/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText("Show archived legs"));
-    expect(screen.getByText(/Leg B/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Leg B — Archived" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Leg A" }));
     await waitFor(() =>

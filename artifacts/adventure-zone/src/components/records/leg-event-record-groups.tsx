@@ -62,14 +62,16 @@ export function groupRecordsByLegAndEvent<T extends LegEventOwnedRecord>(
 ): LegEventRecordGroup<T>[] {
   const legs = new Map<string, { key: string; name: string; records: T[] }>();
   for (const record of records) {
-    const key = record.legId ?? UNASSIGNED_LEG_KEY;
+    const legSnapshot = record.legName?.trim();
+    const key = record.legId
+      ?? (legSnapshot ? `legacy-leg:${legSnapshot.toLocaleLowerCase()}` : UNASSIGNED_LEG_KEY);
     const existing = legs.get(key);
     if (existing) existing.records.push(record);
     else legs.set(key, {
       key,
       name: key === UNASSIGNED_LEG_KEY
         ? "Unassigned leg"
-        : record.legName?.trim() || "Unnamed leg",
+        : legSnapshot || "Unnamed leg",
       records: [record],
     });
   }
