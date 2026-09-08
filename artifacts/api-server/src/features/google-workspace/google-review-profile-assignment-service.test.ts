@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { GoogleReviewProfileAssignmentService } from "./google-review-profile-assignment-service";
 
 describe("GoogleReviewProfileAssignmentService", () => {
-  it("persists the CRM choice before labeling and archiving Gmail", async () => {
+  it("preflights authorization, then persists before labeling and archiving Gmail", async () => {
     const order: string[] = [];
     const resolve = vi.fn(async () => { order.push("persist"); });
     const assignThread = vi.fn(async () => {
@@ -36,14 +36,17 @@ describe("GoogleReviewProfileAssignmentService", () => {
           return { rows: [] };
         },
       },
-      syncFactory: async () => ({
-        connectionId: "conn-1",
-        service: {
-          assignThread,
-          labelInboundMessage: vi.fn(),
-          retry: vi.fn(),
-        },
-      }),
+      syncFactory: async () => {
+        order.push("preflight");
+        return {
+          connectionId: "conn-1",
+          service: {
+            assignThread,
+            labelInboundMessage: vi.fn(),
+            retry: vi.fn(),
+          },
+        };
+      },
     });
 
     await expect(service.resolveReview({
@@ -56,7 +59,7 @@ describe("GoogleReviewProfileAssignmentService", () => {
       gmailSync: { state: "completed" },
     });
 
-    expect(order).toEqual(["persist", "gmail", "sync-state"]);
+    expect(order).toEqual(["preflight", "persist", "gmail", "sync-state"]);
     expect(assignThread).toHaveBeenCalledWith(expect.objectContaining({
       threadId: "thread-1",
       organizationId: "org-1",
