@@ -4,12 +4,15 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
+import { EventRecordGroups } from "@/components/records/leg-event-record-groups";
 import { bossGet } from "@/lib/boss-auth-context";
 
 type Receipt = {
   id: string;
   legId?: string | null;
   legName?: string | null;
+  bookingId?: string | null;
+  bookingName?: string | null;
   submittedBy?: string | null;
   amount?: number | null;
   category?: string | null;
@@ -97,8 +100,8 @@ export default function BossReceiptsPage() {
       ) : (
         <div className="grid gap-4">
           <LegRecordPicker groups={legGroups} noun="receipt" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
-          {effectiveLegKey ? <div className="grid gap-2">
-          {visibleReceipts.map((r) => (
+          {effectiveLegKey ? <EventRecordGroups records={visibleReceipts} noun="receipt">
+          {(r) => (
             <div
               key={r.id}
               className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[7rem_1fr_auto]"
@@ -133,8 +136,8 @@ export default function BossReceiptsPage() {
                 {r.imageUrl ? <Button asChild size="sm" variant="outline"><a href={r.imageUrl} target="_blank" rel="noreferrer">Open photo</a></Button> : null}
               </div>
             </div>
-          ))}
-          </div> : null}
+          )}
+          </EventRecordGroups> : null}
         </div>
       )}
     </div>

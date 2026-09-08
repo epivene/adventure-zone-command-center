@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { LegEventRecordGroups } from "@/components/records/leg-event-record-groups";
 
 function money(cents: number | null | undefined) {
   if (cents == null) return "unavailable";
@@ -88,8 +89,16 @@ function OrganizerFeedbackPanel({ bookingId }: { bookingId: string }) {
 
 export function EventWrapUpReviewQueue({ wrapUps }: { wrapUps: any[] }) {
   if (!wrapUps.length) return <p className="rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No submitted event wrap-ups are waiting for review.</p>;
-  return <div className="grid gap-3">
-    {wrapUps.map((item) => {
+  const groupedWrapUps = wrapUps.map((item) => ({
+    ...item,
+    id: item.event.bookingId,
+    bookingId: item.event.bookingId,
+    bookingName: item.event.name,
+    legId: item.event.legId ?? null,
+    legName: item.event.legName ?? null,
+  }));
+  return <LegEventRecordGroups records={groupedWrapUps} noun="review">
+    {(item) => {
       const trueProfit = item.calculation?.trueProfit;
       const reasons = trueProfit?.incompleteReasons ?? [];
       return <article key={item.event.bookingId} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -99,6 +108,6 @@ export function EventWrapUpReviewQueue({ wrapUps }: { wrapUps: any[] }) {
         {reasons.map((reason: string) => <p key={reason} className="mt-1 text-sm font-semibold text-amber-700">{reason}</p>)}
         <OrganizerFeedbackPanel bookingId={item.event.bookingId} />
       </article>;
-    })}
-  </div>;
+    }}
+  </LegEventRecordGroups>;
 }
