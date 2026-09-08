@@ -32,6 +32,7 @@ export function DocumentReviewQueue() {
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, BusinessDocumentProfileOption | undefined>>({});
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [openingId, setOpeningId] = useState<string | null>(null);
   const [searchingId, setSearchingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,6 +72,19 @@ export function DocumentReviewQueue() {
     } catch {
       setError("Could not apply that document review action.");
     } finally { setBusyId(null); }
+  }
+
+  async function openDocument(item: BusinessDocumentReviewItem) {
+    setOpeningId(item.id);
+    setError(null);
+    try {
+      const url = await businessDocumentsApi.open(item.documentId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("That protected file is not available right now.");
+    } finally {
+      setOpeningId(null);
+    }
   }
 
   if (loading) return <p className="text-sm text-muted-foreground">Loading document reviews…</p>;
@@ -121,6 +135,9 @@ export function DocumentReviewQueue() {
             }} type="button"><strong>{profile.name}</strong>{profile.city || profile.region ? <span className="ml-2 text-muted-foreground">{[profile.city, profile.region].filter(Boolean).join(", ")}</span> : null}</button>)}</div> : null}
             {selectedProfile ? <p className="mt-2 text-xs font-semibold text-emerald-700">Selected profile: {selectedProfile.name}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
+              <Button aria-label={`Open protected file for ${item.displayName}`} disabled={openingId === item.id} onClick={() => void openDocument(item)} size="sm" type="button" variant="outline">
+                {openingId === item.id ? "Opening…" : "Open protected file"}
+              </Button>
               <Button disabled={hasCorrections || busyId === item.id} onClick={() => void act(item, { action: "approve" })} size="sm"><Check className="mr-1.5 h-3.5 w-3.5" />Approve as shown</Button>
               <Button disabled={!hasCorrections || busyId === item.id} onClick={() => void act(item, { action: "correct_and_approve", corrections: {
                 category,
