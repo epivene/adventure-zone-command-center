@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PostgresGoogleProfileLabelRepository } from "./google-profile-label-repository";
 
 describe("PostgresGoogleProfileLabelRepository", () => {
-  it("adopts by stable IDs and never overwrites a different winner", async () => {
+  it("adopts by stable IDs and refreshes the name only for the same label ID", async () => {
     const queries: Array<{ text: string; values?: unknown[] }> = [];
     const pool = {
       async query(text: string, values?: unknown[]) {
@@ -37,7 +37,7 @@ describe("PostgresGoogleProfileLabelRepository", () => {
       query.text.includes("INSERT INTO google_workspace_profile_labels"),
     );
     expect(insert?.text).toContain(
-      "ON CONFLICT (connection_id, organization_id) DO NOTHING",
+      "WHERE google_workspace_profile_labels.gmail_label_id =",
     );
   });
 
