@@ -94,6 +94,25 @@ describe("business document routes", () => {
     }));
   });
 
+  it("applies the supplied display name and category to an uploaded document", async () => {
+    const { app, service } = setup();
+    await request(app)
+      .post("/business-documents/upload")
+      .set(ownerHeader())
+      .set("content-type", "application/pdf")
+      .set("x-file-name", encodeURIComponent("raw-file.pdf"))
+      .set("x-document-name", encodeURIComponent("County Fair Agreement"))
+      .set("x-document-category", "contract")
+      .send(Buffer.from([1, 2, 3]))
+      .expect(201);
+
+    expect(service.update).toHaveBeenCalledWith(documentId, {
+      displayName: "County Fair Agreement",
+      category: "contract",
+      notes: null,
+    }, "");
+  });
+
   it("rejects an upload without a safe filename", async () => {
     const { app, ingestion } = setup();
     await request(app)
