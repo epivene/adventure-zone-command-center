@@ -118,6 +118,8 @@ describe("PostgresGoogleGmailMutationRepository", () => {
         expect(text).toContain("intent.current_mutation_id = candidate_mutation.id");
         expect(text).toContain("intent.generation = candidate_mutation.intent_generation");
         expect(text).toContain("candidate_mutation.operation = 'label_inbound_message'");
+        expect(text).toContain("candidate_mutation.intent_generation IS NULL");
+        expect(text).toContain("google_workspace_gmail_thread_intents any_intent");
         expect(text).not.toContain("pg_try_advisory_xact_lock");
         return { rows: [] };
       },
