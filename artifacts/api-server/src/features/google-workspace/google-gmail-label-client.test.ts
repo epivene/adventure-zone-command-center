@@ -119,6 +119,28 @@ describe("Google Gmail label mutation client", () => {
     });
   });
 
+  it.each([401, 403])(
+    "requires reconnect after Gmail authorization fails with %s",
+    async (status) => {
+      const client = createGoogleWorkspaceReadClient({
+        environment,
+        refreshToken: "refresh-token",
+        fetcher: async (input) =>
+          String(input) === "https://oauth2.googleapis.com/token"
+            ? json({ access_token: "access-token", expires_in: 3600 })
+            : json({}, status),
+      });
+
+      await expect(client.modifyMessageLabels?.({
+        messageId: "message-1",
+        addLabelIds: ["Label_10"],
+        removeLabelIds: [],
+      })).rejects.toMatchObject({
+        code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+      });
+    },
+  );
+
   it("refreshes once after an unauthorized Gmail mutation", async () => {
     let tokenCalls = 0;
     let mutationCalls = 0;
