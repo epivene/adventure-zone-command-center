@@ -47,7 +47,7 @@ export class BusinessDocumentIngestion {
     candidate: BusinessDocumentCandidate,
   ): Promise<DocumentIngestionOutcome | { outcome: "skipped"; errorCode: string }> {
     const classification = classifyBusinessDocument(candidate);
-    if (classification.decision === "skip" && !candidate.uploadMetadata) {
+    if (classification.decision === "skip") {
       return { outcome: "skipped", errorCode: classification.errorCode };
     }
     if (!candidate.storedBlob && (!candidate.bytes || candidate.bytes.byteLength === 0)) {
@@ -61,11 +61,7 @@ export class BusinessDocumentIngestion {
         ? "accepted" as const
         : "needs_review" as const;
     const blob = candidate.storedBlob ?? await this.storage.putIfAbsent(candidate.bytes!, candidate.mimeType);
-    const category = candidate.uploadMetadata
-      ? candidate.uploadMetadata.category
-      : classification.decision === "skip"
-        ? "other"
-        : classification.category;
+    const category = candidate.uploadMetadata?.category ?? classification.category;
 
     return this.repository.ingest({
       displayName: candidate.uploadMetadata?.displayName ?? (candidate.filename.replace(/\.[^.]+$/, "").trim() || candidate.filename),
