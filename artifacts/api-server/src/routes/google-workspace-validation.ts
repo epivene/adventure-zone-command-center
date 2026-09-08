@@ -12,6 +12,7 @@ import {
 } from "@/features/google-workspace/google-validation-repository";
 import { GoogleValidationReviewReconciler } from "@/features/google-workspace/google-validation-review-reconciler";
 import { GoogleValidationWithManualOverlayService } from "@/features/google-workspace/google-validation-with-manual-overlay-service";
+import { PostgresGoogleThreadIgnoreTransaction } from "@/features/google-workspace/google-thread-ignore-transaction";
 
 const inputSchema = z
   .object({
@@ -67,6 +68,14 @@ type ValidationRepository = {
   getStatus(): Promise<GoogleValidationStatus>;
   listReviewItems(): Promise<GoogleValidationReviewItem[]>;
   ignoreReviewItem(input: {
+    messageId: string;
+    actorId: string;
+    now: Date;
+  }): Promise<void>;
+};
+
+type IgnoreService = {
+  ignoreReview(input: {
     messageId: string;
     actorId: string;
     now: Date;
@@ -177,6 +186,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   reviewReconciler?: ReviewReconciler;
   reviewAssignmentService?: ReviewAssignmentService;
   validationRepository?: ValidationRepository;
+  ignoreService?: IgnoreService;
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
@@ -192,6 +202,14 @@ export function createGoogleWorkspaceValidationRouter(options?: {
     };
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
+  const ignoreService =
+    options?.ignoreService ??
+    (options?.validationRepository
+      ? {
+          ignoreReview:
+            validationRepository.ignoreReviewItem.bind(validationRepository),
+        }
+      : new PostgresGoogleThreadIgnoreTransaction());
   const now = options?.now ?? (() => new Date());
 
   router.post(
@@ -268,7 +286,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        await validationRepository.ignoreReviewItem({
+        await ignoreService.ignoreReview({
           messageId: req.params.messageId,
           actorId: ownerActorId(req),
           now: now(),
