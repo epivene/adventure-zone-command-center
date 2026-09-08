@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const cssPath = fileURLToPath(new URL("./mobile-compact.css", import.meta.url));
-const mainPath = fileURLToPath(new URL("./main.tsx", import.meta.url));
+const cssPath = path.resolve(__dirname, "mobile-compact.css");
+const mainPath = path.resolve(__dirname, "main.tsx");
 const css = readFileSync(cssPath, "utf8");
 const main = readFileSync(mainPath, "utf8");
 

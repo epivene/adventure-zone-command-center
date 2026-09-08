@@ -4,13 +4,13 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 function readSource(relativePath: string) {
-  return readFileSync(path.resolve(process.cwd(), relativePath), "utf8");
+  return readFileSync(path.resolve(__dirname, relativePath), "utf8");
 }
 
-const listSource = readSource("artifacts/adventure-zone/src/components/organizations/organization-list.tsx");
-const pageSource = readSource("artifacts/adventure-zone/src/pages/OrganizationsPage.tsx");
-const menuSource = readSource("artifacts/adventure-zone/src/components/profiles/profile-actions-menu.tsx");
-const fillerActionSource = readSource("artifacts/adventure-zone/src/components/profiles/profile-filler-action.tsx");
+const listSource = readSource("organization-list.tsx");
+const pageSource = readSource("../../pages/OrganizationsPage.tsx");
+const menuSource = readSource("../profiles/profile-actions-menu.tsx");
+const fillerActionSource = readSource("../profiles/profile-filler-action.tsx");
 
 describe("Filler profile UI", () => {
   it("shows Filler as a secondary profile badge and directory filter", () => {

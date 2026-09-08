@@ -1,7 +1,11 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 
-const source = readFileSync(new URL("./AdminCommandPanelPage.tsx", import.meta.url), "utf8");
+const source = readFileSync(
+  path.resolve(__dirname, "AdminCommandPanelPage.tsx"),
+  "utf8",
+);
 
 describe("Admin Command Panel", () => {
   it("offers exactly the three approved day-to-day workspaces", () => {
