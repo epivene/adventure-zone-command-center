@@ -77,6 +77,7 @@ function candidates(value: unknown): Array<{ id: string; name: string }> {
 function gmailSyncState(
   value: unknown,
 ): GoogleValidationReviewItem["gmailSyncState"] {
+  if (value === "processing") return "pending";
   return value === "pending" ||
     value === "completed" ||
     value === "retryable_error" ||
@@ -246,29 +247,35 @@ export class PostgresGoogleValidationRepository {
   async listReviewItems(): Promise<GoogleValidationReviewItem[]> {
     const connectionId = await this.currentConnectionId();
     const result = await this.pool.query(
-      `SELECT message_id,
-              thread_id,
-              subject,
-              from_header,
-              to_header,
-              internal_date_ms,
-              evidence_codes,
-              candidate_organizations,
-              has_attachments,
-              review_state,
-              resolved_organization_id,
-              gmail_sync_state,
-              gmail_sync_error_code,
-              gmail_sync_mutation_id::text
-         FROM google_workspace_validation_review_items
-        WHERE connection_id = $1
-        ORDER BY CASE review_state
+      `SELECT item.message_id,
+              item.thread_id,
+              item.subject,
+              item.from_header,
+              item.to_header,
+              item.internal_date_ms,
+              item.evidence_codes,
+              item.candidate_organizations,
+              item.has_attachments,
+              item.review_state,
+              item.resolved_organization_id,
+              COALESCE(mutation.state, item.gmail_sync_state) AS gmail_sync_state,
+              CASE
+                WHEN mutation.id IS NOT NULL THEN mutation.last_error_code
+                ELSE item.gmail_sync_error_code
+              END AS gmail_sync_error_code,
+              COALESCE(mutation.id, item.gmail_sync_mutation_id)::text
+                AS gmail_sync_mutation_id
+         FROM google_workspace_validation_review_items item
+         LEFT JOIN google_workspace_gmail_mutations mutation
+           ON mutation.id = item.gmail_sync_mutation_id
+        WHERE item.connection_id = $1
+        ORDER BY CASE item.review_state
                    WHEN 'pending' THEN 0
                    WHEN 'resolved' THEN 1
                    ELSE 2
                  END,
-                 updated_at DESC,
-                 message_id DESC`,
+                 item.updated_at DESC,
+                 item.message_id DESC`,
       [connectionId],
     );
     return result.rows.flatMap((row) => {
