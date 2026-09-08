@@ -89,4 +89,37 @@ describe("contract builder migration", () => {
       );
     `)).rejects.toThrow();
   });
+  it("activates the reviewed version-one template for enabled production use", async () => {
+    const database = new PGlite();
+    databases.push(database);
+    await database.exec(`
+      create table organizations (id uuid primary key);
+      create table bookings (id uuid primary key, organization_id uuid references organizations(id));
+    `);
+    const baseMigration = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/20260908_contract_builder.sql", import.meta.url)),
+      "utf8",
+    );
+    await database.exec(baseMigration);
+    await database.exec(`
+      insert into contract_templates (stable_key, version, state, created_by)
+      values ('adventure-zone-standard', 1, 'reviewed', 'owner');
+    `);
+
+    const activation = (await loadActReviewMigrations())
+      .find(({ name }) => name === "20260908a_contract_template_v1.sql");
+    expect(activation).toBeDefined();
+    if (!activation) return;
+    await database.exec(activation.sql);
+
+    expect((await database.query(`
+      select stable_key, version, state from contract_templates
+      where stable_key = 'adventure-zone-standard' and version = 1
+    `)).rows).toEqual([{
+      stable_key: "adventure-zone-standard",
+      version: 1,
+      state: "active",
+    }]);
+  });
+
 });
