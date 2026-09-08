@@ -5,6 +5,7 @@ const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
+  retryGoogleWorkspaceGmailMutation: vi.fn(),
 }));
 const search = vi.hoisted(() => ({
   searchGoogleReviewProfiles: vi.fn(),
@@ -27,11 +28,23 @@ const item = {
   hasAttachments: true,
   state: "pending" as const,
   resolvedOrganizationId: null,
+  gmailSyncState: "not_requested" as const,
+  gmailSyncErrorCode: null,
+  gmailSyncMutationId: null,
 };
 
 beforeEach(() => {
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
-  client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
+  client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
+    ok: true,
+    gmailSync: {
+      mutationId: "33333333-3333-4333-8333-333333333333",
+      state: "completed",
+      gmailLabelId: "Label_1",
+      gmailLabelName: "Z - AdventureZone/Profiles/County Fair",
+      errorCode: null,
+    },
+  });
   client.ignoreGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
   search.searchGoogleReviewProfiles.mockResolvedValue([
     { id: "22222222-2222-4222-8222-222222222222", name: "Another Fair" },
@@ -56,6 +69,8 @@ describe("GoogleValidationReview", () => {
         "11111111-1111-4111-8111-111111111111",
       ),
     );
+    expect(await screen.findByText("Assigned to the profile and archived in Gmail."))
+      .toBeInTheDocument();
   });
 
   it("can search for a different profile and assign it", async () => {
@@ -84,5 +99,41 @@ describe("GoogleValidationReview", () => {
     await waitFor(() =>
       expect(client.ignoreGoogleWorkspaceValidationReview).toHaveBeenCalledWith("m1"),
     );
+    expect(await screen.findByText(
+      "Ignored in Email Review. Gmail was left unchanged and the thread stays in Inbox.",
+    )).toBeInTheDocument();
+  });
+
+  it("offers an immediate retry when Gmail synchronization is retryable", async () => {
+    client.resolveGoogleWorkspaceValidationReview.mockResolvedValueOnce({
+      ok: true,
+      gmailSync: {
+        mutationId: "33333333-3333-4333-8333-333333333333",
+        state: "retryable_error",
+        gmailLabelId: null,
+        gmailLabelName: null,
+        errorCode: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED",
+      },
+    });
+    client.retryGoogleWorkspaceGmailMutation.mockResolvedValueOnce({
+      ok: true,
+      gmailSync: {
+        mutationId: "33333333-3333-4333-8333-333333333333",
+        state: "completed",
+        gmailLabelId: "Label_1",
+        gmailLabelName: "Z - AdventureZone/Profiles/County Fair",
+        errorCode: null,
+      },
+    });
+    render(<GoogleValidationReview />);
+    await screen.findByText("County Fair application");
+
+    fireEvent.click(screen.getByRole("button", { name: "Assign to County Fair" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Retry Gmail" }));
+
+    await waitFor(() => expect(client.retryGoogleWorkspaceGmailMutation)
+      .toHaveBeenCalledWith("33333333-3333-4333-8333-333333333333"));
+    expect(await screen.findByText("Assigned to the profile and archived in Gmail."))
+      .toBeInTheDocument();
   });
 });
