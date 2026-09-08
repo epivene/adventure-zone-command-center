@@ -178,7 +178,7 @@ describe("PostgresGoogleThreadIgnoreTransaction", () => {
       expect(states.rows).toHaveLength(3);
       expect(states.rows.every((row) =>
         row.state === "permanent_error" &&
-        row.last_error_code === "GOOGLE_WORKSPACE_ASSIGNMENT_IGNORED"
+        row.last_error_code === "GOOGLE_WORKSPACE_THREAD_INTENT_IGNORED"
       )).toBe(true);
 
       const intent = await db.query<{
