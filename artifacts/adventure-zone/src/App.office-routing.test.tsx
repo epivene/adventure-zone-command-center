@@ -11,7 +11,7 @@ describe("Office Coordinator frontend routing",()=>{
     expect(app).toContain('path="/office/sign-in"');
     expect(app).toContain("OFFICE_PROTECTED_PATH");
     expect(app.indexOf('path="/office/sign-in"')).toBeLessThan(app.indexOf("<Route><Protected><AdminProtectedApp"));
-    for(const route of ["/office/website-inquiries","/office/profiles/:profileId","/office/profiles","/office/mail","/office/emails","/office/tasks","/office/messages"]){expect(app).toContain(`path=\"${route}\"`);}
+    for(const route of ["/office/website-inquiries","/office/profiles/:profileId","/office/profiles","/office/mail","/office/emails","/office/tasks","/office/messages","/office/documents"]){expect(app).toContain(`path=\"${route}\"`);}
     expect(app).toContain('office.canReviewWebsiteInquiries');
     expect(app).toContain('path="/website-inquiries"');
   });
