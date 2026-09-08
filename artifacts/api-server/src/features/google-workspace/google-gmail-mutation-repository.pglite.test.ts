@@ -156,6 +156,51 @@ describe("PostgresGoogleGmailMutationRepository intent fencing", () => {
     }
   });
 
+  it("adopts an expired legacy processing job when Check emails reloads it", async () => {
+    const { db, repository } = await fixture();
+    try {
+      await db.query(
+        `INSERT INTO google_workspace_gmail_thread_intents (
+           connection_id, thread_id, generation, intent_kind, organization_id
+         ) VALUES ($1,'thread-1',4,'assign',$2)`,
+        [connectionId, organizationA],
+      );
+      await db.query(
+        `INSERT INTO google_workspace_gmail_mutations (
+           connection_id, message_id, thread_id, organization_id, operation,
+           idempotency_key, state, intent_generation, processing_lease_expires_at
+         ) VALUES ($1,'legacy-processing','thread-1',$2,'label_inbound_message',
+                   'legacy-processing-key','processing',NULL,
+                   '2026-09-08T14:59:00Z')`,
+        [connectionId, organizationA],
+      );
+
+      const adopted = await repository.createOrLoad({
+        connectionId,
+        messageId: "legacy-processing",
+        threadId: "thread-1",
+        organizationId: organizationA,
+        operation: "label_inbound_message",
+        idempotencyKey: "legacy-processing-key",
+        actorId: null,
+      });
+      expect(adopted).toMatchObject({
+        state: "processing",
+        intentGeneration: 4,
+      });
+      await expect(repository.claim(
+        adopted.id,
+        new Date("2026-09-08T15:00:00Z"),
+      )).resolves.toMatchObject({
+        state: "processing",
+        intentGeneration: 4,
+        attemptCount: 1,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
   it("allows only inbound work matching the current profile generation", async () => {
     const { db, repository } = await fixture();
     try {
