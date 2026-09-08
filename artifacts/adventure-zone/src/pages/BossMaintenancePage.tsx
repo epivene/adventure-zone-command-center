@@ -236,6 +236,7 @@ export default function BossMaintenancePage() {
             const post = event.records.find((item) => canonicalPhase(item.phase) === "post_event");
             const other = event.records.filter((item) => !["pre_event", "post_event"].includes(canonicalPhase(item.phase)));
             const isOpen = openEventKey === event.key;
+            const detailsId = `maintenance-details-${encodeURIComponent(event.key)}`;
             const phasePanel = (label: string, item?: MaintenanceItem) => {
               const loadedRecord = item?.id ? recordsById[item.id] : undefined;
               const detailError = item?.id ? detailErrorsById[item.id] : undefined;
@@ -297,7 +298,7 @@ export default function BossMaintenancePage() {
                   type="button"
                   className="flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   aria-expanded={isOpen}
-                  aria-controls={`maintenance-details-${event.key}`}
+                  aria-controls={detailsId}
                   onClick={() => void toggleEvent(event)}
                 >
                   <span className="min-w-0 flex-1">
@@ -310,7 +311,7 @@ export default function BossMaintenancePage() {
                   <ChevronDown className={`mt-0.5 h-5 w-5 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                 </button>
                 {isOpen ? (
-                  <div id={`maintenance-details-${event.key}`} className="grid gap-3 border-t border-border p-4">
+                  <div id={detailsId} className="grid gap-3 border-t border-border p-4">
                     {phasePanel("Pre-event", pre)}
                     {phasePanel("Post-event", post)}
                     {other.map((item) => phasePanel(phaseLabel(item.phase) ?? "Maintenance", item))}
