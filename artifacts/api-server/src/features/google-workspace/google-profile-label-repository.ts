@@ -126,19 +126,37 @@ implements GoogleProfileLabelRepositoryPort {
       !input.gmailLabelName.trim()
     ) throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_MAPPING_INVALID");
 
-    await this.pool.query(
-      `INSERT INTO google_workspace_profile_labels (
-         connection_id, organization_id, gmail_label_id, gmail_label_name,
-         state, last_error_code, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,'active',NULL,now(),now())
-       ON CONFLICT (connection_id, organization_id) DO NOTHING`,
-      [
-        input.connectionId,
-        input.organizationId,
-        input.gmailLabelId,
-        input.gmailLabelName,
-      ],
-    );
+    try {
+      await this.pool.query(
+        `INSERT INTO google_workspace_profile_labels (
+           connection_id, organization_id, gmail_label_id, gmail_label_name,
+           state, last_error_code, created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,'active',NULL,now(),now())
+         ON CONFLICT (connection_id, organization_id) DO UPDATE SET
+           gmail_label_name = EXCLUDED.gmail_label_name,
+           state = 'active',
+           last_error_code = NULL,
+           updated_at = now()
+         WHERE google_workspace_profile_labels.gmail_label_id =
+               EXCLUDED.gmail_label_id`,
+        [
+          input.connectionId,
+          input.organizationId,
+          input.gmailLabelId,
+          input.gmailLabelName,
+        ],
+      );
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "23505"
+      ) {
+        throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_CONFLICT");
+      }
+      throw error;
+    }
     const winner = await this.findByOrganization(input);
     if (!winner) throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_MAPPING_FAILED");
     if (winner.gmailLabelId !== input.gmailLabelId) {
