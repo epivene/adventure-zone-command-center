@@ -41,6 +41,8 @@ describe("PostgresGoogleGmailMutationRepository", () => {
       idempotencyKey: "assign-thread:key",
     });
     expect(queries[0]?.text).toContain("ON CONFLICT (idempotency_key)");
+    expect(queries[0]?.text).toContain("intent_generation");
+    expect(queries[0]?.text).toContain("intent.organization_id = $4");
   });
 
   it("never downgrades a completed mutation", async () => {
@@ -112,8 +114,10 @@ describe("PostgresGoogleGmailMutationRepository", () => {
       async query(text: string) {
         expect(text).toContain("FOR UPDATE OF candidate_mutation SKIP LOCKED");
         expect(text).toContain("google_workspace_gmail_thread_intents");
+        expect(text).toContain("intent.organization_id = candidate_mutation.organization_id");
         expect(text).toContain("intent.current_mutation_id = candidate_mutation.id");
         expect(text).toContain("intent.generation = candidate_mutation.intent_generation");
+        expect(text).toContain("candidate_mutation.operation = 'label_inbound_message'");
         expect(text).not.toContain("pg_try_advisory_xact_lock");
         return { rows: [] };
       },
