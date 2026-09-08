@@ -1,4 +1,7 @@
-import { pool as defaultPool } from "@workspace/db";
+import {
+  gmailThreadLockPool as defaultThreadLockPool,
+  pool as defaultPool,
+} from "@workspace/db";
 
 export type GoogleGmailMutationRecord = {
   id: string;
@@ -108,17 +111,29 @@ const claimReturning = `
             mutation.last_error_code`;
 
 export class PostgresGoogleGmailMutationRepository {
-  constructor(private readonly pool: SqlPool = defaultPool as unknown as SqlPool) {}
+  private readonly pool: SqlPool;
+  private readonly threadLockPool: SqlPool;
 
+  constructor(
+    pool: SqlPool = defaultPool as unknown as SqlPool,
+    threadLockPool?: SqlPool,
+  ) {
+    this.pool = pool;
+    this.threadLockPool =
+      threadLockPool ??
+      (pool === (defaultPool as unknown as SqlPool)
+        ? defaultThreadLockPool as unknown as SqlPool
+        : pool);
+  }
 
   async withThreadLock<T>(
     input: { connectionId: string; threadId: string },
     work: () => Promise<T>,
   ): Promise<T> {
-    if (!this.pool.connect) {
+    if (!this.threadLockPool.connect) {
       throw new Error("GOOGLE_WORKSPACE_GMAIL_THREAD_LOCK_UNAVAILABLE");
     }
-    const client = await this.pool.connect();
+    const client = await this.threadLockPool.connect();
     let locked = false;
     try {
       await client.query(
@@ -169,7 +184,13 @@ export class PostgresGoogleGmailMutationRepository {
          idempotency_key = EXCLUDED.idempotency_key,
          intent_generation = CASE
            WHEN google_workspace_gmail_mutations.operation = 'label_inbound_message'
-            AND google_workspace_gmail_mutations.state IN ('pending','retryable_error')
+            AND (
+              google_workspace_gmail_mutations.state IN ('pending','retryable_error')
+              OR (
+                google_workspace_gmail_mutations.state = 'processing'
+                AND google_workspace_gmail_mutations.processing_lease_expires_at <= now()
+              )
+            )
             AND EXCLUDED.intent_generation IS NOT NULL
            THEN EXCLUDED.intent_generation
            ELSE google_workspace_gmail_mutations.intent_generation
