@@ -42,4 +42,27 @@ describe("EventCalendar profile navigation", () => {
 
     expect(container.querySelector('a[href="/boss/profiles/profile-1"]')).not.toBeNull();
   });
+
+  it("falls back to booking details for an unlinked Admin event", () => {
+    const legacyEvent = { ...linkedEvent, organizationId: null } as CalendarEvent;
+    const { container } = render(<EventCalendar events={[legacyEvent]} initialMonth="2026-09" />);
+
+    expect(container.querySelector('a[href="/bookings/booking-1"]')).not.toBeNull();
+  });
+
+  it("does not create a broken Boss link for an unlinked legacy event", () => {
+    const legacyEvent = { ...linkedEvent, organizationId: null } as CalendarEvent;
+    const props = {
+      events: [legacyEvent],
+      initialMonth: "2026-09",
+      readOnly: true,
+      profileBasePath: "/boss/profiles",
+    } as Parameters<typeof EventCalendar>[0];
+
+    const { container } = render(<EventCalendar {...props} />);
+
+    expect(container.querySelector('a[href^="/boss/"]')).toBeNull();
+    expect(container.querySelector('a[href="/bookings/booking-1"]')).toBeNull();
+  });
+
 });
