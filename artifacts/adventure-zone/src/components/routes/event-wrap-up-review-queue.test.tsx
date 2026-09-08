@@ -17,7 +17,7 @@ describe("EventWrapUpReviewQueue", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Kristy, 1 review" }));
     fireEvent.click(screen.getByRole("button", { name: "Dickinson Fair, 1 review" }));
-    expect(screen.getByText("Dickinson Fair")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Dickinson Fair" })).toBeInTheDocument();
     expect(screen.getByText(/Kristy/)).toBeInTheDocument();
     expect(screen.getByText("★★★★")).toBeInTheDocument();
     expect(screen.getByText("$25.00 short")).toBeInTheDocument();
