@@ -1,7 +1,10 @@
 import { apiFetch } from "@/lib/auth-token";
-import type { GoogleRecentValidationRow } from "./google-workspace-client";
+import type {
+  GoogleProfileLabelSyncResult,
+  GoogleRecentValidationRow,
+} from "./google-workspace-client";
 
-async function ok(response: Response): Promise<{ ok: true }> {
+async function ok<T extends { ok: true }>(response: Response): Promise<T> {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     const code = body && typeof body === "object" && typeof (body as { error?: unknown }).error === "string"
@@ -9,7 +12,7 @@ async function ok(response: Response): Promise<{ ok: true }> {
       : `API ${response.status}`;
     throw new Error(code);
   }
-  return body as { ok: true };
+  return body as T;
 }
 
 function metadata(row: GoogleRecentValidationRow) {
@@ -26,7 +29,7 @@ function metadata(row: GoogleRecentValidationRow) {
 export async function changeMatchedGoogleEmailProfile(
   row: GoogleRecentValidationRow,
   organizationId: string,
-): Promise<{ ok: true }> {
+): Promise<{ ok: true; gmailSync: GoogleProfileLabelSyncResult }> {
   return ok(await apiFetch(`/google-workspace/validation/matched/${encodeURIComponent(row.id)}`, {
     method: "PUT",
     body: JSON.stringify({ ...metadata(row), organizationId }),
