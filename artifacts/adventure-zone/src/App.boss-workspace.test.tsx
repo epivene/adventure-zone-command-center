@@ -11,6 +11,11 @@ describe("Boss workspace route protection", () => {
     expect(source.indexOf('<Route path={BOSS_PROTECTED_PATH}')).toBeLessThan(source.indexOf("<Route><Protected><AdminProtectedApp"));
   });
 
+  it("exposes Boss-authenticated profile list and detail routes", () => {
+    expect(source).toContain('<Route path="/boss/profiles/:profileId">');
+    expect(source).toContain('<Route path="/boss/profiles" component={BossProfilesPage} />');
+  });
+
   it("keeps Today and Tasks as explicit Boss redirects to the Boss home", () => {
     expect(source).toContain('<Route path="/boss/today"><Redirect to="/boss" /></Route>');
     expect(source).toContain('<Route path="/boss/tasks"><Redirect to="/boss" /></Route>');
