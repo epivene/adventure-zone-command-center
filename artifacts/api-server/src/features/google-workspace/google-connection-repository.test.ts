@@ -5,6 +5,14 @@ import {
   GOOGLE_WORKSPACE_READ_SCOPES,
 } from "./google-api-client";
 import type { GoogleWorkspaceReadClient } from "./google-api-types";
+
+const legacyReadScopes = [
+  "openid",
+  "email",
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/calendar.readonly",
+  "https://www.googleapis.com/auth/drive.readonly",
+];
 import {
   PostgresGoogleConnectionRepository,
   type GoogleConnectionSqlPool,
@@ -72,6 +80,10 @@ const fakeClient: GoogleWorkspaceReadClient = {
   accountIdentity: async () => ({ subject: "subject", email: "zone@example.com" }),
   listLabels: async () => [],
   listCalendars: async () => [],
+  createLabel: async (name) => ({ id: "Label_1", name, type: "user" }),
+  renameLabel: async ({ labelId, name }) => ({ id: labelId, name, type: "user" }),
+  modifyThreadLabels: async () => undefined,
+  modifyMessageLabels: async () => undefined,
 };
 
 const googleEnvironmentKeys = [
@@ -216,7 +228,7 @@ describe("PostgresGoogleConnectionRepository", () => {
     expect(saved).not.toHaveProperty("encryptedRefreshToken");
   });
 
-  it("keeps readonly access but requires explicit reauthorization before composing Gmail drafts", async () => {
+  it("keeps read access but requires reauthorization before Gmail label changes", async () => {
     const harness = repositoryHarness();
     const repository = new PostgresGoogleConnectionRepository({
       pool: harness.pool,
@@ -228,18 +240,44 @@ describe("PostgresGoogleConnectionRepository", () => {
       accountEmail: "zone@example.com",
       googleSubject: null,
       refreshToken: "stored-refresh-token",
-      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      scopes: legacyReadScopes,
       now: new Date("2026-08-22T18:00:00.000Z"),
     });
 
     await expect(repository.getCurrent()).resolves.toMatchObject({
       status: "reauthorization_required",
-      lastErrorCode: "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED",
+      lastErrorCode: "GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE_REQUIRED",
     });
     await expect(repository.createReadClient()).resolves.toBe(fakeClient);
-    await expect(repository.createGmailDraftClient()).rejects.toThrow(
+    await expect(repository.createGmailLabelMutationClient()).rejects.toThrow(
       "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
     );
+  });
+
+  it("returns the narrow Gmail label mutation client when modify is granted", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => fakeClient,
+    });
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      now: new Date("2026-08-22T18:00:00.000Z"),
+    });
+
+    const result = await repository.createGmailLabelMutationClient();
+    expect(result?.connectionId).toBe("connection-id");
+    expect(Object.keys(result?.client ?? {}).sort()).toEqual([
+      "createLabel",
+      "listLabels",
+      "modifyMessageLabels",
+      "modifyThreadLabels",
+      "renameLabel",
+    ]);
   });
 
   it("requires an explicit disconnect before replacing the active Google account", async () => {
