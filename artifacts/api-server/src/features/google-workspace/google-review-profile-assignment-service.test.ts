@@ -166,6 +166,13 @@ describe("GoogleReviewProfileAssignmentService", () => {
       },
     });
     expect(h.query).toHaveBeenCalledTimes(2);
+    expect(String(h.query.mock.calls[0]?.[0])).toContain(
+      "gmail_sync_mutation_id = $5",
+    );
+    expect(String(h.query.mock.calls[0]?.[0])).toContain(
+      "google_workspace_gmail_thread_intents",
+    );
+    expect(h.query.mock.calls[0]?.[1]?.[6]).toBe("org-1");
     expect(h.fail).not.toHaveBeenCalled();
   });
 
