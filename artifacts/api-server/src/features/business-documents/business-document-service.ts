@@ -37,6 +37,7 @@ export class BusinessDocumentService {
     category?: BusinessDocumentCategory;
     reviewState?: BusinessDocumentReviewState;
     limit?: number;
+    offset?: number;
   }) {
     return this.repository.list(input);
   }

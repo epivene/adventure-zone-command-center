@@ -43,7 +43,7 @@ export default function BusinessDocumentsPage() {
     let current = true;
     setLoading(true);
     setError(null);
-    businessDocumentsApi.list({ profileId, limit: 100 })
+    businessDocumentsApi.listAll({ profileId })
       .then((result) => { if (current) setDocuments(result.documents); })
       .catch(() => { if (current) setError("Could not load business documents."); })
       .finally(() => { if (current) setLoading(false); });

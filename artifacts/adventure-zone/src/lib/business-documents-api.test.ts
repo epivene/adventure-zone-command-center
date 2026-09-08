@@ -23,3 +23,18 @@ describe("businessDocumentsApi profile search", () => {
     );
   });
 });
+
+describe("businessDocumentsApi document listing", () => {
+  it("loads every page instead of stopping at the first 100 documents", async () => {
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({ id: `document-${index}` }));
+    auth.apiGet
+      .mockResolvedValueOnce({ documents: firstPage })
+      .mockResolvedValueOnce({ documents: [{ id: "document-100" }] });
+
+    const result = await businessDocumentsApi.listAll();
+
+    expect(auth.apiGet).toHaveBeenNthCalledWith(1, "/business-documents?limit=100&offset=0");
+    expect(auth.apiGet).toHaveBeenNthCalledWith(2, "/business-documents?limit=100&offset=100");
+    expect(result.documents).toHaveLength(101);
+  });
+});

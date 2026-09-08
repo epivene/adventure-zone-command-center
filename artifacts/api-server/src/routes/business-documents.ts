@@ -15,6 +15,7 @@ const listQuery = z.object({
   category: z.enum(businessDocumentCategoryValues).optional(),
   reviewState: z.enum(businessDocumentReviewStateValues).optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
+  offset: z.coerce.number().int().min(0).max(100_000).optional(),
 }).strict();
 const linkBody = z.object({
   targetKind: z.enum(["profile", "booking", "event_family"]),

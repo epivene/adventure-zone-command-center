@@ -1,7 +1,7 @@
 import { pool as defaultPool } from "@workspace/db";
 import { BusinessDocumentIngestion } from "./business-document-ingestion";
 import { GoogleDriveDocumentSource } from "./google-drive-document-source";
-import { GoogleGmailDocumentSource, type GmailImportWindow } from "./google-gmail-document-source";
+import { GoogleGmailDocumentSource, type GmailDocumentInventoryItem, type GmailImportWindow } from "./google-gmail-document-source";
 import { safeBusinessDocumentErrorCode } from "./business-document-error-code";
 
 type ImportCounts = { discovered: number; imported: number; deduplicated: number; linked: number; review: number; skipped: number; retry: number; failed: number };
@@ -11,6 +11,7 @@ type Store = {
   checkpoint(input: { runId: string; externalId: string; status: string; documentId?: string; errorCode?: string }): Promise<void>;
   finish(runId: string, counts: ImportCounts): Promise<void>;
   get(runId: string): Promise<BusinessDocumentImportRun | null>;
+  existingExternalIds(sourceKind: "drive" | "gmail", accountKey: string, externalIds: string[]): Promise<Set<string>>;
 };
 type Ingestion = Pick<BusinessDocumentIngestion, "ingest">;
 
@@ -37,7 +38,9 @@ export class BusinessDocumentImportService {
   }
 
   async start(folderIds: string[], actor: string, pilotLimit = 25) {
-    const files = (await this.dependencies.source.inventory(folderIds)).slice(0, Math.min(100, Math.max(1, pilotLimit)));
+    const inventory = await this.dependencies.source.inventory(folderIds);
+    const existingIds = await this.dependencies.store.existingExternalIds("drive", this.dependencies.accountKey, inventory.map((file) => file.id));
+    const files = inventory.filter((file) => !existingIds.has(file.id)).slice(0, Math.min(100, Math.max(1, pilotLimit)));
     const runId = await this.dependencies.store.create({ sourceKind: "drive", mode: "pilot", scope: { folderIds }, actor });
     const report = counts(files.length);
     for (const file of files) {
@@ -101,11 +104,11 @@ export class BusinessDocumentImportService {
 
   private async startGmail(window: GmailImportWindow, actor: string, pilotLimit: number) {
     if (!this.dependencies.gmailSource) throw new Error("GOOGLE_GMAIL_READ_UNAVAILABLE");
-    const items = [];
-    for await (const item of this.dependencies.gmailSource.inventoryHistoricalGmail(window)) {
-      items.push(item);
-      if (items.length >= Math.min(100, Math.max(1, pilotLimit))) break;
-    }
+    const inventory: GmailDocumentInventoryItem[] = [];
+    for await (const item of this.dependencies.gmailSource.inventoryHistoricalGmail(window)) inventory.push(item);
+    const externalId = (item: (typeof inventory)[number]) => `${item.messageId}:${item.attachmentId}`;
+    const existingIds = await this.dependencies.store.existingExternalIds("gmail", this.dependencies.accountKey, inventory.map(externalId));
+    const items = inventory.filter((item) => !existingIds.has(externalId(item))).slice(0, Math.min(100, Math.max(1, pilotLimit)));
     const runId = await this.dependencies.store.create({ sourceKind: "gmail", mode: "pilot", scope: { after: window.after, before: window.before }, actor });
     const report = counts(items.length);
     for (const item of items) {
@@ -173,5 +176,14 @@ export class PostgresBusinessDocumentImportStore implements Store {
     const result = await this.pool.query("SELECT id, source_kind, status, mode, scope, counts FROM business_document_import_runs WHERE id = $1 AND source_kind IN ('drive','gmail')", [runId]);
     const row = result.rows[0];
     return row ? { id: String(row.id), sourceKind: row.source_kind as "drive" | "gmail", status: String(row.status), mode: String(row.mode), scope: row.scope as Record<string, unknown>, counts: row.counts as ImportCounts } : null;
+  }
+  async existingExternalIds(sourceKind: "drive" | "gmail", accountKey: string, externalIds: string[]) {
+    if (!externalIds.length) return new Set<string>();
+    const result = await this.pool.query(
+      `SELECT external_id FROM business_document_sources
+       WHERE source_kind = $1 AND source_account_key = $2 AND external_id = ANY($3::text[])`,
+      [sourceKind, accountKey, externalIds],
+    );
+    return new Set(result.rows.flatMap((row) => typeof row.external_id === "string" ? [row.external_id] : []));
   }
 }

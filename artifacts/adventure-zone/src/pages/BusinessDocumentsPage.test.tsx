@@ -2,16 +2,16 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+const mocks = vi.hoisted(() => ({ listAll: vi.fn() }));
 vi.mock("@/lib/business-documents-api", () => ({
-  businessDocumentsApi: { list: mocks.list },
+  businessDocumentsApi: { listAll: mocks.listAll },
 }));
 
 import BusinessDocumentsPage from "./BusinessDocumentsPage";
 
 beforeEach(() => {
-  mocks.list.mockReset();
-  mocks.list.mockResolvedValue({ documents: [] });
+  mocks.listAll.mockReset();
+  mocks.listAll.mockResolvedValue({ documents: [] });
 });
 
 describe("BusinessDocumentsPage", () => {

@@ -77,12 +77,27 @@ export const businessDocumentsApi = {
     category?: BusinessDocumentCategory;
     reviewState?: "accepted" | "needs_review" | "rejected";
     limit?: number;
+    offset?: number;
   } = {}) {
     return apiGet<ListResponse>(`/business-documents${queryString(filters)}`);
   },
 
+  async listAll(filters: {
+    profileId?: string;
+    category?: BusinessDocumentCategory;
+    reviewState?: "accepted" | "needs_review" | "rejected";
+  } = {}) {
+    const documents: BusinessDocumentRecord[] = [];
+    const limit = 100;
+    for (let offset = 0; ; offset += limit) {
+      const page = await this.list({ ...filters, limit, offset });
+      documents.push(...page.documents);
+      if (page.documents.length < limit) return { documents };
+    }
+  },
+
   forProfile(profileId: string) {
-    return this.list({ profileId, limit: 100 });
+    return this.listAll({ profileId });
   },
 
   async open(documentId: string) {

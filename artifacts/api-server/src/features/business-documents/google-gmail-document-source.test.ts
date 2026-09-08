@@ -21,6 +21,18 @@ describe("GoogleGmailDocumentSource", () => {
     expect(candidate.source).toMatchObject({ sourceKind: "gmail", externalId: "message-1:attachment-1" });
   });
 
+  it("discovers attachments from the full thread when metadata omits nested parts", async () => {
+    const { client, source } = setup();
+    client.getMessageMetadata.mockResolvedValue({ id: "message-1", threadId: "thread-1", hasAttachments: false } as any);
+
+    const page = await source.inventoryPage({ after: "2025-01-01", before: "2026-01-01" });
+
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]).toMatchObject({ messageId: "message-1", attachmentId: "attachment-1" });
+    expect(client.getThreadDetail).toHaveBeenCalledWith("thread-1");
+    expect(client.getMessageMetadata).not.toHaveBeenCalled();
+  });
+
   it("reuses a previously copied profile-file blob without downloading", async () => {
     const blob = { sha256Hex: "a".repeat(64), storageKey: "profile-files/a", sizeBytes: 10, mimeType: "application/pdf" };
     const { client, source } = setup({ profileId: "profile-1", blob });
