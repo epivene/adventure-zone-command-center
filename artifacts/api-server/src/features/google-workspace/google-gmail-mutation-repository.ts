@@ -270,15 +270,35 @@ export class PostgresGoogleGmailMutationRepository {
     errorCode: string;
     nextAttemptAt: Date | null;
     now: Date;
-  }): Promise<void> {
-    await this.pool.query(
-      `UPDATE google_workspace_gmail_mutations
-          SET state = $2,
-              last_error_code = $3,
-              next_attempt_at = $4,
-              processing_lease_expires_at = NULL,
-              updated_at = $5
-        WHERE id = $1`,
+  }): Promise<GoogleGmailMutationRecord | null> {
+    const result = await this.pool.query(
+      `WITH changed AS (
+         UPDATE google_workspace_gmail_mutations
+            SET state = $2,
+                last_error_code = $3,
+                next_attempt_at = $4,
+                processing_lease_expires_at = NULL,
+                updated_at = $5
+          WHERE id = $1
+            AND state <> 'completed'
+          RETURNING id::text, connection_id::text, message_id, thread_id,
+                    organization_id::text, operation, target_label_id,
+                    remove_label_ids, idempotency_key, state, attempt_count,
+                    last_error_code
+       ),
+       current AS (
+         SELECT id::text, connection_id::text, message_id, thread_id,
+                organization_id::text, operation, target_label_id,
+                remove_label_ids, idempotency_key, state, attempt_count,
+                last_error_code
+           FROM google_workspace_gmail_mutations
+          WHERE id = $1
+            AND NOT EXISTS (SELECT 1 FROM changed)
+       )
+       SELECT * FROM changed
+       UNION ALL
+       SELECT * FROM current
+       LIMIT 1`,
       [
         input.id,
         input.state,
@@ -287,5 +307,6 @@ export class PostgresGoogleGmailMutationRepository {
         input.now,
       ],
     );
+    return result.rows[0] ? record(result.rows[0]) : null;
   }
 }
