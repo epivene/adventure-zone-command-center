@@ -61,11 +61,16 @@ export class BusinessDocumentIngestion {
         ? "accepted" as const
         : "needs_review" as const;
     const blob = candidate.storedBlob ?? await this.storage.putIfAbsent(candidate.bytes!, candidate.mimeType);
+    const category = candidate.uploadMetadata
+      ? candidate.uploadMetadata.category
+      : classification.decision === "skip"
+        ? "other"
+        : classification.category;
 
     return this.repository.ingest({
       displayName: candidate.uploadMetadata?.displayName ?? (candidate.filename.replace(/\.[^.]+$/, "").trim() || candidate.filename),
       originalFilename: candidate.filename,
-      category: candidate.uploadMetadata?.category ?? classification.category,
+      category: category,
       reviewState,
       actor: candidate.actor,
       blob,
