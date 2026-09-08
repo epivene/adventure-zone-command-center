@@ -92,7 +92,7 @@ implements GoogleProfileLabelSyncServicePort {
       organizationId: input.organizationId,
       operation: "assign_thread",
       idempotencyKey:
-        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}:${input.decisionRevision}`,
+        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`,
       actorId: input.actorId,
     };
     return this.start(intent);
