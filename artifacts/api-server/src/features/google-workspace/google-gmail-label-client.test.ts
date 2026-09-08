@@ -128,7 +128,12 @@ describe("Google Gmail label mutation client", () => {
         fetcher: async (input) =>
           String(input) === "https://oauth2.googleapis.com/token"
             ? json({ access_token: "access-token", expires_in: 3600 })
-            : json({}, status),
+            : json(
+                status === 403
+                  ? { error: { errors: [{ reason: "insufficientPermissions" }] } }
+                  : {},
+                status,
+              ),
       });
 
       await expect(client.modifyMessageLabels?.({
@@ -140,6 +145,27 @@ describe("Google Gmail label mutation client", () => {
       });
     },
   );
+
+  it("keeps quota-style Gmail 403 responses retryable without requesting reconnect", async () => {
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input) =>
+        String(input) === "https://oauth2.googleapis.com/token"
+          ? json({ access_token: "access-token", expires_in: 3600 })
+          : json({
+              error: { errors: [{ reason: "userRateLimitExceeded" }] },
+            }, 403),
+    });
+
+    await expect(client.modifyMessageLabels?.({
+      messageId: "message-1",
+      addLabelIds: ["Label_10"],
+      removeLabelIds: [],
+    })).rejects.toMatchObject({
+      code: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED",
+    });
+  });
 
   it("refreshes once after an unauthorized Gmail mutation", async () => {
     let tokenCalls = 0;
