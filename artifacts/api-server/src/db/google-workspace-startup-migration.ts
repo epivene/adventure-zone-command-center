@@ -365,7 +365,7 @@ export async function ensureGoogleWorkspaceSchema(
          AND mutation.thread_id = intent.thread_id
          AND mutation.operation = 'label_inbound_message'
          AND mutation.organization_id = intent.organization_id
-         AND mutation.state IN ('pending','retryable_error')
+         AND mutation.state IN ('pending','processing','retryable_error')
          AND mutation.intent_generation IS NULL
          AND intent.intent_kind = 'assign';
 
@@ -376,7 +376,7 @@ export async function ensureGoogleWorkspaceSchema(
              processing_lease_expires_at = NULL,
              updated_at = now()
        WHERE mutation.operation = 'label_inbound_message'
-         AND mutation.state IN ('pending','retryable_error')
+         AND mutation.state IN ('pending','processing','retryable_error')
          AND EXISTS (
            SELECT 1
              FROM google_workspace_gmail_thread_intents intent
