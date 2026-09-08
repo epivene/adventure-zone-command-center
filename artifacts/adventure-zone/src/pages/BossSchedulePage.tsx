@@ -77,7 +77,7 @@ function LegCard({ leg }: { leg: ScheduleLeg }) {
             <div className="grid gap-2">
               {bookings.map((booking) => (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2" key={booking.id}>
-                  <div>{booking.organizationId ? <Link className="text-sm font-semibold text-slate-900 hover:text-orange-700" href={`/boss/profiles/${booking.organizationId}`}>{booking.name ?? "Event"}</Link> : <p className="text-sm font-semibold text-slate-900">{booking.name ?? "Event"}</p>}{booking.startsAt ? <p className="text-xs text-slate-500">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}</div>
+                  <div>{booking.organizationId ? <Link className="text-sm font-semibold text-slate-900 hover:text-orange-700" href={`/boss/profiles/${encodeURIComponent(booking.organizationId)}`}>{booking.name ?? "Event"}</Link> : <p className="text-sm font-semibold text-slate-900">{booking.name ?? "Event"}</p>}{booking.startsAt ? <p className="text-xs text-slate-500">{new Date(booking.startsAt).toLocaleDateString()}</p> : null}</div>
                   {booking.status ? <span className="rounded-full bg-white px-2 py-1 text-xs font-semibold capitalize text-slate-700">{booking.status.replaceAll("_", " ")}</span> : null}
                 </div>
               ))}
