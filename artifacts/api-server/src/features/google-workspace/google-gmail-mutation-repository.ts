@@ -135,8 +135,20 @@ export class PostgresGoogleGmailMutationRepository {
     const result = await this.pool.query(
       `INSERT INTO google_workspace_gmail_mutations (
          connection_id, message_id, thread_id, organization_id, operation,
-         idempotency_key, actor_id, state, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,'pending',now(),now())
+         idempotency_key, actor_id, state, intent_generation,
+         created_at, updated_at
+       ) VALUES (
+         $1,$2,$3,$4,$5,$6,$7,'pending',
+         CASE WHEN $5 = 'label_inbound_message' THEN (
+           SELECT intent.generation
+             FROM google_workspace_gmail_thread_intents intent
+            WHERE intent.connection_id = $1
+              AND intent.thread_id = $3
+              AND intent.intent_kind = 'assign'
+              AND intent.organization_id = $4
+         ) ELSE NULL END,
+         now(),now()
+       )
        ON CONFLICT (idempotency_key) DO UPDATE
          SET idempotency_key = EXCLUDED.idempotency_key
        ${returning}`,
@@ -181,17 +193,18 @@ export class PostgresGoogleGmailMutationRepository {
            ORDER BY connection.updated_at DESC
            LIMIT 1
         )
-          AND (
-            mutation.operation <> 'assign_thread'
-            OR EXISTS (
-              SELECT 1
-                FROM google_workspace_gmail_thread_intents intent
-               WHERE intent.connection_id = mutation.connection_id
-                 AND intent.thread_id = mutation.thread_id
-                 AND intent.intent_kind = 'assign'
-                 AND intent.current_mutation_id = mutation.id
-                 AND intent.generation = mutation.intent_generation
-            )
+          AND EXISTS (
+            SELECT 1
+              FROM google_workspace_gmail_thread_intents intent
+             WHERE intent.connection_id = mutation.connection_id
+               AND intent.thread_id = mutation.thread_id
+               AND intent.intent_kind = 'assign'
+               AND intent.organization_id = mutation.organization_id
+               AND intent.generation = mutation.intent_generation
+               AND (
+                 mutation.operation = 'label_inbound_message'
+                 OR intent.current_mutation_id = mutation.id
+               )
           )
           AND (
             mutation.state = 'pending'
@@ -225,17 +238,18 @@ export class PostgresGoogleGmailMutationRepository {
       `SELECT id::text
          FROM google_workspace_gmail_mutations
         WHERE connection_id = $1
-          AND (
-            operation <> 'assign_thread'
-            OR EXISTS (
-              SELECT 1
-                FROM google_workspace_gmail_thread_intents intent
-               WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
-                 AND intent.thread_id = google_workspace_gmail_mutations.thread_id
-                 AND intent.intent_kind = 'assign'
-                 AND intent.current_mutation_id = google_workspace_gmail_mutations.id
-                 AND intent.generation = google_workspace_gmail_mutations.intent_generation
-            )
+          AND EXISTS (
+            SELECT 1
+              FROM google_workspace_gmail_thread_intents intent
+             WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+               AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+               AND intent.intent_kind = 'assign'
+               AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+               AND intent.generation = google_workspace_gmail_mutations.intent_generation
+               AND (
+                 google_workspace_gmail_mutations.operation = 'label_inbound_message'
+                 OR intent.current_mutation_id = google_workspace_gmail_mutations.id
+               )
           )
           AND (
             state = 'pending'
@@ -269,17 +283,18 @@ export class PostgresGoogleGmailMutationRepository {
               updated_at = $2
         WHERE id = $1
           AND state = 'retryable_error'
-          AND (
-            operation <> 'assign_thread'
-            OR EXISTS (
-              SELECT 1
-                FROM google_workspace_gmail_thread_intents intent
-               WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
-                 AND intent.thread_id = google_workspace_gmail_mutations.thread_id
-                 AND intent.intent_kind = 'assign'
-                 AND intent.current_mutation_id = google_workspace_gmail_mutations.id
-                 AND intent.generation = google_workspace_gmail_mutations.intent_generation
-            )
+          AND EXISTS (
+            SELECT 1
+              FROM google_workspace_gmail_thread_intents intent
+             WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+               AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+               AND intent.intent_kind = 'assign'
+               AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+               AND intent.generation = google_workspace_gmail_mutations.intent_generation
+               AND (
+                 google_workspace_gmail_mutations.operation = 'label_inbound_message'
+                 OR intent.current_mutation_id = google_workspace_gmail_mutations.id
+               )
           )
         ${returning}`,
       [id, now],
@@ -304,17 +319,18 @@ export class PostgresGoogleGmailMutationRepository {
               candidate_mutation.next_attempt_at IS NULL
               OR candidate_mutation.next_attempt_at <= $2
             )
-            AND (
-              candidate_mutation.operation <> 'assign_thread'
-              OR EXISTS (
-                SELECT 1
-                  FROM google_workspace_gmail_thread_intents intent
-                 WHERE intent.connection_id = candidate_mutation.connection_id
-                   AND intent.thread_id = candidate_mutation.thread_id
-                   AND intent.intent_kind = 'assign'
-                   AND intent.current_mutation_id = candidate_mutation.id
-                   AND intent.generation = candidate_mutation.intent_generation
-              )
+            AND EXISTS (
+              SELECT 1
+                FROM google_workspace_gmail_thread_intents intent
+               WHERE intent.connection_id = candidate_mutation.connection_id
+                 AND intent.thread_id = candidate_mutation.thread_id
+                 AND intent.intent_kind = 'assign'
+                 AND intent.organization_id = candidate_mutation.organization_id
+                 AND intent.generation = candidate_mutation.intent_generation
+                 AND (
+                   candidate_mutation.operation = 'label_inbound_message'
+                   OR intent.current_mutation_id = candidate_mutation.id
+                 )
             )
           FOR UPDATE OF candidate_mutation SKIP LOCKED
        )
