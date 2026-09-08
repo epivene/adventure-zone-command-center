@@ -110,6 +110,7 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
         expect(text).toContain("FOR UPDATE SKIP LOCKED");
+        expect(text).toContain("pg_try_advisory_xact_lock");
         expect(text).toContain("active.thread_id");
         expect(text).toContain("active.state = 'processing'");
         return { rows: [] };
