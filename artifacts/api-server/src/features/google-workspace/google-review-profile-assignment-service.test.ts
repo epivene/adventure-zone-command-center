@@ -117,7 +117,7 @@ describe("GoogleReviewProfileAssignmentService", () => {
         },
       },
       mutations: {
-        createOrLoad: vi.fn(async () => {
+        createOrLoad: vi.fn(async () => ({
           id: "mutation-1",
           connectionId: "conn-1",
           messageId: "message-1",
@@ -130,7 +130,7 @@ describe("GoogleReviewProfileAssignmentService", () => {
           state: "pending" as const,
           attemptCount: 0,
           lastErrorCode: null,
-        }),
+        })),
         get: vi.fn(),
         retryNow: vi.fn(),
         claim: vi.fn(),
