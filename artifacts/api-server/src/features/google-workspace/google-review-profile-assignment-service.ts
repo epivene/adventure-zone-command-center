@@ -83,6 +83,38 @@ export class GoogleReviewProfileAssignmentService {
     return this.syncSavedDecision(input);
   }
 
+  async retryGmailMutation(
+    mutationId: string,
+    now: Date = new Date(),
+  ): Promise<GoogleProfileLabelSyncResult> {
+    const mutations = new PostgresGoogleGmailMutationRepository(this.pool);
+    const mutation = await mutations.get(mutationId);
+    if (!mutation) {
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
+    }
+    const production = await this.syncFactory();
+    if (production.connectionId !== mutation.connectionId) {
+      throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
+    }
+    const gmailSync = await production.service.retry(mutationId);
+    await this.pool.query(
+      `UPDATE google_workspace_validation_review_items
+          SET gmail_sync_state = $3,
+              gmail_sync_error_code = $4,
+              updated_at = GREATEST(updated_at, $5)
+        WHERE connection_id = $1
+          AND gmail_sync_mutation_id = $2`,
+      [
+        mutation.connectionId,
+        mutationId,
+        gmailSync.state,
+        gmailSync.errorCode,
+        now,
+      ],
+    );
+    return gmailSync;
+  }
+
   private async syncSavedDecision(input: BaseInput): Promise<GoogleReviewAssignmentView> {
     const result = await this.pool.query(
       `SELECT item.connection_id::text,
