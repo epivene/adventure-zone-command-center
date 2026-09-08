@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
+import type { GoogleReviewAssignmentView } from "../features/google-workspace/google-review-profile-assignment-service";
 import { createGoogleWorkspaceValidationRouter } from "./google-workspace-validation";
 
 function appWith(options: {
@@ -22,7 +23,7 @@ function appWith(options: {
     organizationId: string;
     actorId: string;
     now: Date;
-  }) => Promise<unknown>;
+  }) => Promise<void | GoogleReviewAssignmentView>;
   ignoreReviewItem?: (input: {
     messageId: string;
     actorId: string;
