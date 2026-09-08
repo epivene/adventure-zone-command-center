@@ -127,21 +127,28 @@ export class PostgresGoogleGmailMutationRepository {
 
   async claim(id: string, now: Date): Promise<GoogleGmailMutationRecord | null> {
     const result = await this.pool.query(
-      `UPDATE google_workspace_gmail_mutations
+      `WITH candidate AS (
+         SELECT id
+           FROM google_workspace_gmail_mutations
+          WHERE id = $1
+            AND (
+              state IN ('pending','retryable_error')
+              OR (
+                state = 'processing'
+                AND processing_lease_expires_at <= $2
+              )
+            )
+            AND (next_attempt_at IS NULL OR next_attempt_at <= $2)
+          FOR UPDATE SKIP LOCKED
+       )
+       UPDATE google_workspace_gmail_mutations AS mutation
           SET state = 'processing',
-              attempt_count = attempt_count + 1,
+              attempt_count = mutation.attempt_count + 1,
               last_error_code = NULL,
               processing_lease_expires_at = $2 + interval '60 seconds',
               updated_at = $2
-        WHERE id = $1
-          AND (
-            state IN ('pending','retryable_error')
-            OR (
-              state = 'processing'
-              AND processing_lease_expires_at <= $2
-            )
-          )
-          AND (next_attempt_at IS NULL OR next_attempt_at <= $2)
+         FROM candidate
+        WHERE mutation.id = candidate.id
         ${returning}`,
       [id, now],
     );
