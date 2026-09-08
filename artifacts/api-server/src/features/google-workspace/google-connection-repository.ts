@@ -119,17 +119,17 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
 
 function toView(row: ConnectionRow): GoogleConnectionView {
   const granted = scopes(row.granted_scopes);
-  const missingCompose = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE);
+  const missingGmailModify = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE);
   const missingCalendarWrite = row.role === "operational_calendar" && !granted.includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE);
   const base: GoogleConnectionView = {
     id: row.id,
     email: row.account_email,
-    status: row.status === "connected" && (missingCompose || missingCalendarWrite) ? "reauthorization_required" : row.status,
+    status: row.status === "connected" && (missingGmailModify || missingCalendarWrite) ? "reauthorization_required" : row.status,
     grantedScopes: granted,
     connectedAt: dateIso(row.connected_at) as string,
     lastVerifiedAt: dateIso(row.last_verified_at),
-    lastErrorCode: missingCompose
-      ? "GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE_REQUIRED"
+    lastErrorCode: missingGmailModify
+      ? "GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE_REQUIRED"
       : missingCalendarWrite
         ? "GOOGLE_OPERATIONAL_CALENDAR_WRITE_SCOPE_REQUIRED"
         : row.last_error_code,
@@ -351,7 +351,7 @@ export class PostgresGoogleConnectionRepository {
   async createGmailDeliveryClient(): Promise<{ connectionId: string; client: GoogleGmailDeliveryClient } | null> {
     const row = await this.currentRow("workspace");
     if (!row) return null;
-    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE)) {
+    if (row.status === "reauthorization_required" || !scopes(row.granted_scopes).some((scope) => scope === GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE || scope === GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE)) {
       throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
     }
     const environment = this.requireEnvironment();
