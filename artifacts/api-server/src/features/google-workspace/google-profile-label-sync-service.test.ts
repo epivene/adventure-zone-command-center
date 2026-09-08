@@ -20,11 +20,16 @@ function harness(enabled = true) {
           removeLabelIds: [],
           state: "pending",
           attemptCount: 0,
+          intentGeneration: intent.operation === "assign_thread" ? 1 : null,
           lastErrorCode: null,
         };
       }
       return row;
     }),
+    withThreadLock: vi.fn(async (
+      _input: { connectionId: string; threadId: string },
+      work: () => Promise<unknown>,
+    ) => work()),
     get: vi.fn(async () => row),
     retryNow: vi.fn(async () => {
       if (!row || row.state !== "retryable_error") return null;
