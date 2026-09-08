@@ -136,6 +136,7 @@ export class GoogleReviewProfileAssignmentService {
       state: gmailSync.state,
       errorCode: gmailSync.errorCode,
       mutationId: gmailSync.mutationId,
+      organizationId: mutation.organizationId,
       now,
     });
     return gmailSync;
@@ -176,6 +177,7 @@ export class GoogleReviewProfileAssignmentService {
       state: gmailSync.state,
       errorCode: gmailSync.errorCode,
       mutationId: gmailSync.mutationId,
+      organizationId: committed.organizationId,
       now: input.now,
     });
     return this.result(committed, gmailSync);
@@ -210,6 +212,7 @@ export class GoogleReviewProfileAssignmentService {
       state: gmailSync.state,
       errorCode: gmailSync.errorCode,
       mutationId: gmailSync.mutationId,
+      organizationId: committed.organizationId,
       now: input.now,
     });
     return this.result(committed, gmailSync);
@@ -232,6 +235,7 @@ export class GoogleReviewProfileAssignmentService {
     state: string;
     errorCode: string | null;
     mutationId: string;
+    organizationId: string;
     now: Date;
   }): Promise<void> {
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -242,7 +246,21 @@ export class GoogleReviewProfileAssignmentService {
                   gmail_sync_error_code = $4,
                   gmail_sync_mutation_id = $5,
                   updated_at = GREATEST(updated_at, $6)
-            WHERE connection_id = $1 AND message_id = $2`,
+            WHERE connection_id = $1
+              AND message_id = $2
+              AND review_state = 'resolved'
+              AND resolved_organization_id = $7
+              AND gmail_sync_mutation_id = $5
+              AND EXISTS (
+                SELECT 1
+                  FROM google_workspace_gmail_thread_intents intent
+                 WHERE intent.connection_id = $1
+                   AND intent.thread_id =
+                     google_workspace_validation_review_items.thread_id
+                   AND intent.intent_kind = 'assign'
+                   AND intent.organization_id = $7
+                   AND intent.current_mutation_id = $5
+              )`,
           [
             input.connectionId,
             input.messageId,
@@ -250,6 +268,7 @@ export class GoogleReviewProfileAssignmentService {
             input.errorCode,
             input.mutationId,
             input.now,
+            input.organizationId,
           ],
         );
         return;
