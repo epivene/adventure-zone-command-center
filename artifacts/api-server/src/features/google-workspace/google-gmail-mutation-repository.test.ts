@@ -113,6 +113,7 @@ describe("PostgresGoogleGmailMutationRepository", () => {
         expect(text).toContain("pg_try_advisory_xact_lock");
         expect(text).toContain("active.thread_id");
         expect(text).toContain("active.state = 'processing'");
+        expect(text).not.toContain("active.processing_lease_expires_at");
         return { rows: [] };
       },
     });
