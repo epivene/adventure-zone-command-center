@@ -12,10 +12,11 @@ import BossReceiptsPage from "./BossReceiptsPage";
 import BossReviewsPage from "./BossReviewsPage";
 
 const bossGet = vi.fn();
+const bossDelete = vi.fn();
 
 vi.mock("@/lib/boss-auth-context", () => ({
   bossGet: (...args: unknown[]) => bossGet(...args),
-  bossDelete: vi.fn(),
+  bossDelete: (...args: unknown[]) => bossDelete(...args),
   bossPatch: vi.fn(),
 }));
 
@@ -75,6 +76,7 @@ const dashboard = {
 beforeEach(() => {
   window.history.replaceState({}, "", "/");
   bossGet.mockReset().mockResolvedValue(dashboard);
+  bossDelete.mockReset().mockResolvedValue({ ok: true });
 });
 
 afterEach(cleanup);
@@ -189,11 +191,11 @@ describe("Boss operational records by leg", () => {
     expect(screen.queryByText("Inspect costume")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /Hulk Birthday Party/ }));
 
-    const event = await screen.findByTestId("maintenance-event-booking-party");
+    const event = screen.getByTestId("maintenance-event-booking-party");
     expect(within(event).getByRole("heading", { name: "Pre-event" })).toBeInTheDocument();
-    expect(within(event).getByText("Inspect costume")).toBeInTheDocument();
+    expect(await within(event).findByText("Inspect costume")).toBeInTheDocument();
     expect(within(event).getByRole("heading", { name: "Post-event" })).toBeInTheDocument();
-    expect(within(event).getByText("Check for damage")).toBeInTheDocument();
+    expect(await within(event).findByText("Check for damage")).toBeInTheDocument();
   });
 
   it("shows a missing phase under an opened maintenance event", async () => {
@@ -230,6 +232,107 @@ describe("Boss operational records by leg", () => {
 
     const event = await screen.findByTestId("maintenance-event-booking-party");
     expect(within(event).getByText("No post-event record yet.")).toBeInTheDocument();
+  });
+
+  it("keeps a successful phase and retries only a failed phase", async () => {
+    let postAttempts = 0;
+    bossGet.mockImplementation(async (path: string) => {
+      if (path === "/boss/dashboard") {
+        return {
+          ...dashboard,
+          checklistAndMaintenance: [
+            { id: "maintenance-pre", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "pre_event" },
+            { id: "maintenance-post", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "post_event" },
+          ],
+        };
+      }
+      if (path === "/boss/maintenance/maintenance-pre") {
+        return { record: { id: "maintenance-pre", items: [{ id: "answer-pre", label: "Pre answer", resourceName: null, result: "safe", note: null }] } };
+      }
+      if (path === "/boss/maintenance/maintenance-post") {
+        postAttempts += 1;
+        if (postAttempts === 1) throw new Error("Post record unavailable");
+        return { record: { id: "maintenance-post", items: [{ id: "answer-post", label: "Post answer", resourceName: null, result: "safe", note: null }] } };
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+
+    render(<BossMaintenancePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 2 maintenance records" }));
+    fireEvent.click(screen.getByRole("button", { name: /Hulk Birthday Party/ }));
+
+    expect(await screen.findByText("Pre answer")).toBeInTheDocument();
+    expect(await screen.findByText("Post record unavailable")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Retry post-event record" }));
+    expect(await screen.findByText("Post answer")).toBeInTheDocument();
+    expect(postAttempts).toBe(2);
+  });
+
+  it("refreshes the details for an event that is already open", async () => {
+    let detailVersion = 1;
+    bossGet.mockImplementation(async (path: string) => {
+      if (path === "/boss/dashboard") {
+        return {
+          ...dashboard,
+          checklistAndMaintenance: [
+            { id: "maintenance-pre", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "pre_event" },
+          ],
+        };
+      }
+      return { record: { id: "maintenance-pre", items: [{ id: "answer-pre", label: `Detail version ${detailVersion}`, resourceName: null, result: "safe", note: null }] } };
+    });
+
+    render(<BossMaintenancePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 1 maintenance record" }));
+    fireEvent.click(screen.getByRole("button", { name: /Hulk Birthday Party/ }));
+    expect(await screen.findByText("Detail version 1")).toBeInTheDocument();
+
+    detailVersion = 2;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(await screen.findByText("Detail version 2")).toBeInTheDocument();
+    expect(screen.queryByText("Detail version 1")).not.toBeInTheDocument();
+  });
+
+  it("groups legacy pre and post records without a booking id into one event card", async () => {
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      checklistAndMaintenance: [
+        { id: "legacy-pre", legId: "leg-hulk", legName: "Hulk", title: "Legacy Party", phase: "pre" },
+        { id: "legacy-post", legId: "leg-hulk", legName: "Hulk", title: "Legacy Party", phase: "post" },
+      ],
+    });
+    render(<BossMaintenancePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 2 maintenance records" }));
+
+    expect(screen.getAllByText("Legacy Party")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /Legacy Party/ })).toHaveTextContent("Pre-event available");
+    expect(screen.getByRole("button", { name: /Legacy Party/ })).toHaveTextContent("Post-event available");
+  });
+
+  it("removes a phase record without using the event card as the action", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    bossGet.mockImplementation(async (path: string) => {
+      if (path === "/boss/dashboard") {
+        return {
+          ...dashboard,
+          checklistAndMaintenance: [
+            { id: "maintenance-pre", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", phase: "pre_event" },
+          ],
+        };
+      }
+      return { record: { id: "maintenance-pre", items: [] } };
+    });
+
+    render(<BossMaintenancePage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 1 maintenance record" }));
+    const toggle = screen.getByRole("button", { name: /Hulk Birthday Party/ });
+    fireEvent.click(toggle);
+    await screen.findByText("No checklist answers.");
+    fireEvent.click(screen.getByRole("button", { name: "Remove pre-event record" }));
+
+    await waitFor(() => expect(bossDelete).toHaveBeenCalledWith("/boss/maintenance/maintenance-pre"));
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    confirm.mockRestore();
   });
 
   it("opens a dashboard-linked review inside its matching leg", async () => {
