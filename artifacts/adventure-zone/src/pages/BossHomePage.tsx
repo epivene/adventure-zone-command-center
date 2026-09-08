@@ -14,6 +14,7 @@ type DashboardData = {
   assignments: Assignment[];
   reviewAndWrapUp: { id?: string; title?: string; bookingId?: string; status?: string; eventDate?: string }[];
   checklistAndMaintenance: { id?: string; title?: string; bookingId?: string; phase?: string; status?: string; completedAt?: string | null }[];
+  recentCompletedMaintenanceEvents?: { id?: string; title?: string; bookingId?: string; status?: string; completedAt: string }[];
 };
 
 function priorityColor(p: string) {
@@ -95,17 +96,9 @@ export default function BossHomePage() {
   const allActiveAssignments = (data?.assignments ?? []).filter(
     (a) => !["done", "cancelled"].includes(a.status)
   );
-  const recentMaintenanceEvents = Array.from(
-    (data?.checklistAndMaintenance ?? [])
-      .filter((item) => Boolean(item.completedAt))
-      .sort((left, right) => new Date(right.completedAt!).getTime() - new Date(left.completedAt!).getTime())
-      .reduce((events, item, index) => {
-        const key = item.bookingId ?? item.title?.trim().toLowerCase() ?? item.id ?? `maintenance-${index}`;
-        if (!events.has(key)) events.set(key, item);
-        return events;
-      }, new Map<string, DashboardData["checklistAndMaintenance"][number]>())
-      .values(),
-  ).slice(0, 3);
+  const recentMaintenanceEvents = (data?.recentCompletedMaintenanceEvents ?? [])
+    .filter((item) => item.status === "completed" && Boolean(item.completedAt))
+    .slice(0, 3);
 
   return (
     <div className="grid gap-6" data-testid="boss-home">
