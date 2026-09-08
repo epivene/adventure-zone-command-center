@@ -10,6 +10,7 @@ import { GoogleProfileLabelSyncService } from "./google-profile-label-sync-servi
 
 function harness(enabled = true) {
   let row: GoogleGmailMutationRecord | null = null;
+  const threadLock = vi.fn();
   const mutations = {
     createOrLoad: vi.fn(async (intent: GoogleGmailMutationIntent) => {
       if (!row) {
@@ -26,10 +27,13 @@ function harness(enabled = true) {
       }
       return row;
     }),
-    withThreadLock: vi.fn(async (
-      _input: { connectionId: string; threadId: string },
-      work: () => Promise<unknown>,
-    ) => work()),
+    async withThreadLock<T>(
+      input: { connectionId: string; threadId: string },
+      work: () => Promise<T>,
+    ): Promise<T> {
+      threadLock(input);
+      return work();
+    },
     get: vi.fn(async () => row),
     retryNow: vi.fn(async () => {
       if (!row || row.state !== "retryable_error") return null;
@@ -107,7 +111,15 @@ function harness(enabled = true) {
     gmail,
     now: () => new Date("2026-09-08T12:00:00.000Z"),
   });
-  return { service, mutations, resolver, labels, gmail, current: () => row };
+  return {
+    service,
+    mutations,
+    resolver,
+    labels,
+    gmail,
+    threadLock,
+    current: () => row,
+  };
 }
 
 describe("GoogleProfileLabelSyncService", () => {
@@ -126,6 +138,10 @@ describe("GoogleProfileLabelSyncService", () => {
       gmailLabelId: "Label_target",
     });
 
+    expect(h.threadLock).toHaveBeenCalledWith({
+      connectionId: "conn-1",
+      threadId: "thread-1",
+    });
     expect(h.gmail.modifyThreadLabels).toHaveBeenCalledWith({
       threadId: "thread-1",
       addLabelIds: ["Label_target"],
