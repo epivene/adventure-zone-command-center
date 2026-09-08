@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Search } from "lucide-react";
 
-import type { GoogleRecentValidationRow } from "@/features/google-workspace/google-workspace-client";
+import {
+  retryGoogleWorkspaceGmailMutation,
+  type GoogleProfileLabelSyncResult,
+  type GoogleRecentValidationRow,
+} from "@/features/google-workspace/google-workspace-client";
 import {
   changeMatchedGoogleEmailProfile,
   ignoreMatchedGoogleEmail,
@@ -10,6 +14,17 @@ import {
   searchGoogleReviewProfiles,
   type GoogleReviewProfileSearchResult,
 } from "@/features/google-workspace/google-review-profile-search";
+
+function gmailMessage(result: GoogleProfileLabelSyncResult): string {
+  if (result.state === "completed") return "Assigned and archived in Gmail.";
+  if (result.state === "retryable_error") {
+    return "Profile assigned. The Gmail update needs a retry.";
+  }
+  if (result.state === "conflict") {
+    return "Profile assigned, but Gmail has a label conflict. No duplicate label was created.";
+  }
+  return "Profile assigned, but Gmail could not be updated.";
+}
 
 export function GoogleMatchedEmailActions({
   row,
@@ -26,6 +41,7 @@ export function GoogleMatchedEmailActions({
   const [busy, setBusy] = useState(false);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gmailSync, setGmailSync] = useState<GoogleProfileLabelSyncResult | null>(null);
 
   async function search() {
     if (!query.trim()) return;
@@ -44,7 +60,8 @@ export function GoogleMatchedEmailActions({
     setBusy(true);
     setError(null);
     try {
-      await changeMatchedGoogleEmailProfile(row, profile.id);
+      const result = await changeMatchedGoogleEmailProfile(row, profile.id);
+      setGmailSync(result.gmailSync);
       onAssigned({ id: profile.id, name: profile.name });
       setEditing(false);
       setResults([]);
@@ -61,9 +78,24 @@ export function GoogleMatchedEmailActions({
     setError(null);
     try {
       await ignoreMatchedGoogleEmail(row);
+      setGmailSync(null);
       onIgnored();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not ignore this email.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retryGmail() {
+    if (!gmailSync || gmailSync.state !== "retryable_error") return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await retryGoogleWorkspaceGmailMutation(gmailSync.mutationId);
+      setGmailSync(result.gmailSync);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not retry the Gmail update.");
     } finally {
       setBusy(false);
     }
@@ -97,6 +129,21 @@ export function GoogleMatchedEmailActions({
               <span className="text-xs text-slate-500">{[profile.city, profile.region].filter(Boolean).join(", ")}</span>
             </button>
           ))}
+        </div>
+      ) : null}
+      {gmailSync ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300" role="status">
+          <span>{gmailMessage(gmailSync)}</span>
+          {gmailSync.state === "retryable_error" ? (
+            <button
+              className="text-orange-700 hover:underline disabled:opacity-50 dark:text-orange-300"
+              disabled={busy}
+              onClick={() => void retryGmail()}
+              type="button"
+            >
+              {busy ? "Retrying…" : "Retry Gmail"}
+            </button>
+          ) : null}
         </div>
       ) : null}
       {error ? <p className="mt-2 text-xs font-semibold text-rose-700" role="alert">{error}</p> : null}
