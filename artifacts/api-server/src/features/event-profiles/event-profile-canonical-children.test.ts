@@ -32,7 +32,7 @@ function records(): EventProfileRecordSet {
     endsAt: null,
     status: "completed",
     probability: "unlikely",
-    notes: `[Merged duplicate] Canonical booking: ${canonicalBookingId}`,
+    notes: `Preserved historical note. [Merged duplicate] Canonical booking: ${canonicalBookingId}`,
     actRecordId: null,
   }));
 

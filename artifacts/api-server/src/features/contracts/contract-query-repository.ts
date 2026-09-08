@@ -35,7 +35,7 @@ export class DrizzleContractQueryRepository {
         .leftJoin(contractDrafts, and(eq(contractDrafts.bookingId, bookings.id), isNull(contractDrafts.finalizedAt)))
         .where(and(
           eq(bookings.organizationId, organizationId),
-          sql`coalesce(${bookings.notes}, '') not like '[Merged duplicate] Canonical booking:%'`,
+          sql`coalesce(${bookings.notes}, '') not like '%[Merged duplicate] Canonical booking:%'`,
         ))
         .orderBy(desc(bookings.startsAt), asc(bookings.name)),
       this.database.select({ file: contractFiles }).from(contractFiles)

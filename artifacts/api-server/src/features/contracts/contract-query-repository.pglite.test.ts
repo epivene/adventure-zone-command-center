@@ -36,7 +36,7 @@ describe("DrizzleContractQueryRepository", () => {
       insert into organizations values ('11111111-1111-4111-8111-111111111111');
       insert into bookings (id, organization_id, name, starts_at, status, notes) values
         ('22222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'Pirate Fest - 2026', '2026-09-18T17:00:00Z', 'pending_decision', null),
-        ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Pirate Fest - 2026', null, 'completed', '[Merged duplicate] Canonical booking: 22222222-2222-4222-8222-222222222222'),
+        ('33333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'Pirate Fest - 2026', null, 'completed', 'Historical note. [Merged duplicate] Canonical booking: 22222222-2222-4222-8222-222222222222'),
         ('44444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', 'Northglenn July 4 Celebration - 2026', '2026-07-04T17:00:00Z', 'interested', null);
     `);
 
