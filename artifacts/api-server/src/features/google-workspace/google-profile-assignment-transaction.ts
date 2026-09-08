@@ -116,7 +116,9 @@ function mutationRecord(row: Record<string, unknown> | undefined): GoogleGmailMu
     intentGeneration:
       typeof row.intent_generation === "number"
         ? row.intent_generation
-        : typeof row.intent_generation === "string"
+        : typeof row.intent_generation === "bigint"
+          ? Number(row.intent_generation)
+          : typeof row.intent_generation === "string"
           ? Number(row.intent_generation)
           : null,
     lastErrorCode:
@@ -431,7 +433,9 @@ implements GoogleProfileAssignmentTransactionPort {
     const generation =
       typeof intent?.generation === "number"
         ? intent.generation
-        : typeof intent?.generation === "string"
+        : typeof intent?.generation === "bigint"
+          ? Number(intent.generation)
+          : typeof intent?.generation === "string"
           ? Number(intent.generation)
           : NaN;
     if (!Number.isSafeInteger(generation) || generation < 1) {
