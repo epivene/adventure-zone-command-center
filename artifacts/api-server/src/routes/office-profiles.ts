@@ -11,7 +11,6 @@ import {
   officeProfileInputSchema,
 } from "@/features/office/office-profile-input";
 import { OfficeProfileService } from "@/features/office/office-profile-service";
-import { createBusinessDocumentsRouter } from "./business-documents";
 
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
@@ -153,6 +152,5 @@ router.post("/office/profiles/:profileId/notes", requireOffice, async (req, res)
   }
 });
 
-router.use("/office", requireOffice, createBusinessDocumentsRouter());
 
 export default router;
