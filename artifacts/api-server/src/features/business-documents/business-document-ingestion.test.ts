@@ -55,4 +55,32 @@ describe("BusinessDocumentIngestion", () => {
     expect(storage.putIfAbsent).not.toHaveBeenCalled();
     expect(repository.ingest).toHaveBeenCalledWith(expect.objectContaining({ blob: storedBlob }));
   });
+
+  it("applies user-supplied upload metadata in the repository transaction", async () => {
+    const repository = { ingest: vi.fn(async (input: any) => ({ outcome: "imported" as const, documentId: "doc-1", versionId: "version-1", blobId: "blob-1", reviewState: input.reviewState, linkedProfileIds: [], linkedBookingIds: [], linkedEventFamilyIds: [] })) };
+    const ingestion = new BusinessDocumentIngestion({
+      storage: { putIfAbsent: vi.fn(async () => ({ sha256Hex: "c".repeat(64), storageKey: "business-documents/cc/hash", mimeType: "application/pdf", sizeBytes: 3 })) },
+      repository,
+    });
+
+    await ingestion.ingest({
+      bytes,
+      filename: "raw-file.pdf",
+      mimeType: "application/pdf",
+      subject: "raw-file.pdf",
+      bodyText: "",
+      source: { ...source, sourceKind: "manual", externalId: "manual-1" },
+      evidence: { approvedThreadProfileId: null, exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] },
+      actor: "boss:dave",
+      uploadMetadata: { displayName: "County Fair Agreement", category: "contract" },
+    });
+
+    expect(repository.ingest).toHaveBeenCalledWith(expect.objectContaining({
+      displayName: "County Fair Agreement",
+      category: "contract",
+      reviewState: "accepted",
+      preserveMetadataOnDuplicate: true,
+    }));
+  });
+
 });
