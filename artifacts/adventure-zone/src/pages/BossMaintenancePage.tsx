@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
+import { useSearch } from "wouter";
 import { ChevronDown, RefreshCw, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
-import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
+import { LegRecordPicker, UNASSIGNED_LEG_KEY, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
 import { bossDelete, bossGet } from "@/lib/boss-auth-context";
 
 type MaintenanceItem = {
@@ -83,6 +84,8 @@ function readableStatus(status?: string | null) {
 }
 
 export default function BossMaintenancePage() {
+  const search = useSearch();
+  const linkedBookingId = new URLSearchParams(search).get("bookingId");
   const [items, setItems] = useState<MaintenanceItem[]>([]);
   const [selectedLegKey, setSelectedLegKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,7 +143,19 @@ export default function BossMaintenancePage() {
       const data = await bossGet<DashboardData>("/boss/dashboard");
       const freshItems = Array.isArray(data.checklistAndMaintenance) ? data.checklistAndMaintenance : [];
       setItems(freshItems);
-      if (openEventKey) {
+      const linkedItem = linkedBookingId
+        ? freshItems.find((item) => item.bookingId === linkedBookingId)
+        : undefined;
+      if (linkedItem && linkedBookingId) {
+        const linkedLegKey = linkedItem.legId ?? UNASSIGNED_LEG_KEY;
+        setSelectedLegKey(linkedLegKey);
+        setOpenEventKey(linkedBookingId);
+        const linkedEvent = groupByEvent(recordsForLeg(freshItems, linkedLegKey))
+          .find((event) => event.key === linkedBookingId);
+        if (linkedEvent) {
+          void loadRecordIds(linkedEvent.records.flatMap((item) => item.id ? [item.id] : []), generation);
+        }
+      } else if (openEventKey) {
         const openEvent = groupByEvent(recordsForLeg(freshItems, selectedLegKey)).find((event) => event.key === openEventKey);
         if (openEvent) {
           void loadRecordIds(openEvent.records.flatMap((item) => item.id ? [item.id] : []), generation);
