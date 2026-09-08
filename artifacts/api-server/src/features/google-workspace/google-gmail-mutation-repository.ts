@@ -237,7 +237,6 @@ export class PostgresGoogleGmailMutationRepository {
                  AND active.thread_id = candidate_mutation.thread_id
                  AND active.id <> candidate_mutation.id
                  AND active.state = 'processing'
-                 AND active.processing_lease_expires_at > $2
             )
           FOR UPDATE OF candidate_mutation SKIP LOCKED
        )
