@@ -66,20 +66,45 @@ describe("GoogleValidationReview", () => {
     expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100);
   });
 
+  it("shows Gmail-checking progress during the opening scan", async () => {
+    let finishCheck!: () => void;
+    client.runGoogleWorkspaceRecentValidation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCheck = () => resolve({});
+      }),
+    );
+
+    render(<GoogleValidationReview checkGmailOnMount />);
+
+    expect(screen.getByText("Checking Gmail…")).toBeInTheDocument();
+    finishCheck();
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+  });
+
   it("lets the owner check Gmail again when opted in", async () => {
     render(<GoogleValidationReview checkGmailOnMount />);
     await screen.findByText("County Fair application");
     client.runGoogleWorkspaceRecentValidation.mockClear();
     client.getGoogleWorkspaceValidationReview.mockClear();
 
+    let finishCheck!: () => void;
+    client.runGoogleWorkspaceRecentValidation.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishCheck = () => resolve({});
+      }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "Check emails" }));
 
+    const checkingButton = screen.getByRole("button", { name: "Checking Gmail…" });
+    expect(checkingButton).toBeDisabled();
     await waitFor(() =>
       expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100),
     );
+    finishCheck();
     await waitFor(() =>
       expect(client.getGoogleWorkspaceValidationReview).toHaveBeenCalledTimes(1),
     );
+    expect(await screen.findByRole("button", { name: "Check emails" })).toBeEnabled();
   });
 
   it("loads only the saved queue in shared views", async () => {
