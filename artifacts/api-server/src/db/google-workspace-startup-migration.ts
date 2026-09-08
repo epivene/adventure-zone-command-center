@@ -278,9 +278,84 @@ export async function ensureGoogleWorkspaceSchema(
         CONSTRAINT google_workspace_gmail_mutations_attempt_nonnegative
           CHECK (attempt_count >= 0)
       );
+      ALTER TABLE google_workspace_gmail_mutations
+        ADD COLUMN IF NOT EXISTS intent_generation bigint;
       CREATE INDEX IF NOT EXISTS google_workspace_gmail_mutations_retry_idx
         ON google_workspace_gmail_mutations
           (state, next_attempt_at, processing_lease_expires_at);
+
+      CREATE TABLE IF NOT EXISTS google_workspace_gmail_thread_intents (
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        thread_id text NOT NULL,
+        generation bigint NOT NULL DEFAULT 1,
+        intent_kind text NOT NULL,
+        organization_id uuid
+          REFERENCES organizations(id) ON DELETE RESTRICT,
+        current_mutation_id uuid
+          REFERENCES google_workspace_gmail_mutations(id) ON DELETE SET NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (connection_id, thread_id),
+        CONSTRAINT google_workspace_gmail_thread_intents_thread_nonblank
+          CHECK (btrim(thread_id) <> ''),
+        CONSTRAINT google_workspace_gmail_thread_intents_generation_positive
+          CHECK (generation > 0),
+        CONSTRAINT google_workspace_gmail_thread_intents_kind_valid
+          CHECK (intent_kind IN ('assign','ignore')),
+        CONSTRAINT google_workspace_gmail_thread_intents_assignment_consistent
+          CHECK (
+            (intent_kind = 'assign' AND organization_id IS NOT NULL)
+            OR (intent_kind = 'ignore' AND organization_id IS NULL AND current_mutation_id IS NULL)
+          )
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_gmail_thread_intents_mutation_idx
+        ON google_workspace_gmail_thread_intents (current_mutation_id)
+        WHERE current_mutation_id IS NOT NULL;
+
+      WITH latest_review AS (
+        SELECT DISTINCT ON (connection_id, thread_id)
+               connection_id, thread_id, review_state,
+               resolved_organization_id, updated_at
+          FROM google_workspace_validation_review_items
+         ORDER BY connection_id, thread_id, updated_at DESC, id DESC
+      ),
+      restored AS (
+        SELECT review.connection_id,
+               review.thread_id,
+               CASE WHEN review.review_state = 'ignored' THEN 'ignore' ELSE 'assign' END AS intent_kind,
+               CASE WHEN review.review_state = 'resolved'
+                    THEN review.resolved_organization_id ELSE NULL END AS organization_id,
+               CASE WHEN review.review_state = 'resolved'
+                    THEN mutation.id ELSE NULL END AS current_mutation_id
+          FROM latest_review review
+          LEFT JOIN LATERAL (
+            SELECT candidate.id
+              FROM google_workspace_gmail_mutations candidate
+             WHERE candidate.connection_id = review.connection_id
+               AND candidate.thread_id = review.thread_id
+               AND candidate.operation = 'assign_thread'
+               AND candidate.organization_id = review.resolved_organization_id
+             ORDER BY candidate.created_at DESC, candidate.id DESC
+             LIMIT 1
+          ) mutation ON true
+         WHERE review.review_state IN ('resolved','ignored')
+      )
+      INSERT INTO google_workspace_gmail_thread_intents (
+        connection_id, thread_id, generation, intent_kind,
+        organization_id, current_mutation_id
+      )
+      SELECT connection_id, thread_id, 1, intent_kind,
+             organization_id, current_mutation_id
+        FROM restored
+       WHERE intent_kind = 'ignore' OR current_mutation_id IS NOT NULL
+      ON CONFLICT (connection_id, thread_id) DO NOTHING;
+
+      UPDATE google_workspace_gmail_mutations mutation
+         SET intent_generation = intent.generation
+        FROM google_workspace_gmail_thread_intents intent
+       WHERE mutation.id = intent.current_mutation_id
+         AND mutation.intent_generation IS NULL;
 
       ALTER TABLE google_workspace_validation_review_items
         ADD COLUMN IF NOT EXISTS gmail_sync_state text NOT NULL DEFAULT 'not_requested';
