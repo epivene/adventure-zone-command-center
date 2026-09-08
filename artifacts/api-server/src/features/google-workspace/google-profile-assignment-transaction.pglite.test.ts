@@ -1,7 +1,6 @@
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
 
-import { ensureGoogleWorkspaceSchema } from "../../db/google-workspace-startup-migration";
 import { PostgresGoogleProfileAssignmentTransaction } from "./google-profile-assignment-transaction";
 
 const connectionId = "20000000-0000-4000-8000-000000000001";
@@ -17,17 +16,79 @@ async function fixture(options?: { failMutation?: boolean }) {
       consolidated_into_id uuid
     );
     CREATE TABLE contacts (id uuid PRIMARY KEY);
-  `);
-  await ensureGoogleWorkspaceSchema({
-    async query(sql: string) {
-      if (sql.includes(";")) {
-        await db.exec(sql);
-        return { rows: [] };
-      }
-      return db.query(sql);
-    },
-  } as never);
-  await db.exec(`
+    CREATE TABLE google_workspace_connections (
+      id uuid PRIMARY KEY,
+      account_email text NOT NULL,
+      status text NOT NULL DEFAULT 'connected',
+      encrypted_refresh_token jsonb NOT NULL,
+      granted_scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE google_workspace_validation_review_items (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      connection_id uuid NOT NULL,
+      message_id text NOT NULL,
+      thread_id text NOT NULL,
+      subject text NOT NULL DEFAULT '',
+      from_header text NOT NULL DEFAULT '',
+      to_header text NOT NULL DEFAULT '',
+      internal_date_ms bigint,
+      evidence_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      candidate_organizations jsonb NOT NULL DEFAULT '[]'::jsonb,
+      has_attachments boolean NOT NULL DEFAULT false,
+      review_state text NOT NULL DEFAULT 'pending',
+      resolved_organization_id uuid,
+      reviewed_by text,
+      reviewed_at timestamptz,
+      gmail_sync_state text NOT NULL DEFAULT 'not_requested',
+      gmail_sync_error_code text,
+      gmail_sync_mutation_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (connection_id, message_id)
+    );
+    CREATE TABLE google_workspace_validation_mappings (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      connection_id uuid NOT NULL,
+      message_id text NOT NULL,
+      thread_id text NOT NULL,
+      organization_id uuid NOT NULL,
+      contact_id uuid,
+      evidence_codes jsonb NOT NULL DEFAULT '[]'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (connection_id, message_id)
+    );
+    CREATE TABLE google_workspace_audit_events (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      actor_kind text NOT NULL,
+      actor_id text,
+      action text NOT NULL,
+      target_type text NOT NULL,
+      target_id text,
+      metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+    CREATE TABLE google_workspace_gmail_mutations (
+      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+      connection_id uuid NOT NULL,
+      message_id text NOT NULL,
+      thread_id text NOT NULL,
+      organization_id uuid NOT NULL,
+      operation text NOT NULL,
+      target_label_id text,
+      remove_label_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      idempotency_key text NOT NULL UNIQUE,
+      state text NOT NULL DEFAULT 'pending',
+      attempt_count integer NOT NULL DEFAULT 0,
+      last_error_code text,
+      next_attempt_at timestamptz,
+      processing_lease_expires_at timestamptz,
+      actor_id text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
     INSERT INTO organizations(id, name) VALUES
       ('${organizationA}', 'First Profile'),
       ('${organizationB}', 'Second Profile');
