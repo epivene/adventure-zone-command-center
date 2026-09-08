@@ -193,18 +193,43 @@ export class PostgresGoogleGmailMutationRepository {
            ORDER BY connection.updated_at DESC
            LIMIT 1
         )
-          AND EXISTS (
-            SELECT 1
-              FROM google_workspace_gmail_thread_intents intent
-             WHERE intent.connection_id = mutation.connection_id
-               AND intent.thread_id = mutation.thread_id
-               AND intent.intent_kind = 'assign'
-               AND intent.organization_id = mutation.organization_id
-               AND intent.generation = mutation.intent_generation
-               AND (
-                 mutation.operation = 'label_inbound_message'
-                 OR intent.current_mutation_id = mutation.id
-               )
+          AND (
+            (
+              mutation.operation = 'assign_thread'
+              AND EXISTS (
+                SELECT 1
+                  FROM google_workspace_gmail_thread_intents intent
+                 WHERE intent.connection_id = mutation.connection_id
+                   AND intent.thread_id = mutation.thread_id
+                   AND intent.intent_kind = 'assign'
+                   AND intent.organization_id = mutation.organization_id
+                   AND intent.generation = mutation.intent_generation
+                   AND intent.current_mutation_id = mutation.id
+              )
+            )
+            OR (
+              mutation.operation = 'label_inbound_message'
+              AND (
+                EXISTS (
+                  SELECT 1
+                    FROM google_workspace_gmail_thread_intents intent
+                   WHERE intent.connection_id = mutation.connection_id
+                     AND intent.thread_id = mutation.thread_id
+                     AND intent.intent_kind = 'assign'
+                     AND intent.organization_id = mutation.organization_id
+                     AND intent.generation = mutation.intent_generation
+                )
+                OR (
+                  mutation.intent_generation IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM google_workspace_gmail_thread_intents any_intent
+                     WHERE any_intent.connection_id = mutation.connection_id
+                       AND any_intent.thread_id = mutation.thread_id
+                  )
+                )
+              )
+            )
           )
           AND (
             mutation.state = 'pending'
@@ -238,18 +263,43 @@ export class PostgresGoogleGmailMutationRepository {
       `SELECT id::text
          FROM google_workspace_gmail_mutations
         WHERE connection_id = $1
-          AND EXISTS (
-            SELECT 1
-              FROM google_workspace_gmail_thread_intents intent
-             WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
-               AND intent.thread_id = google_workspace_gmail_mutations.thread_id
-               AND intent.intent_kind = 'assign'
-               AND intent.organization_id = google_workspace_gmail_mutations.organization_id
-               AND intent.generation = google_workspace_gmail_mutations.intent_generation
-               AND (
-                 google_workspace_gmail_mutations.operation = 'label_inbound_message'
-                 OR intent.current_mutation_id = google_workspace_gmail_mutations.id
-               )
+          AND (
+            (
+              google_workspace_gmail_mutations.operation = 'assign_thread'
+              AND EXISTS (
+                SELECT 1
+                  FROM google_workspace_gmail_thread_intents intent
+                 WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                   AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                   AND intent.intent_kind = 'assign'
+                   AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+                   AND intent.generation = google_workspace_gmail_mutations.intent_generation
+                   AND intent.current_mutation_id = google_workspace_gmail_mutations.id
+              )
+            )
+            OR (
+              google_workspace_gmail_mutations.operation = 'label_inbound_message'
+              AND (
+                EXISTS (
+                  SELECT 1
+                    FROM google_workspace_gmail_thread_intents intent
+                   WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                     AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                     AND intent.intent_kind = 'assign'
+                     AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+                     AND intent.generation = google_workspace_gmail_mutations.intent_generation
+                )
+                OR (
+                  google_workspace_gmail_mutations.intent_generation IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM google_workspace_gmail_thread_intents any_intent
+                     WHERE any_intent.connection_id = google_workspace_gmail_mutations.connection_id
+                       AND any_intent.thread_id = google_workspace_gmail_mutations.thread_id
+                  )
+                )
+              )
+            )
           )
           AND (
             state = 'pending'
@@ -283,18 +333,43 @@ export class PostgresGoogleGmailMutationRepository {
               updated_at = $2
         WHERE id = $1
           AND state = 'retryable_error'
-          AND EXISTS (
-            SELECT 1
-              FROM google_workspace_gmail_thread_intents intent
-             WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
-               AND intent.thread_id = google_workspace_gmail_mutations.thread_id
-               AND intent.intent_kind = 'assign'
-               AND intent.organization_id = google_workspace_gmail_mutations.organization_id
-               AND intent.generation = google_workspace_gmail_mutations.intent_generation
-               AND (
-                 google_workspace_gmail_mutations.operation = 'label_inbound_message'
-                 OR intent.current_mutation_id = google_workspace_gmail_mutations.id
-               )
+          AND (
+            (
+              google_workspace_gmail_mutations.operation = 'assign_thread'
+              AND EXISTS (
+                SELECT 1
+                  FROM google_workspace_gmail_thread_intents intent
+                 WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                   AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                   AND intent.intent_kind = 'assign'
+                   AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+                   AND intent.generation = google_workspace_gmail_mutations.intent_generation
+                   AND intent.current_mutation_id = google_workspace_gmail_mutations.id
+              )
+            )
+            OR (
+              google_workspace_gmail_mutations.operation = 'label_inbound_message'
+              AND (
+                EXISTS (
+                  SELECT 1
+                    FROM google_workspace_gmail_thread_intents intent
+                   WHERE intent.connection_id = google_workspace_gmail_mutations.connection_id
+                     AND intent.thread_id = google_workspace_gmail_mutations.thread_id
+                     AND intent.intent_kind = 'assign'
+                     AND intent.organization_id = google_workspace_gmail_mutations.organization_id
+                     AND intent.generation = google_workspace_gmail_mutations.intent_generation
+                )
+                OR (
+                  google_workspace_gmail_mutations.intent_generation IS NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                      FROM google_workspace_gmail_thread_intents any_intent
+                     WHERE any_intent.connection_id = google_workspace_gmail_mutations.connection_id
+                       AND any_intent.thread_id = google_workspace_gmail_mutations.thread_id
+                  )
+                )
+              )
+            )
           )
         ${returning}`,
       [id, now],
@@ -319,18 +394,43 @@ export class PostgresGoogleGmailMutationRepository {
               candidate_mutation.next_attempt_at IS NULL
               OR candidate_mutation.next_attempt_at <= $2
             )
-            AND EXISTS (
-              SELECT 1
-                FROM google_workspace_gmail_thread_intents intent
-               WHERE intent.connection_id = candidate_mutation.connection_id
-                 AND intent.thread_id = candidate_mutation.thread_id
-                 AND intent.intent_kind = 'assign'
-                 AND intent.organization_id = candidate_mutation.organization_id
-                 AND intent.generation = candidate_mutation.intent_generation
-                 AND (
-                   candidate_mutation.operation = 'label_inbound_message'
-                   OR intent.current_mutation_id = candidate_mutation.id
-                 )
+            AND (
+              (
+                candidate_mutation.operation = 'assign_thread'
+                AND EXISTS (
+                  SELECT 1
+                    FROM google_workspace_gmail_thread_intents intent
+                   WHERE intent.connection_id = candidate_mutation.connection_id
+                     AND intent.thread_id = candidate_mutation.thread_id
+                     AND intent.intent_kind = 'assign'
+                     AND intent.organization_id = candidate_mutation.organization_id
+                     AND intent.generation = candidate_mutation.intent_generation
+                     AND intent.current_mutation_id = candidate_mutation.id
+                )
+              )
+              OR (
+                candidate_mutation.operation = 'label_inbound_message'
+                AND (
+                  EXISTS (
+                    SELECT 1
+                      FROM google_workspace_gmail_thread_intents intent
+                     WHERE intent.connection_id = candidate_mutation.connection_id
+                       AND intent.thread_id = candidate_mutation.thread_id
+                       AND intent.intent_kind = 'assign'
+                       AND intent.organization_id = candidate_mutation.organization_id
+                       AND intent.generation = candidate_mutation.intent_generation
+                  )
+                  OR (
+                    candidate_mutation.intent_generation IS NULL
+                    AND NOT EXISTS (
+                      SELECT 1
+                        FROM google_workspace_gmail_thread_intents any_intent
+                       WHERE any_intent.connection_id = candidate_mutation.connection_id
+                         AND any_intent.thread_id = candidate_mutation.thread_id
+                    )
+                  )
+                )
+              )
             )
           FOR UPDATE OF candidate_mutation SKIP LOCKED
        )
