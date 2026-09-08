@@ -34,6 +34,13 @@ type GmailNotice = {
 };
 
 function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
+  if (result?.errorCode === "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED") {
+    return {
+      message: "Profile assigned. Reconnect the company Google account in Settings, then retry Gmail.",
+      mutationId: result.mutationId,
+      needsRetry: true,
+    };
+  }
   if (!result || result.state === "completed") {
     return {
       message: "Assigned to the profile and archived in Gmail.",
@@ -512,8 +519,11 @@ export function GoogleValidationReview({
                           ? "Ignored · Gmail unchanged"
                           : item.gmailSyncState === "completed"
                             ? "Assigned · archived in Gmail"
-                            : item.gmailSyncState === "retryable_error"
-                              ? "Assigned · Gmail retry needed"
+                            : item.gmailSyncErrorCode ===
+                                "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+                              ? "Assigned · reconnect Gmail"
+                              : item.gmailSyncState === "retryable_error"
+                                ? "Assigned · Gmail retry needed"
                               : item.gmailSyncState === "conflict"
                                 ? "Assigned · label conflict"
                                 : "Assigned"}
