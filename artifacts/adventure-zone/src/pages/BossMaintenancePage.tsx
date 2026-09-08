@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, RefreshCw, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -67,7 +67,10 @@ function canonicalPhase(phase?: string | null) {
 function groupByEvent(items: MaintenanceItem[]): MaintenanceEvent[] {
   const groups = new Map<string, MaintenanceEvent>();
   items.forEach((item, index) => {
-    const key = item.bookingId ?? item.id ?? `maintenance-${index}`;
+    const legacyEventKey = item.title?.trim()
+      ? `legacy:${item.legId ?? "unassigned"}:${item.title.trim().toLowerCase()}`
+      : null;
+    const key = item.bookingId ?? legacyEventKey ?? item.id ?? `maintenance-${index}`;
     const current = groups.get(key);
     if (current) current.records.push(item);
     else groups.set(key, { key, title: item.title ?? `Event ${index + 1}`, records: [item] });
@@ -86,15 +89,63 @@ export default function BossMaintenancePage() {
   const [error, setError] = useState<string | null>(null);
   const [openEventKey, setOpenEventKey] = useState<string | null>(null);
   const [recordsById, setRecordsById] = useState<Record<string, MaintenanceRecord>>({});
-  const [openingEventKey, setOpeningEventKey] = useState<string | null>(null);
+  const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
+  const [detailErrorsById, setDetailErrorsById] = useState<Record<string, string>>({});
+  const detailGeneration = useRef(0);
   const [busy, setBusy] = useState<string | null>(null);
 
+  async function loadRecordIds(ids: string[], generation = detailGeneration.current) {
+    const uniqueIds = Array.from(new Set(ids));
+    if (uniqueIds.length === 0) return;
+    setLoadingById((current) => ({ ...current, ...Object.fromEntries(uniqueIds.map((id) => [id, true])) }));
+    setDetailErrorsById((current) => {
+      const next = { ...current };
+      uniqueIds.forEach((id) => delete next[id]);
+      return next;
+    });
+    await Promise.all(uniqueIds.map(async (id) => {
+      try {
+        const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
+        if (detailGeneration.current === generation) {
+          setRecordsById((current) => ({ ...current, [id]: data.record }));
+        }
+      } catch (cause) {
+        if (detailGeneration.current === generation) {
+          setDetailErrorsById((current) => ({
+            ...current,
+            [id]: cause instanceof Error ? cause.message : "Could not open maintenance record.",
+          }));
+        }
+      } finally {
+        if (detailGeneration.current === generation) {
+          setLoadingById((current) => {
+            const next = { ...current };
+            delete next[id];
+            return next;
+          });
+        }
+      }
+    }));
+  }
+
   async function load() {
+    const generation = detailGeneration.current + 1;
+    detailGeneration.current = generation;
     setLoading(true);
     setError(null);
+    setRecordsById({});
+    setLoadingById({});
+    setDetailErrorsById({});
     try {
       const data = await bossGet<DashboardData>("/boss/dashboard");
-      setItems(Array.isArray(data.checklistAndMaintenance) ? data.checklistAndMaintenance : []);
+      const freshItems = Array.isArray(data.checklistAndMaintenance) ? data.checklistAndMaintenance : [];
+      setItems(freshItems);
+      if (openEventKey) {
+        const openEvent = groupByEvent(recordsForLeg(freshItems, selectedLegKey)).find((event) => event.key === openEventKey);
+        if (openEvent) {
+          void loadRecordIds(openEvent.records.flatMap((item) => item.id ? [item.id] : []), generation);
+        }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load maintenance items.");
     } finally {
@@ -121,21 +172,9 @@ export default function BossMaintenancePage() {
     }
     setOpenEventKey(event.key);
     const recordIds = event.records.flatMap((item) => item.id ? [item.id] : []);
-    const missingIds = recordIds.filter((id) => !recordsById[id]);
+    const missingIds = recordIds.filter((id) => !recordsById[id] && !loadingById[id]);
     if (missingIds.length === 0) return;
-    setOpeningEventKey(event.key);
-    setError(null);
-    try {
-      const loaded = await Promise.all(missingIds.map(async (id) => {
-        const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
-        return [id, data.record] as const;
-      }));
-      setRecordsById((current) => ({ ...current, ...Object.fromEntries(loaded) }));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not open maintenance record.");
-    } finally {
-      setOpeningEventKey(null);
-    }
+    await loadRecordIds(missingIds);
   }
 
   async function removeRecord(item: MaintenanceItem) {
@@ -199,6 +238,8 @@ export default function BossMaintenancePage() {
             const isOpen = openEventKey === event.key;
             const phasePanel = (label: string, item?: MaintenanceItem) => {
               const loadedRecord = item?.id ? recordsById[item.id] : undefined;
+              const detailError = item?.id ? detailErrorsById[item.id] : undefined;
+              const isLoading = item?.id ? loadingById[item.id] : false;
               return (
                 <section className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3" key={label}>
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -207,13 +248,23 @@ export default function BossMaintenancePage() {
                   </div>
                   {!item ? (
                     <p className="text-sm text-muted-foreground">No {label.toLowerCase()} record yet.</p>
-                  ) : openingEventKey === event.key && !loadedRecord ? (
+                  ) : isLoading && !loadedRecord ? (
                     <p className="text-sm text-muted-foreground">Loading record…</p>
+                  ) : detailError ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm text-destructive">{detailError}</p>
+                      <Button size="sm" variant="outline" onClick={() => void loadRecordIds([item.id!])}>
+                        Retry {label.toLowerCase()} record
+                      </Button>
+                    </div>
+                  ) : !item.id ? (
+                    <p className="text-sm text-muted-foreground">No detailed checklist is available for this legacy record.</p>
                   ) : !loadedRecord ? (
-                    <p className="text-sm text-muted-foreground">Record details could not be loaded.</p>
+                    <Button size="sm" variant="outline" className="w-fit" onClick={() => void loadRecordIds([item.id!])}>
+                      Retry {label.toLowerCase()} record
+                    </Button>
                   ) : (
                     <>
-                      {item.notes ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.notes as string}</p> : null}
                       {loadedRecord.items.length === 0 ? <p className="text-sm text-muted-foreground">No checklist answers.</p> : null}
                       {loadedRecord.items.map((detail) => (
                         <div className="rounded-lg bg-card p-3 text-sm" key={detail.id}>
@@ -227,8 +278,9 @@ export default function BossMaintenancePage() {
                       ))}
                     </>
                   )}
+                  {item?.notes ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.notes as string}</p> : null}
                   {item?.id ? (
-                    <Button size="sm" variant="outline" className="w-fit text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
+                    <Button aria-label={`Remove ${label.toLowerCase()} record`} size="sm" variant="outline" className="w-fit text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
                       {busy === item.id ? "Removing…" : "Remove"}
                     </Button>
                   ) : null}
@@ -245,6 +297,7 @@ export default function BossMaintenancePage() {
                   type="button"
                   className="flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   aria-expanded={isOpen}
+                  aria-controls={`maintenance-details-${event.key}`}
                   onClick={() => void toggleEvent(event)}
                 >
                   <span className="min-w-0 flex-1">
@@ -257,7 +310,7 @@ export default function BossMaintenancePage() {
                   <ChevronDown className={`mt-0.5 h-5 w-5 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
                 </button>
                 {isOpen ? (
-                  <div className="grid gap-3 border-t border-border p-4">
+                  <div id={`maintenance-details-${event.key}`} className="grid gap-3 border-t border-border p-4">
                     {phasePanel("Pre-event", pre)}
                     {phasePanel("Post-event", post)}
                     {other.map((item) => phasePanel(phaseLabel(item.phase) ?? "Maintenance", item))}
