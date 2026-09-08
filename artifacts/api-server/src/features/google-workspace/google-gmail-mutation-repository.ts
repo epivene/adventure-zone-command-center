@@ -125,6 +125,24 @@ export class PostgresGoogleGmailMutationRepository {
     return result.rows[0] ? record(result.rows[0]) : null;
   }
 
+  async retryNow(
+    id: string,
+    now: Date,
+  ): Promise<GoogleGmailMutationRecord | null> {
+    const result = await this.pool.query(
+      `UPDATE google_workspace_gmail_mutations
+          SET state = 'pending',
+              next_attempt_at = NULL,
+              processing_lease_expires_at = NULL,
+              updated_at = $2
+        WHERE id = $1
+          AND state = 'retryable_error'
+        ${returning}`,
+      [id, now],
+    );
+    return result.rows[0] ? record(result.rows[0]) : null;
+  }
+
   async claim(id: string, now: Date): Promise<GoogleGmailMutationRecord | null> {
     const result = await this.pool.query(
       `WITH candidate AS (
