@@ -47,13 +47,15 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
         queries.push(text);
-        return {
-          rows: [{
-            ...row,
-            state: "completed",
-            target_label_id: "Label_10",
-          }],
-        };
+        return text.includes("UPDATE google_workspace_gmail_mutations")
+          ? { rows: [] }
+          : {
+              rows: [{
+                ...row,
+                state: "completed",
+                target_label_id: "Label_10",
+              }],
+            };
       },
     });
 
@@ -69,13 +71,47 @@ describe("PostgresGoogleGmailMutationRepository", () => {
     });
 
     expect(queries[0]).toContain("state <> 'completed'");
+    expect(queries[0]).toContain("state IN ('pending','retryable_error')");
     expect(queries[0]).toContain("RETURNING");
+    expect(queries[1]).toContain("SELECT id::text");
   });
 
-  it("claims retryable work with a bounded lease", async () => {
+  it("fences worker transitions by the claimed attempt", async () => {
+    const queries: string[] = [];
+    const repository = new PostgresGoogleGmailMutationRepository({
+      async query(text: string) {
+        queries.push(text);
+        return { rows: [row] };
+      },
+    });
+
+    await repository.complete({
+      id: "mutation-1",
+      expectedAttemptCount: 2,
+      targetLabelId: "Label_10",
+      removeLabelIds: ["INBOX"],
+      now: new Date("2026-09-08T12:00:00Z"),
+    });
+    await repository.fail({
+      id: "mutation-1",
+      expectedAttemptCount: 2,
+      state: "retryable_error",
+      errorCode: "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED",
+      nextAttemptAt: null,
+      now: new Date("2026-09-08T12:00:00Z"),
+    });
+
+    expect(queries[0]).toContain("state = 'processing'");
+    expect(queries[0]).toContain("attempt_count = $5");
+    expect(queries[1]).toContain("attempt_count = $6");
+  });
+
+  it("claims retryable work only when no other worker owns the thread", async () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
         expect(text).toContain("FOR UPDATE SKIP LOCKED");
+        expect(text).toContain("active.thread_id");
+        expect(text).toContain("active.state = 'processing'");
         return { rows: [] };
       },
     });
