@@ -134,15 +134,9 @@ export function createBusinessDocumentsRouter(
         source: { sourceKind: "manual", sourceAccountKey: "owner", externalId: randomUUID(), originalUrl: null, metadata: {} },
         evidence: { approvedThreadProfileId: null, exactEmailProfileIds: [], exactEventMatches: [], fuzzyNameMatches: [] },
         actor: actor(req),
+        uploadMetadata: uploadMetadata?.success ? uploadMetadata.data : undefined,
       });
       if (result.outcome === "skipped") { res.status(422).json({ error: "That file is not an importable business document." }); return; }
-      if (uploadMetadata?.success) {
-        await service.update(result.documentId, {
-          displayName: uploadMetadata.data.displayName,
-          category: uploadMetadata.data.category,
-          notes: null,
-        }, actor(req));
-      }
       res.status(201).json(result);
     } catch {
       res.status(503).json({ error: "Could not store that business document." });
