@@ -13,6 +13,7 @@ import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repos
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { listCertificateRecords } from "./coi-certificates";
+import { createBusinessDocumentsRouter } from "./business-documents";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
@@ -112,5 +113,9 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
     res.status(500).json({ error: "Could not load business documents." });
   }
 });
+
+// Dave uses Boss authentication but receives the same canonical document routes
+// and permissions as the owner document library.
+router.use("/boss", requireBoss, createBusinessDocumentsRouter());
 
 export default router;

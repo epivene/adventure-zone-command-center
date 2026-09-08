@@ -52,7 +52,8 @@ type Service = BusinessDocumentService;
 type Ingestion = Pick<BusinessDocumentIngestion, "ingest">;
 
 function actor(req: unknown) {
-  return String((req as { userId?: string }).userId ?? "owner");
+  const request = req as { userId?: string; bossAccount?: { accountId: string } };
+  return String(request.userId ?? (request.bossAccount ? `boss:${request.bossAccount.accountId}` : "owner"));
 }
 
 function idParam(value: string | string[] | undefined) {
