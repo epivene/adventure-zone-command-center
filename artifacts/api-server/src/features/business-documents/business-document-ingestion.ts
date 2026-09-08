@@ -1,3 +1,4 @@
+import type { BusinessDocumentCategory } from "@workspace/db";
 import { classifyBusinessDocument } from "./business-document-classifier";
 import {
   matchBusinessDocument,
@@ -23,6 +24,7 @@ export type BusinessDocumentCandidate = {
   evidence: BusinessDocumentCrmEvidence;
   actor: string;
   requireRelationshipReview?: boolean;
+  uploadMetadata?: { displayName: string; category: BusinessDocumentCategory };
 };
 
 type Storage = {
@@ -45,7 +47,7 @@ export class BusinessDocumentIngestion {
     candidate: BusinessDocumentCandidate,
   ): Promise<DocumentIngestionOutcome | { outcome: "skipped"; errorCode: string }> {
     const classification = classifyBusinessDocument(candidate);
-    if (classification.decision === "skip") {
+    if (classification.decision === "skip" && !candidate.uploadMetadata) {
       return { outcome: "skipped", errorCode: classification.errorCode };
     }
     if (!candidate.storedBlob && (!candidate.bytes || candidate.bytes.byteLength === 0)) {
@@ -55,15 +57,15 @@ export class BusinessDocumentIngestion {
     const proposals = matchBusinessDocument(candidate.evidence);
     const ambiguousLink = proposals.some((proposal) => proposal.decision === "review") || Boolean(candidate.requireRelationshipReview && !proposals.some((proposal) => proposal.decision === "auto"));
     const reviewState =
-      classification.decision === "auto" && !ambiguousLink
+      (candidate.uploadMetadata || classification.decision === "auto") && !ambiguousLink
         ? "accepted" as const
         : "needs_review" as const;
     const blob = candidate.storedBlob ?? await this.storage.putIfAbsent(candidate.bytes!, candidate.mimeType);
 
     return this.repository.ingest({
-      displayName: candidate.filename.replace(/\.[^.]+$/, "").trim() || candidate.filename,
+      displayName: candidate.uploadMetadata?.displayName ?? (candidate.filename.replace(/\.[^.]+$/, "").trim() || candidate.filename),
       originalFilename: candidate.filename,
-      category: classification.category,
+      category: candidate.uploadMetadata?.category ?? classification.category,
       reviewState,
       actor: candidate.actor,
       blob,
@@ -78,6 +80,7 @@ export class BusinessDocumentIngestion {
           evidence: proposal.evidence,
         })),
       notes: null,
+      preserveMetadataOnDuplicate: Boolean(candidate.uploadMetadata),
     });
   }
 }
