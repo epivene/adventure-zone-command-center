@@ -35,7 +35,7 @@ export type GoogleProfileLabelSyncServicePort = {
 
 type MutationRepository = Pick<
   PostgresGoogleGmailMutationRepository,
-  "createOrLoad" | "get" | "claim" | "complete" | "fail"
+  "createOrLoad" | "get" | "retryNow" | "claim" | "complete" | "fail"
 >;
 
 function safeCode(error: unknown): string {
@@ -114,7 +114,9 @@ implements GoogleProfileLabelSyncServicePort {
   }
 
   async retry(mutationId: string): Promise<GoogleProfileLabelSyncResult> {
-    const current = await this.dependencies.mutations.get(mutationId);
+    const now = this.dependencies.now?.() ?? new Date();
+    const queued = await this.dependencies.mutations.retryNow(mutationId, now);
+    const current = queued ?? await this.dependencies.mutations.get(mutationId);
     if (!current) throw new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_NOT_FOUND");
     return this.execute(current);
   }
