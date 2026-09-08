@@ -54,6 +54,8 @@ const TodayPage = lazy(() => import("@/pages/TodayPage"));
 const BookingsPage = lazy(() => import("@/pages/BookingsPage"));
 const BookingDetailPage = lazy(() => import("@/pages/BookingDetailPage"));
 const BookingEditPage = lazy(() => import("@/pages/BookingEditPage"));
+const ContractBuilderPage = lazy(() => import("@/pages/ContractBuilderPage"));
+const ContractHandoffPage = lazy(() => import("@/pages/ContractHandoffPage"));
 const ContactsPage = lazy(() => import("@/pages/ContactsPage"));
 const ContactDetailPage = lazy(() => import("@/pages/ContactDetailPage"));
 const ContactEditPage = lazy(() => import("@/pages/ContactEditPage"));
@@ -79,6 +81,7 @@ const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCo
 const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
+const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
 const ActRecoveryPage = lazy(() => import("@/pages/ActRecoveryPage"));
 const NotFound = lazy(() => import("@/pages/not-found"));
@@ -210,6 +213,7 @@ function SettingsStub() {
     ["ACT recovery", "/settings/act-recovery", "Recover and repair archived ACT records."],
     ["Call scripts", "/settings/call-scripts", "Manage guided calling copy and branches."],
     ["Packages & resources", "/settings/packages-resources", "Maintain shared package and resource defaults."],
+    ["Contracts & signing", "/settings/contracts", "Maintain future-draft signer and insurance recipient defaults."],
   ] as const;
   return (
     <div className="mx-auto grid max-w-5xl gap-5">
@@ -291,6 +295,8 @@ function AdminProtectedApp() {
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>
+          <Route path="/contracts/drafts/:draftId">{(params)=><ContractBuilderPage draftId={params.draftId}/>}</Route>
+          <Route path="/contracts/:contractVersionId/handoff">{(params)=><ContractHandoffPage contractVersionId={params.contractVersionId}/>}</Route>
           <Route path="/contacts/new" component={ContactNewPage} />
           <Route path="/contacts/:id/edit"><ContactEditPage /></Route>
           <Route path="/contacts/:id">{(params)=><ContactDetailPage contactId={params.id}/>}</Route>
@@ -321,6 +327,7 @@ function AdminProtectedApp() {
           <Route path="/settings/communication-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
+          <Route path="/settings/contracts" component={SettingsContractsPage} />
           <Route path="/settings/google-workspace"><SettingsGoogleWorkspacePage /></Route>
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />

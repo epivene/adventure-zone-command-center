@@ -9,6 +9,10 @@ import { BookingBriefCard } from "@/components/assistant/booking-brief-card";
 import { AssistantContextRegistration } from "@/components/assistant/assistant-context-registration";
 import { StatusBadge } from "@/components/bookings/status-badge";
 import { LastResortWarning } from "@/components/organizations/last-resort-warning";
+import { ContractAction } from "@/components/contracts/contract-action";
+import { ContractHistoryCard } from "@/components/contracts/contract-history-card";
+import { contractClient } from "@/features/contracts/contract-client";
+import type { ContractVersion } from "@/features/contracts/contract-types";
 import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import { getAssistantContext, getBookingBrief } from "@/features/assistant/assistant-api";
 import { useAssistantContext } from "@/features/assistant/assistant-context";
@@ -89,6 +93,8 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
   const [followUpItems, setFollowUpItems] = useState<any[]>([]);
   const [assistantBundle, setAssistantBundle] = useState<AssistantContextBundle | null>(null);
   const [bookingBrief, setBookingBrief] = useState<BookingBrief | null>(null);
+  const [contractBooking, setContractBooking] = useState<{ id: string; name: string; openDraftId: string | null } | null>(null);
+  const [contractVersions, setContractVersions] = useState<ContractVersion[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -131,6 +137,19 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
     };
   }, [bookingId, data?.booking?.name]);
 
+  useEffect(() => {
+    const organizationId = data?.organization?.id;
+    if (!organizationId) return;
+    let cancelled = false;
+    contractClient.listOrganization(organizationId).then((result) => {
+      if (cancelled) return;
+      const choice = result.eligibleBookings.find((booking) => booking.id === bookingId);
+      setContractBooking(choice ?? { id: bookingId, name: data.booking.name, openDraftId: null });
+      setContractVersions(result.contracts.filter((contract) => contract.bookingId === bookingId));
+    }).catch(() => setContractBooking(null));
+    return () => { cancelled = true; };
+  }, [bookingId, data?.booking?.name, data?.organization?.id]);
+
   if (loading) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-slate-500">Loading booking…</p></div>;
   if (error || !data) return <div className="mx-auto max-w-7xl"><p className="mt-8 text-rose-700">{error ?? "Not found"}</p></div>;
 
@@ -150,6 +169,7 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
           <p className="mt-1 text-slate-600">{booking.city}, {booking.region}</p>
         </div>
         <div className="flex flex-wrap items-start gap-2">
+          {contractBooking ? <ContractAction bookingId={bookingId} bookings={[contractBooking]} /> : null}
           <BookingCalendarSendButton bookingId={bookingId} />
           <button
             className="button-secondary"
@@ -170,6 +190,11 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
           reason={organization.lastResortReason ?? ""}
         />
       )}
+
+      {contractVersions.length ? <section className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <h2 className="text-lg font-bold">Contract history</h2>
+        {contractVersions.map((contract) => <ContractHistoryCard key={contract.id} version={contract} />)}
+      </section> : null}
 
       {bookingBrief ? (
         <BookingBriefCard brief={bookingBrief} context={assistantBundle} />

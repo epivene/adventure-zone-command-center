@@ -9,6 +9,7 @@ import { cp, rm } from "node:fs/promises";
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const sourceMapsEnabled = process.env.API_SOURCE_MAPS === "true";
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -110,7 +111,9 @@ async function buildAll() {
       "puppeteer-core",
       "electron",
     ],
-    sourcemap: "linked",
+    // Parsing the linked map roughly doubles startup memory. Keep it opt-in so
+    // hosting environments remain safe even when NODE_ENV is not propagated.
+    sourcemap: sourceMapsEnabled ? "linked" : false,
     plugins: [
       // pino relies on workers to handle logging, instead of externalizing it we use a plugin to handle it
       esbuildPluginPino({ transports: ["pino-pretty"] })

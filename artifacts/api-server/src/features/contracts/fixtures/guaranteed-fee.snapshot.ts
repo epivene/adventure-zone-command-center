@@ -1,0 +1,43 @@
+import type { ContractValues } from "../contract-types";
+
+export const guaranteedFeeSnapshot: ContractValues = {
+  organizationId: "11111111-1111-4111-8111-111111111111",
+  organizationName: "Dinosaur Stone Age",
+  bookingId: "22222222-2222-4222-8222-222222222222",
+  eventName: "Stone Age Stampede",
+  venueName: "Dinosaur Town Park",
+  venueAddress: { address1: "100 Main Street", address2: "", city: "Dinosaur", region: "CO", postalCode: "81610" },
+  eventStartDate: "2026-09-10",
+  eventEndDate: "2026-09-12",
+  eventSigner: { name: "Pat Organizer", role: "Authorized Event Representative", email: "pat@example.com", phone: "307-555-0100", order: 1 },
+  internalSigner: { name: "Dave Gordon", role: "The Adventure Zone", email: "dave@example.com", phone: "", order: 2 },
+  packages: [{ id: "33333333-3333-4333-8333-333333333333", name: "Adventure Zone" }],
+  physicalAttractionTotal: 10,
+  travelLegName: "Colorado",
+  arrangement: "guaranteed_fee",
+  commercialTerms: {
+    arrangement: "guaranteed_fee", totalFeeCents: 500_000, depositCents: 250_000,
+    depositDueDate: "2026-03-06", balanceCents: 250_000,
+    paymentTiming: "upon arrival in September", discountWording: "discounted",
+  },
+  operationalTerms: {
+    operatingStartDate: "2026-09-10", operatingEndDate: "2026-09-12", dailyHours: "Up to 8 hours per day",
+    workDayCount: 4, arrivalDate: "2026-09-08", departureDate: "2026-09-13", dateOverrideReason: "",
+    attractionDescription: "ZONE 10 inflatable attractions and 3–4 carnival-style games with access to 500 prizes.",
+    spaceRequirement: "Required space for games and attractions (7,000 to 10,000 sq. ft.).",
+    exclusivity: "The Adventure Zone is exclusive on all rides and games.",
+    powerRequirement: "Three 220-volt 50-amp outlets or eighteen separate 110-volt outlets within 150 feet, or a 50 kW generator.",
+    waterRequirement: "One water faucet within 150 feet for cleaning and operation.",
+    forkliftRequirement: "A forklift and operator, if available, for reloading during teardown.",
+    lodgingRequirement: "Hotel accommodations from arrival through departure.",
+    restroomAccess: "24-hour restroom access from arrival through departure.",
+    licensingResponsibilities: "The event pays local and state licensing, permit, inspection, and regulation costs needed to operate.",
+    setupTeardownClause: "One setup and one teardown; moving equipment after setup requires an additional $2,500 crew fee.",
+    additionalTerms: "", confirmed: true,
+  },
+  coi: {
+    certificateHolderName: "Town of Dinosaur",
+    certificateHolderAddress: "317 Stegosaurus Freeway\nDinosaur, CO 81610",
+    additionalInsuredWording: "Town of Dinosaur is additional insured for the event dates.",
+  },
+};
