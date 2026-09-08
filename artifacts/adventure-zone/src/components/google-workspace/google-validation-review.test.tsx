@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
+  runGoogleWorkspaceRecentValidation: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
   retryGoogleWorkspaceGmailMutation: vi.fn(),
@@ -34,6 +35,7 @@ const item = {
 };
 
 beforeEach(() => {
+  client.runGoogleWorkspaceRecentValidation.mockResolvedValue({});
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
     ok: true,
@@ -57,6 +59,42 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
+  it("checks recent Gmail before loading the review queue", async () => {
+    render(<GoogleValidationReview />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100);
+  });
+
+  it("lets the owner check Gmail again", async () => {
+    render(<GoogleValidationReview />);
+    await screen.findByText("County Fair application");
+    client.runGoogleWorkspaceRecentValidation.mockClear();
+    client.getGoogleWorkspaceValidationReview.mockClear();
+
+    fireEvent.click(screen.getByRole("button", { name: "Check emails" }));
+
+    await waitFor(() =>
+      expect(client.runGoogleWorkspaceRecentValidation).toHaveBeenCalledWith(100),
+    );
+    await waitFor(() =>
+      expect(client.getGoogleWorkspaceValidationReview).toHaveBeenCalledTimes(1),
+    );
+  });
+
+  it("loads the saved queue when Gmail checking fails", async () => {
+    client.runGoogleWorkspaceRecentValidation.mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
+    );
+
+    render(<GoogleValidationReview />);
+
+    expect(await screen.findByText("County Fair application")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not check Gmail. Showing saved email review items.",
+    );
+  });
+
   it("shows pending items and lets the owner use a suggested profile", async () => {
     render(<GoogleValidationReview />);
 
