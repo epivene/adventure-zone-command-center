@@ -46,6 +46,7 @@ export type GoogleProfileAssignmentTransactionStage =
   | "review"
   | "mapping"
   | "audit"
+  | "intent_lock"
   | "supersede"
   | "mutation";
 
@@ -112,6 +113,12 @@ function mutationRecord(row: Record<string, unknown> | undefined): GoogleGmailMu
     state: row.state,
     attemptCount:
       typeof row.attempt_count === "number" ? row.attempt_count : 0,
+    intentGeneration:
+      typeof row.intent_generation === "number"
+        ? row.intent_generation
+        : typeof row.intent_generation === "string"
+          ? Number(row.intent_generation)
+          : null,
     lastErrorCode:
       typeof row.last_error_code === "string" ? row.last_error_code : null,
   };
@@ -390,58 +397,129 @@ implements GoogleProfileAssignmentTransactionPort {
       newIntent: boolean;
     },
   ): Promise<CommittedProfileAssignment> {
-    stage.set("supersede");
+    stage.set("intent_lock");
     await client.query(
-      `UPDATE google_workspace_gmail_mutations
-          SET state = 'permanent_error',
-              last_error_code = 'GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED',
-              next_attempt_at = NULL,
-              processing_lease_expires_at = NULL,
-              updated_at = $4
-        WHERE connection_id = $1
-          AND thread_id = $2
-          AND organization_id <> $3
-          AND operation = 'assign_thread'
-          AND state IN ('pending', 'retryable_error')`,
-      [input.connectionId, input.threadId, input.organizationId, input.now],
+      "SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+      [input.connectionId, input.threadId],
     );
 
-    stage.set("mutation");
-    const idempotencyKey =
-      `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`;
-    if (input.newIntent) {
+    const intentResult = await client.query(
+      `INSERT INTO google_workspace_gmail_thread_intents (
+         connection_id, thread_id, generation, intent_kind,
+         organization_id, current_mutation_id, created_at, updated_at
+       ) VALUES ($1,$2,1,'assign',$3,NULL,$4,$4)
+       ON CONFLICT (connection_id, thread_id) DO UPDATE SET
+         generation = CASE
+           WHEN google_workspace_gmail_thread_intents.intent_kind = 'assign'
+            AND google_workspace_gmail_thread_intents.organization_id IS NOT DISTINCT FROM EXCLUDED.organization_id
+           THEN google_workspace_gmail_thread_intents.generation
+           ELSE google_workspace_gmail_thread_intents.generation + 1
+         END,
+         intent_kind = 'assign',
+         organization_id = EXCLUDED.organization_id,
+         current_mutation_id = CASE
+           WHEN google_workspace_gmail_thread_intents.intent_kind = 'assign'
+            AND google_workspace_gmail_thread_intents.organization_id IS NOT DISTINCT FROM EXCLUDED.organization_id
+           THEN google_workspace_gmail_thread_intents.current_mutation_id
+           ELSE NULL
+         END,
+         updated_at = EXCLUDED.updated_at
+       RETURNING generation, current_mutation_id::text`,
+      [input.connectionId, input.threadId, input.organizationId, input.now],
+    );
+    const intent = intentResult.rows[0];
+    const generation =
+      typeof intent?.generation === "number"
+        ? intent.generation
+        : typeof intent?.generation === "string"
+          ? Number(intent.generation)
+          : NaN;
+    if (!Number.isSafeInteger(generation) || generation < 1) {
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_THREAD_INTENT_INVALID");
+    }
+
+    const currentMutationId =
+      typeof intent?.current_mutation_id === "string"
+        ? intent.current_mutation_id
+        : null;
+    let mutation: GoogleGmailMutationRecord;
+    if (currentMutationId) {
+      const existing = await client.query(
+        `SELECT id::text, connection_id::text, message_id, thread_id,
+                organization_id::text, operation, target_label_id,
+                remove_label_ids, idempotency_key, state, attempt_count,
+                intent_generation, last_error_code
+           FROM google_workspace_gmail_mutations
+          WHERE id = $1
+          LIMIT 1`,
+        [currentMutationId],
+      );
+      mutation = mutationRecord(existing.rows[0]);
+    } else {
+      stage.set("supersede");
       await client.query(
         `UPDATE google_workspace_gmail_mutations
-            SET idempotency_key =
-                  idempotency_key || ':history:' || id::text,
+            SET state = 'permanent_error',
+                last_error_code = 'GOOGLE_WORKSPACE_ASSIGNMENT_SUPERSEDED',
+                next_attempt_at = NULL,
+                processing_lease_expires_at = NULL,
+                updated_at = $3
+          WHERE connection_id = $1
+            AND thread_id = $2
+            AND operation = 'assign_thread'
+            AND state IN ('pending','processing','retryable_error')`,
+        [input.connectionId, input.threadId, input.now],
+      );
+
+      stage.set("mutation");
+      const idempotencyKey =
+        `assign-thread:${input.connectionId}:${input.threadId}:${input.organizationId}`;
+      await client.query(
+        `UPDATE google_workspace_gmail_mutations
+            SET idempotency_key = idempotency_key || ':history:' || id::text,
                 updated_at = $2
-          WHERE idempotency_key = $1
-            AND state IN ('completed','permanent_error','conflict')`,
+          WHERE idempotency_key = $1`,
         [idempotencyKey, input.now],
       );
+      const inserted = await client.query(
+        `INSERT INTO google_workspace_gmail_mutations (
+           connection_id, message_id, thread_id, organization_id, operation,
+           idempotency_key, actor_id, state, intent_generation,
+           created_at, updated_at
+         ) VALUES ($1,$2,$3,$4,'assign_thread',$5,$6,'pending',$7,$8,$8)
+         RETURNING id::text, connection_id::text, message_id, thread_id,
+                   organization_id::text, operation, target_label_id,
+                   remove_label_ids, idempotency_key, state, attempt_count,
+                   intent_generation, last_error_code`,
+        [
+          input.connectionId,
+          input.messageId,
+          input.threadId,
+          input.organizationId,
+          idempotencyKey,
+          input.actorId,
+          generation,
+          input.now,
+        ],
+      );
+      mutation = mutationRecord(inserted.rows[0]);
+      await client.query(
+        `UPDATE google_workspace_gmail_thread_intents
+            SET current_mutation_id = $3,
+                updated_at = $4
+          WHERE connection_id = $1
+            AND thread_id = $2
+            AND generation = $5
+            AND intent_kind = 'assign'`,
+        [
+          input.connectionId,
+          input.threadId,
+          mutation.id,
+          input.now,
+          generation,
+        ],
+      );
     }
-    const inserted = await client.query(
-      `INSERT INTO google_workspace_gmail_mutations (
-         connection_id, message_id, thread_id, organization_id, operation,
-         idempotency_key, actor_id, state, created_at, updated_at
-       ) VALUES ($1,$2,$3,$4,'assign_thread',$5,$6,'pending',$7,$7)
-       ON CONFLICT (idempotency_key) DO UPDATE SET
-         idempotency_key = EXCLUDED.idempotency_key
-       RETURNING id::text, connection_id::text, message_id, thread_id,
-                 organization_id::text, operation, target_label_id,
-                 remove_label_ids, idempotency_key, state, attempt_count,
-                 last_error_code`,
-      [
-        input.connectionId,
-        input.messageId,
-        input.threadId,
-        input.organizationId,
-        idempotencyKey,
-        input.actorId,
-        input.now,
-      ],
-    );
-    const mutation = mutationRecord(inserted.rows[0]);
 
     await client.query(
       `UPDATE google_workspace_validation_review_items
