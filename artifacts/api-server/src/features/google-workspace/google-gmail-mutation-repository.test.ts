@@ -109,7 +109,7 @@ describe("PostgresGoogleGmailMutationRepository", () => {
   it("claims retryable work only when no other worker owns the thread", async () => {
     const repository = new PostgresGoogleGmailMutationRepository({
       async query(text: string) {
-        expect(text).toContain("FOR UPDATE SKIP LOCKED");
+        expect(text).toContain("FOR UPDATE OF candidate_mutation SKIP LOCKED");
         expect(text).toContain("pg_try_advisory_xact_lock");
         expect(text).toContain("active.thread_id");
         expect(text).toContain("active.state = 'processing'");
