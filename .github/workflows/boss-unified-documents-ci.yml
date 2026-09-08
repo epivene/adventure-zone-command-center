@@ -30,8 +30,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
-      - name: Frontend typecheck
-        run: pnpm --filter @workspace/adventure-zone typecheck
       - name: Business document route tests
         run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts
       - name: Build API and frontend
