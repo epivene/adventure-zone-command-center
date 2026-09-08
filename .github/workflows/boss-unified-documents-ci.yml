@@ -16,10 +16,17 @@ on:
       - "artifacts/adventure-zone/src/pages/BossTemplatesFilesPage.test.tsx"
       - "artifacts/adventure-zone/package.json"
       - "artifacts/api-server/src/routes/boss-documents.ts"
+      - "artifacts/api-server/src/routes/boss-business-documents.ts"
+      - "artifacts/api-server/src/routes/boss-business-documents.test.ts"
       - "artifacts/api-server/src/routes/business-documents.ts"
       - "artifacts/api-server/src/routes/boss-profiles.ts"
       - "artifacts/api-server/src/routes/office-profiles.ts"
       - "artifacts/api-server/src/routes/office-documents.ts"
+      - "artifacts/api-server/src/routes/office-documents.test.ts"
+      - "artifacts/api-server/src/features/business-documents/business-document-ingestion.ts"
+      - "artifacts/api-server/src/features/business-documents/business-document-ingestion.test.ts"
+      - "artifacts/api-server/src/features/business-documents/business-document-types.ts"
+      - "artifacts/api-server/src/features/business-documents/business-document-repository.ts"
       - "artifacts/api-server/src/routes/index.ts"
       - ".github/workflows/boss-unified-documents-ci.yml"
 
@@ -43,6 +50,6 @@ jobs:
       - name: Boss workspace tests
         run: pnpm --filter @workspace/adventure-zone test:boss
       - name: Business document route tests
-        run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts
+        run: pnpm --filter @workspace/api-server exec vitest run src/routes/business-documents.test.ts src/routes/boss-business-documents.test.ts src/routes/office-documents.test.ts src/features/business-documents/business-document-ingestion.test.ts
       - name: Build API and frontend
         run: pnpm --filter @workspace/api-server --filter @workspace/adventure-zone build
