@@ -35,7 +35,7 @@ function repository() {
   });
 }
 
-function input(sourceKind: "gmail" | "drive", externalId: string) {
+function input(sourceKind: "gmail" | "drive", externalId: string, sha256Hex = checksum) {
   return {
     displayName: "Certificate of Insurance",
     originalFilename: "coi.pdf",
@@ -43,8 +43,8 @@ function input(sourceKind: "gmail" | "drive", externalId: string) {
     reviewState: "accepted" as const,
     actor: "owner",
     blob: {
-      sha256Hex: checksum,
-      storageKey: `business-documents/aa/${checksum}`,
+      sha256Hex,
+      storageKey: `business-documents/${sha256Hex.slice(0, 2)}/${sha256Hex}`,
       mimeType: "application/pdf",
       sizeBytes: 42,
     },
@@ -106,6 +106,20 @@ describe("BusinessDocumentRepository", () => {
       links: [{ targetKind: "profile", targetId: profileId }],
     });
     expect(documents[0]?.links[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
+  it("returns stable later pages with limit and offset", async () => {
+    const repo = repository();
+    const oldest = await repo.ingest(input("drive", "drive-oldest", "b".repeat(64)));
+    const middle = await repo.ingest(input("drive", "drive-middle", "c".repeat(64)));
+    const newest = await repo.ingest(input("drive", "drive-newest", "d".repeat(64)));
+    await database.query("UPDATE business_documents SET updated_at = $2 WHERE id = $1", [oldest.documentId, "2026-01-01T00:00:00Z"]);
+    await database.query("UPDATE business_documents SET updated_at = $2 WHERE id = $1", [middle.documentId, "2026-02-01T00:00:00Z"]);
+    await database.query("UPDATE business_documents SET updated_at = $2 WHERE id = $1", [newest.documentId, "2026-03-01T00:00:00Z"]);
+
+    await expect(repo.list({ limit: 1, offset: 0 })).resolves.toMatchObject([{ id: newest.documentId }]);
+    await expect(repo.list({ limit: 1, offset: 1 })).resolves.toMatchObject([{ id: middle.documentId }]);
+    await expect(repo.list({ limit: 1, offset: 2 })).resolves.toMatchObject([{ id: oldest.documentId }]);
   });
 
   it("applies review corrections and their links in one review action", async () => {

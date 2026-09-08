@@ -67,6 +67,14 @@ describe("business document routes", () => {
     expect(response.body).toEqual({ count: 3 });
   });
 
+  it("forwards a bounded offset so the document library can load later pages", async () => {
+    const { app, service } = setup();
+
+    await request(app).get("/business-documents?limit=100&offset=200").set(ownerHeader()).expect(200);
+
+    expect(service.list).toHaveBeenCalledWith({ limit: 100, offset: 200 });
+  });
+
   it("ingests an owner-uploaded document into protected business storage", async () => {
     const { app, ingestion } = setup();
     const response = await request(app)

@@ -31,33 +31,31 @@ function date(value: string) {
 
 export class GoogleGmailDocumentSource {
   constructor(
-    private readonly client: Pick<GoogleWorkspaceReadClient, "listMessagePage" | "getMessageMetadata" | "getThreadDetail" | "getAttachment">,
+    private readonly client: Pick<GoogleWorkspaceReadClient, "listMessagePage" | "getThreadDetail" | "getAttachment">,
     private readonly existingFiles: ExistingFileLookup,
   ) {}
 
   async inventoryPage(input: GmailImportWindow) {
-    if (!this.client.listMessagePage || !this.client.getMessageMetadata || !this.client.getThreadDetail) throw new Error("GOOGLE_GMAIL_READ_UNAVAILABLE");
+    if (!this.client.listMessagePage || !this.client.getThreadDetail) throw new Error("GOOGLE_GMAIL_READ_UNAVAILABLE");
     if (input.after >= input.before) throw new Error("GMAIL_IMPORT_WINDOW_INVALID");
     const page = await this.client.listMessagePage({ maxResults: Math.min(250, Math.max(1, input.maxResults ?? 100)), pageToken: input.pageToken, query: `after:${date(input.after)} before:${date(input.before)} has:attachment` });
     const items: GmailDocumentInventoryItem[] = [];
     const threads = new Map<string, GoogleThreadDetail>();
     const profileIdsByThread = new Map<string, string[]>();
     for (const ref of page.messages) {
-      const metadata = await this.client.getMessageMetadata(ref.id);
-      if (!metadata.hasAttachments) continue;
-      let thread = threads.get(metadata.threadId);
-      if (!thread) { thread = await this.client.getThreadDetail(metadata.threadId); threads.set(metadata.threadId, thread); }
+      let thread = threads.get(ref.threadId);
+      if (!thread) { thread = await this.client.getThreadDetail(ref.threadId); threads.set(ref.threadId, thread); }
       if (!profileIdsByThread.has(thread.id)) {
         const emails = [...new Set(thread.messages.flatMap((item) => `${item.from} ${item.to} ${item.cc}`.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []))];
         profileIdsByThread.set(thread.id, this.existingFiles.profilesForEmails ? await this.existingFiles.profilesForEmails(emails) : []);
       }
-      const message = thread.messages.find((candidate) => candidate.id === metadata.id);
+      const message = thread.messages.find((candidate) => candidate.id === ref.id);
       if (!message) continue;
       for (const attachment of message.attachments) {
         const existing = await this.existingFiles.find(message.id, attachment.attachmentId);
         items.push({
           messageId: message.id,
-          internalDateMs: message.internalDateMs ?? metadata.internalDateMs ?? 0,
+          internalDateMs: message.internalDateMs ?? 0,
           threadId: thread.id,
           attachmentId: attachment.attachmentId,
           filename: attachment.filename,

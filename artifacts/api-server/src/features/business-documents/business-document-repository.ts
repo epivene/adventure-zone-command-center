@@ -310,7 +310,7 @@ export class BusinessDocumentRepository {
     };
   }
 
-  async list(input: { profileId?: string; category?: BusinessDocumentCategory; reviewState?: BusinessDocumentReviewState; limit?: number } = {}) {
+  async list(input: { profileId?: string; category?: BusinessDocumentCategory; reviewState?: BusinessDocumentReviewState; limit?: number; offset?: number } = {}) {
     const client = await this.pool.connect();
     try {
       const values: unknown[] = [];
@@ -325,6 +325,9 @@ export class BusinessDocumentRepository {
       if (input.category) { values.push(input.category); conditions.push(`d.category = $${values.length}`); }
       if (input.reviewState) { values.push(input.reviewState); conditions.push(`d.review_state = $${values.length}`); }
       values.push(Math.min(100, Math.max(1, input.limit ?? 50)));
+      const limitParameter = values.length;
+      values.push(Math.min(100_000, Math.max(0, input.offset ?? 0)));
+      const offsetParameter = values.length;
       const result = await client.query(
         `SELECT d.*,
            EXISTS (
@@ -343,7 +346,7 @@ export class BusinessDocumentRepository {
            ), '[]'::json) AS links
          FROM business_documents d
          WHERE ${conditions.join(" AND ")}
-         ORDER BY d.updated_at DESC LIMIT $${values.length}`,
+         ORDER BY d.updated_at DESC, d.id DESC LIMIT $${limitParameter} OFFSET $${offsetParameter}`,
         values,
       );
       return result.rows.map(toView);
