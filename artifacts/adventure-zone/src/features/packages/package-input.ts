@@ -11,7 +11,7 @@ const optionalNullableTrimmedString = z
   .union([z.string(), z.null(), z.undefined()])
   .transform((value) => value?.trim() || null);
 
-const canonicalUuid = z.uuid().transform((value) => value.toLowerCase());
+const canonicalUuid = z.string().uuid().transform((value) => value.toLowerCase());
 
 function uniqueValues(
   values: readonly string[],

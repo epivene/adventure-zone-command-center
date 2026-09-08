@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const page = fs.readFileSync(path.resolve(__dirname, "ResearchSourcesPage.tsx"), "utf8");
 const app = fs.readFileSync(path.resolve(__dirname, "../App.tsx"), "utf8");
 const menu = fs.readFileSync(path.resolve(__dirname, "../components/navigation/app-menu.tsx"), "utf8");
-const startup = fs.readFileSync(path.resolve(__dirname, "../../api-server/src/db/profile-research-startup-migration.ts"), "utf8");
+const startup = fs.readFileSync(path.resolve(__dirname, "../../../api-server/src/db/profile-research-startup-migration.ts"), "utf8");
 
 describe("Research Sources library", () => {
   it("is reachable from the app and admin menu", () => {
