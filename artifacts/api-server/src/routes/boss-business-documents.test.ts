@@ -11,7 +11,7 @@ vi.mock("@workspace/db", () => ({ db: {} }));
 vi.mock("./business-documents", () => ({
   createBusinessDocumentsRouter: () => {
     const router = Router();
-    router.get("/business-documents", (req, res) => res.json({
+    router.use("/business-documents", (req, res) => res.json({
       actor: req.bossAccount?.accountId ?? null,
     }));
     return router;
@@ -54,8 +54,18 @@ describe("Boss business document authorization", () => {
     await request(app()).get("/boss/business-documents").set("Authorization", "Bearer boss-token").expect(401);
   });
 
-  it("allows Dave through the Boss wrapper", async () => {
-    const response = await request(app()).get("/boss/business-documents").set("Authorization", "Bearer boss-token").expect(200);
-    expect(response.body).toEqual({ actor: "dave" });
+  it("allows Dave to read, edit, delete, upload, and review through the Boss wrapper", async () => {
+    const authorization = { Authorization: "Bearer boss-token" };
+    const documentId = "11111111-1111-4111-8111-111111111111";
+    const reviewId = "22222222-2222-4222-8222-222222222222";
+    const responses = await Promise.all([
+      request(app()).get("/boss/business-documents").set(authorization),
+      request(app()).patch(`/boss/business-documents/${documentId}`).set(authorization),
+      request(app()).delete(`/boss/business-documents/${documentId}`).set(authorization),
+      request(app()).post("/boss/business-documents/upload").set(authorization),
+      request(app()).post(`/boss/business-documents/reviews/${reviewId}/actions`).set(authorization),
+    ]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200, 200, 200, 200]);
+    expect(responses.every((response) => response.body.actor === "dave")).toBe(true);
   });
 });
