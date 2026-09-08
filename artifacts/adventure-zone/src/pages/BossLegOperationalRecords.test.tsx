@@ -90,6 +90,7 @@ describe("Boss operational records by leg", () => {
     expect(screen.queryByText("Hulk Fuel")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Hulk, 1 receipt" }));
+    fireEvent.click(screen.getByRole("button", { name: "Unassigned event, 1 receipt" }));
     expect(screen.getByText("Hulk Fuel")).toBeInTheDocument();
     expect(screen.queryByText("Kristy Fuel")).not.toBeInTheDocument();
   });
@@ -374,12 +375,21 @@ describe("Boss operational records by leg", () => {
       "",
       "/boss/reviews?bookingId=booking-kristy",
     );
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      reviewAndWrapUp: dashboard.reviewAndWrapUp.map((item) =>
+        item.bookingId === "booking-kristy"
+          ? { ...item, feedback: "Focused review details" }
+          : item,
+      ),
+    });
     render(<BossReviewsPage />);
 
     await waitFor(() =>
       expect(screen.getByText("Kristy reviews")).toBeInTheDocument(),
     );
-    expect(screen.getByText("Kristy event")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Kristy event, 1 review" })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Focused review details")).toBeInTheDocument();
     expect(screen.queryByText("Hulk event")).not.toBeInTheDocument();
   });
 
@@ -395,4 +405,45 @@ describe("Boss operational records by leg", () => {
 
     expect(screen.getByText("Legacy event")).toBeInTheDocument();
   });
+  it("groups a selected leg's receipts under their event", async () => {
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      receipts: [
+        { id: "receipt-a", bookingId: "booking-party", bookingName: "Hulk Birthday Party", legId: "leg-hulk", legName: "Hulk", vendor: "Fuel Stop" },
+        { id: "receipt-b", bookingId: "booking-party", bookingName: "Hulk Birthday Party", legId: "leg-hulk", legName: "Hulk", vendor: "Supply Store" },
+        { id: "receipt-unassigned", bookingId: null, bookingName: null, legId: "leg-hulk", legName: "Hulk", vendor: "Unknown Event" },
+      ],
+    });
+
+    render(<BossReceiptsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 3 receipts" }));
+
+    expect(screen.getByRole("button", { name: "Hulk Birthday Party, 2 receipts" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unassigned event, 1 receipt" })).toBeInTheDocument();
+    expect(screen.queryByText("Fuel Stop")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hulk Birthday Party, 2 receipts" }));
+    expect(screen.getByText("Fuel Stop")).toBeInTheDocument();
+    expect(screen.getByText("Supply Store")).toBeInTheDocument();
+    expect(screen.queryByText("Unknown Event")).not.toBeInTheDocument();
+  });
+
+  it("groups a selected leg's review records under their event", async () => {
+    bossGet.mockResolvedValueOnce({
+      ...dashboard,
+      reviewAndWrapUp: [
+        { id: "review-due", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", status: "review_due" },
+        { id: "review-complete", bookingId: "booking-party", legId: "leg-hulk", legName: "Hulk", title: "Hulk Birthday Party", status: "review_completed", feedback: "Great event" },
+      ],
+    });
+
+    render(<BossReviewsPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Hulk, 2 reviews" }));
+
+    expect(screen.getByRole("button", { name: "Hulk Birthday Party, 2 reviews" })).toBeInTheDocument();
+    expect(screen.queryByText("Great event")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hulk Birthday Party, 2 reviews" }));
+    expect(screen.getByText("Great event")).toBeInTheDocument();
+  });
+
 });

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { EventWrapUpReviewQueue } from "./event-wrap-up-review-queue";
 
@@ -15,8 +15,10 @@ describe("EventWrapUpReviewQueue", () => {
       finance: { missingReceiptCount: 1 },
     } as any]} />);
 
-    expect(screen.getByText("Dickinson Fair")).toBeInTheDocument();
-    expect(screen.getByText(/Kristy/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Unassigned leg, 1 review" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dickinson Fair, 1 review" }));
+    expect(screen.getByRole("heading", { name: "Dickinson Fair" })).toBeInTheDocument();
+    expect(screen.getAllByText(/Kristy/).length).toBeGreaterThan(0);
     expect(screen.getByText("★★★★")).toBeInTheDocument();
     expect(screen.getByText("$25.00 short")).toBeInTheDocument();
     expect(screen.getByText("$2,515.00")).toBeInTheDocument();
@@ -25,4 +27,17 @@ describe("EventWrapUpReviewQueue", () => {
     expect(screen.getByText(/Crew wage cost is incomplete/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Review wrap-up/i })).toHaveAttribute("href", "/manager-aftermath?wrapUp=b1");
   });
+  it("groups wrap-ups by leg and then event", () => {
+    render(<EventWrapUpReviewQueue wrapUps={[
+      { event: { bookingId: "b1", name: "Dickinson Fair", legId: "leg-a", legName: "Hulk" }, wrapUp: { ratingStars: 5 }, calculation: {} },
+      { event: { bookingId: "b2", name: "Logan Fair", legId: "leg-a", legName: "Hulk" }, wrapUp: { ratingStars: 4 }, calculation: {} },
+    ] as any[]} />);
+
+    const leg = screen.getByRole("button", { name: "Hulk, 2 reviews" });
+    expect(screen.queryByText("Dickinson Fair")).not.toBeInTheDocument();
+    fireEvent.click(leg);
+    expect(screen.getByRole("button", { name: "Dickinson Fair, 1 review" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Logan Fair, 1 review" })).toBeInTheDocument();
+  });
+
 });

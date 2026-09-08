@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { LegEventRecordGroups } from "@/components/records/leg-event-record-groups";
 
 type ScheduleIssue = {
   id: string;
@@ -49,9 +50,9 @@ type ChecklistRecord = ChecklistSummary & {
   items: Array<{ id: string; label: string; resourceName: string | null; result: string | null; note: string | null }>;
 };
 
-type ReviewDue = { bookingId: string; bookingName: string; legName: string; endsAt: string | null };
+type ReviewDue = { bookingId: string; bookingName: string; legId: string | null; legName: string | null; endsAt: string | null };
 type SavedReview = {
-  id: string; bookingName: string; legName: string; rating: number; feedback: string | null;
+  id: string; bookingId: string; bookingName: string; legId: string | null; legName: string | null; rating: number; feedback: string | null;
   organizerSiteNotes: string | null; crewNotes: string | null; recommendReturn: "yes" | "no" | "unsure" | null;
   createdAt: string;
 };
@@ -261,17 +262,17 @@ export default function ManagerIssuesAdminPage() {
 
       <section className="grid gap-3">
         <div><h2 className="text-xl font-bold">Review Due</h2><p className="text-sm text-slate-600">Completed events still waiting for a crew review. Remove items that should no longer be requested.</p></div>
-        {reviewsDue.length ? reviewsDue.map((item) => <article className="rounded-xl border bg-white p-4" key={item.bookingId}>
+        {reviewsDue.length ? <LegEventRecordGroups records={reviewsDue} noun="review">{(item) => <article className="rounded-xl border bg-white p-4" key={item.bookingId}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><h3 className="font-bold">{item.bookingName}</h3><p className="text-sm text-slate-600">{item.legName}{item.endsAt ? ` · ${new Date(item.endsAt).toLocaleDateString()}` : ""}</p></div>
             <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void removeReviewDue(item)} type="button">Remove from Review Due</button>
           </div>
-        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No reviews are due.</p>}
+        </article>}</LegEventRecordGroups> : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No reviews are due.</p>}
       </section>
 
       <section className="grid gap-3">
         <div><h2 className="text-xl font-bold">Saved event reviews</h2><p className="text-sm text-slate-600">Correct or delete reviews when operational records need to be updated.</p></div>
-        {savedReviews.length ? savedReviews.map((review) => <article className="rounded-xl border bg-white p-4" key={review.id}>
+        {savedReviews.length ? <LegEventRecordGroups records={savedReviews} noun="review">{(review) => <article className="rounded-xl border bg-white p-4" key={review.id}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h3 className="font-bold">{review.bookingName}</h3>
@@ -284,7 +285,7 @@ export default function ManagerIssuesAdminPage() {
               <button className="button-secondary text-rose-700" disabled={busy !== null} onClick={() => void deleteSavedReview(review)} type="button">Delete review</button>
             </div>
           </div>
-        </article>) : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No saved event reviews.</p>}
+        </article>}</LegEventRecordGroups> : <p className="rounded-xl border border-dashed bg-white p-4 text-sm text-slate-600">No saved event reviews.</p>}
       </section>
 
       <section className="grid gap-3">

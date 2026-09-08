@@ -5,6 +5,7 @@ import {
   type AdminExpenseRecord,
   type FinanceEventOption,
 } from "@/components/manager-finance/admin-expense-record";
+import { LegEventRecordGroups } from "@/components/records/leg-event-record-groups";
 
 const money = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
@@ -170,7 +171,7 @@ export default function ManagerFinanceAdminPage() {
         <p className="text-sm font-semibold text-slate-600">{filteredRecords.length} matching expense{filteredRecords.length === 1 ? "" : "s"}</p>
       </section>
 
-      {recordsError ? <section className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p role="alert" className="text-sm font-semibold text-rose-700">{recordsError}</p><button className="button-secondary mt-2" type="button" onClick={() => void loadRecords()}>Retry expenses</button></section> : loadingRecords ? <p className="text-sm text-slate-500">Loading submitted expenses…</p> : filteredRecords.length ? <section className="grid gap-3">{filteredRecords.map((record) => <AdminExpenseRecordCard key={record.id} record={record} events={events} onUpdated={replaceRecord} />)}</section> : <p className="rounded-xl border border-dashed bg-white p-6 text-sm text-slate-500">No expenses match these filters.</p>}
+      {recordsError ? <section className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p role="alert" className="text-sm font-semibold text-rose-700">{recordsError}</p><button className="button-secondary mt-2" type="button" onClick={() => void loadRecords()}>Retry expenses</button></section> : loadingRecords ? <p className="text-sm text-slate-500">Loading submitted expenses…</p> : filteredRecords.length ? <LegEventRecordGroups records={filteredRecords} noun="receipt">{(record) => <AdminExpenseRecordCard key={record.id} record={record} events={events} onUpdated={replaceRecord} />}</LegEventRecordGroups> : <p className="rounded-xl border border-dashed bg-white p-6 text-sm text-slate-500">No expenses match these filters.</p>}
     </div>
   );
 }

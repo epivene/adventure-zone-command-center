@@ -3,6 +3,7 @@ import { useSearch } from "wouter";
 import { apiDelete, apiGet, apiPatch } from "@/lib/auth-token";
 import { EventWrapUpReviewQueue } from "@/components/routes/event-wrap-up-review-queue";
 import EventWrapUpAdminPage from "@/pages/EventWrapUpAdminPage";
+import { LegEventRecordGroups } from "@/components/records/leg-event-record-groups";
 
 function Detail({ label, value }: { label: string; value: any }) {
   if (value === null || value === undefined || value === "") return null;
@@ -173,16 +174,16 @@ export default function ManagerAftermathAdminPage() {
     <section>
       <h2 className="text-xl font-bold">Legacy reviews</h2>
       <p className="text-sm text-slate-600">{reviews.length} historical reviews from the older aftermath form.</p>
-      {reviews.map((review) => {
+      <LegEventRecordGroups records={reviews} noun="review">{(review) => {
         const open = openReview === review.id;
-        return <article key={review.id} className="mt-2 rounded-xl border bg-white">
+        return <article key={review.id} className="rounded-xl border bg-white">
           <button type="button" aria-expanded={open} className="w-full p-3 text-left" onClick={() => setOpenReview(open ? null : review.id)}>
             <div className="flex items-center justify-between gap-3"><span><b>{review.rating}/5</b></span><span className="text-sm font-semibold text-orange-700">{open ? "Hide details" : "View details"}</span></div>
             {review.feedback ? <p className="mt-1">{review.feedback}</p> : null}
           </button>
           {open ? <div className="grid gap-1 border-t p-3"><Detail label="Organizer / site notes" value={review.organizerSiteNotes} /><Detail label="Crew notes" value={review.crewNotes} /><Detail label="Submitted" value={review.createdAt ? new Date(review.createdAt).toLocaleString() : null} /></div> : null}
         </article>;
-      })}
+      }}</LegEventRecordGroups>
     </section>
 
     <section>

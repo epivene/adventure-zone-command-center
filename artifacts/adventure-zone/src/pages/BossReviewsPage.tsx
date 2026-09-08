@@ -5,6 +5,7 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { LegRecordPicker, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
+import { EventRecordGroups } from "@/components/records/leg-event-record-groups";
 import { bossDelete, bossGet, bossPatch } from "@/lib/boss-auth-context";
 
 type ReviewItem = {
@@ -153,8 +154,8 @@ export default function BossReviewsPage() {
       ) : (
         <div className="grid gap-4">
           <LegRecordPicker groups={legGroups} noun="review" selectedLegKey={effectiveLegKey} onSelect={setSelectedLegKey} />
-          {effectiveLegKey ? <div className="grid gap-3">
-          {visibleItems.map((item, i) => {
+          {effectiveLegKey ? <EventRecordGroups records={visibleItems} noun="review" openBookingId={focusBookingId}>
+          {(item, i) => {
             const isFocused = focusBookingId && item.bookingId === focusBookingId;
             return (
               <section
@@ -235,8 +236,8 @@ export default function BossReviewsPage() {
                 }) : null}
               </section>
             );
-          })}
-          </div> : null}
+          }}
+          </EventRecordGroups> : null}
         </div>
       )}
     </div>
