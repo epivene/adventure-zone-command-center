@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ilike } from "drizzle-orm";
 import { db } from "@workspace/db";
 import {
   bookings,
@@ -111,6 +111,29 @@ router.get("/boss/documents", requireBoss, async (req, res): Promise<void> => {
   } catch (error) {
     req.log.error({ err: error }, "Failed to load Boss business documents");
     res.status(500).json({ error: "Could not load business documents." });
+  }
+});
+
+router.get("/boss/business-documents/profiles", requireBoss, async (req, res): Promise<void> => {
+  const query = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  if (!query) {
+    res.json({ profiles: [] });
+    return;
+  }
+
+  try {
+    const profiles = await db.select({
+      id: organizations.id,
+      name: organizations.name,
+    })
+      .from(organizations)
+      .where(ilike(organizations.name, `%${query}%`))
+      .orderBy(asc(organizations.name))
+      .limit(10);
+    res.json({ profiles: profiles.map((profile) => ({ ...profile, city: null, region: null })) });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to search profiles for Boss document review");
+    res.status(500).json({ error: "Could not search profiles." });
   }
 });
 
