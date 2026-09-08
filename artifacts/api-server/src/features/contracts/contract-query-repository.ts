@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -33,7 +33,10 @@ export class DrizzleContractQueryRepository {
         openDraftId: contractDrafts.id,
       }).from(bookings)
         .leftJoin(contractDrafts, and(eq(contractDrafts.bookingId, bookings.id), isNull(contractDrafts.finalizedAt)))
-        .where(eq(bookings.organizationId, organizationId))
+        .where(and(
+          eq(bookings.organizationId, organizationId),
+          sql`coalesce(${bookings.notes}, '') not like '[Merged duplicate] Canonical booking:%'`,
+        ))
         .orderBy(desc(bookings.startsAt), asc(bookings.name)),
       this.database.select({ file: contractFiles }).from(contractFiles)
         .innerJoin(contractVersions, eq(contractVersions.id, contractFiles.contractVersionId))
