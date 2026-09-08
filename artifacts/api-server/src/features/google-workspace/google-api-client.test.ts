@@ -212,7 +212,7 @@ describe("GoogleWorkspaceReadClient", () => {
     });
   });
 
-  it("exposes only Gmail draft creation as a mutation and no send method", () => {
+  it("exposes the bounded Gmail and Drive capabilities and no send method", () => {
     const client = createGoogleWorkspaceReadClient({
       environment,
       fetcher: async () => new Response(),
@@ -223,12 +223,14 @@ describe("GoogleWorkspaceReadClient", () => {
       "authorizationUrl",
       "createGmailDraft",
       "createLabel",
+      "downloadDriveFile",
       "exchangeCode",
       "getAttachment",
       "getMessageMetadata",
       "getThreadDetail",
       "listCalendarEvents",
       "listCalendars",
+      "listDriveFiles",
       "listLabels",
       "listMessagePage",
       "listRecentMessageRefs",
