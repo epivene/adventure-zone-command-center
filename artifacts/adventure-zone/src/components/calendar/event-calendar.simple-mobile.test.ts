@@ -31,4 +31,10 @@ describe("simplified calendar contracts", () => {
     expect(calendarSource).toContain(">Upcoming<");
     expect(calendarSource).toContain(">Show more<");
   });
+
+  it("routes linked calendar events to the profile path supplied by each workspace", () => {
+    expect(calendarSource).toContain('profileBasePath = "/profiles"');
+    expect(calendarSource).toContain("event.organizationId");
+    expect(calendarSource).toContain("profileBasePath");
+  });
 });
