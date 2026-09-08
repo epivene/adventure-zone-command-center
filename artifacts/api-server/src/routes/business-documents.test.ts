@@ -27,11 +27,23 @@ function setup() {
     reviewItems: vi.fn(async () => [{ id: linkId, displayName: "City COI" }]),
     reviewAction: vi.fn(async () => ({ ok: true })),
   };
+  const ingestion = {
+    ingest: vi.fn(async () => ({
+      outcome: "imported" as const,
+      documentId,
+      versionId: "33333333-3333-4333-8333-333333333333",
+      blobId: "44444444-4444-4444-8444-444444444444",
+      reviewState: "accepted" as const,
+      linkedProfileIds: [],
+      linkedBookingIds: [],
+      linkedEventFamilyIds: [],
+    })),
+  };
   const app = express();
   app.use(express.json());
   app.use(requireOwnerMiddleware);
-  app.use(createBusinessDocumentsRouter(service as any));
-  return { app, service };
+  app.use(createBusinessDocumentsRouter(service as any, ingestion as any));
+  return { app, service, ingestion };
 }
 
 function ownerHeader() {
@@ -53,6 +65,35 @@ describe("business document routes", () => {
     const { app } = setup();
     const response = await request(app).get("/business-documents/review-count").set(ownerHeader()).expect(200);
     expect(response.body).toEqual({ count: 3 });
+  });
+
+  it("ingests an owner-uploaded document into protected business storage", async () => {
+    const { app, ingestion } = setup();
+    const response = await request(app)
+      .post("/business-documents/upload")
+      .set(ownerHeader())
+      .set("content-type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+      .set("x-file-name", encodeURIComponent("Art City Days Proposal.docx"))
+      .send(Buffer.from([1, 2, 3]))
+      .expect(201);
+
+    expect(response.body).toEqual(expect.objectContaining({ outcome: "imported", documentId }));
+    expect(ingestion.ingest).toHaveBeenCalledWith(expect.objectContaining({
+      filename: "Art City Days Proposal.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      source: expect.objectContaining({ sourceKind: "manual" }),
+    }));
+  });
+
+  it("rejects an upload without a safe filename", async () => {
+    const { app, ingestion } = setup();
+    await request(app)
+      .post("/business-documents/upload")
+      .set(ownerHeader())
+      .set("content-type", "application/pdf")
+      .send(Buffer.from([1]))
+      .expect(400);
+    expect(ingestion.ingest).not.toHaveBeenCalled();
   });
 
   it("unlinks a profile without deleting the document", async () => {

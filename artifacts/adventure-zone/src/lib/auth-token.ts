@@ -80,6 +80,22 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export async function apiUpload<T>(path: string, file: File): Promise<T> {
+  const res = await apiFetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "X-File-Name": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as any;
+    throw new Error(err?.error ?? `API ${res.status}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   const res = await apiFetch(path, {
     method: "PATCH",

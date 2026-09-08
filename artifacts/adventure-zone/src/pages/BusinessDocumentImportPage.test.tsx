@@ -2,7 +2,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 const apiPost = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/auth-token", () => ({ apiPost }));
+const apiUpload = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/auth-token", () => ({ apiPost, apiUpload }));
 import BusinessDocumentImportPage from "./BusinessDocumentImportPage";
 
 describe("BusinessDocumentImportPage", () => {
@@ -52,5 +53,21 @@ describe("BusinessDocumentImportPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Start Gmail pilot" }));
     await waitFor(() => expect(apiPost).toHaveBeenLastCalledWith("/business-document-imports/gmail/start", { previewRunId: "gmail-preview", confirmation: "START PILOT", pilotLimit: 25 }));
     expect(await screen.findByText("Gmail pilot is running in the background.")).toBeVisible();
+  });
+
+  it("uploads selected local documents to the protected library", async () => {
+    apiUpload.mockReset()
+      .mockResolvedValueOnce({ outcome: "imported" })
+      .mockResolvedValueOnce({ outcome: "imported" });
+    render(<BusinessDocumentImportPage />);
+    const files = [
+      new File([new Uint8Array([1])], "Art City Days Proposal.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
+      new File([new Uint8Array([2])], "Springville Fun-A-Rama Proposal.docx", { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }),
+    ];
+    fireEvent.change(screen.getByLabelText("Upload business documents"), { target: { files } });
+    fireEvent.click(screen.getByRole("button", { name: "Upload 2 documents" }));
+    expect(await screen.findByText("2 documents uploaded.")).toBeVisible();
+    expect(apiUpload).toHaveBeenNthCalledWith(1, "/business-documents/upload", files[0]);
+    expect(apiUpload).toHaveBeenNthCalledWith(2, "/business-documents/upload", files[1]);
   });
 });
