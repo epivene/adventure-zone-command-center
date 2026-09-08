@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { RefreshCw, Wrench } from "lucide-react";
+import { ChevronDown, RefreshCw, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
@@ -30,6 +30,12 @@ type MaintenanceRecord = MaintenanceItem & {
   items: Array<{ id: string; label: string; resourceName: string | null; result: string | null; note: string | null }>;
 };
 
+type MaintenanceEvent = {
+  key: string;
+  title: string;
+  records: MaintenanceItem[];
+};
+
 function phaseLabel(phase?: string | null) {
   if (!phase) return null;
   const map: Record<string, string> = {
@@ -52,14 +58,35 @@ function statusVariant(status?: string | null): "default" | "secondary" | "outli
   }
 }
 
+function canonicalPhase(phase?: string | null) {
+  if (phase === "pre" || phase === "pre_event") return "pre_event";
+  if (phase === "post" || phase === "post_event") return "post_event";
+  return phase ?? "maintenance";
+}
+
+function groupByEvent(items: MaintenanceItem[]): MaintenanceEvent[] {
+  const groups = new Map<string, MaintenanceEvent>();
+  items.forEach((item, index) => {
+    const key = item.bookingId ?? item.id ?? `maintenance-${index}`;
+    const current = groups.get(key);
+    if (current) current.records.push(item);
+    else groups.set(key, { key, title: item.title ?? `Event ${index + 1}`, records: [item] });
+  });
+  return Array.from(groups.values());
+}
+
+function readableStatus(status?: string | null) {
+  return status?.replaceAll("_", " ") ?? "available";
+}
+
 export default function BossMaintenancePage() {
   const [items, setItems] = useState<MaintenanceItem[]>([]);
   const [selectedLegKey, setSelectedLegKey] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filter, setFilter] = useState<string>("all");
-  const [openId, setOpenId] = useState<string | null>(null);
-  const [record, setRecord] = useState<MaintenanceRecord | null>(null);
+  const [openEventKey, setOpenEventKey] = useState<string | null>(null);
+  const [recordsById, setRecordsById] = useState<Record<string, MaintenanceRecord>>({});
+  const [openingEventKey, setOpeningEventKey] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function load() {
@@ -80,27 +107,35 @@ export default function BossMaintenancePage() {
   const legGroups = groupRecordsByLeg(items);
   const effectiveLegKey = legGroups.some((group) => group.key === selectedLegKey) ? selectedLegKey : null;
   const legItems = recordsForLeg(items, effectiveLegKey);
-  const phases = ["all", ...Array.from(new Set(legItems.map((i) => i.phase).filter(Boolean) as string[]))];
-
-  const effectiveFilter = phases.includes(filter) ? filter : "all";
-  const filtered = effectiveFilter === "all" ? legItems : legItems.filter((i) => i.phase === effectiveFilter);
+  const events = groupByEvent(legItems);
 
   function selectLeg(key: string | null) {
     setSelectedLegKey(key);
-    setFilter("all");
+    setOpenEventKey(null);
   }
 
-  async function openRecord(id: string) {
-    if (openId === id) { setOpenId(null); setRecord(null); return; }
-    setBusy(id);
+  async function toggleEvent(event: MaintenanceEvent) {
+    if (openEventKey === event.key) {
+      setOpenEventKey(null);
+      return;
+    }
+    setOpenEventKey(event.key);
+    const recordIds = event.records.flatMap((item) => item.id ? [item.id] : []);
+    const missingIds = recordIds.filter((id) => !recordsById[id]);
+    if (missingIds.length === 0) return;
+    setOpeningEventKey(event.key);
     setError(null);
     try {
-      const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
-      setRecord(data.record);
-      setOpenId(id);
+      const loaded = await Promise.all(missingIds.map(async (id) => {
+        const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
+        return [id, data.record] as const;
+      }));
+      setRecordsById((current) => ({ ...current, ...Object.fromEntries(loaded) }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not open maintenance record.");
-    } finally { setBusy(null); }
+    } finally {
+      setOpeningEventKey(null);
+    }
   }
 
   async function removeRecord(item: MaintenanceItem) {
@@ -108,7 +143,11 @@ export default function BossMaintenancePage() {
     setBusy(item.id);
     try {
       await bossDelete(`/boss/maintenance/${item.id}`);
-      if (openId === item.id) { setOpenId(null); setRecord(null); }
+      setRecordsById((current) => {
+        const next = { ...current };
+        delete next[item.id!];
+        return next;
+      });
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not remove maintenance record.");
@@ -132,24 +171,6 @@ export default function BossMaintenancePage() {
         <LegRecordPicker groups={legGroups} noun="maintenance record" selectedLegKey={effectiveLegKey} onSelect={selectLeg} />
       ) : null}
 
-      {effectiveLegKey && phases.length > 1 ? (
-        <div className="flex flex-wrap gap-2" role="tablist">
-          {phases.map((p) => (
-            <Button
-              key={p}
-              role="tab"
-              aria-selected={effectiveFilter === p}
-              variant={effectiveFilter === p ? "default" : "outline"}
-              size="sm"
-              onClick={() => setFilter(p)}
-              data-testid={`tab-maintenance-${p}`}
-            >
-              {p === "all" ? "All" : phaseLabel(p)}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert">
           <span className="text-destructive">{error}</span>
@@ -171,56 +192,80 @@ export default function BossMaintenancePage() {
         </div>
       ) : effectiveLegKey ? (
         <div className="grid gap-3">
-          {filtered.map((item, i) => (
-            <div
-              key={item.id ?? i}
-              className="rounded-xl border border-border bg-card p-4 shadow-sm"
-              data-testid={`maintenance-item-${item.id ?? i}`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold text-foreground">{item.title ?? `Item ${i + 1}`}</p>
-                  <div className="mt-0.5 flex items-center gap-2 flex-wrap">
-                    {item.phase ? (
-                      <span className="text-xs text-muted-foreground">{phaseLabel(item.phase)}</span>
-                    ) : null}
-                    {item.dueAt ? (
-                      <span className="text-xs text-muted-foreground">
-                        Due {new Date(item.dueAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
-                      </span>
-                    ) : null}
+          {events.map((event) => {
+            const pre = event.records.find((item) => canonicalPhase(item.phase) === "pre_event");
+            const post = event.records.find((item) => canonicalPhase(item.phase) === "post_event");
+            const other = event.records.filter((item) => !["pre_event", "post_event"].includes(canonicalPhase(item.phase)));
+            const isOpen = openEventKey === event.key;
+            const phasePanel = (label: string, item?: MaintenanceItem) => {
+              const loadedRecord = item?.id ? recordsById[item.id] : undefined;
+              return (
+                <section className="grid gap-2 rounded-lg border border-border bg-muted/30 p-3" key={label}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="font-bold text-foreground">{label}</h3>
+                    {item?.status ? <Badge variant={statusVariant(item.status)} className="capitalize">{readableStatus(item.status)}</Badge> : null}
                   </div>
-                </div>
-                {item.status ? (
-                  <Badge variant={statusVariant(item.status)} className="capitalize shrink-0">
-                    {item.status.replace("_", " ")}
-                  </Badge>
+                  {!item ? (
+                    <p className="text-sm text-muted-foreground">No {label.toLowerCase()} record yet.</p>
+                  ) : openingEventKey === event.key && !loadedRecord ? (
+                    <p className="text-sm text-muted-foreground">Loading record…</p>
+                  ) : !loadedRecord ? (
+                    <p className="text-sm text-muted-foreground">Record details could not be loaded.</p>
+                  ) : (
+                    <>
+                      {item.notes ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.notes as string}</p> : null}
+                      {loadedRecord.items.length === 0 ? <p className="text-sm text-muted-foreground">No checklist answers.</p> : null}
+                      {loadedRecord.items.map((detail) => (
+                        <div className="rounded-lg bg-card p-3 text-sm" key={detail.id}>
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <p className="font-semibold">{detail.label}</p>
+                            <Badge variant="outline" className="capitalize">{detail.result?.replaceAll("_", " ") ?? "Not answered"}</Badge>
+                          </div>
+                          {detail.resourceName ? <p className="mt-1 text-xs text-muted-foreground">{detail.resourceName}</p> : null}
+                          {detail.note ? <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.note}</p> : null}
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {item?.id ? (
+                    <Button size="sm" variant="outline" className="w-fit text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
+                      {busy === item.id ? "Removing…" : "Remove"}
+                    </Button>
+                  ) : null}
+                </section>
+              );
+            };
+            return (
+              <section
+                key={event.key}
+                className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+                data-testid={`maintenance-event-${event.key}`}
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                  aria-expanded={isOpen}
+                  onClick={() => void toggleEvent(event)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold text-foreground">{event.title}</span>
+                    <span className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>Pre-event {pre ? readableStatus(pre.status) : "missing"}</span>
+                      <span>Post-event {post ? readableStatus(post.status) : "missing"}</span>
+                    </span>
+                  </span>
+                  <ChevronDown className={`mt-0.5 h-5 w-5 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+                {isOpen ? (
+                  <div className="grid gap-3 border-t border-border p-4">
+                    {phasePanel("Pre-event", pre)}
+                    {phasePanel("Post-event", post)}
+                    {other.map((item) => phasePanel(phaseLabel(item.phase) ?? "Maintenance", item))}
+                  </div>
                 ) : null}
-              </div>
-              {item.notes ? (
-                <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{item.notes as string}</p>
-              ) : null}
-              {item.id ? <div className="mt-3 flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" disabled={busy === item.id} onClick={() => void openRecord(item.id!)}>
-                  {openId === item.id ? "Close record" : busy === item.id ? "Opening…" : "Open record"}
-                </Button>
-                <Button size="sm" variant="outline" className="text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
-                  Remove
-                </Button>
-              </div> : null}
-              {openId === item.id && record ? <div className="mt-4 grid gap-2 border-t border-border pt-4">
-                <p className="text-sm font-semibold">{record.legName ?? "Crew"} · {record.items.length} checklist item{record.items.length === 1 ? "" : "s"}</p>
-                {record.items.map((detail) => <div className="rounded-lg bg-muted/50 p-3 text-sm" key={detail.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <p className="font-semibold">{detail.label}</p>
-                    <Badge variant="outline" className="capitalize">{detail.result?.replaceAll("_", " ") ?? "Not answered"}</Badge>
-                  </div>
-                  {detail.resourceName ? <p className="mt-1 text-xs text-muted-foreground">{detail.resourceName}</p> : null}
-                  {detail.note ? <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{detail.note}</p> : null}
-                </div>)}
-              </div> : null}
-            </div>
-          ))}
+              </section>
+            );
+          })}
         </div>
       ) : null}
     </div>
