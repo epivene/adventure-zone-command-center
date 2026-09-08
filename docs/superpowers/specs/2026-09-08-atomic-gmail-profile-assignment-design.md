@@ -47,6 +47,10 @@ The transaction will:
 
 Only after commit will the service initialize Gmail and execute the queued mutation.
 
+Each thread also has one durable, versioned intent row. Assigning a profile makes that mutation the current generation; Ignore makes an `ignore` generation current and clears the current mutation. Workers may claim assignment work only when its mutation ID and generation still match that row.
+
+A dedicated PostgreSQL session advisory lock is held from worker claim through the Gmail API call and mutation completion. Assignment and Ignore transactions take the matching transaction advisory lock before changing intent. This serializes the external side effect with user decisions, prevents expired workers from applying stale labels, and guarantees that no queued assignment can change Gmail after Ignore returns.
+
 The transaction repository will receive a checked-out database client. It will use `BEGIN`, `COMMIT`, and `ROLLBACK`; no transaction work will use pool-level queries that could switch connections.
 
 ## Stable Idempotency
@@ -128,8 +132,8 @@ Existing unrelated failing repository checks will be reported separately; the fo
 
 ## Verification Results
 
-- Google Workspace backend: 77 files, 316 tests passed.
-- Atomic transaction coverage includes rollback, stable identical retries, reassignment superseding, A → B → A generations, and staged connection failure.
+- Google Workspace backend: 78 files, 320 tests passed.
+- Atomic transaction coverage includes rollback, stable identical retries, processing reassignment superseding, A → B → A generations, staged connection failure, session-lock lifetime, and atomic Ignore cancellation.
 - Office Coordinator workflow: API and frontend builds passed.
 - Release Safety: no new type errors in the atomic transaction, review assignment service, validation repository, matched-corrections route, or route contract test. Remaining type errors are pre-existing Google Gmail client declaration issues.
 - Google Workspace workflow remains red only in pre-existing frontend settings/navigation tests after its backend step passes.
