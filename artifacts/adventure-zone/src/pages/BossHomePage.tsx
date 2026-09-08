@@ -13,7 +13,7 @@ type DashboardData = {
   businessDocumentsCount: number;
   assignments: Assignment[];
   reviewAndWrapUp: { id?: string; title?: string; bookingId?: string; status?: string; eventDate?: string }[];
-  checklistAndMaintenance: { id?: string; title?: string; bookingId?: string; phase?: string; status?: string }[];
+  checklistAndMaintenance: { id?: string; title?: string; bookingId?: string; phase?: string; status?: string; completedAt?: string | null }[];
 };
 
 function priorityColor(p: string) {
@@ -95,6 +95,17 @@ export default function BossHomePage() {
   const allActiveAssignments = (data?.assignments ?? []).filter(
     (a) => !["done", "cancelled"].includes(a.status)
   );
+  const recentMaintenanceEvents = Array.from(
+    (data?.checklistAndMaintenance ?? [])
+      .filter((item) => Boolean(item.completedAt))
+      .sort((left, right) => new Date(right.completedAt!).getTime() - new Date(left.completedAt!).getTime())
+      .reduce((events, item, index) => {
+        const key = item.bookingId ?? item.title?.trim().toLowerCase() ?? item.id ?? `maintenance-${index}`;
+        if (!events.has(key)) events.set(key, item);
+        return events;
+      }, new Map<string, DashboardData["checklistAndMaintenance"][number]>())
+      .values(),
+  ).slice(0, 3);
 
   return (
     <div className="grid gap-6" data-testid="boss-home">
@@ -195,7 +206,7 @@ export default function BossHomePage() {
       ) : null}
 
       {/* Maintenance */}
-      {(data?.checklistAndMaintenance ?? []).length > 0 ? (
+      {recentMaintenanceEvents.length > 0 ? (
         <section>
           <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -207,29 +218,28 @@ export default function BossHomePage() {
             </Link>
           </div>
           <div className="grid gap-2">
-            {(data?.checklistAndMaintenance ?? []).slice(0, 3).map((item, i) => (
-              <div
-                key={item.id ?? i}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2"
-                data-testid={`maintenance-row-${item.id ?? i}`}
+            {recentMaintenanceEvents.map((item, i) => (
+              <Link
+                href={item.bookingId ? `/boss/maintenance?bookingId=${encodeURIComponent(item.bookingId)}` : "/boss/maintenance"}
+                key={item.bookingId ?? item.id ?? i}
+                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2 transition-colors hover:border-primary/40"
+                data-testid={`maintenance-row-${item.bookingId ?? item.id ?? i}`}
               >
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-foreground">{item.title ?? "Checklist item"}</p>
-                  {item.phase ? (
-                    <p className="mt-0.5 text-xs text-muted-foreground capitalize">{item.phase}</p>
-                  ) : null}
+                  <p className="truncate text-sm font-semibold text-foreground">{item.title ?? "Event"}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Completed {new Date(item.completedAt!).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                  </p>
                 </div>
-                {item.status ? (
-                  <Badge variant="outline" className="shrink-0 capitalize">{item.status}</Badge>
-                ) : null}
-              </div>
+                <Badge variant="outline" className="shrink-0">Completed</Badge>
+              </Link>
             ))}
           </div>
         </section>
       ) : null}
 
       {/* All-clear state */}
-      {!loading && (data?.submittedReceipts ?? 0) === 0 && urgentAssignments.length === 0 && (data?.reviewAndWrapUp ?? []).length === 0 && (data?.checklistAndMaintenance ?? []).length === 0 && (data?.businessDocumentsCount ?? 0) === 0 ? (
+      {!loading && (data?.submittedReceipts ?? 0) === 0 && urgentAssignments.length === 0 && (data?.reviewAndWrapUp ?? []).length === 0 && recentMaintenanceEvents.length === 0 && (data?.businessDocumentsCount ?? 0) === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="boss-home-empty">
           <ClipboardList className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 font-bold text-foreground">All clear.</p>
