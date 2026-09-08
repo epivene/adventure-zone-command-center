@@ -1,7 +1,10 @@
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
-import { PostgresGoogleGmailMutationRepository } from "./google-gmail-mutation-repository";
+import {
+  PostgresGoogleGmailMutationRepository,
+  type GoogleGmailMutationRecord,
+} from "./google-gmail-mutation-repository";
 import { GoogleMatchedEmailCorrectionService } from "./google-matched-email-correction-service";
 import { readGoogleProfileLabelConfig } from "./google-profile-label-config";
 import { PostgresGoogleProfileLabelRepository } from "./google-profile-label-repository";
@@ -48,6 +51,30 @@ type MatchedPersistence = {
   assign(input: MatchedInput): Promise<void>;
 };
 
+type MutationRepository = Pick<
+  PostgresGoogleGmailMutationRepository,
+  "createOrLoad" | "get" | "retryNow" | "claim" | "complete" | "fail"
+>;
+
+type SavedDecision = {
+  connectionId: string;
+  threadId: string;
+  decisionRevision: string;
+  mutation: GoogleGmailMutationRecord;
+};
+
+function gmailFailureCode(error: unknown): string {
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? (error as { code?: unknown }).code
+      : error instanceof Error
+        ? error.message
+        : null;
+  return typeof code === "string" && code.startsWith("GOOGLE_WORKSPACE_")
+    ? code
+    : "GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED";
+}
+
 type SyncFactory = () => Promise<{
   connectionId: string;
   service: GoogleProfileLabelSyncServicePort;
@@ -58,12 +85,14 @@ export class GoogleReviewProfileAssignmentService {
   private readonly reviewPersistence: ReviewPersistence;
   private readonly matchedPersistence: MatchedPersistence;
   private readonly syncFactory: SyncFactory;
+  private readonly mutations: MutationRepository;
 
   constructor(input: {
     pool?: SqlPool;
     reviewPersistence?: ReviewPersistence;
     matchedPersistence?: MatchedPersistence;
     syncFactory?: SyncFactory;
+    mutations?: MutationRepository;
   } = {}) {
     this.pool = input.pool ?? (defaultPool as unknown as SqlPool);
     this.reviewPersistence =
@@ -71,18 +100,36 @@ export class GoogleReviewProfileAssignmentService {
     this.matchedPersistence =
       input.matchedPersistence ?? new GoogleMatchedEmailCorrectionService();
     this.syncFactory = input.syncFactory ?? (() => this.createProductionSync());
+    this.mutations =
+      input.mutations ?? new PostgresGoogleGmailMutationRepository(this.pool);
   }
 
   async resolveReview(input: BaseInput): Promise<GoogleReviewAssignmentView> {
-    const production = await this.syncFactory();
     await this.reviewPersistence.resolve(input);
-    return this.syncSavedDecision(input, production);
+    const decision = await this.queueSavedDecision(input);
+    try {
+      return await this.syncSavedDecision(
+        input,
+        decision,
+        await this.syncFactory(),
+      );
+    } catch (error) {
+      return this.markQueuedFailure(input, decision, error);
+    }
   }
 
   async assignMatched(input: MatchedInput): Promise<GoogleReviewAssignmentView> {
-    const production = await this.syncFactory();
     await this.matchedPersistence.assign(input);
-    return this.syncSavedDecision(input, production);
+    const decision = await this.queueSavedDecision(input);
+    try {
+      return await this.syncSavedDecision(
+        input,
+        decision,
+        await this.syncFactory(),
+      );
+    } catch (error) {
+      return this.markQueuedFailure(input, decision, error);
+    }
   }
 
   async retryGmailMutation(
@@ -117,13 +164,7 @@ export class GoogleReviewProfileAssignmentService {
     return gmailSync;
   }
 
-  private async syncSavedDecision(
-    input: BaseInput,
-    production: {
-      connectionId: string;
-      service: GoogleProfileLabelSyncServicePort;
-    },
-  ): Promise<GoogleReviewAssignmentView> {
+  private async queueSavedDecision(input: BaseInput): Promise<SavedDecision> {
     const result = await this.pool.query(
       `SELECT item.connection_id::text,
               item.thread_id,
@@ -144,17 +185,111 @@ export class GoogleReviewProfileAssignmentService {
       typeof row.decision_revision !== "string"
     ) throw new Error("GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND");
 
-    if (production.connectionId !== row.connection_id) {
-      throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
-    }
-    const gmailSync = await production.service.assignThread({
+    const mutation = await this.mutations.createOrLoad({
       connectionId: row.connection_id,
       messageId: input.messageId,
       threadId: row.thread_id,
       organizationId: input.organizationId,
+      operation: "assign_thread",
+      idempotencyKey:
+        `assign-thread:${row.connection_id}:${row.thread_id}:${input.organizationId}:${row.decision_revision}`,
       actorId: input.actorId,
-      decisionRevision: row.decision_revision,
     });
+    await this.writeSyncState({
+      connectionId: row.connection_id,
+      messageId: input.messageId,
+      state:
+        mutation.state === "processing" || mutation.state === "pending"
+          ? "pending"
+          : mutation.state,
+      errorCode: mutation.lastErrorCode,
+      mutationId: mutation.id,
+      now: input.now,
+    });
+    return {
+      connectionId: row.connection_id,
+      threadId: row.thread_id,
+      decisionRevision: row.decision_revision,
+      mutation,
+    };
+  }
+
+  private async syncSavedDecision(
+    input: BaseInput,
+    decision: SavedDecision,
+    production: {
+      connectionId: string;
+      service: GoogleProfileLabelSyncServicePort;
+    },
+  ): Promise<GoogleReviewAssignmentView> {
+    if (production.connectionId !== decision.connectionId) {
+      throw new Error("GOOGLE_WORKSPACE_CONNECTION_CHANGED");
+    }
+    const gmailSync = await production.service.assignThread({
+      connectionId: decision.connectionId,
+      messageId: input.messageId,
+      threadId: decision.threadId,
+      organizationId: input.organizationId,
+      actorId: input.actorId,
+      decisionRevision: decision.decisionRevision,
+    });
+    await this.writeSyncState({
+      connectionId: decision.connectionId,
+      messageId: input.messageId,
+      state: gmailSync.state,
+      errorCode: gmailSync.errorCode,
+      mutationId: gmailSync.mutationId,
+      now: input.now,
+    });
+    return {
+      organizationId: input.organizationId,
+      threadId: decision.threadId,
+      gmailSync,
+    };
+  }
+
+  private async markQueuedFailure(
+    input: BaseInput,
+    decision: SavedDecision,
+    error: unknown,
+  ): Promise<GoogleReviewAssignmentView> {
+    const code = gmailFailureCode(error);
+    await this.mutations.fail({
+      id: decision.mutation.id,
+      state: "retryable_error",
+      errorCode: code,
+      nextAttemptAt: null,
+      now: input.now,
+    });
+    await this.writeSyncState({
+      connectionId: decision.connectionId,
+      messageId: input.messageId,
+      state: "retryable_error",
+      errorCode: code,
+      mutationId: decision.mutation.id,
+      now: input.now,
+    });
+    return {
+      organizationId: input.organizationId,
+      threadId: decision.threadId,
+      gmailSync: {
+        mutationId: decision.mutation.id,
+        state: "retryable_error",
+        gmailLabelId: decision.mutation.targetLabelId,
+        gmailLabelName: null,
+        errorCode: code,
+      },
+    };
+  }
+
+  private async writeSyncState(input: {
+    connectionId: string;
+    messageId: string;
+    state: string;
+    errorCode: string | null;
+    mutationId: string;
+    now: Date;
+  }): Promise<void> {
     await this.pool.query(
       `UPDATE google_workspace_validation_review_items
           SET gmail_sync_state = $3,
@@ -163,19 +298,14 @@ export class GoogleReviewProfileAssignmentService {
               updated_at = GREATEST(updated_at, $6)
         WHERE connection_id = $1 AND message_id = $2`,
       [
-        row.connection_id,
+        input.connectionId,
         input.messageId,
-        gmailSync.state,
-        gmailSync.errorCode,
-        gmailSync.mutationId,
+        input.state,
+        input.errorCode,
+        input.mutationId,
         input.now,
       ],
     );
-    return {
-      organizationId: input.organizationId,
-      threadId: row.thread_id,
-      gmailSync,
-    };
   }
 
   private async createProductionSync(): Promise<{
