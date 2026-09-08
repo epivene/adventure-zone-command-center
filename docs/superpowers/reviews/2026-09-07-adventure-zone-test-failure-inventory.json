@@ -4,8 +4,8 @@
     "platform": "win32"
   },
   "totals": {
-    "failedFiles": 91,
-    "failedTests": 155
+    "failedFiles": 93,
+    "failedTests": 158
   },
   "groups": [
     {
@@ -246,11 +246,12 @@
     },
     {
       "domain": "pages",
-      "failedFiles": 35,
-      "failedTests": 58,
+      "failedFiles": 37,
+      "failedTests": 61,
       "files": [
         "src/pages/ActRecoveryPage.ownership-repair.test.ts",
         "src/pages/AdminCommandPanelPage.test.tsx",
+        "src/pages/BookingDetailPage.assistant-context.test.tsx",
         "src/pages/BossOperationalRecords.test.ts",
         "src/pages/CalendarPage.confirmed-default.test.ts",
         "src/pages/CallWorkspacePage.quick-add.test.tsx",
@@ -268,6 +269,7 @@
         "src/pages/ManagerIncidentPage.test.tsx",
         "src/pages/ManagerMessagesPage.test.tsx",
         "src/pages/ManagerMoneyPage.test.tsx",
+        "src/pages/MobileCallLogPage.test.tsx",
         "src/pages/OrganizationsPage.test.tsx",
         "src/pages/RoutesPage.workflow-split.test.ts",
         "src/pages/SettingsBusinessSourcesPage.test.tsx",
