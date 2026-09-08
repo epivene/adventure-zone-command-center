@@ -12,7 +12,7 @@ function fakePool() {
     if (text.includes("FROM organizations") && text.includes("consolidated_into_id IS NULL")) {
       return { rows: values?.[0] === "org-live" ? [{ id: "org-live" }] : [] };
     }
-    if (text.includes("SELECT message_id") && text.includes("google_workspace_validation_review_items")) {
+    if (text.includes("message_id") && text.includes("google_workspace_validation_review_items item")) {
       return {
         rows: [{
           message_id: "m1",
