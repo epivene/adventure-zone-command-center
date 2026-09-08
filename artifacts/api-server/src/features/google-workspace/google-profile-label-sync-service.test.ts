@@ -53,6 +53,7 @@ function harness(enabled = true) {
       errorCode: string;
     }) => {
       row = { ...row!, state: input.state, lastErrorCode: input.errorCode };
+      return row;
     }),
   };
   const gmail: GoogleGmailLabelMutationClient = {
@@ -162,6 +163,32 @@ describe("GoogleProfileLabelSyncService", () => {
     });
     expect(h.gmail.modifyThreadLabels).not.toHaveBeenCalled();
     expect(h.gmail.modifyMessageLabels).not.toHaveBeenCalled();
+  });
+
+  it("returns a concurrent completed winner instead of downgrading it", async () => {
+    const h = harness();
+    vi.mocked(h.resolver.resolve).mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_GMAIL_MUTATION_FAILED"),
+    );
+    vi.mocked(h.mutations.fail).mockImplementationOnce(async () => ({
+      ...h.current()!,
+      state: "completed",
+      targetLabelId: "Label_10",
+      lastErrorCode: null,
+    }));
+
+    await expect(h.service.assignThread({
+      connectionId: "conn-1",
+      messageId: "message-1",
+      threadId: "thread-1",
+      organizationId: "org-1",
+      actorId: "owner-1",
+      decisionRevision: "revision-1",
+    })).resolves.toMatchObject({
+      state: "completed",
+      gmailLabelId: "Label_10",
+      errorCode: null,
+    });
   });
 
   it("replays the same operation safely when completion persistence failed", async () => {
