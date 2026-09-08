@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { apiPost, apiUpload } from "@/lib/auth-token";
 
-type ImportReport = { runId: string; discovered: number; imported: number; deduplicated: number; linked: number; review: number; skipped: number; retry: number; failed: number };
+type ImportReport = { runId: string; discovered: number; imported: number; deduplicated: number; linked: number; review: number; skipped: number; retry: number; failed: number; hasMore?: boolean };
 type ImportAccepted = { accepted: true; previewRunId: string };
 
 export default function BusinessDocumentImportPage() {
@@ -114,7 +114,7 @@ export default function BusinessDocumentImportPage() {
           {gmailPreview && !gmailRunning ? <Button disabled={busy} onClick={() => void startGmailPilot()}><Play className="mr-2 h-4 w-4" />Start Gmail pilot</Button> : null}
         </div>
         {gmailRunning ? <p className="mt-3 text-sm font-semibold text-foreground">Gmail pilot is running in the background.</p> : null}
-        {gmailPreview ? <p className="mt-3 text-sm font-semibold text-foreground">{gmailPreview.discovered ?? 0} attachments discovered</p> : null}
+        {gmailPreview ? <p className="mt-3 text-sm font-semibold text-foreground">{gmailPreview.discovered ?? 0}{gmailPreview.hasMore ? "+" : ""} attachments discovered in this quick preview. The pilot continues through the full date window.</p> : null}
       </section>
       {error ? <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p> : null}
       {displayed ? (

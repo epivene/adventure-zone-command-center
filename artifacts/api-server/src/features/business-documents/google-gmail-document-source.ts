@@ -35,24 +35,27 @@ export class GoogleGmailDocumentSource {
     private readonly existingFiles: ExistingFileLookup,
   ) {}
 
-  async inventoryPage(input: GmailImportWindow) {
+  async inventoryPage(input: GmailImportWindow, options: { enrich?: boolean } = {}) {
     if (!this.client.listMessagePage || !this.client.getThreadDetail) throw new Error("GOOGLE_GMAIL_READ_UNAVAILABLE");
     if (input.after >= input.before) throw new Error("GMAIL_IMPORT_WINDOW_INVALID");
     const page = await this.client.listMessagePage({ maxResults: Math.min(250, Math.max(1, input.maxResults ?? 100)), pageToken: input.pageToken, query: `after:${date(input.after)} before:${date(input.before)} has:attachment` });
     const items: GmailDocumentInventoryItem[] = [];
+    const enrich = options.enrich !== false;
     const threads = new Map<string, GoogleThreadDetail>();
     const profileIdsByThread = new Map<string, string[]>();
     for (const ref of page.messages) {
       let thread = threads.get(ref.threadId);
       if (!thread) { thread = await this.client.getThreadDetail(ref.threadId); threads.set(ref.threadId, thread); }
-      if (!profileIdsByThread.has(thread.id)) {
+      if (enrich && !profileIdsByThread.has(thread.id)) {
         const emails = [...new Set(thread.messages.flatMap((item) => `${item.from} ${item.to} ${item.cc}`.toLowerCase().match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+\.[a-z]{2,}/g) ?? []))];
         profileIdsByThread.set(thread.id, this.existingFiles.profilesForEmails ? await this.existingFiles.profilesForEmails(emails) : []);
       }
       const message = thread.messages.find((candidate) => candidate.id === ref.id);
       if (!message) continue;
       for (const attachment of message.attachments) {
-        const existing = await this.existingFiles.find(message.id, attachment.attachmentId);
+        const existing = enrich
+          ? await this.existingFiles.find(message.id, attachment.attachmentId)
+          : { profileId: null, blob: null };
         items.push({
           messageId: message.id,
           internalDateMs: message.internalDateMs ?? 0,
@@ -71,6 +74,14 @@ export class GoogleGmailDocumentSource {
       }
     }
     return { items, nextPageToken: page.nextPageToken };
+  }
+
+  async inventoryPreviewPage(input: GmailImportWindow, maxMessages = 10) {
+    const page = await this.inventoryPage(
+      { ...input, maxResults: Math.min(25, Math.max(1, maxMessages)) },
+      { enrich: false },
+    );
+    return { items: page.items, hasMore: Boolean(page.nextPageToken) };
   }
 
   async *inventoryHistoricalGmail(input: GmailImportWindow): AsyncGenerator<GmailDocumentInventoryItem> {

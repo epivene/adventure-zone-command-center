@@ -66,6 +66,7 @@ export type BusinessDocumentView = {
   issueDate: string | null;
   expirationDate: string | null;
   notes: string | null;
+  sourceKinds: BusinessDocumentSourceKind[];
   fileAvailable: boolean;
   links: Array<{
     id: string;

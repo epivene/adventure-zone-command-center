@@ -84,14 +84,13 @@ export class BusinessDocumentImportService {
 
   async previewGmail(window: GmailImportWindow, actor: string) {
     if (!this.dependencies.gmailSource) throw new Error("GOOGLE_GMAIL_READ_UNAVAILABLE");
-    const items = [];
-    for await (const item of this.dependencies.gmailSource.inventoryHistoricalGmail(window)) items.push(item);
+    const { items, hasMore } = await this.dependencies.gmailSource.inventoryPreviewPage(window, 10);
     const scope = { after: window.after, before: window.before };
     const runId = await this.dependencies.store.create({ sourceKind: "gmail", mode: "preview", scope, actor });
     for (const item of items) await this.dependencies.store.checkpoint({ runId, externalId: `${item.messageId}:${item.attachmentId}`, status: "discovered" });
     const report = counts(items.length);
     await this.dependencies.store.finish(runId, report);
-    return { runId, ...scope, ...report };
+    return { runId, ...scope, ...report, hasMore };
   }
 
   async startApprovedGmail(previewRunId: string, actor: string, pilotLimit = 25) {

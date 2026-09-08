@@ -70,6 +70,9 @@ describe("BusinessDocumentRepository", () => {
     expect((await database.query("SELECT id FROM business_document_blobs")).rows).toHaveLength(1);
     expect((await database.query("SELECT id FROM business_documents")).rows).toHaveLength(1);
     expect((await database.query("SELECT id FROM business_document_sources")).rows).toHaveLength(2);
+    await expect(repo.list()).resolves.toMatchObject([{
+      sourceKinds: expect.arrayContaining(["gmail", "drive"]),
+    }]);
   });
 
   it("returns the existing source identity without duplicating provenance", async () => {

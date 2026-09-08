@@ -9,7 +9,11 @@ function setup(existing: any = { profileId: null, blob: null }) {
     getThreadDetail: vi.fn(async () => ({ id: "thread-1", subject: "City COI", originalGmailUrl: "https://mail.google/thread-1", messages: [{ id: "message-1", subject: "City COI", bodyText: "", attachments: [{ attachmentId: "attachment-1", filename: "coi.pdf", mimeType: "application/pdf", sizeBytes: 10 }] }] })),
     getAttachment: vi.fn(async () => new Uint8Array([1, 2, 3])),
   };
-  return { client, source: new GoogleGmailDocumentSource(client as any, { find: vi.fn(async () => existing) }) };
+  const existingFiles = {
+    find: vi.fn(async () => existing),
+    profilesForEmails: vi.fn(async () => ["profile-1"]),
+  };
+  return { client, existingFiles, source: new GoogleGmailDocumentSource(client as any, existingFiles) };
 }
 
 describe("GoogleGmailDocumentSource", () => {
@@ -31,6 +35,26 @@ describe("GoogleGmailDocumentSource", () => {
     expect(page.items[0]).toMatchObject({ messageId: "message-1", attachmentId: "attachment-1" });
     expect(client.getThreadDetail).toHaveBeenCalledWith("thread-1");
     expect(client.getMessageMetadata).not.toHaveBeenCalled();
+  });
+
+  it("keeps Gmail preview metadata-only by skipping profile and stored-file lookups", async () => {
+    const { source, existingFiles } = setup();
+
+    const preview = await source.inventoryPreviewPage(
+      { after: "2025-01-01", before: "2026-01-01" },
+      10,
+    );
+
+    expect(preview.items).toHaveLength(1);
+    expect(preview.items[0]).toMatchObject({
+      messageId: "message-1",
+      attachmentId: "attachment-1",
+      approvedProfileId: null,
+      exactEmailProfileIds: [],
+      storedBlob: null,
+    });
+    expect(existingFiles.find).not.toHaveBeenCalled();
+    expect(existingFiles.profilesForEmails).not.toHaveBeenCalled();
   });
 
   it("reuses a previously copied profile-file blob without downloading", async () => {
