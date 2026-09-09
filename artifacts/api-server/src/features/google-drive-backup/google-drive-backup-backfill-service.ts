@@ -214,7 +214,14 @@ export class GoogleDriveBackupBackfillService {
            cursor = COALESCE((SELECT jsonb_build_object('updatedAt',updated_at,'id',id) FROM tail), r.cursor),
            finished_at = CASE WHEN (SELECT count(*) FROM selected_profiles) < 100 THEN $2 ELSE NULL END,
            updated_at = $2
-         WHERE r.id = $1 RETURNING state
+         WHERE r.id = $1 RETURNING state, mode
+       ), pilot_recorded AS (
+         UPDATE google_drive_backup_config c
+            SET successful_pilot_at = $2, state = 'paused', updated_at = $2
+          WHERE c.id = 'default'
+            AND EXISTS (
+              SELECT 1 FROM updated WHERE state = 'completed' AND mode = 'pilot'
+            )
        )
        SELECT (SELECT count(*)::int FROM selected_profiles) AS enqueued,
               (SELECT state = 'completed' FROM updated) AS completed`,
