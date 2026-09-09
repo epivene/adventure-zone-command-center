@@ -55,6 +55,43 @@ export type GoogleDrivePage = {
   nextPageToken: string | null;
 };
 
+export type GoogleDriveBackupFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  parents: string[];
+  webViewLink: string | null;
+  md5Checksum: string | null;
+};
+
+export type DriveCreateFileInput = {
+  parentId: string;
+  name: string;
+  mimeType: string;
+  bytes: Uint8Array;
+};
+
+export type DriveUpdateFileInput = {
+  fileId: string;
+  name?: string;
+  mimeType?: string;
+  bytes?: Uint8Array;
+  currentParentId?: string;
+  parentId?: string;
+};
+
+export interface GoogleDriveBackupClient {
+  findChild(
+    parentId: string,
+    name: string,
+    mimeType?: string,
+  ): Promise<GoogleDriveBackupFile | null>;
+  createFolder(parentId: string, name: string): Promise<GoogleDriveBackupFile>;
+  createFile(input: DriveCreateFileInput): Promise<GoogleDriveBackupFile>;
+  updateFile(input: DriveUpdateFileInput): Promise<GoogleDriveBackupFile>;
+  getFile(fileId: string): Promise<GoogleDriveBackupFile>;
+}
+
 export type GoogleWorkspaceAccountIdentity = {
   subject: string | null;
   email: string;
@@ -138,6 +175,7 @@ export type GoogleCalendarEvent = {
 };
 
 export interface GoogleWorkspaceReadClient {
+  driveBackup?: GoogleDriveBackupClient;
   authorizationUrl(input: { state: string; scopes?: readonly string[] }): string;
   exchangeCode(code: string): Promise<{
     refreshToken: string;
