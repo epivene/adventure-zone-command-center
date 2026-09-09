@@ -65,30 +65,29 @@ export class GoogleProfileLabelResolver {
     const saved = await this.repository.findByOrganization(input);
     if (saved) {
       const existing = labels.find((label) => label.id === saved.gmailLabelId);
-      if (!existing) {
-        await this.repository.markState({
-          ...input,
-          state: "unavailable",
-          errorCode: "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND",
+      if (existing) {
+        const owner = await this.repository.findByLabelId({
+          connectionId: input.connectionId,
+          gmailLabelId: existing.id,
         });
-        throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND");
+        if (owner && owner.organizationId !== input.organizationId) {
+          return this.conflict(input, [existing]);
+        }
+        return {
+          status: "resolved",
+          mapping: {
+            ...saved,
+            gmailLabelName: existing.name,
+            state: "active",
+            lastErrorCode: null,
+          },
+        };
       }
-      const owner = await this.repository.findByLabelId({
-        connectionId: input.connectionId,
-        gmailLabelId: existing.id,
+      await this.repository.markState({
+        ...input,
+        state: "unavailable",
+        errorCode: "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND",
       });
-      if (owner && owner.organizationId !== input.organizationId) {
-        return this.conflict(input, [existing]);
-      }
-      return {
-        status: "resolved",
-        mapping: {
-          ...saved,
-          gmailLabelName: existing.name,
-          state: "active",
-          lastErrorCode: null,
-        },
-      };
     }
 
     const canonicalName = canonicalProfileLabelName(organization.name);
