@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CalendarDays, MapPin, UserRound } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
+import { ConventionHistory } from "@/components/profiles/convention-history";
 
 type Profile = {
   id: string;
@@ -77,6 +78,7 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
 
   return (
     <div className="grid gap-4" data-testid="boss-profile-page">
+      <ConventionHistory profileId={profileId} boss />
       <Link className="text-sm font-semibold text-primary hover:underline" href="/boss/profiles">← Profiles</Link>
       <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">

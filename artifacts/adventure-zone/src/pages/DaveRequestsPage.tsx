@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardPenLine, MailCheck, Plus, RefreshCw, X } from "lucide-react";
 import { apiFetch } from "@/lib/auth-token";
+import { Link } from "wouter";
 import { OwnerConventionReview } from "@/components/boss-work-requests/OwnerConventionReview";
 import type { BossWorkRequest, BossWorkRequestDetail } from "@/features/boss-work-requests/boss-work-request-types";
 import {
@@ -50,6 +51,7 @@ export default function DaveRequestsPage() {
 
   return (
     <main className="mx-auto grid max-w-6xl gap-5 p-4 sm:p-6">
+      <Link href="/conventions" className="rounded-xl border bg-card p-4 font-semibold">Convention Outreach — yearly lists and profile history</Link>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-primary">Owner Workspace</p><h1 className="text-2xl font-bold">Dave Requests</h1><p className="text-sm text-muted-foreground">Give Dave forms or email previews, then review what comes back.</p></div>
         <div className="flex gap-2">
