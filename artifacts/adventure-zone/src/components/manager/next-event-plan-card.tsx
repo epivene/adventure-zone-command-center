@@ -15,9 +15,9 @@ function formatDriveTime(minutes: number) {
 
 function travelEstimate(event: ManagerScheduleEvent, route: ManagerRoute) {
   if (!route) return null;
-  const stopIndex = route.stops.findIndex((stop) => stop.bookingId === event.bookingId);
-  if (stopIndex < 0) return null;
-  const segment = route.segments[stopIndex];
+  const stop = route.stops.find((candidate) => candidate.bookingId === event.bookingId);
+  if (!stop) return null;
+  const segment = route.segments[stop.sortOrder - 1];
   if (!segment) return null;
   const miles = segment.effectiveMiles;
   const minutes = segment.effectiveMinutes;
