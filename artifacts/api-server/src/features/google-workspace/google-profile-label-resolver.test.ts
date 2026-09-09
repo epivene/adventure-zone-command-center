@@ -252,7 +252,7 @@ describe("GoogleProfileLabelResolver", () => {
     expect(h.gmail.createLabel).not.toHaveBeenCalled();
   });
 
-  it("marks a saved missing label unavailable instead of replacing it", async () => {
+  it("replaces a saved Gmail label mapping when the label no longer exists", async () => {
     const h = harness({
       mapping: {
         connectionId: "conn-1",
@@ -268,10 +268,13 @@ describe("GoogleProfileLabelResolver", () => {
     await expect(h.resolver.resolve({
       connectionId: "conn-1",
       organizationId: "org-1",
-    })).rejects.toThrow("GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND");
-    expect(h.gmail.createLabel).not.toHaveBeenCalled();
-    expect(h.repository.markState).toHaveBeenCalledWith(expect.objectContaining({
-      state: "unavailable",
+    })).resolves.toMatchObject({
+      status: "resolved",
+      mapping: { gmailLabelId: "Label_created" },
+    });
+    expect(h.gmail.createLabel).toHaveBeenCalledOnce();
+    expect(h.repository.adopt).toHaveBeenCalledWith(expect.objectContaining({
+      gmailLabelId: "Label_created",
     }));
   });
 });
