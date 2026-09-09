@@ -98,6 +98,9 @@ export type GoogleProfileLabelCleanupCandidate = {
 export type GoogleProfileLabelCleanupResult = {
   deleted: GoogleProfileLabelCleanupCandidate[];
   skippedLabelIds: string[];
+  failed: Array<
+    GoogleProfileLabelCleanupCandidate & { errorCode: string }
+  >;
 };
 
 export type GoogleProfileLabelSyncResult = {
