@@ -5,8 +5,18 @@ import {
   encryptGoogleSecret,
   type EncryptedGoogleSecretV1,
 } from "./encrypted-google-secret";
-import { GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE, GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE, createGoogleWorkspaceReadClient } from "./google-api-client";
-import type { GoogleGmailDraftClient, GoogleGmailLabelMutationClient, GoogleWorkspaceReadClient } from "./google-api-types";
+import {
+  GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE,
+  GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
+  GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE,
+  createGoogleWorkspaceReadClient,
+} from "./google-api-client";
+import type {
+  GoogleDriveBackupClient,
+  GoogleGmailDraftClient,
+  GoogleGmailLabelMutationClient,
+  GoogleWorkspaceReadClient,
+} from "./google-api-types";
 import {
   createGoogleGmailDeliveryClient,
   type GoogleGmailDeliveryClient,
@@ -120,17 +130,20 @@ function asRow(value: Record<string, unknown> | undefined): ConnectionRow | null
 function toView(row: ConnectionRow): GoogleConnectionView {
   const granted = scopes(row.granted_scopes);
   const missingGmailModify = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE);
+  const missingDriveFile = row.role === "workspace" && !granted.includes(GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE);
   const missingCalendarWrite = row.role === "operational_calendar" && !granted.includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE);
   const base: GoogleConnectionView = {
     id: row.id,
     email: row.account_email,
-    status: row.status === "connected" && (missingGmailModify || missingCalendarWrite) ? "reauthorization_required" : row.status,
+    status: row.status === "connected" && (missingGmailModify || missingDriveFile || missingCalendarWrite) ? "reauthorization_required" : row.status,
     grantedScopes: granted,
     connectedAt: dateIso(row.connected_at) as string,
     lastVerifiedAt: dateIso(row.last_verified_at),
     lastErrorCode: missingGmailModify
       ? "GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE_REQUIRED"
-      : missingCalendarWrite
+      : missingDriveFile
+        ? "GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE_REQUIRED"
+        : missingCalendarWrite
         ? "GOOGLE_OPERATIONAL_CALENDAR_WRITE_SCOPE_REQUIRED"
         : row.last_error_code,
   };
@@ -280,6 +293,33 @@ export class PostgresGoogleConnectionRepository {
     const environment = this.requireEnvironment();
     const refreshToken = decryptGoogleSecret(row.encrypted_refresh_token, environment.tokenEncryptionKey);
     return this.createClient({ environment, refreshToken });
+  }
+
+  async createDriveBackupClient(): Promise<{
+    connectionId: string;
+    client: GoogleDriveBackupClient;
+  } | null> {
+    const row = await this.currentRow("workspace");
+    if (!row) return null;
+    if (
+      row.status === "reauthorization_required" ||
+      !scopes(row.granted_scopes).includes(GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE)
+    ) {
+      throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    const environment = this.requireEnvironment();
+    const refreshToken = decryptGoogleSecret(
+      row.encrypted_refresh_token,
+      environment.tokenEncryptionKey,
+    );
+    const client = this.createClient({ environment, refreshToken });
+    if (!client.driveBackup) {
+      throw new Error("GOOGLE_WORKSPACE_DRIVE_BACKUP_CLIENT_UNAVAILABLE");
+    }
+    return {
+      connectionId: row.id,
+      client: client.driveBackup,
+    };
   }
 
   async createOperationalCalendarClient(): Promise<{
