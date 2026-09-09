@@ -33,6 +33,7 @@ function appWith(options: {
   deleteSelectedLabels?: (labelIds: string[]) => Promise<{
     deleted: Array<{ id: string; name: string }>;
     skippedLabelIds: string[];
+    failed: Array<{ id: string; name: string; errorCode: string }>;
   }>;
 }) {
   const app = express();
@@ -63,7 +64,7 @@ function appWith(options: {
         preview: options.previewLabelCleanup ?? (async () => ({ labels: [] })),
         deleteSelected:
           options.deleteSelectedLabels ??
-          (async () => ({ deleted: [], skippedLabelIds: [] })),
+          (async () => ({ deleted: [], skippedLabelIds: [], failed: [] })),
       },
       now: () => new Date("2026-08-24T17:00:00.000Z"),
     }),
@@ -213,6 +214,7 @@ describe("Google Workspace recent validation route", () => {
         name: "Z - AdventureZone/Profiles/Old",
       })),
       skippedLabelIds: [],
+      failed: [],
     }));
     const response = await request(appWith({ deleteSelectedLabels }))
       .post("/google-workspace/profile-labels/cleanup")
