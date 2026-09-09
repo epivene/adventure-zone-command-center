@@ -349,6 +349,76 @@ describe("loadManagerScopedMapData", () => {
     expect(afterNextCheckIn.events.map((event) => event.bookingId)).toEqual([nextBookingId]);
   });
 
+  it("does not retain a checked-out event for only undated or next-season bookings", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000209";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextSeasonBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000210",
+      startsAt: new Date("2027-06-10T12:00:00Z"),
+      endsAt: new Date("2027-06-11T20:00:00Z"),
+    };
+    const undatedBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000211",
+      startsAt: null,
+      endsAt: null,
+    };
+    const dependencies = deps([], [pastBooking, nextSeasonBooking, undatedBooking]);
+    dependencies.tripRepository = {
+      async listTrips() { return []; },
+      async listStops() { return []; },
+      async listSegments() { return []; },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).not.toContain(lastBookingId);
+  });
+
+  it("does not use a checked-out fallback when the current lifecycle lookup fails", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000212";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000213",
+      startsAt: new Date("2026-08-23T12:00:00Z"),
+      endsAt: new Date("2026-08-23T20:00:00Z"),
+    };
+    const dependencies = deps([], [pastBooking, nextBooking]);
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { throw new Error("Lifecycle read failed"); },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).not.toContain(lastBookingId);
+    expect(result.events.map((event) => event.bookingId)).toContain(nextBooking.bookingId);
+  });
+
   it("drops the last checked-out route anchor when no events remain in the season", async () => {
     const lastBookingId = "00000000-0000-4000-8000-000000000208";
     const pastBooking = {
