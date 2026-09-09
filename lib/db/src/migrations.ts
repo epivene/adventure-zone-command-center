@@ -466,6 +466,19 @@ const migrationFiles = [
       AS ready`,
   },
   {
+    name: "20260909b_boss_work_requests.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.boss_work_requests') IS NOT NULL
+      AND to_regclass(current_schema() || '.boss_convention_submissions') IS NOT NULL
+      AND to_regclass(current_schema() || '.communication_template_reviews') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'communication_templates'
+          AND column_name = 'body_format'
+      ) AS ready`,
+  },
+  {
     name: "20260908a_contract_template_v1.sql",
     markerSql: `SELECT EXISTS (
       SELECT 1 FROM contract_templates
