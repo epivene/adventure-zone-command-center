@@ -67,8 +67,29 @@ function harness(enabled = true) {
       return row;
     }),
   };
-  const gmail: GoogleGmailLabelMutationClient = {
-    listLabels: vi.fn(async () => []),
+  const gmail: GoogleGmailLabelMutationClient & {
+    getThreadLabelIds(threadId: string): Promise<string[]>;
+  } = {
+    listLabels: vi.fn(async () => [
+      {
+        id: "Label_old",
+        name: "Z - AdventureZone/Profiles/Elko County Fair",
+        type: "user",
+      },
+      {
+        id: "Label_target",
+        name: "Z - AdventureZone/Profiles/Elko County Fair - Elko NV",
+        type: "user",
+      },
+      { id: "Label_unrelated", name: "BANKING & LOANS", type: "user" },
+    ]),
+    getThreadLabelIds: vi.fn(async () => [
+      "Label_old",
+      "Label_target",
+      "Label_unrelated",
+      "INBOX",
+      "UNREAD",
+    ]),
     createLabel: vi.fn(async (name) => ({ id: "Label_target", name, type: "user" })),
     renameLabel: vi.fn(async ({ labelId, name }) => ({ id: labelId, name, type: "user" })),
     modifyThreadLabels: vi.fn(async () => undefined),
@@ -152,7 +173,7 @@ describe("GoogleProfileLabelSyncService", () => {
     expect(h.gmail.modifyMessageLabels).not.toHaveBeenCalled();
   });
 
-  it("labels a later incoming message without removing Inbox or unread", async () => {
+  it("keeps the CRM profile label on a later reply and removes stale profile labels only", async () => {
     const h = harness();
 
     await expect(h.service.labelInboundMessage({
@@ -162,12 +183,39 @@ describe("GoogleProfileLabelSyncService", () => {
       organizationId: "org-1",
     })).resolves.toMatchObject({ state: "completed" });
 
-    expect(h.gmail.modifyMessageLabels).toHaveBeenCalledWith({
-      messageId: "new-message",
+    expect(h.gmail.modifyThreadLabels).toHaveBeenCalledWith({
+      threadId: "thread-1",
       addLabelIds: ["Label_target"],
-      removeLabelIds: [],
+      removeLabelIds: ["Label_old"],
     });
-    expect(h.gmail.modifyThreadLabels).not.toHaveBeenCalled();
+    const call = vi.mocked(h.gmail.modifyThreadLabels).mock.calls[0]?.[0];
+    expect(call?.removeLabelIds).not.toContain("INBOX");
+    expect(call?.removeLabelIds).not.toContain("UNREAD");
+    expect(call?.removeLabelIds).not.toContain("Label_unrelated");
+    expect(h.gmail.modifyMessageLabels).not.toHaveBeenCalled();
+  });
+
+  it("repairs stale profile labels when Check Emails revisits a completed mutation", async () => {
+    const h = harness();
+    vi.mocked(h.gmail.getThreadLabelIds)
+      .mockResolvedValueOnce(["Label_target"])
+      .mockResolvedValueOnce(["Label_target", "Label_old"]);
+
+    const input = {
+      connectionId: "conn-1",
+      messageId: "new-message",
+      threadId: "thread-1",
+      organizationId: "org-1",
+    };
+    await h.service.labelInboundMessage(input);
+    await h.service.labelInboundMessage(input);
+
+    expect(h.gmail.modifyThreadLabels).toHaveBeenNthCalledWith(2, {
+      threadId: "thread-1",
+      addLabelIds: ["Label_target"],
+      removeLabelIds: ["Label_old"],
+    });
+    expect(h.gmail.modifyMessageLabels).not.toHaveBeenCalled();
   });
 
   it("does not call Gmail while the rollout switch is disabled", async () => {
