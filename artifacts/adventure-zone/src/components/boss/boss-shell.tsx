@@ -30,7 +30,7 @@ import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearanc
 type NavItem = { href: string; label: string; icon: typeof House };
 
 const navItems: NavItem[] = [
-  { href: "/boss", label: "Home", icon: House },
+  { href: "/boss", label: "Needs Attention", icon: House },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
   { href: "/boss/contacts", label: "Contacts", icon: ContactRound },
   { href: "/boss/profiles", label: "Profiles", icon: Building2 },
