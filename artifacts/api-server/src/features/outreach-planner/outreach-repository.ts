@@ -13,6 +13,7 @@ import {
   travelLegs,
   packageTemplates,
   activities,
+  outreachHolds,
 } from "../../db/schema";
 import type {
   OpeningInput,
@@ -104,6 +105,18 @@ export class OutreachRepository {
     }
   }
   async load(now: Date): Promise<PlannerDTO> {
+    const liveHolds =
+      process.env.OUTREACH_PLANNER_ENABLED === "true"
+        ? await this.db
+            .select()
+            .from(outreachHolds)
+            .where(
+              and(
+                eq(outreachHolds.state, "active"),
+                sql`${outreachHolds.expiresAt} > ${now}`,
+              ),
+            )
+        : [];
     const openings = json<OpeningDTO[]>(
       await this.db.select().from(outreachOpenings),
     );
@@ -255,6 +268,7 @@ export class OutreachRepository {
         capacity: sources.capacity,
         sources,
         waitingForCandidateId: null,
+        liveHoldId: liveHolds.find((h) => h.candidateId === c.id)?.id ?? null,
       });
     }
     candidates.sort(compareOutreachPriority);

@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   check,
 } from "drizzle-orm/pg-core";
-import { travelLegs } from "./schema";
+import { travelLegs, bookings } from "./schema";
 import { bookingOpportunities } from "./booking-opportunity-schema";
 const created = () =>
   timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -144,3 +144,73 @@ export const outreachAudit = pgTable("outreach_audit", {
   detail: jsonb("detail").notNull(),
   createdAt: created(),
 });
+
+// The singleton is shared by holds and (Task 3B) all commitment writers.
+export const outreachAllocationMutex = pgTable("outreach_allocation_mutex", {
+  id: integer("id").primaryKey(),
+  generation: integer("generation").notNull().default(0),
+});
+export const outreachBookingDemand = pgTable("outreach_booking_demand", {
+  bookingId: uuid("booking_id")
+    .primaryKey()
+    .references(() => bookings.id),
+  quantities: jsonb("quantities").$type<Record<string, number>>().notNull(),
+  resourceIds: jsonb("resource_ids").$type<string[]>().notNull(),
+  factsFingerprint: text("facts_fingerprint").notNull(),
+  revision: integer("revision").notNull().default(1),
+  actor: text("actor").notNull(),
+  reason: text("reason").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+export const outreachHolds = pgTable(
+  "outreach_holds",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    candidateId: uuid("candidate_id")
+      .notNull()
+      .references(() => outreachCandidates.id),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id),
+    opportunityId: uuid("opportunity_id")
+      .notNull()
+      .references(() => bookingOpportunities.id),
+    legId: uuid("leg_id")
+      .notNull()
+      .references(() => travelLegs.id),
+    eventStartsOn: date("event_starts_on").notNull(),
+    eventEndsOn: date("event_ends_on").notNull(),
+    startsOn: date("starts_on").notNull(),
+    endsOn: date("ends_on").notNull(),
+    quantities: jsonb("quantities").$type<Record<string, number>>().notNull(),
+    resourceIds: jsonb("resource_ids").$type<string[]>().notNull(),
+    location: jsonb("location")
+      .$type<{ latitude: number; longitude: number }>()
+      .notNull(),
+    demandFingerprint: text("demand_fingerprint").notNull(),
+    revision: integer("revision").notNull().default(1),
+    state: text("state")
+      .$type<"active" | "released" | "expired" | "converted">()
+      .notNull()
+      .default("active"),
+    owner: text("owner").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: created(),
+  },
+  (t) => [
+    uniqueIndex("outreach_holds_active_booking_unique")
+      .on(t.bookingId)
+      .where(sql`${t.state} = 'active'`),
+    check(
+      "outreach_holds_state_valid",
+      sql`${t.state} in ('active','released','expired','converted')`,
+    ),
+    check(
+      "outreach_holds_window_valid",
+      sql`${t.startsOn} <= ${t.eventStartsOn} and ${t.eventStartsOn} <= ${t.eventEndsOn} and ${t.eventEndsOn} <= ${t.endsOn}`,
+    ),
+  ],
+);

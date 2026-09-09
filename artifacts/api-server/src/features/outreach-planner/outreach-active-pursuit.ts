@@ -5,6 +5,7 @@ export function hasActivePursuit(candidate: CandidateDTO): boolean {
   return (
     !candidate.releasedAt &&
     Boolean(
+      candidate.liveHoldId ||
       candidate.decisionDueAt ||
       candidate.sources.manualNextActions.length ||
       candidate.attempts.length ||

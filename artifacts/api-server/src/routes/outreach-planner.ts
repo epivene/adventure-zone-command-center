@@ -13,8 +13,14 @@ import {
   OutreachError,
 } from "../features/outreach-planner/outreach-repository";
 import { OutreachService } from "../features/outreach-planner/outreach-service";
+import { createProductionOutreachAllocation } from "../features/outreach-planner/production-outreach-allocation";
 export function createOutreachPlannerRouter(
-  service = new OutreachService(new OutreachRepository(db)),
+  service = new OutreachService(
+    new OutreachRepository(db),
+    undefined,
+    undefined,
+    createProductionOutreachAllocation(db),
+  ),
 ): IRouter {
   const router = Router();
   router.use(requireOwnerMiddleware);
@@ -39,6 +45,32 @@ export function createOutreachPlannerRouter(
       }
     };
   const actor = (req: Request) => (req as Request & { userId: string }).userId;
+  router.get(
+    "/allocations",
+    run(() => service.allocations()),
+  );
+  router.put(
+    "/candidates/:id/demand",
+    run((req) =>
+      service.saveDemand(String(req.params.id), req.body, actor(req)),
+    ),
+  );
+  router.post(
+    "/candidates/:id/holds",
+    run((req) =>
+      service.createHold(String(req.params.id), req.body, actor(req)),
+    ),
+  );
+  router.post(
+    "/holds/:id/release",
+    run((req) => service.releaseHold(String(req.params.id), actor(req))),
+  );
+  router.post(
+    "/holds/:id/extend",
+    run((req) =>
+      service.extendHold(String(req.params.id), req.body, actor(req)),
+    ),
+  );
   router.get(
     "/opportunities",
     run((req) => service.searchOpportunities(req.query)),

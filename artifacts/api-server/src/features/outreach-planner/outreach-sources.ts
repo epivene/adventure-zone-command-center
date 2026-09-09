@@ -197,19 +197,13 @@ export async function readOutreachSources(
           "Explicit applied convention submission; convention end date must be separately verified.",
       })),
     );
-    const packages = rowsOf<Record<string, unknown>>(
+    const [counts] = rowsOf<{
+      booking_count: number;
+      calendar_mirror_count: number;
+      package_count: number;
+    }>(
       await db.execute(
-        sql`select id,code,normal_capacity,temporary_unavailable_quantity from package_templates`,
-      ),
-    );
-    const bookings = rowsOf<Record<string, unknown>>(
-      await db.execute(
-        sql`select b.id, 'booking:' || b.id::text as canonical_id, b.starts_at,b.ends_at,b.status,b.probability,b.travel_leg_id,w.starts_at as custom_starts_at,w.ends_at as custom_exclusive_ends_at, coalesce((select jsonb_agg(p.code) from booking_package_selections s join package_templates p on p.id=s.package_template_id where s.booking_id=b.id),'[]'::jsonb) as selected_package_codes from bookings b left join booking_operational_windows w on w.booking_id=b.id where b.status <> 'cancelled'`,
-      ),
-    );
-    const calendarMirrors = rowsOf<Record<string, unknown>>(
-      await db.execute(
-        sql`select id, 'booking:' || booking_id::text as canonical_id, calendar_id,google_event_id,package_key,reserved_starts_at,reserved_ends_at,last_synced_at,last_error_code from google_operational_calendar_links`,
+        sql`select (select count(*) from bookings where status <> 'cancelled') as booking_count, (select count(*) from google_operational_calendar_links) as calendar_mirror_count, (select count(*) from package_templates) as package_count`,
       ),
     );
     const history = rowsOf<Record<string, unknown>>(
@@ -232,14 +226,14 @@ export async function readOutreachSources(
       )
       .digest("hex");
     result.capacityObservations = {
-      bookings,
-      calendarMirrors,
-      packages,
+      bookingCount: Number(counts.booking_count),
+      calendarMirrorCount: Number(counts.calendar_mirror_count),
+      packageCount: Number(counts.package_count),
       externalCalendarCoverage: "unverified",
       travel: "unverified",
     };
     result.capacity.reasons.push(
-      "Booking package selections do not establish repeated-unit quantities; external calendar coverage and route travel are unverified.",
+      "Run the fresh allocation check to verify exact package/physical demand, Calendar coverage and route travel.",
     );
     return result;
   } catch (error) {

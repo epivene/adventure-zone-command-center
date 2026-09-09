@@ -515,6 +515,16 @@ const migrationFiles = [
       AND (SELECT count(*) = 5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_openings'),to_regclass(current_schema() || '.outreach_candidates'),to_regclass(current_schema() || '.outreach_attempts'),to_regclass(current_schema() || '.outreach_research_tasks')))
       AS ready`,
   },
+  {
+    name: "20260909_outreach_allocation.sql",
+    markerSql: `SELECT
+      (SELECT count(*)=3 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('outreach_allocation_mutex','outreach_booking_demand','outreach_holds'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_allocation_mutex','generation'),('outreach_booking_demand','facts_fingerprint'),('outreach_booking_demand','quantities'),('outreach_booking_demand','resource_ids'),('outreach_booking_demand','revision'),('outreach_booking_demand','actor'),('outreach_booking_demand','reason'),('outreach_booking_demand','updated_at'),('outreach_holds','candidate_id'),('outreach_holds','booking_id'),('outreach_holds','opportunity_id'),('outreach_holds','leg_id'),('outreach_holds','event_starts_on'),('outreach_holds','event_ends_on'),('outreach_holds','starts_on'),('outreach_holds','ends_on'),('outreach_holds','quantities'),('outreach_holds','resource_ids'),('outreach_holds','location'),('outreach_holds','demand_fingerprint'),('outreach_holds','revision'),('outreach_holds','state'),('outreach_holds','owner'),('outreach_holds','expires_at'),('outreach_holds','ended_at'),('outreach_holds','created_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_holds_active_booking_unique','outreach_holds_live_window'))
+      AND (SELECT count(*)=3 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_holds_state_valid','outreach_holds_window_valid','outreach_holds_lifecycle_valid'))
+      AND (SELECT count(*)=5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_booking_demand'),to_regclass(current_schema() || '.outreach_holds')))
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

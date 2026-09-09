@@ -8,6 +8,12 @@ import type {
 } from "../../db/schema";
 import type { OutreachDecision } from "./outreach-policy";
 import type { CapacityDecision } from "./capacity-policy";
+import type {
+  AllocationTarget,
+  AllocationFacts,
+  HoldFact,
+  DemandFact,
+} from "./outreach-capacity-evidence";
 const date = z
   .string()
   .refine((v) => !!parseBusinessDate(v), "Use a valid YYYY-MM-DD date");
@@ -98,12 +104,13 @@ export type SourcesDTO = {
   observedInterestAt?: string;
   observedConversationAt?: string;
   capacityObservations?: {
-    bookings: Record<string, unknown>[];
-    calendarMirrors: Record<string, unknown>[];
-    packages: Record<string, unknown>[];
+    bookingCount: number;
+    calendarMirrorCount: number;
+    packageCount: number;
     externalCalendarCoverage: "unverified";
     travel: "unverified";
   };
+  allocationCheck?: AllocationCheckDTO;
 };
 export type CandidateDTO = JsonDates<typeof outreachCandidates.$inferSelect> & {
   organizationName: string;
@@ -114,6 +121,8 @@ export type CandidateDTO = JsonDates<typeof outreachCandidates.$inferSelect> & {
   capacity: CapacityDecision;
   sources: SourcesDTO;
   waitingForCandidateId: string | null;
+  liveHoldId?: string | null;
+  lastAllocationCheck?: AllocationCheckDTO & { freshness: "current" | "stale" };
 };
 export type PlannerDTO = {
   enabled: boolean;
@@ -132,3 +141,48 @@ export type PlannerDTO = {
 export const historyReviewInput = z
   .object({ reason: z.string().trim().min(1).max(2000) })
   .strict();
+
+export const exactDemandInput = z
+  .object({
+    quantities: z
+      .record(
+        z.string().trim().min(1),
+        z.number().int().positive().max(2147483647),
+      )
+      .refine((v) => Object.keys(v).length > 0),
+    resourceIds: z
+      .array(z.string().uuid())
+      .min(1)
+      .refine(
+        (v) => new Set(v).size === v.length,
+        "Each physical resource can be selected once.",
+      ),
+    completePhysicalDemandReviewed: z.literal(true),
+    reason: z.string().trim().min(1).max(4000),
+  })
+  .strict();
+export const holdExpiryInput = z.object({ expiresAt: instant }).strict();
+export type AllocationCheckDTO = {
+  capacity: CapacityDecision;
+  checkedAt: string;
+  bookingId: string | null;
+  target: AllocationTarget | null;
+  provenance: {
+    calendarCheckedAt: string | null;
+    calendarExpiresAt: string | null;
+    calendarIds: string[];
+    factsFingerprint: string | null;
+    travelVerified: boolean;
+    generation: number | null;
+    calendarCoverage: { startsOn: string; endsOn: string } | null;
+    calendarEventFingerprint: string | null;
+    sourceErrors: string[];
+  };
+  allocationEnforcementComplete: false;
+};
+export type AllocationCatalogDTO = {
+  holds: HoldFact[];
+  demands: DemandFact[];
+  resources: AllocationFacts["resources"];
+  allocationEnforcementComplete: false;
+};

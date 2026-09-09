@@ -1,5 +1,14 @@
 import { hasActivePursuit } from "./outreach-active-pursuit";
 import { z } from "zod";
+import type { OutreachAllocation } from "./outreach-allocation";
+import { holdExpiryInput } from "./outreach-dto";
+import type { AllocationCheckDTO } from "./outreach-dto";
+import {
+  fingerprint,
+  loadAllocationFacts,
+  canonicalPackageQuantities,
+  type AllocationFacts,
+} from "./outreach-capacity-evidence";
 import { OutreachRepository, OutreachError } from "./outreach-repository";
 import {
   openingInput,
@@ -18,22 +27,83 @@ export class OutreachService {
     readonly repository: OutreachRepository,
     readonly enabled = isOutreachPlannerEnabled,
     readonly clock = () => new Date(),
+    readonly allocation?: OutreachAllocation,
   ) {}
   gate() {
     if (!this.enabled())
       throw new OutreachError(404, "Outreach planner is disabled.");
   }
   async get(): Promise<PlannerDTO> {
-    return this.enabled()
-      ? this.repository.load(this.clock())
-      : {
-          enabled: false,
-          openings: [],
-          candidates: [],
-          researchTasks: [],
-          legs: [],
-          packages: [],
+    if (!this.enabled())
+      return {
+        enabled: false,
+        openings: [],
+        candidates: [],
+        researchTasks: [],
+        legs: [],
+        packages: [],
+      };
+    const now = this.clock();
+    const planner = await this.repository.load(now);
+    if (
+      this.allocation &&
+      planner.candidates.some((c) => c.sourceSnapshot?.allocationCheck)
+    ) {
+      // Shared database-only freshness check; GET never contacts providers.
+      let currentFingerprint: string | null = null;
+      let currentFacts: AllocationFacts | null = null;
+      try {
+        currentFacts = await loadAllocationFacts(this.repository.db);
+        currentFingerprint = fingerprint(currentFacts);
+      } catch {
+        /* stale, actionable */
+      }
+      for (const c of planner.candidates) {
+        const saved = c.sourceSnapshot?.allocationCheck as
+          AllocationCheckDTO | undefined;
+        if (!saved) continue;
+        const opening = planner.openings.find((o) => o.id === c.openingId);
+        const openingQuantities = canonicalPackageQuantities(
+          opening?.quantities ?? {},
+        );
+        const current =
+          !c.releasedAt &&
+          opening?.status === "open" &&
+          !!saved.target &&
+          saved.target.eventStartsOn >= opening.startsOn &&
+          saved.target.eventEndsOn <= opening.endsOn &&
+          saved.target.legId === opening.legId &&
+          Object.entries(
+            canonicalPackageQuantities(saved.target.quantities),
+          ).every(([code, q]) => (openingQuantities[code] ?? 0) >= q) &&
+          !!currentFingerprint &&
+          currentFingerprint === saved.provenance.factsFingerprint &&
+          new Date(saved.checkedAt) <= now &&
+          // Lazy expiry changes effective route/capacity evidence without a DB
+          // write. Include all previously live holds, not just this candidate's.
+          !currentFacts?.holds.some(
+            (h) =>
+              h.state === "active" &&
+              new Date(h.expires_at) > new Date(saved.checkedAt) &&
+              new Date(h.expires_at) <= now,
+          ) &&
+          !!saved.provenance.calendarExpiresAt &&
+          new Date(saved.provenance.calendarExpiresAt) > now;
+        c.lastAllocationCheck = {
+          ...saved,
+          freshness: current ? "current" : "stale",
+          capacity: current
+            ? saved.capacity
+            : {
+                status: "needs_review",
+                reasons: [
+                  "Saved allocation check is stale; run a fresh check.",
+                ],
+              },
         };
+      }
+    }
+    return planner;
   }
   async createOpening(body: unknown, actor: string) {
     this.gate();
@@ -159,6 +229,7 @@ export class OutreachService {
       const c = await this.find(r, id);
       if (
         c.releasedAt ||
+        c.liveHoldId ||
         c.waitingForCandidateId ||
         c.outreach.state !== "advance"
       )
@@ -181,15 +252,59 @@ export class OutreachService {
   }
   async check(id: string, actor: string) {
     this.gate();
+    const allocationCheck = await this.allocation?.evaluateCandidate(id);
     return this.repository.transaction(actor, "check_sources", async (r) => {
       const c = await this.find(r, id);
+      if (allocationCheck) {
+        c.sources.capacity = allocationCheck.capacity;
+        c.sources.allocationCheck = allocationCheck;
+      }
       await r.check(id, c.sources);
       return { id, value: c.sources, opportunityId: c.opportunityId };
     });
   }
   async sources(id: string) {
     this.gate();
-    return (await this.find(this.repository, id)).sources;
+    const sources = (await this.find(this.repository, id)).sources;
+    if (this.allocation) {
+      sources.allocationCheck = await this.allocation.evaluateCandidate(id);
+      sources.capacity = sources.allocationCheck.capacity;
+    }
+    return sources;
+  }
+  private requireAllocation() {
+    this.gate();
+    if (!this.allocation)
+      throw new OutreachError(
+        409,
+        "Allocation evidence provider is unavailable.",
+      );
+    return this.allocation;
+  }
+  async allocations() {
+    return this.requireAllocation().list();
+  }
+  async saveDemand(id: string, body: unknown, actor: string) {
+    return this.requireAllocation().saveDemand(id, body, actor);
+  }
+  async createHold(id: string, body: unknown, actor: string) {
+    const allocation = this.requireAllocation();
+    return allocation.createHold(
+      id,
+      holdExpiryInput.parse(body).expiresAt,
+      actor,
+    );
+  }
+  async releaseHold(id: string, actor: string) {
+    return this.requireAllocation().releaseHold(id, actor);
+  }
+  async extendHold(id: string, body: unknown, actor: string) {
+    const allocation = this.requireAllocation();
+    return allocation.extendHold(
+      id,
+      holdExpiryInput.parse(body).expiresAt,
+      actor,
+    );
   }
   async research(id: string, body: unknown, actor: string) {
     this.gate();

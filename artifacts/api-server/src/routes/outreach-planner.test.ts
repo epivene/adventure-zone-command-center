@@ -72,11 +72,16 @@ describe("outreach owner routes", () => {
       ["POST", `/openings/${id}/research`],
       ["PATCH", `/openings/${id}`],
       ["POST", `/research/${id}/results`],
+      ["PUT", `/candidates/${id}/demand`],
+      ["POST", `/candidates/${id}/holds`],
+      ["POST", `/holds/${id}/release`],
+      ["POST", `/holds/${id}/extend`],
     ])
       expect(
         (await fetch(url + path, { method, headers, body: "{}" })).status,
       ).toBe(404);
     expect(touches).not.toHaveBeenCalled();
+    expect((await fetch(url + "/allocations", { headers })).status).toBe(404);
   });
   it("validates UUID and rejects client-provided capacity results", async () => {
     const { url, token, touches } = await setup(true);
