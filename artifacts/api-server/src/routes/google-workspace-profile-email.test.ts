@@ -188,6 +188,7 @@ describe("Google Workspace profile email routes", () => {
           conversationId: "conversation-thread-1",
           savedCopy: true,
           archiveState: "complete",
+          sourceState: "synced",
         },
       ],
     });
@@ -285,6 +286,7 @@ describe("Google Workspace profile email routes", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.savedCopy).toBe(true);
+    expect(response.body.sourceState).toBe("saved_copy_gmail_unavailable");
     expect(response.body.messages[0].bodyText).toBe("This stays in the app.");
   });
 
