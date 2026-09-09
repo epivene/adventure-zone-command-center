@@ -99,7 +99,7 @@ describe("manager dashboard aggregate", () => {
     expect(dashboard.currentLifecycle).toBeNull();
     expect(dashboard.route?.trip.id).toBe(pastTrip.id);
     expect(dashboard.events.map((event) => event.bookingId)).toEqual(["last-event", "next-event"]);
-    expect(dashboard.nextEvent?.bookingId).toBe("next-event");
+    expect(dashboard.nextEvent?.bookingId).toBe("next-event");\n    expect(dashboard.summary.upcomingBookedEventsCount).toBe(1);
   });
 
   it("returns available queue data with an explicit partial error when a secondary section fails", async () => {
