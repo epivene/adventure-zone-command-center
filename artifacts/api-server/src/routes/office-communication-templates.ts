@@ -8,6 +8,7 @@ import { DrizzlePackageIntelligenceSettingsRepository } from "@/features/package
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { ensureRouteFillOutreachTemplateSeed } from "@/features/communication-templates/route-fill-outreach-template-seed";
+import { ensureConventionCampaignTemplateSeed } from "@/features/communication-templates/convention-campaign-template-seed";
 import { renderCommunicationTemplate } from "@/features/communication-templates/communication-template-service";
 import {
   allowedTemplatePlaceholders,
@@ -61,6 +62,7 @@ async function activePackages(): Promise<PackageChoice[]> {
 async function seedTemplates(): Promise<void> {
   await ensureCommunicationTemplateSeed(db);
   await ensureRouteFillOutreachTemplateSeed(db);
+  await ensureConventionCampaignTemplateSeed(db);
 }
 
 function templateMutationError(res: any, err: unknown): boolean {
