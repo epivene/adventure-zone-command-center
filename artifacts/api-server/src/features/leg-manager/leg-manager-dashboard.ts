@@ -3,6 +3,7 @@ import type { EventReviewStore } from "./event-review-repository";
 import { listDueReviewsForManager } from "./event-review-repository";
 import type { EventLifecycleRepository } from "./event-lifecycle-repository";
 import {
+  isUpcomingManagerScheduleEvent,
   loadManagerScopedScheduleData,
   type ManagerMapBookingRepository,
   type ManagerMapTripRepository,
@@ -135,7 +136,9 @@ export async function loadLegManagerDashboard(
   const activeBookingId = currentResult.status === "fulfilled"
     ? (currentResult.value as DashboardLifecycle | null)?.bookingId
     : undefined;
-  const latestCheckedOutBookingId = !activeBookingId && latestCheckedOutResult.status === "fulfilled"
+  const latestCheckedOutBookingId = currentResult.status === "fulfilled"
+    && currentResult.value === null
+    && latestCheckedOutResult.status === "fulfilled"
     ? (latestCheckedOutResult.value as DashboardLifecycle | null)?.bookingId
     : undefined;
   const [scheduleResult, wrapUpsResult, reviewsResult, moneyResult] = await Promise.allSettled([
@@ -169,7 +172,7 @@ export async function loadLegManagerDashboard(
     legId,
     ...scheduleData,
     nextEvent: scheduleData.events.find((event) => event.bookingId === currentLifecycle?.bookingId)
-      ?? scheduleData.events.find((event) => (event.endsAt ?? event.startsAt ?? new Date(0)).getTime() >= now.getTime())
+      ?? scheduleData.events.find((event) => isUpcomingManagerScheduleEvent(event, now))
       ?? null,
     currentLifecycle,
     lifecycle: currentLifecycle,
@@ -180,7 +183,7 @@ export async function loadLegManagerDashboard(
     money,
     moneySummary: money,
     summary: {
-      upcomingBookedEventsCount: scheduleData.events.length,
+      upcomingBookedEventsCount: scheduleData.events.filter((event) => isUpcomingManagerScheduleEvent(event, now)).length,
       incompleteWrapUpsCount: incompleteWrapUps.length,
       reviewsDueCount: reviewsDue.length,
     },
