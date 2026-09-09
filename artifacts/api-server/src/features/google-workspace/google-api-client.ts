@@ -766,6 +766,29 @@ export function createGoogleWorkspaceReadClient(input: {
       };
     },
 
+    async getThreadLabelIds(threadId: string): Promise<string[]> {
+      const id = threadId.trim();
+      if (!id) throw clientError("GOOGLE_WORKSPACE_GMAIL_THREAD_ID_INVALID");
+      const url = new URL(
+        `${gmailBaseEndpoint}/threads/${encodeURIComponent(id)}`,
+      );
+      url.searchParams.set("format", "metadata");
+      url.searchParams.set("fields", "id,messages(id,labelIds)");
+      const payload = await authorizedJson(url.toString());
+      if (payload.id !== id || !Array.isArray(payload.messages)) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_THREAD_RESPONSE_INVALID");
+      }
+      return [...new Set(payload.messages.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const labelIds = (value as Record<string, unknown>).labelIds;
+        return Array.isArray(labelIds)
+          ? labelIds.filter((label): label is string =>
+              typeof label === "string" && Boolean(label.trim())
+            )
+          : [];
+      }))].sort();
+    },
+
     async getMessageMetadata(id: string): Promise<GoogleMessageMetadata> {
       const messageId = id.trim();
       if (!messageId) {
