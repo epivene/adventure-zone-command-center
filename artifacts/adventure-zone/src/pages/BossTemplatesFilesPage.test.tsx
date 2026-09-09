@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listAll: vi.fn(),
@@ -53,6 +53,12 @@ beforeEach(() => {
   mocks.reviewItems.mockResolvedValue({ items: [] });
 });
 
+afterEach(cleanup);
+
+function openFolder(name: string, index = 0) {
+  fireEvent.click(screen.getAllByText(name, { selector: "summary span:first-child" })[index]);
+}
+
 describe("BossTemplatesFilesPage", () => {
   it("matches the Admin/Des library layout and controls", async () => {
     render(<BossTemplatesFilesPage />);
@@ -64,6 +70,9 @@ describe("BossTemplatesFilesPage", () => {
     expect(screen.getByRole("tab", { name: "COIs & Insurance" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Needs Review" })).toBeVisible();
     expect(screen.getByText("Filters")).toBeVisible();
+    openFolder("Contracts");
+    openFolder("2026");
+    openFolder("Needs Sorting");
     expect(screen.getByRole("button", { name: "Edit Zebra Contract" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Delete Zebra Contract" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Upload document" })).toBeVisible();
@@ -72,7 +81,14 @@ describe("BossTemplatesFilesPage", () => {
   it("loads Dave's files from the canonical business document library", async () => {
     render(<BossTemplatesFilesPage />);
 
-    expect(await screen.findByText("Zebra Contract")).toBeVisible();
+    await screen.findByText("Contracts", { selector: "summary span:first-child" });
+    openFolder("Contracts");
+    openFolder("2026");
+    openFolder("Needs Sorting");
+    expect(screen.getByText("Zebra Contract")).toBeVisible();
+    openFolder("COIs");
+    openFolder("2026", 1);
+    openFolder("Needs Sorting", 1);
     expect(screen.getByText("Alpha COI")).toBeVisible();
     expect(mocks.listAll).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Document workspace unavailable")).not.toBeInTheDocument();
@@ -86,7 +102,10 @@ describe("BossTemplatesFilesPage", () => {
       ],
     });
     render(<BossTemplatesFilesPage />);
-    await screen.findByText("Zebra Contract");
+    await screen.findByText("Contracts", { selector: "summary span:first-child" });
+    openFolder("Contracts");
+    openFolder("2026");
+    openFolder("Needs Sorting");
 
     fireEvent.change(screen.getByLabelText("Sort documents"), { target: { value: "name_asc" } });
 
