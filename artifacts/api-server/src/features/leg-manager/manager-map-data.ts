@@ -46,6 +46,8 @@ export type ManagerScheduleEvent = {
   longitude: number | null;
   startsAt: Date | null;
   endsAt: Date | null;
+    operationalStartsAt?: Date | null;
+    operationalEndsAt?: Date | null;
     status: string;
     probability: string | null;
     scheduleState: ManagerScheduleState;
@@ -91,6 +93,8 @@ export type ManagerScopedMapData = {
       sortOrder: number;
       startsAt: Date | null;
       endsAt: Date | null;
+      operationalStartsAt?: Date | null;
+      operationalEndsAt?: Date | null;
       status: string;
       probability: string | null;
       scheduleState: ManagerScheduleState;
@@ -200,6 +204,8 @@ function eventFromBooking(booking: ManagerMapBookingRecord): ManagerScheduleEven
     longitude: booking.longitude,
     startsAt: booking.startsAt,
     endsAt: booking.endsAt,
+    operationalStartsAt: booking.operationalStartsAt,
+    operationalEndsAt: booking.operationalEndsAt,
     status: booking.status,
     probability: booking.probability,
     scheduleState: managerScheduleState(booking.status, booking.probability),
@@ -248,22 +254,36 @@ export async function loadManagerScopedScheduleData(
     .map(eventFromBooking)
     .filter((event) => alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now));
 
-  const activeTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
-  const details = await Promise.all(
-    activeTrips.map(async (trip) => ({
+  const recentTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
+  const tripsToInspect = alwaysVisibleBookingIds.size ? allTrips : recentTrips;
+  const tripsWithStops = await Promise.all(
+    tripsToInspect.map(async (trip) => ({
       trip,
       stops: await dependencies.tripRepository.listStops(trip.id),
+    })),
+  );
+  const visibleTripsWithStops = tripsWithStops.filter(({ trip, stops }) =>
+    recentTrips.some((recent) => recent.id === trip.id)
+    || stops.some((stop) => alwaysVisibleBookingIds.has(stop.bookingId)),
+  );
+  const details = await Promise.all(
+    visibleTripsWithStops.map(async ({ trip, stops }) => ({
+      trip,
+      stops,
       segments: await dependencies.tripRepository.listSegments(trip.id),
     })),
   );
 
-  const current = details.find(({ trip }) => trip.startDate <= now && trip.endDate >= now) ?? details[0] ?? null;
+  const current = details.find(({ stops }) => stops.some((stop) => alwaysVisibleBookingIds.has(stop.bookingId)))
+    ?? details.find(({ trip }) => trip.startDate <= now && trip.endDate >= now)
+    ?? details[0]
+    ?? null;
   const eventsByBookingId = new Map<string, ManagerScheduleEvent>();
   for (const booking of assignedBookings) {
     eventsByBookingId.set(booking.bookingId, booking);
   }
   for (const event of details.flatMap(({ stops }) => stops.map(eventFromStop))) {
-    if (isVisibleScheduleEvent(event, now) && !eventsByBookingId.has(event.bookingId)) {
+    if ((alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now)) && !eventsByBookingId.has(event.bookingId)) {
       eventsByBookingId.set(event.bookingId, event);
     }
   }
