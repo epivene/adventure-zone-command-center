@@ -3,7 +3,7 @@ import {
   managerDashboardResponseSchema,
   managerScopedMapResponseSchema,
 } from "@workspace/api-zod";
-import { loadManagerScopedScheduleData } from "./manager-map-data";
+import { loadManagerScopedMapData, loadManagerScopedScheduleData } from "./manager-map-data";
 
 const legId = "00000000-0000-4000-8000-000000000010";
 const tripId = "00000000-0000-4000-8000-000000000100";
@@ -58,7 +58,7 @@ function dependencies() {
     stop("trip-completed", "2026-08-22T12:00:00Z", 3, "completed"),
   ];
   const directAssignments = [
-    booking("direct-early", "2026-08-19T12:00:00Z"),
+    { ...booking("direct-early", "2026-08-19T12:00:00Z"), operationalStartsAt: new Date("2026-08-16T00:00:00Z"), operationalEndsAt: new Date("2026-08-22T00:00:00Z") },
     booking("direct-late", "2026-08-23T12:00:00Z", "pending_contract", "definite"),
     booking("direct-declined", "2026-08-24T12:00:00Z", "declined"),
   ];
@@ -107,9 +107,29 @@ describe("manager schedule API contract", () => {
     for (const payload of [dashboard, map, route]) {
       expect(payload.events.map((event) => event.bookingId)).toEqual(expectedIds);
       expect(payload.events.every((event) => event.scheduleState === "booked")).toBe(true);
+      expect(payload.events.find((event) => event.bookingId === "direct-early")).toMatchObject({
+        operationalStartsAt: "2026-08-16T00:00:00.000Z",
+        operationalEndsAt: "2026-08-22T00:00:00.000Z",
+      });
     }
     expect(dashboard.route?.stops.map((event) => event.bookingId)).toEqual(["trip-middle"]);
     expect(map.route?.stops.map((event) => event.bookingId)).toEqual(["trip-middle"]);
+  });
+
+  it("keeps the checked-in event in the manager map after its scheduled date cutoff", async () => {
+    const pastActive = booking("meeteetse-active", "2026-08-15T12:00:00Z");
+    const scoped = dependencies();
+    scoped.bookingRepository.listForLeg = async () => [pastActive];
+
+    const map = await loadManagerScopedMapData({
+      ...scoped,
+      handoffRepository: { async listForLeg() { return []; } },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return { bookingId: "meeteetse-active" }; },
+      },
+    }, legId, now);
+
+    expect(map.events.map((event) => event.bookingId)).toEqual(["meeteetse-active"]);
   });
 
   it("rejects a schedule event when a required contract field is missing", async () => {

@@ -4,23 +4,13 @@ import { Plus } from "lucide-react";
 import { useManagerAssistant } from "@/features/manager-assistant/manager-assistant-context";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { EventLifecycleAction } from "@/components/manager/event-lifecycle-action";
+import { EventScheduleWindow } from "@/components/manager/event-schedule-window";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@workspace/avz-crm/components/ui/dropdown-menu";
 import type { ManagerDashboardResponse } from "@workspace/api-zod";
 
 type ManagerDashboard = ManagerDashboardResponse;
 type NextEvent = ManagerDashboardResponse["events"][number];
 type CurrentLifecycle = NonNullable<ManagerDashboardResponse["currentLifecycle"]>;
-
-function formatEventDate(value?: string | Date | null) {
-  if (!value) return "Date not set";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function formatEventRange(startsAt?: string | Date | null, endsAt?: string | Date | null) {
-  if (!startsAt) return "Date not set";
-  if (!endsAt || endsAt === startsAt) return formatEventDate(startsAt);
-  return `${formatEventDate(startsAt)} → ${formatEventDate(endsAt)}`;
-}
 
 function QuickAddMenu() {
   return <DropdownMenu>
@@ -93,7 +83,7 @@ export default function ManagerHomePage() {
           <div className="mt-2">
             <h2 className="text-xl font-bold">{currentEvent.bookingName || "Current event"}</h2>
             <p className="mt-1 text-sm text-slate-700">{[currentEvent.city, currentEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
-            {currentMapEvent ? <p className="mt-1 text-sm font-semibold text-slate-800">{formatEventRange(currentMapEvent.startsAt, currentMapEvent.endsAt)}</p> : null}
+            {currentMapEvent ? <EventScheduleWindow startsAt={currentMapEvent.startsAt} endsAt={currentMapEvent.endsAt} operationalStartsAt={currentMapEvent.operationalStartsAt} operationalEndsAt={currentMapEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" /> : null}
             <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} /></div>
             <div className="mt-3 flex flex-wrap gap-2"><Link className="button-primary inline-flex" href={`/manager/events/${currentEvent.bookingId}/wrap-up#site-check`}>Event notes / site check</Link><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
           </div>
@@ -103,12 +93,12 @@ export default function ManagerHomePage() {
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Up Next</p>
           <h2 className="mt-2 text-lg font-bold">{nextEvent.bookingName || "Upcoming event"}</h2>
           <p className="mt-1 text-sm text-slate-600">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
-          <p className="text-sm font-semibold text-slate-700">{formatEventRange(nextEvent.startsAt, nextEvent.endsAt)}</p>
+          <EventScheduleWindow startsAt={nextEvent.startsAt} endsAt={nextEvent.endsAt} operationalStartsAt={nextEvent.operationalStartsAt} operationalEndsAt={nextEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-700" />
           <div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div>
         </section> : null}
       </> : <section className="rounded-2xl border border-orange-200 bg-orange-50 p-4 shadow-sm">
         <p className="text-xs font-bold uppercase tracking-wider text-orange-800">Next Stop</p>
-         {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><p className="text-sm font-semibold text-slate-800">{formatEventRange(nextEvent.startsAt, nextEvent.endsAt)}</p><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} allowCheckIn={nextEvent.status === "confirmed"} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No upcoming booked event is currently assigned.</p>}
+         {nextEvent ? <div className="mt-2"><h2 className="text-xl font-bold">{nextEvent.bookingName || "Upcoming event"}</h2><p className="mt-1 text-sm text-slate-700">{[nextEvent.city, nextEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><EventScheduleWindow startsAt={nextEvent.startsAt} endsAt={nextEvent.endsAt} operationalStartsAt={nextEvent.operationalStartsAt} operationalEndsAt={nextEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" /><div className="mt-3"><EventLifecycleAction bookingId={nextEvent.bookingId} allowCheckIn={nextEvent.status === "confirmed"} /></div><div className="mt-3 flex flex-wrap gap-2"><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(nextEvent, "Next event")}>Ask Assistant</button></div></div> : <p className="mt-2 text-sm text-slate-700">No upcoming booked event is currently assigned.</p>}
       </section>}
 
       {(cashOnHand != null || expenseTotal != null) ? <section className="grid grid-cols-2 gap-3">

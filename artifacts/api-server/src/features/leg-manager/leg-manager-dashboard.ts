@@ -120,21 +120,24 @@ export async function loadLegManagerDashboard(
   now = new Date(),
 ): Promise<LegManagerDashboard | LegacyLegManagerDashboard> {
   const isAggregate = "tripRepository" in input;
-  const schedule = isAggregate
-    ? loadManagerScopedScheduleData(input, legId, now)
-    : legacyScheduleData(input, legId, now);
-
   if (!isAggregate) {
-    const data = await schedule;
+    const data = await legacyScheduleData(input, legId, now);
     const current = data.route ? { trip: data.route.trip, stops: data.route.stops, segments: data.route.segments } : null;
     const nextEvent = data.events.find((event) => (event.endsAt ?? event.startsAt ?? new Date(0)).getTime() >= now.getTime()) ?? null;
     return { legId, trips: data.trips, route: current, events: data.events, nextEvent };
   }
 
   const partialErrors: DashboardPartialError[] = [];
-  const [scheduleResult, currentResult, wrapUpsResult, reviewsResult, moneyResult] = await Promise.allSettled([
-    schedule,
+  const [currentResult] = await Promise.allSettled([
     input.lifecycleRepository.getCurrentForLeg(legId),
+  ]);
+  const activeBookingId = currentResult.status === "fulfilled"
+    ? (currentResult.value as DashboardLifecycle | null)?.bookingId
+    : undefined;
+  const [scheduleResult, wrapUpsResult, reviewsResult, moneyResult] = await Promise.allSettled([
+    loadManagerScopedScheduleData(input, legId, now, {
+      alwaysVisibleBookingIds: activeBookingId ? new Set([activeBookingId]) : undefined,
+    }),
     input.lifecycleRepository.listIncompleteForLeg(legId),
     listDueReviewsForManager(input.reviewRepository, legId, now),
     input.financeRepository.summary(legId),
@@ -159,7 +162,9 @@ export async function loadLegManagerDashboard(
   return {
     legId,
     ...scheduleData,
-    nextEvent: scheduleData.events.find((event) => (event.endsAt ?? event.startsAt ?? new Date(0)).getTime() >= now.getTime()) ?? null,
+    nextEvent: scheduleData.events.find((event) => event.bookingId === currentLifecycle?.bookingId)
+      ?? scheduleData.events.find((event) => (event.endsAt ?? event.startsAt ?? new Date(0)).getTime() >= now.getTime())
+      ?? null,
     currentLifecycle,
     lifecycle: currentLifecycle,
     incompleteWrapUps,

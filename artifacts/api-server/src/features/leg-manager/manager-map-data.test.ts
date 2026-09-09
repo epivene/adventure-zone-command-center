@@ -188,6 +188,91 @@ describe("loadManagerScopedMapData", () => {
     expect(managerScheduleState("declined", "definite")).toBe("excluded");
   });
 
+  it("keeps a checked-in booking visible after its scheduled date cutoff", async () => {
+    const activePastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000204",
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const dependencies = deps([], [activePastBooking]);
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return { bookingId: activePastBooking.bookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).toContain(activePastBooking.bookingId);
+  });
+
+  it("keeps the checked-in booking's past trip and travel estimates", async () => {
+    const activeBookingId = "00000000-0000-4000-8000-000000000205";
+    const pastTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000105",
+      startDate: new Date("2026-08-10T00:00:00Z"),
+      endDate: new Date("2026-08-15T23:00:00Z"),
+      mpg: 10,
+      fuelPricePerGallon: 3.5,
+    };
+    const pastStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000106",
+      tripId: pastTrip.id,
+      bookingId: activeBookingId,
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const dependencies = deps([], [{
+      ...assignedBookingWithoutTrip,
+      bookingId: activeBookingId,
+      bookingName: pastStop.bookingName,
+      startsAt: pastStop.startsAt,
+      endsAt: pastStop.endsAt,
+      operationalStartsAt: new Date("2026-08-12T00:00:00Z"),
+      operationalEndsAt: new Date("2026-08-17T00:00:00Z"),
+    }]);
+    dependencies.tripRepository = {
+      async listTrips() { return [pastTrip]; },
+      async listStops(tripId: string) { return tripId === pastTrip.id ? [pastStop] : []; },
+      async listSegments(tripId: string) {
+        return tripId === pastTrip.id
+          ? [{ id: "past-segment", tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Prior stop", toLabel: "Meeteetse", miles: 120, minutes: 150, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }]
+          : [];
+      },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return { bookingId: activeBookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.route?.trip).toMatchObject({
+      id: pastTrip.id,
+      mpg: 10,
+      fuelPricePerGallon: 3.5,
+    });
+    expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([activeBookingId]);
+    expect(result.route?.segments).toEqual([expect.objectContaining({
+      effectiveMiles: 120,
+      effectiveMinutes: 150,
+    })]);
+    expect(result.events.find((event) => event.bookingId === activeBookingId)).toMatchObject({
+      operationalStartsAt: new Date("2026-08-12T00:00:00Z"),
+      operationalEndsAt: new Date("2026-08-17T00:00:00Z"),
+    });
+  });
+
   it("includes a shared meetup but only the counterpart leg identity", async () => {
     const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
 

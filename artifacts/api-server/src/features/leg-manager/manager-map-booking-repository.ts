@@ -1,6 +1,6 @@
 import { asc, eq } from "drizzle-orm";
 import type { db as database } from "@/db/client";
-import { bookings, travelLegs } from "@/db/schema";
+import { bookingOperationalWindows, bookings, travelLegs } from "@/db/schema";
 
 export type ManagerMapBookingRecord = {
   bookingId: string;
@@ -11,6 +11,8 @@ export type ManagerMapBookingRecord = {
   longitude: number | null;
   startsAt: Date | null;
   endsAt: Date | null;
+  operationalStartsAt?: Date | null;
+  operationalEndsAt?: Date | null;
   status: string;
   probability: string | null;
   legName: string;
@@ -33,6 +35,8 @@ export class DrizzleManagerMapBookingRepository {
         longitude: bookings.longitude,
         startsAt: bookings.startsAt,
         endsAt: bookings.endsAt,
+        operationalStartsAt: bookingOperationalWindows.startsAt,
+        operationalEndsAt: bookingOperationalWindows.endsAt,
         status: bookings.status,
         probability: bookings.probability,
         legName: travelLegs.name,
@@ -40,6 +44,7 @@ export class DrizzleManagerMapBookingRepository {
       })
       .from(bookings)
       .innerJoin(travelLegs, eq(bookings.travelLegId, travelLegs.id))
+      .leftJoin(bookingOperationalWindows, eq(bookings.id, bookingOperationalWindows.bookingId))
       .where(eq(bookings.travelLegId, legId))
       .orderBy(asc(bookings.startsAt), asc(bookings.id));
 

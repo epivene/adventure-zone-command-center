@@ -17,6 +17,8 @@ export type ManagerMapTrip = {
   endLongitude: number | null;
   legName?: string;
   legColor?: string | null;
+  mpg?: number | null;
+  fuelPricePerGallon?: number | null;
 };
 
 export interface ManagerMapTripRepository {
@@ -44,6 +46,8 @@ export type ManagerScheduleEvent = {
   longitude: number | null;
   startsAt: Date | null;
   endsAt: Date | null;
+    operationalStartsAt?: Date | null;
+    operationalEndsAt?: Date | null;
     status: string;
     probability: string | null;
     scheduleState: ManagerScheduleState;
@@ -75,6 +79,8 @@ export type ManagerScopedMapData = {
       endLabel: string;
       endLatitude: number | null;
       endLongitude: number | null;
+      mpg: number | null;
+      fuelPricePerGallon: number | null;
     };
     stops: Array<{
       id: string;
@@ -87,6 +93,8 @@ export type ManagerScopedMapData = {
       sortOrder: number;
       startsAt: Date | null;
       endsAt: Date | null;
+      operationalStartsAt?: Date | null;
+      operationalEndsAt?: Date | null;
       status: string;
       probability: string | null;
       scheduleState: ManagerScheduleState;
@@ -108,6 +116,8 @@ export type ManagerScopedMapData = {
     longitude: number | null;
     startsAt: Date | null;
     endsAt: Date | null;
+    operationalStartsAt?: Date | null;
+    operationalEndsAt?: Date | null;
        status: string;
        probability: string | null;
        scheduleState: ManagerScheduleState;
@@ -196,6 +206,8 @@ function eventFromBooking(booking: ManagerMapBookingRecord): ManagerScheduleEven
     longitude: booking.longitude,
     startsAt: booking.startsAt,
     endsAt: booking.endsAt,
+    operationalStartsAt: booking.operationalStartsAt,
+    operationalEndsAt: booking.operationalEndsAt,
     status: booking.status,
     probability: booking.probability,
     scheduleState: managerScheduleState(booking.status, booking.probability),
@@ -215,6 +227,8 @@ function scheduleTripFromTrip(trip: ManagerMapTrip) {
     endLabel: trip.endLabel,
     endLatitude: trip.endLatitude,
     endLongitude: trip.endLongitude,
+    ...(trip.mpg === undefined ? {} : { mpg: trip.mpg }),
+    ...(trip.fuelPricePerGallon === undefined ? {} : { fuelPricePerGallon: trip.fuelPricePerGallon }),
     ...(trip.legName === undefined ? {} : { legName: trip.legName }),
     ...(trip.legColor === undefined ? {} : { legColor: trip.legColor }),
   };
@@ -227,6 +241,7 @@ export async function loadManagerScopedScheduleData(
   },
   legId: string,
   now = new Date(),
+  options: { alwaysVisibleBookingIds?: ReadonlySet<string> } = {},
 ): Promise<ManagerScopedScheduleData> {
   const [listedTrips, listedBookings] = await Promise.all([
     dependencies.tripRepository.listTrips({ travelLegId: legId }),
@@ -236,26 +251,41 @@ export async function loadManagerScopedScheduleData(
   const allTrips = listedTrips
     .filter((trip) => trip.travelLegId === legId)
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.id.localeCompare(b.id));
+  const alwaysVisibleBookingIds = options.alwaysVisibleBookingIds ?? new Set<string>();
   const assignedBookings = listedBookings
     .map(eventFromBooking)
-    .filter((event) => isVisibleScheduleEvent(event, now));
+    .filter((event) => alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now));
 
-  const activeTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
-  const details = await Promise.all(
-    activeTrips.map(async (trip) => ({
+  const recentTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
+  const tripsToInspect = alwaysVisibleBookingIds.size ? allTrips : recentTrips;
+  const tripsWithStops = await Promise.all(
+    tripsToInspect.map(async (trip) => ({
       trip,
       stops: await dependencies.tripRepository.listStops(trip.id),
+    })),
+  );
+  const visibleTripsWithStops = tripsWithStops.filter(({ trip, stops }) =>
+    recentTrips.some((recent) => recent.id === trip.id)
+    || stops.some((stop) => alwaysVisibleBookingIds.has(stop.bookingId)),
+  );
+  const details = await Promise.all(
+    visibleTripsWithStops.map(async ({ trip, stops }) => ({
+      trip,
+      stops,
       segments: await dependencies.tripRepository.listSegments(trip.id),
     })),
   );
 
-  const current = details.find(({ trip }) => trip.startDate <= now && trip.endDate >= now) ?? details[0] ?? null;
+  const current = details.find(({ stops }) => stops.some((stop) => alwaysVisibleBookingIds.has(stop.bookingId)))
+    ?? details.find(({ trip }) => trip.startDate <= now && trip.endDate >= now)
+    ?? details[0]
+    ?? null;
   const eventsByBookingId = new Map<string, ManagerScheduleEvent>();
   for (const booking of assignedBookings) {
     eventsByBookingId.set(booking.bookingId, booking);
   }
   for (const event of details.flatMap(({ stops }) => stops.map(eventFromStop))) {
-    if (isVisibleScheduleEvent(event, now) && !eventsByBookingId.has(event.bookingId)) {
+    if ((alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now)) && !eventsByBookingId.has(event.bookingId)) {
       eventsByBookingId.set(event.bookingId, event);
     }
   }
@@ -274,9 +304,11 @@ export async function loadManagerScopedScheduleData(
           endLabel: current.trip.endLabel,
           endLatitude: current.trip.endLatitude,
           endLongitude: current.trip.endLongitude,
+          mpg: current.trip.mpg ?? null,
+          fuelPricePerGallon: current.trip.fuelPricePerGallon ?? null,
         },
         stops: current.stops
-          .filter((stop) => isVisibleScheduleEvent(stop, now))
+          .filter((stop) => alwaysVisibleBookingIds.has(stop.bookingId) || isVisibleScheduleEvent(stop, now))
           .sort((a, b) => a.sortOrder - b.sortOrder || compareScheduleEvents(eventFromStop(a), eventFromStop(b)))
           .map((stop) => ({
           id: stop.id,
@@ -320,11 +352,14 @@ export async function loadManagerScopedMapData(
     tripRepository: ManagerMapTripRepository;
     bookingRepository: ManagerMapBookingRepository;
     handoffRepository: ManagerMapHandoffRepository;
+    lifecycleRepository?: { getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null> };
   },
   legId: string,
   now = new Date(),
 ): Promise<ManagerScopedMapData> {
-  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now);
+  const currentLifecycle = await dependencies.lifecycleRepository?.getCurrentForLeg(legId).catch(() => null) ?? null;
+  const alwaysVisibleBookingIds = currentLifecycle ? new Set([currentLifecycle.bookingId]) : undefined;
+  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, { alwaysVisibleBookingIds });
   const rawMeetups = await dependencies.handoffRepository.listForLeg(legId, { approvedOnly: true });
   const meetups = rawMeetups.flatMap((handoff) => {
     const counterpart = counterpartFor(handoff, legId);
