@@ -75,7 +75,7 @@ export const bookingEditInputSchema = z
     endsAt: optionalBusinessDateSchema,
     status: z.enum(bookingStatusValues),
     travelLegId: z
-      .union([z.literal(""), z.null(), z.uuid()])
+      .union([z.literal(""), z.null(), z.string().uuid()])
       .transform((value) => value || null),
     notes: nullableTrimmedString,
   })
