@@ -321,8 +321,9 @@ describe("loadManagerScopedMapData", () => {
         return [{ id: `segment-${tripId}`, tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Prior stop", toLabel: tripId === pastTrip.id ? "Meeteetse" : "Blanding", miles: 120, minutes: 150, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }];
       },
     };
+    let checkedInBookingId: string | null = null;
     dependencies.lifecycleRepository = {
-      async getCurrentForLeg() { return null; },
+      async getCurrentForLeg() { return checkedInBookingId ? { bookingId: checkedInBookingId } : null; },
       async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
     };
 
@@ -335,6 +336,17 @@ describe("loadManagerScopedMapData", () => {
     expect(result.route?.trip.id).toBe(pastTrip.id);
     expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([lastBookingId]);
     expect(result.events.map((event) => event.bookingId)).toEqual([lastBookingId, nextBookingId]);
+
+    checkedInBookingId = nextBookingId;
+    const afterNextCheckIn = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(afterNextCheckIn.route?.trip.id).toBe(futureTrip.id);
+    expect(afterNextCheckIn.route?.stops.map((stop) => stop.bookingId)).toEqual([nextBookingId]);
+    expect(afterNextCheckIn.events.map((event) => event.bookingId)).toEqual([nextBookingId]);
   });
 
   it("drops the last checked-out route anchor when no events remain in the season", async () => {
