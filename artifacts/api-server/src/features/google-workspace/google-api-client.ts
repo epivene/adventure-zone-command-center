@@ -1,6 +1,7 @@
 import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
+  GoogleGmailLabelMutationClient,
   GoogleCalendarSummary,
   DriveCreateFileInput,
   DriveUpdateFileInput,
@@ -305,7 +306,7 @@ export function createGoogleWorkspaceReadClient(input: {
   refreshToken?: string;
   fetcher?: GoogleWorkspaceFetch;
   gmailDraftTimeoutMs?: number;
-}): GoogleWorkspaceReadClient {
+}): GoogleWorkspaceReadClient & GoogleGmailLabelMutationClient {
   const fetcher = input.fetcher ?? fetch;
   const gmailDraftTimeoutMs =
     typeof input.gmailDraftTimeoutMs === "number" &&
