@@ -39,6 +39,7 @@ const resolveSchema = z
 const cleanupLabelsSchema = z
   .object({
     labelIds: z.array(z.string().trim().min(1).max(255)).min(1).max(100),
+    confirm: z.literal(true),
   })
   .strict();
 
