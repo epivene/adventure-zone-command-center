@@ -472,7 +472,7 @@ export async function deleteGoogleProfileLabels(
   return responseJson(
     await apiFetch("/google-workspace/profile-labels/cleanup", {
       method: "POST",
-      body: JSON.stringify({ labelIds }),
+      body: JSON.stringify({ labelIds, confirm: true }),
     }),
   );
 }
