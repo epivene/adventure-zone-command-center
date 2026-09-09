@@ -71,6 +71,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
   ensureBusinessDocuments?: RequiredStep;
+  ensureGoogleDriveBackup?: RequiredStep;
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
