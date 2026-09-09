@@ -28,6 +28,9 @@ const EMPTY_DASHBOARD = {
 describe("BossHomePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBossGet.mockImplementation(async (path) => path === "/boss/work-requests"
+      ? { active: [], recentlyCompleted: [] } as never
+      : EMPTY_DASHBOARD as never);
   });
 
   it("shows all-clear when dashboard has no items", async () => {
