@@ -87,6 +87,16 @@ export const bookingEditInputSchema = z
         path: [input.latitude === null ? "latitude" : "longitude"],
       });
     }
+    if (
+      input.status === "confirmed" &&
+      (input.latitude === null || input.longitude === null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Map this confirmed event before saving",
+        path: ["latitude"],
+      });
+    }
 
     // Normalize again at the cross-field boundary instead of assuming the
     // values reaching superRefine are already Date instances. This keeps a
