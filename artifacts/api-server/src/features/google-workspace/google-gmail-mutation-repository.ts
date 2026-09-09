@@ -288,6 +288,11 @@ export class PostgresGoogleGmailMutationRepository {
               mutation.state = 'processing'
               AND mutation.processing_lease_expires_at <= $1
             )
+            OR (
+              mutation.state = 'permanent_error'
+              AND mutation.last_error_code =
+                'GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND'
+            )
           )
         ORDER BY mutation.created_at, mutation.id
         LIMIT $2`,
@@ -354,6 +359,10 @@ export class PostgresGoogleGmailMutationRepository {
             OR (
               state = 'processing'
               AND processing_lease_expires_at <= $2
+            )
+            OR (
+              state = 'permanent_error'
+              AND last_error_code = 'GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND'
             )
           )
         ORDER BY created_at, id
@@ -432,6 +441,11 @@ export class PostgresGoogleGmailMutationRepository {
               OR (
                 candidate_mutation.state = 'processing'
                 AND candidate_mutation.processing_lease_expires_at <= $2
+              )
+              OR (
+                candidate_mutation.state = 'permanent_error'
+                AND candidate_mutation.last_error_code =
+                  'GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND'
               )
             )
             AND (
