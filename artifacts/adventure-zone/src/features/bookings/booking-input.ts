@@ -88,6 +88,16 @@ export const bookingEditInputSchema = z
       });
     }
     if (
+      input.status === "confirmed" &&
+      (input.latitude === null || input.longitude === null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Map this confirmed event before saving",
+        path: ["latitude"],
+      });
+    }
+    if (
       input.startsAt &&
       input.endsAt &&
       input.endsAt.getTime() < input.startsAt.getTime()
