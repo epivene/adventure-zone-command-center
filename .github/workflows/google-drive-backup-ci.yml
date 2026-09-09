@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - codex/google-drive-backup-design-20260909
+      - codex/google-drive-backup-export-20260909
     paths:
       - "lib/db/src/google-drive-backup-schema.ts"
       - "lib/db/src/index.ts"
