@@ -56,6 +56,8 @@ import developmentSampleLoginsRouter from "./development-sample-logins";
 import officeAuthRouter from "./office-auth";
 import bossAuthRouter from "./boss-auth";
 import bossDashboardRouter from "./boss-dashboard";
+import bossWorkRequestsRouter from "./boss-work-requests";
+import bossWorkRequestsOwnerRouter from "./boss-work-requests-owner";
 import bossAssignmentsRouter from "./boss-assignments";
 import bossOperationsRouter from "./boss-operations";
 import bossDocumentsRouter from "./boss-documents";
@@ -173,6 +175,7 @@ router.use(publicWebsiteInquiriesRouter);
 router.use(websiteInquiriesRouter);
 router.use(officeTasksRouter);
 router.use(bossDashboardRouter);
+router.use(bossWorkRequestsRouter);
 router.use(bossAssignmentsRouter);
 router.use(bossOperationsRouter);
 router.use(bossDocumentsRouter);
@@ -233,6 +236,7 @@ router.use(async (req, _res, next) => {
   }
   next();
 });
+router.use(bossWorkRequestsOwnerRouter);
 router.use(officeAdminAccountsRouter);
 router.use(marketingRouter);
 router.use(bossAdminAccountsRouter);
