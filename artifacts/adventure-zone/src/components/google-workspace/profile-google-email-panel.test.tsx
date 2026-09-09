@@ -7,6 +7,7 @@ const client = vi.hoisted(() => ({
   copyGoogleProfileThreadFiles: vi.fn(),
   getGoogleProfileFiles: vi.fn(),
   openGoogleProfileFile: vi.fn(),
+  replyToGoogleProfileEmail: vi.fn(),
 }));
 
 vi.mock("@/features/google-workspace/google-workspace-client", () => client);
@@ -65,6 +66,10 @@ beforeEach(() => {
   });
   client.getGoogleProfileEmailThread.mockResolvedValue({
     id: "thread-1",
+    conversationId: "conversation-1",
+    savedCopy: true,
+    archiveState: "complete",
+    sourceState: "synced",
     subject: "County Fair follow up",
     originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
     messages: [
@@ -90,6 +95,27 @@ beforeEach(() => {
       },
     ],
   });
+  client.replyToGoogleProfileEmail.mockResolvedValue({
+    id: "thread-new",
+    conversationId: "conversation-1",
+    savedCopy: true,
+    archiveState: "complete",
+    sourceState: "synced",
+    subject: "County Fair follow up",
+    originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-new",
+    messages: [{
+      id: "message-new",
+      internalDateMs: Date.UTC(2026, 7, 24, 17, 0, 0),
+      from: "zone@example.com",
+      to: "fair@example.org",
+      cc: "",
+      subject: "Re: County Fair follow up",
+      date: "",
+      direction: "outgoing",
+      bodyText: "We are available.",
+      attachments: [],
+    }],
+  });
   client.getGoogleProfileFiles.mockResolvedValue({ files: [] });
   client.copyGoogleProfileThreadFiles.mockResolvedValue({ files: [storedFile] });
   client.openGoogleProfileFile.mockResolvedValue({
@@ -109,7 +135,7 @@ describe("ProfileGoogleEmailPanel", () => {
     render(<ProfileGoogleEmailPanel organizationId="org-1" />);
 
     expect(await screen.findByRole("heading", { name: "Google history" })).toBeInTheDocument();
-    expect(screen.getByText(/relationship history/i)).toBeInTheDocument();
+    expect(screen.getByText(/saved in the app automatically/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Emails" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair follow up")).toBeInTheDocument();
@@ -154,6 +180,52 @@ describe("ProfileGoogleEmailPanel", () => {
         "thread-1",
       ),
     );
+  });
+
+  it("shows a deleted Gmail thread as saved and sends a reply from the app", async () => {
+    client.getGoogleProfileEmailThread.mockResolvedValueOnce({
+      ...(await client.getGoogleProfileEmailThread.getMockImplementation()!()),
+      id: "thread-1",
+      conversationId: "conversation-1",
+      savedCopy: true,
+      archiveState: "complete",
+      sourceState: "saved_copy_gmail_missing",
+      subject: "County Fair follow up",
+      originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
+      messages: [{
+        id: "m1",
+        internalDateMs: 1,
+        from: "fair@example.org",
+        to: "zone@example.com",
+        cc: "",
+        subject: "County Fair follow up",
+        date: "",
+        direction: "incoming",
+        bodyText: "Saved body",
+        attachments: [],
+      }],
+    });
+    render(<ProfileGoogleEmailPanel organizationId="org-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /County Fair follow up/i }));
+    expect(
+      await screen.findByText("Saved in app; no longer in Gmail"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Open in Gmail")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Reply from the app"), {
+      target: { value: "We are available." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send reply" }));
+
+    await waitFor(() =>
+      expect(client.replyToGoogleProfileEmail).toHaveBeenCalledWith(
+        "org-1",
+        "conversation-1",
+        "We are available.",
+      ),
+    );
+    expect(screen.getByLabelText("Reply from the app")).toHaveValue("");
   });
 
   it("lists durable profile files and opens them through a signed URL", async () => {
