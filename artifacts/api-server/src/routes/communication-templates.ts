@@ -7,6 +7,7 @@ import { communicationTemplates, officeAccounts } from "@/db/schema";
 import { CommunicationTemplateRepository } from "@/features/communication-templates/communication-template-repository";
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { ensureRouteFillOutreachTemplateSeed } from "@/features/communication-templates/route-fill-outreach-template-seed";
+import { ensureConventionCampaignTemplateSeed } from "@/features/communication-templates/convention-campaign-template-seed";
 import { validateAuthoredTemplateText } from "@/features/communication-templates/communication-template-authoring";
 import { BossWorkRequestService, templateFingerprint } from "@/features/boss-work-requests/boss-work-request-service";
 import {
@@ -44,6 +45,7 @@ function templateId(value: string | string[] | undefined) { return Array.isArray
 async function seed() {
   await ensureCommunicationTemplateSeed(db);
   await ensureRouteFillOutreachTemplateSeed(db);
+  await ensureConventionCampaignTemplateSeed(db);
 }
 
 router.get("/communication-templates", async (req, res): Promise<void> => {
