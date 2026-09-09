@@ -1,0 +1,39 @@
+name: Blanding Kristy live-state correction
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/blanding-kristy-live-state.yml"
+      - "artifacts/api-server/src/features/leg-manager/blanding-kristy-state-correction*"
+      - "artifacts/api-server/src/routes/assistant-blanding-kristy-correction*"
+      - "artifacts/api-server/src/app.ts"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/blanding-kristy-live-state.yml"
+      - "artifacts/api-server/src/features/leg-manager/blanding-kristy-state-correction*"
+      - "artifacts/api-server/src/routes/assistant-blanding-kristy-correction*"
+      - "artifacts/api-server/src/app.ts"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Verify Blanding correction behavior
+        run: pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/blanding-kristy-state-correction.test.ts
