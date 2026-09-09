@@ -104,4 +104,43 @@ describe("runRequiredSchemaStartup", () => {
     expect(ensurePaperNotes).toHaveBeenCalledTimes(2);
     expect(run.mock.calls.filter(([name]) => name === "required paper notes schema")).toHaveLength(2);
   });
+  it("waits and retries while Postgres reports recovery mode", async () => {
+    const recovery = Object.assign(
+      new Error("the database system is in recovery mode"),
+      { code: "57P03" },
+    );
+    const ensurePaperNotes = vi.fn()
+      .mockRejectedValueOnce(recovery)
+      .mockRejectedValueOnce(recovery)
+      .mockResolvedValue(false);
+    const sleep = vi.fn(async () => undefined);
+    const run = vi.fn(async (_name: string, step: () => Promise<unknown>) => step());
+    const unchanged = async () => false;
+
+    await runRequiredSchemaStartup({
+      run,
+      sleep,
+      ensurePaperNotes,
+      ensureInboundCalling: unchanged,
+      ensureGoogleWorkspace: unchanged,
+      ensureLeadIntake: unchanged,
+      ensureLegAssignment: unchanged,
+      ensureEventReviewDismissals: unchanged,
+      ensureFollowUpDismissals: unchanged,
+      ensureOrganizerFeedback: unchanged,
+      ensureComputerCalling: unchanged,
+      ensureOfficeCoordinator: unchanged,
+      ensureBoss: unchanged,
+      ensureWebsiteInquiries: unchanged,
+      ensureProfileFiller: unchanged,
+      ensureProfileTouch: unchanged,
+      ensureDesignStudio: unchanged,
+      ensureBusinessDocuments: unchanged,
+    });
+
+    expect(ensurePaperNotes).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1_000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 2_000);
+  });
+
 });
