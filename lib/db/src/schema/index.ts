@@ -3211,3 +3211,5 @@ export const contractCoiDrafts = pgTable("contract_coi_drafts", {
   check("contract_coi_drafts_attempt_nonnegative", sql`${table.attemptCount} >= 0`),
   check("contract_coi_drafts_created_ids_valid", sql`${table.state} <> 'created' or (${table.gmailDraftId} is not null and ${table.gmailMessageId} is not null and ${table.completedAt} is not null)`),
 ]);
+
+export * from "../boss-work-request-schema";
