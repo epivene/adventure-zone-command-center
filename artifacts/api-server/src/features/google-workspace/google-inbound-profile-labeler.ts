@@ -27,6 +27,7 @@ type SqlPool = {
 type SyncFactory = () => Promise<{
   connectionId: string;
   service: GoogleProfileLabelSyncServicePort;
+  ensureHierarchy(): Promise<void>;
 }>;
 
 export class GoogleInboundProfileLabeler {
@@ -53,6 +54,9 @@ export class GoogleInboundProfileLabeler {
       const resolver = new GoogleProfileLabelResolver(labels, connection.client);
       return {
         connectionId: connection.connectionId,
+        ensureHierarchy: async () => {
+          await resolver.ensureHierarchy();
+        },
         service: new GoogleProfileLabelSyncService({
           enabled: readGoogleProfileLabelConfig().enabled,
           mutations,
@@ -73,8 +77,9 @@ export class GoogleInboundProfileLabeler {
       (message.labelIds.includes("INBOX") || message.labelIds.includes("UNREAD"))
     );
     const dueMutationIds = await this.dueMutationIds();
-    if (!candidates.length && !dueMutationIds.length) return;
     const sync = await this.syncFactory();
+    await sync.ensureHierarchy();
+    if (!candidates.length && !dueMutationIds.length) return;
     for (const mutationId of dueMutationIds) {
       await sync.service.retry(mutationId);
     }
