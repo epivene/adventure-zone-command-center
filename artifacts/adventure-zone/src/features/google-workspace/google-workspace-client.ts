@@ -450,6 +450,22 @@ export async function getGoogleProfileEmailThread(
   );
 }
 
+export async function replyToGoogleProfileEmail(
+  organizationId: string,
+  conversationId: string,
+  bodyText: string,
+): Promise<GoogleThreadDetail> {
+  return responseJson<GoogleThreadDetail>(
+    await apiFetch(
+      `/google-workspace/profiles/${encodeURIComponent(organizationId)}/email-conversations/${encodeURIComponent(conversationId)}/reply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ bodyText }),
+      },
+    ),
+  );
+}
+
 export async function copyGoogleProfileThreadFiles(
   organizationId: string,
   threadId: string,
