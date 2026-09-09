@@ -84,6 +84,7 @@ const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCo
 const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
+const DriveBackupPage = lazy(() => import("@/pages/DriveBackupPage"));
 const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
 const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
 const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
@@ -395,6 +396,7 @@ function AdminProtectedApp() {
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/contracts" component={SettingsContractsPage} />
+          <Route path="/settings/google-workspace/backup"><DriveBackupPage /></Route>
           <Route path="/settings/google-workspace"><SettingsGoogleWorkspacePage /></Route>
           <Route path="/settings/act-migration" component={ActMigrationPage} />
           <Route path="/settings/act-recovery" component={ActRecoveryPage} />
