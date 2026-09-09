@@ -111,6 +111,20 @@ describe("template review regression", () => {
     expect(await state(bad)).toBe("waiting_on_dave");
     expect((await db.query("SELECT body_format FROM communication_templates")).rows[0].body_format).toBe("plain_text");
   });
+  it("does not overwrite an edit arriving between candidate selection and repair", async () => {
+    const {boss,template}=await fixture();
+    const good=await review(template,boss,"html","<div>Old</div>");
+    const bad=await review(template,boss,"plain_text","<div>Code copy</div>");
+    // Stage a competing edit at the migration's two-statement boundary.
+    const boundary=repairSql.indexOf("-- Apply only candidates");
+    expect(boundary).toBeGreaterThan(0);
+    await db.exec(repairSql.slice(0,boundary));
+    await db.query("UPDATE communication_templates SET body_template='<div>New unsent edit</div>' WHERE id=$1",[template]);
+    await db.exec(repairSql.slice(boundary));
+    expect(await state(good)).toBe("waiting_on_dave");
+    expect(await state(bad)).toBe("waiting_on_dave");
+    expect((await db.query("SELECT body_template FROM communication_templates")).rows[0].body_template).toBe("<div>New unsent edit</div>");
+  });
   it("reduces all seven campaign pairs from fourteen open cards to seven without deleting snapshots", async () => {
     const {boss,template}=await fixture();
     const codes=["convention_before_general_v2","convention_before_new_event_v2","convention_before_past_event_v2",
