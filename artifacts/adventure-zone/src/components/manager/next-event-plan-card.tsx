@@ -51,7 +51,7 @@ export function NextEventPlanCard({ event, onSelect, route = null }: {
           <p className="text-xs font-bold uppercase tracking-wide text-orange-800">Next event</p>
           <h2 id="next-event-planning-title" className="mt-1 font-bold">{event.bookingName}</h2>
           <p className="text-sm text-slate-700">{location}</p>
-          <EventScheduleWindow startsAt={event.startsAt} endsAt={event.endsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" />
+          <EventScheduleWindow startsAt={event.startsAt} endsAt={event.endsAt} operationalStartsAt={event.operationalStartsAt} operationalEndsAt={event.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" />
         </button>
         {directionsUrl ? <a
           className="button-primary inline-flex w-full shrink-0 items-center justify-center sm:w-auto"
