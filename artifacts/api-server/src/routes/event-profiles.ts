@@ -1,3 +1,5 @@
+import { OutreachError } from "@/features/outreach-planner/outreach-repository";
+import { commitmentTransaction, reconcileCapacityFacts, type AllocationTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -197,7 +199,7 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
   const now = new Date();
   try {
     await db.execute(sql.raw("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS description text"));
-    const profileId = await db.transaction(async (transaction) => {
+    const createProfile = async (transaction: AllocationTransaction) => {
       let organizationId = parsed.data.event.id;
       let eventCity = parsed.data.event.city.trim();
       let eventRegion = parsed.data.event.region.trim().toUpperCase();
@@ -296,10 +298,19 @@ router.post("/event-profiles", async (req, res): Promise<void> => {
         await transaction.insert(followUps).values({ bookingId: booking.id, organizationId, contactId: primaryContactId ?? null, kind: parsed.data.booking.nextActionKind.trim() || "call", dueAt, createdAt: now, updatedAt: now });
       }
       return organizationId;
-    });
+    };
+    // Only the authenticated assistant router can set this server-side marker.
+    const provenance = res.locals.assistantImportProvenance;
+    const profileId = provenance
+      ? await reconcileCapacityFacts(db, "assistant-history-import", createProfile, { provenance })
+      : await commitmentTransaction(db, createProfile);
     res.status(201).json({ ok: true, profileId });
   } catch (error) {
     req.log.error({ err: error }, "Failed to create event profile");
+    if (error instanceof OutreachError) {
+      res.status(error.status).json({ ok: false, error: error.message });
+      return;
+    }
     if (error instanceof Error && ["PARENT_ORGANIZATION_NOT_FOUND", "PARENT_ORGANIZATION_INVALID", "ORGANIZATION_CREATE_REQUIRES_NEW_PROFILE"].includes(error.message)) {
       res.status(error.message === "PARENT_ORGANIZATION_NOT_FOUND" ? 400 : 409).json({ ok: false, error: "That organization can no longer accept this event. Refresh and try again." });
       return;

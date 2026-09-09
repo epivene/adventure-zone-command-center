@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -55,7 +56,7 @@ router.post("/event-profiles/:id/research-intake-context", async (req, res): Pro
   const endsAt = parsed.data.endsAt ? parseBusinessDateInput(parsed.data.endsAt) : null;
 
   try {
-    const result = await db.transaction(async (transaction) => {
+    const result = await commitmentTransaction(db, async (transaction) => {
       const [profile] = await transaction
         .select({ id: organizations.id, website: organizations.website })
         .from(organizations)

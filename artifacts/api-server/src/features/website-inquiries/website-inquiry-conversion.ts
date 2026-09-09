@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { and, asc, eq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { z } from "zod";
@@ -384,7 +385,7 @@ export class DrizzleWebsiteInquiryConversionRepository
   runTransaction<T>(
     operation: (transaction: WebsiteInquiryConversionTransaction) => Promise<T>,
   ): Promise<T> {
-    return this.database.transaction(async (transaction) =>
+    return commitmentTransaction(this.database, async (transaction) =>
       operation({
         getInquiryForUpdate: async (id) => {
           const [inquiry] = await transaction

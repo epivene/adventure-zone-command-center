@@ -1,3 +1,4 @@
+import { beginRawCapacityReconciliation, finishRawCapacityReconciliation } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
 export type ManagerLegMatch = {
@@ -361,6 +362,7 @@ implements BlandingKristyStateCorrectionRepository {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await beginRawCapacityReconciliation(client,"verified-historic-state-correction");
       const locked = await client.query<
         Omit<BookingRow, "gmail_thread_linked" | "contact_emails">
       >(
@@ -499,6 +501,7 @@ implements BlandingKristyStateCorrectionRepository {
           input.contacts.map((contact) => contact.email),
         ],
       );
+      await finishRawCapacityReconciliation(client,"verified-historic-state-correction");
       await client.query("COMMIT");
 
       const wasCurrent =

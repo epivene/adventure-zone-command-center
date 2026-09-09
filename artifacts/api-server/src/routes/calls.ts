@@ -1,3 +1,4 @@
+import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -87,6 +88,7 @@ router.get("/calls/caller-finder", requireAssistedCalling, async (req, res): Pro
     });
     res.json(result);
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to find caller");
     res.status(500).json({ error: "Failed to find caller" });
   }
@@ -104,6 +106,7 @@ router.post("/calls/quick-caller", requireAssistedCalling, async (req, res): Pro
     }
     res.status(result.ok ? 201 : 200).json(result);
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to create quick caller");
     res.status(500).json({ ok: false, error: "Could not create caller" });
   }
@@ -144,6 +147,7 @@ router.get("/calls/workspace", requireAssistedCalling, async (req, res): Promise
       guidedScriptOverrides,
     });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to load call workspace");
     res.status(500).json({ error: "Failed to load call workspace" });
   }
@@ -171,6 +175,7 @@ router.post("/calls/complete", requireAssistedCalling, async (req, res): Promise
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to complete call");
     res.status(500).json({ ok: false, error: "Server error" });
   }

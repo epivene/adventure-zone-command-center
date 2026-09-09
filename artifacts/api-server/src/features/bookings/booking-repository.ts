@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { err, ok, type Result } from "@/lib/result";
 import type { db as database } from "@/db/client";
@@ -159,7 +161,7 @@ export interface BookingTransaction {
 
 export interface BookingRepository {
   createBooking(input: Omit<Booking, "id">): Promise<Booking>;
-  transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T>;
+  transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>, followUpId?: string): Promise<T>;
 }
 
 type DrizzleDatabase = typeof database;
@@ -298,14 +300,18 @@ export class DrizzleBookingRepository implements BookingRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
   async createBooking(input: Omit<Booking, "id">): Promise<Booking> {
-    const [booking] = await this.database.insert(bookings).values(input).returning();
-    if (!booking) throw new Error("Could not create booking.");
-    return toBooking(booking);
+    return commitmentTransaction(this.database, async tx => {
+      const [booking] = await tx.insert(bookings).values(input).returning();
+      if (!booking) throw new Error("Could not create booking.");
+      return toBooking(booking);
+    });
   }
 
-  transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>): Promise<T> {
-    return this.database.transaction((transaction) =>
+  async transaction<T>(operation: (transaction: BookingTransaction) => Promise<T>, followUpId?: string): Promise<T> {
+    const context=allocationEnabled() && followUpId ? (await this.database.select({bookingId:followUps.bookingId}).from(followUps).where(eq(followUps.id,followUpId)).limit(1))[0] : null;
+    return commitmentTransaction(this.database, (transaction) =>
       operation(new DrizzleBookingTransaction(transaction)),
+      {source:"booking-follow-up",bookingIds:context?.bookingId?[context.bookingId]:[]},
     );
   }
 
@@ -313,7 +319,7 @@ export class DrizzleBookingRepository implements BookingRepository {
     followUpId: string,
     input: { kind: string; dueAt: Date },
   ): Promise<Result<FollowUpRecord, FollowUpError>> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const [followUp] = await transaction
         .select()
         .from(followUps)
@@ -333,7 +339,7 @@ export class DrizzleBookingRepository implements BookingRepository {
   }
 
   async deleteFollowUp(followUpId: string): Promise<Result<void, FollowUpError>> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const [followUp] = await transaction
         .select()
         .from(followUps)
@@ -622,7 +628,7 @@ export class DrizzleBookingRepository implements BookingRepository {
     input: BookingEditInput,
     now: Date = new Date(),
   ): Promise<Booking | null> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const [before] = await transaction
         .select()
         .from(bookings)
@@ -670,6 +676,6 @@ export class DrizzleBookingRepository implements BookingRepository {
       });
 
       return toBooking(updated);
-    });
+    }, {source:"booking-details",bookingIds:[bookingId]});
   }
 }

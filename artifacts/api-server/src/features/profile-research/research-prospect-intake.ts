@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { eq } from "drizzle-orm";
 
 import { db } from "@workspace/db";
@@ -153,7 +154,7 @@ class DrizzleResearchProspectStore implements ResearchProspectStore {
     const nextDueAt = parseBusinessDateInput(input.booking.nextActionDueAt);
     if (!nextDueAt) throw new Error("RESEARCH_PROSPECT_FOLLOW_UP_REQUIRED");
 
-    return db.transaction(async (transaction) => {
+    return commitmentTransaction(db, async (transaction) => {
       const [organization] = await transaction.insert(organizations).values({
         name: input.accepted.name,
         city: input.accepted.city,

@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { beginRawCapacityReconciliation, finishRawCapacityReconciliation } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
 const advisoryTryLockSql =
@@ -63,8 +65,13 @@ export async function ensureLegAssignmentSchemaBeforeListen(options?: {
     const result = await client.query(advisoryTryLockSql);
     locked = result.rows[0]?.locked === true;
     if (!locked) throw new Error("LEG_ASSIGNMENT_SCHEMA_LOCK_BUSY");
+    if(allocationEnabled()) {await client.query("BEGIN");await beginRawCapacityReconciliation(client,"operational-window-backfill");}
     await client.query(ensureSchemaSql);
+    if(allocationEnabled()) {await finishRawCapacityReconciliation(client,"operational-window-backfill");await client.query("COMMIT");}
     return true;
+  } catch(error) {
+    if(allocationEnabled()) await client.query("ROLLBACK");
+    throw error;
   } finally {
     if (locked) await client.query(advisoryUnlockSql).catch(() => undefined);
     client.release();

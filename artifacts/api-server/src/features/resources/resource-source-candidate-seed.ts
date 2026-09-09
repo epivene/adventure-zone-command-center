@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
@@ -128,7 +129,7 @@ export async function ensureResourceSourceCandidateSeed(database: Database): Pro
       continue;
     }
 
-    await database.execute(sql`
+    await reconcileCapacityFacts(database,"resource-inventory",async tx=>tx.execute(sql`
       update resources
       set
         year_built = coalesce(year_built, ${sourceAsset.yearBuilt}),
@@ -137,7 +138,7 @@ export async function ensureResourceSourceCandidateSeed(database: Database): Pro
         serial_number = coalesce(serial_number, ${sourceAsset.serialNumber}),
         updated_at = now()
       where id = ${resource.id}::uuid
-    `);
+    `));
 
     await database
       .update(resourceSourceCandidates)

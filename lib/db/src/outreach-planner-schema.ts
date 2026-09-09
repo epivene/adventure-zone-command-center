@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import {
   pgTable,
+  bigint,
+  boolean,
+  doublePrecision,
   uuid,
   text,
   integer,
@@ -10,7 +13,7 @@ import {
   uniqueIndex,
   check,
 } from "drizzle-orm/pg-core";
-import { travelLegs, bookings } from "./schema";
+import { travelLegs, bookings, resources } from "./schema";
 import { bookingOpportunities } from "./booking-opportunity-schema";
 const created = () =>
   timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -214,3 +217,46 @@ export const outreachHolds = pgTable(
     ),
   ],
 );
+
+export const outreachWriteReceipts = pgTable("outreach_write_receipts", {
+  transactionId: bigint("transaction_id", { mode: "bigint" }).primaryKey(),
+  mode: text("mode").notNull(),
+  source: text("source").notNull(),
+  validated: boolean("validated").notNull().default(false),
+  dirty: boolean("dirty").notNull().default(false),
+  createdAt: created(),
+});
+export const outreachReconciliationFacts = pgTable(
+  "outreach_reconciliation_facts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    source: text("source").notNull(),
+    actor: text("actor").notNull(),
+    reason: text("reason").notNull(),
+    bookingIds: jsonb("booking_ids").$type<string[]>().notNull(),
+    factsFingerprint: text("facts_fingerprint").notNull(),
+    state: text("state").notNull().default("needs_review"),
+    detail: jsonb("detail").notNull(),
+    createdAt: created(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+);
+export const outreachRouteAnchors = pgTable("outreach_route_anchors", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  legId: uuid("leg_id").references(() => travelLegs.id),
+  resourceId: uuid("resource_id").references(() => resources.id),
+  direction: text("direction").notNull(),
+  latitude: doublePrecision("latitude").notNull(),
+  longitude: doublePrecision("longitude").notNull(),
+  availableAt: timestamp("available_at", { withTimezone: true }).notNull(),
+  validUntil: timestamp("valid_until", { withTimezone: true }).notNull(),
+  source: text("source").notNull(),
+  reason: text("reason").notNull(),
+  actor: text("actor").notNull(),
+  identityFingerprint: text("identity_fingerprint").notNull(),
+  revision: integer("revision").notNull().default(1),
+  recordedAt: timestamp("recorded_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});

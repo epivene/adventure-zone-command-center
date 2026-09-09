@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq, ne } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
@@ -32,7 +33,7 @@ export async function applyChecklistConditionEffect(
     note: string;
   },
 ): Promise<void> {
-  await database.transaction(async (transaction) => {
+  await reconcileCapacityFacts(database, "resource-inventory",async (transaction) => {
     await transaction
       .insert(resourceConditionIssues)
       .values({

@@ -1,3 +1,10 @@
+import {
+  saveRouteAnchor,
+  reviewImportedClaimSource,
+  revokeRouteAnchor,
+  reconcileCommittedDemand,
+  changeCommitment,
+} from "./outreach-allocation-actions";
 import { hasActivePursuit } from "./outreach-active-pursuit";
 import { z } from "zod";
 import type { OutreachAllocation } from "./outreach-allocation";
@@ -86,6 +93,12 @@ export class OutreachService {
               h.state === "active" &&
               new Date(h.expires_at) > new Date(saved.checkedAt) &&
               new Date(h.expires_at) <= now,
+          ) &&
+          !(currentFacts?.anchors ?? []).some(
+            (a) =>
+              !a.revoked_at &&
+              new Date(a.valid_until) > new Date(saved.checkedAt) &&
+              new Date(a.valid_until) <= now,
           ) &&
           !!saved.provenance.calendarExpiresAt &&
           new Date(saved.provenance.calendarExpiresAt) > now;
@@ -280,6 +293,21 @@ export class OutreachService {
         "Allocation evidence provider is unavailable.",
       );
     return this.allocation;
+  }
+  async reviewImportedClaimSource(id: string, body: unknown, actor: string) {
+    return reviewImportedClaimSource(this.requireAllocation(), id, body, actor);
+  }
+  async saveRouteAnchor(body: unknown, actor: string) {
+    return saveRouteAnchor(this.requireAllocation(), body, actor);
+  }
+  async revokeRouteAnchor(id: string, body: unknown, actor: string) {
+    return revokeRouteAnchor(this.requireAllocation(), id, body, actor);
+  }
+  async reconcileCommittedDemand(id: string, body: unknown, actor: string) {
+    return reconcileCommittedDemand(this.requireAllocation(), id, body, actor);
+  }
+  async changeCommitment(id: string, body: unknown, actor: string) {
+    return changeCommitment(this.requireAllocation(), id, body, actor);
   }
   async allocations() {
     return this.requireAllocation().list();

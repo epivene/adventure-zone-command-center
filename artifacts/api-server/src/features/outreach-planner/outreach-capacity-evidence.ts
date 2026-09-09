@@ -146,13 +146,117 @@ export type AllocationFacts = {
   }[];
   demands: DemandFact[];
   holds: HoldFact[];
+  anchors?: RouteAnchorFact[];
+  unverifiedClaims?: {
+    id: string;
+    booking_ids: string[];
+    detail: {
+      changes?: {
+        bookingId: string;
+        before: ImportedBookingClaim | null;
+        after: ImportedBookingClaim | null;
+      }[];
+    };
+  }[];
 };
+type ImportedBookingClaim = Pick<
+  BookingFact,
+  "id" | "status" | "probability" | "starts_at" | "ends_at" | "travel_leg_id"
+> & {
+  windows?: AllocationFacts["windows"];
+  assignments?: AllocationFacts["assignments"];
+  demand?: DemandFact;
+};
+export type RouteAnchorFact = {
+  id: string;
+  leg_id: string | null;
+  resource_id: string | null;
+  direction: "departure" | "return";
+  latitude: number;
+  longitude: number;
+  available_at: string;
+  valid_until: string;
+  recorded_at: string;
+  revoked_at: string | null;
+  source: string;
+  reason: string;
+  actor: string;
+  identity_fingerprint: string;
+  revision: number;
+};
+export function anchorIdentity(
+  f: AllocationFacts,
+  a: Pick<RouteAnchorFact, "leg_id" | "resource_id">,
+) {
+  return fingerprint(
+    a.resource_id
+      ? f.resources.find((r) => r.id === a.resource_id)
+      : f.legs.find((l) => l.id === a.leg_id),
+  );
+}
+// Canonical semantic projection excludes generated selection/assignment row IDs
+// and write timestamps. Source identities and meaningful configuration remain.
+export function semanticAllocationFacts(f: AllocationFacts): AllocationFacts {
+  const pick = (value: unknown, keys: string[]) =>
+    Object.fromEntries(
+      keys.map((k) => [k, (value as Record<string, unknown>)[k] ?? null]),
+    );
+  const configuration = (value: unknown) =>
+    Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).filter(
+        ([k]) => !["created_at", "updated_at"].includes(k),
+      ),
+    );
+  const normalize = (value: unknown): unknown =>
+    Array.isArray(value)
+      ? value.map(normalize)
+      : value && typeof value === "object"
+        ? Object.fromEntries(
+            Object.entries(value).map(([k, v]) => [
+              k,
+              typeof v === "string" &&
+              k.endsWith("_at") &&
+              !Number.isNaN(Date.parse(v))
+                ? new Date(v).toISOString()
+                : normalize(v),
+            ]),
+          )
+        : value;
+  return normalize({
+    ...f,
+    windows: f.windows.map((x) =>
+      pick(x, ["booking_id", "starts_at", "ends_at", "source"]),
+    ),
+    selections: f.selections.map((x) =>
+      pick(x, ["booking_id", "package_template_id"]),
+    ),
+    assignments: f.assignments.map((x) =>
+      pick(x, ["booking_id", "resource_id"]),
+    ),
+    packages: f.packages.map(configuration),
+    resources: f.resources.map(configuration),
+    legs: f.legs.map(configuration),
+    mirrors: f.mirrors.map((x) =>
+      pick(x, [
+        "booking_id",
+        "calendar_id",
+        "google_event_id",
+        "package_key",
+        "reserved_starts_at",
+        "reserved_ends_at",
+        "last_error_code",
+        "last_synced_at",
+      ]),
+    ),
+  }) as AllocationFacts;
+}
 // One SQL statement gives a consistent read. Secrets from Google connection rows are never selected.
 export async function loadAllocationFacts(
   db: QueryDatabase,
 ): Promise<AllocationFacts> {
-  return rowsOf<{ facts: AllocationFacts }>(
-    await db.execute(sql`select jsonb_build_object(
+  return semanticAllocationFacts(
+    rowsOf<{ facts: AllocationFacts }>(
+      await db.execute(sql`select jsonb_build_object(
     'generation',(select generation from outreach_allocation_mutex where id=1),
     'bookings',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select id,name,starts_at,ends_at,status,probability,travel_leg_id,latitude,longitude from bookings) t),
     'windows',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id),'[]') from booking_operational_windows t),
@@ -164,9 +268,12 @@ export async function loadAllocationFacts(
     'mirrors',(select coalesce(jsonb_agg(to_jsonb(t) order by t.calendar_id,t.google_event_id),'[]') from google_operational_calendar_links t),
     'calendars',(select coalesce(jsonb_agg(to_jsonb(t) order by t.calendar_id,t.connection_id),'[]') from (select s.calendar_id,s.connection_id,s.updated_at from google_workspace_calendar_scopes s join google_workspace_connections c on c.id=s.connection_id where s.selected=true and c.status='connected') t),
     'demands',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id),'[]') from outreach_booking_demand t),
-    'holds',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from outreach_holds t)
+    'holds',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from outreach_holds t),
+    'anchors',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from outreach_route_anchors t),
+    'unverifiedClaims',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select id,booking_ids,detail from outreach_reconciliation_facts where source='assistant-history-import' and state='needs_review') t)
   ) as facts`),
-  )[0].facts;
+    )[0].facts,
+  );
 }
 export function bookingDemandFacts(
   f: AllocationFacts,
@@ -472,6 +579,76 @@ export function projectReservations(
     });
     projection.stops.push({ ...x, bookingId: `hold:${h.id}` });
   }
+  if (f.unverifiedClaims?.length) {
+    // Leg and physical-resource histories are independent. A later equipment
+    // stop on another leg cannot hide an unresolved claim on the target leg,
+    // nor can one resource's nearer stop hide another resource's source history.
+    const claimLegCorridor = adjacentStops(
+      target,
+      projection.stops.filter((s) => s.legId === target.legId),
+    );
+    const claimResourceCorridors = new Map(
+      target.resourceIds.map((id) => [
+        id,
+        adjacentStops(
+          target,
+          projection.stops.filter((s) => s.resourceIds.includes(id)),
+        ),
+      ]),
+    );
+    for (const claim of f.unverifiedClaims ?? []) {
+      const changes = claim.detail.changes ?? [];
+      if (!changes.length && claim.booking_ids.length)
+        projection.reasons.push(
+          `Imported claim ${claim.id} has no reviewed source facts.`,
+        );
+      for (const change of changes)
+        for (const b of [change.before, change.after]) {
+          if (!b || !isBookedForSchedule(b)) continue;
+          let relevant =
+            b.id === target.bookingId || !b.starts_at || !b.ends_at;
+          if (b.starts_at && b.ends_at) {
+            const startsOn = [
+              addDays(day(b.starts_at), -2),
+              ...(b.windows ?? []).map((w) => day(w.starts_at)),
+            ].sort()[0];
+            const endsOn = [
+              addDays(day(b.ends_at), 1),
+              ...(b.windows ?? []).map((w) => addDays(day(w.ends_at), -1)),
+            ]
+              .sort()
+              .at(-1)!;
+            relevant ||= overlaps(target, { startsOn, endsOn });
+            // Inspect both snapshots independently, preserving the union of
+            // legacy physical assignments and any reviewed exact-demand IDs.
+            const resourceIds = new Set([
+              ...(b.assignments ?? []).map((a) => a.resource_id),
+              ...(b.demand?.resource_ids ?? []),
+            ]);
+            const corridors = [
+              ...(b.travel_leg_id === target.legId ? [claimLegCorridor] : []),
+              ...[...resourceIds].flatMap((id) => {
+                const corridor = claimResourceCorridors.get(id);
+                return corridor ? [corridor] : [];
+              }),
+            ];
+            relevant ||= corridors.some(
+              (adjacent) =>
+                (endsOn < target.startsOn &&
+                  (!adjacent.previous.length ||
+                    adjacent.previous.some((s) => endsOn >= s.endsOn))) ||
+                (startsOn > target.endsOn &&
+                  (!adjacent.next.length ||
+                    adjacent.next.some((s) => startsOn <= s.startsOn))),
+            );
+          }
+          if (relevant)
+            projection.reasons.push(
+              `Imported commitment claim ${claim.id} needs independent owner source review; recording exact demand does not verify its provenance.`,
+            );
+        }
+    }
+  }
   return projection;
 }
 export type ExternalEvidence = {
@@ -546,6 +723,37 @@ function adjacentLocationDisagrees(stops: AllocationTarget[]) {
   return new Set(stops.map((s) => fingerprint([s.legId, s.location]))).size > 1;
 }
 
+function routeAnchor(
+  f: AllocationFacts,
+  target: AllocationTarget,
+  direction: RouteAnchorFact["direction"],
+  resourceId: string | undefined,
+  now: Date,
+) {
+  const anchors = (f.anchors ?? []).filter(
+    (a) =>
+      !a.revoked_at &&
+      new Date(a.recorded_at) <= now &&
+      new Date(a.valid_until) > now &&
+      day(a.valid_until) >= target.endsOn &&
+      a.identity_fingerprint === anchorIdentity(f, a) &&
+      (resourceId
+        ? a.resource_id === resourceId
+        : a.leg_id === target.legId && !a.resource_id) &&
+      a.direction === direction,
+  );
+  // A route anchor is a current physical fact, not an optional optimistic stop.
+  // A later replacement supersedes the old source through the audited action.
+  if (
+    new Set(
+      anchors.map((a) =>
+        fingerprint([a.available_at, a.latitude, a.longitude]),
+      ),
+    ).size > 1
+  )
+    return null;
+  return anchors[0] ?? null;
+}
 export function reconcileCalendar(
   f: AllocationFacts,
   target: AllocationTarget,
@@ -567,8 +775,22 @@ export function reconcileCalendar(
     ),
   ];
   const travelScope = { ...target };
-  for (const route of corridors) {
+  for (const [index, route] of corridors.entries()) {
     const { previous, next } = adjacentStops(target, route);
+    for (const direction of ["departure", "return"] as const) {
+      const anchor = routeAnchor(
+        f,
+        target,
+        direction,
+        index ? target.resourceIds[index - 1] : undefined,
+        new Date(external.checkedAt),
+      );
+      if (anchor) {
+        const on = day(anchor.available_at);
+        if (on < travelScope.startsOn) travelScope.startsOn = on;
+        if (on > travelScope.endsOn) travelScope.endsOn = on;
+      }
+    }
     if (adjacentLocationDisagrees(previous) || adjacentLocationDisagrees(next))
       reasons.push(
         "Equally adjacent Calendar route stops disagree on physical location or leg; reconcile the source facts.",
@@ -688,6 +910,7 @@ export async function verifyTravel(
   target: AllocationTarget,
   projection: Projection,
   estimator: DriveTimeEstimator,
+  now: Date = new Date(),
 ): Promise<string[]> {
   const reasons: string[] = [];
   const estimates = new Map<string, Promise<number | null>>();
@@ -721,12 +944,67 @@ export async function verifyTravel(
     }
     // Equal-boundary stops may share a proven location/leg. Only after that
     // consistency check is one representative sufficient for the travel gap.
-    const previous = adjacent.previous[0];
-    const next = adjacent.next[0];
-    // Initial/final depot transport has no authoritative source in the current model.
-    if (!previous || !next) {
+    let previous: AllocationTarget | undefined = adjacent.previous[0];
+    let next: AllocationTarget | undefined = adjacent.next[0];
+    for (const direction of ["departure", "return"] as const) {
+      const recorded = (f.anchors ?? []).some(
+        (a) =>
+          !a.revoked_at &&
+          a.direction === direction &&
+          (resourceId
+            ? a.resource_id === resourceId
+            : a.leg_id === target.legId && !a.resource_id),
+      );
+      if (recorded && !routeAnchor(f, target, direction, resourceId, now)) {
+        reasons.push(
+          "Recorded route anchor is stale, outside its verified period, or contradictory; reconcile its actual location and availability.",
+        );
+        return;
+      }
+    }
+    let origin = routeAnchor(f, target, "departure", resourceId, now);
+    let destination = routeAnchor(f, target, "return", resourceId, now);
+    for (const [stop, anchor, direction] of [
+      [previous, origin, "departure"],
+      [next, destination, "return"],
+    ] as const) {
+      if (!stop || !anchor) continue;
+      const boundary = new Date(
+        `${direction === "departure" ? addDays(stop.endsOn, 1) : stop.startsOn}T00:00:00Z`,
+      ).getTime();
+      if (
+        boundary === new Date(anchor.available_at).getTime() &&
+        fingerprint(stop.location) !==
+          fingerprint({
+            latitude: anchor.latitude,
+            longitude: anchor.longitude,
+          })
+      ) {
+        reasons.push(
+          "Route anchor and adjacent event disagree on the physical location at the same time.",
+        );
+        return;
+      }
+    }
+    if (
+      origin &&
+      (!previous ||
+        new Date(origin.available_at) >=
+          new Date(`${addDays(previous.endsOn, 1)}T00:00:00Z`))
+    )
+      previous = undefined;
+    else origin = null;
+    if (
+      destination &&
+      (!next ||
+        new Date(destination.available_at) <=
+          new Date(`${next.startsOn}T00:00:00Z`))
+    )
+      next = undefined;
+    else destination = null;
+    if ((!previous && !origin) || (!next && !destination)) {
       reasons.push(
-        `${resourceId ? `Resource ${resourceId}` : "Leg"} needs both adjacent route locations to verify travel.`,
+        `${resourceId ? `Resource ${resourceId}` : "Leg"} needs both adjacent route locations or current audited departure/return anchors to verify travel.`,
       );
       return;
     }
@@ -739,15 +1017,25 @@ export async function verifyTravel(
       endsAt: new Date(`${addDays(s.endsOn, 1)}T00:00:00Z`),
     });
     if (
-      [previous, next].some(
-        (s) =>
-          !Number.isFinite(s.location.latitude) ||
-          !Number.isFinite(s.location.longitude),
-      )
+      [previous, next]
+        .filter((s): s is AllocationTarget => Boolean(s))
+        .some(
+          (s) =>
+            !Number.isFinite(s.location.latitude) ||
+            !Number.isFinite(s.location.longitude),
+        )
     ) {
       reasons.push("Adjacent stop location is missing.");
       return;
     }
+    const anchorStop = (a: RouteAnchorFact) => ({
+      bookingId: `anchor:${a.id}`,
+      name: a.source,
+      latitude: a.latitude,
+      longitude: a.longitude,
+      startsAt: new Date(a.available_at),
+      endsAt: new Date(a.available_at),
+    });
     const result = await evaluateLegFeasibility({
       target: {
         ...toStop(target),
@@ -755,8 +1043,8 @@ export async function verifyTravel(
         status: "proposed",
         travelLegId: target.legId,
       },
-      previousStop: toStop(previous),
-      nextStop: toStop(next),
+      previousStop: previous ? toStop(previous) : anchorStop(origin!),
+      nextStop: next ? toStop(next) : anchorStop(destination!),
       estimator: freshEstimator,
     });
     if (!result.eligible) reasons.push(result.reason);
@@ -764,8 +1052,8 @@ export async function verifyTravel(
       const resource = f.resources.find((r) => r.id === resourceId)!;
       if (
         !resource.movable &&
-        (previous.legId !== target.legId ||
-          next.legId !== target.legId ||
+        ((previous && previous.legId !== target.legId) ||
+          (next && next.legId !== target.legId) ||
           resource.normal_travel_leg_id !== target.legId)
       )
         reasons.push(

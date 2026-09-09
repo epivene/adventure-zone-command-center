@@ -267,3 +267,149 @@ describe("allocation package identity and fresh routing", () => {
     ).toBe(60);
   });
 });
+
+describe("pending claims on independent route corridors", () => {
+  it.each(
+    (["previous", "next"] as const).flatMap((direction) =>
+      (["leg", "resource", "second-resource"] as const).flatMap((corridor) =>
+        (["nearer", "tied"] as const).map((boundary) => ({
+          direction,
+          corridor,
+          boundary,
+        })),
+      ),
+    ),
+  )(
+    "retains $direction $corridor claims at $boundary boundaries regardless of stop order",
+    async ({ direction, corridor, boundary }) => {
+      const { target, facts } = tiedStops(direction);
+      target.resourceIds.push("second-resource");
+      facts.resources.push({ ...facts.resources[0], id: "second-resource" });
+      const now = new Date("2026-08-01T00:00:00Z");
+      facts.holds = ["leg", "resource", "second-resource"].flatMap((route) =>
+        (["previous", "next"] as const).map((side): HoldFact => {
+          const matching = route === corridor;
+          const startsOn =
+            side === "previous"
+              ? matching
+                ? "2026-05-01"
+                : "2026-09-01"
+              : matching
+                ? boundary === "tied"
+                  ? "2026-11-29"
+                  : "2027-02-01"
+                : "2026-11-01";
+          const endsOn =
+            side === "previous"
+              ? matching
+                ? boundary === "tied"
+                  ? "2026-07-03"
+                  : "2026-05-02"
+                : "2026-09-02"
+              : matching
+                ? "2027-02-02"
+                : "2026-11-02";
+          return {
+            id: `${route}-${side}`,
+            candidate_id: "candidate",
+            booking_id: `${route}-${side}`,
+            opportunity_id: "opportunity",
+            leg_id: route === "leg" ? target.legId : `${route}-other-leg`,
+            event_starts_on: startsOn,
+            event_ends_on: endsOn,
+            starts_on: startsOn,
+            ends_on: endsOn,
+            quantities: target.quantities,
+            resource_ids: route === "leg" ? [] : [route],
+            location: target.location,
+            demand_fingerprint: "reviewed",
+            revision: 1,
+            state: "active",
+            owner: "owner",
+            expires_at: "2026-08-02T00:00:00Z",
+            ended_at: null,
+          };
+        }),
+      );
+      if (boundary === "tied") {
+        const tied = facts.holds.find(
+          (h) => h.id === `${corridor}-${direction}`,
+        )!;
+        facts.holds.push({
+          ...tied,
+          id: "other-tied-stop",
+          booking_id: "other-tied-stop",
+          ...(direction === "previous"
+            ? { starts_on: "2026-04-01" }
+            : { ends_on: "2027-03-01" }),
+        });
+      }
+      const decide = async () => {
+        const projection = projectReservations(facts, target, now);
+        return capacityDecision(
+          target,
+          projection,
+          await verifyTravel(
+            facts,
+            target,
+            projection,
+            { estimateMinutes: async () => 60 },
+            now,
+          ),
+        );
+      };
+      expect((await decide()).status).toBe("fits");
+      const claim = {
+        id: "claim-booking",
+        status: "confirmed",
+        probability: null,
+        starts_at:
+          direction === "previous"
+            ? "2026-07-01T00:00:00Z"
+            : "2026-12-01T00:00:00Z",
+        ends_at:
+          direction === "previous"
+            ? "2026-07-02T00:00:00Z"
+            : "2026-12-02T00:00:00Z",
+        travel_leg_id: corridor === "leg" ? target.legId : "claim-other-leg",
+        assignments:
+          corridor === "leg"
+            ? []
+            : [{ booking_id: "claim-booking", resource_id: "second-resource" }],
+        demand: {
+          booking_id: "claim-booking",
+          quantities: target.quantities,
+          resource_ids: corridor === "leg" ? [] : ["resource"],
+          facts_fingerprint: "claim",
+          revision: 1,
+          actor: "source",
+          reason: "imported",
+          updated_at: now.toISOString(),
+        },
+      };
+      facts.unverifiedClaims = [
+        {
+          id: "pending-claim",
+          booking_ids: [claim.id],
+          detail: {
+            changes: [
+              {
+                bookingId: claim.id,
+                before: claim,
+                after: { ...claim, status: "cancelled" },
+              },
+            ],
+          },
+        },
+      ];
+      const forward = await decide();
+      facts.holds.reverse();
+      const reverse = await decide();
+      expect(forward).toEqual(reverse);
+      expect(forward.status).toBe("needs_review");
+      expect(forward.reasons.join(" ")).toContain(
+        "pending-claim needs independent owner source review",
+      );
+    },
+  );
+});

@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -101,7 +103,7 @@ export interface CallTransaction {
 }
 
 export interface CallRepository {
-  transaction<T>(operation: (transaction: CallTransaction) => Promise<T>): Promise<T>;
+  transaction<T>(operation: (transaction: CallTransaction) => Promise<T>, bookingId?: string | null, followUpId?: string | null): Promise<T>;
 }
 
 type DrizzleDatabase = typeof database;
@@ -427,7 +429,8 @@ class DrizzleCallTransaction implements CallTransaction {
 export class DrizzleCallRepository implements CallRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  transaction<T>(operation: (transaction: CallTransaction) => Promise<T>): Promise<T> {
-    return this.database.transaction((transaction) => operation(new DrizzleCallTransaction(transaction)));
+  async transaction<T>(operation: (transaction: CallTransaction) => Promise<T>, bookingId?: string | null, followUpId?: string | null): Promise<T> {
+    if(allocationEnabled() && !bookingId && followUpId) bookingId=(await this.database.select({bookingId:followUps.bookingId}).from(followUps).where(eq(followUps.id,followUpId)).limit(1))[0]?.bookingId;
+    return commitmentTransaction(this.database, (transaction) => operation(new DrizzleCallTransaction(transaction)), {source:"call-completion",bookingIds:bookingId?[bookingId]:[]});
   }
 }

@@ -56,6 +56,7 @@ const finalConnectionString = normalizeDatabaseConnectionString(connectionString
 
 export const pool = new Pool({
   connectionString: finalConnectionString,
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
   application_name: "adventure-zone-command-center-api",
   ...databasePoolTimeouts(),
 });
@@ -65,6 +66,7 @@ export const pool = new Pool({
 // leaving the main pool available to resolve labels and persist job state.
 export const gmailThreadLockPool = new Pool({
   connectionString: finalConnectionString,
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
   application_name: "adventure-zone-command-center-gmail-thread-lock",
   max: 2,
   ...databasePoolTimeouts(),

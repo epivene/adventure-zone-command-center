@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ConventionHistory } from "@/components/profiles/convention-history";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
@@ -225,6 +226,7 @@ export default function EventProfilePage() {
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
+        {!profileEditing && profileId ? <ConventionHistory profileId={profileId} /> : null}
         {!profileEditing && profileId ? <ProfileDocuments profileId={profileId} /> : null}
 
         {researchOpen && profileId ? <ProfileResearchPanel profileId={profileId} contactId={contactId ?? data.selectedContactId ?? null} onClose={() => setResearchOpen(false)} onApplied={loadProfile} /> : null}
@@ -286,3 +288,4 @@ export default function EventProfilePage() {
     </div>
   );
 }
+

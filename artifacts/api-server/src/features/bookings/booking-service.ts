@@ -154,6 +154,6 @@ export class BookingService {
       });
 
       return ok({ ...completed, nextFollowUpId });
-    });
+    }, input.status ? input.followUpId : undefined);
   }
 }

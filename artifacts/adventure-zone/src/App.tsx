@@ -82,6 +82,7 @@ const PaperNoteBatchReviewPage = lazy(() => import("@/pages/PaperNoteBatchReview
 const SettingsBusinessSourcesPage = lazy(() => import("@/pages/SettingsBusinessSourcesPage"));
 const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCommunicationTemplatesPage"));
 const DaveRequestsPage = lazy(() => import("@/pages/DaveRequestsPage"));
+const ConventionOutreachPage = lazy(() => import("@/pages/ConventionOutreachPage"));
 const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
@@ -342,6 +343,7 @@ function BossProtectedApp() {
         <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
         <Route path="/boss/work-requests/:requestId">{(params) => <BossWorkRequestPage requestId={params.requestId} />}</Route>
         <Route path="/boss"><BossHomePage /></Route>
+        <Route path="/boss/conventions"><ConventionOutreachPage boss /></Route>
       </Switch>
     </BossShell>
   );
@@ -360,6 +362,7 @@ function AdminProtectedApp() {
           <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
           <Route path="/email-review" component={EmailReviewPage} />
           <Route path="/dave-requests" component={DaveRequestsPage} />
+          <Route path="/conventions" component={ConventionOutreachPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>

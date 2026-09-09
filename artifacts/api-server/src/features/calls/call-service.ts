@@ -407,6 +407,6 @@ export class CallService {
         disposition: value.disposition,
         resultingBookingStatus: requestedBookingStatus ?? null,
       });
-    });
+    }, dispositionBookingStatus[value.disposition] || value.resultingBookingStatus || value.approvedBookingUpdates ? value.bookingId : null, dispositionBookingStatus[value.disposition] || value.resultingBookingStatus || value.approvedBookingUpdates ? value.followUpId : null);
   }
 }

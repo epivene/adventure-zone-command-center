@@ -525,6 +525,32 @@ const migrationFiles = [
       AND (SELECT count(*)=5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_booking_demand'),to_regclass(current_schema() || '.outreach_holds')))
       AS ready`,
   },
+  {
+    name: "20260909_outreach_commitments.sql",
+    markerSql: `SELECT
+      (SELECT count(*)=3 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('outreach_write_receipts','outreach_reconciliation_facts','outreach_route_anchors'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_write_receipts','transaction_id'),('outreach_write_receipts','mode'),('outreach_write_receipts','source'),('outreach_write_receipts','validated'),('outreach_write_receipts','dirty'),('outreach_write_receipts','created_at'),('outreach_reconciliation_facts','id'),('outreach_reconciliation_facts','source'),('outreach_reconciliation_facts','actor'),('outreach_reconciliation_facts','reason'),('outreach_reconciliation_facts','booking_ids'),('outreach_reconciliation_facts','facts_fingerprint'),('outreach_reconciliation_facts','state'),('outreach_reconciliation_facts','detail'),('outreach_reconciliation_facts','created_at'),('outreach_reconciliation_facts','resolved_at'),('outreach_route_anchors','id'),('outreach_route_anchors','leg_id'),('outreach_route_anchors','resource_id'),('outreach_route_anchors','direction'),('outreach_route_anchors','latitude'),('outreach_route_anchors','longitude'),('outreach_route_anchors','available_at'),('outreach_route_anchors','valid_until'),('outreach_route_anchors','source'),('outreach_route_anchors','reason'),('outreach_route_anchors','actor'),('outreach_route_anchors','identity_fingerprint'),('outreach_route_anchors','revision'),('outreach_route_anchors','recorded_at'),('outreach_route_anchors','revoked_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=11 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_write_receipts_mode_check','outreach_reconciliation_facts_state_check','outreach_route_anchors_direction_check','outreach_route_anchors_latitude_check','outreach_route_anchors_longitude_check','outreach_route_anchors_source_check','outreach_route_anchors_reason_check','outreach_route_anchors_check','outreach_route_anchors_check1','outreach_route_anchors_leg_id_fkey','outreach_route_anchors_resource_id_fkey'))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_anchors_identity_live','outreach_reconciliation_pending'))
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='outreach_capacity_validation' AND tgrelid=to_regclass(current_schema() || '.outreach_write_receipts'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('bookings'),('booking_operational_windows'),('booking_package_selections'),('booking_resource_assignments'),('booking_resource_package_attributions'),('package_templates'),('resources'),('travel_legs'),('google_operational_calendar_links'),('google_workspace_calendar_scopes'),('google_workspace_connections'),('outreach_holds'),('outreach_booking_demand'),('outreach_route_anchors'),('outreach_reconciliation_facts')) expected(name) WHERE to_regclass(current_schema() || '.' || expected.name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='outreach_capacity_guard' AND tgrelid=to_regclass(current_schema() || '.' || expected.name))) AS ready`,
+  },
+  {
+    name: "20260909c_convention_outreach.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.convention_editions') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_members') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_history') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_reviews') IS NOT NULL AS ready`,
+  },
+  {
+    name: "20260909d_template_review_repair.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgrelid = to_regclass(current_schema() || '.communication_template_reviews')
+        AND tgname = 'communication_template_reviews_supersede_pending'
+        AND NOT tgisinternal
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

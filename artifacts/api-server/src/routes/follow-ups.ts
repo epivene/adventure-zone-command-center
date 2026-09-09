@@ -1,3 +1,4 @@
+import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { z } from "zod";
@@ -149,6 +150,7 @@ export function createFollowUpsRouter(
 
       res.status(201).json({ ok: true, followUp: result.value });
     } catch (error) {
+    if (error instanceof OutreachError) { res.status(error.status).json({ok:false,error:error.message}); return; }
       req.log.error({ error }, "Failed to create Opportunity follow-up");
       res.status(500).json({ ok: false, error: "Could not create follow-up." });
     }
@@ -176,6 +178,7 @@ export function createFollowUpsRouter(
       }
       res.json({ ok: true, followUp: result.value });
     } catch (error) {
+    if (error instanceof OutreachError) { res.status(error.status).json({ok:false,error:error.message}); return; }
       req.log.error({ error }, "Failed to complete Opportunity follow-up");
       res.status(500).json({
         ok: false,
@@ -199,6 +202,7 @@ export function createFollowUpsRouter(
       }
       res.json({ ok: true, followUp: result.value });
     } catch (error) {
+    if (error instanceof OutreachError) { res.status(error.status).json({ok:false,error:error.message}); return; }
       req.log.error({ error }, "Failed to update follow-up");
       res.status(500).json({ ok: false, error: "Could not update follow-up." });
     }
@@ -217,6 +221,7 @@ export function createFollowUpsRouter(
       }
       res.json({ ok: true });
     } catch (error) {
+    if (error instanceof OutreachError) { res.status(error.status).json({ok:false,error:error.message}); return; }
       req.log.error({ error }, "Failed to delete follow-up");
       res.status(500).json({ ok: false, error: "Could not delete follow-up." });
     }

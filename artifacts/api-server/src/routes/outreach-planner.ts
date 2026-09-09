@@ -45,6 +45,42 @@ export function createOutreachPlannerRouter(
       }
     };
   const actor = (req: Request) => (req as Request & { userId: string }).userId;
+  router.post(
+    "/reconciliations/:id/source-review",
+    run((req) =>
+      service.reviewImportedClaimSource(
+        String(req.params.id),
+        req.body,
+        actor(req),
+      ),
+    ),
+  );
+  router.post(
+    "/route-anchors",
+    run((req) => service.saveRouteAnchor(req.body, actor(req))),
+  );
+  router.post(
+    "/route-anchors/:id/revoke",
+    run((req) =>
+      service.revokeRouteAnchor(String(req.params.id), req.body, actor(req)),
+    ),
+  );
+  router.put(
+    "/bookings/:id/committed-demand",
+    run((req) =>
+      service.reconcileCommittedDemand(
+        String(req.params.id),
+        req.body,
+        actor(req),
+      ),
+    ),
+  );
+  router.post(
+    "/bookings/:id/commitment-change",
+    run((req) =>
+      service.changeCommitment(String(req.params.id), req.body, actor(req)),
+    ),
+  );
   router.get(
     "/allocations",
     run(() => service.allocations()),

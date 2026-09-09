@@ -42,7 +42,10 @@ describe("outreach owner routes", () => {
     const { url, touches } = await setup();
     const payload = `manager.${Date.now() + 60000}`;
     const token = `${payload}.${createHmac("sha256", "planner-test-secret").update(payload).digest("base64url")}`;
-    for (const headers of [{}, { Authorization: `Bearer ${token}` }]) {
+    for (const headers of [{}, { Authorization: `Bearer ${token}` }] as Record<
+      string,
+      string
+    >[]) {
       const response = await fetch(url, { headers });
       expect(response.status).toBe(401);
     }
@@ -62,6 +65,11 @@ describe("outreach owner routes", () => {
     });
     const id = "10000000-0000-4000-8000-000000000001";
     for (const [method, path] of [
+      ["POST", "/route-anchors"],
+      ["POST", `/reconciliations/${id}/source-review`],
+      ["POST", `/route-anchors/${id}/revoke`],
+      ["PUT", `/bookings/${id}/committed-demand`],
+      ["POST", `/bookings/${id}/commitment-change`],
       ["POST", "/openings"],
       ["POST", "/candidates"],
       ["PATCH", `/candidates/${id}`],

@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq, inArray, ne } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -27,7 +28,7 @@ export async function setOrganizationLastResort(
   input: SetLastResortInput,
   changedAt: Date,
 ): Promise<boolean> {
-  return database.transaction(async (transaction) => {
+  return commitmentTransaction(database, async (transaction) => {
     const [before] = await transaction
       .select()
       .from(organizations)

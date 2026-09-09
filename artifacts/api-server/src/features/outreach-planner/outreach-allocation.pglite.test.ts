@@ -1,3 +1,18 @@
+import * as productionAllocation from "./production-outreach-allocation";
+import { DrizzleBookingRepository } from "../bookings/booking-repository";
+import { sql } from "drizzle-orm";
+import {
+  commitmentTransaction,
+  reconcileCapacityFacts,
+  finishCapacityWriteIn,
+} from "./outreach-commitments";
+import {
+  saveRouteAnchor,
+  reviewImportedClaimSource,
+  revokeRouteAnchor,
+  reconcileCommittedDemand,
+  changeCommitment,
+} from "./outreach-allocation-actions";
 import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
@@ -11,6 +26,9 @@ import {
 import { OutreachRepository } from "./outreach-repository";
 import { OutreachService } from "./outreach-service";
 import {
+  projectReservations,
+  verifyTravel,
+  capacityDecision,
   bookingDemandFacts,
   fingerprint,
   loadAllocationFacts,
@@ -21,6 +39,7 @@ import type { GoogleCalendarEvent } from "../google-workspace/google-api-types";
 const clients: PGlite[] = [];
 afterEach(async () => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   await Promise.all(clients.splice(0).map((c) => c.close()));
 });
 const org = "10000000-0000-4000-8000-000000000001",
@@ -71,6 +90,7 @@ insert into booking_package_selections values ('${booking}','${pkg}');
   for (const name of [
     "20260909_outreach_planner.sql",
     "20260909_outreach_allocation.sql",
+    "20260909_outreach_commitments.sql",
   ]) {
     const migration = await readFile(`../../lib/db/migrations/${name}`, "utf8");
     await client.exec(migration);
@@ -632,7 +652,7 @@ describe("shared allocation evidence and holds", () => {
   it("persists actionable source failure while preserving callbacks and history", async () => {
     const { service, candidate, client } = await setup();
     await client.exec(
-      `update booking_opportunities set next_action_kind='callback',next_action_due_at='2026-10-01';drop table resources`,
+      `update booking_opportunities set next_action_kind='callback',next_action_due_at='2026-10-01';drop table resources cascade`,
     );
     const check = await service.check(candidate.id, "owner");
     expect(check.capacity.status).toBe("needs_review");
@@ -649,4 +669,673 @@ describe("shared allocation evidence and holds", () => {
       history_review: expect.any(Object),
     });
   });
+});
+
+async function secondContender(
+  s: Awaited<ReturnType<typeof setup>>,
+  start = "2026-10-10",
+  end = "2026-10-11",
+) {
+  const id = randomUUID();
+  await s.client.query(
+    "insert into bookings(id,starts_at,ends_at,status,travel_leg_id) values ($1,$2,$3,'new_lead',$4)",
+    [id, start, end, leg2],
+  );
+  await s.client.query(
+    "insert into booking_package_selections values ($1,$2)",
+    [id, pkg],
+  );
+  await s.client.query(
+    "insert into booking_resource_assignments values ($1,$2)",
+    [id, resource],
+  );
+  const f = await loadAllocationFacts(s.db),
+    b = f.bookings.find((b) => b.id === id)!;
+  await s.client.query(
+    "insert into outreach_booking_demand(booking_id,quantities,resource_ids,facts_fingerprint,actor,reason) values ($1,$2,$3,$4,'owner','Reviewed complete physical demand')",
+    [
+      id,
+      JSON.stringify({ adventure_zone: 1 }),
+      JSON.stringify([resource]),
+      fingerprint(bookingDemandFacts(f, b, [resource])),
+    ],
+  );
+  return id;
+}
+const demandReview = {
+  quantities: { adventure_zone: 1 },
+  resourceIds: [resource],
+  completePhysicalDemandReviewed: true as const,
+  reason: "Owner reviewed all applicable physical demand",
+};
+const confirm = (s: Awaited<ReturnType<typeof setup>>, id = booking) =>
+  commitmentTransaction(
+    s.db,
+    async (tx) => {
+      await tx.execute(
+        sql`update bookings set status='contract_received' where id=${id}::uuid`,
+      );
+    },
+    { source: "test-confirm", bookingIds: [id], actor: "owner" },
+    s.allocation,
+  );
+
+describe("production commitment enforcement", () => {
+  it("converts an exact hold atomically without double counting and prepares only the target", async () => {
+    const s = await setup(),
+      h = await s.allocation.createHold(
+        s.candidate.id,
+        "2026-08-03T00:00:00Z",
+        "owner",
+      );
+    s.read.mockClear();
+    await s.client.exec("set outreach.enforced='true'");
+    await confirm(s);
+    expect(s.read).toHaveBeenCalledTimes(1);
+    const f = await loadAllocationFacts(s.db);
+    expect(f.bookings.find((b) => b.id === booking)?.status).toBe(
+      "contract_received",
+    );
+    expect(f.holds.find((x) => x.id === h.id)).toMatchObject({
+      state: "converted",
+      revision: 2,
+    });
+    expect(
+      (await s.allocation.evaluateCommitment(booking)).capacity.status,
+    ).toBe("fits");
+  });
+  it("rejects missing, incomplete and subsequently invalidated participation", async () => {
+    const s = await setup();
+    await s.client.exec("set outreach.enforced='true'");
+    await expect(
+      s.client.exec(
+        `update bookings set status='confirmed' where id='${booking}'`,
+      ),
+    ).rejects.toThrow("Allocation participation required");
+    await expect(
+      withAllocationTransaction(
+        s.db,
+        async (tx) => {
+          await tx.execute(
+            sql`update bookings set status='confirmed' where id=${booking}::uuid`,
+          );
+        },
+        { mode: "commitment", source: "unfinished" },
+      ),
+    ).rejects.toThrow("did not complete validation");
+    await expect(
+      withAllocationTransaction(
+        s.db,
+        async (tx) => {
+          await finishCapacityWriteIn(tx);
+          await tx.execute(
+            sql`update bookings set status='confirmed' where id=${booking}::uuid`,
+          );
+        },
+        { mode: "commitment", source: "late-write" },
+      ),
+    ).rejects.toThrow("did not complete validation");
+    await expect(
+      withAllocationTransaction(s.db, async (tx) => {
+        await tx.execute(
+          sql`update bookings set status='confirmed' where id=${booking}::uuid`,
+        );
+      }),
+    ).rejects.toThrow();
+    expect(
+      (await loadAllocationFacts(s.db)).bookings.find((b) => b.id === booking)
+        ?.status,
+    ).toBe("new_lead");
+  });
+  it("serializes booking confirmation versus a hold with exactly one winner", async () => {
+    const s = await setup(),
+      other = await secondContender(s);
+    await s.client.exec("set outreach.enforced='true'");
+    let arrived = 0;
+    let unblock!: () => void;
+    const barrier = new Promise<void>((r) => (unblock = r));
+    s.read.mockImplementation(async () => {
+      if (++arrived === 2) unblock();
+      await barrier;
+      return s.events;
+    });
+    const results = await Promise.allSettled([
+      s.allocation.createHold(s.candidate.id, "2026-08-03T00:00:00Z", "owner"),
+      confirm(s, other),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const f = await loadAllocationFacts(s.db);
+    expect(
+      f.holds.filter((h) => h.state === "active").length +
+        (f.bookings.find((b) => b.id === other)?.status === "contract_received"
+          ? 1
+          : 0),
+    ).toBe(1);
+  });
+  it("serializes committed edits versus a hold and canonicalizes generated IDs and timezone strings", async () => {
+    const s = await setup(),
+      other = await secondContender(s, "2026-10-22", "2026-10-23");
+    await s.client.query("update bookings set status='confirmed' where id=$1", [
+      other,
+    ]);
+    await s.client.exec(
+      "alter table booking_resource_assignments add id uuid default gen_random_uuid(),add updated_at timestamptz default now(); alter table booking_package_selections add id uuid default gen_random_uuid(),add created_at timestamptz default now()",
+    );
+    await s.client.exec("set outreach.enforced='true'");
+    let arrived = 0;
+    let unblock!: () => void;
+    const barrier = new Promise<void>((r) => (unblock = r));
+    s.read.mockImplementation(async () => {
+      if (++arrived === 2) unblock();
+      await barrier;
+      return s.events;
+    });
+    const edit = () =>
+      changeCommitment(
+        s.allocation,
+        other,
+        {
+          startsAt: "2026-10-10T02:00:00+02:00",
+          endsAt: "2026-10-11T00:00:00Z",
+          travelLegId: leg2,
+          latitude: 40,
+          longitude: -80,
+          demand: demandReview,
+        },
+        "owner",
+      );
+    const results = await Promise.allSettled([
+      s.allocation.createHold(s.candidate.id, "2026-08-03T00:00:00Z", "owner"),
+      edit(),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    s.read.mockImplementation(async () => s.events);
+    const active = (await loadAllocationFacts(s.db)).holds.find(
+      (h) => h.state === "active",
+    );
+    if (active) {
+      await s.allocation.releaseHold(active.id, "owner");
+      await edit();
+    }
+    expect(
+      (await loadAllocationFacts(s.db)).bookings.find((b) => b.id === other)
+        ?.starts_at,
+    ).toBe("2026-10-10T00:00:00.000Z");
+  });
+  it("preserves conflicting imported promises as durable reviewed facts and blocks further allocation", async () => {
+    const s = await setup(),
+      other = await secondContender(s),
+      h = await s.allocation.createHold(
+        s.candidate.id,
+        "2026-08-03T00:00:00Z",
+        "owner",
+      );
+    await s.client.exec("set outreach.enforced='true'");
+    await reconcileCapacityFacts(
+      s.db,
+      "operational-calendar-import",
+      async (tx) => {
+        await tx.execute(
+          sql`update bookings set status='confirmed' where id=${other}::uuid`,
+        );
+      },
+    );
+    const facts = await loadAllocationFacts(s.db);
+    expect(facts.bookings.find((b) => b.id === other)?.status).toBe(
+      "confirmed",
+    );
+    expect(facts.holds.find((x) => x.id === h.id)?.state).toBe("active");
+    expect(
+      (
+        await s.client.query(
+          "select state,source,booking_ids from outreach_reconciliation_facts",
+        )
+      ).rows,
+    ).toContainEqual({
+      state: "needs_review",
+      source: "operational-calendar-import",
+      booking_ids: [other],
+    });
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).not.toBe("fits");
+  });
+  it("records actual resource loss and invalidates checked evidence", async () => {
+    const s = await setup();
+    await s.service.check(s.candidate.id, "owner");
+    await s.client.exec("set outreach.enforced='true'");
+    await reconcileCapacityFacts(s.db, "resource-inventory", async (tx) => {
+      await tx.execute(
+        sql`update resources set status='maintenance' where id=${resource}::uuid`,
+      );
+    });
+    expect(
+      (await loadAllocationFacts(s.db)).resources.find((r) => r.id === resource)
+        ?.status,
+    ).toBe("maintenance");
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).toBe("needs_review");
+    expect(
+      (
+        await s.client.query<{ checked_at: string | null }>(
+          "select checked_at from outreach_candidates",
+        )
+      ).rows[0].checked_at,
+    ).toBeNull();
+  });
+  it("reconciles exact demand only for existing commitments without changing status", async () => {
+    const s = await setup();
+    await expect(
+      reconcileCommittedDemand(s.allocation, booking, demandReview, "owner"),
+    ).rejects.toThrow("existing factual commitment");
+    await s.client.query("update bookings set status='confirmed' where id=$1", [
+      booking,
+    ]);
+    await s.client.query(
+      "delete from outreach_booking_demand where booking_id=$1",
+      [booking],
+    );
+    await s.client.exec("set outreach.enforced='true'");
+    const result = await reconcileCommittedDemand(
+      s.allocation,
+      booking,
+      demandReview,
+      "owner",
+    );
+    expect(result.check.capacity.status).toBe("fits");
+    expect(result.demand.actor).toBe("owner");
+    expect(
+      (await loadAllocationFacts(s.db)).bookings.find((b) => b.id === booking)
+        ?.status,
+    ).toBe("confirmed");
+    expect(
+      (
+        await s.client.query<{ state: string }>(
+          "select state from outreach_reconciliation_facts where source='committed-demand-review'",
+        )
+      ).rows[0].state,
+    ).toBe("resolved");
+  });
+  it("resolves first and last events with actual leg and physical anchors and rejects revoked evidence", async () => {
+    const s = await setup();
+    await s.client.exec(
+      `delete from google_operational_calendar_links;update bookings set status='new_lead' where id<>'${booking}'`,
+    );
+    s.setEvents([]);
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).toBe("needs_review");
+    const anchors = [];
+    for (const resourceId of [null, resource])
+      for (const direction of ["departure", "return"] as const)
+        anchors.push(
+          await saveRouteAnchor(
+            s.allocation,
+            {
+              legId: resourceId ? null : leg,
+              resourceId,
+              direction,
+              latitude: 40,
+              longitude: -80,
+              availableAt:
+                direction === "departure"
+                  ? "2026-10-01T09:00:00Z"
+                  : "2026-10-20T15:00:00Z",
+              validUntil: "2026-12-31T00:00:00Z",
+              source:
+                "Owner verified depot schedule and actual equipment location",
+              reason: "Availability and required return time reviewed",
+            },
+            "owner",
+          ),
+        );
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).toBe("fits");
+    await revokeRouteAnchor(
+      s.allocation,
+      anchors.find(
+        (a) => a.resource_id === resource && a.direction === "departure",
+      )!.id,
+      { reason: "Equipment moved elsewhere" },
+      "owner",
+    );
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).toBe("needs_review");
+    await expect(
+      saveRouteAnchor(
+        s.allocation,
+        {
+          legId: leg,
+          resourceId: resource,
+          direction: "departure",
+          latitude: 40,
+          longitude: -80,
+          availableAt: "2026-10-01T00:00:00Z",
+          validUntil: "2026-12-31T00:00:00Z",
+          source: "depot",
+          reason: "test",
+        },
+        "owner",
+      ),
+    ).rejects.toThrow("exactly one");
+  });
+  it("keeps flag-off allocation tables/providers untouched and ordinary transactions free of provider reads", async () => {
+    const work = vi.fn(async () => 7),
+      db = {
+        transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb({})),
+        execute: vi.fn(),
+      };
+    vi.stubEnv("OUTREACH_PLANNER_ENABLED", "false");
+    expect(await commitmentTransaction(db as never, work)).toBe(7);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(
+      await reconcileCapacityFacts(
+        db as never,
+        "operational-calendar-import",
+        work,
+      ),
+    ).toBe(7);
+    const s = await setup();
+    s.read.mockClear();
+    s.estimate.mockClear();
+    await commitmentTransaction(
+      s.db,
+      async (tx) => {
+        await tx.execute(
+          sql`update booking_opportunities set next_action_kind='callback' where id=${op}::uuid`,
+        );
+      },
+      { source: "ordinary-follow-up" },
+      s.allocation,
+    );
+    expect(s.read).not.toHaveBeenCalled();
+    expect(s.estimate).not.toHaveBeenCalled();
+  });
+});
+
+describe("writer and deployment regressions", () => {
+  it("the actual booking repository joins the mutex and converts its follow-up commitment hold", async () => {
+    const s = await setup(),
+      followUpId = randomUUID();
+    await s.client.exec(
+      `alter table bookings add updated_at timestamptz,add organization_id uuid,add primary_contact_id uuid,add venue_name text,add address_1 text,add city text,add region text,add postal_code text,add act_record_id text,add organization_location_id uuid,add notes text,add physical_attraction_total integer,add attraction_total_approval_reason text,add created_at timestamptz`,
+    );
+    await s.client.query(
+      "insert into follow_ups(id,booking_id) values ($1,$2)",
+      [followUpId, booking],
+    );
+    const hold = await s.allocation.createHold(
+      s.candidate.id,
+      "2026-08-03T00:00:00Z",
+      "owner",
+    );
+    vi.spyOn(
+      productionAllocation,
+      "createProductionOutreachAllocation",
+    ).mockReturnValue(s.allocation);
+    await s.client.exec("set outreach.enforced='true'");
+    const repository = new DrizzleBookingRepository(s.db);
+    await repository.transaction(
+      async (tx) =>
+        tx.updateBookingStatus({ bookingId: booking, status: "confirmed" }),
+      followUpId,
+    );
+    expect(
+      (await loadAllocationFacts(s.db)).holds.find((h) => h.id === hold.id)
+        ?.state,
+    ).toBe("converted");
+  });
+  it("repairs missing columns, named constraints, indexes and guard triggers instead of trusting table existence", async () => {
+    const s = await setup();
+    const migration = await readFile(
+      "../../lib/db/migrations/20260909_outreach_commitments.sql",
+      "utf8",
+    );
+    const entry = (await loadActReviewMigrations()).find(
+      (m) => m.name === "20260909_outreach_commitments.sql",
+    )!;
+    await s.client.exec(
+      "alter table outreach_route_anchors drop column reason cascade; alter table outreach_route_anchors drop constraint outreach_route_anchors_direction_check;drop index outreach_anchors_identity_live;drop trigger outreach_capacity_guard on bookings",
+    );
+    expect(
+      (await s.client.query<{ ready: boolean }>(entry.markerSql)).rows[0].ready,
+    ).toBe(false);
+    await s.client.exec(migration);
+    await s.client.exec(migration);
+    expect(
+      (await s.client.query<{ ready: boolean }>(entry.markerSql)).rows[0].ready,
+    ).toBe(true);
+    await s.client.exec("set outreach.enforced='true'");
+    await expect(
+      s.client.exec(
+        `update bookings set starts_at='2026-10-12' where id='${booking}'`,
+      ),
+    ).rejects.toThrow("participation required");
+  });
+});
+
+describe("anchor chronology", () => {
+  it("current actual availability constrains older route stops instead of being ignored", async () => {
+    const s = await setup();
+    await saveRouteAnchor(
+      s.allocation,
+      {
+        legId: null,
+        resourceId: resource,
+        direction: "departure",
+        latitude: 40,
+        longitude: -80,
+        availableAt: "2026-10-09T00:00:00Z",
+        validUntil: "2026-12-31T00:00:00Z",
+        source: "Equipment unavailable until depot return",
+        reason: "Actual current equipment availability confirmed",
+      },
+      "owner",
+    );
+    const unavailable = await s.allocation.evaluateCandidate(s.candidate.id);
+    expect(unavailable.capacity.status).toBe("needs_review");
+    expect(unavailable.capacity.reasons.join(" ")).toMatch(/time|transfer/);
+    await saveRouteAnchor(
+      s.allocation,
+      {
+        legId: null,
+        resourceId: resource,
+        direction: "departure",
+        latitude: 40,
+        longitude: -80,
+        availableAt: "2026-10-01T00:00:00Z",
+        validUntil: "2026-12-31T00:00:00Z",
+        source: "Owner verified updated resource location",
+        reason: "Release became available earlier",
+      },
+      "owner",
+    );
+    expect(
+      (await s.allocation.evaluateCandidate(s.candidate.id)).capacity.status,
+    ).toBe("fits");
+    expect(
+      (await loadAllocationFacts(s.db)).anchors?.filter((a) => !a.revoked_at),
+    ).toHaveLength(1);
+  });
+});
+
+describe("unverified assistant provenance", () => {
+  it("persists submitted commitment claims and requires separate source review even after exact-demand review", async () => {
+    const s = await setup();
+    const submittedFacts = {
+      status: "confirmed",
+      startsAt: "2026-10-10",
+      endsAt: "2026-10-11",
+    };
+    await s.client.exec("set outreach.enforced='true'");
+    await reconcileCapacityFacts(
+      s.db,
+      "assistant-history-import",
+      async (tx) => {
+        await tx.execute(
+          sql`update bookings set status='confirmed' where id=${booking}::uuid`,
+        );
+      },
+      {
+        provenance: {
+          integration: "authenticated-assistant-import",
+          route: "POST /assistant-import/event-profiles",
+          requestId: "import-1",
+          receivedAt: s.allocation.clock().toISOString(),
+          payloadHash: fingerprint(submittedFacts),
+          submittedFacts,
+        },
+      },
+    );
+    const claim = (
+      await s.client.query<{
+        id: string;
+        state: string;
+        detail: { provenance: unknown };
+      }>(
+        "select id,state,detail from outreach_reconciliation_facts where source='assistant-history-import'",
+      )
+    ).rows[0];
+    expect(claim.state).toBe("needs_review");
+    await expect(
+      s.client.query(
+        "update outreach_reconciliation_facts set state='resolved' where id=$1",
+        [claim.id],
+      ),
+    ).rejects.toThrow("Allocation participation required");
+    expect(claim.detail.provenance).toMatchObject({
+      requestId: "import-1",
+      submittedFacts,
+    });
+    const reconciled = await reconcileCommittedDemand(
+      s.allocation,
+      booking,
+      demandReview,
+      "owner",
+    );
+    expect(reconciled.check.capacity.status).toBe("needs_review");
+    expect(reconciled.check.capacity.reasons.join(" ")).toContain(
+      "independent owner source review",
+    );
+    expect(
+      (
+        await s.client.query<{ state: string }>(
+          "select state from outreach_reconciliation_facts where id=$1",
+          [claim.id],
+        )
+      ).rows[0].state,
+    ).toBe("needs_review");
+    await reviewImportedClaimSource(
+      s.allocation,
+      claim.id,
+      {
+        existingExternalCommitmentConfirmed: true,
+        sourceReference: "Owner reviewed signed agreement DOC-123",
+        reason:
+          "Verified the submitted dates and existing customer promise against source document",
+      },
+      "owner",
+    );
+    expect(
+      (await s.allocation.evaluateCommitment(booking)).capacity.status,
+    ).toBe("fits");
+  });
+});
+
+describe("legacy imported physical assignments", () => {
+  it.each(["cancel", "move"] as const)(
+    "preserves nonoverlapping equipment claims after an unreviewed %s without modern demand",
+    async (change) => {
+      const s = await setup();
+      const legacy = randomUUID();
+      await s.client.exec("set outreach.enforced='true'");
+      await reconcileCapacityFacts(
+        s.db,
+        "assistant-history-import",
+        async (tx) => {
+          await tx.execute(
+            sql`insert into bookings(id,starts_at,ends_at,status,travel_leg_id) values (${legacy}::uuid,'2026-09-20','2026-09-21','confirmed',${leg2}::uuid)`,
+          );
+          await tx.execute(
+            sql`insert into booking_resource_assignments(booking_id,resource_id) values (${legacy}::uuid,${resource}::uuid)`,
+          );
+        },
+      );
+      await reconcileCapacityFacts(
+        s.db,
+        "assistant-history-import",
+        async (tx) => {
+          if (change === "cancel")
+            await tx.execute(
+              sql`update bookings set status='cancelled' where id=${legacy}::uuid`,
+            );
+          else {
+            await tx.execute(
+              sql`update bookings set starts_at='2027-04-20',ends_at='2027-04-21' where id=${legacy}::uuid`,
+            );
+            await tx.execute(
+              sql`delete from booking_resource_assignments where booking_id=${legacy}::uuid`,
+            );
+          }
+        },
+      );
+      const facts = await loadAllocationFacts(s.db);
+      expect(facts.demands.some((d) => d.booking_id === legacy)).toBe(false);
+      expect(facts.unverifiedClaims).toHaveLength(2);
+      expect(
+        facts
+          .unverifiedClaims!.flatMap((c) => c.detail.changes ?? [])
+          .find((c) => c.before?.id === legacy)?.before,
+      ).toMatchObject({
+        travel_leg_id: leg2,
+        assignments: [{ booking_id: legacy, resource_id: resource }],
+      });
+      const target = targetForBooking(facts, booking).target!;
+      const projection = projectReservations(
+        facts,
+        target,
+        s.allocation.clock(),
+      );
+      expect(
+        projection.reasons.filter((r) =>
+          r.includes("independent owner source review"),
+        ),
+      ).toHaveLength(2);
+      expect(
+        capacityDecision(
+          target,
+          projection,
+          await verifyTravel(
+            facts,
+            target,
+            projection,
+            { estimateMinutes: async () => 60 },
+            s.allocation.clock(),
+          ),
+        ).status,
+      ).toBe("needs_review");
+      // The current cancelled/moved row is outside this target's equipment route.
+      const withoutClaims = projectReservations(
+        { ...facts, unverifiedClaims: [] },
+        target,
+        s.allocation.clock(),
+      );
+      expect(
+        capacityDecision(
+          target,
+          withoutClaims,
+          await verifyTravel(
+            facts,
+            target,
+            withoutClaims,
+            { estimateMinutes: async () => 60 },
+            s.allocation.clock(),
+          ),
+        ).status,
+      ).toBe("fits");
+    },
+  );
 });

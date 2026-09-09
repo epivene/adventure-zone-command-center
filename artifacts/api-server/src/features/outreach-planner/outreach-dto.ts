@@ -184,5 +184,7 @@ export type AllocationCatalogDTO = {
   holds: HoldFact[];
   demands: DemandFact[];
   resources: AllocationFacts["resources"];
+  anchors?: AllocationFacts["anchors"];
+  reconciliationFacts?: Record<string,unknown>[];
   allocationEnforcementComplete: false;
 };

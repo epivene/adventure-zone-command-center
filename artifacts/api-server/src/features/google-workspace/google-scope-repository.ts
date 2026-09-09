@@ -1,3 +1,4 @@
+import { beginRawCapacityReconciliation, finishRawCapacityReconciliation } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
 import type {
@@ -88,6 +89,7 @@ export class PostgresGoogleScopePersistence implements GoogleScopePersistence {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
+      await beginRawCapacityReconciliation(client,"calendar-scopes");
       await client.query(
         `DELETE FROM google_workspace_label_scopes
           WHERE connection_id = $1`,
@@ -164,6 +166,7 @@ export class PostgresGoogleScopePersistence implements GoogleScopePersistence {
           input.now,
         ],
       );
+      await finishRawCapacityReconciliation(client,"calendar-scopes");
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);

@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
@@ -93,8 +93,23 @@ export class DrizzleOfficeEmailRepository {
     return rows.map(view);
   }
 
+  async listForProfile(organizationId: string) {
+    const rows = await this.database.select().from(officeEmailDrafts)
+      .where(and(eq(officeEmailDrafts.organizationId, organizationId), isNull(officeEmailDrafts.officeAccountId)))
+      .orderBy(desc(officeEmailDrafts.updatedAt));
+    return rows.map(view);
+  }
+
+  async createForOwner(input: { organizationId: string; contactId: string; subject: string; body: string }) {
+    return this.createForOffice({ ...input, accountId: null, communicationTemplateId: null, bookingId: null, eventYear: null, coordinatorNote: null });
+  }
+
+  async updateForOwner(draftId: string, input: { subject: string; body: string }) {
+    return this.updateForOffice(draftId, null, input);
+  }
+
   async createForOffice(input: {
-    accountId: string;
+    accountId: string | null;
     organizationId: string;
     contactId: string;
     communicationTemplateId: string | null;
@@ -126,10 +141,10 @@ export class DrizzleOfficeEmailRepository {
     });
   }
 
-  async updateForOffice(draftId: string, accountId: string, input: { subject?: string; body?: string; coordinatorNote?: string | null }) {
+  async updateForOffice(draftId: string, accountId: string | null, input: { subject?: string; body?: string; coordinatorNote?: string | null }) {
     return this.database.transaction(async (transaction) => {
       const [before] = await transaction.select().from(officeEmailDrafts)
-        .where(and(eq(officeEmailDrafts.id, draftId), eq(officeEmailDrafts.officeAccountId, accountId)))
+        .where(and(eq(officeEmailDrafts.id, draftId), accountId === null ? isNull(officeEmailDrafts.officeAccountId) : eq(officeEmailDrafts.officeAccountId, accountId)))
         .limit(1).for("update");
       if (!before) throw new OfficeEmailError("NOT_FOUND");
       if (!canOfficeEditDraft(before.state)) throw new OfficeEmailError("INVALID_STATE");

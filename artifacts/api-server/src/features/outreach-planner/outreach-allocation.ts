@@ -48,11 +48,19 @@ const review = (...reasons: string[]): CapacityDecision => ({
   reasons,
 });
 
-// Task 3B must wrap ALL relevant writers with this boundary, before any row lock.
-// This service alone is not universal booking enforcement; rollout remains off.
+// Shared boundary, always before booking/resource row locks.
+export const activeAllocationTransactions = new WeakMap<
+  object,
+  "allocation" | "commitment" | "reconciliation"
+>();
 export async function withAllocationTransaction<T>(
   db: AllocationDatabase,
   work: (tx: AllocationDatabase) => Promise<T>,
+  participation: {
+    mode: "allocation" | "commitment" | "reconciliation";
+    source: string;
+  } = { mode: "allocation", source: "outreach-allocation" },
+  transactionConfig?: Parameters<AllocationDatabase["transaction"]>[1],
 ): Promise<T> {
   return db.transaction(async (tx) => {
     const locked = rowsOf(
@@ -67,8 +75,22 @@ export async function withAllocationTransaction<T>(
       );
     // Candidate leadership and manual/history classifications cannot change while a hold is created.
     await tx.execute(sql`select pg_advisory_xact_lock(908092026)`);
-    return work(tx as unknown as AllocationDatabase);
-  });
+    await tx.execute(
+      sql`insert into outreach_write_receipts(transaction_id,mode,source) values (txid_current(),${participation.mode},${participation.source})`,
+    );
+    activeAllocationTransactions.set(tx, participation.mode);
+    let result: T;
+    try {
+      result = await work(tx as unknown as AllocationDatabase);
+    } finally {
+      activeAllocationTransactions.delete(tx);
+    }
+    if (participation.mode === "allocation")
+      await tx.execute(
+        sql`update outreach_write_receipts set validated=true where transaction_id=txid_current()`,
+      );
+    return result;
+  }, transactionConfig);
 }
 export async function invalidateAllocationIn(tx: QueryDatabase) {
   await tx.execute(
@@ -177,6 +199,7 @@ export class OutreachAllocation {
         options.ownHoldId,
       ),
       this.providers.estimator,
+      now,
     );
     return prepared;
   }
@@ -212,6 +235,17 @@ export class OutreachAllocation {
       )
         reasons.push(
           "Calendar/travel evidence expired; retry the fresh check.",
+        );
+      if (
+        (facts.anchors ?? []).some(
+          (a) =>
+            !a.revoked_at &&
+            new Date(a.valid_until) > new Date(prepared.external!.checkedAt) &&
+            new Date(a.valid_until) <= now,
+        )
+      )
+        reasons.push(
+          "A route anchor expired during verification; record current availability evidence.",
         );
       if (
         facts.holds.some(
@@ -438,6 +472,12 @@ export class OutreachAllocation {
         holds: facts.holds,
         demands: facts.demands,
         resources: facts.resources,
+        anchors: facts.anchors ?? [],
+        reconciliationFacts: rowsOf(
+          await tx.execute(
+            sql`select * from outreach_reconciliation_facts order by created_at desc limit 200`,
+          ),
+        ),
         allocationEnforcementComplete: false,
       };
     });
