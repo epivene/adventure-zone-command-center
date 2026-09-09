@@ -104,4 +104,44 @@ describe("BossHomePage", () => {
       expect(screen.getByRole("alert")).toBeTruthy();
     });
   });
+  it("shows both permanent convention inputs in Needs Your Attention", async () => {
+    mockBossGet.mockImplementation(async (path) => path === "/boss/work-requests"
+      ? {
+          active: [
+            {
+              id: "notes-request",
+              type: "rapid_convention_notes",
+              state: "waiting_on_dave",
+              priority: "high",
+              title: "Quick Convention Notes",
+              instructions: "Capture each conversation.",
+              dueAt: null,
+              completedAt: null,
+              createdAt: "2026-09-09T00:00:00.000Z",
+              updatedAt: "2026-09-09T00:00:00.000Z",
+            },
+            {
+              id: "planning-request",
+              type: "convention_planning_questionnaire",
+              state: "waiting_on_dave",
+              priority: "high",
+              title: "Convention Planning Decisions",
+              instructions: "Fill in the registration, hotel, and advertising choices.",
+              dueAt: null,
+              completedAt: null,
+              createdAt: "2026-09-09T00:00:00.000Z",
+              updatedAt: "2026-09-09T00:00:00.000Z",
+            },
+          ],
+          recentlyCompleted: [],
+        } as never
+      : EMPTY_DASHBOARD as never);
+
+    render(<BossHomePage />);
+
+    expect(await screen.findByText("Quick Convention Notes")).toBeVisible();
+    expect(screen.getByText("Convention Planning Decisions")).toBeVisible();
+    expect(screen.getByText(/Planning questionnaire/)).toBeVisible();
+  });
+
 });
