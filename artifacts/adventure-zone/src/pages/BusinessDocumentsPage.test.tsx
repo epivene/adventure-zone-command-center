@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listAll: vi.fn(),
@@ -22,6 +22,8 @@ beforeEach(() => {
   mocks.deleteDocument.mockReset();
 });
 
+afterEach(cleanup);
+
 function documentFixture() {
   return {
     id: "template-1", displayName: "Pirate Names", originalFilename: "Pirate Names.docx",
@@ -41,6 +43,52 @@ describe("BusinessDocumentsPage", () => {
     expect(screen.getByRole("tab", { name: "Templates" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "COIs & Insurance" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "Needs Review" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "Media" })).toBeVisible();
+  });
+
+  it("keeps media out of the document library and gives it a dedicated view", async () => {
+    mocks.listAll.mockResolvedValue({
+      documents: [
+        { ...documentFixture(), id: "contract", displayName: "Big E Contract", originalFilename: "Big E Contract 2026.pdf", category: "contract" },
+        { ...documentFixture(), id: "photo", displayName: "Big E Booth", originalFilename: "Big E Booth 2026.jpg", category: "marketing" },
+      ],
+    });
+    render(<BusinessDocumentsPage />);
+
+    expect(await screen.findByText("Big E Contract")).toBeVisible();
+    expect(screen.queryByText("Big E Booth")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Media" }));
+    expect(screen.getByText("Big E Booth")).toBeVisible();
+    expect(screen.queryByText("Big E Contract")).not.toBeInTheDocument();
+  });
+
+  it("groups regular documents by type, year, and event", async () => {
+    mocks.listAll.mockResolvedValue({
+      documents: [
+        { ...documentFixture(), id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01" },
+        { ...documentFixture(), id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01" },
+      ],
+    });
+    render(<BusinessDocumentsPage />);
+
+    expect(await screen.findByRole("heading", { name: "Contracts" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2026" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Event: Big E" })).toBeVisible();
+    expect(screen.getByText("Big E Contract 2026 Signed")).toBeVisible();
+    expect(screen.getByText("Big E Contract 2026 Draft")).toBeVisible();
+  });
+
+  it("surfaces pending reviews as the primary sorting inbox", async () => {
+    mocks.listAll.mockResolvedValue({
+      documents: [
+        { ...documentFixture(), id: "review-1", displayName: "Unknown Fair File", reviewState: "needs_review" },
+        { ...documentFixture(), id: "review-2", displayName: "Unlinked Contract", reviewState: "needs_review" },
+      ],
+    });
+    render(<BusinessDocumentsPage />);
+
+    expect(await screen.findByRole("heading", { name: "2 documents need sorting" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Open Needs Review" })).toBeVisible();
   });
 
   it("searches filenames and combines type, status, source, link, and year filters", async () => {

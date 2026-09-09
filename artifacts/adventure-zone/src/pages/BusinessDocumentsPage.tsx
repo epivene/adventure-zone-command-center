@@ -8,8 +8,9 @@ import {
   type BusinessDocumentRecord,
 } from "@/lib/business-documents-api";
 import { DocumentReviewQueue } from "@/components/business-documents/document-review-queue";
+import { groupBusinessDocuments, isMediaDocument } from "./business-document-organization";
 
-type View = "all" | "contracts" | "vendor_applications" | "templates" | "insurance" | "review";
+type View = "all" | "media" | "contracts" | "vendor_applications" | "templates" | "insurance" | "review";
 type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 export type BusinessDocumentsClient = Pick<typeof businessDocumentsApi,
@@ -24,12 +25,13 @@ type BusinessDocumentsPageProps = {
 };
 
 const views: Array<{ id: View; label: string }> = [
+  { id: "review", label: "Needs Review" },
   { id: "all", label: "All Documents" },
+  { id: "media", label: "Media" },
   { id: "contracts", label: "Contracts" },
   { id: "vendor_applications", label: "Vendor Applications" },
   { id: "templates", label: "Templates" },
   { id: "insurance", label: "COIs & Insurance" },
-  { id: "review", label: "Needs Review" },
 ];
 
 function titleCase(value: string) {
@@ -37,11 +39,13 @@ function titleCase(value: string) {
 }
 
 function visibleInView(document: BusinessDocumentRecord, view: View) {
+  if (view === "media") return isMediaDocument(document);
+  if (view === "review") return document.reviewState === "needs_review";
+  if (isMediaDocument(document)) return false;
   if (view === "contracts") return document.category === "contract";
   if (view === "vendor_applications") return document.category === "vendor_application";
   if (view === "templates") return document.category === "operational_template";
   if (view === "insurance") return document.category === "coi" || document.category === "insurance_policy";
-  if (view === "review") return document.reviewState === "needs_review";
   return true;
 }
 
@@ -128,6 +132,8 @@ export default function BusinessDocumentsPage({
     return sortOrder === "oldest" ? -difference : difference;
   });
   const activeFilterCount = [category, reviewState, source, linkState, year].filter(Boolean).length;
+  const reviewCount = documents.filter((document) => document.reviewState === "needs_review").length;
+  const groupedDocuments = groupBusinessDocuments(visibleDocuments, { media: view === "media" });
 
   function resetFilters() {
     setQuery("");
@@ -200,6 +206,17 @@ export default function BusinessDocumentsPage({
           </Button>
         )}
       </header>
+
+      {!loading && reviewCount && view !== "review" ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Sorting inbox</p>
+            <h2 className="text-lg font-bold text-foreground">{reviewCount} {reviewCount === 1 ? "document needs" : "documents need"} sorting</h2>
+            <p className="text-sm text-muted-foreground">Confirm its type and event before filing it into the library.</p>
+          </div>
+          <Button onClick={() => setView("review")} type="button">Open Needs Review</Button>
+        </section>
+      ) : null}
 
       <div aria-label="Business document views" className="flex flex-wrap gap-2" role="tablist">
         {views.map((item) => (
@@ -290,8 +307,21 @@ export default function BusinessDocumentsPage({
       ) : null}
 
       {view !== "review" && visibleDocuments.length ? (
-        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {visibleDocuments.map((document) => (
+        <section aria-label="Documents grouped by type, year, and event" className="grid gap-8">
+          {groupedDocuments.map((typeGroup) => (
+            <section className="grid gap-4" key={typeGroup.key}>
+              <div className="flex items-baseline justify-between border-b border-border pb-2">
+                <h2 className="text-xl font-bold text-foreground">{typeGroup.label}</h2>
+                <span className="text-xs text-muted-foreground">{typeGroup.years.reduce((count, item) => count + item.events.reduce((eventCount, event) => eventCount + event.documents.length, 0), 0)} files</span>
+              </div>
+              {typeGroup.years.map((yearGroup) => (
+                <section className="grid gap-3" key={`${typeGroup.key}-${yearGroup.year}`}>
+                  <h3 className="text-lg font-bold text-foreground">{yearGroup.year}</h3>
+                  {yearGroup.events.map((eventGroup) => (
+                    <section className="grid gap-2" key={`${typeGroup.key}-${yearGroup.year}-${eventGroup.label}`}>
+                      <h4 className="text-sm font-semibold text-muted-foreground">Event: {eventGroup.label}</h4>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        {eventGroup.documents.map((document) => (
             <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={document.id}>
               {editingId === document.id ? (
                 <div className="grid gap-3">
@@ -341,6 +371,13 @@ export default function BusinessDocumentsPage({
                 </>
               )}
             </article>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </section>
+              ))}
+            </section>
           ))}
         </section>
       ) : null}
