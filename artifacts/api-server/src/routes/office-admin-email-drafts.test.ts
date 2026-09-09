@@ -4,6 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   listForOwner: vi.fn(),
+  createForOwner: vi.fn(),
+  updateForOwner: vi.fn(),
+  listForProfile: vi.fn(),
   returnForChanges: vi.fn(),
   claimForSend: vi.fn(),
   markSent: vi.fn(),
@@ -15,6 +18,9 @@ vi.mock("@workspace/db", () => ({ db: {} }));
 vi.mock("@/features/office/office-email-repository", () => ({
   DrizzleOfficeEmailRepository: class {
     listForOwner = mocks.listForOwner;
+    createForOwner = mocks.createForOwner;
+    updateForOwner = mocks.updateForOwner;
+    listForProfile = mocks.listForProfile;
     returnForChanges = mocks.returnForChanges;
     claimForSend = mocks.claimForSend;
     markSent = mocks.markSent;
@@ -27,6 +33,7 @@ vi.mock("@/features/office/mail-delivery", async () => {
 });
 
 import router from "./office-admin-email-drafts";
+import { requireOwnerMiddleware } from "@/lib/auth";
 
 function app() { const instance = express(); instance.use(express.json()); instance.use(router); return instance; }
 const draftId = "10000000-0000-4000-8000-000000000001";
@@ -63,4 +70,40 @@ describe("owner office email review", () => {
     expect(mocks.restoreSubmittedAfterFailure).toHaveBeenCalledWith(draftId, expect.stringContaining("smtp unavailable"));
     expect(mocks.markSent).not.toHaveBeenCalled();
   });
+});
+
+
+describe("Booking profile drafts", () => {
+  const input = { organizationId: draftId, contactId: draftId, subject: "Hello", body: "A personal email" };
+  it("creates an unsent owner draft without an Office account", async () => {
+    mocks.createForOwner.mockResolvedValue({ ...input, id: draftId, state: "draft" });
+    const response = await request(app()).post("/office-admin/email-drafts").send(input);
+    expect(response.status).toBe(201);
+    expect(mocks.createForOwner).toHaveBeenCalledWith(input);
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.claimForSend).not.toHaveBeenCalled();
+  });
+  it("rejects client attempts to set state or recipient address", async () => {
+    const response = await request(app()).post("/office-admin/email-drafts").send({ ...input, state: "sent", recipientEmail: "other@example.org" });
+    expect(response.status).toBe(400);
+    expect(mocks.createForOwner).not.toHaveBeenCalled();
+  });
+  it("lists profile drafts and saves changes without delivery", async () => {
+    mocks.listForProfile.mockResolvedValue([]);
+    expect((await request(app()).get(`/office-admin/profile-email-drafts/${draftId}`)).status).toBe(200);
+    expect(mocks.listForProfile).toHaveBeenCalledWith(draftId);
+    mocks.updateForOwner.mockResolvedValue({ id: draftId, state: "draft" });
+    expect((await request(app()).patch(`/office-admin/email-drafts/${draftId}`).send({ subject: "Edited", body: "Still a draft" })).status).toBe(200);
+    expect(mocks.updateForOwner).toHaveBeenCalledWith(draftId, { subject: "Edited", body: "Still a draft" });
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+});
+
+
+it("rejects unauthenticated creation at the owner gate", async () => {
+  const instance = express();
+  instance.use(express.json(), requireOwnerMiddleware, router);
+  const response = await request(instance).post("/office-admin/email-drafts").send({});
+  expect(response.status).toBe(401);
+  expect(mocks.createForOwner).not.toHaveBeenCalled();
 });

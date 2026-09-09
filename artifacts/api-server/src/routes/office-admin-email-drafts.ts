@@ -29,6 +29,47 @@ function emailStateError(res: any, error: unknown) {
   return true;
 }
 
+// Mounted after requireOwnerMiddleware in routes/index.ts. Saving never submits or sends.
+const ownerDraftText = z.object({
+  subject: z.string().trim().min(1).max(500),
+  body: z.string().trim().min(1).max(50000),
+}).strict();
+const ownerDraftCreate = ownerDraftText.extend({ organizationId: uuid, contactId: uuid });
+
+router.get("/office-admin/profile-email-drafts/:organizationId", async (req, res): Promise<void> => {
+  const id = param(req.params.organizationId);
+  if (!uuid.safeParse(id).success) { res.status(400).json({ error: "Invalid profile ID." }); return; }
+  res.json({ drafts: await drafts.listForProfile(id) });
+});
+
+router.post("/office-admin/email-drafts", async (req, res): Promise<void> => {
+  const parsed = ownerDraftCreate.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review the email draft." }); return; }
+  try {
+    res.status(201).json({ draft: await drafts.createForOwner(parsed.data) });
+  } catch (error) {
+    if (error instanceof OfficeEmailError && ["CONTACT_NOT_LINKED", "EMAIL_REQUIRED"].includes(error.code)) {
+      res.status(400).json({ error: "Choose an active contact on this profile with an email address." }); return;
+    }
+    if (emailStateError(res, error)) return;
+    req.log?.error?.({ err: error }, "Failed to save Booking email draft");
+    res.status(500).json({ error: "Could not save the email draft." });
+  }
+});
+
+router.patch("/office-admin/email-drafts/:draftId", async (req, res): Promise<void> => {
+  const id = param(req.params.draftId);
+  const parsed = ownerDraftText.safeParse(req.body);
+  if (!uuid.safeParse(id).success || !parsed.success) { res.status(400).json({ error: "Add a subject and email body to a valid draft." }); return; }
+  try {
+    res.json({ draft: await drafts.updateForOwner(id, parsed.data) });
+  } catch (error) {
+    if (emailStateError(res, error)) return;
+    req.log?.error?.({ err: error }, "Failed to update Booking email draft");
+    res.status(500).json({ error: "Could not update the email draft." });
+  }
+});
+
 router.get("/office-admin/email-drafts", async (req, res): Promise<void> => {
   const raw = typeof req.query.state === "string" ? req.query.state : null;
   const state = raw && officeEmailStateValues.includes(raw as any) ? raw as any : null;

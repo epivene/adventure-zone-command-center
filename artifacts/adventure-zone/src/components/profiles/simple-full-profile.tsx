@@ -26,6 +26,7 @@ import {
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
+import { ProfileEmailComposer, ProfileEmailDrafts, type ProfileEmailDraft } from "@/components/profiles/profile-email-composer";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
@@ -145,6 +146,12 @@ export function SimpleFullProfile({
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [noteSearch, setNoteSearch] = useState("");
+  const [emailComposerOpen, setEmailComposerOpen] = useState(false);
+  const [emailDraft, setEmailDraft] = useState<ProfileEmailDraft | null>(null);
+  const [draftRevision, setDraftRevision] = useState(0);
+  const [emailSaved, setEmailSaved] = useState(false);
+  function createEmail() { setEmailDraft(null); setEmailSaved(false); setEmailComposerOpen(true); }
+  useEffect(() => { setEmailComposerOpen(false); setEmailDraft(null); setEmailSaved(false); }, [profile.id]);
   const [noteComposerOpen, setNoteComposerOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
@@ -623,6 +630,7 @@ export function SimpleFullProfile({
                 Call
               </Link>
             ) : null}
+            <button className="button-primary inline-flex items-center gap-2" type="button" onClick={createEmail}><Mail className="h-4 w-4" />Create Email</button>
             <button aria-label="Edit profile" className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" onClick={() => setEditing(true)} type="button">Edit</button>
             <button
               className="button-primary inline-flex items-center gap-2"
@@ -991,7 +999,12 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {openSection === "emails" ? <ProfileGoogleEmailPanel organizationId={profile.id} /> : null}
+      {emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
+      {emailSaved ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Email draft saved. Nothing was sent. Find it in Emails below.</p> : null}
+      {openSection === "emails" ? <div className="grid gap-4">
+        <ProfileEmailDrafts organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
+        <ProfileGoogleEmailPanel organizationId={profile.id} />
+      </div> : null}
 
       <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
         <div className="flex items-center gap-2">
