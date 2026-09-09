@@ -34,6 +34,12 @@ function documentFixture() {
   };
 }
 
+function openFolder(label: string) {
+  const folder = screen.getByLabelText(`${label} folder`);
+  fireEvent.click(folder.querySelector("summary")!);
+  return folder;
+}
+
 describe("BusinessDocumentsPage", () => {
   it("shows high-volume document categories as top-level views", async () => {
     render(<BusinessDocumentsPage />);
@@ -55,25 +61,31 @@ describe("BusinessDocumentsPage", () => {
     });
     render(<BusinessDocumentsPage />);
 
-    expect(await screen.findByText("Big E Contract")).toBeVisible();
+    expect(await screen.findByText("Big E Contract")).toBeInTheDocument();
     expect(screen.queryByText("Big E Booth")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Media" }));
-    expect(screen.getByText("Big E Booth")).toBeVisible();
+    expect(screen.getByText("Big E Booth")).toBeInTheDocument();
     expect(screen.queryByText("Big E Contract")).not.toBeInTheDocument();
   });
 
-  it("groups regular documents by type, year, and event", async () => {
+  it("groups regular documents into collapsible type, year, and confirmed-event folders", async () => {
     mocks.listAll.mockResolvedValue({
       documents: [
-        { ...documentFixture(), id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01" },
-        { ...documentFixture(), id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01" },
+        { ...documentFixture(), id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01", links: [{ id: "l1", targetKind: "profile", targetId: "p1", targetLabel: "Big E" }] },
+        { ...documentFixture(), id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01", links: [{ id: "l2", targetKind: "profile", targetId: "p1", targetLabel: "Big E" }] },
       ],
     });
     render(<BusinessDocumentsPage />);
 
-    expect(await screen.findByRole("heading", { name: "Contracts" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "2026" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Event: Big E" })).toBeVisible();
+    const contracts = await screen.findByLabelText("Contracts folder");
+    expect(contracts).not.toHaveAttribute("open");
+    openFolder("Contracts");
+    const year = screen.getByLabelText("2026 folder");
+    expect(year).not.toHaveAttribute("open");
+    openFolder("2026");
+    const event = screen.getByLabelText("Big E folder");
+    expect(event).not.toHaveAttribute("open");
+    openFolder("Big E");
     expect(screen.getByText("Big E Contract 2026 Signed")).toBeVisible();
     expect(screen.getByText("Big E Contract 2026 Draft")).toBeVisible();
   });
@@ -111,10 +123,10 @@ describe("BusinessDocumentsPage", () => {
       ],
     });
     render(<BusinessDocumentsPage />);
-    expect(await screen.findByText("Summer Contract")).toBeVisible();
+    expect(await screen.findByText("Summer Contract")).toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search documents" }), { target: { value: "vendor-application" } });
-    expect(screen.getByText("County Fair Packet")).toBeVisible();
+    expect(screen.getByText("County Fair Packet")).toBeInTheDocument();
     expect(screen.queryByText("Summer Contract")).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByRole("searchbox", { name: "Search documents" }), { target: { value: "" } });
@@ -124,10 +136,10 @@ describe("BusinessDocumentsPage", () => {
     fireEvent.change(screen.getByLabelText("Link status"), { target: { value: "unlinked" } });
     fireEvent.change(screen.getByLabelText("Document year"), { target: { value: "2025" } });
 
-    expect(screen.getByText("County Fair Packet")).toBeVisible();
+    expect(screen.getByText("County Fair Packet")).toBeInTheDocument();
     expect(screen.queryByText("Summer Contract")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reset filters" }));
-    expect(screen.getByText("Summer Contract")).toBeVisible();
+    expect(screen.getByText("Summer Contract")).toBeInTheDocument();
   });
 
   it("explains that an empty library can import or upload files", async () => {
@@ -141,14 +153,18 @@ describe("BusinessDocumentsPage", () => {
     mocks.update.mockResolvedValue({ document: { ...documentFixture(), displayName: "Crew Name Ideas", category: "marketing", notes: "Branding reference" } });
     render(<BusinessDocumentsPage />);
 
+    await screen.findByLabelText("Operational Templates folder");
+    openFolder("Operational Templates");
+    openFolder("2026");
+    openFolder("Needs Sorting");
     fireEvent.click(await screen.findByRole("button", { name: "Edit Pirate Names" }));
     fireEvent.change(screen.getByLabelText("Document name"), { target: { value: "Crew Name Ideas" } });
     fireEvent.change(screen.getByLabelText("Edit document type"), { target: { value: "marketing" } });
     fireEvent.change(screen.getByLabelText("Document notes"), { target: { value: "Branding reference" } });
     fireEvent.click(screen.getByRole("button", { name: "Save document" }));
 
-    expect(await screen.findByText("Crew Name Ideas")).toBeVisible();
-    expect(screen.getByText("Branding reference")).toBeVisible();
+    expect(await screen.findByText("Crew Name Ideas")).toBeInTheDocument();
+    expect(screen.getByText("Branding reference")).toBeInTheDocument();
   });
 
   it("deletes a confirmed document and removes it from the active library", async () => {
@@ -157,6 +173,10 @@ describe("BusinessDocumentsPage", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<BusinessDocumentsPage />);
 
+    await screen.findByLabelText("Operational Templates folder");
+    openFolder("Operational Templates");
+    openFolder("2026");
+    openFolder("Needs Sorting");
     fireEvent.click(await screen.findByRole("button", { name: "Delete Pirate Names" }));
 
     await waitFor(() => expect(screen.queryByText("Pirate Names")).not.toBeInTheDocument());
