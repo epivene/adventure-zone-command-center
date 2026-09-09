@@ -206,13 +206,15 @@ export class GoogleDriveBackupBackfillService {
           ORDER BY o.updated_at DESC, o.id DESC
           LIMIT 100
        ), profile_jobs AS (
-         SELECT enqueue_google_drive_backup_job(kind, p.id, 10, $1)
+         SELECT enqueue_google_drive_backup_job(kind::text, p.id, 10, $1)
            FROM selected_profiles p
            CROSS JOIN (VALUES ('profile_summary'),('follow_up_summary')) kinds(kind)
        ), document_jobs AS (
          SELECT enqueue_google_drive_backup_job('document', l.document_id, 10, $1)
            FROM business_document_links l
-           JOIN selected_profiles p ON p.id = l.organization_id
+           LEFT JOIN bookings linked_booking ON linked_booking.id = l.booking_id
+           JOIN selected_profiles p
+             ON p.id = COALESCE(l.organization_id, linked_booking.organization_id)
            JOIN business_documents d ON d.id = l.document_id AND d.lifecycle <> 'deleted'
        ), tail AS (
          SELECT id, updated_at FROM selected_profiles
@@ -237,7 +239,10 @@ export class GoogleDriveBackupBackfillService {
            updated_at = $2
          WHERE r.id = $1 RETURNING state
        )
-       SELECT (SELECT count(*)::int FROM selected_profiles) AS enqueued,
+       SELECT (
+                (SELECT count(*) FROM profile_jobs) +
+                (SELECT count(*) FROM document_jobs)
+              )::int AS enqueued,
               (SELECT state = 'completed' FROM updated) AS completed`,
       [runId, now],
     );
