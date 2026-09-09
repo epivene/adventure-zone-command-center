@@ -3,6 +3,7 @@ import type { EventReviewStore } from "./event-review-repository";
 import { listDueReviewsForManager } from "./event-review-repository";
 import type { EventLifecycleRepository } from "./event-lifecycle-repository";
 import {
+  isUpcomingManagerScheduleEvent,
   loadManagerScopedScheduleData,
   type ManagerMapBookingRepository,
   type ManagerMapTripRepository,
@@ -30,7 +31,7 @@ export interface LegManagerDashboardRepository {
 export interface LegManagerDashboardDependencies {
   tripRepository: ManagerMapTripRepository;
   bookingRepository: ManagerMapBookingRepository;
-  lifecycleRepository: Pick<EventLifecycleRepository, "getCurrentForLeg" | "listIncompleteForLeg">;
+  lifecycleRepository: Pick<EventLifecycleRepository, "getCurrentForLeg" | "getLatestCheckedOutForLeg" | "listIncompleteForLeg">;
   reviewRepository: EventReviewStore;
   financeRepository: { summary(legId: string): Promise<Record<string, unknown>> };
 }
@@ -128,15 +129,22 @@ export async function loadLegManagerDashboard(
   }
 
   const partialErrors: DashboardPartialError[] = [];
-  const [currentResult] = await Promise.allSettled([
+  const [currentResult, latestCheckedOutResult] = await Promise.allSettled([
     input.lifecycleRepository.getCurrentForLeg(legId),
+    input.lifecycleRepository.getLatestCheckedOutForLeg(legId),
   ]);
   const activeBookingId = currentResult.status === "fulfilled"
     ? (currentResult.value as DashboardLifecycle | null)?.bookingId
     : undefined;
+  const latestCheckedOutBookingId = currentResult.status === "fulfilled"
+    && currentResult.value === null
+    && latestCheckedOutResult.status === "fulfilled"
+    ? (latestCheckedOutResult.value as DashboardLifecycle | null)?.bookingId
+    : undefined;
   const [scheduleResult, wrapUpsResult, reviewsResult, moneyResult] = await Promise.allSettled([
     loadManagerScopedScheduleData(input, legId, now, {
       alwaysVisibleBookingIds: activeBookingId ? new Set([activeBookingId]) : undefined,
+      retainBookingIdUntilNextEvent: latestCheckedOutBookingId,
     }),
     input.lifecycleRepository.listIncompleteForLeg(legId),
     listDueReviewsForManager(input.reviewRepository, legId, now),
@@ -155,6 +163,7 @@ export async function loadLegManagerDashboard(
   const money = moneyResult.status === "fulfilled" ? moneyResult.value : {};
 
   if (currentResult.status === "rejected") partialErrors.push({ section: "currentLifecycle", message: errorMessage(currentResult.reason) });
+  if (latestCheckedOutResult.status === "rejected") partialErrors.push({ section: "routeAnchor", message: errorMessage(latestCheckedOutResult.reason) });
   if (wrapUpsResult.status === "rejected") partialErrors.push({ section: "wrapUps", message: errorMessage(wrapUpsResult.reason) });
   if (reviewsResult.status === "rejected") partialErrors.push({ section: "reviews", message: errorMessage(reviewsResult.reason) });
   if (moneyResult.status === "rejected") partialErrors.push({ section: "money", message: errorMessage(moneyResult.reason) });
@@ -163,7 +172,7 @@ export async function loadLegManagerDashboard(
     legId,
     ...scheduleData,
     nextEvent: scheduleData.events.find((event) => event.bookingId === currentLifecycle?.bookingId)
-      ?? scheduleData.events.find((event) => (event.endsAt ?? event.startsAt ?? new Date(0)).getTime() >= now.getTime())
+      ?? scheduleData.events.find((event) => isUpcomingManagerScheduleEvent(event, now))
       ?? null,
     currentLifecycle,
     lifecycle: currentLifecycle,
@@ -174,7 +183,7 @@ export async function loadLegManagerDashboard(
     money,
     moneySummary: money,
     summary: {
-      upcomingBookedEventsCount: scheduleData.events.length,
+      upcomingBookedEventsCount: scheduleData.events.filter((event) => isUpcomingManagerScheduleEvent(event, now)).length,
       incompleteWrapUpsCount: incompleteWrapUps.length,
       reviewsDueCount: reviewsDue.length,
     },

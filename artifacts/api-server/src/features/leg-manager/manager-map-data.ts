@@ -169,6 +169,29 @@ function isVisibleScheduleEvent(
   return relevantAt === null || relevantAt.getTime() >= now.getTime() - 86_400_000;
 }
 
+export function isUpcomingManagerScheduleEvent(
+  event: Pick<ManagerScheduleEvent, "status" | "probability" | "startsAt" | "endsAt">,
+  now: Date,
+) {
+  if (managerScheduleState(event.status, event.probability) !== "booked") return false;
+  if (["declined", "cancelled", "completed"].includes(String(event.status).trim().toLowerCase())) return false;
+  const relevantAt = event.endsAt ?? event.startsAt;
+  return relevantAt !== null && relevantAt.getTime() >= now.getTime();
+}
+
+function isUpcomingScheduleEvent(
+  event: Pick<ManagerScheduleEvent, "bookingId" | "status" | "probability" | "startsAt" | "endsAt">,
+  retainedEvent: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
+  now: Date,
+) {
+  if (event.bookingId === retainedEvent.bookingId || !isUpcomingManagerScheduleEvent(event, now)) return false;
+  const retainedAt = retainedEvent.endsAt ?? retainedEvent.startsAt;
+  const relevantAt = event.endsAt ?? event.startsAt;
+  return retainedAt !== null
+    && relevantAt !== null
+    && relevantAt.getUTCFullYear() === retainedAt.getUTCFullYear();
+}
+
 function compareScheduleEvents(
   a: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
   b: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
@@ -241,7 +264,7 @@ export async function loadManagerScopedScheduleData(
   },
   legId: string,
   now = new Date(),
-  options: { alwaysVisibleBookingIds?: ReadonlySet<string> } = {},
+  options: { alwaysVisibleBookingIds?: ReadonlySet<string>; retainBookingIdUntilNextEvent?: string } = {},
 ): Promise<ManagerScopedScheduleData> {
   const [listedTrips, listedBookings] = await Promise.all([
     dependencies.tripRepository.listTrips({ travelLegId: legId }),
@@ -251,9 +274,19 @@ export async function loadManagerScopedScheduleData(
   const allTrips = listedTrips
     .filter((trip) => trip.travelLegId === legId)
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.id.localeCompare(b.id));
-  const alwaysVisibleBookingIds = options.alwaysVisibleBookingIds ?? new Set<string>();
-  const assignedBookings = listedBookings
-    .map(eventFromBooking)
+  const allAssignedBookings = listedBookings.map(eventFromBooking);
+  const alwaysVisibleBookingIds = new Set(options.alwaysVisibleBookingIds ?? []);
+  const retainedBookingId = options.retainBookingIdUntilNextEvent;
+  const retainedEvent = retainedBookingId
+    ? allAssignedBookings.find((event) => event.bookingId === retainedBookingId)
+    : undefined;
+  if (
+    retainedEvent
+    && allAssignedBookings.some((event) => isUpcomingScheduleEvent(event, retainedEvent, now))
+  ) {
+    alwaysVisibleBookingIds.add(retainedEvent.bookingId);
+  }
+  const assignedBookings = allAssignedBookings
     .filter((event) => alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now));
 
   const recentTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
@@ -352,14 +385,30 @@ export async function loadManagerScopedMapData(
     tripRepository: ManagerMapTripRepository;
     bookingRepository: ManagerMapBookingRepository;
     handoffRepository: ManagerMapHandoffRepository;
-    lifecycleRepository?: { getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null> };
+    lifecycleRepository?: {
+      getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null>;
+      getLatestCheckedOutForLeg?(legId: string): Promise<{ bookingId: string } | null>;
+    };
   },
   legId: string,
   now = new Date(),
 ): Promise<ManagerScopedMapData> {
-  const currentLifecycle = await dependencies.lifecycleRepository?.getCurrentForLeg(legId).catch(() => null) ?? null;
+  const [currentResult, latestCheckedOutResult] = await Promise.allSettled([
+    dependencies.lifecycleRepository?.getCurrentForLeg(legId) ?? Promise.resolve(null),
+    dependencies.lifecycleRepository?.getLatestCheckedOutForLeg?.(legId) ?? Promise.resolve(null),
+  ]);
+  const currentLifecycle = currentResult.status === "fulfilled" ? currentResult.value : null;
+  const latestCheckedOut = currentResult.status === "fulfilled"
+    && currentResult.value === null
+    && latestCheckedOutResult.status === "fulfilled"
+    ? latestCheckedOutResult.value
+    : null;
   const alwaysVisibleBookingIds = currentLifecycle ? new Set([currentLifecycle.bookingId]) : undefined;
-  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, { alwaysVisibleBookingIds });
+  const retainBookingIdUntilNextEvent = latestCheckedOut?.bookingId;
+  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, {
+    alwaysVisibleBookingIds,
+    retainBookingIdUntilNextEvent,
+  });
   const rawMeetups = await dependencies.handoffRepository.listForLeg(legId, { approvedOnly: true });
   const meetups = rawMeetups.flatMap((handoff) => {
     const counterpart = counterpartFor(handoff, legId);

@@ -273,6 +273,195 @@ describe("loadManagerScopedMapData", () => {
     });
   });
 
+  it("keeps the last checked-out event as the route anchor until the next event is checked in", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000206";
+    const nextBookingId = "00000000-0000-4000-8000-000000000207";
+    const pastTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000107",
+      startDate: new Date("2026-08-10T00:00:00Z"),
+      endDate: new Date("2026-08-15T23:00:00Z"),
+    };
+    const futureTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000108",
+      startDate: new Date("2026-08-20T00:00:00Z"),
+      endDate: new Date("2026-08-28T00:00:00Z"),
+    };
+    const lastStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000109",
+      tripId: pastTrip.id,
+      bookingId: lastBookingId,
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000110",
+      tripId: futureTrip.id,
+      bookingId: nextBookingId,
+      bookingName: "Blanding City Fall Festival",
+      startsAt: new Date("2026-08-22T12:00:00Z"),
+      endsAt: new Date("2026-08-23T20:00:00Z"),
+    };
+    const dependencies = deps([], [
+      { ...assignedBookingWithoutTrip, bookingId: lastBookingId, bookingName: lastStop.bookingName, startsAt: lastStop.startsAt, endsAt: lastStop.endsAt },
+      { ...assignedBookingWithoutTrip, bookingId: nextBookingId, bookingName: nextStop.bookingName, startsAt: nextStop.startsAt, endsAt: nextStop.endsAt },
+    ]);
+    dependencies.tripRepository = {
+      async listTrips() { return [pastTrip, futureTrip]; },
+      async listStops(tripId: string) {
+        if (tripId === pastTrip.id) return [lastStop];
+        if (tripId === futureTrip.id) return [nextStop];
+        return [];
+      },
+      async listSegments(tripId: string) {
+        return [{ id: `segment-${tripId}`, tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Prior stop", toLabel: tripId === pastTrip.id ? "Meeteetse" : "Blanding", miles: 120, minutes: 150, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }];
+      },
+    };
+    let checkedInBookingId: string | null = null;
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return checkedInBookingId ? { bookingId: checkedInBookingId } : null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.route?.trip.id).toBe(pastTrip.id);
+    expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([lastBookingId]);
+    expect(result.events.map((event) => event.bookingId)).toEqual([lastBookingId, nextBookingId]);
+
+    checkedInBookingId = nextBookingId;
+    const afterNextCheckIn = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(afterNextCheckIn.route?.trip.id).toBe(futureTrip.id);
+    expect(afterNextCheckIn.route?.stops.map((stop) => stop.bookingId)).toEqual([nextBookingId]);
+    expect(afterNextCheckIn.events.map((event) => event.bookingId)).toEqual([nextBookingId]);
+  });
+
+  it("does not retain a checked-out event for only undated or next-season bookings", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000209";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextSeasonBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000210",
+      startsAt: new Date("2027-06-10T12:00:00Z"),
+      endsAt: new Date("2027-06-11T20:00:00Z"),
+    };
+    const undatedBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000211",
+      startsAt: null,
+      endsAt: null,
+    };
+    const dependencies = deps([], [pastBooking, nextSeasonBooking, undatedBooking]);
+    dependencies.tripRepository = {
+      async listTrips() { return []; },
+      async listStops() { return []; },
+      async listSegments() { return []; },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).not.toContain(lastBookingId);
+  });
+
+  it("does not use a checked-out fallback when the current lifecycle lookup fails", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000212";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000213",
+      startsAt: new Date("2026-08-23T12:00:00Z"),
+      endsAt: new Date("2026-08-23T20:00:00Z"),
+    };
+    const dependencies = deps([], [pastBooking, nextBooking]);
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { throw new Error("Lifecycle read failed"); },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).not.toContain(lastBookingId);
+    expect(result.events.map((event) => event.bookingId)).toContain(nextBooking.bookingId);
+  });
+
+  it("drops the last checked-out route anchor when no events remain in the season", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000208";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const pastTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000111",
+      startDate: new Date("2026-08-10T00:00:00Z"),
+      endDate: new Date("2026-08-15T23:00:00Z"),
+    };
+    const pastStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000112",
+      tripId: pastTrip.id,
+      bookingId: lastBookingId,
+      startsAt: pastBooking.startsAt,
+      endsAt: pastBooking.endsAt,
+    };
+    const dependencies = deps([], [pastBooking]);
+    dependencies.tripRepository = {
+      async listTrips() { return [pastTrip]; },
+      async listStops(tripId: string) { return tripId === pastTrip.id ? [pastStop] : []; },
+      async listSegments() { return []; },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.route).toBeNull();
+    expect(result.events).toEqual([]);
+  });
+
   it("includes a shared meetup but only the counterpart leg identity", async () => {
     const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
 
