@@ -141,7 +141,7 @@ export class BossWorkRequestRepository {
           payload: sql`excluded.payload`,
           updatedAt: new Date(),
         },
-        where: sql`excluded.client_revision > ${bossConventionDrafts.clientRevision}`,
+        setWhere: sql`excluded.client_revision > ${bossConventionDrafts.clientRevision}`,
       }).returning();
     const current = saved[0] ?? (await this.database.select().from(bossConventionDrafts).where(and(
       eq(bossConventionDrafts.requestId, input.requestId),
@@ -261,7 +261,7 @@ export class BossWorkRequestRepository {
       )).returning())[0];
       if (!review) throw new BossWorkRequestConflictError("This review has already been decided.");
       if (input.decision === "approved") {
-        await tx.update(communicationTemplates).set({
+        const activated = await tx.update(communicationTemplates).set({
           state: "active", reviewedBy: detail.request.assignedBossAccountId,
           reviewedAt: new Date(), updatedAt: new Date(),
         }).where(and(
@@ -271,7 +271,10 @@ export class BossWorkRequestRepository {
             ? sql`${communicationTemplates.subjectTemplate} is null`
             : eq(communicationTemplates.subjectTemplate, review.subjectSnapshot),
           eq(communicationTemplates.bodyFormat, review.bodyFormatSnapshot),
-        ));
+        )).returning({ id: communicationTemplates.id });
+        if (!activated.length) {
+          throw new BossWorkRequestConflictError("The template changed. Review the newest version.");
+        }
       }
       const request = (await tx.update(bossWorkRequests).set({
         state: nextState, completedAt: input.decision === "approved" ? new Date() : null, updatedAt: new Date(),
