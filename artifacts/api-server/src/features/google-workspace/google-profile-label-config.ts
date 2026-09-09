@@ -1,4 +1,8 @@
 export const GOOGLE_PROFILE_LABEL_ROOT = "Z - AdventureZone/Profiles";
+export const GOOGLE_PROFILE_LABEL_HIERARCHY = [
+  "Z - AdventureZone",
+  GOOGLE_PROFILE_LABEL_ROOT,
+] as const;
 
 export type GoogleProfileLabelConfig = {
   enabled: boolean;
