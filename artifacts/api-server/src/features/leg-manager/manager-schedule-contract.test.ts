@@ -3,7 +3,7 @@ import {
   managerDashboardResponseSchema,
   managerScopedMapResponseSchema,
 } from "@workspace/api-zod";
-import { loadManagerScopedScheduleData } from "./manager-map-data";
+import { loadManagerScopedMapData, loadManagerScopedScheduleData } from "./manager-map-data";
 
 const legId = "00000000-0000-4000-8000-000000000010";
 const tripId = "00000000-0000-4000-8000-000000000100";
@@ -110,6 +110,22 @@ describe("manager schedule API contract", () => {
     }
     expect(dashboard.route?.stops.map((event) => event.bookingId)).toEqual(["trip-middle"]);
     expect(map.route?.stops.map((event) => event.bookingId)).toEqual(["trip-middle"]);
+  });
+
+  it("keeps the checked-in event in the manager map after its scheduled date cutoff", async () => {
+    const pastActive = booking("meeteetse-active", "2026-08-15T12:00:00Z");
+    const scoped = dependencies();
+    scoped.bookingRepository.listForLeg = async () => [pastActive];
+
+    const map = await loadManagerScopedMapData({
+      ...scoped,
+      handoffRepository: { async listForLeg() { return []; } },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return { bookingId: "meeteetse-active" }; },
+      },
+    }, legId, now);
+
+    expect(map.events.map((event) => event.bookingId)).toEqual(["meeteetse-active"]);
   });
 
   it("rejects a schedule event when a required contract field is missing", async () => {
