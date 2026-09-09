@@ -79,12 +79,18 @@ describe("BossTemplatesFilesPage", () => {
   });
 
   it("lets Dave sort the shared library by document name", async () => {
+    mocks.listAll.mockResolvedValue({
+      documents: [
+        document({}),
+        document({ id: "22222222-2222-4222-8222-222222222222", displayName: "Alpha Contract", originalFilename: "alpha-contract.pdf", createdAt: "2026-01-01T00:00:00.000Z" }),
+      ],
+    });
     render(<BossTemplatesFilesPage />);
     await screen.findByText("Zebra Contract");
 
     fireEvent.change(screen.getByLabelText("Sort documents"), { target: { value: "name_asc" } });
 
-    expect(screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent)).toEqual(["Alpha COI", "Zebra Contract"]);
+    expect(screen.getAllByRole("button", { name: /^Edit / }).map((button) => button.getAttribute("aria-label"))).toEqual(["Edit Alpha Contract", "Edit Zebra Contract"]);
   });
 
   it("lets Dave name and categorize a document before uploading it", async () => {
