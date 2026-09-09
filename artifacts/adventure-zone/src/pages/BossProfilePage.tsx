@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CalendarDays, MapPin, UserRound } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
+import { BossProfileEmails } from "@/components/boss/boss-profile-emails";
 import { ConventionHistory } from "@/components/profiles/convention-history";
 
 type Profile = {
@@ -65,6 +66,8 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
 
   useEffect(() => {
     let active = true;
+    setProfile(null);
+    setError("");
     bossGet<{ profile: Profile }>(`/boss/profiles/${profileId}`)
       .then((result) => { if (active) { setProfile(result.profile); setError(""); } })
       .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profile."); });
@@ -99,6 +102,8 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
         </div>
         {profile.description ? <p className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">{profile.description}</p> : null}
       </section>
+
+      <BossProfileEmails key={profile.id} organizationId={profile.id} />
 
       <section className="rounded-xl border border-border bg-card p-4">
         <h2 className="text-lg font-bold">Contacts ({profile.contacts.length})</h2>
