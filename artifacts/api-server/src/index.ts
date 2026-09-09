@@ -5,7 +5,7 @@ import { logger } from "./lib/logger";
 import { runStartupStep } from "./lib/startup-step";
 import { exitAfterRequiredStartupFailure } from "./lib/required-startup-shutdown";
 import { validateOwnerConfig } from "./lib/auth";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { runActReviewMigrationsAtStartup } from "./db/act-review-startup";
 import { runRequiredSchemaStartup } from "./db/required-schema-startup";
 import { recoverStaleDatabaseLockConvoys } from "./db/stale-lock-recovery";
@@ -97,6 +97,14 @@ import { BusinessDocumentIngestion } from "./features/business-documents/busines
 import { GoogleGmailDocumentSource, PostgresExistingGoogleProfileFileLookup } from "./features/business-documents/google-gmail-document-source";
 import { GoogleDocumentWorker, PostgresGoogleDocumentWorkerState } from "./features/business-documents/google-document-worker";
 import { GoogleDocumentWorkerLoop, systemGoogleDocumentWorkerLoopScheduler } from "./features/business-documents/google-document-worker-loop";
+import { BusinessDocumentStorage } from "./features/business-documents/business-document-storage";
+import { readGoogleDriveBackupRuntimeConfig } from "./features/google-drive-backup/google-drive-backup-config";
+import { GoogleDriveBackupDocumentRepository } from "./features/google-drive-backup/google-drive-backup-document-repository";
+import { PostgresGoogleDriveBackupRepository, type GoogleDriveBackupSqlPool } from "./features/google-drive-backup/google-drive-backup-repository";
+import { GoogleDriveBackupSnapshotRepository, GoogleWorkspaceProfileEmailProvider } from "./features/google-drive-backup/google-drive-backup-snapshot-repository";
+import { GoogleDriveBackupWorker } from "./features/google-drive-backup/google-drive-backup-worker";
+import { GoogleDriveBackupWorkerLoop } from "./features/google-drive-backup/google-drive-backup-worker-loop";
+import { getGoogleWorkspaceEnvironment } from "./features/google-workspace/google-workspace-env";
 
 validateOwnerConfig();
 
@@ -179,6 +187,39 @@ const googleDocumentLoop = new GoogleDocumentWorkerLoop({
   scheduler: systemGoogleDocumentWorkerLoopScheduler,
 });
 
+const googleDriveBackupRuntimeConfig = readGoogleDriveBackupRuntimeConfig(process.env);
+let googleDriveBackupLoop: GoogleDriveBackupWorkerLoop | null = null;
+if (googleDriveBackupRuntimeConfig.enabled) {
+  const environment = getGoogleWorkspaceEnvironment();
+  if (!environment.configured) throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
+  const sqlPool = pool as unknown as GoogleDriveBackupSqlPool;
+  const backupRepository = new PostgresGoogleDriveBackupRepository(sqlPool);
+  const emailProvider = new GoogleWorkspaceProfileEmailProvider({
+    pool: sqlPool,
+    connections: googleConnectionRepository,
+    appOrigin: environment.value.appOrigin,
+  });
+  googleDriveBackupLoop = new GoogleDriveBackupWorkerLoop({
+    worker: new GoogleDriveBackupWorker({
+      workerId: `google-drive-backup-${randomUUID()}`,
+      repository: backupRepository,
+      snapshots: new GoogleDriveBackupSnapshotRepository({
+        pool: sqlPool,
+        appOrigin: environment.value.appOrigin,
+        emailProvider,
+      }),
+      documents: new GoogleDriveBackupDocumentRepository(sqlPool),
+      storage: new BusinessDocumentStorage(),
+      connections: googleConnectionRepository,
+    }),
+    idlePollMs: googleDriveBackupRuntimeConfig.idlePollMs,
+    onResult: (result) => {
+      if (result !== "idle") logger.info({ result }, "Google Drive backup pass completed");
+    },
+    onError: (err) => logger.error({ err }, "Google Drive backup worker pass failed"),
+  });
+}
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
@@ -224,6 +265,7 @@ const shutdown = createActServerShutdown({
       gmailProfileLinkSweepLoop.close(),
       historicalGmailBackfillLoop.close(),
       googleDocumentLoop.close(),
+      googleDriveBackupLoop?.close(),
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
     ]);
@@ -482,6 +524,7 @@ async function startBackgroundWorkers() {
   gmailProfileLinkSweepLoop.start();
   historicalGmailBackfillLoop.start();
   googleDocumentLoop.start();
+  googleDriveBackupLoop?.start();
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
 
