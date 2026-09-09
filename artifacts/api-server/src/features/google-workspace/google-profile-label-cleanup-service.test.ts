@@ -91,11 +91,13 @@ describe("GoogleProfileLabelCleanupService", () => {
     expect(deleteLabel).toHaveBeenCalledWith("old-1");
   });
 
-  it("fails closed when any current CRM profile name cannot be represented", async () => {
-    const service = new GoogleProfileLabelCleanupService(
-      {
-        listCurrentProfileNames: async () => ["A".repeat(181)],
-      },
+  it.each(["A".repeat(181), "Current / Fair"])(
+    "fails closed when current CRM profile name %j cannot be represented",
+    async (invalidName) => {
+      const service = new GoogleProfileLabelCleanupService(
+        {
+          listCurrentProfileNames: async () => [invalidName],
+        },
       {
         listLabels: async () => [
           {
@@ -108,10 +110,11 @@ describe("GoogleProfileLabelCleanupService", () => {
       },
     );
 
-    await expect(service.preview()).rejects.toThrow(
-      "GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID",
-    );
-  });
+      await expect(service.preview()).rejects.toThrow(
+        "GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID",
+      );
+    },
+  );
 
   it("does not delete in Gmail when mapping invalidation fails", async () => {
     const deleteLabel = vi.fn(async () => undefined);
