@@ -223,6 +223,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "authorizationUrl",
       "createGmailDraft",
       "createLabel",
+      "deleteLabel",
       "downloadDriveFile",
       "driveBackup",
       "exchangeCode",
@@ -372,3 +373,4 @@ describe("GoogleWorkspaceReadClient", () => {
   });
 
 });
+

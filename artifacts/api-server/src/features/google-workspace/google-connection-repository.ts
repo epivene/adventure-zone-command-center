@@ -370,6 +370,7 @@ export class PostgresGoogleConnectionRepository {
     const client = this.createClient({ environment, refreshToken });
     if (
       !client.createLabel ||
+      !client.deleteLabel ||
       !client.renameLabel ||
       !client.getThreadLabelIds ||
       !client.modifyThreadLabels ||
@@ -378,6 +379,7 @@ export class PostgresGoogleConnectionRepository {
       throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CLIENT_UNAVAILABLE");
     }
     const createLabel = client.createLabel.bind(client);
+    const deleteLabel = client.deleteLabel.bind(client);
     const renameLabel = client.renameLabel.bind(client);
     const modifyThreadLabels = client.modifyThreadLabels.bind(client);
     const modifyMessageLabels = client.modifyMessageLabels.bind(client);
@@ -411,6 +413,8 @@ export class PostgresGoogleConnectionRepository {
           guardReauthorization(() => getThreadLabelIds(threadId)),
         createLabel: (name) =>
           guardReauthorization(() => createLabel(name)),
+        deleteLabel: (labelId) =>
+          guardReauthorization(() => deleteLabel(labelId)),
         renameLabel: (input) =>
           guardReauthorization(() => renameLabel(input)),
         modifyThreadLabels: (input) =>
@@ -507,3 +511,4 @@ export class PostgresGoogleConnectionRepository {
     return asRow(result.rows[0]);
   }
 }
+

@@ -402,18 +402,20 @@ export function createGoogleWorkspaceReadClient(input: {
 
   async function authorizedMutation(
     url: string,
-    method: "POST" | "PATCH",
-    body: Record<string, unknown>,
+    method: "POST" | "PATCH" | "DELETE",
+    body?: Record<string, unknown>,
     retryUnauthorized = true,
   ): Promise<Record<string, unknown>> {
     const token = await currentAccessToken(!retryUnauthorized);
     const response = await fetcher(url, {
       method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(body),
+      headers: body
+        ? {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          }
+        : { authorization: `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
     });
     if (response.status === 401 && retryUnauthorized) {
       accessToken = null;
@@ -902,6 +904,17 @@ export function createGoogleWorkspaceReadClient(input: {
       ));
     },
 
+    async deleteLabel(labelId: string): Promise<void> {
+      const value = labelId.trim();
+      if (!value) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_ID_INVALID");
+      }
+      await authorizedMutation(
+        `${labelsEndpoint}/${encodeURIComponent(value)}`,
+        "DELETE",
+      );
+    },
+
     async modifyThreadLabels(input): Promise<void> {
       const threadId = input.threadId.trim();
       if (!threadId) throw clientError("GOOGLE_WORKSPACE_GMAIL_THREAD_ID_INVALID");
@@ -1282,3 +1295,5 @@ export type {
   GoogleThreadDetail,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
+
+

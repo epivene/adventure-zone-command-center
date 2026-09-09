@@ -113,6 +113,30 @@ describe("Google Gmail label mutation client", () => {
     ]);
   });
 
+  it("deletes a Gmail label without deleting any messages", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input, init) => {
+        const url = String(input);
+        requests.push({ url, init });
+        if (url === "https://oauth2.googleapis.com/token") {
+          return json({ access_token: "access-token", expires_in: 3600 });
+        }
+        if (url.endsWith("/labels/Label_old") && init?.method === "DELETE") {
+          return new Response(null, { status: 204 });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    });
+
+    await expect(client.deleteLabel?.("Label_old")).resolves.toBeUndefined();
+
+    expect(requests.some((request) => request.url.includes("/messages/"))).toBe(false);
+    expect(requests.some((request) => request.url.includes("/threads/"))).toBe(false);
+  });
+
   it("rejects a label in both add and remove lists before Gmail is called", async () => {
     const client = createGoogleWorkspaceReadClient({
       environment,

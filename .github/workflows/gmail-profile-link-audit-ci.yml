@@ -6,6 +6,14 @@ on:
     paths:
       - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-profile-label-cleanup-service.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-profile-label-cleanup-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-gmail-label-client.test.ts"
+      - "artifacts/api-server/src/routes/google-workspace-validation.ts"
+      - "artifacts/api-server/src/routes/google-workspace-validation.test.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/google-workspace-client.ts"
+      - "artifacts/adventure-zone/src/components/google-workspace/google-validation-review.tsx"
+      - "artifacts/adventure-zone/src/components/google-workspace/google-validation-review.test.tsx"
       - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
@@ -27,6 +35,14 @@ on:
     paths:
       - "artifacts/api-server/src/features/google-workspace/google-api-client.ts"
       - "artifacts/api-server/src/features/google-workspace/google-api-types.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-profile-label-cleanup-service.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-profile-label-cleanup-service.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-gmail-label-client.test.ts"
+      - "artifacts/api-server/src/routes/google-workspace-validation.ts"
+      - "artifacts/api-server/src/routes/google-workspace-validation.test.ts"
+      - "artifacts/adventure-zone/src/features/google-workspace/google-workspace-client.ts"
+      - "artifacts/adventure-zone/src/components/google-workspace/google-validation-review.tsx"
+      - "artifacts/adventure-zone/src/components/google-workspace/google-validation-review.test.tsx"
       - "artifacts/api-server/src/features/google-workspace/google-api-client-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-window-query.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.ts"
@@ -63,11 +79,20 @@ jobs:
           src/features/google-workspace/google-api-client.test.ts
           src/features/google-workspace/google-api-client-metadata.test.ts
           src/features/google-workspace/google-api-client-query.test.ts
+          src/features/google-workspace/google-gmail-label-client.test.ts
+          src/features/google-workspace/google-profile-label-cleanup-service.test.ts
+          src/routes/google-workspace-validation.test.ts
           src/features/google-workspace/google-sent-profile-link-window-query.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts
           src/features/google-workspace/google-historical-backfill-loop.test.ts
           src/routes/assistant-gmail-profile-links.test.ts
           src/routes/google-workspace-profile-email.test.ts
+      - name: Email Review label cleanup test
+        run: >-
+          pnpm --filter @workspace/adventure-zone exec vitest run
+          src/components/google-workspace/google-validation-review.test.tsx
       - name: Production API build
         run: pnpm --filter @workspace/api-server build
+      - name: Production frontend build
+        run: pnpm --filter @workspace/adventure-zone build

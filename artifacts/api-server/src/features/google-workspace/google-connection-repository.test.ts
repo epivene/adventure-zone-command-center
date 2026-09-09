@@ -82,6 +82,7 @@ const fakeClient: GoogleWorkspaceReadClient = {
   listLabels: async () => [],
   listCalendars: async () => [],
   createLabel: async (name) => ({ id: "Label_1", name, type: "user" }),
+  deleteLabel: async () => undefined,
   renameLabel: async ({ labelId, name }) => ({ id: labelId, name, type: "user" }),
   getThreadLabelIds: async () => [],
   modifyThreadLabels: async () => undefined,
@@ -275,6 +276,7 @@ describe("PostgresGoogleConnectionRepository", () => {
     expect(result?.connectionId).toBe("connection-id");
     expect(Object.keys(result?.client ?? {}).sort()).toEqual([
       "createLabel",
+      "deleteLabel",
       "getThreadLabelIds",
       "listLabels",
       "modifyMessageLabels",
@@ -511,3 +513,5 @@ describe("PostgresGoogleConnectionRepository", () => {
   });
 
 });
+
+
