@@ -7,7 +7,9 @@ CREATE TEMP TABLE gmail_review_repair ON COMMIT DROP AS
 SELECT DISTINCT ON (t.id)
   t.id AS template_id, good.request_id AS keep_request_id,
   good_request.assigned_boss_account_id AS boss_id,
-  good.subject_snapshot, good.body_snapshot, good.template_version
+  good.subject_snapshot, good.body_snapshot, good.template_version,
+  t.body_template AS expected_body, t.subject_template AS expected_subject,
+  t.state AS expected_state, t.updated_at AS expected_updated_at
 FROM communication_templates t
 JOIN communication_template_reviews good ON good.template_id = t.id
 JOIN boss_work_requests good_request ON good_request.id = good.request_id
@@ -37,17 +39,31 @@ WHERE t.code IN (
   )
 ORDER BY t.id, good.created_at DESC, good.id DESC;
 
-UPDATE communication_templates t SET
-  body_format = 'html', body_template = repair.body_snapshot,
-  subject_template = repair.subject_snapshot,
-  template_version = repair.template_version, updated_at = now()
-FROM gmail_review_repair repair WHERE t.id = repair.template_id;
+-- Apply only candidates still unchanged since selection. The target-row
+-- predicates are rechecked after any concurrent writer releases its lock.
+CREATE TEMP TABLE applied_gmail_review_repair ON COMMIT DROP AS
+WITH restored AS (
+  UPDATE communication_templates t SET
+    body_format = 'html', body_template = repair.body_snapshot,
+    subject_template = repair.subject_snapshot,
+    template_version = repair.template_version, updated_at = now()
+  FROM gmail_review_repair repair
+  WHERE t.id = repair.template_id
+    AND t.body_format = 'plain_text' AND t.state = repair.expected_state
+    AND t.body_template = repair.expected_body
+    AND t.subject_template IS NOT DISTINCT FROM repair.expected_subject
+    AND t.template_version IS NOT DISTINCT FROM repair.template_version
+    AND t.updated_at IS NOT DISTINCT FROM repair.expected_updated_at
+  RETURNING t.id
+)
+SELECT repair.* FROM gmail_review_repair repair
+JOIN restored ON restored.id = repair.template_id;
 
 WITH obsolete AS (
   SELECT request.id, request.state AS prior_state, request.deduplication_key
   FROM boss_work_requests request
   JOIN communication_template_reviews review ON review.request_id = request.id
-  JOIN gmail_review_repair repair ON repair.template_id = review.template_id
+  JOIN applied_gmail_review_repair repair ON repair.template_id = review.template_id
   WHERE request.id <> repair.keep_request_id
     AND request.assigned_boss_account_id = repair.boss_id
     AND request.state IN ('waiting_on_dave', 'in_progress', 'returned_for_clarification')
@@ -55,7 +71,7 @@ WITH obsolete AS (
 ), closed AS (
   UPDATE boss_work_requests request
   SET state = 'cancelled', completed_at = now(), updated_at = now(), deduplication_key = NULL
-  FROM obsolete WHERE request.id = obsolete.id
+  FROM obsolete WHERE request.id = obsolete.id AND request.state = obsolete.prior_state
   RETURNING request.id, obsolete.prior_state, obsolete.deduplication_key
 )
 INSERT INTO boss_work_request_events(request_id,actor_kind,actor_id,prior_state,new_state,note,metadata)
@@ -76,8 +92,9 @@ BEGIN
   WHERE id = NEW.request_id
     AND state IN ('waiting_on_dave', 'in_progress', 'returned_for_clarification');
   IF assignee IS NULL THEN RETURN NEW; END IF;
-  -- Serialize competing review inserts for a template, including different revisions.
-  PERFORM id FROM communication_templates WHERE id = NEW.template_id FOR UPDATE;
+  -- Serialize competing inserts without upgrading the FK's KEY SHARE lock to
+  -- FOR UPDATE (concurrent upgrades can deadlock). This mode is FK-compatible.
+  PERFORM id FROM communication_templates WHERE id = NEW.template_id FOR NO KEY UPDATE;
   WITH obsolete AS (
     SELECT request.id, request.state AS prior_state, request.deduplication_key
     FROM boss_work_requests request
@@ -89,7 +106,7 @@ BEGIN
   ), closed AS (
     UPDATE boss_work_requests request
     SET state = 'cancelled', completed_at = now(), updated_at = now(), deduplication_key = NULL
-    FROM obsolete WHERE request.id = obsolete.id
+    FROM obsolete WHERE request.id = obsolete.id AND request.state = obsolete.prior_state
     RETURNING request.id, obsolete.prior_state, obsolete.deduplication_key
   )
   INSERT INTO boss_work_request_events(request_id,actor_kind,actor_id,prior_state,new_state,note,metadata)
