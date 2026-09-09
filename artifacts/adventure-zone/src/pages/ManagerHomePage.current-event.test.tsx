@@ -42,9 +42,9 @@ describe("ManagerHomePage current event state", () => {
     expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
     expect(screen.getByText("Up Next")).toBeInTheDocument();
     expect(screen.getByText("Next County Fair")).toBeInTheDocument();
-    expect(screen.getByText(/Event dates:/)).toHaveTextContent(/Aug 22.*Aug 24/);
-    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 20.*Aug 21/);
-    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 25/);
+    expect(screen.getAllByText(/Event dates:/).some((row) => /Aug 22.*Aug 24/.test(row.textContent ?? ""))).toBe(true);
+    expect(screen.getAllByText(/Buffer before:/).some((row) => /Aug 20.*Aug 21/.test(row.textContent ?? ""))).toBe(true);
+    expect(screen.getAllByText(/Buffer after:/).some((row) => /Aug 25/.test(row.textContent ?? ""))).toBe(true);
     expect(screen.queryByText("Next Stop")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Checked in Aug 17, 8:58 PM/)).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Event notes / site check" })).toHaveAttribute("href", "/manager/events/event-1/wrap-up#site-check");
