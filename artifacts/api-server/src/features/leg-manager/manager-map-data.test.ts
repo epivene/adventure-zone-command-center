@@ -273,6 +273,94 @@ describe("loadManagerScopedMapData", () => {
     });
   });
 
+  it("keeps the last checked-out event as the route anchor until the next event is checked in", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000206";
+    const nextBookingId = "00000000-0000-4000-8000-000000000207";
+    const pastTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000107",
+      startDate: new Date("2026-08-10T00:00:00Z"),
+      endDate: new Date("2026-08-15T23:00:00Z"),
+    };
+    const futureTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000108",
+      startDate: new Date("2026-08-20T00:00:00Z"),
+      endDate: new Date("2026-08-28T00:00:00Z"),
+    };
+    const lastStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000109",
+      tripId: pastTrip.id,
+      bookingId: lastBookingId,
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const nextStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000110",
+      tripId: futureTrip.id,
+      bookingId: nextBookingId,
+      bookingName: "Blanding City Fall Festival",
+      startsAt: new Date("2026-08-22T12:00:00Z"),
+      endsAt: new Date("2026-08-23T20:00:00Z"),
+    };
+    const dependencies = deps([], [
+      { ...assignedBookingWithoutTrip, bookingId: lastBookingId, bookingName: lastStop.bookingName, startsAt: lastStop.startsAt, endsAt: lastStop.endsAt },
+      { ...assignedBookingWithoutTrip, bookingId: nextBookingId, bookingName: nextStop.bookingName, startsAt: nextStop.startsAt, endsAt: nextStop.endsAt },
+    ]);
+    dependencies.tripRepository = {
+      async listTrips() { return [pastTrip, futureTrip]; },
+      async listStops(tripId: string) {
+        if (tripId === pastTrip.id) return [lastStop];
+        if (tripId === futureTrip.id) return [nextStop];
+        return [];
+      },
+      async listSegments(tripId: string) {
+        return [{ id: `segment-${tripId}`, tripId, sequence: 1, fromKey: "a", toKey: "b", fromLabel: "Prior stop", toLabel: tripId === pastTrip.id ? "Meeteetse" : "Blanding", miles: 120, minutes: 150, source: "fallback" as const, estimatedAt: null, overrideMiles: null, overrideMinutes: null }];
+      },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.route?.trip.id).toBe(pastTrip.id);
+    expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([lastBookingId]);
+    expect(result.events.map((event) => event.bookingId)).toEqual([lastBookingId, nextBookingId]);
+  });
+
+  it("drops the last checked-out route anchor when no events remain in the season", async () => {
+    const lastBookingId = "00000000-0000-4000-8000-000000000208";
+    const pastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: lastBookingId,
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const dependencies = deps([], [pastBooking]);
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return null; },
+      async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.route).toBeNull();
+    expect(result.events).toEqual([]);
+  });
+
   it("includes a shared meetup but only the counterpart leg identity", async () => {
     const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
 
