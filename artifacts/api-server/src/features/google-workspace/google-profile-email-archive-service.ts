@@ -178,12 +178,13 @@ export class GoogleProfileEmailArchiveService {
       });
     } catch (error) {
       if (!existing) throw error;
+      const code = safeErrorCode(error);
       await this.archive.recordSyncFailure({
         conversationId: existing.id,
-        code: safeErrorCode(error),
+        code,
         now: this.now(),
       });
-      return existing;
+      return { ...existing, lastGmailErrorCode: code };
     }
   }
 }
