@@ -8,20 +8,8 @@ export type GoogleLabelSummary = {
 export type GoogleGmailLabelMutationClient = {
   listLabels(): Promise<GoogleLabelSummary[]>;
   getThreadLabelIds(threadId: string): Promise<string[]>;
-  createLabel?(name: string): Promise<GoogleLabelSummary>;
-  deleteLabel?(labelId: string): Promise<void>;
-  renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
-  modifyThreadLabels?(input: {
-    threadId: string;
-    addLabelIds: string[];
-    removeLabelIds: string[];
-  }): Promise<void>;
-  modifyMessageLabels?(input: {
-    messageId: string;
-    addLabelIds: string[];
-    removeLabelIds: string[];
-  }): Promise<void>;
   createLabel(name: string): Promise<GoogleLabelSummary>;
+  deleteLabel(labelId: string): Promise<void>;
   renameLabel(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
   modifyThreadLabels(input: {
     threadId: string;
@@ -55,6 +43,43 @@ export type GoogleDrivePage = {
   files: GoogleDriveFile[];
   nextPageToken: string | null;
 };
+
+export type GoogleDriveBackupFile = {
+  id: string;
+  name: string;
+  mimeType: string;
+  parents: string[];
+  webViewLink: string | null;
+  md5Checksum: string | null;
+};
+
+export type DriveCreateFileInput = {
+  parentId: string;
+  name: string;
+  mimeType: string;
+  bytes: Uint8Array;
+};
+
+export type DriveUpdateFileInput = {
+  fileId: string;
+  name?: string;
+  mimeType?: string;
+  bytes?: Uint8Array;
+  currentParentId?: string;
+  parentId?: string;
+};
+
+export interface GoogleDriveBackupClient {
+  findChild(
+    parentId: string,
+    name: string,
+    mimeType?: string,
+  ): Promise<GoogleDriveBackupFile | null>;
+  createFolder(parentId: string, name: string): Promise<GoogleDriveBackupFile>;
+  createFile(input: DriveCreateFileInput): Promise<GoogleDriveBackupFile>;
+  updateFile(input: DriveUpdateFileInput): Promise<GoogleDriveBackupFile>;
+  getFile(fileId: string): Promise<GoogleDriveBackupFile>;
+}
 
 export type GoogleWorkspaceAccountIdentity = {
   subject: string | null;
@@ -139,6 +164,7 @@ export type GoogleCalendarEvent = {
 };
 
 export interface GoogleWorkspaceReadClient {
+  driveBackup?: GoogleDriveBackupClient;
   authorizationUrl(input: { state: string; scopes?: readonly string[] }): string;
   exchangeCode(code: string): Promise<{
     refreshToken: string;
@@ -146,6 +172,18 @@ export interface GoogleWorkspaceReadClient {
   }>;
   accountIdentity(): Promise<GoogleWorkspaceAccountIdentity>;
   listLabels(): Promise<GoogleLabelSummary[]>;
+  createLabel?(name: string): Promise<GoogleLabelSummary>;
+  renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
+  modifyThreadLabels?(input: {
+    threadId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+  modifyMessageLabels?(input: {
+    messageId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
   listCalendars(): Promise<GoogleCalendarSummary[]>;
   listCalendarEvents?(input: { calendarIds: string[]; timeMin: string; timeMax: string }): Promise<GoogleCalendarEvent[]>;
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
@@ -168,3 +206,4 @@ export type GoogleWorkspaceFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
+

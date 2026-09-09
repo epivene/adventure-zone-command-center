@@ -225,6 +225,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "createLabel",
       "deleteLabel",
       "downloadDriveFile",
+      "driveBackup",
       "exchangeCode",
       "getAttachment",
       "getMessageMetadata",
@@ -243,6 +244,133 @@ describe("GoogleWorkspaceReadClient", () => {
     expect(Object.keys(client).some((name) => /send/i.test(name))).toBe(false);
     const scopes = GOOGLE_WORKSPACE_REQUIRED_SCOPES as readonly string[];
     expect(scopes).toContain("https://www.googleapis.com/auth/gmail.modify");
+    expect(scopes).toContain("https://www.googleapis.com/auth/drive.file");
     expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.readonly");
   });
+
+  it("creates and updates only files addressed through the narrow Drive backup client", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    let driveResponseId = 0;
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input, init) => {
+        const url = String(input);
+        calls.push({ url, init });
+        if (url === "https://oauth2.googleapis.com/token") {
+          return response({ access_token: "access-token", expires_in: 3600 });
+        }
+        if (url.includes("/drive/v3/files?") && init?.method !== "POST") {
+          return response({
+            files: [{
+              id: "child-folder",
+              name: "Profiles",
+              mimeType: "application/vnd.google-apps.folder",
+              parents: ["root-folder"],
+              webViewLink: "https://drive.google.com/child-folder",
+            }],
+          });
+        }
+        driveResponseId += 1;
+        return response({
+          id: `drive-file-${driveResponseId}`,
+          name: "Profile Summary.pdf",
+          mimeType: "application/pdf",
+          parents: ["profile-folder"],
+          webViewLink: "https://drive.google.com/file",
+          md5Checksum: "google-md5",
+        });
+      },
+    });
+
+    const drive = client.driveBackup;
+    await expect(
+      drive?.findChild(
+        "root-folder",
+        "Profiles",
+        "application/vnd.google-apps.folder",
+      ),
+    ).resolves.toMatchObject({ id: "child-folder", parents: ["root-folder"] });
+    await drive?.createFolder("root-folder", "Profiles");
+    await drive?.createFile({
+      parentId: "profile-folder",
+      name: "Profile Summary.pdf",
+      mimeType: "application/pdf",
+      bytes: new Uint8Array([1, 2, 3]),
+    });
+    await drive?.updateFile({
+      fileId: "drive-file-2",
+      name: "Profile Summary.pdf",
+      mimeType: "application/pdf",
+      bytes: new Uint8Array([4, 5]),
+      currentParentId: "old-folder",
+      parentId: "profile-folder",
+    });
+    await drive?.getFile("drive-file-2");
+
+    const createFolder = calls.find((call) =>
+      call.url.startsWith("https://www.googleapis.com/drive/v3/files?") &&
+      call.init?.method === "POST",
+    );
+    expect(createFolder?.init?.headers).toMatchObject({
+      authorization: "Bearer access-token",
+      "content-type": "application/json",
+    });
+    expect(JSON.parse(String(createFolder?.init?.body))).toEqual({
+      name: "Profiles",
+      mimeType: "application/vnd.google-apps.folder",
+      parents: ["root-folder"],
+    });
+
+    const uploads = calls.filter((call) =>
+      call.url.startsWith("https://www.googleapis.com/upload/drive/v3/files"),
+    );
+    expect(uploads).toHaveLength(2);
+    expect(uploads[0]?.init?.method).toBe("POST");
+    expect(uploads[1]?.init?.method).toBe("PATCH");
+    expect(new URL(uploads[1]!.url).searchParams.get("addParents")).toBe(
+      "profile-folder",
+    );
+    expect(new URL(uploads[1]!.url).searchParams.get("removeParents")).toBe(
+      "old-folder",
+    );
+    expect(String((uploads[0]?.init?.headers as Record<string, string>)?.[
+      "content-type"
+    ])).toMatch(/^multipart\/related; boundary=/);
+    const uploadBody = Buffer.from(
+      await new Response(uploads[0]?.init?.body).arrayBuffer(),
+    ).toString("utf8");
+    expect(uploadBody).toContain("Profile Summary.pdf");
+    expect(uploadBody).toContain("application/pdf");
+  });
+
+  it("classifies Drive authorization and retryable failures", async () => {
+    for (const [status, expectedCode] of [
+      [403, "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"],
+      [429, "GOOGLE_WORKSPACE_DRIVE_RETRYABLE_FAILURE"],
+      [503, "GOOGLE_WORKSPACE_DRIVE_RETRYABLE_FAILURE"],
+    ] as const) {
+      const client = createGoogleWorkspaceReadClient({
+        environment,
+        refreshToken: "refresh-token",
+        fetcher: async (input) => {
+          if (String(input) === "https://oauth2.googleapis.com/token") {
+            return response({ access_token: "access-token", expires_in: 3600 });
+          }
+          return response(
+            status === 403
+              ? { error: { errors: [{ reason: "insufficientPermissions" }] } }
+              : { error: { message: "temporary" } },
+            status,
+          );
+        },
+      });
+
+      await expect(
+        client.driveBackup?.createFolder("root-folder", "Profiles"),
+      ).rejects.toMatchObject({ code: expectedCode });
+    }
+  });
+
 });
+

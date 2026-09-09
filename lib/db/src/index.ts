@@ -21,6 +21,7 @@ import * as designStudioCanvaSchema from "./design-studio-canva-schema";
 import * as contractSchema from "./contract-schema";
 import * as marketingSchema from "./marketing-schema";
 import * as businessDocumentSchema from "./business-document-schema";
+import * as googleDriveBackupSchema from "./google-drive-backup-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
 import { databasePoolTimeouts } from "./pool-config";
 import {
@@ -88,6 +89,7 @@ const schema = {
   ...contractSchema,
   ...marketingSchema,
   ...businessDocumentSchema,
+  ...googleDriveBackupSchema,
   designAssets,
   designCertificates,
   designOutputs,
@@ -121,3 +123,6 @@ export * from "./contract-schema";
 export * from "./design-studio-canva-schema";
 export * from "./marketing-schema";
 export * from "./business-document-schema";
+export * from "./google-drive-backup-schema";
+
+
