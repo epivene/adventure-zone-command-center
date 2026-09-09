@@ -69,6 +69,14 @@ import {
   systemGoogleSentProfileLinkSweepLoopScheduler,
 } from "./features/google-workspace/google-sent-profile-link-sweep-loop";
 import {
+  GoogleHistoricalBackfillLoop,
+  systemGoogleHistoricalBackfillLoopScheduler,
+} from "./features/google-workspace/google-historical-backfill-loop";
+import { GoogleHistoricalBackfillService } from "./features/google-workspace/google-historical-backfill-service";
+import { GoogleHistoricalBackfillRepository } from "./features/google-workspace/google-historical-backfill-repository";
+import { GoogleHistoricalRunLease } from "./features/google-workspace/google-historical-run-lease";
+import { PostgresGoogleValidationRepository } from "./features/google-workspace/google-validation-repository";
+import {
   createActExtractionRuntime,
   createActServerShutdown,
   shouldStartActBackgroundWorkers,
@@ -148,6 +156,16 @@ const gmailProfileLinkSweepLoop = new GoogleSentProfileLinkSweepLoop({
   scheduler: systemGoogleSentProfileLinkSweepLoopScheduler,
 });
 
+const historicalGmailBackfillLoop = new GoogleHistoricalBackfillLoop({
+  enabled:
+    process.env.GOOGLE_WORKSPACE_SYNC_ENABLED?.trim().toLowerCase() === "true",
+  validation: new PostgresGoogleValidationRepository(),
+  repository: new GoogleHistoricalBackfillRepository(),
+  service: new GoogleHistoricalBackfillService(),
+  lease: new GoogleHistoricalRunLease(),
+  scheduler: systemGoogleHistoricalBackfillLoopScheduler,
+});
+
 const googleConnectionRepository = new PostgresGoogleConnectionRepository();
 const googleDocumentLoop = new GoogleDocumentWorkerLoop({
   worker: new GoogleDocumentWorker({
@@ -204,6 +222,7 @@ const shutdown = createActServerShutdown({
       assistantJobLoop.close(),
       paperNoteLoop.close(),
       gmailProfileLinkSweepLoop.close(),
+      historicalGmailBackfillLoop.close(),
       googleDocumentLoop.close(),
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
@@ -461,6 +480,7 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  historicalGmailBackfillLoop.start();
   googleDocumentLoop.start();
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
