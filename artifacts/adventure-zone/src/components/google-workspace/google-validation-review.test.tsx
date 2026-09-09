@@ -154,6 +154,69 @@ describe("GoogleValidationReview", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps failed cleanup labels selected and reports partial results", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    client.getGoogleProfileLabelCleanupPreview.mockResolvedValueOnce({
+      labels: [
+        {
+          id: "Label_good",
+          name: "Z - AdventureZone/Profiles/Old Good",
+        },
+        {
+          id: "Label_bad",
+          name: "Z - AdventureZone/Profiles/Old Bad",
+        },
+      ],
+    });
+    client.deleteGoogleProfileLabels.mockResolvedValueOnce({
+      deleted: [
+        {
+          id: "Label_good",
+          name: "Z - AdventureZone/Profiles/Old Good",
+        },
+      ],
+      skippedLabelIds: [],
+      failed: [
+        {
+          id: "Label_bad",
+          name: "Z - AdventureZone/Profiles/Old Bad",
+          errorCode: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED",
+        },
+      ],
+    });
+    render(<GoogleValidationReview checkGmailOnMount />);
+    await screen.findByText("County Fair application");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clean up old labels" }));
+    const good = await screen.findByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old Good",
+    });
+    const bad = screen.getByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old Bad",
+    });
+    fireEvent.click(good);
+    fireEvent.click(bad);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete 2 selected labels" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Deleted 1 old Gmail label. No emails were deleted. 1 label could not be deleted and remain selected.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Z - AdventureZone/Profiles/Old Good",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Z - AdventureZone/Profiles/Old Bad",
+      }),
+    ).toBeChecked();
+  });
+
   it("loads only the saved queue in shared views", async () => {
     render(<GoogleValidationReview />);
 
