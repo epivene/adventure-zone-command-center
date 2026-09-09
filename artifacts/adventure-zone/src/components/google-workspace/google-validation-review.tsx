@@ -181,16 +181,34 @@ export function GoogleValidationReview({
     try {
       const selected = [...selectedCleanupLabelIds];
       const result = await deleteGoogleProfileLabels(selected);
+      const removedIds = new Set([
+        ...result.deleted.map((label) => label.id),
+        ...result.skippedLabelIds,
+      ]);
       setCleanupLabels((current) =>
-        current.filter((label) => !selected.includes(label.id)),
+        current.filter((label) => !removedIds.has(label.id)),
       );
-      setSelectedCleanupLabelIds([]);
+      setSelectedCleanupLabelIds(
+        result.failed.map((failure) => failure.id),
+      );
       const deletedCount = result.deleted.length;
-      setCleanupStatus(
-        deletedCount
-          ? `Deleted ${deletedCount} old Gmail label${deletedCount === 1 ? "" : "s"}. No emails were deleted.`
-          : "No labels were deleted after the safety re-check.",
-      );
+      const failedCount = result.failed.length;
+      if (deletedCount) {
+        setCleanupStatus(
+          `Deleted ${deletedCount} old Gmail label${deletedCount === 1 ? "" : "s"}. No emails were deleted.` +
+            (failedCount
+              ? ` ${failedCount} label${failedCount === 1 ? "" : "s"} could not be deleted and remain selected.`
+              : ""),
+        );
+      } else if (failedCount) {
+        setCleanupStatus(
+          `No labels were deleted. ${failedCount} label${failedCount === 1 ? "" : "s"} could not be deleted and remain selected.`,
+        );
+      } else {
+        setCleanupStatus(
+          "No labels were deleted after the safety re-check.",
+        );
+      }
     } catch (caught) {
       setError(
         caught instanceof Error
