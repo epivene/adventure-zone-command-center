@@ -1,7 +1,7 @@
 # Durable Gmail Profile History Design
 
 **Date:** 2026-09-09  
-**Status:** Approved for implementation  
+**Status:** Proposed — awaiting written-spec approval  
 **Branch:** `feature/gmail-profile-email-archive`
 
 ## Goal
