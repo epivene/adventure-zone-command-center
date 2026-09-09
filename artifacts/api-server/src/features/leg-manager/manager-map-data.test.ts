@@ -236,7 +236,7 @@ describe("loadManagerScopedMapData", () => {
       startsAt: pastStop.startsAt,
       endsAt: pastStop.endsAt,
       operationalStartsAt: new Date("2026-08-12T00:00:00Z"),
-      operationalEndsAt: new Date("2026-08-16T23:59:00Z"),
+      operationalEndsAt: new Date("2026-08-17T00:00:00Z"),
     }]);
     dependencies.tripRepository = {
       async listTrips() { return [pastTrip]; },
@@ -269,7 +269,7 @@ describe("loadManagerScopedMapData", () => {
     })]);
     expect(result.events.find((event) => event.bookingId === activeBookingId)).toMatchObject({
       operationalStartsAt: new Date("2026-08-12T00:00:00Z"),
-      operationalEndsAt: new Date("2026-08-16T23:59:00Z"),
+      operationalEndsAt: new Date("2026-08-17T00:00:00Z"),
     });
   });
 
