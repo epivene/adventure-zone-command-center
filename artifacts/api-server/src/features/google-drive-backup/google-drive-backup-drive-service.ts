@@ -119,7 +119,7 @@ export class GoogleDriveBackupDriveService {
       input.entityId,
     );
 
-    if (mapping?.sha256Hex === sha256Hex &&
+    if (mapping && mapping.sha256Hex === sha256Hex &&
         mapping.logicalPath === input.path.logicalPath) {
       const file = await this.options.client.getFile(mapping.driveFileId);
       if (!isChild(file, parentId)) {
