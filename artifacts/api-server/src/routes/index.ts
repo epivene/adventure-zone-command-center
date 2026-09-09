@@ -35,6 +35,7 @@ import businessSourceDocumentFilesRouter from "./business-source-document-files"
 import businessSourceDocumentLinksRouter from "./business-source-document-links";
 import googleWorkspaceOAuthCallbackRouter from "./google-workspace-oauth-callback";
 import googleWorkspaceSettingsRouter from "./google-workspace-settings";
+import googleDriveBackupRouter from "./google-drive-backup";
 import googleOperationalCalendarRouter from "./google-operational-calendar";
 import operationalCalendarSyncHookRouter from "./operational-calendar-sync-hook";
 import googleWorkspaceValidationRouter from "./google-workspace-validation";
@@ -307,6 +308,7 @@ router.use(eventFamiliesRouter);
 router.use(profilePhotoRouter);
 router.use(settingsRouter);
 router.use(googleWorkspaceSettingsRouter);
+router.use(googleDriveBackupRouter);
 router.use(googleOperationalCalendarRouter);
 router.use(googleWorkspaceValidationRouter);
 router.use(googleWorkspaceMatchedCorrectionsRouter);
