@@ -54,7 +54,7 @@ export function ManagerScopedMap({ data, variant, focusedBookingId = null, onFoc
       {variant === "operations" ? <ManagerTripNavigationActions trip={focusedTrip} mode={mode} /> : null}
       <div className={variant === "events" ? "max-h-[24rem] overflow-hidden rounded-xl border border-slate-200" : "overflow-hidden rounded-xl border border-slate-200"}>
         <ManagerRouteMapShell viewport={viewport}>
-          <ManagerScopedMapLayers data={data} focusedBookingId={focusedBookingId} mode={mode} showRoute={variant === "operations"} onFocusBooking={onFocusBooking} />
+          <ManagerScopedMapLayers data={data} focusedBookingId={focusedBookingId} mode={mode} showRoute={Boolean(data.route)} onFocusBooking={onFocusBooking} />
         </ManagerRouteMapShell>
       </div>
     </section>
