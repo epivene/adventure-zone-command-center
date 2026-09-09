@@ -330,6 +330,7 @@ export class PostgresGoogleConnectionRepository {
     const client = this.createClient({ environment, refreshToken });
     if (
       !client.createLabel ||
+      !client.deleteLabel ||
       !client.renameLabel ||
       !client.getThreadLabelIds ||
       !client.modifyThreadLabels ||
@@ -366,6 +367,8 @@ export class PostgresGoogleConnectionRepository {
           guardReauthorization(() => client.getThreadLabelIds!(threadId)),
         createLabel: (name) =>
           guardReauthorization(() => client.createLabel!(name)),
+        deleteLabel: (labelId) =>
+          guardReauthorization(() => client.deleteLabel!(labelId)),
         renameLabel: (input) =>
           guardReauthorization(() => client.renameLabel!(input)),
         modifyThreadLabels: (input) =>
