@@ -331,6 +331,7 @@ export class PostgresGoogleConnectionRepository {
     if (
       !client.createLabel ||
       !client.renameLabel ||
+      !client.getThreadLabelIds ||
       !client.modifyThreadLabels ||
       !client.modifyMessageLabels
     ) {
@@ -361,6 +362,8 @@ export class PostgresGoogleConnectionRepository {
       connectionId: row.id,
       client: {
         listLabels: () => guardReauthorization(() => client.listLabels()),
+        getThreadLabelIds: (threadId) =>
+          guardReauthorization(() => client.getThreadLabelIds!(threadId)),
         createLabel: (name) =>
           guardReauthorization(() => client.createLabel!(name)),
         renameLabel: (input) =>
