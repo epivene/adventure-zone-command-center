@@ -82,6 +82,37 @@ describe("Google Gmail label mutation client", () => {
     });
   });
 
+  it("reads the labels attached anywhere in a Gmail thread", async () => {
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input) => {
+        const url = String(input);
+        if (url === "https://oauth2.googleapis.com/token") {
+          return json({ access_token: "access-token", expires_in: 3600 });
+        }
+        if (url.includes("/threads/thread-1?")) {
+          return json({
+            id: "thread-1",
+            messages: [
+              { id: "message-1", labelIds: ["Label_old", "SENT"] },
+              { id: "message-2", labelIds: ["Label_target", "INBOX", "UNREAD"] },
+            ],
+          });
+        }
+        throw new Error(`Unexpected request: ${url}`);
+      },
+    });
+
+    await expect(client.getThreadLabelIds?.("thread-1")).resolves.toEqual([
+      "INBOX",
+      "Label_old",
+      "Label_target",
+      "SENT",
+      "UNREAD",
+    ]);
+  });
+
   it("rejects a label in both add and remove lists before Gmail is called", async () => {
     const client = createGoogleWorkspaceReadClient({
       environment,

@@ -4,6 +4,7 @@ import type {
   GoogleGmailMutationRecord,
   PostgresGoogleGmailMutationRepository,
 } from "./google-gmail-mutation-repository";
+import { isProfileLabelPath } from "./google-profile-label-config";
 import type { GoogleProfileLabelRepositoryPort } from "./google-profile-label-repository";
 import type { GoogleProfileLabelResolver } from "./google-profile-label-resolver";
 
@@ -131,7 +132,9 @@ implements GoogleProfileLabelSyncServicePort {
     intent: GoogleGmailMutationIntent,
   ): Promise<GoogleProfileLabelSyncResult> {
     const mutation = await this.dependencies.mutations.createOrLoad(intent);
-    if (mutation.state === "completed") return this.view(mutation);
+    if (mutation.state === "completed") {
+      return this.reconcileCompleted(mutation);
+    }
     return this.execute(mutation);
   }
 
@@ -195,27 +198,11 @@ implements GoogleProfileLabelSyncServicePort {
       }
 
       const target = resolution.mapping;
-      let removeLabelIds: string[] = [];
-      if (claimed.operation === "assign_thread") {
-        const managed = await this.dependencies.labels.listManagedLabelIds(
-          claimed.connectionId,
-        );
-        removeLabelIds = [...new Set([
-          ...managed.filter((id) => id !== target.gmailLabelId),
-          "INBOX",
-        ])].sort();
-        await this.dependencies.gmail.modifyThreadLabels({
-          threadId: claimed.threadId,
-          addLabelIds: [target.gmailLabelId],
-          removeLabelIds,
-        });
-      } else {
-        await this.dependencies.gmail.modifyMessageLabels({
-          messageId: claimed.messageId,
-          addLabelIds: [target.gmailLabelId],
-          removeLabelIds: [],
-        });
-      }
+      const removeLabelIds = await this.applyCurrentProfileLabel({
+        mutation: claimed,
+        targetLabelId: target.gmailLabelId,
+        onlyWhenChanged: false,
+      });
 
       const winner = await this.dependencies.mutations.complete({
         id: claimed.id,
@@ -257,6 +244,88 @@ implements GoogleProfileLabelSyncServicePort {
         }
       },
     );
+  }
+
+  private async reconcileCompleted(
+    mutation: GoogleGmailMutationRecord,
+  ): Promise<GoogleProfileLabelSyncResult> {
+    if (!this.dependencies.enabled) return this.view(mutation);
+    return this.dependencies.mutations.withThreadLock(
+      {
+        connectionId: mutation.connectionId,
+        threadId: mutation.threadId,
+      },
+      async () => {
+        const resolution = await this.dependencies.resolver.resolve({
+          connectionId: mutation.connectionId,
+          organizationId: mutation.organizationId,
+        });
+        if (resolution.status === "conflict") {
+          return {
+            mutationId: mutation.id,
+            state: "conflict",
+            gmailLabelId: null,
+            gmailLabelName: null,
+            errorCode: resolution.code,
+          };
+        }
+        await this.applyCurrentProfileLabel({
+          mutation,
+          targetLabelId: resolution.mapping.gmailLabelId,
+          onlyWhenChanged: true,
+        });
+        return {
+          ...this.view(mutation),
+          gmailLabelId: resolution.mapping.gmailLabelId,
+          gmailLabelName: resolution.mapping.gmailLabelName,
+        };
+      },
+    );
+  }
+
+  private async applyCurrentProfileLabel(input: {
+    mutation: GoogleGmailMutationRecord;
+    targetLabelId: string;
+    onlyWhenChanged: boolean;
+  }): Promise<string[]> {
+    const [managedLabelIds, gmailLabels, attachedLabelIds] = await Promise.all([
+      this.dependencies.labels.listManagedLabelIds(input.mutation.connectionId),
+      this.dependencies.gmail.listLabels(),
+      this.dependencies.gmail.getThreadLabelIds(input.mutation.threadId),
+    ]);
+    const attached = new Set(attachedLabelIds);
+    const profileLabelIds = new Set([
+      ...managedLabelIds,
+      ...gmailLabels
+        .filter((label) =>
+          label.type === "user" && isProfileLabelPath(label.name)
+        )
+        .map((label) => label.id),
+    ]);
+    const removeLabelIds = [...profileLabelIds]
+      .filter((labelId) =>
+        labelId !== input.targetLabelId && attached.has(labelId)
+      );
+    if (
+      input.mutation.operation === "assign_thread" &&
+      attached.has("INBOX")
+    ) {
+      removeLabelIds.push("INBOX");
+    }
+    removeLabelIds.sort();
+
+    if (
+      !input.onlyWhenChanged ||
+      !attached.has(input.targetLabelId) ||
+      removeLabelIds.length
+    ) {
+      await this.dependencies.gmail.modifyThreadLabels({
+        threadId: input.mutation.threadId,
+        addLabelIds: [input.targetLabelId],
+        removeLabelIds,
+      });
+    }
+    return removeLabelIds;
   }
 
   private view(mutation: GoogleGmailMutationRecord): GoogleProfileLabelSyncResult {

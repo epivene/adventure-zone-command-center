@@ -64,6 +64,7 @@ function harness(input?: {
   };
   let listCalls = 0;
   const gmail: GoogleGmailLabelMutationClient = {
+    getThreadLabelIds: vi.fn(async () => []),
     listLabels: vi.fn(async () => {
       listCalls += 1;
       return listCalls > 1 && input?.labelsAfterCreateConflict

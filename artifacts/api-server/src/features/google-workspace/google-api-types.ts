@@ -7,6 +7,7 @@ export type GoogleLabelSummary = {
 
 export type GoogleGmailLabelMutationClient = {
   listLabels(): Promise<GoogleLabelSummary[]>;
+  getThreadLabelIds(threadId: string): Promise<string[]>;
   createLabel?(name: string): Promise<GoogleLabelSummary>;
   renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
   modifyThreadLabels?(input: {
@@ -154,6 +155,7 @@ export interface GoogleWorkspaceReadClient {
   }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
+  getThreadLabelIds?(threadId: string): Promise<string[]>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
   createGmailDraft?(input: { raw: string }): Promise<GoogleGmailDraft>;
   listDriveFiles?(parentId: string, pageToken?: string | null): Promise<GoogleDrivePage>;
