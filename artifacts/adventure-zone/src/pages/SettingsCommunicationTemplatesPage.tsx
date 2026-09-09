@@ -12,6 +12,7 @@ type Template = {
   category: string;
   subjectTemplate: string | null;
   bodyTemplate: string;
+  bodyFormat: "plain_text" | "html";
   requiredPlaceholders: string[];
   accessScope: "owner" | "office";
   state: TemplateState;
@@ -25,6 +26,7 @@ type NewTemplate = {
   channel: "email" | "internal_email";
   subjectTemplate: string;
   bodyTemplate: string;
+  bodyFormat: "plain_text" | "html";
   requiredPlaceholders: string[];
 };
 
@@ -61,6 +63,7 @@ export default function SettingsCommunicationTemplatesPage() {
     channel: "email",
     subjectTemplate: "",
     bodyTemplate: "",
+    bodyFormat: "plain_text",
     requiredPlaceholders: [],
   };
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -115,24 +118,41 @@ export default function SettingsCommunicationTemplatesPage() {
       const data = (await response.json().catch(() => ({}))) as { template?: Template; error?: string };
       if (!response.ok || !data.template) throw new Error(data.error ?? "Could not save template.");
       await load();
-      setMessage("Template saved. Review it before activating.");
+      setMessage("Template saved. Send this version to Dave when it is ready.");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save template.");
     } finally { setBusy(false); }
   }
 
-  async function changeState(action: "activate" | "archive") {
+  async function archiveTemplate() {
     if (!selected || busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await apiFetch(`/communication-templates/${selected.id}/${action}`, { method: "POST", body: "{}" });
+      const response = await apiFetch(`/communication-templates/${selected.id}/archive`, { method: "POST", body: "{}" });
       const data = (await response.json().catch(() => ({}))) as { template?: Template; error?: string };
-      if (!response.ok || !data.template) throw new Error(data.error ?? `Could not ${action} template.`);
-      await load();
-      setMessage(action === "activate" ? "Template activated." : "Template archived.");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : `Could not ${action} template.`);
-    } finally { setBusy(false); }
+      if (!response.ok || !data.template) throw new Error(data.error ?? "Could not archive template.");
+      await load(); setMessage("Template archived.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not archive template."); }
+    finally { setBusy(false); }
+  }
+
+  async function sendToDave() {
+    if (!selected || busy) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const accountsResponse = await apiFetch("/boss-admin/accounts");
+      const accountsData = await accountsResponse.json() as { accounts?: { id: string; displayName: string; enabled: boolean }[]; error?: string };
+      const account = accountsData.accounts?.find((item) => item.enabled && /dave/i.test(item.displayName))
+        ?? accountsData.accounts?.find((item) => item.enabled);
+      if (!accountsResponse.ok || !account) throw new Error(accountsData.error ?? "Dave’s active Boss account was not found.");
+      const response = await apiFetch(`/communication-templates/${selected.id}/request-dave-approval`, {
+        method: "POST", body: JSON.stringify({ assignedBossAccountId: account.id, priority: "normal" }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not send this template to Dave.");
+      await load(); setMessage("Sent to Dave. His approval will activate this exact version.");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not send this template to Dave."); }
+    finally { setBusy(false); }
   }
 
   async function promoteShared() {
@@ -211,7 +231,7 @@ export default function SettingsCommunicationTemplatesPage() {
         <div><p className="text-sm font-bold">Insert placeholder</p><div className="mt-2 flex flex-wrap gap-2">{placeholderTokens.map((token) => <div className="flex overflow-hidden rounded-full border" key={token}><button className="px-2 py-1 text-xs" type="button" onClick={() => insert(token, "subject")}>{token} → subject</button><button className="border-l px-2 py-1 text-xs" type="button" onClick={() => insert(token, "body")}>body</button></div>)}</div></div>
         <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Required for this template: {selected.requiredPlaceholders.length ? selected.requiredPlaceholders.join(", ") : "None"}</p>
         {message ? <p role="status" className="rounded-lg bg-emerald-50 p-3 font-semibold text-emerald-800">{message}</p> : null}
-        <div className="flex flex-wrap gap-2"><button className="button-primary" disabled={busy || !body.trim()} type="button" onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</button>{selected.state !== "active" && selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void changeState("activate")}>Activate</button> : null}{selected.ownerKind === "office_user" && selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void promoteShared()}>Make shared template</button> : null}{selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void changeState("archive")}>Archive</button> : null}</div>
+        <div className="flex flex-wrap gap-2"><button className="button-primary" disabled={busy || !body.trim()} type="button" onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</button>{selected.state !== "active" && selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void sendToDave()}>Send to Dave for Approval</button> : null}{selected.ownerKind === "office_user" && selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void promoteShared()}>Make shared template</button> : null}{selected.state !== "archived" ? <button className="button-secondary" disabled={busy} type="button" onClick={() => void archiveTemplate()}>Archive</button> : null}</div>
       </section> : <section className="rounded-xl border bg-white p-6 text-slate-500">No templates available.</section>}
     </div>
   </div>;
