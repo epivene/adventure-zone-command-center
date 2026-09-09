@@ -13,7 +13,7 @@ const event = {
   startsAt: "2026-08-20T12:00:00.000Z",
   endsAt: "2026-08-20T16:00:00.000Z",
   operationalStartsAt: "2026-08-16T00:00:00.000Z",
-  operationalEndsAt: "2026-08-22T23:59:00.000Z",
+  operationalEndsAt: "2026-08-23T00:00:00.000Z",
   status: "confirmed",
   probability: null,
   scheduleState: "booked",
