@@ -59,12 +59,26 @@ function gmailHeader(value: string): string {
   return value.trim();
 }
 function wrapBase64(value: string): string { return value.match(/.{1,76}/g)?.join("\r\n") ?? ""; }
-export function buildGmailRawMessage(input: { to: string; subject: string; body: string }): string {
+export function buildGmailRawMessage(input: {
+  to: string;
+  subject: string;
+  body: string;
+  bodyFormat?: "plain_text" | "html";
+}): string {
   const to = gmailHeader(input.to).toLowerCase();
   const subject = gmailHeader(input.subject);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !input.body) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
   const encodedSubject = /^[\x20-\x7E]+$/.test(subject) ? subject : `=?UTF-8?B?${Buffer.from(subject, "utf8").toString("base64")}?=`;
-  const mime = ["MIME-Version: 1.0", `To: ${to}`, `Subject: ${encodedSubject}`, "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64", "", wrapBase64(Buffer.from(input.body, "utf8").toString("base64"))].join("\r\n");
+  const mimeType = input.bodyFormat === "html" ? "text/html" : "text/plain";
+  const mime = [
+    "MIME-Version: 1.0",
+    `To: ${to}`,
+    `Subject: ${encodedSubject}`,
+    `Content-Type: ${mimeType}; charset=UTF-8`,
+    "Content-Transfer-Encoding: base64",
+    "",
+    wrapBase64(Buffer.from(input.body, "utf8").toString("base64")),
+  ].join("\r\n");
   return Buffer.from(mime, "utf8").toString("base64url");
 }
 
