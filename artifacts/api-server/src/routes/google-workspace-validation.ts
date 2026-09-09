@@ -2,6 +2,11 @@ import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
+import {
+  PostgresGoogleProfileLabelCleanupService,
+  type GoogleProfileLabelCleanupCandidate,
+  type GoogleProfileLabelCleanupFailure,
+} from "@/features/google-workspace/google-profile-label-cleanup-service";
 import { GoogleReviewProfileAssignmentService, type GoogleReviewAssignmentView } from "@/features/google-workspace/google-review-profile-assignment-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
 import {
@@ -29,6 +34,13 @@ const decisionSchema = z
 const resolveSchema = z
   .object({
     organizationId: z.string().uuid(),
+  })
+  .strict();
+
+const cleanupLabelsSchema = z
+  .object({
+    labelIds: z.array(z.string().trim().min(1).max(255)).min(1).max(100),
+    confirm: z.literal(true),
   })
   .strict();
 
@@ -80,6 +92,15 @@ type IgnoreService = {
     actorId: string;
     now: Date;
   }): Promise<void>;
+};
+
+type LabelCleanupService = {
+  preview(): Promise<{ labels: GoogleProfileLabelCleanupCandidate[] }>;
+  deleteSelected(labelIds: string[]): Promise<{
+    deleted: GoogleProfileLabelCleanupCandidate[];
+    skippedLabelIds: string[];
+    failed: GoogleProfileLabelCleanupFailure[];
+  }>;
 };
 
 type OwnerRequest = Request & { userId?: string };
@@ -187,6 +208,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   reviewAssignmentService?: ReviewAssignmentService;
   validationRepository?: ValidationRepository;
   ignoreService?: IgnoreService;
+  labelCleanupService?: LabelCleanupService;
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
@@ -210,6 +232,9 @@ export function createGoogleWorkspaceValidationRouter(options?: {
             validationRepository.ignoreReviewItem.bind(validationRepository),
         }
       : new PostgresGoogleThreadIgnoreTransaction());
+  const labelCleanupService =
+    options?.labelCleanupService ??
+    new PostgresGoogleProfileLabelCleanupService();
   const now = options?.now ?? (() => new Date());
 
   router.post(
@@ -292,6 +317,39 @@ export function createGoogleWorkspaceValidationRouter(options?: {
           now: now(),
         });
         res.json({ ok: true });
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/profile-labels/cleanup",
+    async (_req, res): Promise<void> => {
+      try {
+        res.json(await labelCleanupService.preview());
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/profile-labels/cleanup",
+    async (req, res): Promise<void> => {
+      const parsed = cleanupLabelsSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "GOOGLE_WORKSPACE_PROFILE_LABEL_CLEANUP_INPUT_INVALID",
+        });
+        return;
+      }
+      try {
+        res.json(
+          await labelCleanupService.deleteSelected(parsed.data.labelIds),
+        );
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });

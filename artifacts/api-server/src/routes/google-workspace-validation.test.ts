@@ -29,6 +29,12 @@ function appWith(options: {
     actorId: string;
     now: Date;
   }) => Promise<void>;
+  previewLabelCleanup?: () => Promise<{ labels: Array<{ id: string; name: string }> }>;
+  deleteSelectedLabels?: (labelIds: string[]) => Promise<{
+    deleted: Array<{ id: string; name: string }>;
+    skippedLabelIds: string[];
+    failed: Array<{ id: string; name: string; errorCode: string }>;
+  }>;
 }) {
   const app = express();
   app.use(express.json());
@@ -53,6 +59,12 @@ function appWith(options: {
         getStatus: async () => "ready_for_review",
         listReviewItems: options.listReviewItems ?? (async () => []),
         ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
+      },
+      labelCleanupService: {
+        preview: options.previewLabelCleanup ?? (async () => ({ labels: [] })),
+        deleteSelected:
+          options.deleteSelectedLabels ??
+          (async () => ({ deleted: [], skippedLabelIds: [], failed: [] })),
       },
       now: () => new Date("2026-08-24T17:00:00.000Z"),
     }),
@@ -179,6 +191,59 @@ describe("Google Workspace recent validation route", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.items).toHaveLength(1);
+  });
+
+  it("previews old Gmail profile labels without deleting them", async () => {
+    const previewLabelCleanup = vi.fn(async () => ({
+      labels: [{ id: "Label_old", name: "Z - AdventureZone/Profiles/Old" }],
+    }));
+    const response = await request(appWith({ previewLabelCleanup }))
+      .get("/google-workspace/profile-labels/cleanup");
+
+    expect(response.status).toBe(200);
+    expect(response.body.labels).toEqual([
+      { id: "Label_old", name: "Z - AdventureZone/Profiles/Old" },
+    ]);
+    expect(previewLabelCleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("deletes only the explicitly confirmed Gmail label IDs", async () => {
+    const deleteSelectedLabels = vi.fn(async (labelIds: string[]) => ({
+      deleted: labelIds.map((id) => ({
+        id,
+        name: "Z - AdventureZone/Profiles/Old",
+      })),
+      skippedLabelIds: [],
+      failed: [],
+    }));
+    const response = await request(appWith({ deleteSelectedLabels }))
+      .post("/google-workspace/profile-labels/cleanup")
+      .send({ labelIds: ["Label_old"], confirm: true });
+
+    expect(response.status).toBe(200);
+    expect(deleteSelectedLabels).toHaveBeenCalledWith(["Label_old"]);
+  });
+
+  it("rejects empty or oversized Gmail label cleanup requests", async () => {
+    const deleteSelectedLabels = vi.fn();
+    const empty = await request(appWith({ deleteSelectedLabels }))
+      .post("/google-workspace/profile-labels/cleanup")
+      .send({ labelIds: [], confirm: true });
+    const oversized = await request(appWith({ deleteSelectedLabels }))
+      .post("/google-workspace/profile-labels/cleanup")
+      .send({
+        labelIds: Array.from({ length: 101 }, (_, index) => `Label_${index}`),
+        confirm: true,
+      });
+
+    const unconfirmed = await request(appWith({ deleteSelectedLabels }))
+      .post("/google-workspace/profile-labels/cleanup")
+      .send({ labelIds: ["Label_old"] });
+
+    expect(empty.status).toBe(400);
+    expect(oversized.status).toBe(400);
+    expect(unconfirmed.status).toBe(400);
+    expect(deleteSelectedLabels).not.toHaveBeenCalled();
   });
 
   it("assigns a review item to a selected live profile", async () => {

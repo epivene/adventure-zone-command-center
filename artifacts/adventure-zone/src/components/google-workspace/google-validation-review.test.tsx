@@ -7,6 +7,8 @@ const client = vi.hoisted(() => ({
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
   retryGoogleWorkspaceGmailMutation: vi.fn(),
+  getGoogleProfileLabelCleanupPreview: vi.fn(),
+  deleteGoogleProfileLabels: vi.fn(),
 }));
 const search = vi.hoisted(() => ({
   searchGoogleReviewProfiles: vi.fn(),
@@ -48,6 +50,24 @@ beforeEach(() => {
     },
   });
   client.ignoreGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
+  client.getGoogleProfileLabelCleanupPreview.mockResolvedValue({
+    labels: [
+      {
+        id: "Label_old",
+        name: "Z - AdventureZone/Profiles/Old County Fair",
+      },
+    ],
+  });
+  client.deleteGoogleProfileLabels.mockResolvedValue({
+    deleted: [
+      {
+        id: "Label_old",
+        name: "Z - AdventureZone/Profiles/Old County Fair",
+      },
+    ],
+    skippedLabelIds: [],
+    failed: [],
+  });
   search.searchGoogleReviewProfiles.mockResolvedValue([
     { id: "22222222-2222-4222-8222-222222222222", name: "Another Fair" },
   ]);
@@ -105,6 +125,96 @@ describe("GoogleValidationReview", () => {
       expect(client.getGoogleWorkspaceValidationReview).toHaveBeenCalledTimes(1),
     );
     expect(await screen.findByRole("button", { name: "Check emails" })).toBeEnabled();
+  });
+
+  it("previews, selects, confirms, and deletes old labels without touching email", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GoogleValidationReview checkGmailOnMount />);
+    await screen.findByText("County Fair application");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clean up old labels" }));
+
+    const oldLabel = await screen.findByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old County Fair",
+    });
+    expect(client.deleteGoogleProfileLabels).not.toHaveBeenCalled();
+    fireEvent.click(oldLabel);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete 1 selected label" }),
+    );
+
+    await waitFor(() =>
+      expect(client.deleteGoogleProfileLabels).toHaveBeenCalledWith([
+        "Label_old",
+      ]),
+    );
+    expect(confirm).toHaveBeenCalled();
+    expect(
+      await screen.findByText("Deleted 1 old Gmail label. No emails were deleted."),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps failed cleanup labels selected and reports partial results", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    client.getGoogleProfileLabelCleanupPreview.mockResolvedValueOnce({
+      labels: [
+        {
+          id: "Label_good",
+          name: "Z - AdventureZone/Profiles/Old Good",
+        },
+        {
+          id: "Label_bad",
+          name: "Z - AdventureZone/Profiles/Old Bad",
+        },
+      ],
+    });
+    client.deleteGoogleProfileLabels.mockResolvedValueOnce({
+      deleted: [
+        {
+          id: "Label_good",
+          name: "Z - AdventureZone/Profiles/Old Good",
+        },
+      ],
+      skippedLabelIds: [],
+      failed: [
+        {
+          id: "Label_bad",
+          name: "Z - AdventureZone/Profiles/Old Bad",
+          errorCode: "GOOGLE_WORKSPACE_GMAIL_RATE_LIMITED",
+        },
+      ],
+    });
+    render(<GoogleValidationReview checkGmailOnMount />);
+    await screen.findByText("County Fair application");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clean up old labels" }));
+    const good = await screen.findByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old Good",
+    });
+    const bad = screen.getByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old Bad",
+    });
+    fireEvent.click(good);
+    fireEvent.click(bad);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete 2 selected labels" }),
+    );
+
+    expect(
+      await screen.findByText(
+        "Deleted 1 old Gmail label. No emails were deleted. 1 label could not be deleted and remain selected.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", {
+        name: "Z - AdventureZone/Profiles/Old Good",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Z - AdventureZone/Profiles/Old Bad",
+      }),
+    ).toBeChecked();
   });
 
   it("loads only the saved queue in shared views", async () => {
