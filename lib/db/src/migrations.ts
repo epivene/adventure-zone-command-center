@@ -512,6 +512,15 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.convention_history') IS NOT NULL
       AND to_regclass(current_schema() || '.convention_reviews') IS NOT NULL AS ready`,
   },
+  {
+    name: "20260909d_template_review_repair.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgrelid = to_regclass(current_schema() || '.communication_template_reviews')
+        AND tgname = 'communication_template_reviews_supersede_pending'
+        AND NOT tgisinternal
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -576,4 +585,3 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
-
