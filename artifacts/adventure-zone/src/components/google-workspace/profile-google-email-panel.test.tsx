@@ -184,7 +184,6 @@ describe("ProfileGoogleEmailPanel", () => {
 
   it("shows a deleted Gmail thread as saved and sends a reply from the app", async () => {
     client.getGoogleProfileEmailThread.mockResolvedValueOnce({
-      ...(await client.getGoogleProfileEmailThread.getMockImplementation()!()),
       id: "thread-1",
       conversationId: "conversation-1",
       savedCopy: true,
