@@ -116,6 +116,8 @@ export type ManagerScopedMapData = {
     longitude: number | null;
     startsAt: Date | null;
     endsAt: Date | null;
+    operationalStartsAt?: Date | null;
+    operationalEndsAt?: Date | null;
        status: string;
        probability: string | null;
        scheduleState: ManagerScheduleState;
