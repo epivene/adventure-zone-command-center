@@ -188,6 +188,28 @@ describe("loadManagerScopedMapData", () => {
     expect(managerScheduleState("declined", "definite")).toBe("excluded");
   });
 
+  it("keeps a checked-in booking visible after its scheduled date cutoff", async () => {
+    const activePastBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000204",
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      startsAt: new Date("2026-08-14T12:00:00Z"),
+      endsAt: new Date("2026-08-15T20:00:00Z"),
+    };
+    const dependencies = deps([], [activePastBooking]);
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return { bookingId: activePastBooking.bookingId }; },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-08-19T00:00:00Z"),
+    );
+
+    expect(result.events.map((event) => event.bookingId)).toContain(activePastBooking.bookingId);
+  });
+
   it("includes a shared meetup but only the counterpart leg identity", async () => {
     const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
 
