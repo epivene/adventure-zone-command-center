@@ -377,6 +377,11 @@ export class PostgresGoogleConnectionRepository {
     ) {
       throw new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CLIENT_UNAVAILABLE");
     }
+    const createLabel = client.createLabel.bind(client);
+    const renameLabel = client.renameLabel.bind(client);
+    const modifyThreadLabels = client.modifyThreadLabels.bind(client);
+    const modifyMessageLabels = client.modifyMessageLabels.bind(client);
+    const getThreadLabelIds = client.getThreadLabelIds.bind(client);
     const guardReauthorization = async <T>(
       operation: () => Promise<T>,
     ): Promise<T> => {
@@ -403,15 +408,15 @@ export class PostgresGoogleConnectionRepository {
       client: {
         listLabels: () => guardReauthorization(() => client.listLabels()),
         getThreadLabelIds: (threadId) =>
-          guardReauthorization(() => client.getThreadLabelIds!(threadId)),
+          guardReauthorization(() => getThreadLabelIds(threadId)),
         createLabel: (name) =>
-          guardReauthorization(() => client.createLabel!(name)),
+          guardReauthorization(() => createLabel(name)),
         renameLabel: (input) =>
-          guardReauthorization(() => client.renameLabel!(input)),
+          guardReauthorization(() => renameLabel(input)),
         modifyThreadLabels: (input) =>
-          guardReauthorization(() => client.modifyThreadLabels!(input)),
+          guardReauthorization(() => modifyThreadLabels(input)),
         modifyMessageLabels: (input) =>
-          guardReauthorization(() => client.modifyMessageLabels!(input)),
+          guardReauthorization(() => modifyMessageLabels(input)),
       },
     };
   }
