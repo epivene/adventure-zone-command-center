@@ -75,7 +75,7 @@ export const bookingEditInputSchema = z
     endsAt: optionalBusinessDateSchema,
     status: z.enum(bookingStatusValues),
     travelLegId: z
-      .union([z.literal(""), z.null(), z.uuid()])
+      .union([z.literal(""), z.null(), z.string().uuid()])
       .transform((value) => value || null),
     notes: nullableTrimmedString,
   })
@@ -85,6 +85,16 @@ export const bookingEditInputSchema = z
         code: "custom",
         message: "Enter both latitude and longitude, or clear both",
         path: [input.latitude === null ? "latitude" : "longitude"],
+      });
+    }
+    if (
+      input.status === "confirmed" &&
+      (input.latitude === null || input.longitude === null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Map this confirmed event before saving",
+        path: ["latitude"],
       });
     }
     if (
