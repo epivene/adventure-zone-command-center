@@ -69,7 +69,9 @@ export const gmailThreadLockPool = new Pool({
   max: 2,
   ...databasePoolTimeouts(),
 });
+import * as outreachPlannerSchema from "./outreach-planner-schema";
 const schema = {
+  ...outreachPlannerSchema,
   ...coreSchema,
   ...eventFamilySchema,
   ...paperNoteSchema,
@@ -132,3 +134,5 @@ export * from "./business-document-schema";
 export * from "./google-drive-backup-schema";
 
 
+
+export * from "./outreach-planner-schema";

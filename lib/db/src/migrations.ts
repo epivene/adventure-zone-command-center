@@ -505,6 +505,16 @@ const migrationFiles = [
           AND is_nullable = 'YES'
       ) AS ready`,
   },
+  {
+    name: "20260909_outreach_planner.sql",
+    markerSql: `SELECT
+      (SELECT count(*) = 5 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('outreach_openings','outreach_candidates','outreach_attempts','outreach_research_tasks','outreach_audit'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_openings','id'),('outreach_openings','title'),('outreach_openings','event_year'),('outreach_openings','starts_on'),('outreach_openings','ends_on'),('outreach_openings','leg_id'),('outreach_openings','quantities'),('outreach_openings','created_at'),('outreach_openings','status'),('outreach_candidates','id'),('outreach_candidates','opening_id'),('outreach_candidates','opportunity_id'),('outreach_candidates','tier'),('outreach_candidates','manual_rank'),('outreach_candidates','decision_due_at'),('outreach_candidates','meaningful_reply_at'),('outreach_candidates','convention_ends_on'),('outreach_candidates','released_at'),('outreach_candidates','checked_at'),('outreach_candidates','source_snapshot'),('outreach_candidates','created_at'),('outreach_candidates','history_review'),('outreach_attempts','id'),('outreach_attempts','candidate_id'),('outreach_attempts','source_id'),('outreach_attempts','stage'),('outreach_attempts','occurred_at'),('outreach_attempts','actor'),('outreach_attempts','created_at'),('outreach_research_tasks','id'),('outreach_research_tasks','opening_id'),('outreach_research_tasks','criteria'),('outreach_research_tasks','status'),('outreach_research_tasks','created_at'),('outreach_research_tasks','results'),('outreach_audit','id'),('outreach_audit','actor'),('outreach_audit','action'),('outreach_audit','entity_id'),('outreach_audit','detail'),('outreach_audit','created_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*) = 5 FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ('outreach_candidates_membership_unique','outreach_candidates_live_opportunity_unique','outreach_attempts_source_unique','outreach_attempts_stage_unique','outreach_research_criteria_unique'))
+      AND (SELECT count(*) = 6 FROM pg_constraint WHERE connamespace = current_schema()::regnamespace AND conname IN ('outreach_openings_status_valid','outreach_openings_window_valid','outreach_openings_quantities_valid','outreach_candidates_rank_valid','outreach_candidates_tier_valid','outreach_attempts_stage_valid'))
+      AND (SELECT count(*) = 5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_openings'),to_regclass(current_schema() || '.outreach_candidates'),to_regclass(current_schema() || '.outreach_attempts'),to_regclass(current_schema() || '.outreach_research_tasks')))
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
