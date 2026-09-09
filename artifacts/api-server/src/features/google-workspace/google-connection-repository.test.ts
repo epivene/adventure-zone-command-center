@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE,
   GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE,
   GOOGLE_WORKSPACE_READ_SCOPES,
 } from "./google-api-client";
@@ -418,4 +419,95 @@ describe("PostgresGoogleConnectionRepository", () => {
       call.text.includes("'connection_disconnected'"),
     )).toBe(true);
   });
+
+  it("returns only the narrow Drive backup client when drive.file is granted", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => ({
+        ...fakeClient,
+        driveBackup: {
+          findChild: async () => null,
+          createFolder: async (_parentId, name) => ({
+            id: "folder-id",
+            name,
+            mimeType: "application/vnd.google-apps.folder",
+            parents: ["root-id"],
+            webViewLink: null,
+            md5Checksum: null,
+          }),
+          createFile: async (input) => ({
+            id: "file-id",
+            name: input.name,
+            mimeType: input.mimeType,
+            parents: [input.parentId],
+            webViewLink: null,
+            md5Checksum: null,
+          }),
+          updateFile: async (input) => ({
+            id: input.fileId,
+            name: input.name ?? "file",
+            mimeType: input.mimeType ?? "application/octet-stream",
+            parents: input.parentId ? [input.parentId] : [],
+            webViewLink: null,
+            md5Checksum: null,
+          }),
+          getFile: async (id) => ({
+            id,
+            name: "file",
+            mimeType: "application/pdf",
+            parents: ["root-id"],
+            webViewLink: null,
+            md5Checksum: null,
+          }),
+        },
+      }),
+    });
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: [...GOOGLE_WORKSPACE_READ_SCOPES],
+      now: new Date("2026-09-09T14:00:00.000Z"),
+    });
+
+    const result = await repository.createDriveBackupClient();
+
+    expect(result?.connectionId).toBe("connection-id");
+    expect(Object.keys(result?.client ?? {}).sort()).toEqual([
+      "createFile",
+      "createFolder",
+      "findChild",
+      "getFile",
+      "updateFile",
+    ]);
+  });
+
+  it("requires reconnect before Drive backup when drive.file is missing", async () => {
+    const harness = repositoryHarness();
+    const repository = new PostgresGoogleConnectionRepository({
+      pool: harness.pool,
+      environment,
+      createClient: () => fakeClient,
+    });
+    await repository.upsertConnected({
+      accountEmail: "zone@example.com",
+      googleSubject: null,
+      refreshToken: "stored-refresh-token",
+      scopes: GOOGLE_WORKSPACE_READ_SCOPES.filter(
+        (scope) => scope !== GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE,
+      ),
+      now: new Date("2026-09-09T14:00:00.000Z"),
+    });
+
+    await expect(repository.getCurrent()).resolves.toMatchObject({
+      status: "reauthorization_required",
+      lastErrorCode: "GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE_REQUIRED",
+    });
+    await expect(repository.createDriveBackupClient()).rejects.toThrow(
+      "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    );
+  });
+
 });
