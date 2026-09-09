@@ -133,12 +133,18 @@ implements GoogleProfileLabelRepositoryPort {
            state, last_error_code, created_at, updated_at
          ) VALUES ($1,$2,$3,$4,'active',NULL,now(),now())
          ON CONFLICT (connection_id, organization_id) DO UPDATE SET
+           gmail_label_id = EXCLUDED.gmail_label_id,
            gmail_label_name = EXCLUDED.gmail_label_name,
            state = 'active',
            last_error_code = NULL,
            updated_at = now()
          WHERE google_workspace_profile_labels.gmail_label_id =
-               EXCLUDED.gmail_label_id`,
+                 EXCLUDED.gmail_label_id
+            OR (
+              google_workspace_profile_labels.state = 'unavailable'
+              AND google_workspace_profile_labels.last_error_code =
+                'GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND'
+            )`,
         [
           input.connectionId,
           input.organizationId,

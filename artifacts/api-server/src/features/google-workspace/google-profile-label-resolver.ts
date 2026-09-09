@@ -4,6 +4,7 @@ import type {
 } from "./google-api-types";
 import {
   canonicalProfileLabelName,
+  GOOGLE_PROFILE_LABEL_HIERARCHY,
   isProfileLabelPath,
   normalizedProfileLabelPath,
 } from "./google-profile-label-config";
@@ -36,6 +37,42 @@ export class GoogleProfileLabelResolver {
     private readonly gmail: GoogleGmailLabelMutationClient,
   ) {}
 
+  async ensureHierarchy(
+    knownLabels?: GoogleLabelSummary[],
+  ): Promise<GoogleLabelSummary[]> {
+    let labels = knownLabels ? [...knownLabels] : await this.gmail.listLabels();
+
+    for (const name of GOOGLE_PROFILE_LABEL_HIERARCHY) {
+      const normalizedName = normalizedProfileLabelPath(name);
+      const existing = labels.find(
+        (label) =>
+          label.type === "user" &&
+          normalizedProfileLabelPath(label.name) === normalizedName,
+      );
+      if (existing) continue;
+
+      try {
+        const created = await this.gmail.createLabel!(name);
+        labels.push(created);
+      } catch (error) {
+        if (errorCode(error) !== "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT") {
+          throw error;
+        }
+        labels = await this.gmail.listLabels();
+        const winner = labels.find(
+          (label) =>
+            label.type === "user" &&
+            normalizedProfileLabelPath(label.name) === normalizedName,
+        );
+        if (!winner) {
+          throw new Error("GOOGLE_WORKSPACE_GMAIL_RETRYABLE_FAILURE");
+        }
+      }
+    }
+
+    return labels;
+  }
+
   private async conflict(
     input: { connectionId: string; organizationId: string },
     labels: GoogleLabelSummary[],
@@ -61,7 +98,7 @@ export class GoogleProfileLabelResolver {
       throw new Error("GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND");
     }
 
-    const labels = await this.gmail.listLabels();
+    const labels = await this.ensureHierarchy(await this.gmail.listLabels());
     const saved = await this.repository.findByOrganization(input);
     if (saved) {
       const existing = labels.find((label) => label.id === saved.gmailLabelId);

@@ -14,6 +14,7 @@ describe("GoogleInboundProfileLabeler", () => {
     const labeler = new GoogleInboundProfileLabeler({
       syncFactory: async () => ({
         connectionId: "conn-1",
+        ensureHierarchy: vi.fn(async () => undefined),
         service: {
           assignThread: vi.fn(),
           labelInboundMessage,
@@ -50,6 +51,7 @@ describe("GoogleInboundProfileLabeler", () => {
       dueMutationIds: async () => ["mutation-due"],
       syncFactory: async () => ({
         connectionId: "conn-1",
+        ensureHierarchy: vi.fn(async () => undefined),
         service: {
           assignThread: vi.fn(),
           labelInboundMessage: vi.fn(),
@@ -63,8 +65,19 @@ describe("GoogleInboundProfileLabeler", () => {
     expect(retry).toHaveBeenCalledWith("mutation-due");
   });
 
-  it("does not touch unrelated, ambiguous, or sent messages", async () => {
-    const syncFactory = vi.fn();
+  it("repairs hierarchy but does not label unrelated, ambiguous, or sent messages", async () => {
+    const ensureHierarchy = vi.fn(async () => undefined);
+    const labelInboundMessage = vi.fn();
+    const retry = vi.fn();
+    const syncFactory = vi.fn(async () => ({
+      connectionId: "conn-1",
+      ensureHierarchy,
+      service: {
+        assignThread: vi.fn(),
+        labelInboundMessage,
+        retry,
+      },
+    }));
     const labeler = new GoogleInboundProfileLabeler({ syncFactory });
 
     await labeler.labelNewThreadMatches([
@@ -91,6 +104,28 @@ describe("GoogleInboundProfileLabeler", () => {
       },
     ]);
 
-    expect(syncFactory).not.toHaveBeenCalled();
+    expect(syncFactory).toHaveBeenCalledOnce();
+    expect(ensureHierarchy).toHaveBeenCalledOnce();
+    expect(labelInboundMessage).not.toHaveBeenCalled();
+    expect(retry).not.toHaveBeenCalled();
   });
+  it("repairs the Gmail label hierarchy when a check finds no messages", async () => {
+    const ensureHierarchy = vi.fn(async () => undefined);
+    const labeler = new GoogleInboundProfileLabeler({
+      syncFactory: async () => ({
+        connectionId: "conn-1",
+        ensureHierarchy,
+        service: {
+          assignThread: vi.fn(),
+          labelInboundMessage: vi.fn(),
+          retry: vi.fn(),
+        },
+      }),
+    });
+
+    await labeler.labelNewThreadMatches([]);
+
+    expect(ensureHierarchy).toHaveBeenCalledOnce();
+  });
+
 });
