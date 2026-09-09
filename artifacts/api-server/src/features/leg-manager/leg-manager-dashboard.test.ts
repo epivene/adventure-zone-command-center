@@ -38,6 +38,7 @@ describe("manager dashboard aggregate", () => {
       },
       lifecycleRepository: {
         async getCurrentForLeg() { return { bookingId: "trip-booking", checkedInAt: new Date("2026-08-16T13:00:00Z") } as any; },
+        async getLatestCheckedOutForLeg() { return null; },
         async listIncompleteForLeg() { return [{ bookingId: "wrap-up-booking", bookingName: "Wrap-up", city: "A City", region: "ND" }] as any; },
       },
       reviewRepository: {
