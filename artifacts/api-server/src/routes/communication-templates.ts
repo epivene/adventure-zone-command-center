@@ -34,7 +34,10 @@ export const communicationTemplateWriteSchema = z.object({
 }).strict();
 
 const communicationTemplatePatchSchema = communicationTemplateWriteSchema
-  .omit({ code: true }).partial().strict()
+  .omit({ code: true }).partial()
+  // Creation defaults must not change omitted fields on PATCH (Zod 4 applies
+  // defaults inside optional fields). Preserve the stored format on body edits.
+  .extend({ bodyFormat: z.enum(["plain_text", "html"]).optional() }).strict()
   .refine((value) => Object.keys(value).length > 0, "No template changes provided.");
 const previewSchema = z.object({ values: z.record(z.string(), z.string().nullable()).default({}) }).strict();
 
