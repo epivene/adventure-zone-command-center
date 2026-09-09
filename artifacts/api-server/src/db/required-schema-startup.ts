@@ -17,6 +17,7 @@ import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required
 import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
 
 const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
+const REQUIRED_SCHEMA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
 
 type RequiredStep = () => Promise<unknown>;
 type RequiredStepRunner = (
@@ -26,9 +27,29 @@ type RequiredStepRunner = (
   onTimeout?: (error: Error) => void,
 ) => Promise<unknown>;
 
-function isDroppedDatabaseConnection(error: unknown): boolean {
-  return error instanceof Error
-    && /connection (?:terminated|closed) unexpectedly|econnreset/i.test(error.message);
+function postgresErrorCode(error: unknown): string | null {
+  return error && typeof error === "object" && "code" in error
+    && typeof (error as { code?: unknown }).code === "string"
+    ? (error as { code: string }).code
+    : null;
+}
+
+function isTransientDatabaseStartupError(error: unknown): boolean {
+  const code = postgresErrorCode(error);
+  return code === "57P03"
+    || code === "57P01"
+    || code === "57P02"
+    || code === "08000"
+    || code === "08001"
+    || code === "08003"
+    || code === "08004"
+    || code === "08006"
+    || (error instanceof Error
+      && /connection (?:terminated|closed) unexpectedly|econnreset/i.test(error.message));
+}
+
+function systemSleep(delayMs: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, delayMs));
 }
 
 export async function runRequiredSchemaStartup(dependencies?: {
@@ -49,18 +70,25 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
   ensureBusinessDocuments?: RequiredStep;
+  sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
+  const sleep = dependencies?.sleep ?? systemSleep;
   const runRequired = async (
     name: string,
     step: RequiredStep,
     onTimeout?: (error: Error) => void,
   ) => {
-    try {
-      return await run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
-    } catch (error) {
-      if (!isDroppedDatabaseConnection(error)) throw error;
-      return run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await run(name, step, REQUIRED_SCHEMA_TIMEOUT_MS, onTimeout);
+      } catch (error) {
+        const delayMs = REQUIRED_SCHEMA_RETRY_DELAYS_MS[attempt];
+        if (!isTransientDatabaseStartupError(error) || delayMs === undefined) {
+          throw error;
+        }
+        await sleep(delayMs);
+      }
     }
   };
   await runRequired(

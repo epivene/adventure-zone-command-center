@@ -1,3 +1,5 @@
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
@@ -65,4 +67,29 @@ describe("lead email startup readiness", () => {
     expect(client.release).toHaveBeenCalledWith(expect.any(Error));
     expect(client.release).toHaveBeenCalledOnce();
   });
+  it("turns a checked-out client error into a retryable startup rejection", async () => {
+    const connectionError = new Error("Connection terminated unexpectedly");
+    const events = new EventEmitter();
+    const release = vi.fn();
+    const client = Object.assign(events, {
+      query: vi.fn(async () => ({ rows: [] as Array<Record<string, unknown>> })),
+      release,
+    });
+
+    const startup = ensureLeadIntakeSchemaBeforeListen({
+      pool: { connect: async () => client },
+      ensureSchema: async () => {
+        expect(client.listenerCount("error")).toBe(1);
+        client.emit("error", connectionError);
+        return false;
+      },
+      ensureTemplateSeed: async () => undefined,
+      isTemplateReady: async () => true,
+    });
+
+    await expect(startup).rejects.toThrow("Connection terminated unexpectedly");
+    expect(release).toHaveBeenCalledWith(connectionError);
+    expect(client.listenerCount("error")).toBe(0);
+  });
+
 });
