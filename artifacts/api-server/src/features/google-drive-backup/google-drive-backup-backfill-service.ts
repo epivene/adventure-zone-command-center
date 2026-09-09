@@ -121,7 +121,9 @@ export class GoogleDriveBackupBackfillService {
        ) SELECT * FROM created`,
       [input.profileLimit, input.createdBy, input.now],
     );
-    return run(result.rows[0]);
+    const created = run(result.rows[0]);
+    await this.enqueueNextBatch(created.id, input.now);
+    return { ...created, state: "running" };
   }
 
   async startBackfill(input: { now: Date; createdBy: string }): Promise<BackupRun> {
@@ -142,7 +144,9 @@ export class GoogleDriveBackupBackfillService {
       [input.createdBy, input.now],
     );
     if (!result.rows[0]) throw new Error("GOOGLE_DRIVE_BACKUP_PILOT_REQUIRED");
-    return run(result.rows[0]);
+    const created = run(result.rows[0]);
+    await this.enqueueNextBatch(created.id, input.now);
+    return { ...created, state: "running" };
   }
 
   async pause(now: Date): Promise<BackupRun> {
@@ -210,21 +214,13 @@ export class GoogleDriveBackupBackfillService {
           ORDER BY updated_at ASC, id ASC LIMIT 1
        ), updated AS (
          UPDATE google_drive_backup_runs r SET
-           state = CASE WHEN (SELECT count(*) FROM selected_profiles) < 100 THEN 'completed' ELSE 'running' END,
+           state = 'running',
            cursor = COALESCE((SELECT jsonb_build_object('updatedAt',updated_at,'id',id) FROM tail), r.cursor),
-           finished_at = CASE WHEN (SELECT count(*) FROM selected_profiles) < 100 THEN $2 ELSE NULL END,
            updated_at = $2
-         WHERE r.id = $1 RETURNING state, mode
-       ), pilot_recorded AS (
-         UPDATE google_drive_backup_config c
-            SET successful_pilot_at = $2, state = 'paused', updated_at = $2
-          WHERE c.id = 'default'
-            AND EXISTS (
-              SELECT 1 FROM updated WHERE state = 'completed' AND mode = 'pilot'
-            )
+         WHERE r.id = $1 RETURNING state
        )
        SELECT (SELECT count(*)::int FROM selected_profiles) AS enqueued,
-              (SELECT state = 'completed' FROM updated) AS completed`,
+              false AS completed`,
       [runId, now],
     );
     const row = result.rows[0] ?? {};
