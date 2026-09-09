@@ -6,14 +6,8 @@ function asDate(value?: string | Date | null) {
 
 function shiftedDate(value: Date, days: number) {
   const shifted = new Date(value);
-  shifted.setDate(shifted.getDate() + days);
+  shifted.setUTCDate(shifted.getUTCDate() + days);
   return shifted;
-}
-
-function startOfDay(value: Date) {
-  const day = new Date(value);
-  day.setHours(0, 0, 0, 0);
-  return day;
 }
 
 function formatDateTime(value: Date) {
@@ -26,11 +20,11 @@ function formatDateTime(value: Date) {
 }
 
 function formatDay(value: Date) {
-  return value.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return value.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 function formatDayRange(startsAt: Date, endsAt: Date) {
-  if (startOfDay(startsAt).getTime() === startOfDay(endsAt).getTime()) return formatDay(startsAt);
+  if (startsAt.toISOString().slice(0, 10) === endsAt.toISOString().slice(0, 10)) return formatDay(startsAt);
   return `${formatDay(startsAt)} – ${formatDay(endsAt)}`;
 }
 
@@ -59,11 +53,12 @@ export function EventScheduleWindow({
   const bufferBeforeStart = asDate(operationalStartsAt) ?? shiftedDate(start, -2);
   const bufferBeforeEnd = shiftedDate(start, -1);
   const bufferAfterStart = shiftedDate(end, 1);
-  const bufferAfterEnd = asDate(operationalEndsAt) ?? bufferAfterStart;
-  const bufferBefore = startOfDay(bufferBeforeStart) < startOfDay(start)
+  const storedOperationalEnd = asDate(operationalEndsAt);
+  const bufferAfterEnd = storedOperationalEnd ? shiftedDate(storedOperationalEnd, -1) : bufferAfterStart;
+  const bufferBefore = bufferBeforeStart.toISOString().slice(0, 10) < start.toISOString().slice(0, 10)
     ? formatDayRange(bufferBeforeStart, bufferBeforeEnd)
     : "None";
-  const bufferAfter = startOfDay(bufferAfterEnd) > startOfDay(end)
+  const bufferAfter = bufferAfterEnd.toISOString().slice(0, 10) > end.toISOString().slice(0, 10)
     ? formatDayRange(bufferAfterStart, bufferAfterEnd)
     : "None";
 
