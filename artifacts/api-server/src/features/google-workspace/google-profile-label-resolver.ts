@@ -52,7 +52,7 @@ export class GoogleProfileLabelResolver {
       if (existing) continue;
 
       try {
-        const created = await this.gmail.createLabel(name);
+        const created = await this.gmail.createLabel!(name);
         labels.push(created);
       } catch (error) {
         if (errorCode(error) !== "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT") {
