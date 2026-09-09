@@ -24,7 +24,7 @@ const categoryLabels: Record<BusinessDocumentCategory, string> = {
   other: "Other Documents",
 };
 
-export type BusinessDocumentEventGroup = { label: string; documents: BusinessDocumentRecord[] };
+export type BusinessDocumentEventGroup = { key: string; label: string; documents: BusinessDocumentRecord[] };
 export type BusinessDocumentYearGroup = { year: string; events: BusinessDocumentEventGroup[] };
 export type BusinessDocumentTypeGroup = { key: string; label: string; years: BusinessDocumentYearGroup[] };
 
@@ -45,17 +45,12 @@ export function businessDocumentYear(document: BusinessDocumentRecord) {
 }
 
 export function businessDocumentEvent(document: BusinessDocumentRecord) {
-  const value = document.displayName
-    .replace(/\.[a-z0-9]{2,5}$/i, "")
-    .replace(/[_–—-]+/g, " ")
-    .replace(/\b20\d{2}\b/g, " ")
-    .replace(/\b(certificate of insurance|insurance policy|vendor application|deposit receipt|operational template)\b/gi, " ")
-    .replace(/\b(contracts?|agreements?|proposals?|coi|w[ -]?9|permits?|applications?|inspections?|receipts?|templates?|marketing|photos?|images?|videos?)\b/gi, " ")
-    .replace(/\b(draft|final|signed|executed|revised|revision|rev|version|ver|copy)\b(?:\s*\d+)?/gi, " ")
-    .replace(/[()[\]]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  return value || "General";
+  const priority = { booking: 0, profile: 1, event_family: 2 } as const;
+  const link = [...document.links]
+    .filter((candidate) => candidate.targetLabel?.trim())
+    .sort((left, right) => priority[left.targetKind] - priority[right.targetKind])[0];
+  if (!link) return { key: "needs-sorting", label: "Needs Sorting" };
+  return { key: `${link.targetKind}:${link.targetId}`, label: link.targetLabel!.trim() };
 }
 
 export function groupBusinessDocuments(documents: BusinessDocumentRecord[], options: { media?: boolean } = {}) {
@@ -72,12 +67,15 @@ export function groupBusinessDocuments(documents: BusinessDocumentRecord[], opti
       label: includeMedia ? "Media" : categoryLabels[typeKey as BusinessDocumentCategory],
       years: years.map((year) => {
         const byYear = byType.filter((document) => businessDocumentYear(document) === year);
-        const eventLabels = [...new Set(byYear.map(businessDocumentEvent))];
+        const events = [...new Map(byYear.map((document) => {
+          const event = businessDocumentEvent(document);
+          return [event.key, event];
+        })).values()];
         return {
           year,
-          events: eventLabels.map((label) => ({
-            label,
-            documents: byYear.filter((document) => businessDocumentEvent(document) === label),
+          events: events.map((event) => ({
+            ...event,
+            documents: byYear.filter((document) => businessDocumentEvent(document).key === event.key),
           })),
         };
       }),
