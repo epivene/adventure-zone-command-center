@@ -16,9 +16,12 @@ export type GoogleProfileLabelCleanupCandidate = {
   name: string;
 };
 
+export type GoogleProfileLabelCleanupFailure =
+  GoogleProfileLabelCleanupCandidate & { errorCode: string };
+
 export type GoogleProfileLabelNameSource = {
-  listCanonicalLabelNames(): Promise<string[]>;
-  labelDeleted?(labelId: string): Promise<void>;
+  listCurrentProfileNames(): Promise<string[]>;
+  prepareLabelDeletion?(labelId: string): Promise<void>;
 };
 
 export type GoogleProfileLabelCleanupGmailClient = {
@@ -26,12 +29,31 @@ export type GoogleProfileLabelCleanupGmailClient = {
   deleteLabel(labelId: string): Promise<void>;
 };
 
+function cleanupErrorCode(error: unknown): string {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+  return error instanceof Error
+    ? error.message
+    : "GOOGLE_WORKSPACE_PROFILE_LABEL_CLEANUP_FAILED";
+}
+
 function candidates(
   labels: GoogleLabelSummary[],
-  canonicalNames: string[],
+  currentProfileNames: string[],
 ): GoogleProfileLabelCleanupCandidate[] {
+  // Converting every current name here is deliberately fail-closed. If even
+  // one current CRM profile cannot be represented by the canonical label
+  // policy, cleanup must not offer any labels for deletion.
   const current = new Set(
-    canonicalNames.map((name) => normalizedProfileLabelPath(name)),
+    currentProfileNames.map((name) =>
+      normalizedProfileLabelPath(canonicalProfileLabelName(name)),
+    ),
   );
   return labels
     .filter(
@@ -51,16 +73,17 @@ export class GoogleProfileLabelCleanupService {
   ) {}
 
   async preview(): Promise<{ labels: GoogleProfileLabelCleanupCandidate[] }> {
-    const [canonicalNames, labels] = await Promise.all([
-      this.profiles.listCanonicalLabelNames(),
+    const [currentProfileNames, labels] = await Promise.all([
+      this.profiles.listCurrentProfileNames(),
       this.gmail.listLabels(),
     ]);
-    return { labels: candidates(labels, canonicalNames) };
+    return { labels: candidates(labels, currentProfileNames) };
   }
 
   async deleteSelected(labelIds: string[]): Promise<{
     deleted: GoogleProfileLabelCleanupCandidate[];
     skippedLabelIds: string[];
+    failed: GoogleProfileLabelCleanupFailure[];
   }> {
     const selected = [
       ...new Set(labelIds.map((id) => id.trim()).filter(Boolean)),
@@ -70,6 +93,7 @@ export class GoogleProfileLabelCleanupService {
     );
     const deleted: GoogleProfileLabelCleanupCandidate[] = [];
     const skippedLabelIds: string[] = [];
+    const failed: GoogleProfileLabelCleanupFailure[] = [];
 
     for (const labelId of selected) {
       const label = safeById.get(labelId);
@@ -77,15 +101,21 @@ export class GoogleProfileLabelCleanupService {
         skippedLabelIds.push(labelId);
         continue;
       }
-      await this.gmail.deleteLabel(labelId);
-      await this.profiles.labelDeleted?.(labelId);
-      deleted.push(label);
+      try {
+        // Invalidate any saved mapping before the destructive Gmail call. If
+        // this database step fails, Gmail is left untouched. If Gmail fails,
+        // the existing label can be re-adopted by the normal resolver.
+        await this.profiles.prepareLabelDeletion?.(labelId);
+        await this.gmail.deleteLabel(labelId);
+        deleted.push(label);
+      } catch (error) {
+        failed.push({ ...label, errorCode: cleanupErrorCode(error) });
+      }
     }
 
-    return { deleted, skippedLabelIds };
+    return { deleted, skippedLabelIds, failed };
   }
 }
-
 
 class PostgresGoogleProfileLabelNameSource
 implements GoogleProfileLabelNameSource {
@@ -94,24 +124,24 @@ implements GoogleProfileLabelNameSource {
     private readonly pool: GoogleConnectionSqlPool,
   ) {}
 
-  async listCanonicalLabelNames(): Promise<string[]> {
+  async listCurrentProfileNames(): Promise<string[]> {
     const result = await this.pool.query(
       `SELECT name
          FROM organizations
         WHERE consolidated_into_id IS NULL
         ORDER BY name, id`,
     );
-    return result.rows.flatMap((row) => {
-      if (typeof row.name !== "string") return [];
-      try {
-        return [canonicalProfileLabelName(row.name)];
-      } catch {
-        return [];
+    return result.rows.map((row) => {
+      if (typeof row.name !== "string") {
+        throw new Error(
+          "GOOGLE_WORKSPACE_PROFILE_LABEL_CLEANUP_PROFILE_INVALID",
+        );
       }
+      return row.name;
     });
   }
 
-  async labelDeleted(labelId: string): Promise<void> {
+  async prepareLabelDeletion(labelId: string): Promise<void> {
     await this.pool.query(
       `UPDATE google_workspace_profile_labels
           SET state = 'unavailable',
