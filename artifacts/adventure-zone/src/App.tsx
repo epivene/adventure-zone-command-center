@@ -81,6 +81,7 @@ const PaperNotesInboxPage = lazy(() => import("@/pages/PaperNotesInboxPage"));
 const PaperNoteBatchReviewPage = lazy(() => import("@/pages/PaperNoteBatchReviewPage"));
 const SettingsBusinessSourcesPage = lazy(() => import("@/pages/SettingsBusinessSourcesPage"));
 const SettingsCommunicationTemplatesPage = lazy(() => import("@/pages/SettingsCommunicationTemplatesPage"));
+const DaveRequestsPage = lazy(() => import("@/pages/DaveRequestsPage"));
 const SettingsCallScriptsPage = lazy(() => import("@/pages/SettingsCallScriptsPage"));
 const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackagesResourcesPage"));
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
@@ -95,6 +96,7 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 
 const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
 const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
+const BossWorkRequestPage = lazy(() => import("@/pages/BossWorkRequestPage"));
 const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
 const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
 const BossProfilesPage = lazy(() => import("@/pages/BossProfilesPage"));
@@ -338,6 +340,7 @@ function BossProtectedApp() {
         {/* Redirect away from disallowed paths */}
         <Route path="/boss/today"><Redirect to="/boss" /></Route>
         <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
+        <Route path="/boss/work-requests/:requestId">{(params) => <BossWorkRequestPage requestId={params.requestId} />}</Route>
         <Route path="/boss"><BossHomePage /></Route>
       </Switch>
     </BossShell>
@@ -356,6 +359,7 @@ function AdminProtectedApp() {
           <Route path="/today" component={TodayPage} />
           <Route path="/website-inquiries" component={WebsiteInquiriesPage} />
           <Route path="/email-review" component={EmailReviewPage} />
+          <Route path="/dave-requests" component={DaveRequestsPage} />
           <Route path="/bookings" component={BookingsPage} />
           <Route path="/bookings/:id/edit">{(params)=><BookingEditPage bookingId={params.id}/>}</Route>
           <Route path="/bookings/:id">{(params)=><BookingDetailPage bookingId={params.id}/>}</Route>

@@ -2,6 +2,7 @@ import type {
   CommunicationTemplateAccess,
   CommunicationTemplateChannel,
   CommunicationTemplateCreatedByKind,
+  CommunicationTemplateBodyFormat,
   CommunicationTemplateOwnerKind,
   CommunicationTemplateState,
 } from "@workspace/db/business-source-schema";
@@ -24,6 +25,8 @@ export const allowedTemplatePlaceholders = [
   "conventionName",
   "additionalInsuredWording",
   "additionalInsuredInfo",
+  "personalNote",
+  "earlyBirdDeadline",
 ] as const;
 
 export type TemplatePlaceholder =
@@ -40,6 +43,7 @@ export type CommunicationTemplateSeed = {
   subjectTemplate: string | null;
   requiredPlaceholders: readonly TemplatePlaceholder[];
   bodyTemplate: string;
+  bodyFormat?: CommunicationTemplateBodyFormat;
   sourceNote?: string;
   reviewedBy?: string;
 };
@@ -55,6 +59,7 @@ export type CommunicationTemplateRecord = {
   state: CommunicationTemplateState;
   subjectTemplate: string | null;
   bodyTemplate: string;
+  bodyFormat: CommunicationTemplateBodyFormat;
   allowedPlaceholders: TemplatePlaceholder[];
   requiredPlaceholders: TemplatePlaceholder[];
   ownerKind: CommunicationTemplateOwnerKind;
@@ -77,5 +82,6 @@ export type RenderedCommunicationTemplate = {
   templateId: string;
   subject: string;
   body: string;
+  bodyFormat: CommunicationTemplateBodyFormat;
   missingRequiredFields: TemplatePlaceholder[];
 };

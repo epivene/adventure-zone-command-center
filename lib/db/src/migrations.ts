@@ -474,6 +474,19 @@ const migrationFiles = [
         AND state = 'active'
     ) AS ready`,
   },
+  {
+    name: "20260909b_boss_work_requests.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.boss_work_requests') IS NOT NULL
+      AND to_regclass(current_schema() || '.boss_convention_submissions') IS NOT NULL
+      AND to_regclass(current_schema() || '.communication_template_reviews') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'communication_templates'
+          AND column_name = 'body_format'
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

@@ -19,6 +19,12 @@ describe("owner communication template administration", () => {
     expect(source).not.toContain("passwordSalt");
   });
 
+  it("requires Dave approval instead of direct company-template activation", () => {
+    expect(source).toContain('router.post("/communication-templates/:templateId/request-dave-approval"');
+    expect(source).toContain("Approval activates the exact reviewed revision automatically");
+    expect(source).toContain("templateFingerprint");
+  });
+
   it("provides an owner-only promotion endpoint", () => {
     expect(source).toContain('router.post("/communication-templates/:templateId/promote-shared"');
     expect(source).toContain("promoteToShared");

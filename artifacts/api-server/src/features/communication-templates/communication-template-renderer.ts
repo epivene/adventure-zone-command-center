@@ -57,6 +57,7 @@ export function renderCommunicationTemplateText(input: {
   templateId: string;
   subjectTemplate: string | null;
   bodyTemplate: string;
+  bodyFormat?: "plain_text" | "html";
   requiredPlaceholders: readonly TemplatePlaceholder[];
   values: TemplateRenderValues;
 }): RenderedCommunicationTemplate {
@@ -76,6 +77,7 @@ export function renderCommunicationTemplateText(input: {
     body: cleanOptionalWhitespace(
       renderText(input.bodyTemplate, input.values, required),
     ),
+    bodyFormat: input.bodyFormat ?? "plain_text",
     missingRequiredFields,
   };
 }
