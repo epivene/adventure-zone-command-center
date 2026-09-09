@@ -8,6 +8,7 @@ export interface GoogleDriveBackupJob {
   claimedGeneration: number;
   attempts: number;
   priority: number;
+  runId: string | null;
 }
 
 export interface BackupMapping {
@@ -54,6 +55,7 @@ function job(row: Record<string, unknown> | undefined): GoogleDriveBackupJob | n
     claimedGeneration: Number(row.claimed_generation),
     attempts: Number(row.attempts),
     priority: Number(row.priority),
+    runId: typeof row.run_id === "string" ? row.run_id : null,
   };
 }
 
@@ -177,13 +179,29 @@ export class PostgresGoogleDriveBackupRepository {
 
   async markSucceeded(id: string, claimedGeneration: number, now: Date): Promise<void> {
     await this.pool.query(
-      `UPDATE google_drive_backup_jobs
-          SET status = CASE WHEN request_generation = $2 THEN 'succeeded' ELSE 'queued' END,
-              next_attempt_at = CASE WHEN request_generation = $2 THEN next_attempt_at ELSE $3 END,
-              completed_at = CASE WHEN request_generation = $2 THEN $3 ELSE NULL END,
-              locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
-              last_error_code = NULL, last_error_message = NULL, updated_at = $3
-        WHERE id = $1 AND status = 'processing' AND claimed_generation = $2`,
+      `WITH finished_job AS (
+         UPDATE google_drive_backup_jobs
+            SET status = CASE WHEN request_generation = $2 THEN 'succeeded' ELSE 'queued' END,
+                next_attempt_at = CASE WHEN request_generation = $2 THEN next_attempt_at ELSE $3 END,
+                completed_at = CASE WHEN request_generation = $2 THEN $3 ELSE NULL END,
+                locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
+                last_error_code = NULL, last_error_message = NULL, updated_at = $3
+          WHERE id = $1 AND status = 'processing' AND claimed_generation = $2
+          RETURNING run_id
+       ), completed_run AS (
+         UPDATE google_drive_backup_runs r
+            SET state = 'completed', finished_at = $3, updated_at = $3
+          WHERE r.id = (SELECT run_id FROM finished_job)
+            AND r.mode = 'pilot'
+            AND NOT EXISTS (
+              SELECT 1 FROM google_drive_backup_jobs j
+               WHERE j.run_id = r.id AND j.status <> 'succeeded'
+            )
+          RETURNING mode
+       )
+       UPDATE google_drive_backup_config c
+          SET successful_pilot_at = $3, state = 'paused', updated_at = $3
+        WHERE c.id = 'default' AND EXISTS (SELECT 1 FROM completed_run)`,
       [id, claimedGeneration, now],
     );
   }
