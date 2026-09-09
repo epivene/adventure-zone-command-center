@@ -50,7 +50,7 @@ export default function ManagerHomePage() {
   const reviewsDue = dashboard?.summary?.reviewsDueCount ?? dashboard?.reviewsDue?.length ?? 0;
   const currentMapEvent = currentLifecycle ? bookedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
   const currentEvent = currentLifecycle ? { ...currentMapEvent, ...currentLifecycle } : null;
-  const nextEvent = bookedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
+  const nextEvent = dashboard?.nextEvent ?? null;
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
 
