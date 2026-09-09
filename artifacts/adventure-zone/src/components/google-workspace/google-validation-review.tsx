@@ -7,11 +7,14 @@ import {
   type GoogleReviewNewProfileInput,
 } from "@/features/google-workspace/google-review-new-profile";
 import {
+  deleteGoogleProfileLabels,
+  getGoogleProfileLabelCleanupPreview,
   getGoogleWorkspaceValidationReview,
   ignoreGoogleWorkspaceValidationReview,
   resolveGoogleWorkspaceValidationReview,
   retryGoogleWorkspaceGmailMutation,
   runGoogleWorkspaceRecentValidation,
+  type GoogleProfileLabelCleanupCandidate,
   type GoogleProfileLabelSyncResult,
   type GoogleValidationReviewItem,
 } from "@/features/google-workspace/google-workspace-client";
@@ -89,6 +92,16 @@ export function GoogleValidationReview({
   const [searchByMessage, setSearchByMessage] = useState<Record<string, SearchState>>({});
   const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [cleanupDeleting, setCleanupDeleting] = useState(false);
+  const [cleanupLabels, setCleanupLabels] = useState<
+    GoogleProfileLabelCleanupCandidate[]
+  >([]);
+  const [selectedCleanupLabelIds, setSelectedCleanupLabelIds] = useState<
+    string[]
+  >([]);
+  const [cleanupStatus, setCleanupStatus] = useState<string | null>(null);
 
   async function load(): Promise<boolean> {
     setError(null);
@@ -120,6 +133,73 @@ export function GoogleValidationReview({
       setError("Could not check Gmail. Showing saved email review items.");
     }
     setChecking(false);
+  }
+
+  async function toggleLabelCleanup() {
+    if (cleanupOpen) {
+      setCleanupOpen(false);
+      return;
+    }
+    setCleanupLoading(true);
+    setError(null);
+    setCleanupStatus(null);
+    try {
+      const result = await getGoogleProfileLabelCleanupPreview();
+      setCleanupLabels(result.labels);
+      setSelectedCleanupLabelIds([]);
+      setCleanupOpen(true);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not check Gmail labels.",
+      );
+    } finally {
+      setCleanupLoading(false);
+    }
+  }
+
+  function toggleCleanupLabel(labelId: string) {
+    setSelectedCleanupLabelIds((current) =>
+      current.includes(labelId)
+        ? current.filter((id) => id !== labelId)
+        : [...current, labelId],
+    );
+  }
+
+  async function deleteSelectedCleanupLabels() {
+    const count = selectedCleanupLabelIds.length;
+    if (!count) return;
+    const confirmed = window.confirm(
+      `Delete ${count} selected Gmail label${count === 1 ? "" : "s"}? This removes only labels; no emails will be deleted.`,
+    );
+    if (!confirmed) return;
+
+    setCleanupDeleting(true);
+    setError(null);
+    setCleanupStatus(null);
+    try {
+      const selected = [...selectedCleanupLabelIds];
+      const result = await deleteGoogleProfileLabels(selected);
+      setCleanupLabels((current) =>
+        current.filter((label) => !selected.includes(label.id)),
+      );
+      setSelectedCleanupLabelIds([]);
+      const deletedCount = result.deleted.length;
+      setCleanupStatus(
+        deletedCount
+          ? `Deleted ${deletedCount} old Gmail label${deletedCount === 1 ? "" : "s"}. No emails were deleted.`
+          : "No labels were deleted after the safety re-check.",
+      );
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not delete the selected Gmail labels.",
+      );
+    } finally {
+      setCleanupDeleting(false);
+    }
   }
 
   useEffect(() => {
@@ -311,14 +391,34 @@ export function GoogleValidationReview({
           ) : null}
         </div>
         {checkGmailOnMount ? (
-          <button
-            className="button-secondary shrink-0 px-3 py-2 text-sm"
-            disabled={checking || busyMessageId !== null || retryingMutationId !== null}
-            onClick={() => void checkEmails()}
-            type="button"
-          >
-            {checking ? "Checking Gmail…" : "Check emails"}
-          </button>
+          <div className="flex shrink-0 flex-wrap gap-2">
+            <button
+              className="button-secondary px-3 py-2 text-sm"
+              disabled={
+                checking ||
+                cleanupLoading ||
+                cleanupDeleting ||
+                busyMessageId !== null ||
+                retryingMutationId !== null
+              }
+              onClick={() => void checkEmails()}
+              type="button"
+            >
+              {checking ? "Checking Gmail…" : "Check emails"}
+            </button>
+            <button
+              className="button-secondary px-3 py-2 text-sm"
+              disabled={cleanupLoading || cleanupDeleting || checking}
+              onClick={() => void toggleLabelCleanup()}
+              type="button"
+            >
+              {cleanupLoading
+                ? "Checking labels…"
+                : cleanupOpen
+                  ? "Close label cleanup"
+                  : "Clean up old labels"}
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -337,6 +437,65 @@ export function GoogleValidationReview({
             </button>
           ) : null}
         </div>
+      ) : null}
+
+      {cleanupOpen ? (
+        <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-950/40">
+          <div>
+            <p className="font-semibold text-slate-900 dark:text-slate-100">
+              Old Gmail profile labels
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Only labels that do not match a current CRM profile are shown.
+              Deleting a label never deletes its emails.
+            </p>
+          </div>
+          {cleanupLabels.length ? (
+            <div className="grid max-h-64 gap-2 overflow-y-auto">
+              {cleanupLabels.map((label) => (
+                <label
+                  className="flex items-start gap-2 rounded border border-slate-200 p-2 dark:border-slate-700"
+                  key={label.id}
+                >
+                  <input
+                    aria-label={label.name}
+                    checked={selectedCleanupLabelIds.includes(label.id)}
+                    className="mt-0.5"
+                    onChange={() => toggleCleanupLabel(label.id)}
+                    type="checkbox"
+                  />
+                  <span className="break-all">{label.name}</span>
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="text-slate-600 dark:text-slate-300">
+              No old profile labels found.
+            </p>
+          )}
+          {cleanupLabels.length ? (
+            <div>
+              <button
+                className="button-secondary px-3 py-2 text-sm"
+                disabled={
+                  cleanupDeleting || selectedCleanupLabelIds.length === 0
+                }
+                onClick={() => void deleteSelectedCleanupLabels()}
+                type="button"
+              >
+                {cleanupDeleting
+                  ? "Deleting labels…"
+                  : `Delete ${selectedCleanupLabelIds.length} selected label${selectedCleanupLabelIds.length === 1 ? "" : "s"}`}
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {cleanupStatus ? (
+        <p className="text-sm font-semibold text-emerald-700" role="status">
+          {cleanupStatus}
+        </p>
       ) : null}
 
       {pending.length === 0 ? (
