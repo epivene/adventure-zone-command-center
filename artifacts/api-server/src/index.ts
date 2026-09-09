@@ -98,6 +98,7 @@ import { GoogleGmailDocumentSource, PostgresExistingGoogleProfileFileLookup } fr
 import { GoogleDocumentWorker, PostgresGoogleDocumentWorkerState } from "./features/business-documents/google-document-worker";
 import { GoogleDocumentWorkerLoop, systemGoogleDocumentWorkerLoopScheduler } from "./features/business-documents/google-document-worker-loop";
 import { BusinessDocumentStorage } from "./features/business-documents/business-document-storage";
+import { GoogleDriveBackupBackfillService } from "./features/google-drive-backup/google-drive-backup-backfill-service";
 import { readGoogleDriveBackupRuntimeConfig } from "./features/google-drive-backup/google-drive-backup-config";
 import { GoogleDriveBackupDocumentRepository } from "./features/google-drive-backup/google-drive-backup-document-repository";
 import { PostgresGoogleDriveBackupRepository, type GoogleDriveBackupSqlPool } from "./features/google-drive-backup/google-drive-backup-repository";
@@ -194,6 +195,7 @@ if (googleDriveBackupRuntimeConfig.enabled) {
   if (!environment.configured) throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
   const sqlPool = pool as unknown as GoogleDriveBackupSqlPool;
   const backupRepository = new PostgresGoogleDriveBackupRepository(sqlPool);
+  const backupBackfill = new GoogleDriveBackupBackfillService(sqlPool);
   const emailProvider = new GoogleWorkspaceProfileEmailProvider({
     pool: sqlPool,
     connections: googleConnectionRepository,
@@ -211,6 +213,7 @@ if (googleDriveBackupRuntimeConfig.enabled) {
       documents: new GoogleDriveBackupDocumentRepository(sqlPool),
       storage: new BusinessDocumentStorage(),
       connections: googleConnectionRepository,
+      backfill: backupBackfill,
     }),
     idlePollMs: googleDriveBackupRuntimeConfig.idlePollMs,
     onResult: (result) => {
