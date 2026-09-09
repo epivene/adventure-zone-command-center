@@ -1,6 +1,7 @@
 name: Blanding Kristy live-state correction
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
       - ".github/workflows/blanding-kristy-live-state.yml"
@@ -40,3 +41,113 @@ jobs:
           pnpm --filter @workspace/api-server exec vitest run
           src/features/leg-manager/blanding-kristy-state-correction.test.ts
           src/routes/assistant-blanding-kristy-correction.test.ts
+          src/features/leg-manager/manager-map-data.test.ts
+          src/features/leg-manager/manager-schedule-contract.test.ts
+      - name: Build production API
+        run: pnpm --filter @workspace/api-server run build
+      - name: Guard the protected live correction
+        run: |
+          grep -F 'router.use(requireAssistantImportToken);' artifacts/api-server/src/routes/assistant-blanding-kristy-correction.ts
+          grep -F 'router.post("/blanding-kristy-state-correction"' artifacts/api-server/src/routes/assistant-blanding-kristy-correction.ts
+          grep -F 'assistantBlandingKristyCorrectionRouter' artifacts/api-server/src/app.ts
+
+  correct:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check protected live configuration
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          test -n "${API_URL}" || { echo "ADVENTURE_ZONE_API_URL is not configured"; exit 1; }
+          test -n "${ASSISTANT_IMPORT_TOKEN}" || { echo "ASSISTANT_IMPORT_TOKEN is not configured"; exit 1; }
+      - name: Wait for deployment and apply exact correction
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}"
+
+          for attempt in {1..60}; do
+            HTTP_STATUS=$(curl --silent --show-error \
+              --request POST \
+              --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data '{}' \
+              --output blanding-correction.json \
+              --write-out "%{http_code}" \
+              "${BASE_URL}/api/assistant-import/blanding-kristy-state-correction" || true)
+
+            if [ "${HTTP_STATUS}" = "200" ] && node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('blanding-correction.json','utf8')); if(x.ok!==true || !x.result || !['applied','already_current'].includes(x.result.status) || x.result.mapReady!==true) process.exit(1)"; then
+              echo "Blanding correction applied on attempt ${attempt}."
+              break
+            fi
+
+            if [ "${HTTP_STATUS}" = "404" ] || [ "${HTTP_STATUS}" = "000" ]; then
+              echo "Correction endpoint not deployed yet (HTTP ${HTTP_STATUS}, attempt ${attempt})."
+              sleep 15
+              continue
+            fi
+
+            echo "The deployed correction returned HTTP ${HTTP_STATUS}."
+            if [ -f blanding-correction.json ]; then
+              cat blanding-correction.json
+            fi
+            exit 1
+          done
+
+          test -f blanding-correction.json
+          node -e "const fs=require('fs'); const x=JSON.parse(fs.readFileSync('blanding-correction.json','utf8')); if(x.ok!==true || !x.result) process.exit(1)"
+      - name: Require idempotent live state
+        env:
+          API_URL: ${{ secrets.ADVENTURE_ZONE_API_URL }}
+          ASSISTANT_IMPORT_TOKEN: ${{ secrets.ASSISTANT_IMPORT_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE_URL="${API_URL%/}"
+          curl --fail --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${ASSISTANT_IMPORT_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data '{}' \
+            --output blanding-verification.json \
+            "${BASE_URL}/api/assistant-import/blanding-kristy-state-correction"
+
+          node <<'NODE'
+          const fs = require('fs');
+          const result = JSON.parse(fs.readFileSync('blanding-verification.json', 'utf8'));
+          const expectedContacts = [
+            'amitchell@sanjuancc.org',
+            'ssherrow@sanjuancc.org',
+          ];
+          if (result.ok !== true || result.result?.status !== 'already_current') {
+            throw new Error('Blanding correction did not persist idempotently.');
+          }
+          if (result.result.gmailThreadId !== '19d214e0a6d3f255') {
+            throw new Error('Blanding Gmail thread is not linked.');
+          }
+          if (result.result.mapReady !== true) {
+            throw new Error('Blanding does not have map-ready coordinates.');
+          }
+          if (JSON.stringify(result.result.contacts) !== JSON.stringify(expectedContacts)) {
+            throw new Error('Blanding contact emails are incomplete.');
+          }
+          fs.writeFileSync('blanding-live-state-verification.json', JSON.stringify({
+            verifiedAt: new Date().toISOString(),
+            ...result.result,
+          }, null, 2));
+          NODE
+      - name: Upload protected verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: blanding-kristy-live-state
+          path: |
+            blanding-correction.json
+            blanding-verification.json
+            blanding-live-state-verification.json
+          retention-days: 7
