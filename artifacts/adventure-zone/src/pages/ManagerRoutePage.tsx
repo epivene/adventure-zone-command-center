@@ -14,17 +14,6 @@ import type { ManagerDashboardResponse } from "@workspace/api-zod";
 type Data = Pick<ManagerDashboardResponse, "route" | "events" | "nextEvent">;
 type Incomplete = { bookingId: string };
 
-function formatEventDate(value?: string | Date | null) {
-  if (!value) return "Date not set";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function formatEventRange(startsAt?: string | Date | null, endsAt?: string | Date | null) {
-  if (!startsAt) return "Date not set";
-  if (!endsAt || endsAt === startsAt) return formatEventDate(startsAt);
-  return `${formatEventDate(startsAt)} → ${formatEventDate(endsAt)}`;
-}
-
 export default function ManagerRoutePage() {
   const { managerApi } = useManagerAuth();
   const { setActiveContext } = useManagerAssistant();
