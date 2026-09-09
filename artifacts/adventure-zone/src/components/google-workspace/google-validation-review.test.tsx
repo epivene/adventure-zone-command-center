@@ -7,6 +7,8 @@ const client = vi.hoisted(() => ({
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
   retryGoogleWorkspaceGmailMutation: vi.fn(),
+  getGoogleProfileLabelCleanupPreview: vi.fn(),
+  deleteGoogleProfileLabels: vi.fn(),
 }));
 const search = vi.hoisted(() => ({
   searchGoogleReviewProfiles: vi.fn(),
@@ -48,6 +50,23 @@ beforeEach(() => {
     },
   });
   client.ignoreGoogleWorkspaceValidationReview.mockResolvedValue({ ok: true });
+  client.getGoogleProfileLabelCleanupPreview.mockResolvedValue({
+    labels: [
+      {
+        id: "Label_old",
+        name: "Z - AdventureZone/Profiles/Old County Fair",
+      },
+    ],
+  });
+  client.deleteGoogleProfileLabels.mockResolvedValue({
+    deleted: [
+      {
+        id: "Label_old",
+        name: "Z - AdventureZone/Profiles/Old County Fair",
+      },
+    ],
+    skippedLabelIds: [],
+  });
   search.searchGoogleReviewProfiles.mockResolvedValue([
     { id: "22222222-2222-4222-8222-222222222222", name: "Another Fair" },
   ]);
@@ -105,6 +124,33 @@ describe("GoogleValidationReview", () => {
       expect(client.getGoogleWorkspaceValidationReview).toHaveBeenCalledTimes(1),
     );
     expect(await screen.findByRole("button", { name: "Check emails" })).toBeEnabled();
+  });
+
+  it("previews, selects, confirms, and deletes old labels without touching email", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<GoogleValidationReview checkGmailOnMount />);
+    await screen.findByText("County Fair application");
+
+    fireEvent.click(screen.getByRole("button", { name: "Clean up old labels" }));
+
+    const oldLabel = await screen.findByRole("checkbox", {
+      name: "Z - AdventureZone/Profiles/Old County Fair",
+    });
+    expect(client.deleteGoogleProfileLabels).not.toHaveBeenCalled();
+    fireEvent.click(oldLabel);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Delete 1 selected label" }),
+    );
+
+    await waitFor(() =>
+      expect(client.deleteGoogleProfileLabels).toHaveBeenCalledWith([
+        "Label_old",
+      ]),
+    );
+    expect(confirm).toHaveBeenCalled();
+    expect(
+      await screen.findByText("Deleted 1 old Gmail label. No emails were deleted."),
+    ).toBeInTheDocument();
   });
 
   it("loads only the saved queue in shared views", async () => {
