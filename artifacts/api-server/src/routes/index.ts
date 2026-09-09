@@ -58,6 +58,7 @@ import bossAuthRouter from "./boss-auth";
 import bossDashboardRouter from "./boss-dashboard";
 import bossWorkRequestsRouter from "./boss-work-requests";
 import bossWorkRequestsOwnerRouter from "./boss-work-requests-owner";
+import communicationTemplatesRouter from "./communication-templates";
 import bossAssignmentsRouter from "./boss-assignments";
 import bossOperationsRouter from "./boss-operations";
 import bossDocumentsRouter from "./boss-documents";
@@ -237,6 +238,7 @@ router.use(async (req, _res, next) => {
   next();
 });
 router.use(bossWorkRequestsOwnerRouter);
+router.use(communicationTemplatesRouter);
 router.use(officeAdminAccountsRouter);
 router.use(marketingRouter);
 router.use(bossAdminAccountsRouter);
