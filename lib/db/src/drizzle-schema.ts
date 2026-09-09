@@ -1,17 +1,2 @@
-export * from "./schema";
-export * from "./event-family-schema";
-export * from "./paper-note-schema";
-export * from "./business-source-schema";
-export * from "./boss-work-request-schema";
-export * from "./commercial-offer-schema";
-export * from "./event-checklist-schema";
-export * from "./resource-source-candidate-schema";
-export * from "./event-attendance-history-schema";
-export * from "./office-coordinator-schema";
-export * from "./google-workspace-schema";
-export * from "./operational-calendar-schema";
-export * from "./lead-intake-schema";
-export * from "./booking-opportunity-schema";
-export * from "./booking-opportunity-email-schema";
-export * from "./leg-assignment-schema";
-export * from "./design-studio-schema";
+base64: invalid input
+m��
