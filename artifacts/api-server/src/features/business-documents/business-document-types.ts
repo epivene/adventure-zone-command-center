@@ -73,6 +73,7 @@ export type BusinessDocumentView = {
     id: string;
     targetKind: BusinessDocumentTargetKind;
     targetId: string;
+    targetLabel: string | null;
   }>;
   createdAt: string;
   updatedAt: string;

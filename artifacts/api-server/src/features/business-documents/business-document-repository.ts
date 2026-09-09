@@ -56,6 +56,7 @@ function documentLinks(value: unknown): BusinessDocumentView["links"] {
       id: candidate.id,
       targetKind: candidate.targetKind as BusinessDocumentView["links"][number]["targetKind"],
       targetId: candidate.targetId,
+      targetLabel: typeof candidate.targetLabel === "string" ? candidate.targetLabel : null,
     }];
   });
 }
@@ -351,7 +352,12 @@ export class BusinessDocumentRepository {
              SELECT json_agg(json_build_object(
                'id', document_link.id,
                'targetKind', document_link.target_kind,
-               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id)
+               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id),
+               'targetLabel', CASE document_link.target_kind
+                 WHEN 'profile' THEN (SELECT organization.name FROM organizations organization WHERE organization.id = document_link.organization_id)
+                 WHEN 'booking' THEN (SELECT booking.name FROM bookings booking WHERE booking.id = document_link.booking_id)
+                 WHEN 'event_family' THEN (SELECT event_family.name FROM event_families event_family WHERE event_family.id = document_link.event_family_id)
+               END
              ) ORDER BY document_link.created_at)
              FROM business_document_links document_link
              WHERE document_link.document_id = d.id
@@ -384,7 +390,12 @@ export class BusinessDocumentRepository {
              SELECT json_agg(json_build_object(
                'id', document_link.id,
                'targetKind', document_link.target_kind,
-               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id)
+               'targetId', COALESCE(document_link.organization_id, document_link.booking_id, document_link.event_family_id),
+               'targetLabel', CASE document_link.target_kind
+                 WHEN 'profile' THEN (SELECT organization.name FROM organizations organization WHERE organization.id = document_link.organization_id)
+                 WHEN 'booking' THEN (SELECT booking.name FROM bookings booking WHERE booking.id = document_link.booking_id)
+                 WHEN 'event_family' THEN (SELECT event_family.name FROM event_families event_family WHERE event_family.id = document_link.event_family_id)
+               END
              ) ORDER BY document_link.created_at)
              FROM business_document_links document_link
              WHERE document_link.document_id = d.id

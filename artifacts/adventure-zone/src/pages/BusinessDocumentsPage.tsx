@@ -309,20 +309,28 @@ export default function BusinessDocumentsPage({
       {view !== "review" && visibleDocuments.length ? (
         <section aria-label="Documents grouped by type, year, and event" className="grid gap-8">
           {groupedDocuments.map((typeGroup) => (
-            <section className="grid gap-4" key={typeGroup.key}>
-              <div className="flex items-baseline justify-between border-b border-border pb-2">
-                <h2 className="text-xl font-bold text-foreground">{typeGroup.label}</h2>
+            <details aria-label={`${typeGroup.label} folder`} className="rounded-xl border border-border bg-card" key={typeGroup.key}>
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 font-bold text-foreground">
+                <span>{typeGroup.label}</span>
                 <span className="text-xs text-muted-foreground">{typeGroup.years.reduce((count, item) => count + item.events.reduce((eventCount, event) => eventCount + event.documents.length, 0), 0)} files</span>
-              </div>
-              {typeGroup.years.map((yearGroup) => (
-                <section className="grid gap-3" key={`${typeGroup.key}-${yearGroup.year}`}>
-                  <h3 className="text-lg font-bold text-foreground">{yearGroup.year}</h3>
-                  {yearGroup.events.map((eventGroup) => (
-                    <section className="grid gap-2" key={`${typeGroup.key}-${yearGroup.year}-${eventGroup.label}`}>
-                      <h4 className="text-sm font-semibold text-muted-foreground">Event: {eventGroup.label}</h4>
-                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              </summary>
+              <div className="grid gap-3 border-t border-border p-3">
+                {typeGroup.years.map((yearGroup) => (
+                  <details aria-label={`${yearGroup.year} folder`} className="rounded-lg border border-border bg-background" key={`${typeGroup.key}-${yearGroup.year}`}>
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 font-semibold text-foreground">
+                      <span>{yearGroup.year}</span>
+                      <span className="text-xs text-muted-foreground">{yearGroup.events.reduce((count, event) => count + event.documents.length, 0)} files</span>
+                    </summary>
+                    <div className="grid gap-2 border-t border-border p-2">
+                      {yearGroup.events.map((eventGroup) => (
+                        <details aria-label={`${eventGroup.label} folder`} className="rounded-lg border border-border bg-card" key={`${typeGroup.key}-${yearGroup.year}-${eventGroup.key}`}>
+                          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground">
+                            <span>{eventGroup.label}</span>
+                            <span className="text-xs font-normal text-muted-foreground">{eventGroup.documents.length} {eventGroup.documents.length === 1 ? "file" : "files"}</span>
+                          </summary>
+                          <div className="grid gap-2 border-t border-border p-2 md:grid-cols-2 xl:grid-cols-3">
                         {eventGroup.documents.map((document) => (
-            <article className="rounded-xl border border-border bg-card p-4 shadow-sm" key={document.id}>
+            <article className="rounded-lg border border-border bg-background p-3 shadow-sm" key={document.id}>
               {editingId === document.id ? (
                 <div className="grid gap-3">
                   <label className="grid gap-1 text-xs font-semibold">Document name
@@ -372,12 +380,14 @@ export default function BusinessDocumentsPage({
               )}
             </article>
                         ))}
-                      </div>
-                    </section>
-                  ))}
-                </section>
-              ))}
-            </section>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </details>
           ))}
         </section>
       ) : null}

@@ -31,10 +31,10 @@ describe("business document organization", () => {
     expect(isMediaDocument(record({ category: "marketing", originalFilename: "Big E flyer.pdf" }))).toBe(false);
   });
 
-  it("groups document versions by type, year, and inferred event", () => {
+  it("groups document versions by type, year, and confirmed event", () => {
     const groups = groupBusinessDocuments([
-      record({ id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01" }),
-      record({ id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01" }),
+      record({ id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01", links: [{ id: "l1", targetKind: "profile", targetId: "p1", targetLabel: "Big E" } as never] }),
+      record({ id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01", links: [{ id: "l2", targetKind: "profile", targetId: "p1", targetLabel: "Big E" } as never] }),
       record({ id: "coi", displayName: "County Fair COI", originalFilename: "County Fair COI 2025.pdf", category: "coi", issueDate: "2025-04-02" }),
     ]);
 
@@ -43,6 +43,14 @@ describe("business document organization", () => {
     expect(groups[0].years[0].events).toEqual([
       expect.objectContaining({ label: "Big E", documents: [expect.objectContaining({ id: "draft" }), expect.objectContaining({ id: "signed" })] }),
     ]);
-    expect(groups[1].years[0].events[0].label).toBe("County Fair");
+    expect(groups[1].years[0].events[0].label).toBe("Needs Sorting");
+  });
+
+  it("never invents an event from an unlinked filename", () => {
+    const groups = groupBusinessDocuments([
+      record({ displayName: "Adventure Zone Agreement for LC Fair 002", category: "contract", effectiveDate: "2026-01-01" }),
+    ]);
+
+    expect(groups[0].years[0].events.map((event) => event.label)).toEqual(["Needs Sorting"]);
   });
 });
