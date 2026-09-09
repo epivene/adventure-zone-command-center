@@ -51,6 +51,20 @@ describe("Google Gmail draft-only client", () => {
       .toThrow("GOOGLE_WORKSPACE_GMAIL_HEADER_INVALID");
   });
 
+  it("preserves reviewed HTML as an HTML MIME body", () => {
+    const html = '<table role="presentation"><tr><td style="background:#ec4899">Slide into action!</td></tr></table>';
+    const raw = buildGmailRawMessage({
+      to: "event@example.com",
+      subject: "Adventure Zone",
+      body: html,
+      bodyFormat: "html",
+    });
+    const mime = Buffer.from(raw, "base64url").toString("utf8");
+    expect(mime).toContain("Content-Type: text/html; charset=UTF-8\r\n");
+    const encodedBody = mime.split("\r\n\r\n")[1]!;
+    expect(Buffer.from(encodedBody.replace(/\r\n/g, ""), "base64").toString("utf8")).toBe(html);
+  });
+
   it("calls users.drafts.create exactly once and never retries an uncertain network outcome", async () => {
     const urls: string[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
