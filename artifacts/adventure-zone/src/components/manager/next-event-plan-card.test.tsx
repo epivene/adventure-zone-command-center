@@ -12,6 +12,8 @@ const event = {
   longitude: -105.8406,
   startsAt: "2026-08-20T12:00:00.000Z",
   endsAt: "2026-08-20T16:00:00.000Z",
+  operationalStartsAt: "2026-08-16T00:00:00.000Z",
+  operationalEndsAt: "2026-08-22T23:59:00.000Z",
   status: "confirmed",
   probability: null,
   scheduleState: "booked",
@@ -53,8 +55,8 @@ describe("NextEventPlanCard", () => {
 
     expect(screen.getByText("Miles City, MT")).toBeInTheDocument();
     expect(screen.getByText(/Event dates:/)).toHaveTextContent(/Aug 20/);
-    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 18.*Aug 19/);
-    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 21/);
+    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 16.*Aug 19/);
+    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 21.*Aug 22/);
     expect(screen.getByText("120 mi")).toBeInTheDocument();
     expect(screen.getByText("2 hr 30 min")).toBeInTheDocument();
     expect(screen.getByText("$42.00 estimated gas")).toBeInTheDocument();
