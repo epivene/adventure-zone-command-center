@@ -185,6 +185,11 @@ export class GoogleDriveBackupBackfillService {
            JOIN google_drive_backup_runs r ON r.id = $1
           WHERE o.consolidated_into_id IS NULL
             AND r.state IN ('queued','running')
+            AND (
+              SELECT count(*) FROM google_drive_backup_jobs pending
+               WHERE pending.run_id = r.id
+                 AND pending.status IN ('queued','retry','processing')
+            ) < 100
             AND (r.mode <> 'pilot' OR
               o.id IN (
                 SELECT p.id FROM organizations p
@@ -214,13 +219,26 @@ export class GoogleDriveBackupBackfillService {
           ORDER BY updated_at ASC, id ASC LIMIT 1
        ), updated AS (
          UPDATE google_drive_backup_runs r SET
-           state = 'running',
+           state = CASE
+             WHEN NOT EXISTS (SELECT 1 FROM selected_profiles)
+              AND NOT EXISTS (
+                SELECT 1 FROM google_drive_backup_jobs j
+                 WHERE j.run_id = r.id AND j.status <> 'succeeded'
+              )
+             THEN 'completed' ELSE 'running' END,
            cursor = COALESCE((SELECT jsonb_build_object('updatedAt',updated_at,'id',id) FROM tail), r.cursor),
+           finished_at = CASE
+             WHEN NOT EXISTS (SELECT 1 FROM selected_profiles)
+              AND NOT EXISTS (
+                SELECT 1 FROM google_drive_backup_jobs j
+                 WHERE j.run_id = r.id AND j.status <> 'succeeded'
+              )
+             THEN $2 ELSE NULL END,
            updated_at = $2
          WHERE r.id = $1 RETURNING state
        )
        SELECT (SELECT count(*)::int FROM selected_profiles) AS enqueued,
-              false AS completed`,
+              (SELECT state = 'completed' FROM updated) AS completed`,
       [runId, now],
     );
     const row = result.rows[0] ?? {};
