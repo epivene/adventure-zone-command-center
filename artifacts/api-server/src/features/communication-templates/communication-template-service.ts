@@ -20,6 +20,7 @@ import {
   formatPackagePrice,
   renderCommunicationTemplateText,
 } from "./communication-template-renderer";
+import { applyEarlyBirdPromoToRenderedTemplate } from "./communication-template-promotion";
 import type {
   RenderedCommunicationTemplate,
   TemplateRenderValues,
@@ -52,6 +53,9 @@ export async function renderCommunicationTemplate(
     commercialOfferContext?: CommercialOfferUseContext | null;
     sender: { name: string; phone: string | null; email: string | null };
     extraValues?: TemplateRenderValues;
+    now?: Date;
+    alreadyPaid?: boolean;
+    existingPromotionDeadlineDate?: string | null;
   },
 ): Promise<RenderedCommunicationTemplate> {
   const repository = new CommunicationTemplateRepository(database);
@@ -96,12 +100,12 @@ export async function renderCommunicationTemplate(
   if (!contact) throw new Error("CONTACT_NOT_FOUND");
 
   const upcomingBookings = await database
-    .select({ startsAt: bookings.startsAt, endsAt: bookings.endsAt })
+    .select({ id: bookings.id, startsAt: bookings.startsAt, endsAt: bookings.endsAt })
     .from(bookings)
     .where(
       and(
         eq(bookings.organizationId, input.organizationId),
-        gte(bookings.startsAt, new Date()),
+        gte(bookings.startsAt, input.now ?? new Date()),
       ),
     )
     .orderBy(asc(bookings.startsAt))
@@ -165,11 +169,21 @@ export async function renderCommunicationTemplate(
     ...input.extraValues,
   };
 
-  return renderCommunicationTemplateText({
+  const rendered = renderCommunicationTemplateText({
     templateId: template.id,
     subjectTemplate: template.subjectTemplate,
     bodyTemplate: template.bodyTemplate,
     requiredPlaceholders: template.requiredPlaceholders,
     values,
+  });
+  const now = input.now ?? new Date();
+  return applyEarlyBirdPromoToRenderedTemplate(rendered, {
+    category: template.category,
+    code: template.code,
+    now,
+    alreadyPaid: input.alreadyPaid ?? false,
+    existingPromotionDeadlineDate: input.existingPromotionDeadlineDate,
+    bookingId: booking?.id ?? null,
+    eventYear: booking?.startsAt?.getUTCFullYear() ?? 2027,
   });
 }

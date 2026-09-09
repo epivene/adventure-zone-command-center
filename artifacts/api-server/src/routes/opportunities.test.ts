@@ -47,11 +47,14 @@ function repository() {
   };
 }
 
-function app(repo = repository()) {
+function app(repo = repository(), promotion = { confirmInterest: vi.fn(async () => null) }) {
   const app = express();
   app.use(express.json());
-  app.use("/api/opportunities", requireOwnerMiddleware, createOpportunitiesRouter(repo));
-  return { app, repo };
+  app.use("/api/opportunities", requireOwnerMiddleware, createOpportunitiesRouter(repo, {
+    promotion,
+    now: () => new Date("2026-09-09T15:00:00Z"),
+  }));
+  return { app, repo, promotion };
 }
 
 beforeEach(() => {
@@ -77,7 +80,7 @@ describe("Opportunity routes", () => {
   });
 
   it("updates authoritative priority and next action", async () => {
-    const { app: testApp, repo } = app();
+    const { app: testApp, repo, promotion } = app();
     const response = await request(testApp)
       .patch(`/api/opportunities/${ID}`)
       .set("Authorization", `Bearer ${ownerToken()}`)
@@ -90,7 +93,7 @@ describe("Opportunity routes", () => {
   });
 
   it("suggests subjective interest without applying it", async () => {
-    const { app: testApp, repo } = app();
+    const { app: testApp, repo, promotion } = app();
     const response = await request(testApp)
       .patch(`/api/opportunities/${ID}`)
       .set("Authorization", `Bearer ${ownerToken()}`)
@@ -98,16 +101,22 @@ describe("Opportunity routes", () => {
     expect(response.status).toBe(200);
     expect(response.body).toMatchObject({ suggestedStatus: "interested" });
     expect(repo.update).not.toHaveBeenCalled();
+    expect(promotion.confirmInterest).not.toHaveBeenCalled();
   });
 
   it("applies a suggested subjective status only through explicit approval", async () => {
-    const { app: testApp, repo } = app();
+    const { app: testApp, repo, promotion } = app();
     const response = await request(testApp)
       .post(`/api/opportunities/${ID}/apply-suggested-status`)
       .set("Authorization", `Bearer ${ownerToken()}`)
       .send({ status: "interested" });
     expect(response.status).toBe(200);
     expect(repo.update).toHaveBeenCalledWith(ID, { status: "interested" });
+    expect(promotion.confirmInterest).toHaveBeenCalledWith({
+      opportunityId: ID,
+      confirmedAt: new Date("2026-09-09T15:00:00Z"),
+      evidenceMessageId: null,
+    });
   });
 
   it("rejects invalid status and priority values", async () => {

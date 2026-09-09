@@ -1,4 +1,5 @@
 import type { DraftGenerator } from "./draft-generator";
+import type { EarlyBirdPromoService } from "@/features/early-bird-promo/early-bird-promo-service";
 import { evaluateDraftGuardrails, type DraftBlocker } from "./draft-guardrails";
 import type { DraftContext } from "./draft-context-resolver";
 import type {
@@ -91,6 +92,8 @@ export type OpportunityEmailServiceDependencies = {
   blockerSink: OpportunityDraftBlockerSink;
   rewriteAdapter?: DraftRewriteAdapter;
   workflowSink?: OpportunityEmailWorkflowSink;
+  promotion?: Pick<EarlyBirdPromoService, "prepareBody" | "recordConfirmedSend">;
+  now?: () => Date;
 };
 
 function serviceError(code: string): Error { return Object.assign(new Error(code), { code }); }
@@ -139,9 +142,39 @@ export class OpportunityEmailService {
 
   async sendDraft(input: { opportunityId: string; draftId: string; requestKey: string }): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date }> {
     const prior = await this.deps.emailRepository.findBySendRequestKey?.(input.requestKey);
-    if (prior?.id === input.draftId && prior.opportunityId === input.opportunityId && prior.state === "sent" && prior.sentAt) return { draft: prior, followUpReferenceAt: prior.sentAt };
-    const existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
+    if (prior?.id === input.draftId && prior.opportunityId === input.opportunityId && prior.state === "sent" && prior.sentAt) {
+      await this.recordPromotion(prior, {
+        messageId: prior.gmailMessageId ?? "",
+        threadId: prior.gmailThreadId,
+        sentAt: prior.sentAt,
+      });
+      return { draft: prior, followUpReferenceAt: prior.sentAt };
+    }
+    let existing = await this.requireOwnedDraft(input.opportunityId, input.draftId);
     if (!this.deps.gmailDraftProvider.sendDraft) throw serviceError("OPPORTUNITY_EMAIL_SEND_UNAVAILABLE");
+    if (this.deps.promotion) {
+      const prepared = await this.deps.promotion.prepareBody({
+        sourceKind: "opportunity_email",
+        emailRecordId: existing.id,
+        opportunityId: existing.opportunityId,
+        organizationId: existing.organizationId,
+        bookingId: null,
+        contactId: existing.contactId,
+        officeAccountId: null,
+        eventYear: existing.eventYear,
+        templateCategory: existing.purpose === "new_outreach" ? "outreach" : "follow_up",
+        templateCode: null,
+        body: existing.body,
+        attemptedAt: this.deps.now?.() ?? new Date(),
+      });
+      if (prepared.body !== existing.body) {
+        existing = await this.persistDraftContent(
+          existing,
+          existing.subject,
+          prepared.body,
+        );
+      }
+    }
     let confirmation: ConfirmedSend;
     try {
       confirmation = await this.deps.gmailDraftProvider.sendDraft({ draftId: existing.gmailDraftId! });
@@ -174,7 +207,30 @@ export class OpportunityEmailService {
   private async confirmSent(existing: OpportunityEmailRecord, requestKey: string, confirmation: ConfirmedSend) {
     const draft = await this.deps.emailRepository.update(existing.id, { state: "sent", sentAt: confirmation.sentAt, scheduledFor: null, sendRequestKey: requestKey, gmailMessageId: confirmation.messageId, gmailThreadId: confirmation.threadId ?? existing.gmailThreadId, lastFailureCode: null, lastFailureMessage: null });
     await this.deps.workflowSink?.recordSent({ opportunityId: existing.opportunityId, draftId: existing.id, sentAt: confirmation.sentAt, messageId: confirmation.messageId, threadId: confirmation.threadId ?? existing.gmailThreadId });
+    await this.recordPromotion(draft, confirmation);
     return { draft, followUpReferenceAt: confirmation.sentAt };
+  }
+
+  private async recordPromotion(
+    draft: OpportunityEmailRecord,
+    confirmation: ConfirmedSend,
+  ): Promise<void> {
+    if (!this.deps.promotion) return;
+    await this.deps.promotion.recordConfirmedSend({
+      sourceKind: "opportunity_email",
+      emailRecordId: draft.id,
+      opportunityId: draft.opportunityId,
+      organizationId: draft.organizationId,
+      bookingId: null,
+      contactId: draft.contactId,
+      officeAccountId: null,
+      eventYear: draft.eventYear,
+      templateCategory: draft.purpose === "new_outreach" ? "outreach" : "follow_up",
+      templateCode: null,
+      sentAt: confirmation.sentAt,
+      gmailMessageId: confirmation.messageId || null,
+      gmailThreadId: confirmation.threadId ?? draft.gmailThreadId,
+    });
   }
 
   private async recordDeliveryFailure(existing: OpportunityEmailRecord, operation: "send" | "schedule", requestKey: string, error: unknown, scheduledFor?: Date): Promise<void> {

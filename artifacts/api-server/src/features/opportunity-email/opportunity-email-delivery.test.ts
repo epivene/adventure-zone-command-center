@@ -89,6 +89,52 @@ describe("OpportunityEmailService delivery", () => {
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
   });
 
+  it("finalizes the Early Bird date before Gmail send and records it after confirmation", async () => {
+    const deps = dependencies(record({ eventYear: 2027 }));
+    deps.gmailDraftProvider.updateDraft.mockResolvedValueOnce({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-1",
+      threadId: null,
+    });
+    const promotion = {
+      prepareBody: vi.fn(async () => ({
+        body: "Current edited body\n\nEarly Bird Promo:\nOffer ends September 26, 2026.",
+        eligible: true,
+        deadlineDate: "2026-09-26",
+      })),
+      recordConfirmedSend: vi.fn(async () => null),
+    };
+    const service = new OpportunityEmailService({
+      ...deps,
+      promotion,
+      now: () => new Date("2026-08-27T18:00:00Z"),
+    } as any);
+
+    await service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "send-with-promo",
+    });
+
+    expect(deps.gmailDraftProvider.updateDraft).toHaveBeenCalledWith({
+      draftId: "gmail-draft-1",
+      to: "booking@example.com",
+      subject: "Adventure Zone for Sample County Fair",
+      body: expect.stringContaining("Early Bird Promo"),
+    });
+    expect(deps.gmailDraftProvider.updateDraft.mock.invocationCallOrder[0])
+      .toBeLessThan(deps.gmailDraftProvider.sendDraft.mock.invocationCallOrder[0]);
+    expect(promotion.recordConfirmedSend).toHaveBeenCalledWith(expect.objectContaining({
+      emailRecordId: DRAFT_ID,
+      opportunityId: OPPORTUNITY_ID,
+      organizationId: "22222222-2222-4222-8222-222222222222",
+      eventYear: 2027,
+      sentAt: SENT_AT,
+      gmailMessageId: "gmail-sent-1",
+      gmailThreadId: "thread-1",
+    }));
+  });
+
   it("records app-owned scheduled state without pretending the email has been sent", async () => {
     const deps = dependencies();
     const service = new OpportunityEmailService(deps as any);

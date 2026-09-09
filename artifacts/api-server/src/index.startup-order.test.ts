@@ -19,4 +19,12 @@ describe("server startup ordering", () => {
     expect(source).toContain("workerId: `paper-notes-${randomUUID()}`");
     expect(source.indexOf("paperNoteLoop.start();")).toBeGreaterThan(source.indexOf("async function startBackgroundWorkers()"));
   });
+
+  it("seeds the approved Early Bird rule before starting its reminder loop", () => {
+    const seed = source.indexOf("ensureEarlyBirdPromoOffer(db)");
+    const start = source.indexOf("earlyBirdPromoLoop.start();");
+    expect(seed).toBeGreaterThanOrEqual(0);
+    expect(start).toBeGreaterThan(seed);
+    expect(source).toContain("earlyBirdPromoLoop.close(),");
+  });
 });

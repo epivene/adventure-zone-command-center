@@ -3,6 +3,7 @@ export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./business-source-schema";
 export * from "./commercial-offer-schema";
+export * from "./early-bird-promo-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";

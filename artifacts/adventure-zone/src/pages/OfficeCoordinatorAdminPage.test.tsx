@@ -19,4 +19,8 @@ describe("owner Office Coordinator controls",()=>{
     const bookingItems=menu.slice(menu.indexOf("const bookingItems"),menu.indexOf("const bookingGroups"));
     expect(bookingItems).toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
   });
+  it("calls out automatically prepared Early Bird reminders for Boss review",()=>{
+    expect(source).toContain("Early Bird 15-day reminder");
+    expect(source).toContain("Review before sending");
+  });
 });

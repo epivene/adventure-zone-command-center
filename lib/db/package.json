@@ -13,6 +13,7 @@
     "./paper-note-schema": "./src/paper-note-schema.ts",
     "./business-source-schema": "./src/business-source-schema.ts",
     "./commercial-offer-schema": "./src/commercial-offer-schema.ts",
+    "./early-bird-promo-schema": "./src/early-bird-promo-schema.ts",
     "./event-checklist-schema": "./src/event-checklist-schema.ts",
     "./resource-source-candidate-schema": "./src/resource-source-candidate-schema.ts",
     "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",

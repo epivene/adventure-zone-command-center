@@ -78,4 +78,11 @@ export type RenderedCommunicationTemplate = {
   subject: string;
   body: string;
   missingRequiredFields: TemplatePlaceholder[];
+  promotion: {
+    name: "Early Bird Promo";
+    provisionalDeadlineDate: string;
+    eligible: true;
+    bookingId: string | null;
+    eventYear: number;
+  } | null;
 };
