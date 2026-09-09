@@ -28,7 +28,7 @@ export class BossWorkRequestService {
   async bossQueue(bossAccountId: string) {
     const requests = await this.repository.listForBoss(bossAccountId);
     const active = requests
-      .filter((request) => !["approved", "applied", "cancelled"].includes(request.state))
+      .filter((request) => !["approved", "applied", "cancelled", "changes_requested"].includes(request.state))
       .sort(compareWorkRequestUrgency);
     const recentlyCompleted = requests
       .filter((request) => ["approved", "applied"].includes(request.state))
