@@ -617,7 +617,7 @@ git commit -m "feat: add Drive backup administration"
 - Create: `artifacts/api-server/src/features/google-drive-backup/google-drive-backup-config.ts`
 - Create: `artifacts/api-server/src/features/google-drive-backup/google-drive-backup-config.test.ts`
 - Modify: `artifacts/api-server/src/index.ts`
-- Modify: `artifacts/api-server/src/index.test.ts` or the existing runtime-loop test file.
+- Create: `artifacts/api-server/src/index.google-drive-backup.test.ts`.
 - Create: `docs/operations/google-drive-backup.md`
 - Create: `docs/acceptance/google-drive-backup-v1-checklist.md`
 
@@ -642,7 +642,7 @@ Defaults: disabled, 2,000 ms idle poll, 100-job low-water mark, 10 attempts. Rej
 
 - [ ] **Step 2: Wire worker lifecycle**
 
-In `artifacts/api-server/src/index.ts`, create/start the backup loop only when `GOOGLE_DRIVE_BACKUP_ENABLED=true`. Reuse the shared DB pool, Google connection repository, business-document storage, and logger. Add `close()` to the existing shutdown sequence and verify it executes once even after partial startup failure.
+In `artifacts/api-server/src/index.ts`, create/start the backup loop only when `GOOGLE_DRIVE_BACKUP_ENABLED=true`. Reuse the shared DB pool, Google connection repository, business-document storage, and logger. Add `close()` to the existing shutdown sequence and verify it executes once even after partial startup failure in `index.google-drive-backup.test.ts`.
 
 - [ ] **Step 3: Write the operations runbook**
 
