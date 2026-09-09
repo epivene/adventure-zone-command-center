@@ -72,14 +72,12 @@ export function groupBusinessDocuments(documents: BusinessDocumentRecord[], opti
       label: includeMedia ? "Media" : categoryLabels[typeKey as BusinessDocumentCategory],
       years: years.map((year) => {
         const byYear = byType.filter((document) => businessDocumentYear(document) === year);
-        const eventLabels = [...new Set(byYear.map(businessDocumentEvent))].sort((left, right) => left.localeCompare(right));
+        const eventLabels = [...new Set(byYear.map(businessDocumentEvent))];
         return {
           year,
           events: eventLabels.map((label) => ({
             label,
-            documents: byYear
-              .filter((document) => businessDocumentEvent(document) === label)
-              .sort((left, right) => left.displayName.localeCompare(right.displayName)),
+            documents: byYear.filter((document) => businessDocumentEvent(document) === label),
           })),
         };
       }),
