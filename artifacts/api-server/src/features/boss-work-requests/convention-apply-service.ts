@@ -8,6 +8,7 @@ import {
   bossWorkRequests,
   contacts,
   followUps,
+  organizationContacts,
   organizations,
 } from "@/db/schema";
 import { BossWorkRequestConflictError, BossWorkRequestNotFoundError } from "./boss-work-request-repository";
@@ -72,12 +73,22 @@ export class ConventionApplyService {
         if (!payload.contactName) throw new BossWorkRequestConflictError("A contact name is required.");
         const parts = payload.contactName.trim().split(/\s+/);
         contactId = (await tx.insert(contacts).values({
-          organizationId,
+          organizationId: null,
           firstName: parts.shift() || payload.contactName,
           lastName: parts.join(" "),
           email: payload.email || null,
           phone: payload.phone || null,
         }).returning({ id: contacts.id }))[0]!.id;
+        if (organizationId) {
+          await tx.insert(organizationContacts).values({
+            organizationId,
+            contactId,
+            isPrimary: true,
+            source: "local",
+          });
+          await tx.update(contacts).set({ organizationId, updatedAt: new Date() })
+            .where(eq(contacts.id, contactId));
+        }
       }
       if (!organizationId && !contactId) {
         throw new BossWorkRequestConflictError("Choose or create a profile before applying.");
