@@ -33,8 +33,8 @@ describe("business document organization", () => {
 
   it("groups document versions by type, year, and inferred event", () => {
     const groups = groupBusinessDocuments([
-      record({ id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01" }),
       record({ id: "draft", displayName: "Big E Contract 2026 Draft", originalFilename: "Big E Contract 2026 Draft.docx", category: "contract", effectiveDate: "2026-09-01" }),
+      record({ id: "signed", displayName: "Big E Contract 2026 Signed", originalFilename: "Big E Contract 2026 Signed.pdf", category: "contract", effectiveDate: "2026-09-01" }),
       record({ id: "coi", displayName: "County Fair COI", originalFilename: "County Fair COI 2025.pdf", category: "coi", issueDate: "2025-04-02" }),
     ]);
 
