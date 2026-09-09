@@ -169,6 +169,18 @@ function isVisibleScheduleEvent(
   return relevantAt === null || relevantAt.getTime() >= now.getTime() - 86_400_000;
 }
 
+function isUpcomingScheduleEvent(
+  event: Pick<ManagerScheduleEvent, "bookingId" | "status" | "probability" | "startsAt" | "endsAt">,
+  retainedBookingId: string,
+  now: Date,
+) {
+  if (event.bookingId === retainedBookingId) return false;
+  if (managerScheduleState(event.status, event.probability) !== "booked") return false;
+  if (["declined", "cancelled", "completed"].includes(String(event.status).trim().toLowerCase())) return false;
+  const relevantAt = event.endsAt ?? event.startsAt;
+  return relevantAt === null || relevantAt.getTime() >= now.getTime();
+}
+
 function compareScheduleEvents(
   a: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
   b: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
@@ -241,7 +253,7 @@ export async function loadManagerScopedScheduleData(
   },
   legId: string,
   now = new Date(),
-  options: { alwaysVisibleBookingIds?: ReadonlySet<string> } = {},
+  options: { alwaysVisibleBookingIds?: ReadonlySet<string>; retainBookingIdUntilNextEvent?: string } = {},
 ): Promise<ManagerScopedScheduleData> {
   const [listedTrips, listedBookings] = await Promise.all([
     dependencies.tripRepository.listTrips({ travelLegId: legId }),
@@ -251,9 +263,16 @@ export async function loadManagerScopedScheduleData(
   const allTrips = listedTrips
     .filter((trip) => trip.travelLegId === legId)
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.id.localeCompare(b.id));
-  const alwaysVisibleBookingIds = options.alwaysVisibleBookingIds ?? new Set<string>();
-  const assignedBookings = listedBookings
-    .map(eventFromBooking)
+  const allAssignedBookings = listedBookings.map(eventFromBooking);
+  const alwaysVisibleBookingIds = new Set(options.alwaysVisibleBookingIds ?? []);
+  const retainedBookingId = options.retainBookingIdUntilNextEvent;
+  if (
+    retainedBookingId
+    && allAssignedBookings.some((event) => isUpcomingScheduleEvent(event, retainedBookingId, now))
+  ) {
+    alwaysVisibleBookingIds.add(retainedBookingId);
+  }
+  const assignedBookings = allAssignedBookings
     .filter((event) => alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now));
 
   const recentTrips = allTrips.filter((trip) => trip.endDate.getTime() >= now.getTime() - 86_400_000);
@@ -352,14 +371,24 @@ export async function loadManagerScopedMapData(
     tripRepository: ManagerMapTripRepository;
     bookingRepository: ManagerMapBookingRepository;
     handoffRepository: ManagerMapHandoffRepository;
-    lifecycleRepository?: { getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null> };
+    lifecycleRepository?: {
+      getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null>;
+      getLatestCheckedOutForLeg?(legId: string): Promise<{ bookingId: string } | null>;
+    };
   },
   legId: string,
   now = new Date(),
 ): Promise<ManagerScopedMapData> {
-  const currentLifecycle = await dependencies.lifecycleRepository?.getCurrentForLeg(legId).catch(() => null) ?? null;
+  const [currentLifecycle, latestCheckedOut] = await Promise.all([
+    dependencies.lifecycleRepository?.getCurrentForLeg(legId).catch(() => null) ?? null,
+    dependencies.lifecycleRepository?.getLatestCheckedOutForLeg?.(legId).catch(() => null) ?? null,
+  ]);
   const alwaysVisibleBookingIds = currentLifecycle ? new Set([currentLifecycle.bookingId]) : undefined;
-  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, { alwaysVisibleBookingIds });
+  const retainBookingIdUntilNextEvent = currentLifecycle ? undefined : latestCheckedOut?.bookingId;
+  const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, {
+    alwaysVisibleBookingIds,
+    retainBookingIdUntilNextEvent,
+  });
   const rawMeetups = await dependencies.handoffRepository.listForLeg(legId, { approvedOnly: true });
   const meetups = rawMeetups.flatMap((handoff) => {
     const counterpart = counterpartFor(handoff, legId);
