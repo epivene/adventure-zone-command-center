@@ -5,6 +5,7 @@ import type { GoogleRecentValidationResult } from "@/features/google-workspace/g
 import {
   PostgresGoogleProfileLabelCleanupService,
   type GoogleProfileLabelCleanupCandidate,
+  type GoogleProfileLabelCleanupFailure,
 } from "@/features/google-workspace/google-profile-label-cleanup-service";
 import { GoogleReviewProfileAssignmentService, type GoogleReviewAssignmentView } from "@/features/google-workspace/google-review-profile-assignment-service";
 import { GoogleValidationMappingReconciler } from "@/features/google-workspace/google-validation-mapping-reconciler";
@@ -98,6 +99,7 @@ type LabelCleanupService = {
   deleteSelected(labelIds: string[]): Promise<{
     deleted: GoogleProfileLabelCleanupCandidate[];
     skippedLabelIds: string[];
+    failed: GoogleProfileLabelCleanupFailure[];
   }>;
 };
 
