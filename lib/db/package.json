@@ -1,2 +1,56 @@
-base64: invalid input
-m��
+{
+  "name": "@workspace/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./migrations": "./src/migrations.ts",
+    "./business-drive-migrations": "./src/business-drive-migrations.ts",
+    "./schema": "./src/schema/index.ts",
+    "./event-family-schema": "./src/event-family-schema.ts",
+    "./booking-assistant-schema": "./src/booking-assistant-schema.ts",
+    "./paper-note-schema": "./src/paper-note-schema.ts",
+    "./business-source-schema": "./src/business-source-schema.ts",
+    "./commercial-offer-schema": "./src/commercial-offer-schema.ts",
+    "./early-bird-promo-schema": "./src/early-bird-promo-schema.ts",
+    "./event-checklist-schema": "./src/event-checklist-schema.ts",
+    "./resource-source-candidate-schema": "./src/resource-source-candidate-schema.ts",
+    "./event-attendance-history-schema": "./src/event-attendance-history-schema.ts",
+    "./office-coordinator-schema": "./src/office-coordinator-schema.ts",
+    "./boss-schema": "./src/boss-schema.ts",
+    "./boss-work-request-schema": "./src/boss-work-request-schema.ts",
+    "./website-inquiry-schema": "./src/website-inquiry-schema.ts",
+    "./google-workspace-schema": "./src/google-workspace-schema.ts",
+    "./operational-calendar-schema": "./src/operational-calendar-schema.ts",
+    "./lead-intake-schema": "./src/lead-intake-schema.ts",
+    "./booking-opportunity-schema": "./src/booking-opportunity-schema.ts",
+    "./booking-opportunity-email-schema": "./src/booking-opportunity-email-schema.ts",
+    "./leg-assignment-schema": "./src/leg-assignment-schema.ts",
+    "./design-studio-schema": "./src/design-studio-schema.ts",
+    "./contract-schema": "./src/contract-schema.ts",
+    "./business-document-schema": "./src/business-document-schema.ts"
+    ,"./marketing-schema": "./src/marketing-schema.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "bootstrap": "drizzle-kit push --force --config ./drizzle.config.ts",
+    "push": "drizzle-kit push --config ./drizzle.config.ts && tsx ./src/run-migrations.ts",
+    "push-force": "drizzle-kit push --force --config ./drizzle.config.ts && tsx ./src/run-migrations.ts",
+    "run-migrations": "tsx ./src/run-migrations.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "catalog:",
+    "drizzle-zod": "^0.8.3",
+    "pg": "^8.22.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "catalog:"
+  }
+}
+
+
