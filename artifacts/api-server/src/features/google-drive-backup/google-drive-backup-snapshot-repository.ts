@@ -173,7 +173,15 @@ export class GoogleDriveBackupSnapshotRepository {
         `SELECT a.id, a.kind, a.subject, a.status, a.timeline_sort_at,
                 a.updated_at
            FROM activities a
-          WHERE a.organization_id = $1
+           LEFT JOIN bookings activity_booking
+             ON activity_booking.id = a.booking_id
+           LEFT JOIN contacts activity_contact
+             ON activity_contact.id = a.contact_id
+          WHERE COALESCE(
+            a.organization_id,
+            activity_booking.organization_id,
+            activity_contact.organization_id
+          ) = $1
             AND a.deleted_at IS NULL
           ORDER BY a.timeline_sort_at DESC, a.id DESC
           LIMIT 20`,
