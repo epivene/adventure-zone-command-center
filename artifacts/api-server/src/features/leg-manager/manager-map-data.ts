@@ -169,16 +169,27 @@ function isVisibleScheduleEvent(
   return relevantAt === null || relevantAt.getTime() >= now.getTime() - 86_400_000;
 }
 
-function isUpcomingScheduleEvent(
-  event: Pick<ManagerScheduleEvent, "bookingId" | "status" | "probability" | "startsAt" | "endsAt">,
-  retainedBookingId: string,
+export function isUpcomingManagerScheduleEvent(
+  event: Pick<ManagerScheduleEvent, "status" | "probability" | "startsAt" | "endsAt">,
   now: Date,
 ) {
-  if (event.bookingId === retainedBookingId) return false;
   if (managerScheduleState(event.status, event.probability) !== "booked") return false;
   if (["declined", "cancelled", "completed"].includes(String(event.status).trim().toLowerCase())) return false;
   const relevantAt = event.endsAt ?? event.startsAt;
-  return relevantAt === null || relevantAt.getTime() >= now.getTime();
+  return relevantAt !== null && relevantAt.getTime() >= now.getTime();
+}
+
+function isUpcomingScheduleEvent(
+  event: Pick<ManagerScheduleEvent, "bookingId" | "status" | "probability" | "startsAt" | "endsAt">,
+  retainedEvent: Pick<ManagerScheduleEvent, "bookingId" | "startsAt" | "endsAt">,
+  now: Date,
+) {
+  if (event.bookingId === retainedEvent.bookingId || !isUpcomingManagerScheduleEvent(event, now)) return false;
+  const retainedAt = retainedEvent.endsAt ?? retainedEvent.startsAt;
+  const relevantAt = event.endsAt ?? event.startsAt;
+  return retainedAt !== null
+    && relevantAt !== null
+    && relevantAt.getUTCFullYear() === retainedAt.getUTCFullYear();
 }
 
 function compareScheduleEvents(
@@ -266,11 +277,14 @@ export async function loadManagerScopedScheduleData(
   const allAssignedBookings = listedBookings.map(eventFromBooking);
   const alwaysVisibleBookingIds = new Set(options.alwaysVisibleBookingIds ?? []);
   const retainedBookingId = options.retainBookingIdUntilNextEvent;
+  const retainedEvent = retainedBookingId
+    ? allAssignedBookings.find((event) => event.bookingId === retainedBookingId)
+    : undefined;
   if (
-    retainedBookingId
-    && allAssignedBookings.some((event) => isUpcomingScheduleEvent(event, retainedBookingId, now))
+    retainedEvent
+    && allAssignedBookings.some((event) => isUpcomingScheduleEvent(event, retainedEvent, now))
   ) {
-    alwaysVisibleBookingIds.add(retainedBookingId);
+    alwaysVisibleBookingIds.add(retainedEvent.bookingId);
   }
   const assignedBookings = allAssignedBookings
     .filter((event) => alwaysVisibleBookingIds.has(event.bookingId) || isVisibleScheduleEvent(event, now));
@@ -379,12 +393,18 @@ export async function loadManagerScopedMapData(
   legId: string,
   now = new Date(),
 ): Promise<ManagerScopedMapData> {
-  const [currentLifecycle, latestCheckedOut] = await Promise.all([
-    dependencies.lifecycleRepository?.getCurrentForLeg(legId).catch(() => null) ?? null,
-    dependencies.lifecycleRepository?.getLatestCheckedOutForLeg?.(legId).catch(() => null) ?? null,
+  const [currentResult, latestCheckedOutResult] = await Promise.allSettled([
+    dependencies.lifecycleRepository?.getCurrentForLeg(legId) ?? Promise.resolve(null),
+    dependencies.lifecycleRepository?.getLatestCheckedOutForLeg?.(legId) ?? Promise.resolve(null),
   ]);
+  const currentLifecycle = currentResult.status === "fulfilled" ? currentResult.value : null;
+  const latestCheckedOut = currentResult.status === "fulfilled"
+    && currentResult.value === null
+    && latestCheckedOutResult.status === "fulfilled"
+    ? latestCheckedOutResult.value
+    : null;
   const alwaysVisibleBookingIds = currentLifecycle ? new Set([currentLifecycle.bookingId]) : undefined;
-  const retainBookingIdUntilNextEvent = currentLifecycle ? undefined : latestCheckedOut?.bookingId;
+  const retainBookingIdUntilNextEvent = latestCheckedOut?.bookingId;
   const schedule = await loadManagerScopedScheduleData(dependencies, legId, now, {
     alwaysVisibleBookingIds,
     retainBookingIdUntilNextEvent,
