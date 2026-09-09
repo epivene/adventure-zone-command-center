@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useLocation, useParams, useSearch } from "wouter";
 import { apiGet, apiPatch } from "@/lib/auth-token";
 import { EventProfileWorkspace } from "@/components/event-profiles/event-profile-workspace";
+import { EarlyBirdPromoCard, type EarlyBirdPromoView } from "@/components/event-profiles/early-bird-promo-card";
 import { SimpleFullProfile } from "@/components/profiles/simple-full-profile";
 import { ProfileResearchPanel } from "@/components/profiles/profile-research-panel";
 import { ScoutNotesPanel } from "@/components/profiles/scout-notes-panel";
@@ -60,11 +61,12 @@ export default function EventProfilePage() {
     const qs = new URLSearchParams();
     if (contactId) qs.set("contactId", contactId);
     try {
-      const [d, ratingSummary, photo, descriptionResult] = await Promise.all([
+      const [d, ratingSummary, photo, descriptionResult, earlyBirdPromoResult] = await Promise.all([
         apiGet<any>(`/event-profiles/${profileId}?${qs.toString()}`),
         apiGet<{ average: number | null; count: number }>(`/event-wrap-up-ratings/organization/${profileId}`).catch(() => ({ average: null, count: 0 })),
         apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
         apiGet<{ description: string | null }>(`/event-profiles/${profileId}/description`).catch(() => ({ description: null })),
+        apiGet<{ promotion: EarlyBirdPromoView | null }>(`/early-bird-promo/profile/${profileId}?eventYear=2027`).catch(() => ({ promotion: null })),
       ]);
       const toDate = (value: any) => (value ? new Date(value) : null);
       const normalized = {
@@ -74,6 +76,7 @@ export default function EventProfilePage() {
           description: descriptionResult.description ?? null,
         },
         wrapUpRatingSummary: ratingSummary,
+        earlyBirdPromo: earlyBirdPromoResult.promotion,
         notes: (d.notes ?? []).map((note: any) => ({
           ...note,
           body: note.importedFromAct ? simplifyHistoryText(String(note.body ?? "")) : note.body,
@@ -211,6 +214,13 @@ export default function EventProfilePage() {
             onEditingChange={setProfileEditing}
           />
         </div>
+
+        {!profileEditing && data.earlyBirdPromo ? (
+          <EarlyBirdPromoCard
+            promotion={data.earlyBirdPromo}
+            onChanged={(promotion) => setData((current: any) => ({ ...current, earlyBirdPromo: promotion }))}
+          />
+        ) : null}
 
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 

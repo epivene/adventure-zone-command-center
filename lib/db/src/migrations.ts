@@ -487,6 +487,24 @@ const migrationFiles = [
           AND column_name = 'body_format'
       ) AS ready`,
   },
+  {
+    name: "20260909_early_bird_promo.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.early_bird_promo_enrollments') IS NOT NULL
+      AND to_regclass(current_schema() || '.early_bird_promo_offer_org_year_unique') IS NOT NULL
+      AND (SELECT COUNT(*) = 2
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'early_bird_promo_enrollments'
+          AND column_name IN ('claim_lease_owner', 'claim_lease_expires_at'))
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'office_email_drafts'
+          AND column_name = 'office_account_id'
+          AND is_nullable = 'YES'
+      ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   check,
+  integer,
   index,
   pgTable,
   text,
@@ -12,7 +13,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { communicationTemplates } from "./business-source-schema";
-import { contacts, organizations } from "./schema";
+import { bookings, contacts, organizations } from "./schema";
 
 export const officeRoleValues = ["office_coordinator"] as const;
 export type OfficeRole = (typeof officeRoleValues)[number];
@@ -42,6 +43,7 @@ export const officeEmailStateValues = [
   "needs_changes",
   "sending",
   "sent",
+  "cancelled",
 ] as const;
 export type OfficeEmailState = (typeof officeEmailStateValues)[number];
 
@@ -115,9 +117,11 @@ export const officeMailActivity = pgTable("office_mail_activity", {
 
 export const officeEmailDrafts = pgTable("office_email_drafts", {
   id: uuid("id").defaultRandom().primaryKey(),
-  officeAccountId: uuid("office_account_id").notNull().references(() => officeAccounts.id, { onDelete: "restrict" }),
+  officeAccountId: uuid("office_account_id").references(() => officeAccounts.id, { onDelete: "restrict" }),
   organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
   contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  eventYear: integer("event_year"),
   communicationTemplateId: uuid("communication_template_id").references(() => communicationTemplates.id, { onDelete: "set null" }),
   recipientEmail: text("recipient_email").notNull(),
   subject: text("subject").notNull(),
@@ -132,10 +136,12 @@ export const officeEmailDrafts = pgTable("office_email_drafts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  check("office_email_drafts_state_valid", sql`${table.state} in ('draft','submitted','needs_changes','sending','sent')`),
+  check("office_email_drafts_state_valid", sql`${table.state} in ('draft','submitted','needs_changes','sending','sent','cancelled')`),
+  check("office_email_drafts_event_year_valid", sql`${table.eventYear} is null or ${table.eventYear} between 2000 and 2200`),
   index("office_email_drafts_state_submitted_idx").on(table.state, table.submittedAt),
   index("office_email_drafts_account_updated_idx").on(table.officeAccountId, table.updatedAt),
   index("office_email_drafts_template_idx").on(table.communicationTemplateId),
+  index("office_email_drafts_organization_year_idx").on(table.organizationId, table.eventYear),
 ]);
 
 export const officeMessages = pgTable("office_messages", {

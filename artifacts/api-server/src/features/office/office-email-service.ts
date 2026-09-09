@@ -15,6 +15,7 @@ export type OfficeEmailErrorCode =
   | "EMAIL_REQUIRED"
   | "SEND_LOCKED"
   | "INVALID_TEMPLATE"
+  | "INVALID_BOOKING"
   | "UNRESOLVED_TEMPLATE_FIELD";
 
 export class OfficeEmailError extends Error {

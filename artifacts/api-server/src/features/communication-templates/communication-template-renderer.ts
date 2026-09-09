@@ -60,7 +60,7 @@ export function renderCommunicationTemplateText(input: {
   bodyFormat?: "plain_text" | "html";
   requiredPlaceholders: readonly TemplatePlaceholder[];
   values: TemplateRenderValues;
-}): RenderedCommunicationTemplate {
+}): Omit<RenderedCommunicationTemplate, "promotion"> {
   const required = new Set(input.requiredPlaceholders);
   const combined = `${input.subjectTemplate ?? ""}\n${input.bodyTemplate}`;
   validateTemplatePlaceholders(combined);

@@ -32,6 +32,8 @@ export async function createProductionOpportunityEmailRuntime() {
     workflowModule,
     productionContextModule,
     readySourceModule,
+    earlyBirdRepositoryModule,
+    earlyBirdServiceModule,
   ] = await Promise.all([
     import("drizzle-orm"),
     import("@workspace/db"),
@@ -52,6 +54,8 @@ export async function createProductionOpportunityEmailRuntime() {
     import("./opportunity-email-workflow"),
     import("./production-draft-context-sources"),
     import("./production-ready-to-send-source"),
+    import("@/features/early-bird-promo/early-bird-promo-repository"),
+    import("@/features/early-bird-promo/early-bird-promo-service"),
   ]);
 
   const { and, count, eq } = drizzle;
@@ -73,6 +77,8 @@ export async function createProductionOpportunityEmailRuntime() {
   const { OpportunityEmailWorkflowCoordinator } = workflowModule;
   const { ProductionDraftContextSources } = productionContextModule;
   const { ProductionReadyToSendSource } = readySourceModule;
+  const { EarlyBirdPromoRepository } = earlyBirdRepositoryModule;
+  const { EarlyBirdPromoService } = earlyBirdServiceModule;
 
   const opportunities = new OpportunityRepository(db);
   const emails = new OpportunityEmailRepository(db);
@@ -156,6 +162,7 @@ export async function createProductionOpportunityEmailRuntime() {
     blockerSink: workflow,
     rewriteAdapter: writer,
     workflowSink: workflow,
+    promotion: new EarlyBirdPromoService(new EarlyBirdPromoRepository(db)),
   });
   const readySource = new ProductionReadyToSendSource({
     emails,

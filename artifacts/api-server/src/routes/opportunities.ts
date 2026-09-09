@@ -3,6 +3,8 @@ import { db } from "@workspace/db";
 import { z } from "zod";
 
 import { OpportunityRepository } from "@/features/opportunities/opportunity-repository";
+import { EarlyBirdPromoRepository } from "@/features/early-bird-promo/early-bird-promo-repository";
+import { EarlyBirdPromoService } from "@/features/early-bird-promo/early-bird-promo-service";
 import {
   opportunityPriorityValues,
   opportunityStatusValues,
@@ -39,6 +41,13 @@ function defaultRepository(): OpportunityRouteRepository {
 
 export function createOpportunitiesRouter(
   repository: OpportunityRouteRepository = defaultRepository(),
+  options: {
+    promotion: Pick<EarlyBirdPromoService, "confirmInterest">;
+    now: () => Date;
+  } = {
+    promotion: new EarlyBirdPromoService(new EarlyBirdPromoRepository(db)),
+    now: () => new Date(),
+  },
 ): IRouter {
   const router: IRouter = Router();
 
@@ -99,6 +108,13 @@ export function createOpportunitiesRouter(
     const opportunity = await repository.update(parsed.data.id, {
       status: parsed.data.status,
     });
+    if (parsed.data.status === "interested") {
+      await options.promotion.confirmInterest({
+        opportunityId: parsed.data.id,
+        confirmedAt: options.now(),
+        evidenceMessageId: null,
+      });
+    }
     res.json({ ok: true, opportunity, suggestedStatus: null });
   });
 
