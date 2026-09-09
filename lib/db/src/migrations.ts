@@ -505,6 +505,13 @@ const migrationFiles = [
           AND is_nullable = 'YES'
       ) AS ready`,
   },
+  {
+    name: "20260909c_convention_outreach.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.convention_editions') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_members') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_history') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_reviews') IS NOT NULL AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -569,3 +576,4 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
+
