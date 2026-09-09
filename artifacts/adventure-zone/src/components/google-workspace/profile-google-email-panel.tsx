@@ -18,6 +18,16 @@ function fileSize(bytes: number): string {
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
 }
 
+function savedCopyLabel(thread: GoogleThreadDetail): string | null {
+  if (thread.sourceState === "saved_copy_gmail_missing") {
+    return "Saved in app; no longer in Gmail";
+  }
+  if (thread.sourceState === "saved_copy_gmail_unavailable") {
+    return "Showing saved copy";
+  }
+  return thread.savedCopy ? "Saved in app" : null;
+}
+
 function conversationYear(conversation: GoogleProfileEmailConversation): number | null {
   const parsedHeaderDate = Date.parse(conversation.date);
   if (Number.isFinite(parsedHeaderDate)) {
@@ -58,6 +68,7 @@ function ThreadDetail({
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const attachments = thread.messages.flatMap((message) => message.attachments);
+  const savedLabel = savedCopyLabel(thread);
 
   async function saveAttachments() {
     setCopying(true);
@@ -89,17 +100,22 @@ function ThreadDetail({
               {copying ? "Saving attachments…" : "Save attachments to Files"}
             </button>
           ) : null}
-          <a
+          {thread.sourceState !== "saved_copy_gmail_missing" ? <a
             className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300"
             href={thread.originalGmailUrl}
             rel="noreferrer"
             target="_blank"
           >
             Open in Gmail <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          </a> : null}
         </div>
       </div>
       {copyError ? <p className="text-xs font-medium text-rose-700">{copyError}</p> : null}
+      {savedLabel ? (
+        <p className="w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+          {savedLabel}
+        </p>
+      ) : null}
       {thread.messages.map((message) => (
         <article
           className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
@@ -338,7 +354,7 @@ export function ProfileGoogleEmailPanel({
             Google history
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Current Gmail conversations stay up front. Earlier matched Gmail remains available below as relationship history, along with saved Gmail attachments for this profile.
+            Emails assigned to this profile are saved in the app automatically, including attachment copies. They remain available here even if the Gmail original is deleted.
           </p>
           <div className="mt-3 flex gap-2 border-b border-slate-200 dark:border-slate-700">
             <button
