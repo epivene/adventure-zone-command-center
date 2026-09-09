@@ -194,7 +194,10 @@ if (googleDriveBackupRuntimeConfig.enabled) {
   const environment = getGoogleWorkspaceEnvironment();
   if (!environment.configured) throw new Error("GOOGLE_WORKSPACE_NOT_CONFIGURED");
   const sqlPool = pool as unknown as GoogleDriveBackupSqlPool;
-  const backupRepository = new PostgresGoogleDriveBackupRepository(sqlPool);
+  const backupRepository = new PostgresGoogleDriveBackupRepository(
+    sqlPool,
+    googleDriveBackupRuntimeConfig.maxAutomaticAttempts,
+  );
   const backupBackfill = new GoogleDriveBackupBackfillService(sqlPool);
   const emailProvider = new GoogleWorkspaceProfileEmailProvider({
     pool: sqlPool,
