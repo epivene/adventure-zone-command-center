@@ -117,6 +117,7 @@ export class GoogleDriveBackupWorker {
       const source = await this.sourceFor(job, now);
       if (!source) {
         await this.options.repository.markSourceRemoved(job, now);
+        if (job.runId) await this.options.backfill?.enqueueNextBatch(job.runId, now);
         return "skipped";
       }
       const connection = await this.options.connections.createDriveBackupClient();
