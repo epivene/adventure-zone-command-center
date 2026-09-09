@@ -12,17 +12,6 @@ type ManagerDashboard = ManagerDashboardResponse;
 type NextEvent = ManagerDashboardResponse["events"][number];
 type CurrentLifecycle = NonNullable<ManagerDashboardResponse["currentLifecycle"]>;
 
-function formatEventDate(value?: string | Date | null) {
-  if (!value) return "Date not set";
-  return new Date(value).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function formatEventRange(startsAt?: string | Date | null, endsAt?: string | Date | null) {
-  if (!startsAt) return "Date not set";
-  if (!endsAt || endsAt === startsAt) return formatEventDate(startsAt);
-  return `${formatEventDate(startsAt)} → ${formatEventDate(endsAt)}`;
-}
-
 function QuickAddMenu() {
   return <DropdownMenu>
     <DropdownMenuTrigger asChild><button className="button-primary inline-flex items-center gap-2" type="button"><Plus className="h-4 w-4" />Add</button></DropdownMenuTrigger>
