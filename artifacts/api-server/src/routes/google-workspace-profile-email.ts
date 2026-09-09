@@ -84,6 +84,13 @@ function gmailUrl(threadId: string): string {
   return `https://mail.google.com/mail/u/0/#all/${encodeURIComponent(threadId)}`;
 }
 
+function sourceState(thread: ArchivedProfileEmailThread) {
+  if (!thread.lastGmailErrorCode) return "synced" as const;
+  return thread.lastGmailErrorCode === "GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND"
+    ? "saved_copy_gmail_missing" as const
+    : "saved_copy_gmail_unavailable" as const;
+}
+
 function mappingsByThread(mappings: GoogleApprovedValidationMapping[]) {
   const grouped = new Map<string, GoogleApprovedValidationMapping[]>();
   for (const mapping of mappings) {
@@ -197,6 +204,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
               conversationId: thread.id,
               savedCopy: true,
               archiveState: thread.archiveState,
+              sourceState: sourceState(thread),
             };
           })
           .sort(
@@ -260,6 +268,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           archiveState: archived.archiveState,
           lastSyncedAt: archived.lastSyncedAt,
           lastGmailErrorCode: archived.lastGmailErrorCode,
+          sourceState: sourceState(archived),
           messages: archived.messages.map((message) => ({
             id: message.gmailMessageId,
             internalDateMs: message.internalDateMs,
