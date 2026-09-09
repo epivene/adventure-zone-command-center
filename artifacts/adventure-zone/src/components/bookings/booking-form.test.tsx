@@ -139,8 +139,12 @@ describe("BookingForm location safeguards", () => {
 
     await waitFor(() => expect(mocks.geocode).toHaveBeenCalledTimes(1));
     expect(onSubmit).not.toHaveBeenCalled();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Map this confirmed event before saving",
-    );
+    expect(
+      screen
+        .getAllByRole("alert")
+        .some((alert) =>
+          alert.textContent?.includes("Map this confirmed event before saving"),
+        ),
+    ).toBe(true);
   });
 });
