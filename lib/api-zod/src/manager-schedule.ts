@@ -14,6 +14,8 @@ export const managerScheduleEventSchema = z.object({
   longitude: z.number().nullable(),
   startsAt: nullableScheduleDateSchema,
   endsAt: nullableScheduleDateSchema,
+  operationalStartsAt: nullableScheduleDateSchema.optional(),
+  operationalEndsAt: nullableScheduleDateSchema.optional(),
   status: z.string(),
   probability: z.string().nullable(),
   scheduleState: managerScheduleStateSchema,
