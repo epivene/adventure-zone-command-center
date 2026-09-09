@@ -36,4 +36,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Verify Blanding correction behavior
-        run: pnpm --filter @workspace/api-server exec vitest run src/features/leg-manager/blanding-kristy-state-correction.test.ts
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          src/features/leg-manager/blanding-kristy-state-correction.test.ts
+          src/routes/assistant-blanding-kristy-correction.test.ts
