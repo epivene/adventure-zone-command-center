@@ -29,6 +29,50 @@ import { geocodeAddressAction, type GeocodeCandidate } from "@/actions/trips";
 type GeoState = { loading: boolean; error: string | null; candidates: GeocodeCandidate[] };
 const geoInit: GeoState = { loading: false, error: null, candidates: [] };
 
+const locationFieldNames = new Set([
+  "venueName",
+  "address1",
+  "city",
+  "region",
+  "postalCode",
+]);
+
+const westernStateNames: Record<string, string> = {
+  AZ: "arizona",
+  CO: "colorado",
+  ID: "idaho",
+  MT: "montana",
+  ND: "north dakota",
+  NM: "new mexico",
+  NV: "nevada",
+  OR: "oregon",
+  SD: "south dakota",
+  UT: "utah",
+  WA: "washington",
+  WY: "wyoming",
+};
+
+function candidateMatchesBooking(
+  displayName: string,
+  city: string,
+  region: string,
+) {
+  const normalizedDisplay = displayName.toLowerCase();
+  const normalizedCity = city.trim().toLowerCase();
+  const normalizedRegion = region.trim().toUpperCase();
+  const cityMatches =
+    !normalizedCity || normalizedDisplay.includes(normalizedCity);
+  const stateName = westernStateNames[normalizedRegion];
+  const stateCodeMatches = new RegExp(
+    `(^|[^a-z])${normalizedRegion.toLowerCase()}([^a-z]|$)`,
+  ).test(normalizedDisplay);
+  const stateMatches =
+    !normalizedRegion ||
+    stateCodeMatches ||
+    (stateName ? normalizedDisplay.includes(stateName) : true);
+  return cityMatches && stateMatches;
+}
+
 type BookingSubmissionResult =
   | { ok: true }
   | { ok: false; error: string }
@@ -243,11 +287,30 @@ export function BookingForm(props: BookingFormProps) {
   const [isLocalDraft, setIsLocalDraft] = useState(false);
   const [draftError, setDraftError] = useState("");
   const [geo, setGeo] = useState<GeoState>(geoInit);
+  const [selectedGeoLabel, setSelectedGeoLabel] = useState<string | null>(
+    initialValues?.latitude && initialValues?.longitude
+      ? "Saved map location"
+      : null,
+  );
+  const [locationWarning, setLocationWarning] = useState("");
 
   async function findCoordinates() {
-    const query = [values.city, values.region].filter(Boolean).join(", ").trim();
-    if (!query) {
-      setGeo({ loading: false, error: "Enter a city first, then click Find.", candidates: [] });
+    const query = [
+      values.venueName,
+      values.address1,
+      values.city,
+      values.region,
+      values.postalCode,
+    ]
+      .filter((part) => part.trim())
+      .join(", ")
+      .trim();
+    if (!values.city.trim() || !values.region.trim()) {
+      setGeo({
+        loading: false,
+        error: "Enter the event city and state before mapping it.",
+        candidates: [],
+      });
       return;
     }
     setGeo({ loading: true, error: null, candidates: [] });
@@ -267,6 +330,16 @@ export function BookingForm(props: BookingFormProps) {
     };
     setValues(nextValues);
     setGeo(geoInit);
+    setSelectedGeoLabel(candidate.displayName);
+    setLocationWarning(
+      candidateMatchesBooking(
+        candidate.displayName,
+        values.city,
+        values.region,
+      )
+        ? ""
+        : `This result does not appear to match ${values.city}, ${values.region.toUpperCase()}. Check it before saving.`,
+    );
     if (!navigator.onLine) persistDraft(nextValues);
   }
 
@@ -298,7 +371,17 @@ export function BookingForm(props: BookingFormProps) {
     >,
   ) {
     const { name, value } = event.currentTarget;
-    const nextValues = { ...values, [name]: value };
+    const locationChanged =
+      locationFieldNames.has(name) &&
+      value !== values[name as keyof BookingFormValues];
+    const nextValues = locationChanged
+      ? { ...values, [name]: value, latitude: "", longitude: "" }
+      : { ...values, [name]: value };
+    if (locationChanged) {
+      setGeo(geoInit);
+      setSelectedGeoLabel(null);
+      setLocationWarning("Location changed — choose coordinates again.");
+    }
     setValues(nextValues);
     if (!navigator.onLine) {
       persistDraft(nextValues);
@@ -332,6 +415,15 @@ export function BookingForm(props: BookingFormProps) {
         }
       }
       setErrors(fieldErrors);
+      if (
+        props.variant === "edit" &&
+        rawInput.status === "confirmed" &&
+        (!String(rawInput.latitude ?? "").trim() ||
+          !String(rawInput.longitude ?? "").trim())
+      ) {
+        setLocationWarning("Map this confirmed event before saving.");
+        void findCoordinates();
+      }
       return;
     }
 
@@ -557,6 +649,29 @@ export function BookingForm(props: BookingFormProps) {
               <p className="rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">
                 {geo.error}
               </p>
+            ) : null}
+            {locationWarning ? (
+              <p
+                className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-950"
+                role="alert"
+              >
+                {locationWarning}
+              </p>
+            ) : null}
+            {selectedGeoLabel ? (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950">
+                <p className="font-semibold">Mapped to {selectedGeoLabel}</p>
+                <a
+                  className="mt-1 inline-block text-xs font-bold underline"
+                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+                    `${values.latitude},${values.longitude}`,
+                  )}`}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Preview pin
+                </a>
+              </div>
             ) : null}
             {geo.candidates.length > 0 ? (
               <ul className="rounded-lg border border-slate-200 divide-y divide-slate-100 text-sm shadow-sm">
