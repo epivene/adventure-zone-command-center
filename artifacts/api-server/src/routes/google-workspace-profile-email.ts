@@ -1,8 +1,10 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request } from "express";
+import { z } from "zod";
 
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
 import { GoogleProfileEmailArchiveService } from "@/features/google-workspace/google-profile-email-archive-service";
 import type { ArchivedProfileEmailThread } from "@/features/google-workspace/google-profile-email-archive-types";
+import { GoogleProfileEmailReplyService } from "@/features/google-workspace/google-profile-email-reply-service";
 import {
   GoogleProfileFileService,
   type GoogleProfileFile,
@@ -33,6 +35,24 @@ type ArchiveAccess = {
     gmailThreadId: string;
   }): Promise<ArchivedProfileEmailThread>;
 };
+
+type ReplyAccess = {
+  reply(input: {
+    organizationId: string;
+    conversationId: string;
+    bodyText: string;
+    actorId: string;
+  }): Promise<{
+    conversation: ArchivedProfileEmailThread;
+    gmailMessageId: string;
+    gmailThreadId: string;
+  }>;
+};
+
+type OwnerRequest = Request & { userId?: string };
+const replySchema = z.object({
+  bodyText: z.string().trim().min(1).max(100_000),
+}).strict();
 
 type FileAccess = {
   copyApprovedThreadAttachments(input: {
@@ -65,7 +85,9 @@ function errorStatus(code: string): number {
     code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE" ||
     code === "GOOGLE_WORKSPACE_PROFILE_FILES_UNAVAILABLE" ||
     code === "GOOGLE_WORKSPACE_API_REQUEST_FAILED" ||
-    code === "GOOGLE_WORKSPACE_OAUTH_TOKEN_REQUEST_FAILED"
+    code === "GOOGLE_WORKSPACE_OAUTH_TOKEN_REQUEST_FAILED" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_SEND_FAILED" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN"
   ) {
     return 503;
   }
@@ -76,7 +98,11 @@ function errorStatus(code: string): number {
   ) {
     return 404;
   }
-  if (code === "GOOGLE_WORKSPACE_PROFILE_FILE_UNAVAILABLE") return 409;
+  if (code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_REPLY_INVALID") return 400;
+  if (
+    code === "GOOGLE_WORKSPACE_PROFILE_FILE_UNAVAILABLE" ||
+    code === "GOOGLE_WORKSPACE_PROFILE_EMAIL_RECIPIENT_MISSING"
+  ) return 409;
   return 500;
 }
 
@@ -123,6 +149,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   validationRepository?: ValidationAccess;
   fileService?: FileAccess;
   archiveService?: ArchiveAccess;
+  replyService?: ReplyAccess;
 }): IRouter {
   const router: IRouter = Router();
   const validationRepository =
@@ -130,6 +157,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   const fileService = options?.fileService ?? new GoogleProfileFileService();
   const archiveService =
     options?.archiveService ?? new GoogleProfileEmailArchiveService();
+  const replyService = options?.replyService ?? new GoogleProfileEmailReplyService();
 
   router.get(
     "/google-workspace/profiles/:organizationId/emails",
@@ -270,6 +298,56 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           lastGmailErrorCode: archived.lastGmailErrorCode,
           sourceState: sourceState(archived),
           messages: archived.messages.map((message) => ({
+            id: message.gmailMessageId,
+            internalDateMs: message.internalDateMs,
+            from: message.from,
+            to: message.to,
+            cc: message.cc,
+            subject: message.subject,
+            date: message.date,
+            direction: message.direction,
+            bodyText: message.bodyText,
+            attachments: message.attachments,
+          })),
+        });
+      } catch (error) {
+        const code = errorCode(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.post(
+    "/google-workspace/profiles/:organizationId/email-conversations/:conversationId/reply",
+    async (req, res): Promise<void> => {
+      const parsed = replySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({
+          error: "GOOGLE_WORKSPACE_PROFILE_EMAIL_REPLY_INVALID",
+        });
+        return;
+      }
+      try {
+        const result = await replyService.reply({
+          organizationId: req.params.organizationId,
+          conversationId: req.params.conversationId,
+          bodyText: parsed.data.bodyText,
+          actorId:
+            ((req as OwnerRequest).userId || "owner").trim() || "owner",
+        });
+        res.json({
+          id: result.gmailThreadId,
+          conversationId: result.conversation.id,
+          subject: result.conversation.subject,
+          originalGmailUrl:
+            result.conversation.originalGmailUrl ||
+            gmailUrl(result.gmailThreadId),
+          savedCopy: true,
+          archiveState: result.conversation.archiveState,
+          lastSyncedAt: result.conversation.lastSyncedAt,
+          lastGmailErrorCode: result.conversation.lastGmailErrorCode,
+          sourceState: sourceState(result.conversation),
+          messages: result.conversation.messages.map((message) => ({
             id: message.gmailMessageId,
             internalDateMs: message.internalDateMs,
             from: message.from,
