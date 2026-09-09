@@ -91,20 +91,59 @@ function appFor(options?: {
   openFile?: ReturnType<typeof vi.fn>;
   client?: GoogleWorkspaceReadClient | null;
   mappings?: typeof defaultMappings;
+  archiveThread?: ReturnType<typeof vi.fn>;
 }) {
   const app = express();
+  const selectedClient =
+    options && "client" in options ? options.client ?? null : googleClient();
+  const archiveThread = options?.archiveThread ?? vi.fn(async (input: {
+    organizationId: string;
+    contactId: string | null;
+    gmailThreadId: string;
+  }) => {
+    if (!selectedClient) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
+    if (!selectedClient.getThreadDetail) {
+      throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
+    }
+    const detail = await selectedClient.getThreadDetail(input.gmailThreadId);
+    return {
+      id: `conversation-${input.gmailThreadId}`,
+      organizationId: input.organizationId,
+      contactId: input.contactId,
+      subject: detail.subject,
+      originalGmailUrl: detail.originalGmailUrl,
+      providerThreadIds: [input.gmailThreadId],
+      archiveState: "complete" as const,
+      lastSyncedAt: "2026-09-09T12:00:00.000Z",
+      lastGmailErrorCode: null,
+      messages: detail.messages.map((message) => ({
+        id: `saved-${message.id}`,
+        gmailMessageId: message.id,
+        gmailThreadId: input.gmailThreadId,
+        internalDateMs: message.internalDateMs,
+        from: message.from,
+        to: message.to,
+        cc: message.cc,
+        subject: message.subject,
+        date: message.date,
+        direction: message.direction,
+        bodyText: message.bodyText,
+        attachments: message.attachments,
+      })),
+    };
+  });
   app.use(express.json());
   app.use(
     createGoogleWorkspaceProfileEmailRouter({
       connection: {
-        createReadClient: async () =>
-          options && "client" in options ? options.client ?? null : googleClient(),
+        createReadClient: async () => selectedClient,
       },
       validationRepository: {
         listApprovedForOrganization: async (organizationId) =>
           organizationId === "org-1" ? options?.mappings ?? defaultMappings : [],
         organizationOwnsApprovedThread: async () => options?.ownsThread ?? true,
       },
+      archiveService: { archiveApprovedThread: archiveThread },
       fileService: {
         copyApprovedThreadAttachments:
           options?.copyFiles ?? vi.fn(async () => [storedFile]),
@@ -146,6 +185,9 @@ describe("Google Workspace profile email routes", () => {
           contactId: "contact-1",
           evidenceCodes: ["exact_contact_email", "contact_active_organization"],
           originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
+          conversationId: "conversation-thread-1",
+          savedCopy: true,
+          archiveState: "complete",
         },
       ],
     });
@@ -208,6 +250,42 @@ describe("Google Workspace profile email routes", () => {
     expect(response.body).toEqual({
       error: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
     });
+  });
+
+  it("returns a saved copy when the original Gmail thread was deleted", async () => {
+    const archiveThread = vi.fn(async () => ({
+      id: "conversation-1",
+      organizationId: "org-1",
+      contactId: "contact-1",
+      subject: "Deleted in Gmail",
+      originalGmailUrl: null,
+      providerThreadIds: ["thread-1"],
+      archiveState: "complete" as const,
+      lastSyncedAt: "2026-09-09T12:00:00.000Z",
+      lastGmailErrorCode: "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
+      messages: [{
+        id: "saved-message-1",
+        gmailMessageId: "message-1",
+        gmailThreadId: "thread-1",
+        internalDateMs: 1000,
+        from: "fair@example.org",
+        to: "zone@example.com",
+        cc: "",
+        subject: "Deleted in Gmail",
+        date: "",
+        direction: "incoming" as const,
+        bodyText: "This stays in the app.",
+        attachments: [],
+      }],
+    }));
+
+    const response = await request(appFor({ client: null, archiveThread })).get(
+      "/google-workspace/profiles/org-1/emails/thread-1",
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.savedCopy).toBe(true);
+    expect(response.body.messages[0].bodyText).toBe("This stays in the app.");
   });
 
   it("returns the whole approved thread with readable body and attachment metadata", async () => {
