@@ -345,7 +345,26 @@ describe("loadManagerScopedMapData", () => {
       startsAt: new Date("2026-08-14T12:00:00Z"),
       endsAt: new Date("2026-08-15T20:00:00Z"),
     };
+    const pastTrip = {
+      ...kristyTrip,
+      id: "00000000-0000-4000-8000-000000000111",
+      startDate: new Date("2026-08-10T00:00:00Z"),
+      endDate: new Date("2026-08-15T23:00:00Z"),
+    };
+    const pastStop = {
+      ...kristyStop,
+      id: "00000000-0000-4000-8000-000000000112",
+      tripId: pastTrip.id,
+      bookingId: lastBookingId,
+      startsAt: pastBooking.startsAt,
+      endsAt: pastBooking.endsAt,
+    };
     const dependencies = deps([], [pastBooking]);
+    dependencies.tripRepository = {
+      async listTrips() { return [pastTrip]; },
+      async listStops(tripId: string) { return tripId === pastTrip.id ? [pastStop] : []; },
+      async listSegments() { return []; },
+    };
     dependencies.lifecycleRepository = {
       async getCurrentForLeg() { return null; },
       async getLatestCheckedOutForLeg() { return { bookingId: lastBookingId, checkedOutAt: new Date("2026-08-16T01:00:00Z") }; },
