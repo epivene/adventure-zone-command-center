@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { BossAttentionQueue } from "@/components/boss-work-requests/BossAttentionQueue";
 import { Link } from "wouter";
 import { AlertTriangle, ArrowRight, ClipboardList, RefreshCw, Star, Wrench } from "lucide-react";
 import { Badge } from "@workspace/avz-crm/components/ui/badge";
@@ -104,8 +105,10 @@ export default function BossHomePage() {
     <div className="grid gap-6" data-testid="boss-home">
       <header>
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss Workspace</p>
-        <h1 className="mt-1 text-2xl font-bold text-foreground">Priorities</h1>
+        <h1 className="mt-1 text-2xl font-bold text-foreground">Your Workspace</h1>
       </header>
+
+      <BossAttentionQueue />
 
       {/* At-a-glance stat strip */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
