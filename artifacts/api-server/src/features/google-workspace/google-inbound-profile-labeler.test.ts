@@ -114,13 +114,12 @@ describe("GoogleInboundProfileLabeler", () => {
     const labeler = new GoogleInboundProfileLabeler({
       syncFactory: async () => ({
         connectionId: "conn-1",
-        ensureHierarchy: vi.fn(async () => undefined),
+        ensureHierarchy,
         service: {
           assignThread: vi.fn(),
           labelInboundMessage: vi.fn(),
           retry: vi.fn(),
         },
-        ensureHierarchy,
       }),
     });
 
