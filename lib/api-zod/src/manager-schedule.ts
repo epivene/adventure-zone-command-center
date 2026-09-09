@@ -33,6 +33,8 @@ export const managerScheduleTripSchema = z.object({
   endLongitude: z.number().nullable(),
   legName: z.string().optional(),
   legColor: z.string().nullable().optional(),
+  mpg: z.number().nullable().optional(),
+  fuelPricePerGallon: z.number().nullable().optional(),
 }).strict();
 
 const managerScheduleRouteTripSchema = z.object({
@@ -44,6 +46,8 @@ const managerScheduleRouteTripSchema = z.object({
   endLabel: z.string(),
   endLatitude: z.number().nullable(),
   endLongitude: z.number().nullable(),
+  mpg: z.number().nullable(),
+  fuelPricePerGallon: z.number().nullable(),
 }).strict();
 
 const managerScheduleStopSchema = managerScheduleEventSchema.extend({
