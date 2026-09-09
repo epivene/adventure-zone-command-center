@@ -27,7 +27,15 @@ jobs:
       - name: API location policy tests
         run: pnpm --filter @workspace/api-server exec vitest run src/features/bookings/booking-input.test.ts
       - name: Booking form location tests
-        run: pnpm --filter @workspace/adventure-zone exec vitest run src/features/bookings/booking-input.test.ts src/components/bookings/booking-form.test.tsx
+        run: |
+          set -o pipefail
+          pnpm --filter @workspace/adventure-zone exec vitest run src/features/bookings/booking-input.test.ts src/components/bookings/booking-form.test.tsx 2>&1 | tee booking-location-tests.txt
+      - name: Upload focused test output
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: booking-location-test-output
+          path: booking-location-tests.txt
       - name: Frontend build
         run: pnpm --filter @workspace/adventure-zone build
       - name: API build
