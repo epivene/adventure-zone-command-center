@@ -69,6 +69,38 @@ describe("manager dashboard aggregate", () => {
     });
   });
 
+  it("keeps the last checked-out route until the next event is checked in", async () => {
+    const pastTrip = { ...trip, id: "past-trip", startDate: new Date("2026-08-10"), endDate: new Date("2026-08-15") };
+    const futureTrip = { ...trip, id: "future-trip", startDate: new Date("2026-08-20"), endDate: new Date("2026-08-28") };
+    const pastStop = { ...stop("last-event", "2026-08-15T12:00:00Z"), id: "past-stop", tripId: pastTrip.id };
+    const futureStop = { ...stop("next-event", "2026-08-22T12:00:00Z"), id: "future-stop", tripId: futureTrip.id };
+    const dashboard = await loadLegManagerDashboard(dependencies({
+      tripRepository: {
+        async listTrips() { return [pastTrip, futureTrip]; },
+        async listStops(tripId) { return tripId === pastTrip.id ? [pastStop] : [futureStop]; },
+        async listSegments() { return []; },
+      },
+      bookingRepository: {
+        async listForLeg() {
+          return [
+            { bookingId: "last-event", bookingName: "Meeteetse", city: "Meeteetse", region: "WY", latitude: null, longitude: null, startsAt: pastStop.startsAt, endsAt: pastStop.endsAt, status: "confirmed", probability: null, legName: "A", legColor: "#f97316" },
+            { bookingId: "next-event", bookingName: "Blanding", city: "Blanding", region: "UT", latitude: null, longitude: null, startsAt: futureStop.startsAt, endsAt: futureStop.endsAt, status: "confirmed", probability: null, legName: "A", legColor: "#f97316" },
+          ];
+        },
+      },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return null; },
+        async getLatestCheckedOutForLeg() { return { bookingId: "last-event", checkedOutAt: new Date("2026-08-16T01:00:00Z") } as any; },
+        async listIncompleteForLeg() { return []; },
+      },
+    }), A, new Date("2026-08-19T00:00:00Z"));
+
+    expect(dashboard.currentLifecycle).toBeNull();
+    expect(dashboard.route?.trip.id).toBe(pastTrip.id);
+    expect(dashboard.events.map((event) => event.bookingId)).toEqual(["last-event", "next-event"]);
+    expect(dashboard.nextEvent?.bookingId).toBe("next-event");
+  });
+
   it("returns available queue data with an explicit partial error when a secondary section fails", async () => {
     const dashboard = await loadLegManagerDashboard(dependencies({
       financeRepository: { async summary() { throw new Error("Finance unavailable"); } },
