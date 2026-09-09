@@ -8,6 +8,7 @@ import { CommunicationTemplateRepository } from "@/features/communication-templa
 import { ensureCommunicationTemplateSeed } from "@/features/communication-templates/communication-template-seed";
 import { ensureRouteFillOutreachTemplateSeed } from "@/features/communication-templates/route-fill-outreach-template-seed";
 import { validateAuthoredTemplateText } from "@/features/communication-templates/communication-template-authoring";
+import { BossWorkRequestService, templateFingerprint } from "@/features/boss-work-requests/boss-work-request-service";
 import {
   allowedTemplatePlaceholders,
   extractTemplateTokens,
@@ -17,6 +18,7 @@ import type { TemplatePlaceholder } from "@/features/communication-templates/com
 
 const router: IRouter = Router();
 const placeholderSchema = z.enum(allowedTemplatePlaceholders);
+const bossWorkRequests = new BossWorkRequestService(db);
 
 export const communicationTemplateWriteSchema = z.object({
   code: z.string().trim().min(1).max(120).regex(/^[a-z0-9]+(?:_[a-z0-9]+)*$/),
@@ -24,7 +26,8 @@ export const communicationTemplateWriteSchema = z.object({
   channel: z.enum(["email", "internal_email"]),
   category: z.string().trim().min(1).max(120),
   subjectTemplate: z.string().max(2000).nullable(),
-  bodyTemplate: z.string().trim().min(1).max(20000),
+  bodyTemplate: z.string().trim().min(1).max(100000),
+  bodyFormat: z.enum(["plain_text", "html"]).default("plain_text"),
   requiredPlaceholders: z.array(placeholderSchema),
   accessScope: z.enum(["owner", "office"]),
 }).strict();
@@ -111,22 +114,49 @@ router.patch("/communication-templates/:templateId", async (req, res): Promise<v
   }
 });
 
-router.post("/communication-templates/:templateId/activate", async (req, res): Promise<void> => {
+const requestApprovalSchema = z.object({
+  assignedBossAccountId: z.string().uuid(),
+  priority: z.enum(["normal", "high", "urgent"]).default("normal"),
+  dueAt: z.string().datetime().nullable().optional(),
+  instructions: z.string().trim().max(12000).nullable().optional(),
+}).strict();
+
+router.post("/communication-templates/:templateId/request-dave-approval", async (req, res): Promise<void> => {
   const id = templateId(req.params.templateId);
-  if (!z.uuid().safeParse(id).success) { res.status(400).json({ error: "Invalid template id" }); return; }
-  const rows = await db.select().from(communicationTemplates).where(eq(communicationTemplates.id, id)).limit(1);
-  const template = rows[0];
+  const parsed = requestApprovalSchema.safeParse(req.body);
+  if (!z.uuid().safeParse(id).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid template id" : parsed.error.issues[0]?.message });
+    return;
+  }
+  const template = (await db.select().from(communicationTemplates).where(eq(communicationTemplates.id, id)).limit(1))[0];
   if (!template) { res.status(404).json({ error: "Template not found" }); return; }
   try {
     validateCopy(template.subjectTemplate, template.bodyTemplate);
-    const tokenSet = new Set(extractTemplateTokens(`${template.subjectTemplate ?? ""}\n${template.bodyTemplate}`));
-    const missingDefinitions = template.requiredPlaceholders.filter((token) => !tokenSet.has(token));
-    if (missingDefinitions.length > 0) { res.status(409).json({ error: `Required placeholders are not present in the template: ${missingDefinitions.join(", ")}` }); return; }
-    const updated = await db.update(communicationTemplates).set({
-      state: "active", reviewedBy: String((req as any).userId ?? "owner"), reviewedAt: new Date(), updatedAt: new Date(),
-    }).where(eq(communicationTemplates.id, id)).returning();
-    res.json({ template: updated[0] });
-  } catch (err) { res.status(400).json({ error: err instanceof Error ? err.message : "Could not activate template" }); }
+    const fingerprint = templateFingerprint({
+      templateVersion: template.templateVersion,
+      subjectTemplate: template.subjectTemplate,
+      bodyTemplate: template.bodyTemplate,
+      bodyFormat: template.bodyFormat,
+    });
+    const detail = await bossWorkRequests.createOwnerRequest({
+      type: "email_template_approval",
+      assignedBossAccountId: parsed.data.assignedBossAccountId,
+      title: `Review email template: ${template.name}`,
+      instructions: parsed.data.instructions ?? "Please preview this email and approve it or leave notes for changes.",
+      priority: parsed.data.priority,
+      dueAt: parsed.data.dueAt ? new Date(parsed.data.dueAt) : null,
+      deduplicationKey: `template-review:${template.id}:${fingerprint}`,
+      templateId: template.id,
+      ownerId: String((req as any).userId ?? "owner"),
+    });
+    res.status(201).json(detail);
+  } catch (err) {
+    res.status(409).json({ error: err instanceof Error ? err.message : "Could not send template for approval." });
+  }
+});
+
+router.post("/communication-templates/:templateId/activate", async (_req, res): Promise<void> => {
+  res.status(409).json({ error: "Send this company template to Dave for approval. Approval activates the exact reviewed revision automatically." });
 });
 
 router.post("/communication-templates/:templateId/archive", async (req, res): Promise<void> => {
@@ -165,6 +195,7 @@ router.post("/communication-templates/:templateId/preview", async (req, res): Pr
       .filter(([key]) => allowedTemplatePlaceholders.includes(key as TemplatePlaceholder)));
     res.json({ preview: renderCommunicationTemplateText({
       templateId: template.id, subjectTemplate: template.subjectTemplate, bodyTemplate: template.bodyTemplate,
+      bodyFormat: template.bodyFormat,
       requiredPlaceholders: template.requiredPlaceholders as TemplatePlaceholder[], values,
     }) });
   } catch (err) { res.status(400).json({ error: err instanceof Error ? err.message : "Could not preview template" }); }
