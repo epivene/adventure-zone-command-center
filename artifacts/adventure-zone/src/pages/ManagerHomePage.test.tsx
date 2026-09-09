@@ -14,6 +14,8 @@ const managerApi = vi.fn(async (path: string) => {
         region: "MT",
         startsAt: "2026-08-18T12:00:00.000Z",
         endsAt: "2026-08-20T12:00:00.000Z",
+        operationalStartsAt: "2026-08-14T00:00:00.000Z",
+        operationalEndsAt: "2026-08-23T23:59:00.000Z",
         status: "confirmed",
       }],
       currentLifecycle: null,
@@ -57,8 +59,8 @@ describe("ManagerHomePage", () => {
     expect(await screen.findByText("Eastern Montana Fair")).toBeInTheDocument();
     expect(screen.getByText(/Miles City, MT/)).toBeInTheDocument();
     expect(screen.getByText(/Event dates:/)).toHaveTextContent(/Aug 18.*Aug 20/);
-    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 16.*Aug 17/);
-    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 21/);
+    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 14.*Aug 17/);
+    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 21.*Aug 23/);
     expect(await screen.findByRole("button", { name: "Check in" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open Schedule" })).toHaveAttribute("href", "/manager/route");
     expect(screen.getByRole("link", { name: /Receipts/i })).toHaveAttribute("href", "/manager/receipts");
