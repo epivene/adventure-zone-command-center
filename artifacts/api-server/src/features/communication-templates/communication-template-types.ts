@@ -25,6 +25,8 @@ export const allowedTemplatePlaceholders = [
   "conventionName",
   "additionalInsuredWording",
   "additionalInsuredInfo",
+  "personalNote",
+  "earlyBirdDeadline",
 ] as const;
 
 export type TemplatePlaceholder =
