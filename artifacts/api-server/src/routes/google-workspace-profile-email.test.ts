@@ -92,6 +92,7 @@ function appFor(options?: {
   client?: GoogleWorkspaceReadClient | null;
   mappings?: typeof defaultMappings;
   archiveThread?: ReturnType<typeof vi.fn>;
+  reply?: ReturnType<typeof vi.fn>;
 }) {
   const app = express();
   const selectedClient =
@@ -144,6 +145,9 @@ function appFor(options?: {
         organizationOwnsApprovedThread: async () => options?.ownsThread ?? true,
       },
       archiveService: { archiveApprovedThread: archiveThread },
+      replyService: {
+        reply: options?.reply ?? vi.fn(async () => { throw new Error("unused"); }),
+      },
       fileService: {
         copyApprovedThreadAttachments:
           options?.copyFiles ?? vi.fn(async () => [storedFile]),
@@ -312,6 +316,54 @@ describe("Google Workspace profile email routes", () => {
 
     expect(response.status).toBe(404);
     expect(response.body).toEqual({ error: "GOOGLE_WORKSPACE_PROFILE_EMAIL_NOT_FOUND" });
+  });
+
+  it("replies from the saved app conversation", async () => {
+    const reply = vi.fn(async () => ({
+      gmailMessageId: "message-new",
+      gmailThreadId: "thread-new",
+      conversation: {
+        id: "conversation-1",
+        organizationId: "org-1",
+        contactId: "contact-1",
+        subject: "County Fair follow up",
+        originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-new",
+        providerThreadIds: ["thread-1", "thread-new"],
+        archiveState: "complete" as const,
+        lastSyncedAt: "2026-09-09T13:00:00.000Z",
+        lastGmailErrorCode: null,
+        messages: [{
+          id: "saved-new",
+          gmailMessageId: "message-new",
+          gmailThreadId: "thread-new",
+          internalDateMs: 2000,
+          from: "zone@example.com",
+          to: "fair@example.org",
+          cc: "",
+          subject: "Re: County Fair follow up",
+          date: "",
+          direction: "outgoing" as const,
+          bodyText: "We are available.",
+          attachments: [],
+        }],
+      },
+    }));
+
+    const response = await request(appFor({ reply }))
+      .post(
+        "/google-workspace/profiles/org-1/email-conversations/conversation-1/reply",
+      )
+      .send({ bodyText: "We are available." });
+
+    expect(response.status).toBe(200);
+    expect(reply).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      conversationId: "conversation-1",
+      bodyText: "We are available.",
+      actorId: "owner",
+    });
+    expect(response.body.conversationId).toBe("conversation-1");
+    expect(response.body.messages[0].bodyText).toBe("We are available.");
   });
 
   it("copies approved conversation attachments into the profile Files area", async () => {
