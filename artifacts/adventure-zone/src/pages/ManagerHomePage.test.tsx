@@ -15,7 +15,7 @@ const managerApi = vi.fn(async (path: string) => {
         startsAt: "2026-08-18T12:00:00.000Z",
         endsAt: "2026-08-20T12:00:00.000Z",
         operationalStartsAt: "2026-08-14T00:00:00.000Z",
-        operationalEndsAt: "2026-08-23T23:59:00.000Z",
+        operationalEndsAt: "2026-08-24T00:00:00.000Z",
         status: "confirmed",
       }],
       currentLifecycle: null,
