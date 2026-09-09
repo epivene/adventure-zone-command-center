@@ -4,6 +4,7 @@ export * from "@workspace/db/event-family-schema";
 export * from "@workspace/db/paper-note-schema";
 export * from "@workspace/db/business-source-schema";
 export * from "@workspace/db/commercial-offer-schema";
+export * from "@workspace/db/early-bird-promo-schema";
 export * from "@workspace/db/event-checklist-schema";
 export * from "@workspace/db/resource-source-candidate-schema";
 export * from "@workspace/db/event-attendance-history-schema";

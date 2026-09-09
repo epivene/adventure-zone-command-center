@@ -2,6 +2,7 @@ import { and, desc, eq, sql } from "drizzle-orm";
 import type { db as database } from "@/db/client";
 import {
   auditEntries,
+  bookings,
   communicationTemplates,
   contacts,
   officeEmailDrafts,
@@ -19,6 +20,8 @@ function view(row: typeof officeEmailDrafts.$inferSelect): OfficeEmailDraftView 
     id: row.id,
     organizationId: row.organizationId,
     contactId: row.contactId,
+    bookingId: row.bookingId,
+    eventYear: row.eventYear,
     communicationTemplateId: row.communicationTemplateId,
     recipientEmail: row.recipientEmail,
     subject: row.subject,
@@ -68,6 +71,14 @@ export class DrizzleOfficeEmailRepository {
     if (!row) throw new OfficeEmailError("INVALID_TEMPLATE");
   }
 
+  async validateBooking(transaction: any, organizationId: string, bookingId: string | null) {
+    if (!bookingId) return;
+    const [row] = await transaction.select({ id: bookings.id }).from(bookings)
+      .where(and(eq(bookings.id, bookingId), eq(bookings.organizationId, organizationId)))
+      .limit(1);
+    if (!row) throw new OfficeEmailError("INVALID_BOOKING");
+  }
+
   async listForOffice(accountId: string) {
     const rows = await this.database.select().from(officeEmailDrafts)
       .where(eq(officeEmailDrafts.officeAccountId, accountId))
@@ -87,6 +98,8 @@ export class DrizzleOfficeEmailRepository {
     organizationId: string;
     contactId: string;
     communicationTemplateId: string | null;
+    bookingId: string | null;
+    eventYear: number | null;
     subject: string;
     body: string;
     coordinatorNote: string | null;
@@ -94,11 +107,14 @@ export class DrizzleOfficeEmailRepository {
     return this.database.transaction(async (transaction) => {
       const recipientEmail = await this.validateRecipient(transaction, input.organizationId, input.contactId);
       await this.validateTemplate(transaction, input.communicationTemplateId);
+      await this.validateBooking(transaction, input.organizationId, input.bookingId);
       const [row] = await transaction.insert(officeEmailDrafts).values({
         officeAccountId: input.accountId,
         organizationId: input.organizationId,
         contactId: input.contactId,
         communicationTemplateId: input.communicationTemplateId,
+        bookingId: input.bookingId,
+        eventYear: input.eventYear,
         recipientEmail,
         subject: input.subject.trim(),
         body: input.body.trim(),
@@ -187,12 +203,23 @@ export class DrizzleOfficeEmailRepository {
       if (!existing) throw new OfficeEmailError("NOT_FOUND");
       throw new OfficeEmailError("SEND_LOCKED");
     }
-    return row;
+    const template = row.communicationTemplateId
+      ? (await this.database
+          .select({ code: communicationTemplates.code, category: communicationTemplates.category })
+          .from(communicationTemplates)
+          .where(eq(communicationTemplates.id, row.communicationTemplateId))
+          .limit(1))[0]
+      : null;
+    return {
+      ...row,
+      templateCode: template?.code ?? null,
+      templateCategory: template?.category ?? null,
+    };
   }
 
-  async markSent(draftId: string, input: { recipientEmail: string; subject: string; body: string; messageId: string }) {
+  async markSent(draftId: string, input: { recipientEmail: string; subject: string; body: string; messageId: string; sentAt: Date }) {
     return this.database.transaction(async (transaction) => {
-      const now = new Date();
+      const now = input.sentAt;
       const [row] = await transaction.update(officeEmailDrafts).set({
         recipientEmail: input.recipientEmail.trim().toLowerCase(),
         subject: input.subject.trim(),

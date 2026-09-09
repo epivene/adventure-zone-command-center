@@ -20,6 +20,7 @@ import activitiesRouter from "./activities";
 import callsRouter from "./calls";
 import needsAnswerRouter from "./needs-answer";
 import eventProfilesRouter from "./event-profiles";
+import earlyBirdPromoRouter from "./early-bird-promo";
 import eventProfileDescriptionRouter from "./event-profile-description";
 import eventProfileVenueSummaryRouter from "./event-profile-venue-summary";
 import profileResearchRouter from "./profile-research";
@@ -305,6 +306,7 @@ router.use(createInboundComputerCallingRouter({
 }));
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);
+router.use(earlyBirdPromoRouter);
 router.use(eventProfileDescriptionRouter);
 router.use(eventProfileVenueSummaryRouter);
 router.use(profileResearchRouter);

@@ -57,4 +57,8 @@ describe("owner Office Coordinator controls",()=>{
     await waitFor(() => expect(api.patch).toHaveBeenCalledWith("/office-admin/accounts/amy", { canReviewWebsiteInquiries: true }));
     expect(screen.getByText(/public contact details and convert/i)).toBeInTheDocument();
   });
+  it("calls out automatically prepared Early Bird reminders for Boss review",()=>{
+    expect(source).toContain("Early Bird 15-day reminder");
+    expect(source).toContain("Review before sending");
+  });
 });

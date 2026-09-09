@@ -5,9 +5,13 @@ import { officeEmailStateValues } from "@/db/schema";
 import { DrizzleOfficeEmailRepository } from "@/features/office/office-email-repository";
 import { OfficeEmailError } from "@/features/office/office-email-service";
 import { createMailDeliveryFromEnv, MailConfigurationError } from "@/features/office/mail-delivery";
+import { EarlyBirdPromoRepository } from "@/features/early-bird-promo/early-bird-promo-repository";
+import { EarlyBirdPromoService } from "@/features/early-bird-promo/early-bird-promo-service";
+import { OfficeEmailSendCoordinator } from "@/features/office/office-email-send-coordinator";
 
 const router: IRouter = Router();
 const drafts = new DrizzleOfficeEmailRepository(db);
+const promotion = new EarlyBirdPromoService(new EarlyBirdPromoRepository(db));
 const uuid = z.string().uuid();
 const returnSchema = z.object({ note: z.string().trim().min(1).max(4000) }).strict();
 const sendSchema = z.object({
@@ -50,29 +54,17 @@ router.post("/office-admin/email-drafts/:draftId/send", async (req, res): Promis
   const parsed = sendSchema.safeParse(req.body);
   if (!uuid.safeParse(draftId).success || !parsed.success) { res.status(400).json({ error: parsed.success ? "Invalid draft ID." : parsed.error.issues[0]?.message ?? "Review the email." }); return; }
 
-  let claimed: any;
   try {
-    claimed = await drafts.claimForSend(draftId);
-  } catch (error) {
-    if (emailStateError(res, error)) return;
-    throw error;
-  }
-
-  const recipientEmail = parsed.data.recipientEmail ?? claimed.recipientEmail;
-  const subject = parsed.data.subject ?? claimed.subject;
-  const body = parsed.data.body ?? claimed.body;
-  try {
-    const delivery = createMailDeliveryFromEnv();
-    const sent = await delivery.send({ to: recipientEmail, subject, body });
-    const draft = await drafts.markSent(draftId, { recipientEmail, subject, body, messageId: sent.messageId });
+    const coordinator = new OfficeEmailSendCoordinator({
+      drafts,
+      delivery: createMailDeliveryFromEnv(),
+      promotion,
+    });
+    const draft = await coordinator.send({ draftId, overrides: parsed.data });
     res.json({ draft });
   } catch (error) {
+    if (emailStateError(res, error)) return;
     const message = error instanceof Error ? error.message : "Email delivery failed.";
-    try {
-      await drafts.restoreSubmittedAfterFailure(draftId, message);
-    } catch {
-      // Preserve the original delivery failure response even if restoring state fails.
-    }
     if (error instanceof MailConfigurationError) {
       res.status(503).json({ error: message });
       return;

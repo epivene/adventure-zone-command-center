@@ -25,6 +25,13 @@ import { ensureBookingAssistantSchema } from "./features/assistant/assistant-sch
 import { ensureCallScriptSettingsSchema } from "./features/calls/call-script-settings";
 import { ensureBusinessSourceSeed } from "./features/business-sources/business-source-seed";
 import { ensureCommercialOfferSeed } from "./features/commercial-offers/commercial-offer-seed";
+import { ensureEarlyBirdPromoOffer } from "./features/early-bird-promo/early-bird-promo-offer-seed";
+import { EarlyBirdPromoRepository } from "./features/early-bird-promo/early-bird-promo-repository";
+import { EarlyBirdPromoWorker } from "./features/early-bird-promo/early-bird-promo-worker";
+import {
+  EarlyBirdPromoWorkerLoop,
+  systemEarlyBirdPromoWorkerLoopScheduler,
+} from "./features/early-bird-promo/early-bird-promo-worker-loop";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
 import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./features/approved-profile-import/startup-config";
@@ -226,6 +233,13 @@ if (googleDriveBackupRuntimeConfig.enabled) {
   });
 }
 
+const earlyBirdPromoLoop = new EarlyBirdPromoWorkerLoop({
+  worker: new EarlyBirdPromoWorker(new EarlyBirdPromoRepository(db)),
+  workerId: `early-bird-promo-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemEarlyBirdPromoWorkerLoopScheduler,
+});
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
@@ -274,6 +288,7 @@ const shutdown = createActServerShutdown({
       googleDriveBackupLoop?.close(),
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
+      earlyBirdPromoLoop.close(),
     ]);
   },
   closeServer() {
@@ -489,6 +504,16 @@ async function runPostListenMaintenance() {
     );
   }
   try {
+    await runStartupStep("approved Early Bird Promo offer seed", () =>
+      ensureEarlyBirdPromoOffer(db),
+    );
+  } catch (err) {
+    logger.error(
+      { err },
+      "Early Bird Promo offer seed deferred; startup will continue",
+    );
+  }
+  try {
     await runStartupStep("event checklist template seed", () =>
       ensureEventChecklistTemplates(db),
     );
@@ -533,6 +558,7 @@ async function startBackgroundWorkers() {
   googleDriveBackupLoop?.start();
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
+  earlyBirdPromoLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();

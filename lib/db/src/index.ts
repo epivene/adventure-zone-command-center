@@ -5,6 +5,7 @@ import * as eventFamilySchema from "./event-family-schema";
 import * as paperNoteSchema from "./paper-note-schema";
 import * as businessSourceSchema from "./business-source-schema";
 import * as commercialOfferSchema from "./commercial-offer-schema";
+import * as earlyBirdPromoSchema from "./early-bird-promo-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
@@ -74,6 +75,7 @@ const schema = {
   ...paperNoteSchema,
   ...businessSourceSchema,
   ...commercialOfferSchema,
+  ...earlyBirdPromoSchema,
   ...eventChecklistSchema,
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
@@ -108,6 +110,7 @@ export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./business-source-schema";
 export * from "./commercial-offer-schema";
+export * from "./early-bird-promo-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
