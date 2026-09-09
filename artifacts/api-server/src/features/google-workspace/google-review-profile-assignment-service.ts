@@ -1,6 +1,8 @@
 import { pool as defaultPool } from "@workspace/db";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
+import { GoogleProfileEmailArchiveService } from "./google-profile-email-archive-service";
+import type { ArchivedProfileEmailThread } from "./google-profile-email-archive-types";
 import {
   PostgresGoogleGmailMutationRepository,
   type GoogleGmailMutationRecord,
@@ -35,6 +37,19 @@ export type GoogleReviewAssignmentView = {
   organizationId: string;
   threadId: string;
   gmailSync: GoogleProfileLabelSyncResult;
+  archiveSync: {
+    conversationId: string | null;
+    state: "complete" | "partial" | "pending" | "retry_required";
+    errorCode: string | null;
+  };
+};
+
+type ArchiveAccess = {
+  archiveApprovedThread(input: {
+    organizationId: string;
+    contactId: string | null;
+    gmailThreadId: string;
+  }): Promise<ArchivedProfileEmailThread>;
 };
 
 type MutationRepository = Pick<
@@ -87,12 +102,14 @@ export class GoogleReviewProfileAssignmentService {
   private readonly assignmentPersistence: GoogleProfileAssignmentTransactionPort;
   private readonly syncFactory: SyncFactory;
   private readonly mutations: MutationRepository;
+  private readonly archiver: ArchiveAccess;
 
   constructor(input: {
     pool?: SqlPool;
     assignmentPersistence?: GoogleProfileAssignmentTransactionPort;
     syncFactory?: SyncFactory;
     mutations?: MutationRepository;
+    archiver?: ArchiveAccess;
   } = {}) {
     this.pool = input.pool ?? (defaultPool as unknown as SqlPool);
     this.assignmentPersistence =
@@ -101,20 +118,31 @@ export class GoogleReviewProfileAssignmentService {
     this.syncFactory = input.syncFactory ?? (() => this.createProductionSync());
     this.mutations =
       input.mutations ?? new PostgresGoogleGmailMutationRepository(this.pool);
+    this.archiver =
+      input.archiver ??
+      (Object.keys(input).length
+        ? {
+            archiveApprovedThread: async () => {
+              throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_ARCHIVE_UNAVAILABLE");
+            },
+          }
+        : new GoogleProfileEmailArchiveService());
   }
 
   async resolveReview(
     input: BaseAssignmentInput,
   ): Promise<GoogleReviewAssignmentView> {
     const committed = await this.assignmentPersistence.resolveReview(input);
-    return this.executeCommitted(input, committed);
+    const result = await this.executeCommitted(input, committed);
+    return this.withArchive(result, committed);
   }
 
   async assignMatched(
     input: MatchedAssignmentInput,
   ): Promise<GoogleReviewAssignmentView> {
     const committed = await this.assignmentPersistence.assignMatched(input);
-    return this.executeCommitted(input, committed);
+    const result = await this.executeCommitted(input, committed);
+    return this.withArchive(result, committed);
   }
 
   async retryGmailMutation(
@@ -226,7 +254,42 @@ export class GoogleReviewProfileAssignmentService {
       organizationId: committed.organizationId,
       threadId: committed.threadId,
       gmailSync,
+      archiveSync: {
+        conversationId: null,
+        state: "pending",
+        errorCode: null,
+      },
     };
+  }
+
+  private async withArchive(
+    result: GoogleReviewAssignmentView,
+    committed: CommittedProfileAssignment,
+  ): Promise<GoogleReviewAssignmentView> {
+    try {
+      const archived = await this.archiver.archiveApprovedThread({
+        organizationId: committed.organizationId,
+        contactId: null,
+        gmailThreadId: committed.threadId,
+      });
+      return {
+        ...result,
+        archiveSync: {
+          conversationId: archived.id,
+          state: archived.archiveState,
+          errorCode: null,
+        },
+      };
+    } catch (error) {
+      return {
+        ...result,
+        archiveSync: {
+          conversationId: null,
+          state: "retry_required",
+          errorCode: gmailFailureCode(error),
+        },
+      };
+    }
   }
 
   private async writeSyncStateBestEffort(input: {
