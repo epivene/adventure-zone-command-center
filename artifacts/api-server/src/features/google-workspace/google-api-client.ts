@@ -2,6 +2,9 @@ import type {
   GoogleCalendarEvent,
   GoogleGmailDraft,
   GoogleCalendarSummary,
+  DriveCreateFileInput,
+  DriveUpdateFileInput,
+  GoogleDriveBackupFile,
   GoogleDriveFile,
   GoogleDrivePage,
   GoogleLabelSummary,
@@ -17,6 +20,8 @@ import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
 
 export const GOOGLE_WORKSPACE_GMAIL_COMPOSE_SCOPE = "https://www.googleapis.com/auth/gmail.compose";
 export const GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE = "https://www.googleapis.com/auth/gmail.modify";
+export const GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE =
+  "https://www.googleapis.com/auth/drive.file";
 
 export const GOOGLE_WORKSPACE_READ_SCOPES = [
   "openid",
@@ -24,6 +29,7 @@ export const GOOGLE_WORKSPACE_READ_SCOPES = [
   GOOGLE_WORKSPACE_GMAIL_MODIFY_SCOPE,
   "https://www.googleapis.com/auth/calendar.readonly",
   "https://www.googleapis.com/auth/drive.readonly",
+  GOOGLE_WORKSPACE_DRIVE_FILE_SCOPE,
 ] as const;
 export const GOOGLE_WORKSPACE_REQUIRED_SCOPES = [...GOOGLE_WORKSPACE_READ_SCOPES] as const;
 
@@ -37,6 +43,10 @@ const calendarListEndpoint =
   "https://www.googleapis.com/calendar/v3/users/me/calendarList";
 const calendarBaseEndpoint = "https://www.googleapis.com/calendar/v3/calendars";
 const driveFilesEndpoint = "https://www.googleapis.com/drive/v3/files";
+const driveUploadEndpoint = "https://www.googleapis.com/upload/drive/v3/files";
+const driveFolderMimeType = "application/vnd.google-apps.folder";
+const driveFileFields =
+  "id,name,mimeType,parents,webViewLink,md5Checksum";
 
 type TokenResponse = {
   access_token?: unknown;
@@ -435,6 +445,136 @@ export function createGoogleWorkspaceReadClient(input: {
     return response.status === 204 ? {} : responseJson(response);
   }
 
+  function requiredDriveValue(value: string, code: string): string {
+    const normalized = value.normalize("NFC").trim();
+    if (!normalized || normalized.length > 500 || /[\r\n\0]/.test(normalized)) {
+      throw clientError(code);
+    }
+    return normalized;
+  }
+
+  function driveSearchLiteral(value: string): string {
+    return value.replaceAll("\\", "\\\\").replaceAll("'", "\\'");
+  }
+
+  function driveBackupFile(value: unknown): GoogleDriveBackupFile {
+    if (!value || typeof value !== "object") {
+      throw clientError("GOOGLE_WORKSPACE_DRIVE_RESPONSE_INVALID");
+    }
+    const file = value as Record<string, unknown>;
+    if (
+      typeof file.id !== "string" ||
+      !file.id.trim() ||
+      typeof file.name !== "string" ||
+      !file.name.trim() ||
+      typeof file.mimeType !== "string" ||
+      !file.mimeType.trim()
+    ) {
+      throw clientError("GOOGLE_WORKSPACE_DRIVE_RESPONSE_INVALID");
+    }
+    return {
+      id: file.id.trim(),
+      name: file.name.trim(),
+      mimeType: file.mimeType.trim(),
+      parents: Array.isArray(file.parents)
+        ? file.parents.filter((parent): parent is string =>
+            typeof parent === "string" && Boolean(parent.trim())
+          )
+        : [],
+      webViewLink:
+        typeof file.webViewLink === "string" && file.webViewLink.trim()
+          ? file.webViewLink.trim()
+          : null,
+      md5Checksum:
+        typeof file.md5Checksum === "string" && file.md5Checksum.trim()
+          ? file.md5Checksum.trim()
+          : null,
+    };
+  }
+
+  function driveMultipartBody(
+    metadata: Record<string, unknown>,
+    mimeType: string,
+    bytes: Uint8Array,
+  ): { body: Uint8Array; contentType: string } {
+    const boundary = `azcc-drive-${Math.random().toString(36).slice(2)}`;
+    const before = Buffer.from(
+      [
+        `--${boundary}`,
+        "Content-Type: application/json; charset=UTF-8",
+        "",
+        JSON.stringify(metadata),
+        `--${boundary}`,
+        `Content-Type: ${mimeType}`,
+        "",
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
+    const after = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
+    return {
+      body: new Uint8Array(Buffer.concat([before, Buffer.from(bytes), after])),
+      contentType: `multipart/related; boundary=${boundary}`,
+    };
+  }
+
+  async function authorizedDriveRequest(
+    url: string,
+    init: Omit<RequestInit, "headers"> & {
+      headers?: Record<string, string>;
+    } = {},
+    retryUnauthorized = true,
+  ): Promise<Record<string, unknown>> {
+    const token = await currentAccessToken(!retryUnauthorized);
+    const response = await fetcher(url, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(init.headers ?? {}),
+      },
+    });
+    if (response.status === 401 && retryUnauthorized) {
+      accessToken = null;
+      return authorizedDriveRequest(url, init, false);
+    }
+    const payload = await responseJson(response);
+    if (response.status === 401) {
+      throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 403) {
+      const error =
+        payload.error && typeof payload.error === "object"
+          ? payload.error as Record<string, unknown>
+          : {};
+      const reasons = Array.isArray(error.errors)
+        ? error.errors.flatMap((entry) =>
+            entry &&
+            typeof entry === "object" &&
+            typeof (entry as Record<string, unknown>).reason === "string"
+              ? [String((entry as Record<string, unknown>).reason)]
+              : [],
+          )
+        : [];
+      if (reasons.some((reason) =>
+        /^(rateLimitExceeded|userRateLimitExceeded|quotaExceeded|dailyLimitExceeded)$/i
+          .test(reason)
+      )) {
+        throw clientError("GOOGLE_WORKSPACE_DRIVE_RETRYABLE_FAILURE");
+      }
+      throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    }
+    if (response.status === 429 || response.status >= 500) {
+      throw clientError("GOOGLE_WORKSPACE_DRIVE_RETRYABLE_FAILURE");
+    }
+    if (response.status === 404) {
+      throw clientError("GOOGLE_WORKSPACE_DRIVE_SOURCE_NOT_FOUND");
+    }
+    if (!response.ok) {
+      throw clientError("GOOGLE_WORKSPACE_DRIVE_WRITE_FAILED");
+    }
+    return payload;
+  }
+
   async function authorizedBytes(url: string, retryUnauthorized = true): Promise<Uint8Array> {
     const token = await currentAccessToken(!retryUnauthorized);
     const response = await fetcher(url, { headers: { authorization: `Bearer ${token}` } });
@@ -447,6 +587,180 @@ export function createGoogleWorkspaceReadClient(input: {
   }
 
   return {
+    driveBackup: {
+      async findChild(
+        parentId: string,
+        name: string,
+        mimeType?: string,
+      ): Promise<GoogleDriveBackupFile | null> {
+        const parent = requiredDriveValue(
+          parentId,
+          "GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID",
+        );
+        const childName = requiredDriveValue(
+          name,
+          "GOOGLE_WORKSPACE_DRIVE_NAME_INVALID",
+        );
+        const url = new URL(driveFilesEndpoint);
+        const clauses = [
+          `'${driveSearchLiteral(parent)}' in parents`,
+          `name = '${driveSearchLiteral(childName)}'`,
+          "trashed = false",
+        ];
+        if (mimeType) {
+          clauses.push(
+            `mimeType = '${driveSearchLiteral(requiredDriveValue(
+              mimeType,
+              "GOOGLE_WORKSPACE_DRIVE_MIME_INVALID",
+            ))}'`,
+          );
+        }
+        url.searchParams.set("q", clauses.join(" and "));
+        url.searchParams.set("pageSize", "2");
+        url.searchParams.set("fields", `files(${driveFileFields})`);
+        const payload = await authorizedDriveRequest(url.toString());
+        const files = Array.isArray(payload.files) ? payload.files : [];
+        return files.length ? driveBackupFile(files[0]) : null;
+      },
+
+      async createFolder(
+        parentId: string,
+        name: string,
+      ): Promise<GoogleDriveBackupFile> {
+        const parent = requiredDriveValue(
+          parentId,
+          "GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID",
+        );
+        const folderName = requiredDriveValue(
+          name,
+          "GOOGLE_WORKSPACE_DRIVE_NAME_INVALID",
+        );
+        const url = new URL(driveFilesEndpoint);
+        url.searchParams.set("fields", driveFileFields);
+        return driveBackupFile(await authorizedDriveRequest(url.toString(), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: folderName,
+            mimeType: driveFolderMimeType,
+            parents: [parent],
+          }),
+        }));
+      },
+
+      async createFile(
+        createInput: DriveCreateFileInput,
+      ): Promise<GoogleDriveBackupFile> {
+        const parent = requiredDriveValue(
+          createInput.parentId,
+          "GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID",
+        );
+        const name = requiredDriveValue(
+          createInput.name,
+          "GOOGLE_WORKSPACE_DRIVE_NAME_INVALID",
+        );
+        const mimeType = requiredDriveValue(
+          createInput.mimeType,
+          "GOOGLE_WORKSPACE_DRIVE_MIME_INVALID",
+        );
+        const multipart = driveMultipartBody(
+          { name, mimeType, parents: [parent] },
+          mimeType,
+          createInput.bytes,
+        );
+        const url = new URL(driveUploadEndpoint);
+        url.searchParams.set("uploadType", "multipart");
+        url.searchParams.set("fields", driveFileFields);
+        return driveBackupFile(await authorizedDriveRequest(url.toString(), {
+          method: "POST",
+          headers: { "content-type": multipart.contentType },
+          body: multipart.body,
+        }));
+      },
+
+      async updateFile(
+        updateInput: DriveUpdateFileInput,
+      ): Promise<GoogleDriveBackupFile> {
+        const fileId = requiredDriveValue(
+          updateInput.fileId,
+          "GOOGLE_WORKSPACE_DRIVE_FILE_INVALID",
+        );
+        const metadata: Record<string, unknown> = {};
+        if (updateInput.name !== undefined) {
+          metadata.name = requiredDriveValue(
+            updateInput.name,
+            "GOOGLE_WORKSPACE_DRIVE_NAME_INVALID",
+          );
+        }
+        if (updateInput.mimeType !== undefined) {
+          metadata.mimeType = requiredDriveValue(
+            updateInput.mimeType,
+            "GOOGLE_WORKSPACE_DRIVE_MIME_INVALID",
+          );
+        }
+        const moving = updateInput.parentId !== undefined ||
+          updateInput.currentParentId !== undefined;
+        if (moving && (!updateInput.parentId || !updateInput.currentParentId)) {
+          throw clientError("GOOGLE_WORKSPACE_DRIVE_MOVE_INVALID");
+        }
+        if (!updateInput.bytes && !moving && Object.keys(metadata).length === 0) {
+          throw clientError("GOOGLE_WORKSPACE_DRIVE_UPDATE_EMPTY");
+        }
+        const url = new URL(
+          `${updateInput.bytes ? driveUploadEndpoint : driveFilesEndpoint}/${encodeURIComponent(fileId)}`,
+        );
+        url.searchParams.set("fields", driveFileFields);
+        if (updateInput.bytes) url.searchParams.set("uploadType", "multipart");
+        if (moving) {
+          url.searchParams.set(
+            "addParents",
+            requiredDriveValue(
+              updateInput.parentId!,
+              "GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID",
+            ),
+          );
+          url.searchParams.set(
+            "removeParents",
+            requiredDriveValue(
+              updateInput.currentParentId!,
+              "GOOGLE_WORKSPACE_DRIVE_PARENT_INVALID",
+            ),
+          );
+        }
+        if (updateInput.bytes) {
+          const mimeType = requiredDriveValue(
+            updateInput.mimeType ?? "application/octet-stream",
+            "GOOGLE_WORKSPACE_DRIVE_MIME_INVALID",
+          );
+          const multipart = driveMultipartBody(
+            metadata,
+            mimeType,
+            updateInput.bytes,
+          );
+          return driveBackupFile(await authorizedDriveRequest(url.toString(), {
+            method: "PATCH",
+            headers: { "content-type": multipart.contentType },
+            body: multipart.body,
+          }));
+        }
+        return driveBackupFile(await authorizedDriveRequest(url.toString(), {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(metadata),
+        }));
+      },
+
+      async getFile(fileId: string): Promise<GoogleDriveBackupFile> {
+        const id = requiredDriveValue(
+          fileId,
+          "GOOGLE_WORKSPACE_DRIVE_FILE_INVALID",
+        );
+        const url = new URL(`${driveFilesEndpoint}/${encodeURIComponent(id)}`);
+        url.searchParams.set("fields", driveFileFields);
+        return driveBackupFile(await authorizedDriveRequest(url.toString()));
+      },
+    },
+
     authorizationUrl({ state }: { state: string }): string {
       if (!state.trim()) {
         throw clientError("GOOGLE_WORKSPACE_OAUTH_STATE_INVALID");
