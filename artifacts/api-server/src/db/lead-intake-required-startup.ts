@@ -61,6 +61,12 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
     locked = true;
     const schemaChanged = await (options?.ensureSchema ?? ensureLeadIntakeSchema)(client);
     throwIfConnectionFailed();
+    // Template seeding uses the current ORM shape before the later Boss work
+    // request migration runs. Ensure its shared column exists under this lock.
+    await client.query(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS body_format text NOT NULL DEFAULT 'plain_text'",
+    );
+    throwIfConnectionFailed();
     await (options?.ensureTemplateSeed ?? (() => ensureCommunicationTemplateSeed(defaultDatabase as never)))();
     throwIfConnectionFailed();
     const templateReady = await (options?.isTemplateReady ?? (() => isApprovedCommunicationTemplateSeedReady(defaultDatabase as never)))();

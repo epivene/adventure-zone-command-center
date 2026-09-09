@@ -5,6 +5,51 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 
 describe("lead email startup readiness", () => {
+  it("adds the shared template column before seeding even when lead intake is already current", async () => {
+    let bodyFormatExists = false;
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("ADD COLUMN IF NOT EXISTS body_format")) bodyFormatExists = true;
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    await expect(ensureLeadIntakeSchemaBeforeListen({
+      pool: { connect: async () => client },
+      ensureSchema: async () => false,
+      ensureTemplateSeed: async () => {
+        if (!bodyFormatExists) throw new Error('column "body_format" does not exist');
+      },
+      isTemplateReady: async () => true,
+    })).resolves.toBe(false);
+    expect(client.query).toHaveBeenCalledWith(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS body_format text NOT NULL DEFAULT 'plain_text'",
+    );
+  });
+
+  it("does not seed templates if the shared column migration fails", async () => {
+    const failure = new Error("column migration failed");
+    const seed = vi.fn();
+    const client = {
+      query: vi.fn(async (sql: string) => {
+        if (sql.includes("ALTER TABLE communication_templates")) throw failure;
+        return { rows: [] };
+      }),
+      release: vi.fn(),
+    };
+    await expect(ensureLeadIntakeSchemaBeforeListen({
+      pool: { connect: async () => client },
+      ensureSchema: async () => false,
+      ensureTemplateSeed: seed,
+      isTemplateReady: async () => true,
+    })).rejects.toThrow("column migration failed");
+    expect(seed).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledWith(failure);
+    expect(client.query).toHaveBeenLastCalledWith(
+      "SELECT pg_advisory_unlock(hashtext('adventure-zone:lead-intake-schema'))",
+    );
+  });
+
   it("seeds and verifies the exact approved template under the startup lock before releasing it", async () => {
     const order: string[] = [];
     const client = {
@@ -22,7 +67,7 @@ describe("lead email startup readiness", () => {
     });
 
     expect(result).toBe(true);
-    expect(order).toEqual(["lock", "schema", "seed", "ready", "unlock", "release"]);
+    expect(order).toEqual(["lock", "schema", "query", "seed", "ready", "unlock", "release"]);
   });
 
   it("fails startup when the exact approved template is not ready", async () => {
