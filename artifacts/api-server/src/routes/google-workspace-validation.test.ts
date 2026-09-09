@@ -216,7 +216,7 @@ describe("Google Workspace recent validation route", () => {
     }));
     const response = await request(appWith({ deleteSelectedLabels }))
       .post("/google-workspace/profile-labels/cleanup")
-      .send({ labelIds: ["Label_old"] });
+      .send({ labelIds: ["Label_old"], confirm: true });
 
     expect(response.status).toBe(200);
     expect(deleteSelectedLabels).toHaveBeenCalledWith(["Label_old"]);
@@ -226,13 +226,21 @@ describe("Google Workspace recent validation route", () => {
     const deleteSelectedLabels = vi.fn();
     const empty = await request(appWith({ deleteSelectedLabels }))
       .post("/google-workspace/profile-labels/cleanup")
-      .send({ labelIds: [] });
+      .send({ labelIds: [], confirm: true });
     const oversized = await request(appWith({ deleteSelectedLabels }))
       .post("/google-workspace/profile-labels/cleanup")
-      .send({ labelIds: Array.from({ length: 101 }, (_, index) => `Label_${index}`) });
+      .send({
+        labelIds: Array.from({ length: 101 }, (_, index) => `Label_${index}`),
+        confirm: true,
+      });
+
+    const unconfirmed = await request(appWith({ deleteSelectedLabels }))
+      .post("/google-workspace/profile-labels/cleanup")
+      .send({ labelIds: ["Label_old"] });
 
     expect(empty.status).toBe(400);
     expect(oversized.status).toBe(400);
+    expect(unconfirmed.status).toBe(400);
     expect(deleteSelectedLabels).not.toHaveBeenCalled();
   });
 
