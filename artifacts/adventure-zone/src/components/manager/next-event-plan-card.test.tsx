@@ -24,9 +24,40 @@ describe("NextEventPlanCard", () => {
 
   it("shows the destination and opens coordinate directions while selecting the event", () => {
     const onSelect = vi.fn();
-    render(<NextEventPlanCard event={event} onSelect={onSelect} />);
+    render(<NextEventPlanCard
+      event={event}
+      onSelect={onSelect}
+      route={{
+        trip: {
+          id: "trip-1",
+          name: "Kristy route",
+          startLabel: "Prior stop",
+          startLatitude: 44.5,
+          startLongitude: -109.5,
+          endLabel: "Home",
+          endLatitude: 40.2,
+          endLongitude: -111.9,
+          mpg: 10,
+          fuelPricePerGallon: 3.5,
+        },
+        stops: [{ ...event, id: "stop-1", sortOrder: 1 }],
+        segments: [{
+          id: "segment-1",
+          fromLabel: "Prior stop",
+          toLabel: "Eastern Montana Fair",
+          effectiveMiles: 120,
+          effectiveMinutes: 150,
+        }],
+      }}
+    />);
 
     expect(screen.getByText("Miles City, MT")).toBeInTheDocument();
+    expect(screen.getByText(/Event dates:/)).toHaveTextContent(/Aug 20/);
+    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 18.*Aug 19/);
+    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 21/);
+    expect(screen.getByText("120 mi")).toBeInTheDocument();
+    expect(screen.getByText("2 hr 30 min")).toBeInTheDocument();
+    expect(screen.getByText("$42.00 estimated gas")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get directions" })).toHaveAttribute(
       "href",
       expect.stringContaining("destination=46.4083%2C-105.8406"),
