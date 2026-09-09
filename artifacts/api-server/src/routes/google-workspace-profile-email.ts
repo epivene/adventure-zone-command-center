@@ -1,7 +1,8 @@
 import { Router, type IRouter } from "express";
 
-import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/google-api-types";
+import { GoogleProfileEmailArchiveService } from "@/features/google-workspace/google-profile-email-archive-service";
+import type { ArchivedProfileEmailThread } from "@/features/google-workspace/google-profile-email-archive-types";
 import {
   GoogleProfileFileService,
   type GoogleProfileFile,
@@ -23,6 +24,14 @@ type ValidationAccess = {
     organizationId: string;
     threadId: string;
   }): Promise<boolean>;
+};
+
+type ArchiveAccess = {
+  archiveApprovedThread(input: {
+    organizationId: string;
+    contactId: string | null;
+    gmailThreadId: string;
+  }): Promise<ArchivedProfileEmailThread>;
 };
 
 type FileAccess = {
@@ -106,12 +115,14 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   connection?: ConnectionAccess;
   validationRepository?: ValidationAccess;
   fileService?: FileAccess;
+  archiveService?: ArchiveAccess;
 }): IRouter {
   const router: IRouter = Router();
-  const connection = options?.connection ?? new PostgresGoogleConnectionRepository();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const fileService = options?.fileService ?? new GoogleProfileFileService();
+  const archiveService =
+    options?.archiveService ?? new GoogleProfileEmailArchiveService();
 
   router.get(
     "/google-workspace/profiles/:organizationId/emails",
@@ -135,18 +146,18 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           return;
         }
 
-        const client = await connection.createReadClient();
-        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
-        if (!client.getThreadDetail) {
-          throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
-        }
-
         const threadEntries = [...grouped.entries()];
         const settled = await Promise.allSettled(
           threadEntries.map(async ([threadId, threadMappings]) => ({
             threadId,
             threadMappings,
-            thread: await client.getThreadDetail!(threadId),
+            thread: await archiveService.archiveApprovedThread({
+              organizationId: req.params.organizationId,
+              contactId:
+                threadMappings.find((mapping) => mapping.contactId)?.contactId ??
+                null,
+              gmailThreadId: threadId,
+            }),
           })),
         );
 
@@ -183,6 +194,9 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
                 ...new Set(threadMappings.flatMap((mapping) => mapping.evidenceCodes)),
               ],
               originalGmailUrl: thread.originalGmailUrl || gmailUrl(threadId),
+              conversationId: thread.id,
+              savedCopy: true,
+              archiveState: thread.archiveState,
             };
           })
           .sort(
@@ -231,12 +245,34 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           return;
         }
 
-        const client = await connection.createReadClient();
-        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
-        if (!client.getThreadDetail) {
-          throw new Error("GOOGLE_WORKSPACE_PROFILE_EMAIL_UNAVAILABLE");
-        }
-        res.json(await client.getThreadDetail(req.params.threadId));
+        const archived = await archiveService.archiveApprovedThread({
+          organizationId: req.params.organizationId,
+          contactId: null,
+          gmailThreadId: req.params.threadId,
+        });
+        res.json({
+          id: req.params.threadId,
+          conversationId: archived.id,
+          subject: archived.subject,
+          originalGmailUrl:
+            archived.originalGmailUrl || gmailUrl(req.params.threadId),
+          savedCopy: true,
+          archiveState: archived.archiveState,
+          lastSyncedAt: archived.lastSyncedAt,
+          lastGmailErrorCode: archived.lastGmailErrorCode,
+          messages: archived.messages.map((message) => ({
+            id: message.gmailMessageId,
+            internalDateMs: message.internalDateMs,
+            from: message.from,
+            to: message.to,
+            cc: message.cc,
+            subject: message.subject,
+            date: message.date,
+            direction: message.direction,
+            bodyText: message.bodyText,
+            attachments: message.attachments,
+          })),
+        });
       } catch (error) {
         const code = errorCode(error);
         res.status(errorStatus(code)).json({ error: code });
