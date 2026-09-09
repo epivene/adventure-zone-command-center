@@ -78,7 +78,7 @@ export class EventLifecycleRepository {
         eq(eventLegLifecycle.legId, legId),
         isNotNull(eventLegLifecycle.checkedOutAt),
       ))
-      .orderBy(desc(eventLegLifecycle.checkedOutAt))
+      .orderBy(desc(eventLegLifecycle.checkedOutAt), desc(eventLegLifecycle.id))
       .limit(1))[0] ?? null;
   }
 
