@@ -169,6 +169,7 @@ export async function renderCommunicationTemplate(
     templateId: template.id,
     subjectTemplate: template.subjectTemplate,
     bodyTemplate: template.bodyTemplate,
+    bodyFormat: template.bodyFormat,
     requiredPlaceholders: template.requiredPlaceholders,
     values,
   });
