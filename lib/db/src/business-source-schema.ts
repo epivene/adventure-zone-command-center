@@ -81,6 +81,10 @@ export const communicationTemplateChannelValues = [
 export type CommunicationTemplateChannel =
   (typeof communicationTemplateChannelValues)[number];
 
+export const communicationTemplateBodyFormatValues = ["plain_text", "html"] as const;
+export type CommunicationTemplateBodyFormat =
+  (typeof communicationTemplateBodyFormatValues)[number];
+
 export const sourceDocumentLinkKindValues = [
   "profile",
   "location",
@@ -362,6 +366,10 @@ export const communicationTemplates = pgTable(
     category: text("category").notNull(),
     subjectTemplate: text("subject_template"),
     bodyTemplate: text("body_template").notNull(),
+    bodyFormat: text("body_format")
+      .$type<CommunicationTemplateBodyFormat>()
+      .default("plain_text")
+      .notNull(),
     allowedPlaceholders: text("allowed_placeholders")
       .array()
       .default(sql`ARRAY[]::text[]`)
@@ -424,6 +432,10 @@ export const communicationTemplates = pgTable(
     check(
       "communication_templates_channel_valid",
       sql`${table.channel} in ('email','internal_email')`,
+    ),
+    check(
+      "communication_templates_body_format_valid",
+      sql`${table.bodyFormat} in ('plain_text','html')`,
     ),
     check(
       "communication_templates_access_valid",
