@@ -4,6 +4,7 @@ import { DrizzleLegManagerRepository } from "@/features/leg-manager/leg-manager-
 import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-manager-middleware";
 import { loadLegManagerDashboard } from "@/features/leg-manager/leg-manager-dashboard";
 import { DrizzleTripRepository } from "@/features/trips/trip-repository";
+import { DrizzleRoutingCacheStore, OsrmRoutingProvider, RoutingEstimator } from "@/features/trips/routing";
 import { DrizzleManagerMapBookingRepository } from "@/features/leg-manager/manager-map-booking-repository";
 import { EventLifecycleRepository } from "@/features/leg-manager/event-lifecycle-repository";
 import { DrizzleScheduleIssueRepository, scheduleIssueKinds } from "@/features/leg-manager/schedule-issue-repository";
@@ -20,11 +21,13 @@ import { createReviewForManager, DrizzleEventReviewRepository, listDueReviewsFor
 import { createIncidentForManager, DrizzleIncidentRepository } from "@/features/leg-manager/incident-repository";
 import { attachIncidentPhotoUrls } from "@/features/leg-manager/incident-photo-service";
 import { managerDashboardResponseSchema } from "@workspace/api-zod";
+const managerRoutingEstimator = new RoutingEstimator(new OsrmRoutingProvider(), new DrizzleRoutingCacheStore(db));
 const router:IRouter=Router();const requireManager=createRequireLegManagerMiddleware(new DrizzleLegManagerRepository(db));const finance=new DrizzleFinanceRepository(db);const crew=new DrizzleCrewRepository(db);const reviews=new DrizzleEventReviewRepository(db);const incidents=new DrizzleIncidentRepository(db);
 async function data(req:any,res:any){
   const result=await loadLegManagerDashboard({
     tripRepository:new DrizzleTripRepository(db),
     bookingRepository:new DrizzleManagerMapBookingRepository(db),
+    routingEstimator:managerRoutingEstimator,
     lifecycleRepository:new EventLifecycleRepository(db),
     reviewRepository:reviews,
     financeRepository:finance,
