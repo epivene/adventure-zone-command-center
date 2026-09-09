@@ -31,6 +31,14 @@ export interface ManagerMapBookingRepository {
   listForLeg(legId: string): Promise<ManagerMapBookingRecord[]>;
 }
 
+export interface ManagerRoutingEstimator {
+  estimate(
+    from: { latitude: number; longitude: number },
+    to: { latitude: number; longitude: number },
+    options: { preferLive: boolean },
+  ): Promise<{ miles: number; minutes: number } | null>;
+}
+
 export interface ManagerMapHandoffRepository {
   listForLeg(legId: string, options?: { approvedOnly?: boolean }): Promise<EquipmentHandoff[]>;
 }
@@ -261,6 +269,7 @@ export async function loadManagerScopedScheduleData(
   dependencies: {
     tripRepository: ManagerScheduleTripRepository;
     bookingRepository: ManagerMapBookingRepository;
+    routingEstimator?: ManagerRoutingEstimator;
   },
   legId: string,
   now = new Date(),
@@ -326,7 +335,7 @@ export async function loadManagerScopedScheduleData(
 
   const firstTrip = allTrips[0];
   const firstAssignedBooking = listedBookings[0];
-  const route = current
+  let route: ManagerScopedMapData["route"] = current
     ? {
         trip: {
           id: current.trip.id,
@@ -368,6 +377,72 @@ export async function loadManagerScopedScheduleData(
       }
     : null;
 
+  const routeAnchor = events.find((event) => alwaysVisibleBookingIds.has(event.bookingId));
+  const nextEvent = routeAnchor
+    ? events.find((event) =>
+        event.bookingId !== routeAnchor.bookingId
+        && isUpcomingManagerScheduleEvent(event, now))
+    : undefined;
+  const routeAlreadyTargetsNextEvent = nextEvent
+    ? route?.stops.some((stop) => stop.bookingId === nextEvent.bookingId)
+    : false;
+  if (
+    routeAnchor
+    && nextEvent
+    && !routeAlreadyTargetsNextEvent
+    && routeAnchor.latitude !== null
+    && routeAnchor.longitude !== null
+    && nextEvent.latitude !== null
+    && nextEvent.longitude !== null
+  ) {
+    const estimate = await dependencies.routingEstimator?.estimate(
+      { latitude: routeAnchor.latitude, longitude: routeAnchor.longitude },
+      { latitude: nextEvent.latitude, longitude: nextEvent.longitude },
+      { preferLive: false },
+    ) ?? null;
+    const configuredTrip = current?.trip
+      ?? allTrips.find((trip) => trip.mpg != null || trip.fuelPricePerGallon != null)
+      ?? null;
+    route = {
+      trip: {
+        id: configuredTrip?.id ?? `manager-navigation:${legId}`,
+        name: `${routeAnchor.bookingName} → ${nextEvent.bookingName}`,
+        startLabel: routeAnchor.bookingName,
+        startLatitude: routeAnchor.latitude,
+        startLongitude: routeAnchor.longitude,
+        endLabel: nextEvent.bookingName,
+        endLatitude: nextEvent.latitude,
+        endLongitude: nextEvent.longitude,
+        mpg: configuredTrip?.mpg ?? null,
+        fuelPricePerGallon: configuredTrip?.fuelPricePerGallon ?? null,
+      },
+      stops: [{
+        id: `manager-navigation:${nextEvent.bookingId}`,
+        bookingId: nextEvent.bookingId,
+        bookingName: nextEvent.bookingName,
+        city: nextEvent.city,
+        region: nextEvent.region,
+        latitude: nextEvent.latitude,
+        longitude: nextEvent.longitude,
+        sortOrder: 1,
+        startsAt: nextEvent.startsAt,
+        endsAt: nextEvent.endsAt,
+        operationalStartsAt: nextEvent.operationalStartsAt,
+        operationalEndsAt: nextEvent.operationalEndsAt,
+        status: nextEvent.status,
+        probability: nextEvent.probability,
+        scheduleState: nextEvent.scheduleState,
+      }],
+      segments: [{
+        id: `manager-navigation:${routeAnchor.bookingId}:${nextEvent.bookingId}`,
+        fromLabel: routeAnchor.bookingName,
+        toLabel: nextEvent.bookingName,
+        effectiveMiles: estimate?.miles ?? null,
+        effectiveMinutes: estimate?.minutes ?? null,
+      }],
+    };
+  }
+
   return {
     leg: {
       id: legId,
@@ -384,6 +459,7 @@ export async function loadManagerScopedMapData(
   dependencies: {
     tripRepository: ManagerMapTripRepository;
     bookingRepository: ManagerMapBookingRepository;
+    routingEstimator?: ManagerRoutingEstimator;
     handoffRepository: ManagerMapHandoffRepository;
     lifecycleRepository?: {
       getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null>;
