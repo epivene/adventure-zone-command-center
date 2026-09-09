@@ -18,6 +18,7 @@ export type BusinessDocumentLink = {
   id: string;
   targetKind: "profile" | "booking" | "event_family";
   targetId: string;
+  targetLabel?: string | null;
 };
 
 export type BusinessDocumentRecord = {
