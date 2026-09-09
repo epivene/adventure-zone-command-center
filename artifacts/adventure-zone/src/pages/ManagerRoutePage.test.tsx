@@ -3,7 +3,7 @@ import { cleanup,render,screen,waitFor } from "@testing-library/react";
 import { afterEach,describe,expect,it,vi } from "vitest";
 import ManagerRoutePage from "./ManagerRoutePage";
 
-const nextEvent={bookingId:"next",bookingName:"Next Fair",city:"Fargo",region:"ND",latitude:46.8772,longitude:-96.7898,startsAt:"2026-08-17T12:00:00Z",endsAt:"2026-08-19T12:00:00Z",operationalStartsAt:"2026-08-14T00:00:00Z",operationalEndsAt:"2026-08-22T23:59:00Z",status:"confirmed",probability:"definite",scheduleState:"booked"} as const;
+const nextEvent={bookingId:"next",bookingName:"Next Fair",city:"Fargo",region:"ND",latitude:46.8772,longitude:-96.7898,startsAt:"2026-08-17T12:00:00Z",endsAt:"2026-08-19T12:00:00Z",operationalStartsAt:"2026-08-14T00:00:00Z",operationalEndsAt:"2026-08-23T00:00:00Z",status:"confirmed",probability:"definite",scheduleState:"booked"} as const;
 const api=vi.fn(async()=>({route:{trip:{id:"t",name:"Dakotas",startLabel:"Home",startLatitude:47,startLongitude:-103,endLabel:"Fargo",endLatitude:46.8772,endLongitude:-96.7898,mpg:10,fuelPricePerGallon:3.5},stops:[{...nextEvent,id:"stop-next",sortOrder:1}],segments:[{id:"seg-next",fromLabel:"Home",toLabel:"Fargo",effectiveMiles:120,effectiveMinutes:150}]},events:[nextEvent],nextEvent}));
 vi.mock("@/lib/manager-auth-context",()=>({useManagerAuth:()=>({managerApi:api})}));
 vi.mock("@/features/manager-assistant/manager-assistant-context",()=>({useManagerAssistant:()=>({activeContext:null,setActiveContext:vi.fn(),open:false,openAssistant:vi.fn(),closeAssistant:vi.fn(),prefill:""})}));
