@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { CheckCircle2, Cloud, LockKeyhole, Unplug } from "lucide-react";
 
 import { GoogleHistoricalBackfill } from "@/components/google-workspace/google-historical-backfill";
@@ -133,6 +134,11 @@ export function SettingsGoogleWorkspacePage({ openAuthorizationUrl = defaultOpen
   return <div className="mx-auto grid max-w-5xl gap-6 pb-10">
     <header><p className="text-sm font-bold uppercase tracking-[0.16em] text-orange-700 dark:text-orange-300">Settings</p><h1 className="mt-1 text-3xl font-bold tracking-tight">Google Workspace</h1><p className="mt-2 max-w-3xl text-slate-600">Keep the company Gmail/files connection separate from David's operational calendar. Confirmed app bookings can mirror to David's calendar without giving that connection access to Gmail or Drive.</p></header>
     <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-900 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-200"><LockKeyhole className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="font-semibold">Separate, narrow Google permissions</p><p className="mt-1 text-sm text-blue-800 dark:text-blue-300">The company connection can read Gmail, create drafts, and—when Email Review assigns a thread—apply one profile label and remove Inbox from that thread. Ignore never changes Gmail, and later replies stay visible in Inbox and unread. David's separate operational connection receives Calendar access only. Reconnect the company account once to approve the updated Gmail permission.</p></div></div>
+    <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900 dark:bg-emerald-950/30">
+      <h2 className="font-bold text-emerald-950 dark:text-emerald-100">Command Center Drive backup</h2>
+      <p className="mt-1 text-sm text-emerald-900 dark:text-emerald-200">Documents plus compact profile and follow-up summaries. Writes only inside the Command Center backup folder, keeping Amy’s system separate.</p>
+      <Link className="mt-2 inline-block text-sm font-bold text-emerald-800 underline dark:text-emerald-200" href="/settings/google-workspace/backup">Open Drive backup</Link>
+    </section>
     {loading ? <p className="text-slate-500">Loading Google Workspace settings…</p> : null}
     {error ? <ErrorNotice message={error} /> : null}
     {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200" role="status">{notice}</div> : null}
