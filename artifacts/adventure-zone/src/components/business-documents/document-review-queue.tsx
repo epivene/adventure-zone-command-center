@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Check, Clock3, RefreshCw, X } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Input } from "@workspace/avz-crm/components/ui/input";
@@ -28,12 +28,19 @@ type DocumentReviewQueueProps = {
   api?: Pick<typeof businessDocumentsApi, "reviewItems" | "searchProfiles" | "reviewAction" | "open">;
 };
 
+const REVIEW_PAGE_SIZE = 25;
+type ReviewSort = "newest" | "oldest" | "name_asc";
+
 export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentReviewQueueProps = {}) {
   const [items, setItems] = useState<BusinessDocumentReviewItem[]>([]);
   const [categories, setCategories] = useState<Record<string, BusinessDocumentCategory>>({});
   const [profileQueries, setProfileQueries] = useState<Record<string, string>>({});
   const [profileResults, setProfileResults] = useState<Record<string, BusinessDocumentProfileOption[]>>({});
+  const [profileSearchCompleted, setProfileSearchCompleted] = useState<Record<string, boolean>>({});
   const [selectedProfiles, setSelectedProfiles] = useState<Record<string, BusinessDocumentProfileOption | undefined>>({});
+  const [queueQuery, setQueueQuery] = useState("");
+  const [sort, setSort] = useState<ReviewSort>("newest");
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [openingId, setOpeningId] = useState<string | null>(null);
@@ -50,6 +57,25 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
 
   useEffect(() => { void load(); }, []);
 
+  const filteredItems = useMemo(() => {
+    const query = queueQuery.trim().toLocaleLowerCase();
+    return items
+      .filter((item) => !query || `${item.displayName} ${item.originalFilename}`.toLocaleLowerCase().includes(query))
+      .sort((left, right) => {
+        if (sort === "name_asc") return left.displayName.localeCompare(right.displayName);
+        const difference = new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+        return sort === "oldest" ? difference : -difference;
+      });
+  }, [items, queueQuery, sort]);
+  const pageCount = Math.max(1, Math.ceil(filteredItems.length / REVIEW_PAGE_SIZE));
+  const resolvedPage = Math.min(page, pageCount);
+  const pageStart = (resolvedPage - 1) * REVIEW_PAGE_SIZE;
+  const visibleItems = filteredItems.slice(pageStart, pageStart + REVIEW_PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > pageCount) setPage(pageCount);
+  }, [page, pageCount]);
+
   async function searchProfiles(item: BusinessDocumentReviewItem) {
     const query = profileQueries[item.id]?.trim() ?? "";
     if (!query) return;
@@ -58,6 +84,7 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
     try {
       const results = await api.searchProfiles(query);
       setProfileResults((current) => ({ ...current, [item.id]: results }));
+      setProfileSearchCompleted((current) => ({ ...current, [item.id]: true }));
     } catch {
       setError("Could not search profiles.");
     } finally {
@@ -97,7 +124,24 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
   return (
     <section className="grid gap-3" aria-label="Document review queue">
       {error ? <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p> : null}
-      {items.map((item) => {
+      <div className="grid gap-3 rounded-xl border border-border bg-card p-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
+        <label className="grid gap-1 text-xs font-semibold text-foreground">
+          Find documents to sort
+          <Input aria-label="Find documents to sort" onChange={(event) => { setQueueQuery(event.target.value); setPage(1); }} placeholder="Search document name or filename" type="search" value={queueQuery} />
+        </label>
+        <label className="grid gap-1 text-xs font-semibold text-foreground">
+          Sort review documents
+          <select aria-label="Sort review documents" className="h-9 rounded-md border border-input bg-background px-3 text-sm" onChange={(event) => { setSort(event.target.value as ReviewSort); setPage(1); }} value={sort}>
+            <option value="newest">Newest first</option>
+            <option value="oldest">Oldest first</option>
+            <option value="name_asc">Name A–Z</option>
+          </select>
+        </label>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          {filteredItems.length ? `Showing ${pageStart + 1}–${pageStart + visibleItems.length} of ${filteredItems.length} documents` : "No documents match this search."}
+        </p>
+      </div>
+      {visibleItems.map((item) => {
         const category = categories[item.id] ?? item.category;
         const profileQuery = profileQueries[item.id] ?? "";
         const selectedProfile = selectedProfiles[item.id];
@@ -127,6 +171,7 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
                     setProfileQueries((current) => ({ ...current, [item.id]: event.target.value }));
                     setSelectedProfiles((current) => ({ ...current, [item.id]: undefined }));
                     setProfileResults((current) => ({ ...current, [item.id]: [] }));
+                    setProfileSearchCompleted((current) => ({ ...current, [item.id]: false }));
                   }} placeholder="Search profile name or city" value={profileQuery} />
                   <Button disabled={!profileQuery.trim() || searchingId === item.id} onClick={() => void searchProfiles(item)} size="sm" type="button" variant="outline">Search profiles</Button>
                 </div>
@@ -137,6 +182,7 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
               setProfileQueries((current) => ({ ...current, [item.id]: profile.name }));
               setProfileResults((current) => ({ ...current, [item.id]: [] }));
             }} type="button"><strong>{profile.name}</strong>{profile.city || profile.region ? <span className="ml-2 text-muted-foreground">{[profile.city, profile.region].filter(Boolean).join(", ")}</span> : null}</button>)}</div> : null}
+            {profileSearchCompleted[item.id] && !results.length && !selectedProfile ? <p className="mt-2 text-xs text-muted-foreground">No profiles found. Try fewer words or search by city.</p> : null}
             {selectedProfile ? <p className="mt-2 text-xs font-semibold text-emerald-700">Selected profile: {selectedProfile.name}</p> : null}
             <div className="mt-3 flex flex-wrap gap-2">
               <Button aria-label={`Open protected file for ${item.displayName}`} disabled={openingId === item.id} onClick={() => void openDocument(item)} size="sm" type="button" variant="outline">
@@ -154,6 +200,11 @@ export function DocumentReviewQueue({ api = businessDocumentsApi }: DocumentRevi
           </article>
         );
       })}
+      {filteredItems.length > REVIEW_PAGE_SIZE ? <nav aria-label="Review queue pages" className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card p-3">
+        <Button aria-label="Previous page" disabled={resolvedPage === 1} onClick={() => setPage((current) => Math.max(1, current - 1))} size="sm" type="button" variant="outline">Previous</Button>
+        <span className="text-xs font-semibold text-muted-foreground">Page {resolvedPage} of {pageCount}</span>
+        <Button aria-label="Next page" disabled={resolvedPage === pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))} size="sm" type="button" variant="outline">Next</Button>
+      </nav> : null}
     </section>
   );
 }

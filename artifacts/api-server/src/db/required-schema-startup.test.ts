@@ -48,6 +48,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureProfileTouch: async () => false,
       ensureDesignStudio: async () => false,
       ensureBusinessDocuments: async () => false,
+      ensureGoogleDriveBackup: async () => false,
     });
 
     expect(timeouts.get("required lead intake schema")).toBe(120_000);
@@ -71,6 +72,7 @@ describe("runRequiredSchemaStartup", () => {
       "required profile touch schema",
       "required Design Studio schema",
       "required business document schema",
+      "required Google Drive backup schema",
     ]);
   });
 
@@ -99,6 +101,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureProfileTouch: unchanged,
       ensureDesignStudio: unchanged,
       ensureBusinessDocuments: unchanged,
+      ensureGoogleDriveBackup: unchanged,
     });
 
     expect(ensurePaperNotes).toHaveBeenCalledTimes(2);
@@ -136,6 +139,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureProfileTouch: unchanged,
       ensureDesignStudio: unchanged,
       ensureBusinessDocuments: unchanged,
+      ensureGoogleDriveBackup: unchanged,
     });
 
     expect(ensurePaperNotes).toHaveBeenCalledTimes(3);
@@ -144,3 +148,5 @@ describe("runRequiredSchemaStartup", () => {
   });
 
 });
+
+

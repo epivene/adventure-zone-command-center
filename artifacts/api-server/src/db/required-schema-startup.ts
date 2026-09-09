@@ -15,6 +15,7 @@ import { ensureProfileTouchSchema } from "../features/organizations/profile-touc
 import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-startup";
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
+import { ensureGoogleDriveBackupSchemaBeforeListen } from "./google-drive-backup-required-startup";
 
 const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
 const REQUIRED_SCHEMA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
@@ -70,6 +71,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureProfileTouch?: RequiredStep;
   ensureDesignStudio?: RequiredStep;
   ensureBusinessDocuments?: RequiredStep;
+  ensureGoogleDriveBackup?: RequiredStep;
   sleep?: (delayMs: number) => Promise<void>;
 }): Promise<void> {
   const run = dependencies?.run ?? runStartupStep;
@@ -157,4 +159,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
     "required business document schema",
     dependencies?.ensureBusinessDocuments ?? ensureBusinessDocumentSchemaBeforeListen,
   );
+  await runRequired(
+    "required Google Drive backup schema",
+    dependencies?.ensureGoogleDriveBackup ?? ensureGoogleDriveBackupSchemaBeforeListen,
+  );
 }
+
+
