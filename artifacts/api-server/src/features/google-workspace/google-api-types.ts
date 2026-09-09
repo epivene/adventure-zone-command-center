@@ -8,18 +8,6 @@ export type GoogleLabelSummary = {
 export type GoogleGmailLabelMutationClient = {
   listLabels(): Promise<GoogleLabelSummary[]>;
   getThreadLabelIds(threadId: string): Promise<string[]>;
-  createLabel?(name: string): Promise<GoogleLabelSummary>;
-  renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
-  modifyThreadLabels?(input: {
-    threadId: string;
-    addLabelIds: string[];
-    removeLabelIds: string[];
-  }): Promise<void>;
-  modifyMessageLabels?(input: {
-    messageId: string;
-    addLabelIds: string[];
-    removeLabelIds: string[];
-  }): Promise<void>;
   createLabel(name: string): Promise<GoogleLabelSummary>;
   renameLabel(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
   modifyThreadLabels(input: {
@@ -183,6 +171,18 @@ export interface GoogleWorkspaceReadClient {
   }>;
   accountIdentity(): Promise<GoogleWorkspaceAccountIdentity>;
   listLabels(): Promise<GoogleLabelSummary[]>;
+  createLabel?(name: string): Promise<GoogleLabelSummary>;
+  renameLabel?(input: { labelId: string; name: string }): Promise<GoogleLabelSummary>;
+  modifyThreadLabels?(input: {
+    threadId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
+  modifyMessageLabels?(input: {
+    messageId: string;
+    addLabelIds: string[];
+    removeLabelIds: string[];
+  }): Promise<void>;
   listCalendars(): Promise<GoogleCalendarSummary[]>;
   listCalendarEvents?(input: { calendarIds: string[]; timeMin: string; timeMax: string }): Promise<GoogleCalendarEvent[]>;
   listRecentMessageRefs?(limit: number): Promise<GoogleMessageRef[]>;
