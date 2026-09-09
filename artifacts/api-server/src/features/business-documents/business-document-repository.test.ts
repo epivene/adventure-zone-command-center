@@ -15,9 +15,9 @@ let database: PGlite;
 beforeEach(async () => {
   database = new PGlite();
   await database.exec(`
-    CREATE TABLE organizations (id uuid PRIMARY KEY);
-    CREATE TABLE bookings (id uuid PRIMARY KEY);
-    CREATE TABLE event_families (id uuid PRIMARY KEY);
+    CREATE TABLE organizations (id uuid PRIMARY KEY, name text NOT NULL DEFAULT 'Profile');
+    CREATE TABLE bookings (id uuid PRIMARY KEY, name text NOT NULL DEFAULT 'Booking');
+    CREATE TABLE event_families (id uuid PRIMARY KEY, name text NOT NULL DEFAULT 'Event family');
     CREATE TABLE office_accounts (id uuid PRIMARY KEY);
     CREATE TABLE design_certificates (id uuid PRIMARY KEY);
   `);
@@ -110,7 +110,7 @@ describe("BusinessDocumentRepository", () => {
 
   it("lists the openable file and its profile link for profile document screens", async () => {
     const profileId = "00000000-0000-4000-8000-000000000001";
-    await database.query("INSERT INTO organizations (id) VALUES ($1)", [profileId]);
+    await database.query("INSERT INTO organizations (id, name) VALUES ($1, $2)", [profileId, "Big E"]);
     const repo = repository();
     const ingestInput = input("gmail", "message-2:attachment-1");
     const created = await repo.ingest({
@@ -130,7 +130,7 @@ describe("BusinessDocumentRepository", () => {
     expect(documents[0]).toMatchObject({
       id: created.documentId,
       fileAvailable: true,
-      links: [{ targetKind: "profile", targetId: profileId }],
+      links: [{ targetKind: "profile", targetId: profileId, targetLabel: "Big E" }],
     });
     expect(documents[0]?.links[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
   });
