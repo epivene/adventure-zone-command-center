@@ -229,7 +229,11 @@ describe("GoogleProfileEmailArchiveService", () => {
       organizationId: "org-1",
       contactId: "contact-1",
       gmailThreadId: "thread-1",
-    })).resolves.toEqual(saved);
+    })).resolves.toMatchObject({
+      id: saved.id,
+      messages: saved.messages,
+      lastGmailErrorCode: "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
+    });
     expect(recordSyncFailure).toHaveBeenCalledWith({
       conversationId: "conversation-1",
       code: "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
