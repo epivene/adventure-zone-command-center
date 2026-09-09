@@ -25,7 +25,7 @@ describe("ManagerHomePage current event state", () => {
       if (path === "/manager/dashboard") return Promise.resolve({
         events: [
           { bookingId: "event-1", bookingName: "Eastern Montana Fair", city: "Miles City", region: "MT", startsAt: "2026-08-18T17:00:00.000Z", status: "confirmed", scheduleState: "booked" },
-          { bookingId: "event-2", bookingName: "Next County Fair", city: "Glendive", region: "MT", startsAt: "2026-08-22T17:00:00.000Z", status: "confirmed", scheduleState: "booked" },
+          { bookingId: "event-2", bookingName: "Next County Fair", city: "Glendive", region: "MT", startsAt: "2026-08-22T17:00:00.000Z", endsAt: "2026-08-24T17:00:00.000Z", status: "confirmed", scheduleState: "booked" },
         ],
         currentLifecycle: { bookingId: "event-1", bookingName: "Eastern Montana Fair", city: "Miles City", region: "MT", checkedInAt: "2026-08-18T02:58:00.000Z" },
         incompleteWrapUps: [],
@@ -42,6 +42,9 @@ describe("ManagerHomePage current event state", () => {
     expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
     expect(screen.getByText("Up Next")).toBeInTheDocument();
     expect(screen.getByText("Next County Fair")).toBeInTheDocument();
+    expect(screen.getByText(/Event dates:/)).toHaveTextContent(/Aug 22.*Aug 24/);
+    expect(screen.getByText(/Buffer before:/)).toHaveTextContent(/Aug 20.*Aug 21/);
+    expect(screen.getByText(/Buffer after:/)).toHaveTextContent(/Aug 25/);
     expect(screen.queryByText("Next Stop")).not.toBeInTheDocument();
     expect(screen.getAllByText(/Checked in Aug 17, 8:58 PM/)).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Event notes / site check" })).toHaveAttribute("href", "/manager/events/event-1/wrap-up#site-check");
