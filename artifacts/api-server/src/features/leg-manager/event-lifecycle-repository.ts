@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { bookings, travelLegs } from "@/db/schema";
@@ -55,6 +55,30 @@ export class EventLifecycleRepository {
         eq(eventLegLifecycle.legId, legId),
         isNull(eventLegLifecycle.checkedOutAt),
       ))
+      .limit(1))[0] ?? null;
+  }
+
+  async getLatestCheckedOutForLeg(legId: string) {
+    return (await this.database
+      .select({
+        id: eventLegLifecycle.id,
+        bookingId: eventLegLifecycle.bookingId,
+        legId: eventLegLifecycle.legId,
+        checkedInAt: eventLegLifecycle.checkedInAt,
+        checkInTimeZone: eventLegLifecycle.checkInTimeZone,
+        checkedOutAt: eventLegLifecycle.checkedOutAt,
+        checkOutTimeZone: eventLegLifecycle.checkOutTimeZone,
+        bookingName: bookings.name,
+        city: bookings.city,
+        region: bookings.region,
+      })
+      .from(eventLegLifecycle)
+      .innerJoin(bookings, eq(bookings.id, eventLegLifecycle.bookingId))
+      .where(and(
+        eq(eventLegLifecycle.legId, legId),
+        isNotNull(eventLegLifecycle.checkedOutAt),
+      ))
+      .orderBy(desc(eventLegLifecycle.checkedOutAt))
       .limit(1))[0] ?? null;
   }
 
