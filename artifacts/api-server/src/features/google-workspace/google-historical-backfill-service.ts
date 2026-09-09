@@ -18,6 +18,7 @@ import {
   GoogleHistoricalMessageClassifier,
   type GoogleHistoricalClassification,
 } from "./google-historical-message-classifier";
+import { GoogleProfileEmailArchiveService } from "./google-profile-email-archive-service";
 import { GoogleProfileFileService } from "./google-profile-file-service";
 import {
   PostgresGoogleValidationRepository,
@@ -81,6 +82,14 @@ type ClassifierAccess = {
 type ValidationRepositoryAccess = {
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
+};
+
+type ArchiveAccess = {
+  archiveApprovedThread(input: {
+    organizationId: string;
+    contactId: string | null;
+    gmailThreadId: string;
+  }): Promise<unknown>;
 };
 
 type FileServiceAccess = {
@@ -151,6 +160,7 @@ export class GoogleHistoricalBackfillService {
   private readonly classifier: ClassifierAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
   private readonly fileService: FileServiceAccess;
+  private readonly archiver: ArchiveAccess | null;
   private readonly ioTimeoutMs: number;
 
   constructor(options?: {
@@ -160,6 +170,7 @@ export class GoogleHistoricalBackfillService {
     classifier?: ClassifierAccess;
     validationRepository?: ValidationRepositoryAccess;
     fileService?: FileServiceAccess;
+    archiver?: ArchiveAccess;
     ioTimeoutMs?: number;
   }) {
     this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
@@ -177,6 +188,9 @@ export class GoogleHistoricalBackfillService {
       (options
         ? { copyApprovedThreadAttachments: async () => undefined }
         : new GoogleProfileFileService());
+    this.archiver = options
+      ? options.archiver ?? null
+      : new GoogleProfileEmailArchiveService();
     this.ioTimeoutMs = options?.ioTimeoutMs ?? 15_000;
   }
 
@@ -336,12 +350,23 @@ export class GoogleHistoricalBackfillService {
           });
           counts.attached += 1;
 
-          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
+          if (!copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
-            await this.copyThreadFiles(
-              classification.organization.id,
-              message.threadId,
-            );
+            if (this.archiver) {
+              await withGoogleTimeout(
+                this.archiver.archiveApprovedThread({
+                  organizationId: classification.organization.id,
+                  contactId: null,
+                  gmailThreadId: message.threadId,
+                }),
+                this.ioTimeoutMs,
+              );
+            } else if (message.hasAttachments) {
+              await this.copyThreadFiles(
+                classification.organization.id,
+                message.threadId,
+              );
+            }
           }
         } else if (classification.outcome === "needs_review") {
           await withGoogleTimeout(
@@ -450,9 +475,23 @@ export class GoogleHistoricalBackfillService {
             organizationId: classification.organization.id,
           });
           result.attached += 1;
-          if (message.hasAttachments && !copiedFileThreads.has(message.threadId)) {
+          if (!copiedFileThreads.has(message.threadId)) {
             copiedFileThreads.add(message.threadId);
-            await this.copyThreadFiles(classification.organization.id, message.threadId);
+            if (this.archiver) {
+              await withGoogleTimeout(
+                this.archiver.archiveApprovedThread({
+                  organizationId: classification.organization.id,
+                  contactId: null,
+                  gmailThreadId: message.threadId,
+                }),
+                this.ioTimeoutMs,
+              );
+            } else if (message.hasAttachments) {
+              await this.copyThreadFiles(
+                classification.organization.id,
+                message.threadId,
+              );
+            }
           }
         } else if (classification.outcome === "needs_review") {
           await withGoogleTimeout(
