@@ -121,6 +121,45 @@ describe("PostgresGoogleGmailMutationRepository intent fencing", () => {
     }
   });
 
+  it("requeues the current assignment after a missing Gmail label failure", async () => {
+    const { db, repository } = await fixture();
+    try {
+      const mutation = await db.query<{ id: string }>(
+        `INSERT INTO google_workspace_gmail_mutations (
+           connection_id, message_id, thread_id, organization_id, operation,
+           idempotency_key, state, intent_generation, last_error_code
+         ) VALUES ($1,'failed-assignment','thread-1',$2,'assign_thread',
+                   'failed-assignment-key','permanent_error',1,
+                   'GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND')
+         RETURNING id::text`,
+        [connectionId, organizationA],
+      );
+      const id = mutation.rows[0]!.id;
+      await db.query(
+        `INSERT INTO google_workspace_gmail_thread_intents (
+           connection_id, thread_id, generation, intent_kind,
+           organization_id, current_mutation_id
+         ) VALUES ($1,'thread-1',1,'assign',$2,$3)`,
+        [connectionId, organizationA, id],
+      );
+
+      await expect(repository.listDueIds(
+        connectionId,
+        new Date("2026-09-09T01:00:00Z"),
+      )).resolves.toContain(id);
+      await expect(repository.claim(
+        id,
+        new Date("2026-09-09T01:00:00Z"),
+      )).resolves.toMatchObject({
+        id,
+        state: "processing",
+        lastErrorCode: null,
+      });
+    } finally {
+      await db.close();
+    }
+  });
+
   it("adopts the current generation when Check emails reloads a legacy retry", async () => {
     const { db, repository } = await fixture();
     try {
