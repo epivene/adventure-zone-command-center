@@ -7,10 +7,12 @@ import { eventLegLifecycle } from "@/features/leg-manager/event-lifecycle-schema
 import { deleteChecklistRun } from "@/features/leg-manager/delete-checklist-run";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
+import { BossWorkRequestService } from "@/features/boss-work-requests/boss-work-request-service";
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
+const bossWorkRequestService = new BossWorkRequestService(db);
 const uuid = z.string().uuid();
 const param = (value: string | string[] | undefined) => Array.isArray(value) ? value[0] ?? "" : value ?? "";
 const receiptStorage = new GoogleCloudLegManagerObjectStorage();
@@ -261,7 +263,12 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       ? await receiptStorage.getSignedReadUrl(objectKey, 15 * 60).catch(() => null)
       : null,
   })));
+  const workRequestQueue = await bossWorkRequestService.bossQueue(req.bossAccount!.accountId);
   res.json({
+    workRequests: {
+      needsAttention: workRequestQueue.active.length,
+      recentlyCompleted: workRequestQueue.recentlyCompleted.length,
+    },
     submittedReceipts: receipts.length,
     receipts: visibleReceipts,
     submittedDrafts,
