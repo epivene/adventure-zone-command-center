@@ -58,7 +58,7 @@ function dependencies() {
     stop("trip-completed", "2026-08-22T12:00:00Z", 3, "completed"),
   ];
   const directAssignments = [
-    { ...booking("direct-early", "2026-08-19T12:00:00Z"), operationalStartsAt: new Date("2026-08-16T00:00:00Z"), operationalEndsAt: new Date("2026-08-21T23:59:00Z") },
+    { ...booking("direct-early", "2026-08-19T12:00:00Z"), operationalStartsAt: new Date("2026-08-16T00:00:00Z"), operationalEndsAt: new Date("2026-08-22T00:00:00Z") },
     booking("direct-late", "2026-08-23T12:00:00Z", "pending_contract", "definite"),
     booking("direct-declined", "2026-08-24T12:00:00Z", "declined"),
   ];
@@ -109,7 +109,7 @@ describe("manager schedule API contract", () => {
       expect(payload.events.every((event) => event.scheduleState === "booked")).toBe(true);
       expect(payload.events.find((event) => event.bookingId === "direct-early")).toMatchObject({
         operationalStartsAt: "2026-08-16T00:00:00.000Z",
-        operationalEndsAt: "2026-08-21T23:59:00.000Z",
+        operationalEndsAt: "2026-08-22T00:00:00.000Z",
       });
     }
     expect(dashboard.route?.stops.map((event) => event.bookingId)).toEqual(["trip-middle"]);
