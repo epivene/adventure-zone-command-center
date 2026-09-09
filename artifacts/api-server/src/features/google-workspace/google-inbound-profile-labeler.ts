@@ -52,13 +52,14 @@ export class GoogleInboundProfileLabeler {
       if (!connection) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
       const labels = new PostgresGoogleProfileLabelRepository(pool);
       const resolver = new GoogleProfileLabelResolver(labels, connection.client);
+      const enabled = readGoogleProfileLabelConfig().enabled;
       return {
         connectionId: connection.connectionId,
         ensureHierarchy: async () => {
-          await resolver.ensureHierarchy();
+          if (enabled) await resolver.ensureHierarchy();
         },
         service: new GoogleProfileLabelSyncService({
-          enabled: readGoogleProfileLabelConfig().enabled,
+          enabled,
           mutations,
           resolver,
           labels,
