@@ -254,5 +254,3 @@ export class OpportunityEmailService {
     return draft;
   }
 }
-
-

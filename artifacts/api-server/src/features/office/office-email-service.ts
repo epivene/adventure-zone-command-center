@@ -24,5 +24,3 @@ export class OfficeEmailError extends Error {
     this.name = "OfficeEmailError";
   }
 }
-
-

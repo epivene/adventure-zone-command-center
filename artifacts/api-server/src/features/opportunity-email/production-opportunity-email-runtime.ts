@@ -190,5 +190,3 @@ export function getProductionOpportunityEmailRuntime(): Promise<ProductionOpport
   });
   return productionRuntimePromise;
 }
-
-

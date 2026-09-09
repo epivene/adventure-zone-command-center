@@ -106,5 +106,3 @@ router.post("/office/email-drafts/:draftId/submit", requireOffice, async (req, r
 });
 
 export default router;
-
-

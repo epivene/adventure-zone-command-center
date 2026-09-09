@@ -128,5 +128,3 @@ describe("Opportunity routes", () => {
     expect(response.status).toBe(400);
   });
 });
-
-

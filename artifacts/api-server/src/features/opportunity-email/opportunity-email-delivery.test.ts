@@ -235,5 +235,3 @@ describe("OpportunityEmailService delivery", () => {
     expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
   });
 });
-
-

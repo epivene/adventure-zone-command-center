@@ -156,5 +156,3 @@ export const officeMessages = pgTable("office_messages", {
   check("office_messages_actor_kind_valid", sql`${table.actorKind} in ('office','owner')`),
   index("office_messages_account_created_idx").on(table.officeAccountId, table.createdAt),
 ]);
-
-

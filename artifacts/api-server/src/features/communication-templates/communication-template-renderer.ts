@@ -101,5 +101,3 @@ export function formatPackageDuration(
   }
   return `${minimumDays}–${maximumDays} days`;
 }
-
-

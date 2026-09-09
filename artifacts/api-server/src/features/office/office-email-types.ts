@@ -17,5 +17,3 @@ export type OfficeEmailDraftView = {
   sentAt: string | null;
   updatedAt: string;
 };
-
-

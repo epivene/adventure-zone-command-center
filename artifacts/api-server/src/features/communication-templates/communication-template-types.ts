@@ -92,5 +92,3 @@ export type RenderedCommunicationTemplate = {
     eventYear: number;
   } | null;
 };
-
-

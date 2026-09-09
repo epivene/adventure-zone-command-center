@@ -16,5 +16,3 @@ export * from "./booking-opportunity-schema";
 export * from "./booking-opportunity-email-schema";
 export * from "./leg-assignment-schema";
 export * from "./design-studio-schema";
-
-

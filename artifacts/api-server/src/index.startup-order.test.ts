@@ -46,5 +46,3 @@ describe("server startup ordering", () => {
     expect(source).toContain("earlyBirdPromoLoop.close(),");
   });
 });
-
-

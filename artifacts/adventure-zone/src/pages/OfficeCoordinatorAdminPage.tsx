@@ -498,5 +498,3 @@ export function BossAccountPanel() {
     </div>
   );
 }
-
-

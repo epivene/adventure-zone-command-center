@@ -192,5 +192,3 @@ export async function renderCommunicationTemplate(
     eventYear: booking?.startsAt?.getUTCFullYear() ?? 2027,
   });
 }
-
-
