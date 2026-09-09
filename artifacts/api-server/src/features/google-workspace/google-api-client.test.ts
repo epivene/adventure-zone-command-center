@@ -223,6 +223,7 @@ describe("GoogleWorkspaceReadClient", () => {
       "authorizationUrl",
       "createGmailDraft",
       "createLabel",
+      "deleteLabel",
       "downloadDriveFile",
       "exchangeCode",
       "getAttachment",
