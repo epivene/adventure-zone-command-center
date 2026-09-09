@@ -496,7 +496,7 @@ export function createGoogleWorkspaceReadClient(input: {
     metadata: Record<string, unknown>,
     mimeType: string,
     bytes: Uint8Array,
-  ): { body: Uint8Array; contentType: string } {
+  ): { body: ArrayBuffer; contentType: string } {
     const boundary = `azcc-drive-${Math.random().toString(36).slice(2)}`;
     const before = Buffer.from(
       [
@@ -512,8 +512,11 @@ export function createGoogleWorkspaceReadClient(input: {
       "utf8",
     );
     const after = Buffer.from(`\r\n--${boundary}--\r\n`, "utf8");
+    const combined = Buffer.concat([before, Buffer.from(bytes), after]);
+    const body = new ArrayBuffer(combined.byteLength);
+    new Uint8Array(body).set(combined);
     return {
-      body: new Uint8Array(Buffer.concat([before, Buffer.from(bytes), after])),
+      body,
       contentType: `multipart/related; boundary=${boundary}`,
     };
   }
