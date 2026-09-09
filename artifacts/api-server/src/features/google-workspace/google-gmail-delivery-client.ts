@@ -36,7 +36,7 @@ async function responseJson(response: Response): Promise<Record<string, unknown>
 }
 
 export type GoogleGmailDeliveryClient = {
-  sendGmailMessage(input: { raw: string }): Promise<{
+  sendGmailMessage(input: { raw: string; threadId?: string }): Promise<{
     messageId: string;
     threadId: string | null;
   }>;
@@ -122,8 +122,9 @@ export function createGoogleGmailDeliveryClient(input: {
   }
 
   return {
-    async sendGmailMessage({ raw }) {
+    async sendGmailMessage({ raw, threadId }) {
       const safeRaw = validRaw(raw);
+      const safeThreadId = threadId === undefined ? undefined : validDraftId(threadId);
       return bounded("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN", async (token, signal) => {
         const response = await fetcher(`${gmailMessagesEndpoint}/send`, {
           method: "POST",
@@ -131,10 +132,16 @@ export function createGoogleGmailDeliveryClient(input: {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ raw: safeRaw }),
+          body: JSON.stringify({
+            raw: safeRaw,
+            ...(safeThreadId ? { threadId: safeThreadId } : {}),
+          }),
           signal,
         });
         const payload = await responseJson(response);
+        if (response.status === 404) {
+          throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+        }
         if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_FAILED");
         if (typeof payload.id !== "string" || !payload.id) {
           throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
