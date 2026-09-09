@@ -93,4 +93,23 @@ describe("GoogleInboundProfileLabeler", () => {
 
     expect(syncFactory).not.toHaveBeenCalled();
   });
+  it("repairs the Gmail label hierarchy when a check finds no messages", async () => {
+    const ensureHierarchy = vi.fn(async () => undefined);
+    const labeler = new GoogleInboundProfileLabeler({
+      syncFactory: async () => ({
+        connectionId: "conn-1",
+        service: {
+          assignThread: vi.fn(),
+          labelInboundMessage: vi.fn(),
+          retry: vi.fn(),
+        },
+        ensureHierarchy,
+      }),
+    });
+
+    await labeler.labelNewThreadMatches([]);
+
+    expect(ensureHierarchy).toHaveBeenCalledOnce();
+  });
+
 });
