@@ -54,6 +54,7 @@ export class GoogleDriveBackupWorker {
     documents: GoogleDriveBackupDocumentRepository;
     storage: Pick<BusinessDocumentStorage, "get">;
     connections: DriveConnectionFactory;
+    backfill?: { enqueueNextBatch(runId: string, now: Date): Promise<unknown> };
   }) {}
 
   private async sourceFor(job: GoogleDriveBackupJob, now: Date): Promise<{
@@ -137,6 +138,7 @@ export class GoogleDriveBackupWorker {
         now,
       });
       await this.options.repository.markSucceeded(job.id, job.claimedGeneration, now);
+      if (job.runId) await this.options.backfill?.enqueueNextBatch(job.runId, now);
       return result.outcome === "unchanged" ? "skipped" : "exported";
     } catch (error) {
       const code = error instanceof DriveContainmentError
