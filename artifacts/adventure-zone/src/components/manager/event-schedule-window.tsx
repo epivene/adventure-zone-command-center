@@ -47,9 +47,9 @@ export function EventScheduleWindow({
 
   return (
     <div className={className}>
-      <p><span className="font-semibold">Event dates:</span> {formatEventRange(start, end)}</p>
-      <p><span className="font-semibold">Buffer before:</span> {formatDay(bufferBeforeStart)} – {formatDay(bufferBeforeEnd)}</p>
-      <p><span className="font-semibold">Buffer after:</span> {formatDay(bufferAfter)}</p>
+      <p><strong>Event dates:</strong>{` ${formatEventRange(start, end)}`}</p>
+      <p><strong>Buffer before:</strong>{` ${formatDay(bufferBeforeStart)} – ${formatDay(bufferBeforeEnd)}`}</p>
+      <p><strong>Buffer after:</strong>{` ${formatDay(bufferAfter)}`}</p>
     </div>
   );
 }
