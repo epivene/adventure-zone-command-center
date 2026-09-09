@@ -16,14 +16,22 @@ function harness(input?: {
   organizationName?: string;
   otherOwnerLabelId?: string;
   labelsAfterCreateConflict?: GoogleLabelSummary[];
+  missingParents?: boolean;
 }) {
   let mapping = input?.mapping ?? null;
-  const labels = input?.labels ?? [];
-  const created: GoogleLabelSummary = {
-    id: "Label_created",
-    name: `Z - AdventureZone/Profiles/${input?.organizationName ?? "Elko County Fair"}`,
-    type: "user",
-  };
+  const labels: GoogleLabelSummary[] = [
+    ...(input?.missingParents
+      ? []
+      : [
+          { id: "Label_root", name: "Z - AdventureZone", type: "user" as const },
+          {
+            id: "Label_profiles",
+            name: "Z - AdventureZone/Profiles",
+            type: "user" as const,
+          },
+        ]),
+    ...(input?.labels ?? []),
+  ];
   const repository: GoogleProfileLabelRepositoryPort = {
     getOrganization: vi.fn(async () => ({
       id: "org-1",
@@ -62,13 +70,26 @@ function harness(input?: {
         ? input.labelsAfterCreateConflict
         : labels;
     }),
-    createLabel: vi.fn(async () => {
-      if (input?.labelsAfterCreateConflict) {
+    createLabel: vi.fn(async (name) => {
+      const profileName =
+        `Z - AdventureZone/Profiles/${input?.organizationName ?? "Elko County Fair"}`;
+      if (input?.labelsAfterCreateConflict && name === profileName) {
         throw Object.assign(
           new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT"),
           { code: "GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT" },
         );
       }
+      const created: GoogleLabelSummary = {
+        id:
+          name === "Z - AdventureZone"
+            ? "Label_root"
+            : name === "Z - AdventureZone/Profiles"
+              ? "Label_profiles"
+              : "Label_created",
+        name,
+        type: "user",
+      };
+      labels.push(created);
       return created;
     }),
     renameLabel: vi.fn(async ({ labelId, name }) => ({
@@ -278,7 +299,7 @@ describe("GoogleProfileLabelResolver", () => {
     }));
   });
   it("creates the Gmail parent labels before a new profile label", async () => {
-    const h = harness({ labels: [] });
+    const h = harness({ labels: [], missingParents: true });
 
     await h.resolver.resolve({
       connectionId: "conn-1",
@@ -302,7 +323,7 @@ describe("GoogleProfileLabelResolver", () => {
       name: "Z - AdventureZone/Profiles/Elko County Fair",
       type: "user" as const,
     };
-    const h = harness({ labels: [existing] });
+    const h = harness({ labels: [existing], missingParents: true });
 
     await expect(h.resolver.resolve({
       connectionId: "conn-1",
