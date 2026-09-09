@@ -15,8 +15,8 @@ export type ManagerScopedMapData = {
       endLabel: string;
       endLatitude: number | null;
       endLongitude: number | null;
-      mpg: number | null;
-      fuelPricePerGallon: number | null;
+      mpg?: number | null;
+      fuelPricePerGallon?: number | null;
     };
     stops: Array<{
       id: string;
