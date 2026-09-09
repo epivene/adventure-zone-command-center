@@ -94,6 +94,7 @@ const NotFound = lazy(() => import("@/pages/not-found"));
 
 const BossSignInPage = lazy(() => import("@/pages/BossSignInPage"));
 const BossHomePage = lazy(() => import("@/pages/BossHomePage"));
+const BossWorkRequestPage = lazy(() => import("@/pages/BossWorkRequestPage"));
 const BossSchedulePage = lazy(() => import("@/pages/BossSchedulePage"));
 const BossContactsPage = lazy(() => import("@/pages/BossContactsPage"));
 const BossProfilesPage = lazy(() => import("@/pages/BossProfilesPage"));
@@ -337,6 +338,7 @@ function BossProtectedApp() {
         {/* Redirect away from disallowed paths */}
         <Route path="/boss/today"><Redirect to="/boss" /></Route>
         <Route path="/boss/tasks"><Redirect to="/boss" /></Route>
+        <Route path="/boss/work-requests/:requestId">{(params) => <BossWorkRequestPage requestId={params.requestId} />}</Route>
         <Route path="/boss"><BossHomePage /></Route>
       </Switch>
     </BossShell>
