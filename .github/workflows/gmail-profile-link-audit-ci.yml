@@ -12,10 +12,13 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-historical-backfill-loop.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-historical-backfill-loop.test.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/api-server/src/index.ts"
+      - "render.yaml"
       - ".github/workflows/gmail-profile-link-audit-ci.yml"
   push:
     branches:
@@ -30,10 +33,13 @@ on:
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.ts"
       - "artifacts/api-server/src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-historical-backfill-loop.ts"
+      - "artifacts/api-server/src/features/google-workspace/google-historical-backfill-loop.test.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.ts"
       - "artifacts/api-server/src/routes/assistant-gmail-profile-links.test.ts"
       - "artifacts/api-server/src/app.ts"
       - "artifacts/api-server/src/index.ts"
+      - "render.yaml"
       - ".github/workflows/gmail-profile-link-audit-ci.yml"
 
 jobs:
@@ -60,6 +66,7 @@ jobs:
           src/features/google-workspace/google-sent-profile-link-window-query.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-service.test.ts
           src/features/google-workspace/google-sent-profile-link-sweep-loop.test.ts
+          src/features/google-workspace/google-historical-backfill-loop.test.ts
           src/routes/assistant-gmail-profile-links.test.ts
           src/routes/google-workspace-profile-email.test.ts
       - name: Production API build

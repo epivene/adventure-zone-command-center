@@ -67,10 +67,10 @@ services:
         sync: false
       - key: GOOGLE_WORKSPACE_TOKEN_ENCRYPTION_KEY
         sync: false
-      # Historical processing remains disabled. The bounded recent-email safety check
-      # may use the app's existing AI provider for MATCH / IGNORE / NEEDS REVIEW triage.
+      # Historical Gmail runs in bounded 100-message batches. The first batch
+      # still parks for owner approval before older batches may continue.
       - key: GOOGLE_WORKSPACE_SYNC_ENABLED
-        value: "false"
+        value: "true"
       # Email Review assignments create/reuse profile labels and archive assigned threads.
       - key: GOOGLE_WORKSPACE_GMAIL_PROFILE_LABEL_SYNC_ENABLED
         value: "true"
