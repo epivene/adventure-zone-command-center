@@ -60,7 +60,10 @@ function job(row: Record<string, unknown> | undefined): GoogleDriveBackupJob | n
 }
 
 export class PostgresGoogleDriveBackupRepository {
-  constructor(private readonly pool: GoogleDriveBackupSqlPool) {}
+  constructor(
+    private readonly pool: GoogleDriveBackupSqlPool,
+    private readonly maxAutomaticAttempts = 10,
+  ) {}
 
   async getConfig(): Promise<GoogleDriveBackupConfigRecord> {
     const result = await this.pool.query(
@@ -212,17 +215,17 @@ export class PostgresGoogleDriveBackupRepository {
       `UPDATE google_drive_backup_jobs
           SET status = CASE
                 WHEN request_generation <> $2 THEN 'queued'
-                WHEN attempts >= 10 THEN 'failed'
+                WHEN attempts >= $6 THEN 'failed'
                 ELSE 'retry'
               END,
               next_attempt_at = CASE WHEN request_generation <> $2 THEN $5
                 ELSE $5 + make_interval(secs => LEAST(3600, 15 * power(2, LEAST(attempts, 8))::int))
               END,
-              completed_at = CASE WHEN request_generation = $2 AND attempts >= 10 THEN $5 ELSE NULL END,
+              completed_at = CASE WHEN request_generation = $2 AND attempts >= $6 THEN $5 ELSE NULL END,
               locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
               last_error_code = $3, last_error_message = $4, updated_at = $5
         WHERE id = $1 AND status = 'processing' AND claimed_generation = $2`,
-      [id, claimedGeneration, code, safeMessage, now],
+      [id, claimedGeneration, code, safeMessage, now, this.maxAutomaticAttempts],
     );
   }
 
