@@ -145,6 +145,9 @@ export async function renderCommunicationTemplate(
     .filter(Boolean)
     .join(" ");
   const booking = upcomingBookings[0];
+  const earlyBirdDeadline = new Intl.DateTimeFormat("en-US", {
+    month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+  }).format(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000));
   const values: TemplateRenderValues = {
     contactName,
     eventName: organization.name,
@@ -154,6 +157,7 @@ export async function renderCommunicationTemplate(
     senderName: input.sender.name,
     senderPhone: input.sender.phone,
     senderEmail: input.sender.email,
+    earlyBirdDeadline,
     packageName: packageRow?.name ?? null,
     packagePrice: packageRow ? formatPackagePrice(packageRow.basePriceCents) : null,
     packageDuration: packageRow
