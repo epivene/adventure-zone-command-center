@@ -87,6 +87,23 @@ describe("EventLifecycleAction", () => {
     expect(await screen.findByRole("link", { name: "Finish post-event checklist" })).toHaveAttribute("href", "/manager/events/booking-1/checklist/post-event");
   });
 
+
+  it("warns that checkout is late after the event buffer has ended", async () => {
+    mocks.lifecycle = {
+      ...baseLifecycle,
+      checkedInAt: "2026-09-05T16:00:00.000Z",
+      preEventChecklistState: "completed",
+      readyToOperate: true,
+    };
+    const { hook } = memoryLocation({ path: "/manager", static: false });
+    render(<Router hook={hook}><EventLifecycleAction {...({
+      bookingId: "booking-1",
+      checkoutDueAt: "2020-01-01T00:00:00.000Z",
+    } as any)} /></Router>);
+    expect(await screen.findByText("Event over — checkout late")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start checkout" })).toBeInTheDocument();
+  });
+
   it("records final departure only after post-event checklist and opens wrap-up", async () => {
     mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "completed", postEventChecklistState: "completed", readyToOperate: true };
     const { hook, history } = memoryLocation({ path: "/manager", static: false });
