@@ -48,6 +48,7 @@ function mapTemplate(
     state: row.state,
     subjectTemplate: row.subjectTemplate,
     bodyTemplate: row.bodyTemplate,
+    bodyFormat: row.bodyFormat,
     allowedPlaceholders: row.allowedPlaceholders as TemplatePlaceholder[],
     requiredPlaceholders: row.requiredPlaceholders as TemplatePlaceholder[],
     ownerKind: row.ownerKind,
