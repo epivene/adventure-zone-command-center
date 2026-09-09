@@ -69,6 +69,30 @@ describe("Google Gmail delivery client", () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it("sends within a requested Gmail thread and reports a confirmed missing source", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("oauth2.googleapis.com/token")) return tokenResponse();
+      expect(JSON.parse(String(init?.body))).toEqual({
+        raw: "cmF3",
+        threadId: "thread-old",
+      });
+      return new Response("{}", { status: 404 });
+    });
+    const client = createGoogleGmailDeliveryClient({
+      environment,
+      refreshToken: "refresh",
+      fetcher,
+    });
+
+    await expect(client.sendGmailMessage({
+      raw: "cmF3",
+      threadId: "thread-old",
+    })).rejects.toMatchObject({
+      code: "GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND",
+    });
+  });
+
   it("never retries an uncertain Gmail send outcome", async () => {
     const urls: string[] = [];
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
