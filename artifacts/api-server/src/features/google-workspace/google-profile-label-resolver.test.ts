@@ -277,4 +277,47 @@ describe("GoogleProfileLabelResolver", () => {
       gmailLabelId: "Label_created",
     }));
   });
+  it("creates the Gmail parent labels before a new profile label", async () => {
+    const h = harness({ labels: [] });
+
+    await h.resolver.resolve({
+      connectionId: "conn-1",
+      organizationId: "org-1",
+    });
+
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(1, "Z - AdventureZone");
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
+      2,
+      "Z - AdventureZone/Profiles",
+    );
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
+      3,
+      "Z - AdventureZone/Profiles/Elko County Fair",
+    );
+  });
+
+  it("creates only missing parents when the flat profile label already exists", async () => {
+    const existing = {
+      id: "Label_existing",
+      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      type: "user" as const,
+    };
+    const h = harness({ labels: [existing] });
+
+    await expect(h.resolver.resolve({
+      connectionId: "conn-1",
+      organizationId: "org-1",
+    })).resolves.toMatchObject({
+      status: "resolved",
+      mapping: { gmailLabelId: "Label_existing" },
+    });
+    expect(h.gmail.createLabel).toHaveBeenCalledTimes(2);
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(1, "Z - AdventureZone");
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
+      2,
+      "Z - AdventureZone/Profiles",
+    );
+    expect(h.gmail.createLabel).not.toHaveBeenCalledWith(existing.name);
+  });
+
 });
