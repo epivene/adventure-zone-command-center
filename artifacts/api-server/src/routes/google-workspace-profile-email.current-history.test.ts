@@ -51,6 +51,39 @@ describe("Google profile email current/history split", () => {
         listApprovedForOrganization: async () => mappings,
         organizationOwnsApprovedThread: async () => true,
       },
+      archiveService: {
+        archiveApprovedThread: async (input) => {
+          const detail = thread(
+            input.gmailThreadId,
+            input.gmailThreadId === "current-thread" ? year : year - 1,
+          );
+          return {
+            id: `conversation-${input.gmailThreadId}`,
+            organizationId: input.organizationId,
+            contactId: input.contactId,
+            subject: detail.subject,
+            originalGmailUrl: detail.originalGmailUrl,
+            providerThreadIds: [input.gmailThreadId],
+            archiveState: "complete" as const,
+            lastSyncedAt: new Date().toISOString(),
+            lastGmailErrorCode: null,
+            messages: detail.messages.map((message) => ({
+              id: `saved-${message.id}`,
+              gmailMessageId: message.id,
+              gmailThreadId: input.gmailThreadId,
+              internalDateMs: message.internalDateMs,
+              from: message.from,
+              to: message.to,
+              cc: message.cc,
+              subject: message.subject,
+              date: message.date,
+              direction: message.direction,
+              bodyText: message.bodyText,
+              attachments: message.attachments,
+            })),
+          };
+        },
+      },
       fileService: {
         copyApprovedThreadAttachments: async () => [],
         listProfileFiles: async () => [],
