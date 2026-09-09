@@ -90,6 +90,16 @@ export type GoogleRecentValidationResult = {
   ignored: GoogleRecentValidationRow[];
 };
 
+export type GoogleProfileLabelCleanupCandidate = {
+  id: string;
+  name: string;
+};
+
+export type GoogleProfileLabelCleanupResult = {
+  deleted: GoogleProfileLabelCleanupCandidate[];
+  skippedLabelIds: string[];
+};
+
 export type GoogleProfileLabelSyncResult = {
   mutationId: string;
   state: "completed" | "retryable_error" | "permanent_error" | "conflict";
@@ -445,6 +455,25 @@ export async function openGoogleProfileFile(
       `/google-workspace/profiles/${encodeURIComponent(organizationId)}/files/${encodeURIComponent(fileId)}/open`,
       { method: "POST", body: "{}" },
     ),
+  );
+}
+
+export async function getGoogleProfileLabelCleanupPreview(): Promise<{
+  labels: GoogleProfileLabelCleanupCandidate[];
+}> {
+  return responseJson(
+    await apiFetch("/google-workspace/profile-labels/cleanup"),
+  );
+}
+
+export async function deleteGoogleProfileLabels(
+  labelIds: string[],
+): Promise<GoogleProfileLabelCleanupResult> {
+  return responseJson(
+    await apiFetch("/google-workspace/profile-labels/cleanup", {
+      method: "POST",
+      body: JSON.stringify({ labelIds }),
+    }),
   );
 }
 
