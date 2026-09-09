@@ -25,12 +25,13 @@ The app currently persists Gmail-to-profile mappings, but profile email routes c
 Add app-owned archive records under the existing Google Workspace schema:
 
 - `google_workspace_profile_email_threads`
-  - connection ID, Gmail thread ID, organization/profile ID, optional contact ID
+  - stable app conversation ID, connection ID, organization/profile ID, optional contact ID
+  - primary/latest Gmail thread ID plus the set of provider thread IDs represented by its messages
   - subject, normalized participants, first/latest message dates
   - original Gmail URL, sync state, last successful sync, last Gmail error
   - never deleted merely because Gmail no longer returns the thread
 - `google_workspace_profile_email_messages`
-  - Gmail message ID and thread ID
+  - Gmail message ID and provider thread ID, linked to the stable app conversation ID
   - sender, recipients, CC, subject, sent/received date, direction
   - complete readable text body and safe HTML body when available
   - immutable provider IDs and timestamps
@@ -73,7 +74,7 @@ No Gmail deletion event or missing-thread response may delete an archive record.
 The profile thread view gets a reply composer using the existing authenticated Gmail connection.
 
 - Normal case: send with Gmail thread headers and the saved thread/message identifiers.
-- If Gmail no longer has the original thread: send a new Gmail message to the saved participants with the existing subject (adding `Re:` when needed), then associate the new Gmail thread/message IDs with the same app conversation.
+- If Gmail no longer has the original thread: send a new Gmail message to the saved participants with the existing subject (adding `Re:` when needed), then associate the new provider thread/message IDs with the same stable app conversation. The app conversation—not Gmail's thread ID—is the identity shown on the profile.
 - Save the outgoing message in the app immediately after Gmail confirms the send.
 - If Gmail sending fails, preserve the draft and show a retryable error; do not fabricate a sent message.
 - Replies never require opening Gmail.
