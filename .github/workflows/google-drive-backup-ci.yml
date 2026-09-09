@@ -1,0 +1,50 @@
+name: Google Drive Backup CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - codex/google-drive-backup-design-20260909
+    paths:
+      - "lib/db/src/google-drive-backup-schema.ts"
+      - "lib/db/src/index.ts"
+      - "lib/db/migrations/20260909_google_drive_backup_exports.sql"
+      - "artifacts/api-server/src/db/google-drive-backup-required-startup.ts"
+      - "artifacts/api-server/src/db/google-drive-backup-required-startup.test.ts"
+      - "artifacts/api-server/src/db/required-schema-startup.ts"
+      - "artifacts/api-server/src/db/required-schema-startup.test.ts"
+      - "artifacts/api-server/src/features/google-drive-backup/**"
+      - "artifacts/api-server/src/features/google-workspace/**"
+      - "artifacts/api-server/src/routes/google-drive-backup*"
+      - "artifacts/adventure-zone/src/features/google-drive-backup/**"
+      - "artifacts/adventure-zone/src/pages/DriveBackupPage*"
+      - ".github/workflows/google-drive-backup-ci.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Drive backup database tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/test
+        run: pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/db/google-drive-backup-required-startup.test.ts src/db/required-schema-startup.test.ts
+      - name: Drive backup feature tests
+        env:
+          DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/test
+        run: |
+          if find artifacts/api-server/src/features/google-drive-backup -name '*.test.ts' -print -quit 2>/dev/null | grep -q .; then
+            pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts src/features/google-drive-backup
+          fi
+      - name: Build database package
+        run: pnpm --filter @workspace/db build
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
