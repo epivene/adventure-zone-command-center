@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiGet = vi.hoisted(() => vi.fn());
@@ -16,7 +16,11 @@ vi.mock("@/components/calendar/event-calendar", () => ({
   ),
 }));
 vi.mock("@/components/calendar/history-suggestions", () => ({ HistorySuggestions: () => null }));
-vi.mock("@/components/routes/route-conflict-warning", () => ({ RouteConflictWarning: () => null }));
+vi.mock("@/components/routes/route-conflict-warning", () => ({
+  RouteConflictWarning: ({ conflicts }: { conflicts: unknown[] }) => (
+    <div data-testid="route-conflict-count">{conflicts.length}</div>
+  ),
+}));
 
 import { CalendarContent } from "./CalendarPage";
 
@@ -47,7 +51,7 @@ afterEach(() => {
 });
 
 describe("Schedule booked-state filtering", () => {
-  it("treats a definite Contract Received booking as booked while keeping ordinary possibilities behind Show potential", async () => {
+  it("keeps hidden potential overlaps out of warnings until potential shows are selected", async () => {
     apiGet.mockImplementation((path: string) => {
       if (path === "/calendar/display-settings") {
         return Promise.resolve({ eventColor: "#ec4899", travelColor: "#94a3b8" });
@@ -82,6 +86,11 @@ describe("Schedule booked-state filtering", () => {
 
     expect(screen.getByText("Meeteetse Annual Labor Day Celebration 2026:confirmed")).toBeInTheDocument();
     expect(screen.queryByText(/Ordinary Possible Event/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show potential (1)" })).toBeInTheDocument();
+    const showPotential = screen.getByRole("button", { name: "Show potential (1)" });
+    expect(screen.getByTestId("route-conflict-count")).toHaveTextContent("0");
+
+    fireEvent.click(showPotential);
+
+    expect(screen.getByTestId("route-conflict-count")).toHaveTextContent("1");
   });
 });
