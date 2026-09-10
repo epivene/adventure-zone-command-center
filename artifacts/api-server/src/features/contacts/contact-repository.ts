@@ -833,11 +833,10 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       }
 
       const normalizedPhone = normalizeUsPhone(input.phone);
+      const normalizedEmail = normalizeSendableContactEmail(input.email);
       const duplicateLocks = [
         normalizedPhone ? `phone:${normalizedPhone}` : null,
-        normalizeSendableContactEmail(input.email)
-          ? `email:${normalizeSendableContactEmail(input.email)}`
-          : null,
+        normalizedEmail ? `email:${normalizedEmail}` : null,
         `name-organization:${normalizedText(
           [input.firstName, input.lastName, input.organizationName].join(" "),
         )}`,
