@@ -58,3 +58,33 @@ test('direct package page renders its own heading and preselects inquiry', () =>
     assert.match(root.textContent, /Ammo sold separately/);
   } finally { dom.window.close(); }
 });
+
+test('all package videos appear before About and each package page shows its matching video', () => {
+  const home = mount();
+  try {
+    assert.equal(home.root.querySelectorAll('#videos iframe').length, 3);
+    assert.ok(home.root.querySelector('#videos').compareDocumentPosition(home.root.querySelector('#about')) & 4);
+    assert.doesNotMatch(home.root.textContent, /fully immersive/i);
+  } finally { home.dom.window.close(); }
+  for (const [path, id] of [['adventure-zone-package', 'MWD0SdAWZpc'], ['pirates-rebellion-package', 'tgjwa1LvghI'], ['warriors-playground-package', '-xTjCJz9RmI']]) {
+    const page = mount('/' + path, 'adventure-zone-package');
+    try {
+      const player = page.root.querySelector('.package-detail iframe');
+      assert.equal(new URL(player.src).pathname, '/embed/' + id);
+      assert.ok(player.compareDocumentPosition(page.root.querySelector('#package-detail-title')) & 4);
+    } finally { page.dom.window.close(); }
+  }
+});
+
+test('closing package video removes the player so playback stops', () => {
+  const { dom, root } = mount();
+  try {
+    const link = root.querySelector('[data-package-open="weekend-warriors"]');
+    link.click();
+    assert.match(root.querySelector('.package-dialog iframe').src, /-xTjCJz9RmI/);
+    root.querySelector('[data-package-close]').click();
+    assert.equal(root.querySelector('.package-dialog iframe'), null);
+    link.click();
+    assert.ok(root.querySelector('.package-dialog iframe'));
+  } finally { dom.window.close(); }
+});
