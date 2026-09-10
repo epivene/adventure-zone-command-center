@@ -64,7 +64,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-minimal-refresh-v9");
+      expect(template.templateVersion).toBe("2026-09-early-bird-refresh-v10");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
@@ -269,7 +269,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-minimal-refresh-v9",
+      template_version: "2026-09-early-bird-refresh-v10",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
