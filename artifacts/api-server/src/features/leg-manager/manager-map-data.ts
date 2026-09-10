@@ -89,6 +89,7 @@ export type ManagerScopedMapData = {
       endLongitude: number | null;
       mpg: number | null;
       fuelPricePerGallon: number | null;
+      navigationOnly?: boolean;
     };
     stops: Array<{
       id: string;
@@ -270,6 +271,7 @@ export async function loadManagerScopedScheduleData(
     tripRepository: ManagerScheduleTripRepository;
     bookingRepository: ManagerMapBookingRepository;
     routingEstimator?: ManagerRoutingEstimator;
+    eventLocationResolver?: (events: ManagerScheduleEvent[]) => Promise<ManagerScheduleEvent[]>;
   },
   legId: string,
   now = new Date(),
@@ -283,7 +285,10 @@ export async function loadManagerScopedScheduleData(
   const allTrips = listedTrips
     .filter((trip) => trip.travelLegId === legId)
     .sort((a, b) => a.startDate.getTime() - b.startDate.getTime() || a.id.localeCompare(b.id));
-  const allAssignedBookings = listedBookings.map(eventFromBooking);
+  const unresolvedAssignedBookings = listedBookings.map(eventFromBooking);
+  const allAssignedBookings = dependencies.eventLocationResolver
+    ? await dependencies.eventLocationResolver(unresolvedAssignedBookings)
+    : unresolvedAssignedBookings;
   const alwaysVisibleBookingIds = new Set(options.alwaysVisibleBookingIds ?? []);
   const retainedBookingId = options.retainBookingIdUntilNextEvent;
   const retainedEvent = retainedBookingId
@@ -348,6 +353,7 @@ export async function loadManagerScopedScheduleData(
           endLongitude: current.trip.endLongitude,
           mpg: current.trip.mpg ?? null,
           fuelPricePerGallon: current.trip.fuelPricePerGallon ?? null,
+          navigationOnly: false,
         },
         stops: current.stops
           .filter((stop) => alwaysVisibleBookingIds.has(stop.bookingId) || isVisibleScheduleEvent(stop, now))
@@ -405,14 +411,15 @@ export async function loadManagerScopedScheduleData(
       ?? null;
     route = {
       trip: {
-        id: configuredTrip?.id ?? `manager-navigation:${legId}`,
+        id: `manager-navigation:${legId}`,
+        navigationOnly: true,
         name: `${routeAnchor.bookingName} → ${nextEvent.bookingName}`,
         startLabel: routeAnchor.bookingName,
         startLatitude: routeAnchor.latitude,
         startLongitude: routeAnchor.longitude,
         endLabel: nextEvent.bookingName,
-        endLatitude: nextEvent.latitude,
-        endLongitude: nextEvent.longitude,
+        endLatitude: null,
+        endLongitude: null,
         mpg: configuredTrip?.mpg ?? null,
         fuelPricePerGallon: configuredTrip?.fuelPricePerGallon ?? null,
       },
@@ -460,6 +467,7 @@ export async function loadManagerScopedMapData(
     tripRepository: ManagerMapTripRepository;
     bookingRepository: ManagerMapBookingRepository;
     routingEstimator?: ManagerRoutingEstimator;
+    eventLocationResolver?: (events: ManagerScheduleEvent[]) => Promise<ManagerScheduleEvent[]>;
     handoffRepository: ManagerMapHandoffRepository;
     lifecycleRepository?: {
       getCurrentForLeg(legId: string): Promise<{ bookingId: string } | null>;
