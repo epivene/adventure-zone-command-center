@@ -91,6 +91,22 @@ describe("convention campaign template seed", () => {
     }
   });
 
+  it("uses the approved high-contrast Early Bird box in every convention email", () => {
+    for (const template of conventionCampaignTemplates) {
+      expect(template.bodyTemplate).toContain("EARLY BIRD BOOKING OFFER");
+      expect(template.bodyTemplate).toContain(
+        'style="background:#0f1729;border:3px solid #0f1729"',
+      );
+      expect(template.bodyTemplate).toContain(
+        'style="padding:10px 20px;background:#ff0a8a;color:#ffffff',
+      );
+      expect(template.bodyTemplate).toContain(
+        'style="font-size:30px;line-height:34px;font-weight:900;color:#ffca05">SAVE 10%',
+      );
+      expect(template.bodyTemplate).not.toContain("background:#fff4f8");
+    }
+  });
+
   it("keeps the original pre-banner header and uses the visibly updated GIF for each stage", () => {
     for (const template of conventionCampaignTemplates) {
       expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
