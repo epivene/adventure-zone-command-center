@@ -827,7 +827,7 @@
       ${item.ammo ? `<p>${item.ammo}</p>` : ""}
       <p><strong>${item.price} for 1–4 days.</strong> Extended events: additional pricing applies.</p>
       <p>Our crew handles setup, operation, and teardown. Tell us your location and dates so the booking team can confirm availability and site requirements.</p>
-      <div class="package-detail-actions"><button type="button" class="button" data-package-book="${item.key}">Ask About This Package</button>${standalone ? '<a href="/?section=packages">Compare all packages</a>' : `<a href="${packagePath(item.key)}">Open package page</a>`}</div>
+      <div class="package-detail-actions"><button type="button" class="button" data-package-book="${item.key}">Contact Us</button>${standalone ? '<a href="/?section=packages">Compare all packages</a>' : ""}</div>
       <h3 class="display">Possible Attraction Lineup</h3>${lineup}</div></div>`;
   }
 
