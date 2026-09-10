@@ -99,7 +99,9 @@ describe("convention workspace", () => {
         name: "Heartland 2026 convention game",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("columnheader", { name: "Met" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Met" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("columnheader", { name: "Follow up" }),
     ).toBeInTheDocument();
