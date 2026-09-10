@@ -19,8 +19,7 @@ describe("seven-email convention review workspace", () => {
     expect(review).toContain("review.blockedLinks.length === 0");
     expect(review).toContain("allLinksVerified");
     expect(review).toContain("Approve This Email");
-    expect(review).toContain("Desktop preview");
-    expect(review).toContain("Mobile preview");
+    expect(review).toContain("<EmailTemplatePreview");
   });
 
   it("shows every per-email decision and verification to the owner", () => {

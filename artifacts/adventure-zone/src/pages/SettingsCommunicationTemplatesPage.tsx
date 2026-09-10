@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { apiFetch } from "@/lib/auth-token";
-import { buildEmailPreview } from "@/lib/email-preview";
+import { EmailTemplatePreview } from "@/components/email-template-preview";
 
 type TemplateState = "draft" | "reviewed" | "active" | "archived";
 type TemplateOwnerKind = "company" | "shared_office" | "office_user";
@@ -314,7 +314,7 @@ export default function SettingsCommunicationTemplatesPage() {
           <div className="overflow-hidden rounded-xl border bg-white">
             <div className="border-b bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subject</p><p className="mt-1 break-words font-semibold">{exampleSubject || "(No subject)"}</p></div>
             {selectedIsHtml
-              ? <iframe className="min-h-[42rem] w-full bg-white" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={buildEmailPreview(exampleBody)} title="Email body preview" />
+              ? <EmailTemplatePreview title="Email body preview" html={exampleBody} />
               : <pre className="min-h-40 whitespace-pre-wrap break-words p-4 font-sans text-sm">{exampleBody}</pre>}
           </div>
         </section>
