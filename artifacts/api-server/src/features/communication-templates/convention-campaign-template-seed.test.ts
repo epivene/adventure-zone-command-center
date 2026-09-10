@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a08b3f7f050efe7",
+        gmailMessageId: "1a08b43c89b62f52",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a08b3fcc1c666f2",
+        gmailMessageId: "1a08b43e715a4506",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a08b3fed41dae09",
+        gmailMessageId: "1a08b4403bb30df1",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a08b40082a31fd6",
+        gmailMessageId: "1a08b44588ae768b",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a08b404f2e866ec",
+        gmailMessageId: "1a08b447893cb43a",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a08b406ac58e5d2",
+        gmailMessageId: "1a08b449607f7420",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a08b40877b4c617",
+        gmailMessageId: "1a08b44eef713040",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -98,6 +98,10 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate).not.toContain("0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2.png");
       expect(template.bodyTemplate.match(/adventure-zone-logo-navy\.png/g))
         .toHaveLength(1);
+      expect(template.bodyTemplate).toMatch(
+        /<td style="background:#0f1729;padding:16px 38px 36px;border-bottom:7px solid #ff0a8a;text-align:center">/,
+      );
+      expect(template.bodyTemplate).toContain("margin:19px auto 17px");
 
       const trailer = template.bodyTemplate.match(
         /<a href="([^"]+)"[^>]*><img src="(https:\/\/static\.wixstatic\.com\/media\/[^"]+\.gif)"[^>]*alt="([^"]+)"/,
