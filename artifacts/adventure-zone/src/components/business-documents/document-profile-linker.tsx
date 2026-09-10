@@ -145,7 +145,7 @@ export function DocumentProfileLinker({ api, documents, onLinked }: DocumentProf
             ))}
           </div>
           <Button className="mt-3" disabled={linking} onClick={() => void linkMatches()} type="button">
-            <Link2 className="mr-2 h-4 w-4" />{linking ? "Linking…" : `Link ${suggestions.length} strong matches`}
+            <Link2 className="mr-2 h-4 w-4" />{linking ? "Linking…" : `Link ${suggestions.length} strong ${suggestions.length === 1 ? "match" : "matches"}`}
           </Button>
         </details>
       ) : null}
