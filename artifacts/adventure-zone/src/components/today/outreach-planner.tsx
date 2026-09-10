@@ -244,8 +244,8 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
   const [reason, setReason] = useState("");
   const [decisionDue, setDecisionDue] = useState(localInput(candidate.decisionDueAt));
   const [snoozedUntil, setSnoozedUntil] = useState(localInput(candidate.snoozedUntil));
-  const [cadence, setCadence] = useState(candidate.cadenceOverride?.days.join(",") ?? "7,14,21");
-  const [minimumGap, setMinimumGap] = useState(candidate.cadenceOverride?.minimumGapDays ?? 7);
+  const [cadence, setCadence] = useState(candidate.cadenceOverride?.days.join(",") ?? "3,10,15");
+  const [minimumGap, setMinimumGap] = useState(candidate.cadenceOverride?.minimumGapDays ?? 3);
   const [timelineReviewed, setTimelineReviewed] = useState(candidate.cadenceOverride?.timelineReviewed ?? false);
   const [cadenceReason, setCadenceReason] = useState(candidate.cadenceOverride?.reason ?? "");
   const [sourceId, setSourceId] = useState("");
@@ -326,7 +326,7 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
         {candidate.tier === "dedicated" ? <p className="text-sm text-amber-900">Returning dedicated events require an explicit renewal review or decision date. Prior participation does not reserve equipment.</p> : null}
         <div className="grid gap-3 sm:grid-cols-3"><label className="grid gap-1 text-sm font-semibold">Cadence days<input className={input} value={cadence} onChange={(event) => setCadence(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Minimum gap days<input className={input} min="1" type="number" value={minimumGap} onChange={(event) => setMinimumGap(Number(event.target.value))} /></label><label className="grid gap-1 text-sm font-semibold">Cadence override reason<input className={input} value={cadenceReason} onChange={(event) => setCadenceReason(event.target.value)} /></label></div>
         <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={timelineReviewed} onChange={(event) => setTimelineReviewed(event.target.checked)} />I reviewed the urgent operational timeline and approve this cadence.</label>
-        <p className="text-xs text-slate-500">Default is 7 / 14 / 21 days. A shorter cadence cannot bypass missing evidence, replies, decisions, or callbacks.</p><button className="button-secondary min-h-11 w-fit" disabled={!!busy} type="button" onClick={() => void saveCadence()}>Save cadence override</button>
+        <p className="text-xs text-slate-500">Default is day 3, day 10, and day 15 after the first successful contact (3 days, then 7 more, then 5 more). A shorter cadence cannot bypass missing evidence, replies, decisions, or callbacks.</p><button className="button-secondary min-h-11 w-fit" disabled={!!busy} type="button" onClick={() => void saveCadence()}>Save cadence override</button>
       </Details>
       <Details title="Actual contact history and source review">
         <button className="button-secondary min-h-11 w-fit" disabled={!!busy} type="button" onClick={() => void mutate("check", () => checkCandidate(candidate.id))}>{busy === "check" ? "Checking…" : "Refresh actual sources and allocation"}</button>

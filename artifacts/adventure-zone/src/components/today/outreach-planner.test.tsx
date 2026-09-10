@@ -386,7 +386,7 @@ describe("final review planner contracts", () => {
   it("renders Advance from real policy and portfolio output and preserves hold protection", async () => {
     const c = candidate({ tier: "strong", eventStartsAt: "2026-12-01T12:00:00Z", sources: { ...candidate().sources, choices: [] } });
     const at = new Date("2026-09-30T18:00:00Z");
-    c.outreach = evaluateOutreach({ tier: "strong", status: "ready_to_contact", attempts: ["initial", "follow_up_1", "follow_up_2"].map((stage, i) => ({ id: stage, stage, occurredAt: `2026-09-${String(1 + i*7).padStart(2, "0")}T18:00:00Z`, successful: true })) as any, meaningfulReplyAt: null, decisionDueAt: null, conventionEndsOn: null, operationalStartsOn: "2026-12-01", blockedReason: null }, at) as typeof c.outreach;
+    c.outreach = evaluateOutreach({ tier: "strong", status: "ready_to_contact", attempts: ["initial", "follow_up_1", "follow_up_2"].map((stage, i) => ({ id: stage, stage, occurredAt: `2026-09-${String([1, 4, 11][i]).padStart(2, "0")}T18:00:00Z`, successful: true })) as any, meaningfulReplyAt: null, decisionDueAt: null, conventionEndsOn: null, operationalStartsOn: "2026-12-01", blockedReason: null }, at) as typeof c.outreach;
     const dto = planner({ candidates: [c] });
     // A real missing-capacity portfolio result is needs_review. Advancement
     // releases advisory pursuit and does not require or promise availability.
@@ -448,6 +448,9 @@ describe("final review planner contracts", () => {
     const contact = (await screen.findByText(/Contact next/)).closest("details")!;
     fireEvent.click(within(contact).getByText("Decision, snooze, classification and rank"));
     expect(within(contact).getByLabelText(/Renewal review \/ decision due/)).toBeVisible();
+    expect(within(contact).getByLabelText("Cadence days")).toHaveValue("3,10,15");
+    expect(within(contact).getByLabelText("Minimum gap days")).toHaveValue(3);
+    expect(within(contact).getByText(/Default is day 3, day 10, and day 15/)).toBeVisible();
     fireEvent.change(within(contact).getByLabelText("Audit reason"), { target: { value: "Reviewed urgent dates" } });
     fireEvent.change(within(contact).getByLabelText("Cadence days"), { target: { value: "2,4,6" } });
     fireEvent.change(within(contact).getByLabelText("Minimum gap days"), { target: { value: "2" } });

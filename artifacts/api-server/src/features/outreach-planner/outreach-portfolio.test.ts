@@ -384,7 +384,7 @@ describe("final review ongoing pursuit contract", () => {
       expect(b.portfolio.state).toBe("first_choice");
     },
   );
-  it("returns an actionable real completed day-21 DTO", () => {
+  it("returns an actionable real completed day-15 DTO", () => {
     const a = candidate("a", "leg1");
     a.outreach = evaluateOutreach(
       {
@@ -393,7 +393,7 @@ describe("final review ongoing pursuit contract", () => {
         attempts: ["initial", "follow_up_1", "follow_up_2"].map((stage, i) => ({
           id: stage,
           stage,
-          occurredAt: `2026-07-${String(1 + 7 * i).padStart(2, "0")}T18:00:00Z`,
+          occurredAt: `2026-07-${String([1, 4, 11][i]).padStart(2, "0")}T18:00:00Z`,
           successful: true,
         })) as any,
         meaningfulReplyAt: null,

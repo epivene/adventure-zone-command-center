@@ -45,8 +45,8 @@ export type OutreachCadence = {
   reason: string;
 };
 export const DEFAULT_OUTREACH_CADENCE: OutreachCadence = {
-  days: [7, 14, 21],
-  minimumGapDays: 7,
+  days: [3, 10, 15],
+  minimumGapDays: 3,
   reason: "Default cadence",
 };
 export function validCadence(policy: OutreachCadence): boolean {
@@ -319,7 +319,13 @@ export function evaluateOutreach(
     new Date(
       Math.max(
         first.getTime() + policy.days[completed.length - 1] * DAY,
-        last.getTime() + policy.minimumGapDays * DAY,
+        last.getTime() +
+          Math.max(
+            policy.minimumGapDays,
+            policy.days[completed.length - 1] -
+              (policy.days[completed.length - 2] ?? 0),
+          ) *
+            DAY,
       ),
     ),
   );
