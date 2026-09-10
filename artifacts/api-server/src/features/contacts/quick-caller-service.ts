@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { normalizeContactEmailValue } from "@/features/contacts/contact-email-value";
 import type { DrizzleContactRepository } from "@/features/contacts/contact-repository";
 import type { DuplicateCandidate } from "@/features/caller-finder/caller-finder-types";
 import type { QuickCallerInput } from "@/features/contacts/contact-types";
@@ -11,7 +12,7 @@ const quickCallerSchema = z.object({
   name: z.string().trim().min(1, "Enter the caller's name."),
   organizationName: z.string().trim().min(1, "Enter an organization or event."),
   phone: optionalText,
-  email: z.string().trim().toLowerCase().transform((value) => value || null),
+  email: z.string().transform(normalizeContactEmailValue),
   reason: z.string().trim().min(1, "Enter the reason for calling."),
   eventDate: optionalText,
   eventLocation: optionalText,
