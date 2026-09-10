@@ -1,12 +1,12 @@
 /* Compact the app on small phones without using browser zoom. */
 @media (max-width: 640px) {
   html {
-    font-size: 90%;
+    font-size: 94%;
   }
 
   /* Preserve a comfortable minimum tap target after the rem scale shrinks. */
   button {
-    min-height: 44px;
+    min-height: 46px;
   }
 }
 
@@ -20,7 +20,7 @@
   }
 
   button {
-    min-height: 44px;
+    min-height: 46px;
   }
 
   /* Avoid iOS zooming the whole page when a small text field receives focus. */
