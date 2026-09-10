@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 /**
  * Organization consolidation -- merges multiple organization profiles that
  * represent locations of the same real-world organization into one canonical
@@ -237,7 +238,7 @@ export async function applyConsolidation(
     seenSourceIds.add(a.sourceOrgId);
   }
 
-  return database.transaction(async (tx) => {
+  return reconcileCapacityFacts(database, "canonical-merge",async (tx) => {
     await lockOrganizationMutationDomain(tx);
 
     const sourceIds = input.locationAssignments.map((a) => a.sourceOrgId);

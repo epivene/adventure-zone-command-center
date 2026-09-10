@@ -1,3 +1,4 @@
+import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import express, { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
 
@@ -68,6 +69,7 @@ function actor(req: Request) {
 }
 
 function mapError(error: unknown, res: Response) {
+  if (error instanceof OutreachError) { res.status(error.status).json({error:error.message}); return; }
   if (error instanceof ContractDraftServiceError) {
     if (error.code === "CONTRACT_DRAFT_STALE") {
       res.status(409).json({

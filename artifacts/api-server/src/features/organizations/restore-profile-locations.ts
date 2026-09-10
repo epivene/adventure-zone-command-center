@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
@@ -85,7 +86,7 @@ export async function restoreAllProfileLocations(
   canonicalOrgId: string,
   now: Date,
 ): Promise<{ restoredLocationCount: number; restoredProfileIds: string[] }> {
-  return database.transaction(async (tx) => {
+  return reconcileCapacityFacts(database, "canonical-merge",async (tx) => {
     // Use the same mutation domain as consolidation/add-profile flows so a
     // restore cannot race another relationship change and split ownership.
     await lockOrganizationMutationDomain(tx);

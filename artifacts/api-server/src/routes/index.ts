@@ -1,3 +1,4 @@
+import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import healthRouter from "./health";
@@ -231,6 +232,7 @@ router.use(createTwilioInboundVoiceWebhooksRouter({
 }));
 
 router.use(requireOwnerMiddleware);
+router.use("/outreach-planner", createOutreachPlannerRouter());
 router.use(conventionOutreachRouter);
 router.use(async (req, _res, next) => {
   leakedFixtureCleanup ??= cleanupLeakedConsolidationTestFixtures(db);

@@ -1,3 +1,4 @@
+import { beginRawCapacityReconciliation, finishRawCapacityReconciliation } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
 export type ManagerLegMatch = {
@@ -434,6 +435,7 @@ implements KristyReviewStateCorrectionRepository {
     const client = await this.database.connect();
     try {
       await client.query("BEGIN");
+      await beginRawCapacityReconciliation(client,"verified-historic-state-correction");
 
       const allIds = [
         ...KRISTY_REVIEW_PROMPT_BOOKINGS.map((booking) => booking.id),
@@ -584,6 +586,7 @@ implements KristyReviewStateCorrectionRepository {
         return "changed";
       }
 
+      await finishRawCapacityReconciliation(client,"verified-historic-state-correction");
       await client.query("COMMIT");
       return "applied";
     } catch (error) {

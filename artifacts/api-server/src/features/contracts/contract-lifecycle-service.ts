@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -124,7 +126,8 @@ export class DrizzleContractLifecycleRepository implements ContractLifecycleRepo
   }
 
   async commit(input: Parameters<ContractLifecycleRepository["commit"]>[0]) {
-    return this.database.transaction(async (transaction) => {
+    const allocationBooking = allocationEnabled() && input.bookingStatus ? await this.get(input.contractVersionId) : null;
+    return commitmentTransaction(this.database, async (transaction) => {
       const [locked] = await transaction.select({
         contractVersionId: contractVersions.id,
         bookingId: contractVersions.bookingId,
@@ -187,11 +190,12 @@ export class DrizzleContractLifecycleRepository implements ContractLifecycleRepo
         contractStatus: input.toStatus,
         bookingStatus,
       }, reused: false };
-    });
+    }, {source:"contract-lifecycle",actor:input.actorId,bookingIds:allocationBooking?[allocationBooking.bookingId]:[]});
   }
 
   async confirmSignedFile(input: Parameters<ContractLifecycleRepository["confirmSignedFile"]>[0]) {
-    return this.database.transaction(async (transaction) => {
+    const allocationBooking = allocationEnabled() && true ? await this.get(input.contractVersionId) : null;
+    return commitmentTransaction(this.database, async (transaction) => {
       const [locked] = await transaction.select({
         contractVersionId: contractVersions.id,
         bookingId: contractVersions.bookingId,
@@ -248,6 +252,6 @@ export class DrizzleContractLifecycleRepository implements ContractLifecycleRepo
         contractVersionId: locked.contractVersionId, bookingId: locked.bookingId,
         contractStatus: "completed" as const, bookingStatus,
       }, reused: false };
-    });
+    }, {source:"contract-lifecycle",actor:input.actorId,bookingIds:allocationBooking?[allocationBooking.bookingId]:[]});
   }
 }

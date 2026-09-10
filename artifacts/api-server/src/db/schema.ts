@@ -31,3 +31,5 @@ export {
 export * from "@workspace/db/contract-schema";
 export * from "@workspace/db/marketing-schema";
 export * from "@workspace/db/business-document-schema";
+
+export * from "@workspace/db/outreach-planner-schema";

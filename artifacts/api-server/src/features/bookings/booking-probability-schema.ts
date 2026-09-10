@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { beginRawCapacityReconciliation, finishRawCapacityReconciliation } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
@@ -68,6 +70,7 @@ export async function ensureBookingProbabilitySchema(
       );
     }
 
+    if(allocationEnabled()) { await client.query("BEGIN");await beginRawCapacityReconciliation(client,"confirmed-probability-backfill"); }
     await client.query(`
       UPDATE bookings
       SET probability = 'definite'::probability,
@@ -94,6 +97,10 @@ export async function ensureBookingProbabilitySchema(
       FOR EACH ROW
       EXECUTE FUNCTION set_confirmed_booking_probability();
     `);
+    if(allocationEnabled()) { await finishRawCapacityReconciliation(client,"confirmed-probability-backfill");await client.query("COMMIT"); }
+  } catch(error) {
+    if(allocationEnabled()) await client.query("ROLLBACK");
+    throw error;
   } finally {
     if (repairTimeoutsApplied) {
       await client.query("RESET statement_timeout").catch(() => undefined);

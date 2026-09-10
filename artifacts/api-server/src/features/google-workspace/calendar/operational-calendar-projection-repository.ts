@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -165,7 +166,8 @@ export class OperationalCalendarProjectionRepository {
     endsAt: Date;
     source: "app" | "google_calendar" | "manual";
   }): Promise<void> {
-    await this.db.insert(bookingOperationalWindows).values({
+    await reconcileCapacityFacts(this.db,"calendar-sync",async tx => {
+    await tx.insert(bookingOperationalWindows).values({
       bookingId: input.bookingId,
       startsAt: input.startsAt,
       endsAt: input.endsAt,
@@ -173,6 +175,7 @@ export class OperationalCalendarProjectionRepository {
     }).onConflictDoUpdate({
       target: bookingOperationalWindows.bookingId,
       set: { startsAt: input.startsAt, endsAt: input.endsAt, source: input.source, updatedAt: new Date() },
+    });
     });
   }
 }

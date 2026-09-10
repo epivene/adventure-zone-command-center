@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq } from "drizzle-orm";
 import type { db as applicationDatabase } from "@/db/client";
 import {
@@ -40,7 +41,7 @@ export async function addProfileAsLocation(
     throw new OrganizationConflictError("A profile cannot be added to itself.");
   }
 
-  return database.transaction(async (tx) => {
+  return reconcileCapacityFacts(database, "canonical-merge",async (tx) => {
     await lockOrganizationMutationDomain(tx);
 
     const [canonical] = await tx
