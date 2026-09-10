@@ -320,3 +320,54 @@ describe("owner cadence and snooze", () => {
     ).toBe("needs_review");
   });
 });
+
+describe("final review urgent cadence and dedicated renewal", () => {
+  it("requires an explicit urgent review and retains the default schedule", () => {
+    const urgent = { ...base, operationalStartsOn: "2026-10-15" };
+    const override = {
+      days: [2, 4, 6] as [number, number, number],
+      minimumGapDays: 2,
+      reason: "Reviewed urgent event",
+    };
+    expect(evaluateOutreach(urgent, now).state).toBe("needs_review");
+    expect(evaluateOutreach(urgent, now, override).state).toBe("needs_review");
+    expect(
+      evaluateOutreach(urgent, now, { ...override, timelineReviewed: true })
+        .state,
+    ).toBe("ready");
+    const delayed = {
+      ...urgent,
+      attempts: [initial, { ...first, occurredAt: "2026-09-29T18:00:00Z" }],
+    };
+    expect(
+      evaluateOutreach(delayed, now, { ...override, timelineReviewed: true }),
+    ).toMatchObject({ state: "waiting", dueAt: "2026-10-01T18:00:00.000Z" });
+    expect(
+      evaluateOutreach({ ...delayed, operationalStartsOn: "2026-12-01" }, now)
+        .dueAt,
+    ).toBe("2026-10-06T18:00:00.000Z");
+    expect(
+      evaluateOutreach({ ...urgent, blockedReason: "Missing evidence" }, now, {
+        ...override,
+        timelineReviewed: true,
+      }).reason,
+    ).toBe("Missing evidence");
+    expect(
+      evaluateOutreach(
+        { ...urgent, meaningfulReplyAt: initial.occurredAt },
+        now,
+        { ...override, timelineReviewed: true },
+      ).state,
+    ).toBe("reply");
+  });
+  it("requires a dedicated renewal date and exposes the due owner task", () => {
+    expect(decide({ tier: "dedicated" }).reason).toMatch(/renewal review/);
+    expect(
+      decide({ tier: "dedicated", decisionDueAt: initial.occurredAt }).state,
+    ).toBe("decision");
+    expect(
+      decide({ tier: "dedicated", decisionDueAt: "2026-10-02T18:00:00Z" })
+        .state,
+    ).toBe("waiting");
+  });
+});

@@ -1,3 +1,4 @@
+import { evaluateOutreach } from "./outreach-policy";
 import { describe, expect, it } from "vitest";
 import { applyPortfolioPriority } from "./outreach-portfolio";
 import type { CandidateDTO, PlannerDTO } from "./outreach-dto";
@@ -326,5 +327,86 @@ describe("portfolio pursuit contention", () => {
       "first_choice",
       "first_choice",
     ]);
+  });
+});
+
+describe("final review ongoing pursuit contract", () => {
+  it.each([1, 2])(
+    "retains a contacted pursuit through waiting after %s actual stages until explicit release",
+    (count) => {
+      const a = candidate("a", "leg1"),
+        b = candidate("b", "leg2");
+      a.tier = "convention";
+      b.tier = "filler";
+      a.attempts = [
+        {
+          id: "initial",
+          sourceId: "initial",
+          stage: "initial",
+          occurredAt: "2026-07-01T18:00:00Z",
+        },
+        ...(count === 2
+          ? [
+              {
+                id: "followup",
+                sourceId: "followup",
+                stage: "follow_up_1",
+                occurredAt: "2026-07-31T18:00:00Z",
+              },
+            ]
+          : []),
+      ] as CandidateDTO["attempts"];
+      if (count === 1) a.attempts[0].occurredAt = "2026-07-31T18:00:00Z";
+      a.outreach = evaluateOutreach(
+        {
+          tier: a.tier,
+          status: "ready_to_contact",
+          attempts: a.attempts.map((x) => ({ ...x, successful: true })),
+          meaningfulReplyAt: null,
+          decisionDueAt: null,
+          conventionEndsOn: "2026-06-20",
+          operationalStartsOn: "2026-12-01",
+          blockedReason: null,
+        },
+        now,
+      );
+      const { p, facts } = planner([a, b]);
+      applyPortfolioPriority(p, facts, now);
+      expect(a.outreach.state).toBe("waiting");
+      expect(a.portfolio.state).toBe("waiting");
+      expect(b.portfolio).toMatchObject({
+        state: "waiting",
+        competing: [{ candidateId: "a" }],
+      });
+      a.releasedAt = now.toISOString();
+      a.outreach.state = "closed";
+      applyPortfolioPriority(p, facts, now);
+      expect(b.portfolio.state).toBe("first_choice");
+    },
+  );
+  it("returns an actionable real completed day-21 DTO", () => {
+    const a = candidate("a", "leg1");
+    a.outreach = evaluateOutreach(
+      {
+        tier: "strong",
+        status: "ready_to_contact",
+        attempts: ["initial", "follow_up_1", "follow_up_2"].map((stage, i) => ({
+          id: stage,
+          stage,
+          occurredAt: `2026-07-${String(1 + 7 * i).padStart(2, "0")}T18:00:00Z`,
+          successful: true,
+        })) as any,
+        meaningfulReplyAt: null,
+        decisionDueAt: null,
+        conventionEndsOn: null,
+        operationalStartsOn: "2026-12-01",
+        blockedReason: null,
+      },
+      now,
+    );
+    const { p, facts } = planner([a]);
+    applyPortfolioPriority(p, facts, now);
+    expect(a.outreach.state).toBe("advance");
+    expect(a.portfolio.state).toBe("first_choice");
   });
 });

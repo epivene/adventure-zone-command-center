@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { getBossWorkRequest } from "@/features/boss-work-requests/boss-work-request-api";
 import type { BossWorkRequestDetail } from "@/features/boss-work-requests/boss-work-request-types";
 import { RapidConventionNotesForm } from "@/components/boss-work-requests/RapidConventionNotesForm";
+import { ConventionPlanningForm } from "@/components/boss-work-requests/ConventionPlanningForm";
 import { EmailTemplateReview } from "@/components/boss-work-requests/EmailTemplateReview";
 
 export default function BossWorkRequestPage({ requestId }: { requestId: string }) {
@@ -25,7 +26,9 @@ export default function BossWorkRequestPage({ requestId }: { requestId: string }
         <h1 className="mt-2 text-2xl font-bold">{detail.request.title}</h1>
         {detail.request.instructions && <p className="mt-1 max-w-3xl text-sm text-muted-foreground">{detail.request.instructions}</p>}
       </header>
-      {detail.request.type === "rapid_convention_notes"
+      {detail.request.type === "convention_planning_questionnaire"
+        ? <ConventionPlanningForm key={`${detail.request.id}:${detail.request.state}`} detail={detail} reload={reload} />
+        : detail.request.type === "rapid_convention_notes"
         ? <RapidConventionNotesForm detail={detail} reload={reload} />
         : <EmailTemplateReview detail={detail} reload={reload} />}
     </main>

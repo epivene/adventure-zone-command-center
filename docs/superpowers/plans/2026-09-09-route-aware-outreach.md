@@ -86,17 +86,17 @@ Requirements: Respect explicit blockers and closed statuses; booked is closed fo
 
 Capacity: validate real calendar dates, positive integer requested quantities, nonnegative integer inventory. Missing leg/window/inventory/evidence/travel => review. Dedupe matching canonical reservations only if all relevant facts agree; contradictory mirrors => review. Skip excluded current booking. Check leg overlaps and each resource at interval breakpoints; two nonoverlapping bookings within requested window do not consume two simultaneous units. Ambiguous overlapping reservation blocks. Empty demand is review. Existing reservation malformed window/demand cannot silently disappear. Reservation leg null is review if relevant. The evaluator is pure and does not allocate or send.
 
-- [ ] Add behavior tests first:
+- [x] Add behavior tests first:
 ```ts
 expect(evaluateOutreach({ ...base, attempts: [initial] }, new Date("2026-09-30T18:00:00Z")).state).toBe("follow_up");
 expect(evaluateOutreach({ ...base, attempts: [initial, first, second] }, new Date("2026-09-30T18:00:00Z")).state).toBe("advance");
 expect(evaluateCapacity({ ...capacity, capacities: { az: 2 }, reservations: [earlyBooking, laterBooking] }).status).toBe("fits");
 ```
 Define fixtures with verified inputs; cover every requirement above with meaningful behavior cases, including DST/business-date boundaries and canonical duplicates.
-- [ ] Run focused tests to establish red using existing API Vitest config.
-- [ ] Implement the exported interfaces with small helpers and no new dependencies.
-- [ ] Run focused tests and TypeScript checking for these files.
-- [ ] Commit only these four files and write report with exact tests and concerns.
+- [x] Run focused tests to establish red using existing API Vitest config.
+- [x] Implement the exported interfaces with small helpers and no new dependencies.
+- [x] Run focused tests and TypeScript checking for these files.
+- [x] Commit only these four files and write report with exact tests and concerns.
 
 ## Task 2: Persist openings, candidates, evidence, and research work
 
@@ -114,15 +114,15 @@ Define fixtures with verified inputs; cover every requirement above with meaning
 
 **Interfaces:** REST under /outreach-planner. GET / returns enabled, openings, candidates, researchTasks, leg/package configuration; POST /openings creates planning window, POST /candidates associates an existing opportunity, PATCH /candidates/:id changes tier/rank/decision, POST /candidates/:id/attempts records a logged call/outreach reference, POST /candidates/:id/advance releases pursuit only when policy permits, POST /openings/:id/research creates idempotent criteria task. Service uses evaluateOutreach and evaluateCapacity from Task1, never trusts a client supplied capacity result.
 
-- [ ] Inspect actual schema/source identifiers and expose strongly typed DTOs to the UI task.
-- [ ] Add migration with foreign keys, validated dates/year and nonnegative rank, unique opening/opportunity membership, unique evidence ids, and idempotent research task creation. Migration marker verifies all objects used by runtime.
-- [ ] Add PGlite lifecycle tests: save/load edits, candidate duplicate prevention, source replay, unknown profile, invalid dates, existing manual next-action preservation.
-- [ ] Implement repository with transactions for changes and audit activity. Return disabled state without querying new tables when flag is false.
-- [ ] Add convention attribution from explicit submissions; read successful sends and logged calls from actual source state, preserve meaningful replies. Do not manufacture send history.
-- [ ] Add service and validated routes behind existing owner authorization. Failed actions preserve state and return actionable 400/404/409; integration failures are needs_review.
-- [ ] Add source evidence adapter that reconciles booking/calendar/resource data, records check timestamps, and preserves unknowns.
-- [ ] Verify routes cannot be used by unauthenticated/leg-manager identities and feature flag gating works.
-- [ ] Commit and report.
+- [x] Inspect actual schema/source identifiers and expose strongly typed DTOs to the UI task.
+- [x] Add migration with foreign keys, validated dates/year and nonnegative rank, unique opening/opportunity membership, unique evidence ids, and idempotent research task creation. Migration marker verifies all objects used by runtime.
+- [x] Add PGlite lifecycle tests: save/load edits, candidate duplicate prevention, source replay, unknown profile, invalid dates, existing manual next-action preservation.
+- [x] Implement repository with transactions for changes and audit activity. Return disabled state without querying new tables when flag is false.
+- [x] Add convention attribution from explicit submissions; read successful sends and logged calls from actual source state, preserve meaningful replies. Do not manufacture send history.
+- [x] Add service and validated routes behind existing owner authorization. Failed actions preserve state and return actionable 400/404/409; integration failures are needs_review.
+- [x] Add source evidence adapter that reconciles booking/calendar/resource data, records check timestamps, and preserves unknowns.
+- [x] Verify routes cannot be used by unauthenticated/leg-manager identities and feature flag gating works.
+- [x] Commit and report.
 
 ## Task 3: Shared allocation and offer safety
 
@@ -134,13 +134,13 @@ Define fixtures with verified inputs; cover every requirement above with meaning
 
 **Interfaces:** createHold(candidateId, expiresAt, actor), releaseHold(holdId, actor), extendHold(holdId, expiresAt, actor), and evaluateCommitment(bookingId) use shared authoritative evidence. A hold has exact quantities, leg, operational dates, owner, expiry, and lifecycle state. Customer-specific offer references a live hold.
 
-- [ ] Trace every booking status write and email dispatch path before enforcement.
-- [ ] Write transactional allocation tests showing two contenders for the last resource yield one success, plus expiry/release/extension/conversion and self-exclusion.
-- [ ] Serialize overlapping allocation checks using database locking; re-read authoritative booking inventory and live holds inside transaction. Reconcile with external Calendar evidence before allocation, treating missing evidence as review.
-- [ ] Enforce available capacity on commitment paths and recheck specific offers immediately before dispatch. General exploratory outreach remains possible; no automatic sends added.
-- [ ] Invalidate affected planning evaluations when dates, assignments, resources, calendar sync, or hold lifecycle changes; preserve conversation history.
-- [ ] Ensure rollout flag keeps current behavior unchanged until enabled. No double-counting on hold-to-booking conversion.
-- [ ] Run focused source, dispatch, and allocation tests; commit and report.
+- [x] Trace every booking status write and email dispatch path before enforcement.
+- [x] Write transactional allocation tests showing two contenders for the last resource yield one success, plus expiry/release/extension/conversion and self-exclusion.
+- [x] Serialize overlapping allocation checks using database locking; re-read authoritative booking inventory and live holds inside transaction. Reconcile with external Calendar evidence before allocation, treating missing evidence as review.
+- [x] Enforce available capacity on commitment paths and recheck specific offers immediately before dispatch. General exploratory outreach remains possible; no automatic sends added.
+- [x] Invalidate affected planning evaluations when dates, assignments, resources, calendar sync, or hold lifecycle changes; preserve conversation history.
+- [x] Ensure rollout flag keeps current behavior unchanged until enabled. No double-counting on hold-to-booking conversion.
+- [x] Run focused source, dispatch, and allocation tests; commit and report.
 
 ## Task 4: Booking workspace and profile controls
 
@@ -154,19 +154,36 @@ Define fixtures with verified inputs; cover every requirement above with meaning
 
 **Interfaces:** Consume Task2 DTOs and allocation actions through existing apiGet/apiPost/apiPatch helpers. Today displays existing urgent work first, then eligible convention-first outreach and explicit waiting/research work.
 
-- [ ] Write interaction tests: create opening, classify/add existing opportunity, save decision date, log attempt, advance only when eligible, request research, show holds/conflicts.
-- [ ] Build mobile-friendly cards and forms with visible labels, disabled/busy actions, preserved form input on error, and no forced horizontal scrolling.
-- [ ] Show candidate year/tier, event dates, next action, real contact evidence, waiting reason and package/leg fit. Unverified capacity must never be styled as available.
-- [ ] Link full existing event profile with Today return context. Preserve current Today features and Early Bird card.
-- [ ] Add empty-state setup using real configured legs and packages. Unknown dates/tier remain reviewable. Do not seed fake business data.
-- [ ] Run React interaction tests and relevant existing Today tests.
-- [ ] Commit and report.
+- [x] Write interaction tests: create opening, classify/add existing opportunity, save decision date, log attempt, advance only when eligible, request research, show holds/conflicts.
+- [x] Build mobile-friendly cards and forms with visible labels, disabled/busy actions, preserved form input on error, and no forced horizontal scrolling.
+- [x] Show candidate year/tier, event dates, next action, real contact evidence, waiting reason and package/leg fit. Unverified capacity must never be styled as available.
+- [x] Link full existing event profile with Today return context. Preserve current Today features and Early Bird card.
+- [x] Add empty-state setup using real configured legs and packages. Unknown dates/tier remain reviewable. Do not seed fake business data.
+- [x] Run React interaction tests and relevant existing Today tests.
+- [x] Commit and report.
 
 ## Task 5: Integrated review and delivery
 
-- [ ] Verify migrations twice on isolated PGlite and targeted domain/API/UI tests.
-- [ ] Typecheck modified units; build production bundles where complete dependency graph is available. Record baseline failures separately.
-- [ ] Inspect diff for unrelated changes, permissions, stale evidence and duplicate writes.
+- [x] Verify migrations twice on isolated PGlite and targeted domain/API/UI tests.
+- [x] Typecheck modified units; build production bundles where complete dependency graph is available. Record baseline failures separately.
+- [x] Inspect diff for unrelated changes, permissions, stale evidence and duplicate writes.
 - [ ] Create a reviewable feature branch/PR with precise tested scope and rollout instructions.
 - [ ] Report actual completion and any unverified live behavior. No production data mutation or external communication.
 
+
+## Task 3 dependency slices
+
+Task3 is implemented and reviewed in three sequential slices because it spans independent source, mutation, and dispatch boundaries. All original Task3 requirements remain binding; Task3 is not complete until all slices pass.
+- 3A: Shared authoritative evidence projection, persisted exact candidate demand, expiring holds/global mutex, owner API. Holds-only concurrency/lifecycle/self-exclusion. Production enforcement is incomplete until3B/3C.
+- 3B: Shared transactional enforcement across every booking/capacity writer, external fact reconciliation, invalidation/backstop, hold-to-booking conversion. Test hold-versus-booking and commitment-edit races.
+- 3C: Explicit content-bound offer intent and dispatch claims at opportunity and office coordinators. Scheduled/retry paths, editing invalidation, livehold/content/identity/expiry checks, outcome reconciliation; preserve general exploratory contact and EarlyBird.
+
+Full rollout stays disabled throughout implementation and review.
+
+## Task 4 dependency slices
+
+- [x] 4A: Complete backend contracts for audited snooze/cadence, safe profile/year admission, shared-resource pursuit priority, qualified research results, named recovery catalogs and existing contact blocks.
+- [x] 4B: Integrate reviewed contracts into Today, profile and actual owner draft-review screens; verify mobile interactions and preserve current urgent work and Early Bird behavior.
+- [x] 4C: Add explicit owner-confirmed binding of an undated, unlinked opportunity to its verified matching event, preserving existing linked-event identity and history.
+
+Task 4 is complete only after all three slices pass review. Task 3A–3C are reviewed complete; the final feature review also covers their integration with Task 4.

@@ -320,6 +320,23 @@ export class OutreachRepository {
           reason: `Existing ${manual.kind} takes precedence over generic outreach.`,
         };
       }
+      if (
+        c.releasedAt &&
+        sources.inboundObservations?.some(
+          (m) =>
+            (!m.receivedAt || new Date(m.receivedAt) > c.releasedAt!) &&
+            (m.state !== "reviewed" ||
+              (m.reviewedOpportunityId === c.opportunityId &&
+                m.classification !== "not_reply")),
+        )
+      )
+        outreach = {
+          state: "needs_review",
+          dueAt: null,
+          nextStage: null,
+          reason:
+            "Late inbound message on a released pursuit: classify the reply, recheck current availability and explicitly decide whether to resume. Old capacity has not been restored.",
+        };
       candidates.push({
         ...json<Omit<CandidateDTO, "sources">>(c),
         organizationId: op.organizationId,
@@ -479,11 +496,12 @@ export class OutreachRepository {
     return row;
   }
   async patch(id: string, input: CandidatePatch) {
-    const { reason, ...fields } = input;
+    const { reason, resumeReleased, ...fields } = input;
     const [row] = await this.db
       .update(outreachCandidates)
       .set({
         ...fields,
+        ...(resumeReleased ? { releasedAt: null } : {}),
         snoozedUntil:
           fields.snoozedUntil === undefined
             ? undefined
@@ -506,7 +524,7 @@ export class OutreachRepository {
       .where(eq(outreachCandidates.id, id))
       .returning();
     if (!row) throw new OutreachError(404, "Candidate not found.");
-    return { ...row, reason };
+    return { ...row, reason, ...(resumeReleased ? { resumeReleased: true } : {}) };
   }
   async attempt(
     id: string,

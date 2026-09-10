@@ -11,6 +11,13 @@ import {
 import type { ActiveAssistantContext } from "./assistant-types";
 
 type ConcreteAssistantContext = Exclude<ActiveAssistantContext, null>;
+export type AssistantScoutLaunchPrefill = {
+  anchorLabel: string;
+  radiusMiles: 25 | 50 | 100 | 150 | 200 | 300;
+  dateStart: string;
+  dateEnd: string;
+  criteriaSummary: string;
+};
 
 type AssistantContextValue = {
   pageContext: ActiveAssistantContext;
@@ -25,7 +32,8 @@ type AssistantContextValue = {
   clearExplicitContext(): void;
   isOpen: boolean;
   prefill: string;
-  openAssistant(prefill?: string): void;
+  scoutLaunchPrefill: AssistantScoutLaunchPrefill | null;
+  openAssistant(prefill?: string, scoutLaunchPrefill?: AssistantScoutLaunchPrefill): void;
   closeAssistant(): void;
 };
 
@@ -43,6 +51,7 @@ export function AssistantContextProvider({ children }: { children: ReactNode }) 
   const [explicitContext, setExplicitContext] = useState<ActiveAssistantContext>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [prefill, setPrefill] = useState("");
+  const [scoutLaunchPrefill, setScoutLaunchPrefill] = useState<AssistantScoutLaunchPrefill | null>(null);
 
   const setPageContext = useCallback((next: ActiveAssistantContext) => {
     const previous = pageContextRef.current;
@@ -81,15 +90,18 @@ export function AssistantContextProvider({ children }: { children: ReactNode }) 
     clearExplicitContext,
     isOpen,
     prefill,
-    openAssistant(nextPrefill = "") {
+    scoutLaunchPrefill,
+    openAssistant(nextPrefill = "", nextScoutLaunchPrefill) {
       setPrefill(nextPrefill);
+      setScoutLaunchPrefill(nextScoutLaunchPrefill ?? null);
       setIsOpen(true);
     },
     closeAssistant() {
       setIsOpen(false);
       setPrefill("");
+      setScoutLaunchPrefill(null);
     },
-  }), [activeContext, clearExplicitContext, clearPageContext, clearTransientContext, explicitContext, isOpen, pageContext, prefill, selectExplicitContext, setPageContext, setTransientContext, transientContext]);
+  }), [activeContext, clearExplicitContext, clearPageContext, clearTransientContext, explicitContext, isOpen, pageContext, prefill, scoutLaunchPrefill, selectExplicitContext, setPageContext, setTransientContext, transientContext]);
 
   return <AssistantContext.Provider value={value}>{children}</AssistantContext.Provider>;
 }

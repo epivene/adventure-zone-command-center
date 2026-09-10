@@ -54,6 +54,7 @@ export const candidateInput = z
   .strict();
 export const cadenceInput = z
   .object({
+    timelineReviewed: z.boolean().optional(),
     days: z.tuple([
       z.number().int().positive().max(3650),
       z.number().int().positive().max(3650),
@@ -69,6 +70,7 @@ export const cadenceInput = z
   );
 export const candidatePatch = z
   .object({
+    resumeReleased: z.literal(true).optional(),
     tier: candidateInput.shape.tier.optional(),
     manualRank: candidateInput.shape.manualRank.optional(),
     snoozedUntil: instant.nullable().optional(),
@@ -149,6 +151,19 @@ export const profileAdmissionInput = z
   })
   .strict();
 export type ProfileAdmissionInput = z.infer<typeof profileAdmissionInput>;
+export const opportunityBindingInput = z
+  .object({
+    bookingId: z.string().uuid(),
+    confirmedEventYear: z.number().int().min(2000).max(2200),
+    confirmedSameEvent: z.literal(true),
+    reason: z.string().trim().min(1).max(2000),
+    sourceReference: z.string().trim().min(1).max(2000),
+  })
+  .strict();
+export type OpportunityBindingInput = z.infer<typeof opportunityBindingInput>;
+export type OpportunityBindingDTO = ProfileAdmissionDTO & {
+  sourceReference: string;
+};
 export type ProfileChoiceDTO = {
   organizationId: string;
   organizationName: string;

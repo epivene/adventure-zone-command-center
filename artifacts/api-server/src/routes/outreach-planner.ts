@@ -182,6 +182,12 @@ export function createOutreachPlannerRouter(
     "/opportunities/admit",
     run((req) => service.admitProfile(req.body, actor(req))),
   );
+  router.post(
+    "/opportunities/:id/bind-booking",
+    run((req) =>
+      service.bindOpportunity(String(req.params.id), req.body, actor(req)),
+    ),
+  );
   router.get(
     "/opportunities",
     run((req) => service.searchOpportunities(req.query)),

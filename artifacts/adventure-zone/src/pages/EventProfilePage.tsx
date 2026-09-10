@@ -23,6 +23,7 @@ import { ContractAction } from "@/components/contracts/contract-action";
 import { ContractHistoryCard } from "@/components/contracts/contract-history-card";
 import { contractClient } from "@/features/contracts/contract-client";
 import type { ContractVersion } from "@/features/contracts/contract-types";
+import { OutreachProfileSummary } from "@/components/today/outreach-planner";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -223,6 +224,8 @@ export default function EventProfilePage() {
           />
         ) : null}
 
+        {!profileEditing && profileId ? <OutreachProfileSummary organizationId={profileId} /> : null}
+
         {!profileEditing ? <ScoutNotesPanel notes={data.scoutNotes ?? []} /> : null}
 
         {!profileEditing && profileId ? <AttendanceHistoryPanel mode="owner" profileId={profileId} /> : null}
@@ -288,4 +291,3 @@ export default function EventProfilePage() {
     </div>
   );
 }
-

@@ -55,7 +55,7 @@ async function setup() {
   clients.push(client);
   await client.exec(`
 create table travel_legs(id uuid primary key,name text);
-create table organizations(id uuid primary key,name text,last_resort boolean default false);
+create table organizations(id uuid primary key,name text,region text,last_resort boolean default false);
 create table bookings(id uuid primary key,starts_at timestamptz,ends_at timestamptz,status text,probability text,travel_leg_id uuid);
 create table booking_opportunities(id uuid primary key,organization_id uuid references organizations(id),event_year integer not null,booking_id uuid,contact_id uuid,status text default 'ready_to_contact',priority text default 'normal',next_action_kind text,next_action_due_at timestamptz,hold_reason text,email_automation_protected boolean default false,territory_exception_approved boolean default false,created_at timestamptz default now(),updated_at timestamptz default now(), unique(organization_id,event_year));
 create table package_templates(id uuid primary key,code text,normal_capacity integer,temporary_unavailable_quantity integer);
@@ -70,7 +70,7 @@ create table booking_package_selections(booking_id uuid,package_template_id uuid
 create table google_operational_calendar_links(id uuid,booking_id uuid,calendar_id text,google_event_id text,package_key text,reserved_starts_at timestamptz,reserved_ends_at timestamptz,last_synced_at timestamptz,last_error_code text);
 create table google_workspace_validation_mappings(message_id text,organization_id uuid,updated_at timestamptz);
 create table activities(id uuid primary key default gen_random_uuid(),organization_id uuid,contact_id uuid,booking_id uuid,kind text,subject text,status text,body text,occurred_at timestamptz,timeline_sort_at timestamptz,date_is_import_fallback boolean default false,ends_at timestamptz,act_record_id text,source_record_id uuid,source_version_id uuid,source_type text,organization_location_id uuid,created_at timestamptz default now(),updated_at timestamptz default now(),deleted_at timestamptz);
-insert into travel_legs values ('${leg}','Leg 1');insert into organizations values ('${org}','Festival',false);insert into booking_opportunities(id,organization_id,event_year,booking_id) values ('${op}','${org}',2026,'${booking}');
+insert into travel_legs values ('${leg}','Leg 1');insert into organizations(id,name,last_resort) values ('${org}','Festival',false);insert into booking_opportunities(id,organization_id,event_year,booking_id) values ('${op}','${org}',2026,'${booking}');
 `);
   await client.exec(`
 alter table bookings add name text default 'Event', add latitude double precision default 40,add longitude double precision default -80;
@@ -1402,6 +1402,141 @@ describe("content-bound dispatch ledger", () => {
     return { ...f, id, hold, dispatch, preview, kind };
   }
   it.each(["opportunity_email", "office_email"] as const)(
+    "final review %s blocks current protections at review, approval, scheduled claim and final boundary",
+    async (kind) => {
+      const f = await reviewed(kind, "exploratory");
+      const mutations = [
+        "update organizations set last_resort=true",
+        "update organizations set region='TX'",
+        "update booking_opportunities set email_automation_protected=true",
+        "update booking_opportunities set status='declined'",
+        "update booking_opportunities set status='not_pursuing'",
+        "update booking_opportunities set status='territory_hold',territory_exception_approved=false",
+      ];
+      const reset = async () => {
+        await f.client.exec(
+          "update organizations set last_resort=false,region=null; update booking_opportunities set email_automation_protected=false,status='ready_to_contact',territory_exception_approved=false",
+        );
+      };
+      if (kind === "opportunity_email")
+        await f.client.query(
+          "update booking_opportunity_email_state set state='scheduled',scheduled_for='2026-08-01T17:00:00Z' where id=$1",
+          [f.id],
+        );
+      for (const change of mutations) {
+        await f.client.exec(change);
+        const review = await f.dispatch.review(kind, f.id);
+        expect(review.approvalCurrent).toBe(false);
+        expect(review.reviewReasons.join(" ")).toMatch(/DO NOT SEND/);
+        await expect(
+          f.dispatch.approve(
+            kind,
+            f.id,
+            {
+              digest: review.digest,
+              intent: "administrative",
+              holdId: null,
+              stage: null,
+              reason: "Ordinary content approval is not a protection exception",
+            },
+            "owner",
+          ),
+        ).rejects.toThrow(/DO NOT SEND/);
+        await expect(
+          f.dispatch.claim(kind, f.id, f.preview.draft.content),
+        ).rejects.toThrow(/DO NOT SEND/);
+        await reset();
+      }
+      const claim = await f.dispatch.claim(kind, f.id, f.preview.draft.content);
+      for (const change of mutations) {
+        await f.client.exec(change);
+        await expect(f.dispatch.assertCurrent(claim)).rejects.toMatchObject({
+          code: "OUTREACH_SEND_RECHECK_FAILED",
+        });
+        await reset();
+      }
+      await f.client.exec(
+        "update booking_opportunities set status='territory_hold',territory_exception_approved=true",
+      );
+      await expect(f.dispatch.assertCurrent(claim)).resolves.toBeUndefined();
+    },
+  );
+  it.each(["opportunity_email", "office_email"] as const)(
+    "final review %s coordinator stops provider submission when protection changes after claim",
+    async (kind) => {
+      const f = await reviewed(kind, "exploratory");
+      const payload = f.preview.draft;
+      const finalSubmit = vi.fn();
+      const provider = async (input: any) => {
+        await f.client.exec(
+          "update booking_opportunities set email_automation_protected=true",
+        );
+        await input.beforeSend();
+        finalSubmit();
+        return { messageId: "must-not-send", sentAt: f.allocation.clock() };
+      };
+      const draft = {
+        ...payload,
+        recipientEmail: payload.content.to,
+        subject: payload.content.subject,
+        body: payload.content.body,
+        gmailDraftId: "draft1",
+        state: "scheduled",
+        scheduledFor: new Date("2026-08-01T17:00:00Z"),
+      };
+      if (kind === "opportunity_email") {
+        await f.client.query(
+          "update booking_opportunity_email_state set state='scheduled',scheduled_for=$2 where id=$1",
+          [f.id, draft.scheduledFor],
+        );
+        const { OpportunityEmailService } =
+          await import("../opportunity-email/opportunity-email-service");
+        const { ScheduledEmailDispatcher } =
+          await import("../opportunity-email/scheduled-email-dispatcher");
+        const delivery = new OpportunityEmailService({
+          emailRepository: {
+            getById: async () => draft,
+            update: vi.fn(async () => draft),
+          },
+          gmailDraftProvider: { sendDraft: provider },
+          dispatchSafety: f.dispatch,
+        } as any);
+        const releaseLease = vi.fn();
+        await new ScheduledEmailDispatcher({
+          store: { claimOneDue: async () => draft as any, releaseLease },
+          delivery,
+        }).runOne({ workerId: "test-worker", now: f.allocation.clock() });
+        expect(releaseLease).toHaveBeenCalledWith(
+          f.id,
+          "test-worker",
+          f.allocation.clock(),
+        );
+      } else {
+        const { OfficeEmailSendCoordinator } =
+          await import("../office/office-email-send-coordinator");
+        const restore = vi.fn(async () => undefined);
+        const coordinator = new OfficeEmailSendCoordinator({
+          drafts: {
+            claimForSend: async () => draft,
+            restoreSubmittedAfterFailure: restore,
+            markSent: vi.fn(),
+          },
+          delivery: { send: provider },
+          dispatchSafety: f.dispatch,
+        } as any);
+        await expect(
+          coordinator.send({ draftId: f.id, overrides: {} }),
+        ).rejects.toMatchObject({ code: "OUTREACH_SEND_RECHECK_FAILED" });
+        expect(restore).toHaveBeenCalled();
+      }
+      expect(finalSubmit).not.toHaveBeenCalled();
+      expect((await f.dispatch.list())[0]).toMatchObject({
+        state: "not_sent",
+        lastError: expect.stringContaining("DO NOT SEND"),
+      });
+    },
+  );
+  it.each(["opportunity_email", "office_email"] as const)(
     "%s rechecks exact DO NOT SEND targets and override recipient before submission",
     async (kind) => {
       const f = await reviewed(kind, "exploratory");
@@ -1945,5 +2080,685 @@ describe("dispatch migration repair", () => {
         )
       ).rows[0],
     ).toEqual({ id: dispatchId, tracking_state: "pending" });
+  });
+});
+
+describe("explicit prospect event identity resolution", () => {
+  const binding = (bookingId: string) => ({
+    bookingId,
+    confirmedEventYear: 2026,
+    confirmedSameEvent: true as const,
+    reason:
+      "Organizer confirmed the same annual event and actual booking dates.",
+    sourceReference: "https://festival.example/2026/program",
+  });
+  async function prospect() {
+    const f = await setup();
+    await f.client.exec(`
+      alter table organizations add consolidated_into_id uuid;
+      alter table bookings add organization_id uuid, add primary_contact_id uuid;
+      alter table booking_opportunities alter column id set default gen_random_uuid();
+      update bookings set organization_id='10000000-0000-4000-8000-000000000001';
+    `);
+    const profile = randomUUID(),
+      book = randomUUID();
+    await f.client.query(
+      "insert into organizations(id,name) values ($1,'Matched Festival')",
+      [profile],
+    );
+    const admitted = await f.service.admitProfile(
+      {
+        organizationId: profile,
+        eventYear: 2026,
+        reason: "Saved undated future prospect",
+      },
+      "owner",
+    );
+    expect(admitted.bookingId).toBeNull();
+    const c = await f.service.createCandidate(
+      {
+        openingId: f.opening.id,
+        opportunityId: admitted.opportunityId,
+        tier: "strong",
+        manualRank: 7,
+      },
+      "owner",
+    );
+    // Actual booking becomes known later; no opportunity/profile/history is recreated.
+    await f.client.query(
+      "insert into bookings(id,organization_id,name,starts_at,ends_at,status,travel_leg_id) values ($1,$2,'Matched Festival 2026','2026-10-16T15:00:00Z','2026-10-18T23:00:00Z','new_lead',$3)",
+      [book, profile, leg],
+    );
+    await f.client.query(
+      "insert into booking_package_selections values ($1,$2)",
+      [book, pkg],
+    );
+    return {
+      ...f,
+      profile,
+      book,
+      opportunity: admitted.opportunityId,
+      prospectCandidate: c,
+    };
+  }
+  it("admits an undated prospect, resolves the selected booking once, preserves history/manual work, and uses normal demand/fit review", async () => {
+    const f = await prospect();
+    const {
+      client,
+      service,
+      profile,
+      book,
+      opportunity,
+      prospectCandidate: c,
+    } = f;
+    const emailState = randomUUID(),
+      call = randomUUID(),
+      followup = randomUUID(),
+      research = randomUUID();
+    const researchResults = [
+      {
+        opportunityId: opportunity,
+        sourceUrl: "https://festival.example/source",
+        note: "Saved organizer research",
+        dateConfidence: "unknown",
+      },
+    ];
+    await client.query(
+      "insert into outreach_research_tasks(id,opening_id,criteria,results) values ($1,$2,'Existing event research',$3)",
+      [research, f.opening.id, JSON.stringify(researchResults)],
+    );
+    await client.query(
+      "update booking_opportunities set status='needs_review',priority='high',next_action_kind='callback',next_action_due_at='2026-10-01T15:00:00Z' where id=$1",
+      [opportunity],
+    );
+    await client.query(
+      "insert into booking_opportunity_email_state(id,opportunity_id,organization_id,event_year,state,subject) values ($1,$2,$3,2026,'draft','Existing convention follow-up')",
+      [emailState, opportunity, profile],
+    );
+    await client.query(
+      "insert into call_sessions(id,organization_id,ended_at,direction,disposition) values ($1,$2,'2026-07-01','outbound','completed')",
+      [call, profile],
+    );
+    await client.query(
+      "insert into follow_ups(id,organization_id,kind,due_at) values ($1,$2,'callback','2026-10-01T15:00:00Z')",
+      [followup, profile],
+    );
+    await service.reviewHistory(
+      c.id,
+      { reason: "Reviewed existing calls and source history" },
+      "owner",
+    );
+    await service.patchCandidate(
+      c.id,
+      {
+        decisionDueAt: "2026-10-02T15:00:00Z",
+        reason: "Existing decision promise",
+      },
+      "owner",
+    );
+    const candidateBefore = (
+      await client.query("select * from outreach_candidates where id=$1", [
+        c.id,
+      ])
+    ).rows[0] as any;
+    const opportunityBefore = (
+      await client.query("select * from booking_opportunities where id=$1", [
+        opportunity,
+      ])
+    ).rows[0] as any;
+    const profiles = await service.searchProfiles({
+      q: "Matched",
+      year: "2026",
+    });
+    expect(profiles[0]).toMatchObject({
+      organizationId: profile,
+      bookings: [
+        expect.objectContaining({ id: book, name: "Matched Festival 2026" }),
+      ],
+    });
+    const result = await service.bindOpportunity(
+      opportunity,
+      binding(book),
+      "owner",
+    );
+    expect(result).toMatchObject({
+      opportunityId: opportunity,
+      bookingId: book,
+      eventYear: 2026,
+      reused: false,
+    });
+    const after = (
+      await client.query("select * from booking_opportunities where id=$1", [
+        opportunity,
+      ])
+    ).rows[0];
+    expect(after).toEqual({
+      ...opportunityBefore,
+      booking_id: book,
+      updated_at: expect.any(Date),
+    });
+    const candidateAfter = (
+      await client.query("select * from outreach_candidates where id=$1", [
+        c.id,
+      ])
+    ).rows[0];
+    expect(candidateAfter).toEqual({
+      ...candidateBefore,
+      checked_at: null,
+      source_snapshot: null,
+    });
+    expect(
+      (
+        await client.query(
+          "select opportunity_id,subject from booking_opportunity_email_state where id=$1",
+          [emailState],
+        )
+      ).rows[0],
+    ).toEqual({
+      opportunity_id: opportunity,
+      subject: "Existing convention follow-up",
+    });
+    expect(
+      (await client.query("select id from call_sessions where id=$1", [call]))
+        .rows,
+    ).toHaveLength(1);
+    expect(
+      (await client.query("select id from follow_ups where id=$1", [followup]))
+        .rows,
+    ).toHaveLength(1);
+    expect(
+      (
+        await client.query(
+          "select results from outreach_research_tasks where id=$1",
+          [research],
+        )
+      ).rows[0],
+    ).toEqual({ results: researchResults });
+    const audit = (
+      await client.query(
+        "select detail from outreach_audit where entity_id=$1 and action='bind_opportunity_booking'",
+        [opportunity],
+      )
+    ).rows[0] as any;
+    expect(audit.detail).toMatchObject({
+      actor: "owner",
+      confirmedSameEvent: true,
+      sourceReference: binding(book).sourceReference,
+      priorIdentity: { bookingId: null },
+      newIdentity: { bookingId: book },
+    });
+    expect(
+      (
+        await client.query("select body from activities where id=$1", [
+          audit.detail.profileActivityId,
+        ])
+      ).rows[0],
+    ).toMatchObject({ body: expect.stringContaining("Matched Festival 2026") });
+    const repeated = await service.bindOpportunity(
+      opportunity,
+      binding(book),
+      "owner",
+    );
+    expect(repeated.reused).toBe(true);
+    expect(
+      (
+        await client.query(
+          "select id from outreach_audit where entity_id=$1 and action='bind_opportunity_booking'",
+          [opportunity],
+        )
+      ).rows,
+    ).toHaveLength(1);
+    expect(
+      (
+        await client.query(
+          "select id from booking_opportunities where organization_id=$1 and event_year=2026",
+          [profile],
+        )
+      ).rows,
+    ).toHaveLength(1);
+    expect(
+      (await service.get()).candidates.find((x) => x.id === c.id)?.capacity
+        .status,
+    ).toBe("needs_review");
+    await service.saveDemand(
+      c.id,
+      {
+        quantities: { adventure_zone: 1 },
+        resourceIds: [resource],
+        completePhysicalDemandReviewed: true,
+        reason: "Separately reviewed complete physical requirements",
+      },
+      "owner",
+    );
+    expect(
+      (
+        await client.query(
+          "select booking_id from outreach_booking_demand where booking_id=$1",
+          [book],
+        )
+      ).rows,
+    ).toEqual([{ booking_id: book }]);
+    const check = await service.check(c.id, "owner");
+    expect(check.capacity.status).toBe("fits");
+    expect(
+      (
+        await client.query(
+          "select id from outreach_holds where candidate_id=$1",
+          [c.id],
+        )
+      ).rows,
+    ).toHaveLength(0);
+    await expect(
+      service.bindOpportunity(opportunity, binding(booking), "owner"),
+    ).rejects.toThrow("already linked");
+  });
+  it("rejects wrong profile/year, invalid actual dates, retired/protected profiles and protected contacts without binding", async () => {
+    const { client, service, opportunity, profile, book } = await prospect();
+    await expect(
+      service.bindOpportunity(opportunity, binding(booking), "owner"),
+    ).rejects.toThrow("on this profile");
+    await expect(
+      service.bindOpportunity(
+        opportunity,
+        { ...binding(book), confirmedEventYear: 2027 },
+        "owner",
+      ),
+    ).rejects.toThrow("confirmed event year");
+    for (const [starts, ends] of [
+      [null, null],
+      ["2027-01-01", "2027-01-02"],
+      ["2026-10-18", "2026-10-16"],
+      ["infinity", "infinity"],
+      ["2026-12-31T23:00:00Z", "2027-01-02T00:00:00Z"],
+    ]) {
+      await client.query(
+        "update bookings set starts_at=$2,ends_at=$3 where id=$1",
+        [book, starts, ends],
+      );
+      await expect(
+        service.bindOpportunity(opportunity, binding(book), "owner"),
+      ).rejects.toThrow("ordered actual dates");
+    }
+    await client.query(
+      "update bookings set starts_at='2026-10-16',ends_at='2026-10-18' where id=$1",
+      [book],
+    );
+    await client.query(
+      "update organizations set consolidated_into_id=$2 where id=$1",
+      [profile, org],
+    );
+    await expect(
+      service.bindOpportunity(opportunity, binding(book), "owner"),
+    ).rejects.toThrow("active profile");
+    await client.query(
+      "update organizations set consolidated_into_id=null,last_resort=true where id=$1",
+      [profile],
+    );
+    await expect(
+      service.bindOpportunity(opportunity, binding(book), "owner"),
+    ).rejects.toThrow("Protected profile");
+    await client.query(
+      "update organizations set last_resort=false where id=$1",
+      [profile],
+    );
+    for (const protection of [
+      "email_automation_protected=true",
+      "email_automation_protected=false,status='territory_hold'",
+    ]) {
+      await client.query(
+        `update booking_opportunities set ${protection} where id=$1`,
+        [opportunity],
+      );
+      await expect(
+        service.bindOpportunity(opportunity, binding(book), "owner"),
+      ).rejects.toThrow("Protected contact or territory");
+    }
+    await client.query(
+      "update booking_opportunities set status='needs_review' where id=$1",
+      [opportunity],
+    );
+    const contact = randomUUID(),
+      otherContact = randomUUID();
+    await client.query(
+      "insert into contacts(id,email) values ($1,'blocked@example.com'),($2,'existing@example.com')",
+      [contact, otherContact],
+    );
+    await client.query(
+      "update bookings set primary_contact_id=$2 where id=$1",
+      [book, contact],
+    );
+    await client.query(
+      "update booking_opportunities set contact_id=$2 where id=$1",
+      [opportunity, otherContact],
+    );
+    await client.query(
+      "insert into communication_blocks(target_type,normalized_email,reason) values ('recipient_email','blocked@example.com','Owner protected recipient')",
+    );
+    await expect(
+      service.bindOpportunity(opportunity, binding(book), "owner"),
+    ).rejects.toThrow("DO NOT SEND");
+    await client.query(
+      "update communication_blocks set target_type='contact',contact_id=$1",
+      [otherContact],
+    );
+    await expect(
+      service.bindOpportunity(opportunity, binding(book), "owner"),
+    ).rejects.toThrow("DO NOT SEND");
+    await client.query(
+      "update communication_blocks set target_type='organization',organization_id=$1",
+      [profile],
+    );
+    await expect(
+      service.bindOpportunity(opportunity, binding(book), "owner"),
+    ).rejects.toThrow("DO NOT SEND");
+    expect(
+      (
+        await client.query(
+          "select booking_id from booking_opportunities where id=$1",
+          [opportunity],
+        )
+      ).rows,
+    ).toEqual([{ booking_id: null }]);
+  });
+  it.each(["dispatching", "uncertain"])(
+    "blocks %s opportunity and unknown-identity Office dispatches under the allocation mutex",
+    async (state) => {
+      const { client, db, service, opportunity, profile, book } =
+        await prospect();
+      for (const kind of ["opportunity_email", "office_email"]) {
+        const draft = randomUUID();
+        if (kind === "opportunity_email")
+          await client.query(
+            "insert into booking_opportunity_email_state(id,opportunity_id,organization_id,event_year,state) values ($1,$2,$3,2026,'draft')",
+            [draft, opportunity, profile],
+          );
+        else
+          await client.query(
+            "insert into office_email_drafts(id,organization_id,state) values ($1,$2,'submitted')",
+            [draft, profile],
+          );
+        await withAllocationTransaction(db, async (tx) => {
+          await tx.execute(
+            sql`insert into outreach_dispatches(draft_kind,draft_id,digest,intent,payload,state,review_after) values (${kind},${draft}::uuid,${"a".repeat(64)},'exploratory',${JSON.stringify({ organizationId: profile, opportunityId: kind === "opportunity_email" ? opportunity : null, eventYear: null })}::jsonb,${state},now())`,
+          );
+        });
+        await expect(
+          service.bindOpportunity(opportunity, binding(book), "owner"),
+        ).rejects.toThrow("Reconcile the provider outcome");
+        expect(
+          (
+            await client.query(
+              "select booking_id from booking_opportunities where id=$1",
+              [opportunity],
+            )
+          ).rows,
+        ).toEqual([{ booking_id: null }]);
+        await withAllocationTransaction(db, async (tx) => {
+          await tx.execute(
+            sql`update outreach_dispatches set state='not_sent' where draft_id=${draft}::uuid`,
+          );
+        });
+      }
+      expect(
+        (await service.bindOpportunity(opportunity, binding(book), "owner"))
+          .reused,
+      ).toBe(false);
+    },
+  );
+  it.each([2026, null])(
+    "retires approvals and rejects pre-binding Office review for year %s; fails closed without the shared mutex",
+    async (eventYear) => {
+      const { client, db, service, allocation, opportunity, profile, book } =
+        await prospect();
+      const { OutreachDispatch } = await import("./outreach-dispatch");
+      const dispatch = new OutreachDispatch(
+        db,
+        allocation,
+        undefined,
+        () => true,
+      );
+      const office = randomUUID(),
+        email = randomUUID();
+      await client.query(
+        "insert into office_email_drafts(id,organization_id,event_year,state,recipient_email,subject,body) values ($1,$2,$3,'submitted','owner@example.com','Event enquiry','Please confirm event details')",
+        [office, profile, eventYear],
+      );
+      await client.query(
+        "insert into booking_opportunity_email_state(id,opportunity_id,organization_id,event_year,state) values ($1,$2,$3,2026,'draft')",
+        [email, opportunity, profile],
+      );
+      await client.query(
+        "insert into outreach_offer_approvals(draft_kind,draft_id,digest,intent,actor,reason) values ('office_email',$1,$3,'exploratory','owner','Prior review'),('opportunity_email',$2,$3,'exploratory','owner','Prior review')",
+        [office, email, "a".repeat(64)],
+      );
+      const priorReview = await dispatch.review("office_email", office);
+      await client.exec("delete from outreach_allocation_mutex");
+      await expect(
+        service.bindOpportunity(opportunity, binding(book), "owner"),
+      ).rejects.toThrow("Allocation mutex is missing");
+      await client.exec("insert into outreach_allocation_mutex(id) values (1)");
+      await service.bindOpportunity(opportunity, binding(book), "owner");
+      expect(
+        (
+          await client.query(
+            "select * from outreach_offer_approvals where draft_id in ($1,$2)",
+            [office, email],
+          )
+        ).rows,
+      ).toHaveLength(0);
+      const audit = (
+        await client.query(
+          "select detail from outreach_audit where entity_id=$1 and action='bind_opportunity_booking'",
+          [opportunity],
+        )
+      ).rows[0] as any;
+      expect(audit.detail.invalidatedApprovals).toHaveLength(2);
+      const currentReview = await dispatch.review("office_email", office);
+      expect(currentReview.digest).not.toBe(priorReview.digest);
+      expect(currentReview.draft.opportunityIdentities).toEqual([
+        { opportunityId: opportunity, bookingId: book, eventYear: 2026 },
+      ]);
+      await expect(
+        dispatch.approve(
+          "office_email",
+          office,
+          {
+            digest: priorReview.digest,
+            intent: "exploratory",
+            holdId: null,
+            stage: null,
+            overrides: {},
+            reason: "Old preview",
+          },
+          "owner",
+        ),
+      ).rejects.toThrow("Final email content changed");
+      expect(
+        (
+          await client.query("select * from office_email_drafts where id=$1", [
+            office,
+          ])
+        ).rows[0],
+      ).toMatchObject({ booking_id: null, state: "submitted" });
+    },
+  );
+});
+
+describe("final review base migration and late reply lifecycle", () => {
+  it("repairs base allocation columns and constraints with retained demand and hold data", async () => {
+    const f = await setup();
+    const hold = await f.allocation.createHold(
+      f.candidate.id,
+      "2026-08-03T18:00:00Z",
+      "owner",
+    );
+    const before = (
+      await f.client.query(
+        "select booking_id,quantities,resource_ids,actor,reason from outreach_booking_demand order by booking_id",
+      )
+    ).rows;
+    const migration = (await loadActReviewMigrations()).find(
+      (m) => m.name === "20260909_outreach_allocation.sql",
+    )!;
+    await f.client.exec(
+      `alter table outreach_booking_demand rename constraint outreach_booking_demand_booking_id_fkey to outreach_booking_demand_booking_id_bookings_id_fk;
+       alter table outreach_holds rename constraint outreach_holds_candidate_id_fkey to outreach_holds_candidate_id_outreach_candidates_id_fk;
+       alter table outreach_holds rename constraint outreach_holds_booking_id_fkey to outreach_holds_booking_id_bookings_id_fk;
+       alter table outreach_holds rename constraint outreach_holds_opportunity_id_fkey to outreach_holds_opportunity_id_booking_opportunities_id_fk;
+       alter table outreach_holds rename constraint outreach_holds_leg_id_fkey to outreach_holds_leg_id_travel_legs_id_fk;
+       alter table outreach_booking_demand drop column revision;
+       alter table outreach_holds drop constraint outreach_holds_lifecycle_valid;
+       alter table outreach_holds drop constraint outreach_holds_quantities_check;
+       alter table outreach_holds alter column quantities drop not null`,
+    );
+    expect(
+      (await f.client.query<{ ready: boolean }>(migration.markerSql)).rows[0]
+        .ready,
+    ).toBe(false);
+    await f.client.exec(migration.sql);
+    await f.client.exec(migration.sql);
+    expect(
+      (await f.client.query<{ ready: boolean }>(migration.markerSql)).rows[0]
+        .ready,
+    ).toBe(true);
+    expect(
+      (
+        await f.client.query<{ count: string }>(
+          "select count(*) from pg_constraint where contype='f' and conrelid in ('outreach_booking_demand'::regclass,'outreach_holds'::regclass)",
+        )
+      ).rows[0].count,
+    ).toBe(5);
+    expect(
+      (
+        await f.client.query(
+          "select booking_id,quantities,resource_ids,actor,reason from outreach_booking_demand order by booking_id",
+        )
+      ).rows,
+    ).toEqual(before);
+    expect(
+      (
+        await f.client.query(
+          "select id,state,ended_at from outreach_holds where id=$1",
+          [hold.id],
+        )
+      ).rows[0],
+    ).toEqual({ id: hold.id, state: "active", ended_at: null });
+    await expect(
+      f.client.query("update outreach_holds set state='released' where id=$1", [
+        hold.id,
+      ]),
+    ).rejects.toThrow(/lifecycle/);
+    await expect(
+      f.client.query("update outreach_holds set quantities='{}' where id=$1", [
+        hold.id,
+      ]),
+    ).rejects.toThrow(/quantities/);
+    await expect(
+      f.client.query("update outreach_holds set quantities=null where id=$1", [
+        hold.id,
+      ]),
+    ).rejects.toThrow(/null/);
+  });
+  it("advances, observes a late reply, keeps it released in attention, classifies and explicitly resumes only after fresh availability", async () => {
+    const f = await setup();
+    for (const [i, stage] of [
+      "initial",
+      "follow_up_1",
+      "follow_up_2",
+    ].entries()) {
+      const occurredAt = `2026-07-${String(1 + i * 7).padStart(2, "0")}T18:00:00Z`;
+      await f.client.query(
+        "insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,purpose,sent_at,gmail_message_id,gmail_thread_id) values ($1,$2,2026,'sent','new_outreach',$3,$4,'late-thread')",
+        [randomUUID(), op, occurredAt, `actual-${i}`],
+      );
+      await f.client.query(
+        "insert into outreach_attempts(candidate_id,source_id,stage,occurred_at,actor) values ($1,$2,$3,$4,'owner')",
+        [f.candidate.id, `gmail:actual-${i}`, stage, occurredAt],
+      );
+    }
+    await f.service.reviewHistory(
+      f.candidate.id,
+      { reason: "Reviewed the actual sent chain" },
+      "owner",
+    );
+    expect((await f.service.get()).candidates[0].outreach.state).toBe(
+      "advance",
+    );
+    await f.service.advance(f.candidate.id, "owner");
+    f.setNow("2026-08-02T18:00:00Z");
+    const { observeInboundOutreach, reviewInboundObservation } =
+      await import("./outreach-inbound");
+    await observeInboundOutreach(
+      f.db,
+      [
+        {
+          id: "late-reply",
+          threadId: "late-thread",
+          internalDateMs: Date.parse("2026-08-02T12:00:00Z"),
+          labelIds: ["INBOX"],
+          resolvedOrganization: { id: org },
+          from: "owner@example.com",
+          to: "sales@example.com",
+          evidenceCodes: [],
+        },
+      ] as any,
+      f.allocation.clock(),
+    );
+    const message = (
+      await f.client.query<{ id: string }>(
+        "select id from outreach_inbound_observations where message_id='late-reply'",
+      )
+    ).rows[0].id;
+    let c = (await f.service.get()).candidates[0];
+    expect(c).toMatchObject({
+      outreach: { state: "needs_review" },
+      portfolio: { state: "attention" },
+    });
+    expect(c.releasedAt).not.toBeNull();
+    expect(c.liveHoldId).toBeNull();
+    const input = {
+      resumeReleased: true,
+      decisionDueAt: "2026-08-03T18:00:00Z",
+      reason: "Owner chose to revisit late reply after availability check",
+    };
+    await expect(
+      f.service.patchCandidate(c.id, input, "owner"),
+    ).rejects.toThrow(/Classify/);
+    await reviewInboundObservation(
+      f.db,
+      message,
+      {
+        classification: "meaningful_reply",
+        opportunityId: op,
+        sourceReference: "Gmail late-reply",
+        reason: "Reviewed exact event-year reply",
+      },
+      "owner",
+    );
+    await f.service.reviewHistory(
+      c.id,
+      { reason: "Reviewed late reply and complete stored history" },
+      "owner",
+    );
+    const nextOrg = randomUUID(), nextOpportunity = randomUUID();
+    await f.client.query("insert into organizations(id,name) values ($1,'Next event')", [nextOrg]);
+    await f.client.query("insert into booking_opportunities(id,organization_id,event_year) values ($1,$2,2026)", [nextOpportunity, nextOrg]);
+    const next = await f.service.createCandidate({ openingId: f.opening.id, opportunityId: nextOpportunity, tier: "filler" }, "owner");
+    await f.service.patchCandidate(next.id, { decisionDueAt: "2026-08-04T18:00:00Z", reason: "Existing callback to the next candidate" }, "owner");
+    await expect(f.service.patchCandidate(c.id, input, "owner")).rejects.toThrow(/Another established pursuit/);
+    expect((await f.service.get()).candidates.find((x) => x.id === next.id)?.decisionDueAt).toBe("2026-08-04T18:00:00.000Z");
+    await f.service.patchCandidate(next.id, { decisionDueAt: null, reason: "Owner explicitly resolved the next candidate callback before reopening late reply" }, "owner");
+    f.read.mockRejectedValueOnce(new Error("Calendar unavailable"));
+    await expect(
+      f.service.patchCandidate(c.id, input, "owner"),
+    ).rejects.toThrow(/Fresh availability/);
+    expect((await f.service.get()).candidates[0].releasedAt).not.toBeNull();
+    await f.service.patchCandidate(c.id, input, "owner");
+    c = (await f.service.get()).candidates[0];
+    expect(c.releasedAt).toBeNull();
+    expect(c.decisionDueAt).toBe(new Date(input.decisionDueAt).toISOString());
+    expect(c.attempts).toHaveLength(3);
+    expect(c.liveHoldId).toBeNull();
+    expect(f.read).toHaveBeenCalled();
   });
 });

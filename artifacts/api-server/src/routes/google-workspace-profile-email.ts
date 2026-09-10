@@ -103,18 +103,21 @@ function conversationYear(conversation: {
 }
 
 export function createGoogleWorkspaceProfileEmailRouter(options?: {
+  profilePath?: string;
+  emailsOnly?: boolean;
   connection?: ConnectionAccess;
   validationRepository?: ValidationAccess;
   fileService?: FileAccess;
 }): IRouter {
   const router: IRouter = Router();
+  const profilePath = options?.profilePath ?? "/google-workspace/profiles";
   const connection = options?.connection ?? new PostgresGoogleConnectionRepository();
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const fileService = options?.fileService ?? new GoogleProfileFileService();
 
   router.get(
-    "/google-workspace/profiles/:organizationId/emails",
+    `${profilePath}/:organizationId/emails`,
     async (req, res): Promise<void> => {
       try {
         const mappings = await validationRepository.listApprovedForOrganization(
@@ -218,7 +221,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   );
 
   router.get(
-    "/google-workspace/profiles/:organizationId/emails/:threadId",
+    `${profilePath}/:organizationId/emails/:threadId`,
     async (req, res): Promise<void> => {
       try {
         const ownsThread =
@@ -243,6 +246,9 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
       }
     },
   );
+
+  // Boss access exposes only conversation reads, never file-copy or write actions.
+  if (options?.emailsOnly) return router;
 
   router.post(
     "/google-workspace/profiles/:organizationId/threads/:threadId/copy-files",

@@ -1,5 +1,9 @@
 import { rowsOf } from "./outreach-sources";
-import { searchProfiles, admitProfile } from "./outreach-workspace";
+import {
+  searchProfiles,
+  admitProfile,
+  bindOpportunityToBooking,
+} from "./outreach-workspace";
 import { applyPortfolioPriority } from "./outreach-portfolio";
 import { sql } from "drizzle-orm";
 import { replayActualOutreach } from "./outreach-events";
@@ -12,19 +16,24 @@ import {
 } from "./outreach-allocation-actions";
 import { hasActivePursuit } from "./outreach-active-pursuit";
 import { z } from "zod";
-import type { OutreachAllocation } from "./outreach-allocation";
+import {
+  withAllocationTransaction,
+  type OutreachAllocation,
+} from "./outreach-allocation";
 import { holdExpiryInput } from "./outreach-dto";
 import type { AllocationCheckDTO } from "./outreach-dto";
 import {
   fingerprint,
   loadAllocationFacts,
   canonicalPackageQuantities,
+  targetForBooking,
   type AllocationFacts,
 } from "./outreach-capacity-evidence";
 import { OutreachRepository, OutreachError } from "./outreach-repository";
 import {
   openingInput,
   profileAdmissionInput,
+  opportunityBindingInput,
   researchResultInput,
   candidateInput,
   candidatePatch,
@@ -182,30 +191,120 @@ export class OutreachService {
       new Date(input.meaningfulReplyAt) > this.clock()
     )
       throw new OutreachError(400, "Reply cannot be in the future.");
-    return this.repository.transaction(actor, "edit_candidate", async (r) => {
-      const c = await this.find(r, id);
-      if (c.releasedAt)
-        throw new OutreachError(409, "Released candidate cannot be edited.");
-      // Reordering must never displace an existing pursuit, including a callback or reply.
-      if (input.manualRank !== undefined || input.tier !== undefined) {
-        const rows = (await r.load(this.clock())).candidates;
-        if (
-          rows.some(
-            (x) =>
-              x.openingId === c.openingId &&
-              !x.releasedAt &&
-              (input.manualRank !== undefined || x.id !== c.id) &&
-              hasActivePursuit(x),
-          )
-        )
+    const before = input.resumeReleased
+      ? await this.find(this.repository, id)
+      : null;
+    const prepared =
+      before?.bookingId && this.allocation
+        ? await this.allocation.prepare(before.bookingId, { candidateId: id })
+        : null;
+    const edit = (repository: OutreachRepository) =>
+      repository.transaction(actor, "edit_candidate", async (r) => {
+        const c = await this.find(r, id);
+        if (c.releasedAt && !input.resumeReleased)
           throw new OutreachError(
             409,
-            "An active pursuit exists; release it through the reviewed advancement action before reranking.",
+            "Released candidate requires an explicit resume decision.",
           );
-      }
-      const value = await r.patch(id, input);
-      return { id, value, opportunityId: c.opportunityId };
-    });
+        if (input.resumeReleased) {
+          if (
+            !c.releasedAt ||
+            !prepared ||
+            !this.allocation ||
+            !input.decisionDueAt ||
+            ["booked", "declined", "not_pursuing", "cancelled", "closed", "closed_won", "closed_lost"].includes(c.opportunityStatus) ||
+            c.sources.protectedReason ||
+            c.sources.reviewReasons.length ||
+            !c.sources.inboundObservations?.some(
+              (m) =>
+                m.state === "reviewed" &&
+                m.reviewedOpportunityId === c.opportunityId &&
+                ["meaningful_reply", "conversation"].includes(
+                  m.classification ?? "",
+                ) &&
+                m.receivedAt &&
+                new Date(m.receivedAt) > new Date(c.releasedAt!),
+            )
+          )
+            throw new OutreachError(
+              409,
+              "Classify the late reply, resolve source/contact review and set an explicit decision date before resuming with fresh availability.",
+            );
+          const others = (await r.load(this.clock())).candidates.filter(
+            (x) => x.id !== id && hasActivePursuit(x),
+          );
+          const facts = await loadAllocationFacts(r.db);
+          const target = prepared.target;
+          if (
+            others.some((x) => {
+              if (x.openingId === c.openingId) return true;
+              const other = x.bookingId
+                ? targetForBooking(facts, x.bookingId).target
+                : null;
+              return (
+                !target ||
+                !other ||
+                (other.startsOn <= target.endsOn &&
+                  other.endsOn >= target.startsOn &&
+                  (other.legId === target.legId ||
+                    other.resourceIds.some((r) =>
+                      target.resourceIds.includes(r),
+                    ) ||
+                    Object.keys(
+                      canonicalPackageQuantities(other.quantities),
+                    ).some(
+                      (code) =>
+                        code in canonicalPackageQuantities(target.quantities),
+                    )))
+              );
+            })
+          )
+            throw new OutreachError(
+              409,
+              "Another established pursuit may compete. Resolve that pursuit explicitly before resuming this late reply.",
+            );
+        }
+        // Reordering must never displace an existing pursuit, including a callback or reply.
+        if (input.manualRank !== undefined || input.tier !== undefined) {
+          const rows = (await r.load(this.clock())).candidates;
+          if (
+            rows.some(
+              (x) =>
+                x.openingId === c.openingId &&
+                !x.releasedAt &&
+                (input.manualRank !== undefined || x.id !== c.id) &&
+                hasActivePursuit(x),
+            )
+          )
+            throw new OutreachError(
+              409,
+              "An active pursuit exists; release it through the reviewed advancement action before reranking.",
+            );
+        }
+        const value = await r.patch(id, input);
+        if (input.resumeReleased && prepared && this.allocation) {
+          const check = await this.allocation.evaluateCommitmentIn(
+            r.db,
+            prepared,
+          );
+          if (check.capacity.status !== "fits")
+            throw new OutreachError(
+              409,
+              `Fresh availability required: ${check.capacity.reasons.join(" ")}`,
+            );
+          await r.check(id, {
+            ...c.sources,
+            capacity: check.capacity,
+            allocationCheck: check,
+          });
+        }
+        return { id, value, opportunityId: c.opportunityId };
+      });
+    return input.resumeReleased
+      ? withAllocationTransaction(this.repository.db, (tx) =>
+          edit(new OutreachRepository(tx)),
+        )
+      : edit(this.repository);
   }
   async recordAttempt(id: string, body: unknown, actor: string) {
     this.gate();
@@ -520,6 +619,19 @@ export class OutreachService {
           opportunityId: value.opportunityId,
         };
       },
+    );
+  }
+  async bindOpportunity(id: string, body: unknown, actor: string) {
+    this.gate();
+    const opportunityId = z.string().uuid().parse(id);
+    const input = opportunityBindingInput.parse(body);
+    return withAllocationTransaction(this.repository.db, (tx) =>
+      bindOpportunityToBooking(
+        new OutreachRepository(tx),
+        opportunityId,
+        input,
+        actor,
+      ),
     );
   }
   async saveResearchResults(id: string, body: unknown, actor: string) {
