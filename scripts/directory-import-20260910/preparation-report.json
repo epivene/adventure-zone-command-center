@@ -1,0 +1,915 @@
+{
+  "sourceCounts": {
+    "RMAF fairs": 120,
+    "RMAF service members": 152,
+    "Heartland fairs": 60,
+    "Colorado": 71,
+    "AFA associates": 113,
+    "AFA fairs": 20,
+    "Wyoming fairs": 24,
+    "Wyoming services": 9,
+    "ShoWorks": 666
+  },
+  "records": 1235,
+  "namedContactRecords": 479,
+  "emailRecords": 444,
+  "held": [
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Brianne Brower",
+      "contact": "Brianne Brower",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Jasmyne Bryant",
+      "contact": "Jasmyne Bryant",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Shae Lux",
+      "contact": "Shae Lux",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Kota Provence",
+      "contact": "Kota Provence",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "William Wood",
+      "contact": "William Wood",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Nicholle Watkins",
+      "contact": "Nicholle Watkins",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Erika Koshar",
+      "contact": "Erika Koshar",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Matthew Davis",
+      "contact": "Matthew Davis",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Liz Slattery",
+      "contact": "Liz Slattery",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Dan Ange",
+      "contact": "Dan Ange",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Natalie Cornia",
+      "contact": "Natalie Cornia",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Pat Hart",
+      "contact": "Pat Hart",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Virtual"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Niki Hensley",
+      "contact": "Niki Hensley",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Monica Munoz",
+      "contact": "Monica Munoz",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Courtny Hinds",
+      "contact": "Courtny Hinds",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Bud Claycomb",
+      "contact": "Bud Claycomb",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Rachelle Saxton",
+      "contact": "Rachelle Saxton",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Barb Price",
+      "contact": "Barb Price",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Jarrod Robles",
+      "contact": "Jarrod Robles",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Jay Brower",
+      "contact": "Jay Brower",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Taylor Haley",
+      "contact": "Taylor Haley",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Kimber Solberg",
+      "contact": "Kimber Solberg",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Sara Doyle",
+      "contact": "Sara Doyle",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2025 attendance",
+      "name": "Devin Finson",
+      "contact": "Devin Finson",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2025",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2025_annual_meeting.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2025; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Nicholle Watkins",
+      "contact": "Nicholle Watkins",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Kyle Groves",
+      "contact": "Kyle Groves",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Virtual"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Pat Hart",
+      "contact": "Pat Hart",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Billy Wood",
+      "contact": "Billy Wood",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Brianne Brower",
+      "contact": "Brianne Brower",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Devin Finson",
+      "contact": "Devin Finson",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Virtual"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Jasmyne Bryant",
+      "contact": "Jasmyne Bryant",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Taylor Haley",
+      "contact": "Taylor Haley",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Liz Slattery",
+      "contact": "Liz Slattery",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Larry Milbourn",
+      "contact": "Larry Milbourn",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Tamara Boglino-Mercer",
+      "contact": "Tamara Boglino-Mercer",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Laci Schiffer",
+      "contact": "Laci Schiffer",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Niki Hensley",
+      "contact": "Niki Hensley",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Monica Munoz",
+      "contact": "Monica Munoz",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Dave Schanno",
+      "contact": "Dave Schanno",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Bud Claycomb",
+      "contact": "Bud Claycomb",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Rachelle Saxton",
+      "contact": "Rachelle Saxton",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Virtual"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Dan Ange",
+      "contact": "Dan Ange",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Angela Miller",
+      "contact": "Angela Miller",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Ryan Lyman",
+      "contact": "Ryan Lyman",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Sara Doyle",
+      "contact": "Sara Doyle",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Virtual"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Kimber Solberg",
+      "contact": "Kimber Solberg",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Karl Johnston",
+      "contact": "Karl Johnston",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Jenny Davis",
+      "contact": "Jenny Davis",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Julie Webb",
+      "contact": "Julie Webb",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Barb Price",
+      "contact": "Barb Price",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Rachel Grimes",
+      "contact": "Rachel Grimes",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Historical meeting attendee; organization affiliation needs verification",
+      "group": "Wyoming 2024 attendance",
+      "name": "Casey Rodriguez",
+      "contact": "Casey Rodriguez",
+      "category": "Annual meeting attendee",
+      "facts": {
+        "Meeting year": "2024",
+        "Participation": "Listed; mode not specified"
+      },
+      "source": "https://www.wyomingfairs.org/uploads/1/4/6/1/14610122/2024_waf_annual_meeting_minutes.docx__1_.pdf",
+      "pages": [
+        1
+      ],
+      "notes": "Annual meeting roll call, not a complete convention registration roster.",
+      "status": "Historical attendance in 2024; 2026 attendance unconfirmed"
+    },
+    {
+      "reason": "Test registration site",
+      "source": "https://afa.fairwire.com/passportfairs.aspx",
+      "cells": [
+        "Fort Worth Test Site",
+        "TX",
+        "",
+        "08/31/2026",
+        "09/04/2031"
+      ],
+      "link": "https://fwssrtest.fairwire.com/"
+    }
+  ],
+  "note": "Prepared data, not live import results. Association entries do not confirm convention attendance."
+}

@@ -610,6 +610,10 @@ const migrationFiles = [
     AND to_regclass(current_schema() || '.communication_template_reviews_request_unique') IS NULL
       AS ready`,
   },
+  {
+    name: "20260910_public_directory_leads.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -676,3 +680,4 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
+
