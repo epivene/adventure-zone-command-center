@@ -14,7 +14,9 @@ export type OfficeProfileBasics = {
   website: string | null;
 };
 
-export function OfficeProfileEditor({ profile, onSaved, onCancel }: { profile: OfficeProfileBasics; onSaved: () => void | Promise<void>; onCancel: () => void }) {
+type ProfileSave = (profileId: string, input: Record<string, string | null>) => Promise<unknown>;
+
+export function OfficeProfileEditor({ profile, onSaved, onCancel, saveProfile }: { profile: OfficeProfileBasics; onSaved: () => void | Promise<void>; onCancel: () => void; saveProfile?: ProfileSave }) {
   const [value, setValue] = useState({
     name: profile.name,
     description: profile.description ?? "",
@@ -32,7 +34,7 @@ export function OfficeProfileEditor({ profile, onSaved, onCancel }: { profile: O
   async function save() {
     setBusy(true); setError("");
     try {
-      await officePatch(`/office/profiles/${profile.id}`, {
+      const input = {
         name: value.name,
         description: value.description || null,
         phone: value.phone || null,
@@ -42,7 +44,9 @@ export function OfficeProfileEditor({ profile, onSaved, onCancel }: { profile: O
         region: value.region || null,
         postalCode: value.postalCode || null,
         website: value.website || null,
-      });
+      };
+      if (saveProfile) await saveProfile(profile.id, input);
+      else await officePatch(`/office/profiles/${profile.id}`, input);
       await onSaved();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not save profile."); }
     finally { setBusy(false); }
