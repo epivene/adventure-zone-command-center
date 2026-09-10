@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
 import { buildMonthSpanSegments, type MonthSpanSegment } from "@/features/calendar/month-spans";
+import { normalizeCalendarBookingDates } from "@/features/calendar/calendar-display";
+import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import {
   bookingVisualKindOnDate,
   calendarBookingLabel,
@@ -127,7 +129,7 @@ function bookingHref(event: BookingEvent, profileBasePath: string) {
 }
 
 function BookingEventLink({ event, compact = false, readOnly = false, profileBasePath }: { event: BookingEvent; compact?: boolean; readOnly?: boolean; profileBasePath: string }) {
-  const confirmed = event.status === "confirmed";
+  const confirmed = isBookedForSchedule(event);
   const color = event.travelLegColor ?? "#64748b";
   const className = `block rounded-lg border bg-white px-3 py-2 shadow-sm transition ${confirmed ? "border-slate-200" : "border-dashed border-slate-300"} ${readOnly ? "" : "hover:border-orange-300 hover:shadow"}`;
   const content = (
@@ -141,8 +143,8 @@ function BookingEventLink({ event, compact = false, readOnly = false, profileBas
   );
   const href = bookingHref(event, profileBasePath);
   return href
-    ? <Link className={className} href={href} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>{content}</Link>
-    : <div className={className} style={{ borderLeftColor: color, borderLeftWidth: "4px" }}>{content}</div>;
+    ? <Link className={className} href={href} style={{ borderLeftColor: color, borderLeftWidth: "4px", opacity: confirmed ? 1 : 0.55 }}>{content}</Link>
+    : <div className={className} style={{ borderLeftColor: color, borderLeftWidth: "4px", opacity: confirmed ? 1 : 0.55 }}>{content}</div>;
 }
 
 const actTypeColors: Record<ActCalendarActivity["activityType"], string> = {
@@ -214,9 +216,9 @@ function DesktopMonthWeek({ weekIndex, days, bookingEvents, actEvents, segments,
         {positioned.map((segment) => {
           const event = eventById.get(segment.eventId);
           if (!event) return null;
-          const confirmed = event.status === "confirmed";
+          const confirmed = isBookedForSchedule(event);
           const className = `pointer-events-auto mx-1 min-w-0 truncate rounded-md border border-white/50 px-2 py-1 text-xs font-bold text-white shadow-sm transition ${readOnly ? "" : "hover:ring-2 hover:ring-orange-300"} ${confirmed ? "" : "border-dashed"} ${segment.startsHere ? "" : "rounded-l-none"} ${segment.endsHere ? "" : "rounded-r-none"}`;
-          const style = { background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1, textShadow: "0 1px 2px rgba(15, 23, 42, 0.8)" };
+          const style = { background: gradientForSegment(event, segment, days, colors), gridColumnStart: segment.startColumn + 1, gridColumnEnd: segment.endColumn + 2, gridRowStart: segment.lane + 1, opacity: confirmed ? 1 : 0.55, textShadow: "0 1px 2px rgba(15, 23, 42, 0.8)" };
           const label = segment.startsHere ? calendarBookingLabel(event) : `↳ ${calendarBookingLabel(event)}`;
           const title = `${calendarBookingLabel(event)}: ${formatDay(event.startsAt!)} – ${formatDay(event.endsAt ?? event.startsAt!)}`;
           const href = bookingHref(event, profileBasePath);
@@ -238,14 +240,15 @@ function MobileBookingStrip({ event, dateKey, colors, readOnly = false, profileB
   const startsHere = dateKey === startsOn;
   const endsHere = dateKey === endsOn;
   const color = colorForBookingDay(event, dateKey, colors) ?? colors.eventColor;
+  const confirmed = isBookedForSchedule(event);
   const label = calendarBookingLabel(event);
   const className = `block h-4 min-w-0 overflow-hidden px-1 text-[9px] font-bold leading-4 shadow-sm ${kind === "event" ? "text-white" : "text-slate-800"} ${startsHere ? "rounded-l-full" : "rounded-l-none"} ${endsHere ? "rounded-r-full" : "rounded-r-none"}`;
   const content = startsHere ? <span className="block truncate">{label}</span> : <span aria-hidden="true">&nbsp;</span>;
   const title = `${label} · ${kind === "event" ? "Event" : "Travel/setup/teardown"}`;
   const href = bookingHref(event, profileBasePath);
   return href
-    ? <Link aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} href={href} style={{ backgroundColor: color }} title={title}>{content}</Link>
-    : <span aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} style={{ backgroundColor: color }} title={title}>{content}</span>;
+    ? <Link aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} href={href} style={{ backgroundColor: color, opacity: confirmed ? 1 : 0.55 }} title={title}>{content}</Link>
+    : <span aria-label={`${label}, ${kind === "event" ? "event" : "travel/setup"}`} className={className} style={{ backgroundColor: color, opacity: confirmed ? 1 : 0.55 }} title={title}>{content}</span>;
 }
 
 export function EventCalendar({ events, initialMonth = businessDateKey(new Date()).slice(0, 7), onMonthChange, colors = DEFAULT_SCHEDULE_DISPLAY_COLORS, readOnly = false, profileBasePath = "/profiles" }: { events: CalendarEvent[]; initialMonth?: string; onMonthChange?: (month: string) => void; colors?: ScheduleDisplayColors; readOnly?: boolean; profileBasePath?: string }) {
@@ -265,7 +268,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
     const activities: ActCalendarActivity[] = [];
     for (const event of events) {
       if (isActActivity(event)) activities.push(event);
-      else bookings.push(event as BookingEvent);
+      else bookings.push(normalizeCalendarBookingDates(event as BookingEvent));
     }
     return { bookingEvents: bookings, actEvents: activities };
   }, [events]);
