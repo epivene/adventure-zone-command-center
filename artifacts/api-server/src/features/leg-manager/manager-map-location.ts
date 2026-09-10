@@ -24,10 +24,10 @@ function locationLabel(event: ManagerMapEvent) {
   return null;
 }
 
-export async function resolveManagerMapEventLocations(
-  events: ManagerMapEvent[],
+export async function resolveManagerMapEventLocations<T extends ManagerMapEvent>(
+  events: T[],
   geocoder: Pick<GeocodingProvider, "geocode">,
-): Promise<ManagerMapEvent[]> {
+): Promise<T[]> {
   return Promise.all(events.map(async (event) => {
     if (hasCoordinates(event)) return event;
     const label = locationLabel(event);
