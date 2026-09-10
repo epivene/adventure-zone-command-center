@@ -1,0 +1,38 @@
+name: Verify profile research fixture
+
+on:
+  push:
+    branches:
+      - fix/profile-research-scout-notes-fixture
+    paths:
+      - ".github/workflows/verify-profile-research-fixture.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @workspace/api-server exec vitest run src/features/profile-research/profile-research-context.test.ts
+      - run: pnpm run typecheck:libs
+      - name: Verify profile research fixture type error is gone
+        run: |
+          set +e
+          pnpm --filter @workspace/api-server typecheck 2>&1 | tee /tmp/api.log
+          set -e
+          if grep -E 'profile-research-context\.test\.ts.*error TS2322' /tmp/api.log; then
+            echo "Profile research fixture type error remains." >&2
+            exit 1
+          fi
