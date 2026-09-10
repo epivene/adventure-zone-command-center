@@ -53,17 +53,17 @@ describe("workspace-aware Admin shell", () => {
   it("puts secondary Booking work under the desktop Booking tools submenu", () => {
     expect(menuSource).toContain('label="Booking tools"');
     expect(menuSource).toContain("DropdownMenuSub");
-    const bookingToolsStart = menuSource.indexOf("const bookingToolItems");
+    const bookingToolsStart = menuSource.indexOf("const bookingItems");
     const bookingToolsEnd = menuSource.indexOf("const operationsGroups");
     const bookingTools = menuSource.slice(bookingToolsStart, bookingToolsEnd);
     for (const [href, label] of [
       ["/profiles", "Profiles"],
       ["/calls/workspace", "Calls"],
       ["/research-sources", "Research Sources"],
-      ["/office-coordinator", "Office Coordinator"],
       ["/needs-answer", "Needs Answer"],
     ]) expect(bookingTools).toContain(`{ href: "${href}", label: "${label}"`);
     expect(bookingTools).not.toContain('{ href: "/bookings", label: "Bookings" }');
+    expect(bookingTools).not.toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
   });
 
   it("keeps Admin Tools grouped and progressively disclosed", () => {
