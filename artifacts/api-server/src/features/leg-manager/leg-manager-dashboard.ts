@@ -8,6 +8,7 @@ import {
   type ManagerMapBookingRepository,
   type ManagerMapTripRepository,
   type ManagerRoutingEstimator,
+  type ManagerScheduleEvent,
   type ManagerScopedScheduleData,
 } from "./manager-map-data";
 
@@ -33,6 +34,7 @@ export interface LegManagerDashboardDependencies {
   tripRepository: ManagerMapTripRepository;
   bookingRepository: ManagerMapBookingRepository;
   routingEstimator?: ManagerRoutingEstimator;
+  eventLocationResolver?: (events: ManagerScheduleEvent[]) => Promise<ManagerScheduleEvent[]>;
   lifecycleRepository: Pick<EventLifecycleRepository, "getCurrentForLeg" | "getLatestCheckedOutForLeg" | "listIncompleteForLeg">;
   reviewRepository: EventReviewStore;
   financeRepository: { summary(legId: string): Promise<Record<string, unknown>> };
@@ -175,6 +177,7 @@ export async function loadLegManagerDashboard(
     ...scheduleData,
     nextEvent: scheduleData.events.find((event) =>
       event.bookingId !== currentLifecycle?.bookingId
+      && event.bookingId !== latestCheckedOutBookingId
       && isUpcomingManagerScheduleEvent(event, now))
       ?? null,
     currentLifecycle,
