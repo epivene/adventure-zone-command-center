@@ -86,6 +86,31 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("convention workspace", () => {
+  it("turns the live convention roster into a printable game sheet", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => {});
+    render(<ConventionOutreachPage boss />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Convention Game" }),
+    );
+
+    expect(
+      screen.getByRole("table", {
+        name: "Heartland 2026 convention game",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Met" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Follow up" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Profile linked")).toBeInTheDocument();
+    expect(screen.getByText("Profile needed")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Print Game Sheet" }));
+    expect(print).toHaveBeenCalledOnce();
+    print.mockRestore();
+  });
+
   it("keeps replacement and special-handling contacts visible in the simple view", async () => {
     render(<ConventionOutreachPage boss />);
     expect(await screen.findByText("County Fair")).toBeInTheDocument();
