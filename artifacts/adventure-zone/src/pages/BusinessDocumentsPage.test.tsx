@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   open: vi.fn(),
   update: vi.fn(),
   deleteDocument: vi.fn(),
+  searchProfiles: vi.fn(),
+  linkProfile: vi.fn(),
 }));
 vi.mock("@/lib/business-documents-api", () => ({
   businessDocumentsApi: mocks,
@@ -20,6 +22,10 @@ beforeEach(() => {
   mocks.open.mockReset();
   mocks.update.mockReset();
   mocks.deleteDocument.mockReset();
+  mocks.searchProfiles.mockReset();
+  mocks.searchProfiles.mockResolvedValue([]);
+  mocks.linkProfile.mockReset();
+  mocks.linkProfile.mockResolvedValue({ ok: true });
 });
 
 afterEach(cleanup);
@@ -165,6 +171,51 @@ describe("BusinessDocumentsPage", () => {
 
     expect(await screen.findByText("Crew Name Ideas")).toBeInTheDocument();
     expect(screen.getByText("Branding reference")).toBeInTheDocument();
+  });
+
+  it("previews and applies only strong automatic profile links", async () => {
+    mocks.listAll.mockResolvedValue({ documents: [{
+      ...documentFixture(),
+      id: "contract-1",
+      displayName: "Big E Contract 2026 Signed",
+      originalFilename: "Big E Contract 2026 Signed.pdf",
+      category: "contract",
+    }] });
+    mocks.searchProfiles.mockResolvedValue([
+      { id: "profile-1", name: "Big E", city: "West Springfield", region: "MA" },
+    ]);
+    render(<BusinessDocumentsPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Find strong matches" }));
+    expect(await screen.findByText("Found 1 strong match. Review it before linking.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Link 1 strong matches" }));
+
+    await waitFor(() => expect(mocks.linkProfile).toHaveBeenCalledWith(
+      "contract-1",
+      "profile-1",
+      expect.objectContaining({ confidence: 0.98 }),
+    ));
+    expect(mocks.searchProfiles).toHaveBeenCalledWith("Big E");
+  });
+
+  it("lets an owner search for and manually link a profile while editing", async () => {
+    mocks.listAll.mockResolvedValue({ documents: [documentFixture()] });
+    mocks.searchProfiles.mockResolvedValue([
+      { id: "profile-1", name: "Big E", city: "West Springfield", region: "MA" },
+    ]);
+    render(<BusinessDocumentsPage />);
+
+    await screen.findByLabelText("Operational Templates folder");
+    openFolder("Operational Templates");
+    openFolder("2026");
+    openFolder("Needs Sorting");
+    fireEvent.click(screen.getByRole("button", { name: "Edit Pirate Names" }));
+    fireEvent.change(screen.getByLabelText("Find a profile to link"), { target: { value: "Big E" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    fireEvent.click(await screen.findByRole("option", { name: /Big E/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Link selected profile" }));
+
+    await waitFor(() => expect(mocks.linkProfile).toHaveBeenCalledWith("template-1", "profile-1"));
   });
 
   it("deletes a confirmed document and removes it from the active library", async () => {
