@@ -18,13 +18,16 @@ export function EmailTemplateReview({
   const [selectedId, setSelectedId] = useState(firstPending);
 
   useEffect(() => {
-    if (!reviews.some((item) => item.id === selectedId && item.decision === "pending")) {
+    if (!reviews.some((item) => item.id === selectedId)) {
       setSelectedId(firstPending);
     }
   }, [firstPending, reviews, selectedId]);
 
   const selected = reviews.find((item) => item.id === selectedId) ?? reviews[0];
   const decided = reviews.filter((item) => item.decision !== "pending").length;
+  const approved = reviews.filter((item) => item.decision === "approved").length;
+  const changes = reviews.filter((item) => item.decision === "changes_requested").length;
+  const pending = reviews.length - decided;
   if (!selected) return <p>Email previews are unavailable.</p>;
 
   return (
@@ -34,6 +37,9 @@ export function EmailTemplateReview({
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-primary">Convention email review</p>
             <h2 className="mt-1 text-xl font-bold">{decided} of {reviews.length} decided</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {pending} pending · {approved} approved · {changes} changes requested
+            </p>
           </div>
           <div className="h-2 w-44 overflow-hidden rounded-full bg-muted">
             <div className="h-full bg-primary" style={{ width: `${reviews.length ? (decided / reviews.length) * 100 : 0}%` }} />
