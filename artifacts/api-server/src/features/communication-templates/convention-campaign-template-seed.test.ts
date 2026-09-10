@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a089d39ffb4ac0e",
+        gmailMessageId: "1a08b34342ec736b",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a089d410a9c6c47",
+        gmailMessageId: "1a08b345758b9e5c",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a089d42b974325e",
+        gmailMessageId: "1a08b347344784f6",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a089d4484514e6c",
+        gmailMessageId: "1a08b34c8b3bf6d2",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a089d4bb691e927",
+        gmailMessageId: "1a08b34ea768ec8f",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a089d4f26182f80",
+        gmailMessageId: "1a08b350a6c9f2cb",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a089d55760281da",
+        gmailMessageId: "1a08b356539ed66e",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -64,13 +64,13 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-convention-header-gifs-v6");
+      expect(template.templateVersion).toBe("2026-09-combined-logo-v7");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
       expect(template.bodyTemplate).toContain("SEE MORE!");
       expect(template.bodyTemplate).not.toContain("EXPLORE THE WEBSITE");
-      expect(template.bodyTemplate).toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).toContain("background:#0f1729");
       expect(template.bodyTemplate).toContain("background:#ffca05");
       expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
@@ -91,12 +91,13 @@ describe("convention campaign template seed", () => {
     }
   });
 
-  it("keeps the original header with a pink carnival line and uses the visibly updated GIF for each stage", () => {
+  it("keeps the original header structure with the combined logo and uses the visibly updated GIF for each stage", () => {
     for (const template of conventionCampaignTemplates) {
-      expect(template.bodyTemplate).toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).not.toContain("border-right:14px solid #ff0a8a");
-      expect(template.bodyTemplate.indexOf("adventure-zone-logo-navy.png"))
-        .toBeLessThan(template.bodyTemplate.indexOf("AMERICA’S BEST BOUNCE HOUSE CARNIVAL"));
+      expect(template.bodyTemplate).not.toContain("adventure-zone-logo-navy.png");
+      expect(template.bodyTemplate.match(/0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2\.png/g))
+        .toHaveLength(1);
 
       const trailer = template.bodyTemplate.match(
         /<a href="([^"]+)"[^>]*><img src="(https:\/\/static\.wixstatic\.com\/media\/[^"]+\.gif)"[^>]*alt="([^"]+)"/,
@@ -247,7 +248,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-convention-header-gifs-v6",
+      template_version: "2026-09-combined-logo-v7",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
