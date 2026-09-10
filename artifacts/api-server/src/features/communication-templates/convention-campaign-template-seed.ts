@@ -267,6 +267,8 @@ function isReturningCustomerOutreach(code: string): boolean {
   return code === "convention_before_general_v2" || code === "convention_before_past_event_v2";
 }
 
+const returningCustomerEarlyBirdBlock = '<tr data-outreach-promo="v12"><td style="padding:22px 24px 28px;background:#f8f6f1"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#ffffff;border:1px solid #e5dfd5;border-top:5px solid #ff0a8a;border-radius:0 0 14px 14px"><tr><td align="center" style="padding:26px 24px 28px"><div style="font-size:12px;line-height:18px;font-weight:900;letter-spacing:1.4px;color:#b80061">EARLY BIRD BOOKING OFFER</div><div style="margin-top:10px;font-size:44px;line-height:48px;font-weight:900;letter-spacing:-1px;color:#0f1729">SAVE 10%</div><div style="margin-top:10px;font-size:17px;line-height:25px;color:#26324a">Bring the fun back and save on your next event.</div><div style="margin-top:14px;font-size:16px;line-height:24px;color:#26324a">Secure your event with a deposit by<br><strong style="display:inline-block;margin-top:6px;padding:4px 12px;background:#ffca05;color:#0f1729;border-radius:5px">{{earlyBirdDeadline}}</strong></div><table role="presentation" cellspacing="0" cellpadding="0" width="100%" style="margin-top:22px"><tr><td align="center" style="background:#ff0a8a;border-radius:7px"><a href="mailto:TheAdventureZone12@gmail.com?subject=Let%E2%80%99s%20plan%20our%20next%20event" target="_blank" style="display:block;padding:16px 20px;color:#ffffff!important;text-decoration:none;font-size:15px;line-height:20px;font-weight:900;letter-spacing:0.8px;border-radius:7px">CONTACT US &#8594;</a></td></tr></table><div style="margin-top:12px;font-size:13px;line-height:20px;color:#526078">Send us your dates and location to get started.</div><div style="margin-top:8px;font-size:12px;line-height:18px;color:#526078">Available across the upcoming season for a short time.</div></td></tr></table></td></tr>';
+
 /** General reconnect outreach for customers served within the last five years. */
 function returningCustomerOutreach(html: string): string {
   const intro = '<tr><td style="padding:0 38px 31px;background:#f8f6f1"><div style="font-size:16px;line-height:25px;color:#26324a">Hi {{contactName}},</div><div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">We’ve loved being part of <strong>{{eventName}}</strong>, and we’d love to bring the fun back! We’re reaching out to the customers we’ve worked with over the past five years to reconnect and start getting your next event scheduled.</div><div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">Send us your event dates and location so we can check availability and help you choose the right package. Now is a great time to plan ahead and take advantage of our <strong>10% Early Bird booking offer</strong>.</div></td></tr>';
@@ -275,12 +277,12 @@ function returningCustomerOutreach(html: string): string {
     .replace("IT’S CONVENTION SEASON!", "LET’S RECONNECT!")
     .replace(/LET’S (?:PLAN|MAKE)<br><span style="color:#ffca05">(?:SOMETHING BIG\.|MORE GREAT MEMORIES\.)<\/span>/, 'LET’S BRING<br><span style="color:#ffca05">THE FUN BACK!</span>')
     .replace(approvedEarlyBirdBlock, "")
-    .replace(/<tr>\s*<td class="[^"]+pad" style="padding-top:36px;padding-bottom:31px;background:#f8f6f1">[\s\S]*?<\/td>\s*<\/tr>/, approvedEarlyBirdBlock.replace("padding:0 38px 34px", "padding:28px 38px 24px") + intro)
+    .replace(/<tr>\s*<td class="[^"]+pad" style="padding-top:36px;padding-bottom:31px;background:#f8f6f1">[\s\S]*?<\/td>\s*<\/tr>/, returningCustomerEarlyBirdBlock + intro)
     .replace("WILL WE SEE YOU THERE?", "READY FOR ANOTHER ADVENTURE?")
     .replace(/Let’s (?:connect|reconnect) at \{\{conventionName\}\}\./g, "Let’s get your next event scheduled.")
     .replace(/We’ll be there \{\{conventionDates\}\} at \{\{boothOrMeetingLocation\}\}\.[\s\S]*?(?=<\/div>)/, "Reply with your dates and location, and we’ll check availability and help you take the next step.")
     .replace(/subject=[^"]*(?=")/g, "subject=Let%E2%80%99s%20plan%20our%20next%20event")
-    .replace(/SCHEDULE A TIME TO MEET/g, "CONTACT US")
+    .replace(/<td><a href="mailto:[^"]+"[^>]*>SCHEDULE A TIME TO MEET[\s\S]*?<\/a><\/td>\s*<td width="15" class="[^"]+button-gap"><\/td>/g, "")
     .replace("See you at the conference!", "We’d love to work with you again!")
     .replace(/—/g, ", ");
 }
@@ -298,7 +300,7 @@ export const conventionCampaignTemplates = conventionCampaignTemplateSources.map
       ? "TEMPLATE 1 — General Outreach — Returning Customers"
       : "TEMPLATE 3 — General Outreach — Past Event") : template.name,
     subjectTemplate: reconnect ? "Let’s reconnect and get your next event scheduled" : template.subjectTemplate,
-    templateVersion: reconnect ? "2026-09-returning-customer-outreach-v11" : "2026-09-early-bird-refresh-v10",
+    templateVersion: reconnect ? "2026-09-returning-customer-outreach-v12" : "2026-09-early-bird-refresh-v10",
     bodyTemplate: reconnect ? returningCustomerOutreach(body) : body,
   };
 });
@@ -444,11 +446,11 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
   }
   await refreshEmailLogos(database);
 
-  // Backfill the owner-requested review even when v11 was already deployed.
+  // Backfill the owner-requested review even when the current template version was already deployed.
   // Use a durable request identity so opening templates again (or completing the
   // review and clearing its dedupe key) cannot create another review task.
   if (!dave) return;
-  const reviewOwnerId = "system:returning-customer-outreach-review-v11";
+  const reviewOwnerId = "system:returning-customer-outreach-review-v12";
   const existing = await database.select({ id: bossWorkRequests.id })
     .from(bossWorkRequests).where(and(
       eq(bossWorkRequests.assignedBossAccountId, dave.id),
@@ -457,7 +459,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
   if (existing.length) return;
   const outreach = await database.select().from(communicationTemplates).where(and(
     inArray(communicationTemplates.code, ["convention_before_general_v2", "convention_before_past_event_v2"]),
-    eq(communicationTemplates.templateVersion, "2026-09-returning-customer-outreach-v11"),
+    eq(communicationTemplates.templateVersion, "2026-09-returning-customer-outreach-v12"),
   ));
   if (outreach.length !== 2 || outreach.some(template => template.state === "archived")) return;
   outreach.sort((a, b) => a.code.localeCompare(b.code));
@@ -467,7 +469,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       createdByOwnerId: reviewOwnerId,
       deduplicationKey: reviewOwnerId,
       title: "Review returning customer outreach (2 emails)",
-      instructions: "Updated general outreach for customers from the past five years. Preview both emails with the Early Bird card at the top, test the links, and approve or leave notes.",
+      instructions: "Updated general outreach for customers from the past five years. Preview the refreshed Early Bird card with its Contact Us button directly below the header, test the links, and approve or leave notes.",
       priority: "normal",
     },
     reviews: outreach.map((template, position) => ({
