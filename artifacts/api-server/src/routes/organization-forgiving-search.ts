@@ -7,7 +7,7 @@ import { DrizzleOrganizationRepository, type OrganizationListPage } from "@/feat
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import {
   buildProfileSearchTerms,
-  profileSearchMatches,
+  profileSearchScore,
 } from "@/features/organizations/profile-search";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 
@@ -40,6 +40,12 @@ function termCondition(term: string) {
           or ${normalizedSearchField(sql.raw("concat_ws(' ', person.first_name, person.last_name)"))} like ${pattern}
           or ${normalizedSearchField(sql.raw("person.phone"))} like ${pattern}
           or ${normalizedSearchField(sql.raw("person.email"))} like ${pattern}
+          or exists (
+            select 1
+            from contact_phones person_phone
+            where person_phone.contact_id = person.id
+              and ${normalizedSearchField(sql.raw("person_phone.number"))} like ${pattern}
+          )
         )
     )
     or exists (
@@ -66,6 +72,12 @@ function termCondition(term: string) {
                 or ${normalizedSearchField(sql.raw("concat_ws(' ', loc_contact.first_name, loc_contact.last_name)"))} like ${pattern}
                 or ${normalizedSearchField(sql.raw("loc_contact.phone"))} like ${pattern}
                 or ${normalizedSearchField(sql.raw("loc_contact.email"))} like ${pattern}
+                or exists (
+                  select 1
+                  from contact_phones location_phone
+                  where location_phone.contact_id = loc_contact.id
+                    and ${normalizedSearchField(sql.raw("location_phone.number"))} like ${pattern}
+                )
               )
           )
         )
@@ -73,9 +85,9 @@ function termCondition(term: string) {
   )`;
 }
 
-async function matchedOrganizationIds(terms: string[]): Promise<Set<string>> {
+async function matchedOrganizationIds(terms: string[]): Promise<Map<string, number>> {
   const termConditions = terms.map((term) => termCondition(term));
-  if (!termConditions.length) return new Set();
+  if (!termConditions.length) return new Map();
   const exactResult = await db.execute<{ id: string }>(sql`
     select distinct o.id
     from organizations o
@@ -97,7 +109,10 @@ async function matchedOrganizationIds(terms: string[]): Promise<Set<string>> {
         o.phone,
         (
           select string_agg(
-            concat_ws(' ', person.first_name, person.last_name, person.phone, person.email),
+            concat_ws(
+              ' ', person.first_name, person.last_name, person.phone, person.email,
+              (select string_agg(person_phone.number, ' ') from contact_phones person_phone where person_phone.contact_id = person.id)
+            ),
             ' '
           )
           from organization_contacts association
@@ -120,7 +135,10 @@ async function matchedOrganizationIds(terms: string[]): Promise<Set<string>> {
               loc.email,
               (
                 select string_agg(
-                  concat_ws(' ', loc_contact.first_name, loc_contact.last_name, loc_contact.phone, loc_contact.email),
+                  concat_ws(
+                    ' ', loc_contact.first_name, loc_contact.last_name, loc_contact.phone, loc_contact.email,
+                    (select string_agg(location_phone.number, ' ') from contact_phones location_phone where location_phone.contact_id = loc_contact.id)
+                  ),
                   ' '
                 )
                 from contacts loc_contact
@@ -137,9 +155,11 @@ async function matchedOrganizationIds(terms: string[]): Promise<Set<string>> {
     order by o.id
     limit ${MAX_SEARCH_CANDIDATES}
   `);
-  const matchedIds = new Set(exactResult.rows.map((row) => row.id));
+  const matchedIds = new Map<string, number>(exactResult.rows.map((row) => [row.id, 0]));
   for (const row of fuzzyResult.rows) {
-    if (profileSearchMatches(terms, [row.searchText ?? ""])) matchedIds.add(row.id);
+    if (matchedIds.has(row.id)) continue;
+    const score = profileSearchScore(terms, [row.searchText ?? ""]);
+    if (score !== null) matchedIds.set(row.id, score);
   }
   return matchedIds;
 }
@@ -244,7 +264,9 @@ router.get("/organizations", async (req: Request, res: Response, next: NextFunct
       page: 1,
       pageSize: MAX_SEARCH_CANDIDATES,
     });
-    const matchedRecords = candidatePage.records.filter((record) => matchedIds.has(record.id));
+    const matchedRecords = candidatePage.records
+      .filter((record) => matchedIds.has(record.id))
+      .sort((left, right) => (matchedIds.get(left.id) ?? 0) - (matchedIds.get(right.id) ?? 0));
     const organizationPage = paginate(matchedRecords, query.page, query.pageSize);
     const cardDetails = await loadProfileCardDetails(organizationPage.records.map((record) => record.id));
     const enrichedPage = {

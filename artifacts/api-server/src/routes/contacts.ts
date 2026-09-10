@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
+import { ForgivingContactSearchService } from "@/features/contacts/forgiving-contact-search";
 import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
 import { atomicContactEditSchema, contactFormInputSchema, contactListQuerySchema, replaceContactPhonesSchema } from "@/features/contacts/contact-input";
 import { ActivityService } from "@/features/activities/activity-service";
@@ -30,7 +31,7 @@ router.get("/contacts", async (req, res): Promise<void> => {
     page: req.query.page ?? undefined,
   });
   try {
-    const contacts = await contactRepo().listContacts(query);
+    const contacts = await new ForgivingContactSearchService(contactRepo()).listContacts(query);
     res.json(contacts);
   } catch (err) {
     req.log.error({ err }, "Failed to list contacts");
