@@ -30,7 +30,10 @@ ALTER TABLE communication_template_reviews
   ALTER COLUMN verified_links SET DEFAULT '[]'::jsonb,
   ALTER COLUMN verified_links SET NOT NULL;
 
-DROP INDEX IF EXISTS communication_template_reviews_request_unique;
+ALTER TABLE communication_template_reviews
+    DROP CONSTRAINT IF EXISTS communication_template_reviews_request_id_key;
+
+  DROP INDEX IF EXISTS communication_template_reviews_request_unique;
 
 CREATE UNIQUE INDEX IF NOT EXISTS communication_template_reviews_request_template_unique
   ON communication_template_reviews (request_id, template_id);
