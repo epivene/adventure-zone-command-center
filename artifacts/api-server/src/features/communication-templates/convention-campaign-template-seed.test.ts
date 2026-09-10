@@ -64,7 +64,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-minimal-refresh-v9");
+      expect(template.templateVersion).toBe("2026-09-early-bird-refresh-v10");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
@@ -88,6 +88,22 @@ describe("convention campaign template seed", () => {
         "subject=Planning%20%5BEvent%20Name%5D%20for%202027",
       );
       expect(template.bodyTemplate).toContain(">SEE MORE!</a>");
+    }
+  });
+
+  it("uses the approved high-contrast Early Bird box in every convention email", () => {
+    for (const template of conventionCampaignTemplates) {
+      expect(template.bodyTemplate).toContain("EARLY BIRD BOOKING OFFER");
+      expect(template.bodyTemplate).toContain(
+        'style="background:#0f1729;border:3px solid #0f1729"',
+      );
+      expect(template.bodyTemplate).toContain(
+        'style="padding:10px 20px;background:#ff0a8a;color:#ffffff',
+      );
+      expect(template.bodyTemplate).toContain(
+        'style="font-size:30px;line-height:34px;font-weight:900;color:#ffca05">SAVE 10%',
+      );
+      expect(template.bodyTemplate).not.toContain("background:#fff4f8");
     }
   });
 
@@ -253,7 +269,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-minimal-refresh-v9",
+      template_version: "2026-09-early-bird-refresh-v10",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
