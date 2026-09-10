@@ -929,7 +929,7 @@
         <div class="hero-content">
           <div class="eyebrow">${icon("star")}<span>America's Best Bounce House Carnival!</span>${icon("star")}</div>
           <h1 class="display">We Bring <br><span class="yellow">The Action</span></h1>
-          <p class="hero-copy">Professional, fully staffed traveling inflatable carnival packages for fairs, festivals &amp; major community events.</p>
+          <p class="hero-copy">A fully staffed inflatable bounce house carnival for fairs, festivals, rodeos, and community events.</p>
           <div class="hero-actions"><a class="button" href="#packages">See Packages</a><a class="button outline" href="#contact">Contact</a></div>
         </div>
       </section>
