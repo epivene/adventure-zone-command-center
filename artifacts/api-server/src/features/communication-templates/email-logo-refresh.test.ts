@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { refreshEmailLogos } from "./email-logo-refresh";
+import { refreshEmailLogos, replaceEmailLogo } from "./email-logo-refresh";
 
 const old = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-logo-navy.png";
 const next = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-logo-tagline-20260910.png";
@@ -9,7 +9,7 @@ let pg: PGlite;
 afterEach(async () => { await pg?.close(); });
 
 describe("saved email logo refresh", () => {
-  it("updates active templates and pending snapshots only, preserving wording, layout, approvals and repeatability", async () => {
+  it.each([old, next])("updates active templates and pending snapshots only, preserving wording, layout, approvals and repeatability", async (source) => {
     pg = new PGlite();
     await pg.exec(`
       create table communication_templates(id text primary key, body_template text not null, body_format text not null, state text not null, reviewed_by text, reviewed_at timestamptz, updated_at timestamptz default now());
@@ -19,7 +19,7 @@ describe("saved email logo refresh", () => {
       create unique index reviews_template on communication_template_reviews(request_id,template_id);
       create table boss_work_request_events(request_id text, actor_kind text, actor_id text, prior_state text, new_state text, note text);
     `);
-    const body = `<table><tr><td style="background:#0f1729"><img src="${old}" width="390" style="height:auto;max-width:92%"><p>My edited wording</p></td></tr></table>`;
+    const body = `<table><tr><td style="background:#0f1729"><img src="${source}" width="390" style="height:auto;max-width:92%"></td></tr><tr><td style="background:#0f1729"><span class="eyebrow">CONFERENCE SEASON</span><p>My edited wording</p></td></tr></table>`;
     for (const [id, state] of [["one", "active"], ["two", "draft"], ["three", "archived"]]) {
       await pg.query("insert into communication_templates(id,body_template,body_format,state,reviewed_by) values ($1,$2,'html',$3,'Dave')", [id, body, state]);
     }
@@ -30,11 +30,11 @@ describe("saved email logo refresh", () => {
     const db = drizzle(pg) as unknown as Parameters<typeof refreshEmailLogos>[0];
     await refreshEmailLogos(db);
     const templates = (await pg.query<{id:string;body_template:string;state:string;reviewed_by:string|null}>("select * from communication_templates order by id")).rows;
-    expect(templates.find(t => t.id === "one")).toMatchObject({body_template: body.replace(old,next),state:"reviewed",reviewed_by:null});
-    expect(templates.find(t => t.id === "two")).toMatchObject({body_template:body.replace(old,next),state:"draft"});
-    expect(templates.find(t => t.id === "three")).toMatchObject({body_template:body.replace(old,next),state:"archived"});
+    expect(templates.find(t => t.id === "one")).toMatchObject({body_template: replaceEmailLogo(body),state:"reviewed",reviewed_by:null});
+    expect(templates.find(t => t.id === "two")).toMatchObject({body_template:replaceEmailLogo(body),state:"draft"});
+    expect(templates.find(t => t.id === "three")).toMatchObject({body_template:replaceEmailLogo(body),state:"archived"});
     const reviews = (await pg.query<{id:string;body_snapshot:string;content_fingerprint:string;decision:string}>("select * from communication_template_reviews order by id")).rows;
-    expect(reviews.find(r => r.id === "pending")).toMatchObject({body_snapshot:body.replace(old,next),decision:"pending"});
+    expect(reviews.find(r => r.id === "pending")).toMatchObject({body_snapshot:replaceEmailLogo(body),decision:"pending"});
     expect(reviews.find(r => r.id === "pending")?.content_fingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(reviews.find(r => r.id === "decided")).toMatchObject({body_snapshot:body,content_fingerprint:"old-fingerprint",decision:"approved"});
     expect(reviews.find(r => r.id === "historic")).toMatchObject({body_snapshot:body,content_fingerprint:"old-fingerprint"});
