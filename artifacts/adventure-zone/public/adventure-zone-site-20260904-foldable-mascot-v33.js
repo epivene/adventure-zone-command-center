@@ -846,12 +846,12 @@
       <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title" tabindex="-1">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
-        <h2 class="display" id="convention-welcome-title">Let’s Keep the Fun Going</h2>
-        <p>We already know who you are and we’re ready to help you choose the package that will make your event unforgettable.</p>
+        <h2 class="display" id="convention-welcome-title">It’s So Nice to See You Again!</h2>
+        <p>Thank you for taking a moment to reconnect with The Adventure Zone. We’re genuinely glad you’re here.</p>
         <p class="convention-offer">We have so many fun things to offer—which package would you like to see first?</p>
         <div class="convention-package-grid">
           <button class="button" type="button" data-convention-package="Adventure Zone">Adventure Zone</button>
-          <button class="button" type="button" data-convention-package="Weekend Warriors">Weekend Warriors</button>
+          <button class="button" type="button" data-convention-package="Warrior's Playground">Warrior's Playground</button>
           <button class="button" type="button" data-convention-package="Pirates Rebellion">Pirates Rebellion</button>
         </div>
       </section>
@@ -1120,7 +1120,7 @@
     showConventionPackage(choice) {
       const packageKey = {
         "Adventure Zone": "adventure-zone",
-        "Weekend Warriors": "weekend-warriors",
+        "Warrior's Playground": "weekend-warriors",
         "Pirates Rebellion": "pirates-rebellion",
       }[choice];
       const card = packageKey

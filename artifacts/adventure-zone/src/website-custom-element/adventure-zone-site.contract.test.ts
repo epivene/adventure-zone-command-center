@@ -732,12 +732,17 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
+    expect(dialog).toHaveTextContent("It’s So Nice to See You Again!");
+    expect(dialog).toHaveTextContent(
+      "Thank you for taking a moment to reconnect with The Adventure Zone. We’re genuinely glad you’re here.",
+    );
     expect(dialog).toHaveTextContent("We have so many fun things to offer—which package would you like to see first?");
+    expect(dialog).not.toHaveTextContent(/we already know who you are/i);
     expect(dialog).not.toHaveTextContent(/tell us about your event/i);
     expect(dialog).not.toHaveTextContent(/fill out|contact form/i);
     expect(Array.from(root.querySelectorAll("[data-convention-package]")).map((button) => button.textContent?.trim())).toEqual([
       "Adventure Zone",
-      "Weekend Warriors",
+      "Warrior's Playground",
       "Pirates Rebellion",
     ]);
     expect(root.querySelector(".convention-form-note")).toHaveAttribute("hidden");
@@ -760,7 +765,7 @@ describe("adventure-zone-site inquiry contract", () => {
 
   it.each([
     ["Adventure Zone", "adventure-zone", "Adventure Zone"],
-    ["Weekend Warriors", "weekend-warriors", "Warrior's Playground"],
+    ["Warrior's Playground", "weekend-warriors", "Warrior's Playground"],
     ["Pirates Rebellion", "pirates-rebellion", "Pirate's Rebellion"],
   ])("closes the welcome and shows the selected %s package first", (choice, packageKey, packageTitle) => {
     window.history.replaceState({}, "", "/?welcome=convention");
