@@ -1114,7 +1114,7 @@
       this.conventionOpen = false;
       welcome.classList.remove("open");
       welcome.hidden = true;
-           document.body.style.overflow = this.previousBodyOverflow;
+      document.body.style.overflow = this.previousBodyOverflow;
     }
 
     showConventionPackage(choice) {
