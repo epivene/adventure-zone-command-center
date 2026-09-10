@@ -93,8 +93,28 @@ export class ConventionRepository {
     if (!edition) throw new ConventionError("Convention not found.", 404);
     const [members, history, reviews] = await Promise.all([
       this.pool.query(
-        "SELECT * FROM convention_members WHERE edition_id=$1 ORDER BY data->>'event', id",
-        [id],
+        `SELECT m.*,
+          coalesce(nullif(b.city,''),o.city) AS event_city,
+          coalesce(nullif(b.region,''),o.region) AS event_region,
+          o.place_type AS event_place_type,
+          b.name AS event_booking_name,
+          b.starts_at AS event_starts_at,
+          b.ends_at AS event_ends_at
+        FROM convention_members m
+        LEFT JOIN organizations o ON o.id=m.organization_id
+        LEFT JOIN LATERAL (
+          SELECT name,city,region,starts_at,ends_at
+          FROM bookings
+          WHERE organization_id=m.organization_id
+          ORDER BY
+            CASE WHEN starts_at IS NULL THEN 1 ELSE 0 END,
+            abs(extract(year FROM starts_at)::int-$2),
+            starts_at DESC
+          LIMIT 1
+        ) b ON true
+        WHERE m.edition_id=$1
+        ORDER BY m.data->>'event',m.id`,
+        [id, edition.year],
       ),
       this.pool.query(
         "SELECT * FROM convention_history WHERE edition_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT 200",
@@ -107,7 +127,30 @@ export class ConventionRepository {
     ]);
     return {
       edition,
-      members: members.rows,
+      members: members.rows.map((member) => {
+        const {
+          event_city,
+          event_region,
+          event_place_type,
+          event_booking_name,
+          event_starts_at,
+          event_ends_at,
+          ...stored
+        } = member;
+        return {
+          ...stored,
+          event_info: member.organization_id
+            ? {
+                city: event_city,
+                region: event_region,
+                placeType: event_place_type,
+                bookingName: event_booking_name,
+                startsAt: event_starts_at,
+                endsAt: event_ends_at,
+              }
+            : null,
+        };
+      }),
       history: history.rows,
       review: reviews.rows[0] ?? null,
     };

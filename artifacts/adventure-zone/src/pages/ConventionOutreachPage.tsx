@@ -47,6 +47,14 @@ type Member = {
   organization_id: string | null;
   contact_id: string | null;
   revision: number;
+  event_info?: {
+    city: string | null;
+    region: string | null;
+    placeType: string | null;
+    bookingName: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+  } | null;
   data: Data;
 };
 type Edition = {
@@ -105,6 +113,7 @@ export default function ConventionOutreachPage({
   boss?: boolean;
 }) {
   const search = useSearch();
+  const requestedView = new URLSearchParams(search).get("view");
   const [editions, setEditions] = useState<Edition[]>([]),
     [selected, setSelected] = useState(
       new URLSearchParams(search).get("edition") || "",
@@ -114,7 +123,9 @@ export default function ConventionOutreachPage({
     [query, setQuery] = useState(""),
     [group, setGroup] = useState(""),
     [page, setPage] = useState(0),
-    [view, setView] = useState<"cards" | "game">("cards");
+    [view, setView] = useState<"cards" | "game">(
+      requestedView === "game" ? "game" : "cards",
+    );
   const [error, setError] = useState(""),
     [gameError, setGameError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -168,6 +179,15 @@ export default function ConventionOutreachPage({
           setDetail(d);
           setNote(d?.review?.note || "");
           setError("");
+          if (!selected && requestedView === "game") {
+            const newest =
+              list.editions.find((edition) => !edition.archived_at) ||
+              list.editions[0];
+            if (newest) {
+              setYear(String(newest.year));
+              setSelected(newest.id);
+            }
+          }
         }
       })
       .catch((e) => {
@@ -827,13 +847,6 @@ function ConventionGame({
   savedCard: string;
   edit: (member: Member) => void;
 }) {
-  const summary = (member: Member) => {
-    const value =
-      member.data.notes ||
-      member.data.reason ||
-      `Past attendance: ${member.data.attendance.replaceAll("_", " ")}`;
-    return value.length > 240 ? `${value.slice(0, 237)}...` : value;
-  };
   return (
     <section
       className={`${box} overflow-x-auto print:overflow-visible print:border-0 print:p-0`}
@@ -883,9 +896,7 @@ function ConventionGame({
                     Spoke with {response.contact}
                   </span>
                 )}
-                <span className="mt-2 block text-sm text-muted-foreground">
-                  {summary(member)}
-                </span>
+                <EventInformation member={member} className="mt-2" />
                 <span className="mt-3 flex flex-wrap gap-2 text-xs">
                   <span>{response?.met ? "✓ Met" : "○ Not met"}</span>
                   <span>
@@ -949,7 +960,7 @@ function ConventionGame({
                 )}
               </td>
               <td className="border p-2">
-                {summary(member)}
+                <EventInformation member={member} />
                 <span className="mt-1 block text-xs">
                   Past attendance: {member.data.attendance.replaceAll("_", " ")}
                 </span>
@@ -987,6 +998,79 @@ function ConventionGame({
     </section>
   );
 }
+
+const eventTypeLabels: Record<string, string> = {
+  fair: "Fair",
+  city_government: "City event",
+  festival_event: "Festival / event",
+  venue: "Venue",
+  school: "School event",
+  tribe: "Tribal event",
+  association: "Association event",
+  company: "Company event",
+  other: "Other event",
+};
+
+function eventDateRange(startsAt?: string | null, endsAt?: string | null) {
+  if (!startsAt) return "Event dates not in profile";
+  const start = new Date(startsAt);
+  if (Number.isNaN(start.getTime())) return "Event dates not in profile";
+  const short = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+  const full = new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  if (!endsAt) return full.format(start);
+  const end = new Date(endsAt);
+  if (Number.isNaN(end.getTime())) return full.format(start);
+  if (start.toISOString().slice(0, 10) === end.toISOString().slice(0, 10))
+    return full.format(start);
+  return `${short.format(start)}–${full.format(end)}`;
+}
+
+function factualResearch(member: Member) {
+  const entries = Object.entries(member.data.research || {});
+  const useful = entries.find(([key, value]) => {
+    const normalized = key.toLowerCase();
+    return Boolean(value.trim()) &&
+      /(event info|event detail|about|audience|attendance|size|hours|schedule)/.test(normalized) &&
+      !/(contact|email|phone|source|outreach|next|recommend|offer|reason)/.test(normalized);
+  });
+  if (!useful) return null;
+  const value = useful[1].trim();
+  return value.length > 180 ? `${value.slice(0, 177)}...` : value;
+}
+
+function eventInformation(member: Member) {
+  const info = member.event_info;
+  const location = [info?.city, info?.region].filter(Boolean).join(", ");
+  const type = info?.placeType
+    ? eventTypeLabels[info.placeType] || info.placeType.replaceAll("_", " ")
+    : "Event type not in profile";
+  return [
+    location || "Location not in profile",
+    eventDateRange(info?.startsAt, info?.endsAt),
+    type,
+    factualResearch(member),
+  ].filter((value): value is string => Boolean(value));
+}
+
+function EventInformation({ member, className = "" }: { member: Member; className?: string }) {
+  return (
+    <span className={`${className} block text-sm text-muted-foreground`}>
+      {eventInformation(member).map((line) => (
+        <span className="block" key={line}>{line}</span>
+      ))}
+    </span>
+  );
+}
+
 function ConventionCardEditor({
   member,
   busy,
@@ -1040,9 +1124,7 @@ function ConventionCardEditor({
       >
         <div>
           <h2 className="text-xl font-bold">{member.data.event}</h2>
-          <p className="text-sm text-muted-foreground">
-            {member.data.notes || member.data.reason || "No event summary yet."}
-          </p>
+          <EventInformation member={member} className="mt-1" />
         </div>
         {error && (
           <div
