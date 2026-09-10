@@ -33,6 +33,9 @@
 - Create: `lib/db/migrations/20260910_convention_email_review_set.sql`
 - Modify: `lib/db/src/boss-work-request-schema.ts`
 - Create: `lib/db/src/boss-work-request-schema.test.ts`
+- Modify: `artifacts/api-server/src/features/boss-work-requests/boss-work-request-service.ts`
+- Modify: `artifacts/api-server/src/features/boss-work-requests/boss-work-request-repository.ts`
+- Create: `artifacts/api-server/src/features/boss-work-requests/convention-email-review-set-migration.pglite.test.ts`
 
 **Interfaces:**
 - Produces: `CommunicationTemplateVerifiedLink`
@@ -58,15 +61,18 @@ describe("communication template review set schema", () => {
 });
 ```
 
-- [ ] **Step 2: Run the schema test and verify RED**
+Add a PGlite migration test that creates the legacy one-review schema and row, executes `20260910_convention_email_review_set.sql`, and asserts the row is preserved with position zero, the referenced template name, and empty verified links. Run the same migration twice and assert the second run succeeds.
+
+- [ ] **Step 2: Run the schema and migration tests and verify RED**
 
 Run:
 
 ```bash
 pnpm --filter @workspace/db exec vitest run src/boss-work-request-schema.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/features/boss-work-requests/convention-email-review-set-migration.pglite.test.ts
 ```
 
-Expected: FAIL because the three properties do not exist.
+Expected: both tests FAIL because the fields and migration do not exist.
 
 - [ ] **Step 3: Add the schema types and columns**
 
@@ -134,13 +140,17 @@ WHERE verified_links IS NULL;
 
 Each DDL statement uses `IF EXISTS` or `IF NOT EXISTS` where PostgreSQL permits it. Guard the check constraint with a `pg_constraint` lookup.
 
+Update the existing one-template creation path to pass `template.name` as `templateNameSnapshot`, position zero, and an empty verified-link array. This keeps the existing service compiling and preserves its behavior before batch creation is added.
+
 - [ ] **Step 5: Run schema verification and typecheck**
 
 Run:
 
 ```bash
 pnpm --filter @workspace/db exec vitest run src/boss-work-request-schema.test.ts
+pnpm --filter @workspace/api-server exec vitest run src/features/boss-work-requests/convention-email-review-set-migration.pglite.test.ts
 pnpm --filter @workspace/db typecheck
+pnpm --filter @workspace/api-server typecheck
 ```
 
 Expected: PASS with zero TypeScript errors.
@@ -148,7 +158,7 @@ Expected: PASS with zero TypeScript errors.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add lib/db/migrations/20260910_convention_email_review_set.sql lib/db/src/boss-work-request-schema.ts lib/db/src/boss-work-request-schema.test.ts
+git add lib/db/migrations/20260910_convention_email_review_set.sql lib/db/src/boss-work-request-schema.ts lib/db/src/boss-work-request-schema.test.ts artifacts/api-server/src/features/boss-work-requests/boss-work-request-service.ts artifacts/api-server/src/features/boss-work-requests/boss-work-request-repository.ts artifacts/api-server/src/features/boss-work-requests/convention-email-review-set-migration.pglite.test.ts
 git commit -m "feat: persist convention email review items"
 ```
 
@@ -612,14 +622,15 @@ Mock the template list, Dave accounts, and set creation. Click the action and as
 ```ts
 expect(apiFetch).toHaveBeenCalledWith(
   "/communication-templates/convention-review-set",
-  expect.objectContaining({
-    method: "POST",
-    body: JSON.stringify(expect.objectContaining({
-      assignedBossAccountId: DAVE_ACCOUNT_ID,
-      priority: "high",
-    })),
-  }),
+  expect.objectContaining({ method: "POST" }),
 );
+const createCall = apiFetch.mock.calls.find(
+  ([url]) => url === "/communication-templates/convention-review-set",
+);
+expect(JSON.parse(createCall![1].body)).toMatchObject({
+  assignedBossAccountId: DAVE_ACCOUNT_ID,
+  priority: "high",
+});
 expect(await screen.findByText("Seven convention emails were sent to Dave in one review set."))
   .toBeInTheDocument();
 ```
