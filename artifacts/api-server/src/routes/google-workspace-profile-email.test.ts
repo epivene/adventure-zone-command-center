@@ -118,7 +118,7 @@ function appFor(options?: {
   client?: GoogleWorkspaceReadClient | null;
   mappings?: typeof defaultMappings;
   archiveThread?: ReturnType<typeof vi.fn>;
-  savedThreads?: typeof savedThread[];
+  savedThreads?: Array<typeof savedThread>;
   reply?: ReturnType<typeof vi.fn>;
 }) {
   const app = express();
@@ -231,7 +231,7 @@ describe("Google Workspace profile email routes", () => {
           evidenceCodes: ["exact_contact_email", "contact_active_organization"],
           originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
           conversationId: "conversation-thread-1",
-          savedCopy: true,
+          savedCopy: false,
           archiveState: "complete",
           sourceState: "synced",
         },
