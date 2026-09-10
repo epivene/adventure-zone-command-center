@@ -49,6 +49,14 @@ function emptyRecentResult(): GoogleRecentValidationResult {
 }
 
 describe("GoogleSentProfileLinkSweepLoop", () => {
+  it("keeps late-August sent mail inside the September catch-up window", () => {
+    const septemberTenth = Date.parse("2026-09-10T13:00:00.000Z");
+    const augustTwentyFifth = Date.parse("2026-08-25T00:00:00.000Z");
+
+    expect(septemberTenth - GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS)
+      .toBeLessThanOrEqual(augustTwentyFifth);
+  });
+
   it("reconciles recent all-mail hourly and runs the sent-mail catch-up daily", async () => {
     let now = new Date("2026-08-31T21:30:00.000Z");
     const recentRun = vi.fn().mockResolvedValue({
