@@ -692,6 +692,7 @@ function MemberEditor({
     >([]),
     [error, setError] = useState("");
   const searchSequence = useRef(0);
+  const searchInput = useRef<HTMLInputElement>(null);
   const change = (key: keyof Data, value: string) =>
     set({ ...m, data: { ...m.data, [key]: value } });
   return (
@@ -751,6 +752,7 @@ function MemberEditor({
         <label>
           Find profile
           <input
+            ref={searchInput}
             className={field}
             value={q}
             onChange={(e) => setQ(e.target.value)}
@@ -761,10 +763,11 @@ function MemberEditor({
           type="button"
           onClick={() => {
             const sequence = ++searchSequence.current;
+            const query = searchInput.current?.value ?? q;
             setError("");
             void conventionRequest<{ profiles: typeof matches }>(
               false,
-              `/profile-search?q=${encodeURIComponent(q)}`,
+              `/profile-search?q=${encodeURIComponent(query)}`,
             )
               .then((r) => {
                 if (sequence === searchSequence.current) {
