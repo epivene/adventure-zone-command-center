@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { MapEvent } from "@/features/routes/map-data";
 import { buildMonthSpanSegments, type MonthSpanSegment } from "@/features/calendar/month-spans";
-import { normalizeCalendarBookingDates } from "@/features/calendar/calendar-display";
+import { calendarBookingDisplayDates } from "@/features/calendar/calendar-display";
 import { isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import {
   bookingVisualKindOnDate,
@@ -268,7 +268,7 @@ export function EventCalendar({ events, initialMonth = businessDateKey(new Date(
     const activities: ActCalendarActivity[] = [];
     for (const event of events) {
       if (isActActivity(event)) activities.push(event);
-      else bookings.push(normalizeCalendarBookingDates(event as BookingEvent));
+      else bookings.push(calendarBookingDisplayDates(event as BookingEvent));
     }
     return { bookingEvents: bookings, actEvents: activities };
   }, [events]);
