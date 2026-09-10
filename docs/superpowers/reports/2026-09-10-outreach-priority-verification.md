@@ -1,6 +1,6 @@
 # Outreach priority system — verification and rollout
 
-Status: the seven Important whole-feature findings and three smaller findings are addressed. The scoped re-review cleared nine findings and exposed one generated foreign-key naming defect in I6; the bounded correction and focused verification pass. Publication remains in progress and rollout remains disabled.
+Status: the seven Important whole-feature findings and three smaller findings are addressed. The scoped re-review cleared nine findings and exposed one generated foreign-key naming defect in I6; the bounded correction and focused verification pass. Draft PR #799 contains the reviewed feature scope. Rollout remains disabled.
 
 ## Intended behavior
 
