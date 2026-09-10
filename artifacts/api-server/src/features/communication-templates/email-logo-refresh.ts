@@ -28,7 +28,7 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
       select p.id, p.state, p.deduplication_key from boss_work_requests p
       where p.state in ('waiting_on_dave','in_progress','submitted_to_owner','changes_requested','returned_for_clarification')
         and exists (select 1 from communication_template_reviews r where r.request_id=p.id
-          and r.decision='pending' and r.body_format_snapshot='html' and (strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v1"') = 0)))
+          and r.decision='pending' and r.body_format_snapshot='html' and (strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v2"') = 0)))
       order by p.id for update
     `);
     for (const request of requests.rows) {
@@ -64,7 +64,7 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
     }
     const templates = await tx.execute<{id: string; body_template: string}>(sql`
       select id, body_template from communication_templates
-      where body_format='html' and (strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v1"') = 0)) order by id for update
+      where body_format='html' and (strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v2"') = 0)) order by id for update
     `);
     for (const template of templates.rows) {
       const body = replaceEmailLogo(template.body_template);
@@ -75,4 +75,5 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
     }
   });
 }
+
 
