@@ -72,7 +72,8 @@ export class BossWorkRequestRepository {
       this.database.select().from(bossConventionSubmissions)
         .where(eq(bossConventionSubmissions.requestId, id)).orderBy(desc(bossConventionSubmissions.createdAt)),
       this.database.select().from(communicationTemplateReviews)
-        .where(eq(communicationTemplateReviews.requestId, id)).limit(1),
+        .where(eq(communicationTemplateReviews.requestId, id))
+        .orderBy(asc(communicationTemplateReviews.position)),
       this.database.select().from(bossWorkRequestEvents)
         .where(eq(bossWorkRequestEvents.requestId, id)).orderBy(asc(bossWorkRequestEvents.createdAt)),
     ]);
