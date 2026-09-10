@@ -594,6 +594,18 @@ const migrationFiles = [
         AND pg_get_constraintdef(oid) LIKE '%convention_planning_questionnaire%'
     ) AS ready`,
   },
+  {
+    name: "20260910_communication_template_review_sets.sql",
+    markerSql: `SELECT
+      (SELECT COUNT(*) = 3
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'communication_template_reviews'
+          AND column_name IN ('position', 'template_name_snapshot', 'verified_links'))
+      AND to_regclass(current_schema() || '.communication_template_reviews_request_template_unique') IS NOT NULL
+      AND to_regclass(current_schema() || '.communication_template_reviews_request_position_unique') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
