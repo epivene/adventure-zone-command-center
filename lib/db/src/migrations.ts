@@ -604,6 +604,10 @@ const migrationFiles = [
           AND column_name IN ('position', 'template_name_snapshot', 'verified_links'))
       AND to_regclass(current_schema() || '.communication_template_reviews_request_template_unique') IS NOT NULL
       AND to_regclass(current_schema() || '.communication_template_reviews_request_position_unique') IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM pg_constraint
+      WHERE conrelid = to_regclass(current_schema() || '.communication_template_reviews')
+        AND conname = 'communication_template_reviews_request_id_key')
+    AND to_regclass(current_schema() || '.communication_template_reviews_request_unique') IS NULL
       AS ready`,
   },
 ] as const;
