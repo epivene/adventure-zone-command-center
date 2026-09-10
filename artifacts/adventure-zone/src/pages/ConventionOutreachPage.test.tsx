@@ -230,6 +230,16 @@ describe("convention workspace", () => {
     expect(screen.getByLabelText("Convention notes")).toHaveValue(
       "Do not lose this conversation.",
     );
+    fireEvent.click(screen.getByRole("button", { name: "Reload current card" }));
+    expect(
+      await screen.findByRole("button", { name: "Use latest saved answers" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Keep my answers and retry" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Convention notes")).toHaveValue(
+      "Do not lose this conversation.",
+    );
   });
 
   it("links profiles through the admin path in Game view", async () => {

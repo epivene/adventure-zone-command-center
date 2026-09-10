@@ -123,6 +123,7 @@ export default function ConventionOutreachPage({
   const [planEditing, setPlanEditing] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null),
     [gameEditing, setGameEditing] = useState<Member | null>(null),
+    [conflictLatest, setConflictLatest] = useState<Member | null>(null),
     [savedCard, setSavedCard] = useState(""),
     [create, setCreate] = useState(false),
     [name, setName] = useState(""),
@@ -151,6 +152,7 @@ export default function ConventionOutreachPage({
     setPreview(null);
     setEditing(null);
     setGameEditing(null);
+    setConflictLatest(null);
     setSavedCard("");
     setGameError("");
     setRollover(false);
@@ -192,6 +194,7 @@ export default function ConventionOutreachPage({
   async function saveGameCard(member: Member) {
     setBusy(true);
     setGameError("");
+    setConflictLatest(null);
     try {
       await request(
         `/${member.edition_id}/members/${member.id}/convention-response`,
@@ -201,9 +204,24 @@ export default function ConventionOutreachPage({
           conventionResponse: member.data.conventionResponse,
         },
       );
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              edition: {
+                ...current.edition,
+                revision: current.edition.revision + 1,
+              },
+              members: current.members.map((item) =>
+                item.id === member.id
+                  ? { ...member, revision: member.revision + 1 }
+                  : item,
+              ),
+            }
+          : current,
+      );
       setSavedCard(member.id);
       setGameEditing(null);
-      await reload();
     } catch (cause) {
       setGameError(
         cause instanceof Error ? cause.message : "Could not save this card.",
@@ -212,10 +230,7 @@ export default function ConventionOutreachPage({
       setBusy(false);
     }
   }
-  async function refreshGameCard(
-    member: Member,
-    response: NonNullable<Data["conventionResponse"]>,
-  ) {
+  async function refreshGameCard(member: Member) {
     setBusy(true);
     setGameError("");
     try {
@@ -224,10 +239,7 @@ export default function ConventionOutreachPage({
       const latest = current.members.find((item) => item.id === member.id);
       if (!latest)
         throw new Error("This convention card is no longer available.");
-      setGameEditing({
-        ...latest,
-        data: { ...latest.data, conventionResponse: response },
-      });
+      setConflictLatest(latest);
     } catch (cause) {
       setGameError(
         cause instanceof Error ? cause.message : "Could not reload this card.",
@@ -613,6 +625,7 @@ export default function ConventionOutreachPage({
               savedCard={savedCard}
               edit={(member) => {
                 setGameError("");
+                setConflictLatest(null);
                 setGameEditing(member);
               }}
             />
@@ -783,10 +796,18 @@ export default function ConventionOutreachPage({
           member={gameEditing}
           busy={busy}
           error={gameError}
+          latest={conflictLatest}
           cancel={() => setGameEditing(null)}
-          reload={(response) =>
-            void refreshGameCard(gameEditing, response)
-          }
+          reload={() => void refreshGameCard(gameEditing)}
+          resolve={(response) => {
+            if (!conflictLatest) return;
+            setGameEditing({
+              ...conflictLatest,
+              data: { ...conflictLatest.data, conventionResponse: response },
+            });
+            setConflictLatest(null);
+            setGameError("");
+          }}
           save={(member) => void saveGameCard(member)}
         />
       )}
@@ -970,15 +991,19 @@ function ConventionCardEditor({
   member,
   busy,
   error,
+  latest,
   cancel,
   reload,
+  resolve,
   save,
 }: {
   member: Member;
   busy: boolean;
   error: string;
+  latest: Member | null;
   cancel: () => void;
-  reload: (response: NonNullable<Data["conventionResponse"]>) => void;
+  reload: () => void;
+  resolve: (response: NonNullable<Data["conventionResponse"]>) => void;
   save: (member: Member) => void;
 }) {
   const empty = {
@@ -1025,17 +1050,66 @@ function ConventionCardEditor({
             className="rounded-lg bg-destructive/10 p-3 text-destructive"
           >
             <p>{error}</p>
-            {error.includes("changed") && (
+            {error.includes("changed") && !latest && (
               <button
                 type="button"
                 className={`${button} mt-2`}
                 disabled={busy}
-                onClick={() => reload(response)}
+                onClick={reload}
               >
                 Reload current card
               </button>
             )}
           </div>
+        )}
+        {latest && (
+          <section className="rounded-lg border border-amber-400 bg-amber-50 p-3 text-slate-950">
+            <h3 className="font-bold">Latest saved version</h3>
+            <p>
+              {latest.data.conventionResponse?.met ? "Met" : "Not met"} ·{" "}
+              {latest.data.conventionResponse?.interested
+                ? "Interested"
+                : "Interest not marked"}{" "}
+              ·{" "}
+              {latest.data.conventionResponse?.followUp
+                ? "Follow-up needed"
+                : "No follow-up marked"}
+            </p>
+            {latest.data.conventionResponse?.contact && (
+              <p>Spoke with {latest.data.conventionResponse.contact}</p>
+            )}
+            {latest.data.conventionResponse?.notes && (
+              <p className="whitespace-pre-wrap">
+                {latest.data.conventionResponse.notes}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={button}
+                onClick={() =>
+                  resolve(
+                    latest.data.conventionResponse || {
+                      met: false,
+                      interested: false,
+                      followUp: false,
+                      contact: "",
+                      notes: "",
+                    },
+                  )
+                }
+              >
+                Use latest saved answers
+              </button>
+              <button
+                type="button"
+                className={button}
+                onClick={() => resolve(response)}
+              >
+                Keep my answers and retry
+              </button>
+            </div>
+          </section>
         )}
         <div className="grid gap-3 sm:grid-cols-3">
           {([
