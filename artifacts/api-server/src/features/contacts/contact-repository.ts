@@ -210,6 +210,22 @@ export function buildContactSearchCondition(search: string) {
   const trimmed = search.trim();
   if (!trimmed) return null;
   const pattern = `%${trimmed}%`;
+  const digits = trimmed.replace(/\D/g, "");
+  const phonePattern = digits.length >= 4 ? `%${digits}%` : null;
+  const normalizedPhoneCondition = phonePattern
+    ? sql<boolean>`(
+        regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]+', '', 'g') like ${phonePattern}
+        or exists (
+          select 1
+          from contact_phones search_phone
+          where search_phone.contact_id = ${contacts.id}
+            and (
+              regexp_replace(coalesce(search_phone.number, ''), '[^0-9]+', '', 'g') like ${phonePattern}
+              or regexp_replace(coalesce(search_phone.normalized_number, ''), '[^0-9]+', '', 'g') like ${phonePattern}
+            )
+        )
+      )`
+    : undefined;
   return (
     or(
       ilike(
@@ -222,6 +238,7 @@ export function buildContactSearchCondition(search: string) {
       ilike(contacts.city, pattern),
       ilike(contacts.region, pattern),
       ilike(contacts.postalCode, pattern),
+      normalizedPhoneCondition,
     ) ?? null
   );
 }

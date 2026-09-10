@@ -3,7 +3,7 @@ import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@workspace/db";
-import { bookings, contacts, travelLegs, trips } from "@/db/schema";
+import { bookings, travelLegs, trips } from "@/db/schema";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { LegAssignmentRepository } from "@/features/leg-assignment/leg-assignment-repository";
@@ -16,8 +16,9 @@ import { filterMapEvents } from "@/features/routes/map-data";
 import { resolveRouteMapEvents } from "@/features/routes/location-resolver";
 import { NominatimGeocodingProvider } from "@/features/trips/geocoding";
 import { DrizzleContactRepository } from "@/features/contacts/contact-repository";
+import { ForgivingContactSearchService } from "@/features/contacts/forgiving-contact-search";
 import { createContactPhoneRepository } from "@/features/contact-phones/contact-phone-repository";
-import { atomicContactEditSchema } from "@/features/contacts/contact-input";
+import { atomicContactEditSchema, contactListQuerySchema } from "@/features/contacts/contact-input";
 
 const router: IRouter = Router(), requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
 const routeGeocoder = new NominatimGeocodingProvider();
@@ -98,7 +99,19 @@ router.put("/boss/bookings/:bookingId/leg", requireBoss, async (req, res): Promi
   await new LegAssignmentService(new LegAssignmentRepository(db), new RouteDriveTimeEstimator(db)).recordManualAssignment(bookingId, value.data.travelLegId);
   res.json({ ok: true });
 });
-router.get("/boss/contacts", requireBoss, async (_req, res) => res.json({ contacts: await db.select().from(contacts).limit(500) }));
+router.get("/boss/contacts", requireBoss, async (req, res): Promise<void> => {
+  const query = contactListQuerySchema.parse({ q: req.query.q ?? undefined, page: 1, state: "all" });
+  try {
+    const page = await new ForgivingContactSearchService(new DrizzleContactRepository(db)).listContacts({
+      ...query,
+      pageSize: 500,
+    });
+    res.json({ contacts: page.records, total: page.total });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to search Boss contacts");
+    res.status(500).json({ error: "Could not search contacts." });
+  }
+});
 router.get("/boss/contacts/:contactId", requireBoss, async (req, res): Promise<void> => {
   const id = routeId(req.params.contactId);
   if (!z.string().uuid().safeParse(id).success) { res.status(400).json({ error: "Invalid contact ID." }); return; }

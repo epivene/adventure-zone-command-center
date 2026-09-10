@@ -17,7 +17,7 @@ export function buildProfileSearchTerms(value: string): string[] {
 
 function maximumTypoDistance(term: string): number {
   if (term.length < 3) return 0;
-  if (term.length < 8) return 1;
+  if (term.length < 6) return 1;
   return 2;
 }
 
@@ -62,4 +62,27 @@ export function profileSearchTermMatches(term: string, value: string): boolean {
 
 export function profileSearchMatches(terms: string[], values: string[]): boolean {
   return terms.every((term) => values.some((value) => profileSearchTermMatches(term, value)));
+}
+
+function profileSearchTermScore(term: string, value: string): number | null {
+  const normalizedTerm = normalizeSearchText(term).replace(/\s+/g, "");
+  const normalizedValue = normalizeSearchText(value);
+  if (!normalizedTerm || !normalizedValue) return null;
+
+  const words = normalizedValue.split(/\s+/);
+  if (words.includes(normalizedTerm)) return 0;
+  if (normalizedValue.replace(/\s+/g, "").includes(normalizedTerm)) return 1;
+  return profileSearchTermMatches(normalizedTerm, normalizedValue) ? 10 : null;
+}
+
+export function profileSearchScore(terms: string[], values: string[]): number | null {
+  let total = 0;
+  for (const term of terms) {
+    const scores = values
+      .map((value) => profileSearchTermScore(term, value))
+      .filter((score): score is number => score !== null);
+    if (!scores.length) return null;
+    total += Math.min(...scores);
+  }
+  return total;
 }

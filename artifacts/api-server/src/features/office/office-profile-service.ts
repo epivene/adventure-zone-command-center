@@ -6,8 +6,10 @@ import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-p
 import { attachEventFamiliesToOrganizationPage } from "@/features/event-families/event-family-list";
 import { DrizzleLocationRepository } from "@/features/organization-locations/location-repository";
 import { DrizzleOrganizationRepository } from "@/features/organizations/organization-repository";
+import { buildProfileSearchTerms, profileSearchScore } from "@/features/organizations/profile-search";
 
 type DrizzleDatabase = typeof database;
+const MAX_PROFILE_SEARCH_CANDIDATES = 5_000;
 
 export type OfficeLocationView = {
   id: string;
@@ -182,8 +184,9 @@ export class OfficeProfileService {
   constructor(private readonly database: DrizzleDatabase) {}
 
   async listProfiles(input: { search: string; page: number }) {
+    const normalizedSearch = input.search.trim().replace(/\s+/g, " ");
     const query = {
-      search: input.search.trim().replace(/\s+/g, " "),
+      search: normalizedSearch,
       lastResort: "all" as const,
       travelLegId: null,
       placeType: null,
@@ -195,10 +198,53 @@ export class OfficeProfileService {
       hasLocations: false,
       showMembers: false,
       includeRetired: false,
-      page: input.page,
-      pageSize: 12,
+      page: normalizedSearch ? 1 : input.page,
+      pageSize: normalizedSearch ? MAX_PROFILE_SEARCH_CANDIDATES : 12,
     };
-    const page = await new DrizzleOrganizationRepository(this.database).listOrganizations(query);
+    let page = await new DrizzleOrganizationRepository(this.database).listOrganizations({ ...query, search: "" });
+    if (normalizedSearch) {
+      const terms = buildProfileSearchTerms(normalizedSearch);
+      const searchRows = await this.database.execute<{ id: string; searchText: string | null }>(sql`
+        select
+          o.id,
+          concat_ws(
+            ' ', o.name, o.city, o.region, o.postal_code, o.address_1, o.website, o.phone,
+            (
+              select string_agg(
+                concat_ws(
+                  ' ', c.first_name, c.last_name, c.email, c.phone,
+                  (select string_agg(search_phone.number, ' ') from contact_phones search_phone where search_phone.contact_id = c.id)
+                ),
+                ' '
+              )
+              from organization_contacts oc
+              inner join contacts c on c.id = oc.contact_id
+              where oc.organization_id = o.id and oc.active
+            )
+          ) as "searchText"
+        from organizations o
+        order by o.id
+        limit ${MAX_PROFILE_SEARCH_CANDIDATES}
+      `);
+      const scores = new Map<string, number>();
+      for (const row of searchRows.rows) {
+        const score = profileSearchScore(terms, [row.searchText ?? ""]);
+        if (score !== null) scores.set(row.id, score);
+      }
+      const ranked = page.records
+        .filter((record) => scores.has(record.id))
+        .sort((left, right) => (scores.get(left.id) ?? 0) - (scores.get(right.id) ?? 0));
+      const pageSize = 12;
+      const offset = (input.page - 1) * pageSize;
+      page = {
+        ...page,
+        records: ranked.slice(offset, offset + pageSize),
+        total: ranked.length,
+        page: input.page,
+        pageSize,
+        pageCount: Math.max(1, Math.ceil(ranked.length / pageSize)),
+      };
+    }
     const grouped = await attachEventFamiliesToOrganizationPage(this.database, query, page);
     const ids = grouped.organizations.records.map((record) => record.id);
     const photoById = new Map<string, string | null>();
