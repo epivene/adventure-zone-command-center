@@ -83,6 +83,18 @@ router.patch("/boss/work-requests/:requestId/convention-submissions/:submissionI
   } catch (error) { fail(res, error); }
 });
 
+router.post("/boss/work-requests/:requestId/template-reviews/:reviewId/decision", requireBoss, async (req, res) => {
+  try {
+    const input = templateDecisionSchema.parse(req.body);
+    res.json(await service.decideTemplateReview({
+      requestId: requestId(req.params.requestId),
+      reviewId: requestId(req.params.reviewId),
+      bossAccountId: req.bossAccount!.accountId,
+      ...input,
+    }));
+  } catch (error) { fail(res, error); }
+});
+
 router.post("/boss/work-requests/:requestId/template-decision", requireBoss, async (req, res) => {
   try {
     const input = templateDecisionSchema.parse(req.body);
