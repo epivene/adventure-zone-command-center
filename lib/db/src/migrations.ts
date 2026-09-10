@@ -614,6 +614,11 @@ const migrationFiles = [
     name: "20260910_public_directory_leads.sql",
     markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL AS ready`,
   },
+  {
+    name: "20260910_rmaf_online_directory.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL
+      AND EXISTS (SELECT 1 FROM directory_import_20260910_batch WHERE batch = 'rmaf-online-directory-20260910-v1') AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
