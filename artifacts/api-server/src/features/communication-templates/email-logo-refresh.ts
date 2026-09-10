@@ -1,3 +1,4 @@
+import { replaceEmailVideoLinks } from "./email-video-links";
 import { updateConventionHeader } from "./email-header";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -9,9 +10,9 @@ const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringi
 
 /** Refresh the logo and convention header without re-seeding authored body copy. */
 export function replaceEmailLogo(html: string, code = ""): string {
-  return updateConventionHeader(html.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
+  return replaceEmailVideoLinks(updateConventionHeader(html.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
     (match, prefix: string, quote: string, src: string) => src === previousLogo
-      ? `${prefix}${quote}${EMAIL_LOGO_URL}${quote}` : match), code);
+      ? `${prefix}${quote}${EMAIL_LOGO_URL}${quote}` : match), code));
 }
 
 type ReviewRow = {
@@ -28,7 +29,7 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
       select p.id, p.state, p.deduplication_key from boss_work_requests p
       where p.state in ('waiting_on_dave','in_progress','submitted_to_owner','changes_requested','returned_for_clarification')
         and exists (select 1 from communication_template_reviews r where r.request_id=p.id
-          and r.decision='pending' and r.body_format_snapshot='html' and (strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v3"') = 0)))
+          and r.decision='pending' and r.body_format_snapshot='html' and (r.body_snapshot ~ '(MWD0SdAWZpc|tgjwa1LvghI|-xTjCJz9RmI)' or strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v3"') = 0)))
       order by p.id for update
     `);
     for (const request of requests.rows) {
@@ -61,11 +62,11 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
       await tx.execute(sql`insert into boss_work_request_events
         (request_id,actor_kind,actor_id,prior_state,new_state,note)
         values (${request.id},'system','system:email-logo-refresh',${request.state},${request.state},
-          'Updated the logo and convention header in pending email previews. Completed decisions remain unchanged; please review the updated previews.')`);
+          'Updated website video links, logo, and convention header in pending email previews. Completed decisions remain unchanged; please review the updated previews.')`);
     }
     const templates = await tx.execute<{id: string; code: string; body_template: string}>(sql`
       select id, code, body_template from communication_templates
-      where body_format='html' and (strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v3"') = 0)) order by id for update
+      where body_format='html' and (body_template ~ '(MWD0SdAWZpc|tgjwa1LvghI|-xTjCJz9RmI)' or strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v3"') = 0)) order by id for update
     `);
     for (const template of templates.rows) {
       const body = replaceEmailLogo(template.body_template, template.code);
@@ -76,6 +77,7 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
     }
   });
 }
+
 
 
 
