@@ -640,7 +640,7 @@
     }
 
     @media (max-width: 767px) {
-      :host { font-size: 13px; }
+      :host { min-height: 100vh; background: var(--az-navy); font-size: 13px; }
       .container { width: calc(100% - 24px); }
       .site-header, .site-header.scrolled { padding: 8px 0; }
       .header-row { gap: 10px; }
@@ -911,13 +911,13 @@
         <div class="container header-row">
           <a class="logo-link" href="#hero" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a>
           <nav class="desktop-nav" aria-label="Primary navigation">
-            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
+            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#videos">Videos</a><a href="#faq">FAQ</a>
           </nav>
           <div class="desktop-book"><a class="button" href="#contact">Contact ${icon("arrow")}</a></div>
           <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
-          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
+          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#videos">Videos ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
         </nav>
       </header>
 
@@ -1005,7 +1005,7 @@
         ${formMarkup()}
       </div></div></section>
 
-      <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
+      <footer class="footer" id="videos"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
       <dialog class="package-dialog" aria-labelledby="package-detail-title"><button type="button" class="package-dialog-close" data-package-close aria-label="Close package details">${icon("close")}</button><div class="package-dialog-content"></div></dialog>
