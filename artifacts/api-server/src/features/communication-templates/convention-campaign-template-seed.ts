@@ -367,26 +367,28 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       bodyFormat: template.bodyFormat,
     });
 
-    const openReviewRequests = await database.select({ id: bossWorkRequests.id })
-      .from(bossWorkRequests)
-      .innerJoin(
-        communicationTemplateReviews,
-        eq(communicationTemplateReviews.requestId, bossWorkRequests.id),
-      )
-      .where(and(
-        eq(communicationTemplateReviews.templateId, template.id),
-        inArray(bossWorkRequests.state, [...openTemplateReviewStates]),
-      ));
-    const openReviewRequestIds = openReviewRequests.map((request) => request.id);
-    if (openReviewRequestIds.length) {
-      await database.update(bossWorkRequests)
-        .set({
-          state: "cancelled",
-          completedAt: refreshedAt,
-          updatedAt: refreshedAt,
-          deduplicationKey: null,
-        })
-        .where(inArray(bossWorkRequests.id, openReviewRequestIds));
+    if (inserted.length) {
+      const openReviewRequests = await database.select({ id: bossWorkRequests.id })
+        .from(bossWorkRequests)
+        .innerJoin(
+          communicationTemplateReviews,
+          eq(communicationTemplateReviews.requestId, bossWorkRequests.id),
+        )
+        .where(and(
+          eq(communicationTemplateReviews.templateId, template.id),
+          inArray(bossWorkRequests.state, [...openTemplateReviewStates]),
+        ));
+      const openReviewRequestIds = openReviewRequests.map((request) => request.id);
+      if (openReviewRequestIds.length) {
+        await database.update(bossWorkRequests)
+          .set({
+            state: "cancelled",
+            completedAt: refreshedAt,
+            updatedAt: refreshedAt,
+            deduplicationKey: null,
+          })
+          .where(inArray(bossWorkRequests.id, openReviewRequestIds));
+      }
     }
 
     if (!dave || template.state === "active") continue;

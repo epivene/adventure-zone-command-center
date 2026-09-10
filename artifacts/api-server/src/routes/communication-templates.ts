@@ -126,6 +126,30 @@ const requestApprovalSchema = z.object({
   instructions: z.string().trim().max(12000).nullable().optional(),
 }).strict();
 
+router.post("/communication-templates/convention-review-set", async (req, res): Promise<void> => {
+  const parsed = requestApprovalSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review this request." });
+    return;
+  }
+  try {
+    await seed();
+    const detail = await bossWorkRequests.createConventionTemplateReviewSet({
+      assignedBossAccountId: parsed.data.assignedBossAccountId,
+      priority: parsed.data.priority,
+      dueAt: parsed.data.dueAt ? new Date(parsed.data.dueAt) : null,
+      instructions: parsed.data.instructions,
+      ownerId: String((req as any).userId ?? "owner"),
+    });
+    res.status(201).json(detail);
+  } catch (err) {
+    const status = err instanceof Error && err.message.includes("not available") ? 404 : 409;
+    res.status(status).json({
+      error: err instanceof Error ? err.message : "Could not send the convention set for approval.",
+    });
+  }
+});
+
 router.post("/communication-templates/:templateId/request-dave-approval", async (req, res): Promise<void> => {
   const id = templateId(req.params.templateId);
   const parsed = requestApprovalSchema.safeParse(req.body);

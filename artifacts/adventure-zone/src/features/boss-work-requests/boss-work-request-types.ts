@@ -57,12 +57,21 @@ export type TemplateReview = {
   requestId: string;
   templateId: string;
   templateVersion: string | null;
+  position: number;
+  templateNameSnapshot: string;
   contentFingerprint: string;
   subjectSnapshot: string | null;
   bodySnapshot: string;
   bodyFormatSnapshot: "plain_text" | "html";
   decision: "pending" | "approved" | "changes_requested";
   note: string | null;
+  verifiedLinks: { href: string; label: string; verifiedAt: string }[];
+  safeLinks: { href: string; label: string }[];
+  blockedLinks: {
+    href: string;
+    label: string;
+    reason: "malformed_url" | "unsafe_protocol" | "unresolved_placeholder";
+  }[];
 };
 
 export type BossWorkRequestDetail = {
@@ -70,6 +79,7 @@ export type BossWorkRequestDetail = {
   request: BossWorkRequest;
   draft: ConventionDraft | null;
   submissions: ConventionSubmission[];
+  templateReviews: TemplateReview[];
   templateReview: TemplateReview | null;
 };
 

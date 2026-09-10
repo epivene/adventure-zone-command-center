@@ -193,6 +193,38 @@ export default function SettingsCommunicationTemplatesPage() {
     finally { setBusy(false); }
   }
 
+  async function sendConventionSetToDave() {
+    if (busy) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const accountsResponse = await apiFetch("/boss-admin/accounts");
+      const accountsData = await accountsResponse.json() as {
+        accounts?: { id: string; displayName: string; enabled: boolean }[];
+        error?: string;
+      };
+      const account = accountsData.accounts?.find((item) => item.enabled && /dave/i.test(item.displayName))
+        ?? accountsData.accounts?.find((item) => item.enabled);
+      if (!accountsResponse.ok || !account) {
+        throw new Error(accountsData.error ?? "Dave’s active Boss account was not found.");
+      }
+      const response = await apiFetch("/communication-templates/convention-review-set", {
+        method: "POST",
+        body: JSON.stringify({
+          assignedBossAccountId: account.id,
+          priority: "high",
+          instructions: "Preview all seven convention emails, test every link, and approve or request changes on each email.",
+        }),
+      });
+      const data = await response.json().catch(() => ({})) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Could not send the convention email set to Dave.");
+      setMessage("All seven convention emails were sent to Dave as one high-priority review.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not send the convention email set to Dave.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function promoteShared() {
     if (!selected || selected.ownerKind !== "office_user" || busy) return;
     setBusy(true); setError(""); setMessage("");
@@ -239,7 +271,15 @@ export default function SettingsCommunicationTemplatesPage() {
   }
 
   return <div className="mx-auto grid max-w-7xl gap-5 py-6">
-    <header><h1 className="text-3xl font-bold">Communication templates</h1><p className="mt-1 text-slate-600">Adventure Zone standards, shared Office wording, and coordinator-created templates all stay visible here.</p></header>
+    <header className="flex flex-wrap items-start justify-between gap-3">
+      <div><h1 className="text-3xl font-bold">Communication templates</h1><p className="mt-1 text-slate-600">Adventure Zone standards, shared Office wording, and coordinator-created templates all stay visible here.</p></div>
+      <button
+        className="button-primary"
+        disabled={busy}
+        type="button"
+        onClick={() => void sendConventionSetToDave()}
+      >{busy ? "Sending…" : "Send 7 convention emails to Dave"}</button>
+    </header>
     {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 font-semibold text-rose-700">{error}</p> : null}
     <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
       <aside className="grid content-start gap-4 rounded-xl border bg-white p-3">

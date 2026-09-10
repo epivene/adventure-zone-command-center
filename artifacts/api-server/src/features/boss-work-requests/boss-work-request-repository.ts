@@ -49,11 +49,19 @@ export class BossWorkRequestRepository {
       this.database.select().from(bossConventionSubmissions)
         .where(eq(bossConventionSubmissions.requestId, id)).orderBy(desc(bossConventionSubmissions.createdAt)),
       this.database.select().from(communicationTemplateReviews)
-        .where(eq(communicationTemplateReviews.requestId, id)).limit(1),
+        .where(eq(communicationTemplateReviews.requestId, id))
+        .orderBy(asc(communicationTemplateReviews.position)),
       this.database.select().from(bossWorkRequestEvents)
         .where(eq(bossWorkRequestEvents.requestId, id)).orderBy(asc(bossWorkRequestEvents.createdAt)),
     ]);
-    return { request, draft: draft[0] ?? null, submissions, templateReview: review[0] ?? null, events };
+    return {
+      request,
+      draft: draft[0] ?? null,
+      submissions,
+      templateReviews: review,
+      templateReview: review.length === 1 ? review[0] : null,
+      events,
+    };
   }
 
   async getForOwner(id: string) {
@@ -64,11 +72,18 @@ export class BossWorkRequestRepository {
       this.database.select().from(bossConventionSubmissions)
         .where(eq(bossConventionSubmissions.requestId, id)).orderBy(desc(bossConventionSubmissions.createdAt)),
       this.database.select().from(communicationTemplateReviews)
-        .where(eq(communicationTemplateReviews.requestId, id)).limit(1),
+        .where(eq(communicationTemplateReviews.requestId, id))
+        .orderBy(asc(communicationTemplateReviews.position)),
       this.database.select().from(bossWorkRequestEvents)
         .where(eq(bossWorkRequestEvents.requestId, id)).orderBy(asc(bossWorkRequestEvents.createdAt)),
     ]);
-    return { request, submissions, templateReview: review[0] ?? null, events };
+    return {
+      request,
+      submissions,
+      templateReviews: review,
+      templateReview: review.length === 1 ? review[0] : null,
+      events,
+    };
   }
 
   async create(input: {
@@ -108,19 +123,83 @@ export class BossWorkRequestRepository {
     });
   }
 
+  async createTemplateReviewSet(input: {
+    request: {
+      priority: BossWorkRequestPriority;
+      title: string;
+      instructions?: string | null;
+      dueAt?: Date | null;
+      createdByOwnerId: string;
+      assignedBossAccountId: string;
+      deduplicationKey: string;
+    };
+    reviews: Array<{
+      templateId: string;
+      position: number;
+      templateNameSnapshot: string;
+      templateVersion: string | null;
+      contentFingerprint: string;
+      subjectSnapshot: string | null;
+      bodySnapshot: string;
+      bodyFormatSnapshot: "plain_text" | "html";
+    }>;
+  }) {
+    return this.database.transaction(async (tx) => {
+      const inserted = await tx.insert(bossWorkRequests).values({
+        ...input.request,
+        type: "email_template_approval",
+        state: "waiting_on_dave",
+      }).onConflictDoNothing().returning();
+      const request = inserted[0] ?? (await tx.select().from(bossWorkRequests).where(and(
+        eq(bossWorkRequests.assignedBossAccountId, input.request.assignedBossAccountId),
+        eq(bossWorkRequests.deduplicationKey, input.request.deduplicationKey),
+      )).limit(1))[0];
+      if (!request) throw new BossWorkRequestConflictError("The review set could not be created.");
+
+      if (inserted.length) {
+        await tx.insert(bossWorkRequestEvents).values({
+          requestId: request.id,
+          actorKind: "owner",
+          actorId: input.request.createdByOwnerId,
+          priorState: null,
+          newState: "waiting_on_dave",
+          note: input.request.instructions ?? null,
+          metadata: { reviewCount: input.reviews.length },
+        });
+        await tx.insert(communicationTemplateReviews).values(input.reviews.map((review) => ({
+          ...review,
+          requestId: request.id,
+          verifiedLinks: [],
+        })));
+      }
+      return { request, created: inserted.length > 0 };
+    });
+  }
+
   async createTemplateReview(input: {
     requestId: string;
     templateId: string;
+    position: number;
+    templateNameSnapshot: string;
     contentFingerprint: string;
     subjectSnapshot: string | null;
     bodySnapshot: string;
     bodyFormatSnapshot: "plain_text" | "html";
     templateVersion: string | null;
+    verifiedLinks?: Array<{ href: string; label: string; verifiedAt: string }>;
   }) {
-    return (await this.database.insert(communicationTemplateReviews).values(input)
-      .onConflictDoNothing({ target: communicationTemplateReviews.requestId })
+    return (await this.database.insert(communicationTemplateReviews).values({
+      ...input,
+      verifiedLinks: input.verifiedLinks ?? [],
+    })
+      .onConflictDoNothing({
+        target: [communicationTemplateReviews.requestId, communicationTemplateReviews.templateId],
+      })
       .returning())[0] ?? (await this.database.select().from(communicationTemplateReviews)
-        .where(eq(communicationTemplateReviews.requestId, input.requestId)).limit(1))[0]!;
+        .where(and(
+          eq(communicationTemplateReviews.requestId, input.requestId),
+          eq(communicationTemplateReviews.templateId, input.templateId),
+        )).limit(1))[0]!;
   }
 
   async saveDraft(input: {
@@ -233,37 +312,53 @@ export class BossWorkRequestRepository {
     });
   }
 
-  async decideTemplate(input: {
+  async decideTemplateReview(input: {
     requestId: string;
+    reviewId: string;
     bossAccountId: string;
     decision: "approved" | "changes_requested";
     note?: string | null;
     expectedFingerprint: string;
+    verifiedLinks: Array<{ href: string; label: string; verifiedAt: string }>;
   }) {
     const detail = await this.getForBoss(input.requestId, input.bossAccountId);
-    if (!detail?.templateReview) throw new BossWorkRequestNotFoundError("Template review not found.");
-    if (detail.templateReview.contentFingerprint !== input.expectedFingerprint) {
+    const selected = detail?.templateReviews.find((review) => review.id === input.reviewId);
+    if (!detail || !selected) throw new BossWorkRequestNotFoundError("Template review not found.");
+    if (selected.contentFingerprint !== input.expectedFingerprint) {
       throw new BossWorkRequestConflictError("The template changed. Review the newest version.");
     }
-    if (detail.templateReview.decision !== "pending") {
-      return { request: detail.request, review: detail.templateReview, repeated: true };
+    if (selected.decision !== "pending") {
+      return { request: detail.request, review: selected, repeated: true };
     }
-    const nextState = input.decision === "approved" ? "approved" : "changes_requested";
-    assertTransition(detail.request.state, nextState);
+
     return this.database.transaction(async (tx) => {
+      const lockedRequest = (await tx.select().from(bossWorkRequests)
+        .where(eq(bossWorkRequests.id, input.requestId))
+        .for("update")
+        .limit(1))[0];
+      if (!lockedRequest) throw new BossWorkRequestNotFoundError("Work request not found.");
+
       const review = (await tx.update(communicationTemplateReviews).set({
-        decision: input.decision, note: input.note ?? null,
-        decidedByBossAccountId: input.bossAccountId, decidedAt: new Date(), updatedAt: new Date(),
+        decision: input.decision,
+        note: input.note ?? null,
+        verifiedLinks: input.verifiedLinks,
+        decidedByBossAccountId: input.bossAccountId,
+        decidedAt: new Date(),
+        updatedAt: new Date(),
       }).where(and(
-        eq(communicationTemplateReviews.id, detail.templateReview.id),
+        eq(communicationTemplateReviews.id, selected.id),
+        eq(communicationTemplateReviews.requestId, input.requestId),
         eq(communicationTemplateReviews.decision, "pending"),
         eq(communicationTemplateReviews.contentFingerprint, input.expectedFingerprint),
       )).returning())[0];
       if (!review) throw new BossWorkRequestConflictError("This review has already been decided.");
+
       if (input.decision === "approved") {
         const activated = await tx.update(communicationTemplates).set({
-          state: "active", reviewedBy: detail.request.assignedBossAccountId,
-          reviewedAt: new Date(), updatedAt: new Date(),
+          state: "active",
+          reviewedBy: detail.request.assignedBossAccountId,
+          reviewedAt: new Date(),
+          updatedAt: new Date(),
         }).where(and(
           eq(communicationTemplates.id, review.templateId),
           eq(communicationTemplates.bodyTemplate, review.bodySnapshot),
@@ -271,18 +366,46 @@ export class BossWorkRequestRepository {
             ? sql`${communicationTemplates.subjectTemplate} is null`
             : eq(communicationTemplates.subjectTemplate, review.subjectSnapshot),
           eq(communicationTemplates.bodyFormat, review.bodyFormatSnapshot),
+          review.templateVersion === null
+            ? sql`${communicationTemplates.templateVersion} is null`
+            : eq(communicationTemplates.templateVersion, review.templateVersion),
         )).returning({ id: communicationTemplates.id });
         if (!activated.length) {
           throw new BossWorkRequestConflictError("The template changed. Review the newest version.");
         }
       }
+
+      const reviews = await tx.select().from(communicationTemplateReviews)
+        .where(eq(communicationTemplateReviews.requestId, input.requestId))
+        .orderBy(asc(communicationTemplateReviews.position));
+      const hasPending = reviews.some((item) => item.decision === "pending");
+      const hasChanges = reviews.some((item) => item.decision === "changes_requested");
+      const nextState: BossWorkRequestState = hasPending
+        ? "in_progress"
+        : hasChanges ? "changes_requested" : "approved";
+      if (lockedRequest.state !== nextState) assertTransition(lockedRequest.state, nextState);
       const request = (await tx.update(bossWorkRequests).set({
-        state: nextState, completedAt: input.decision === "approved" ? new Date() : null, updatedAt: new Date(),
-      }).where(and(eq(bossWorkRequests.id, input.requestId), eq(bossWorkRequests.state, detail.request.state))).returning())[0];
+        state: nextState,
+        completedAt: nextState === "approved" ? new Date() : null,
+        updatedAt: new Date(),
+      }).where(and(
+        eq(bossWorkRequests.id, input.requestId),
+        eq(bossWorkRequests.state, lockedRequest.state),
+      )).returning())[0];
       if (!request) throw new BossWorkRequestConflictError("The request changed. Refresh and try again.");
+
       await tx.insert(bossWorkRequestEvents).values({
-        requestId: input.requestId, actorKind: "boss", actorId: input.bossAccountId,
-        priorState: detail.request.state, newState: nextState, note: input.note ?? null,
+        requestId: input.requestId,
+        actorKind: "boss",
+        actorId: input.bossAccountId,
+        priorState: lockedRequest.state,
+        newState: nextState,
+        note: input.note ?? null,
+        metadata: {
+          reviewId: review.id,
+          templateId: review.templateId,
+          decision: input.decision,
+        },
       });
       return { request, review, repeated: false };
     });

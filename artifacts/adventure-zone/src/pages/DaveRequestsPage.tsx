@@ -90,15 +90,43 @@ export default function DaveRequestsPage() {
                   {selected.submissions.map((submission) => <OwnerConventionReview key={submission.id} requestId={selected.request.id} submission={submission} reload={reload} />)}
                   {selected.request.state === "submitted_to_owner" && <button onClick={async () => { const note = window.prompt("What does Dave need to clarify?"); if (note) { await returnWorkRequest(selected.request.id, note); await reload(); } }} className="min-h-11 rounded-lg border px-4 font-semibold">Return for Clarification</button>}
                 </div>
-              ) : selected.templateReview ? (
-                <div className="grid gap-3">
-                  <p className="text-sm"><strong>Decision:</strong> {selected.templateReview.decision.replaceAll("_", " ")}</p>
-                  {selected.templateReview.note && <p className="rounded-lg bg-muted p-3 text-sm">{selected.templateReview.note}</p>}
-                  <div className="overflow-hidden rounded-lg border bg-white">
-                    {selected.templateReview.bodyFormatSnapshot === "html"
-                      ? <iframe title="Reviewed email" sandbox="" srcDoc={selected.templateReview.bodySnapshot} className="min-h-[30rem] w-full" />
-                      : <pre className="whitespace-pre-wrap p-4 font-sans text-sm text-slate-900">{selected.templateReview.bodySnapshot}</pre>}
-                  </div>
+              ) : selected.templateReviews.length ? (
+                <div className="grid gap-4">
+                  <p className="text-sm font-semibold">
+                    {selected.templateReviews.filter((item) => item.decision !== "pending").length}
+                    {" of "}
+                    {selected.templateReviews.length}
+                    {" emails decided"}
+                  </p>
+                  {selected.templateReviews.map((review, index) => (
+                    <details key={review.id} className="rounded-xl border p-4" open={review.decision === "changes_requested"}>
+                      <summary className="cursor-pointer font-bold">
+                        {index + 1}. {review.templateNameSnapshot}
+                        <span className="ml-2 text-sm font-normal text-muted-foreground">
+                          {review.decision.replaceAll("_", " ")}
+                        </span>
+                      </summary>
+                      <div className="mt-4 grid gap-3">
+                        <p className="text-sm"><strong>Subject:</strong> {review.subjectSnapshot || "(No subject)"}</p>
+                        {review.note && <p className="rounded-lg bg-muted p-3 text-sm"><strong>Dave’s note:</strong> {review.note}</p>}
+                        {review.verifiedLinks.length > 0 && (
+                          <div className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+                            <strong>Verified links:</strong>
+                            <ul className="mt-2 list-disc pl-5">
+                              {review.verifiedLinks.map((link) => (
+                                <li key={link.href} className="break-all">{link.label}: {link.href}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="overflow-hidden rounded-lg border bg-white">
+                          {review.bodyFormatSnapshot === "html"
+                            ? <iframe title={`Reviewed email ${index + 1}`} sandbox="" srcDoc={review.bodySnapshot} className="min-h-[30rem] w-full" />
+                            : <pre className="whitespace-pre-wrap p-4 font-sans text-sm text-slate-900">{review.bodySnapshot}</pre>}
+                        </div>
+                      </div>
+                    </details>
+                  ))}
                 </div>
               ) : <p>Template review is unavailable.</p>}
             </div>

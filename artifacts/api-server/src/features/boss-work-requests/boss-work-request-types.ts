@@ -37,6 +37,7 @@ export const conventionSubmissionSchema = z.object({
 export const templateDecisionSchema = z.object({
   decision: z.enum(["approved", "changes_requested"]),
   note: z.string().trim().max(12000).nullable().optional(),
+  verifiedLinks: z.array(z.string().url().max(4000)).max(100).default([]),
 }).strict().superRefine((value, context) => {
   if (value.decision === "changes_requested" && !value.note) {
     context.addIssue({ code: "custom", path: ["note"], message: "Please explain the requested changes." });

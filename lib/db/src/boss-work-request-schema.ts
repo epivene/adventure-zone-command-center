@@ -49,6 +49,12 @@ export const communicationTemplateReviewDecisionValues = [
 export type CommunicationTemplateReviewDecision =
   (typeof communicationTemplateReviewDecisionValues)[number];
 
+export type CommunicationTemplateVerifiedLink = {
+  href: string;
+  label: string;
+  verifiedAt: string;
+};
+
 export type ConventionNotesPayload = {
   planningAnswers?: Record<string, string>;
   eventName: string;
@@ -161,19 +167,23 @@ export const communicationTemplateReviews = pgTable(
     requestId: uuid("request_id").notNull().references(() => bossWorkRequests.id, { onDelete: "cascade" }),
     templateId: uuid("template_id").notNull().references(() => communicationTemplates.id, { onDelete: "restrict" }),
     templateVersion: text("template_version"),
+    position: integer("position").default(0).notNull(),
+    templateNameSnapshot: text("template_name_snapshot").notNull(),
     contentFingerprint: text("content_fingerprint").notNull(),
     subjectSnapshot: text("subject_snapshot"),
     bodySnapshot: text("body_snapshot").notNull(),
     bodyFormatSnapshot: text("body_format_snapshot").$type<"plain_text" | "html">().notNull(),
     decision: text("decision").$type<CommunicationTemplateReviewDecision>().default("pending").notNull(),
     note: text("note"),
+    verifiedLinks: jsonb("verified_links").$type<CommunicationTemplateVerifiedLink[]>().default([]).notNull(),
     decidedByBossAccountId: uuid("decided_by_boss_account_id").references(() => bossAccounts.id, { onDelete: "restrict" }),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    uniqueIndex("communication_template_reviews_request_unique").on(table.requestId),
+    uniqueIndex("communication_template_reviews_request_template_unique").on(table.requestId, table.templateId),
+    uniqueIndex("communication_template_reviews_request_position_unique").on(table.requestId, table.position),
     index("communication_template_reviews_template_version_idx").on(table.templateId, table.templateVersion),
     check("communication_template_reviews_format_valid", sql`${table.bodyFormatSnapshot} in ('plain_text','html')`),
     check("communication_template_reviews_decision_valid", sql`${table.decision} in ('pending','approved','changes_requested')`),

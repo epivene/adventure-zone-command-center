@@ -23,6 +23,8 @@ describe("owner communication template administration", () => {
     expect(source).toContain('router.post("/communication-templates/:templateId/request-dave-approval"');
     expect(source).toContain("Approval activates the exact reviewed revision automatically");
     expect(source).toContain("templateFingerprint");
+    expect(source).toContain('router.post("/communication-templates/convention-review-set"');
+    expect(source).toContain("createConventionTemplateReviewSet");
   });
 
   it("provides an owner-only promotion endpoint", () => {
