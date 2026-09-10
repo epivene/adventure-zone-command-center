@@ -11,10 +11,7 @@ const quickCallerSchema = z.object({
   name: z.string().trim().min(1, "Enter the caller's name."),
   organizationName: z.string().trim().min(1, "Enter an organization or event."),
   phone: optionalText,
-  email: z.string().trim().toLowerCase().refine(
-    (value) => !value || z.string().email().safeParse(value).success,
-    "Enter a valid email address.",
-  ).transform((value) => value || null),
+  email: z.string().trim().toLowerCase().transform((value) => value || null),
   reason: z.string().trim().min(1, "Enter the reason for calling."),
   eventDate: optionalText,
   eventLocation: optionalText,
