@@ -332,6 +332,12 @@ export class BossWorkRequestRepository {
     }
 
     return this.database.transaction(async (tx) => {
+      const lockedRequest = (await tx.select().from(bossWorkRequests)
+        .where(eq(bossWorkRequests.id, input.requestId))
+        .for("update")
+        .limit(1))[0];
+      if (!lockedRequest) throw new BossWorkRequestNotFoundError("Work request not found.");
+
       const review = (await tx.update(communicationTemplateReviews).set({
         decision: input.decision,
         note: input.note ?? null,
@@ -360,6 +366,9 @@ export class BossWorkRequestRepository {
             ? sql`${communicationTemplates.subjectTemplate} is null`
             : eq(communicationTemplates.subjectTemplate, review.subjectSnapshot),
           eq(communicationTemplates.bodyFormat, review.bodyFormatSnapshot),
+          review.templateVersion === null
+            ? sql`${communicationTemplates.templateVersion} is null`
+            : eq(communicationTemplates.templateVersion, review.templateVersion),
         )).returning({ id: communicationTemplates.id });
         if (!activated.length) {
           throw new BossWorkRequestConflictError("The template changed. Review the newest version.");
@@ -374,14 +383,14 @@ export class BossWorkRequestRepository {
       const nextState: BossWorkRequestState = hasPending
         ? "in_progress"
         : hasChanges ? "changes_requested" : "approved";
-      if (detail.request.state !== nextState) assertTransition(detail.request.state, nextState);
+      if (lockedRequest.state !== nextState) assertTransition(lockedRequest.state, nextState);
       const request = (await tx.update(bossWorkRequests).set({
         state: nextState,
         completedAt: nextState === "approved" ? new Date() : null,
         updatedAt: new Date(),
       }).where(and(
         eq(bossWorkRequests.id, input.requestId),
-        eq(bossWorkRequests.state, detail.request.state),
+        eq(bossWorkRequests.state, lockedRequest.state),
       )).returning())[0];
       if (!request) throw new BossWorkRequestConflictError("The request changed. Refresh and try again.");
 
@@ -389,7 +398,7 @@ export class BossWorkRequestRepository {
         requestId: input.requestId,
         actorKind: "boss",
         actorId: input.bossAccountId,
-        priorState: detail.request.state,
+        priorState: lockedRequest.state,
         newState: nextState,
         note: input.note ?? null,
         metadata: {
