@@ -123,6 +123,18 @@ export const businessDocumentsApi = {
     return apiDelete<{ ok: true }>(`/business-documents/${documentId}/links/${linkId}`);
   },
 
+  linkProfile(documentId: string, profileId: string, match?: {
+    confidence?: number;
+    evidence?: Array<Record<string, unknown>>;
+  }) {
+    return apiPost<{ ok: true }>(`/business-documents/${documentId}/links`, {
+      targetKind: "profile",
+      targetId: profileId,
+      confidence: match?.confidence ?? null,
+      evidence: match?.evidence ?? [],
+    });
+  },
+
   reviewItems() {
     return apiGet<{ items: BusinessDocumentReviewItem[] }>("/business-documents/reviews");
   },
