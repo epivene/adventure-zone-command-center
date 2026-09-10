@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { readFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 import { URL } from "node:url";
