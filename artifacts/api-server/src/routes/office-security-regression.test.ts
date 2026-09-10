@@ -82,6 +82,15 @@ describe("Office Coordinator security regression", () => {
     }).email).toBe("use the website contact form");
   });
 
+  it("continues to validate location email fields separately", () => {
+    expect(officeLocationInputSchema.safeParse({
+      email: "Use the website contact form",
+    }).success).toBe(false);
+    expect(officeLocationInputSchema.parse({
+      email: "Information@RockyMountainTrainShow.com",
+    }).email).toBe("information@rockymountaintrainshow.com");
+  });
+
   it("rejects strategic and operational fields from factual Office edit schemas", () => {
     expect(officeProfileInputSchema.safeParse({ name: "Fair", lastResort: true }).success).toBe(false);
     expect(officeProfileInputSchema.safeParse({ name: "Fair", probability: "likely" }).success).toBe(false);
