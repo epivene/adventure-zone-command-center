@@ -1,4 +1,6 @@
-import { Link } from "wouter";
+import { useEffect, useState } from "react";
+import { LoaderCircle, Search } from "lucide-react";
+import { Link, useLocation } from "wouter";
 
 import type {
   ContactListPage,
@@ -31,13 +33,28 @@ export function ContactList({
   query,
   basePath = "/contacts",
   fixedParams = {},
+  loading = false,
 }: {
   contacts: ContactListPage;
   query: ContactListQuery;
   basePath?: string;
   fixedParams?: FixedParams;
+  loading?: boolean;
 }) {
+  const [, setLocation] = useLocation();
+  const [searchValue, setSearchValue] = useState(query.search);
+  const [pendingSearch, setPendingSearch] = useState(false);
   const reset = resetHref(basePath, fixedParams);
+  useEffect(() => { setSearchValue(query.search); }, [query.search]);
+  useEffect(() => {
+    if (searchValue === query.search) return;
+    const id = window.setTimeout(() => setLocation(contactListHref(basePath, fixedParams, { ...query, search: searchValue.trim(), page: 1 }, 1)), 150);
+    return () => window.clearTimeout(id);
+  }, [basePath, fixedParams, query, query.search, searchValue, setLocation]);
+  useEffect(() => {
+    if (!loading && searchValue === query.search) setPendingSearch(false);
+  }, [loading, query.search, searchValue]);
+  const searching = pendingSearch || loading;
   return (
     <div className="grid gap-5">
       <form
@@ -49,18 +66,23 @@ export function ContactList({
           <input key={name} name={name} type="hidden" value={value} />
         ))}
         <label className="grid gap-1 text-sm font-semibold">
-          Search contacts
+          <span>Search contacts</span>
+          <span className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
-            defaultValue={query.search}
+            aria-label="Search contacts"
+            className="w-full pr-10"
             name="q"
+            onChange={(event) => { setSearchValue(event.currentTarget.value); setPendingSearch(true); }}
             placeholder="Name, company, email, phone, or location"
+            style={{ paddingLeft: "3rem" }}
             type="search"
+            value={searchValue}
           />
+          {searching ? <span aria-label="Searching contacts" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-orange-700" role="status"><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /></span> : null}
+          </span>
         </label>
         <div className="flex items-end gap-2">
-          <button className="button-primary" type="submit">
-            Search
-          </button>
           <Link className="button-secondary" href={reset}>
             Reset
           </Link>

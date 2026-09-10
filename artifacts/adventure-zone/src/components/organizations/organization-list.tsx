@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { useLocation } from "wouter";
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { LoaderCircle, Search } from "lucide-react";
 
 import { profileTypeOptions } from "@/features/organizations/last-resort-input";
 import type { OrganizationListQuery, OrganizationListPage } from "@/features/organizations/organization-repository";
@@ -60,8 +61,10 @@ function RatingSummary({ average, count }: { average?: number | null; count?: nu
   );
 }
 
-export function OrganizationList({ organizations, query, travelLegs, afterSearch }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[]; afterSearch?: ReactNode }) {
+export function OrganizationList({ organizations, query, travelLegs, afterSearch, loading = false }: { organizations: OrganizationListPage; query: OrganizationListQuery; travelLegs: { id: string; name: string; color: string }[]; afterSearch?: ReactNode; loading?: boolean }) {
   const [, setLocation] = useLocation();
+  const [searchValue, setSearchValue] = useState(query.search);
+  const [pendingSearch, setPendingSearch] = useState(false);
   const profileTypeLabel = profileTypeOptions.find((option) => option.value === query.placeType)?.label;
   const legLabel = travelLegs.find((leg) => leg.id === query.travelLegId)?.name;
   const activeFilters: ActiveFilter[] = [
@@ -79,14 +82,27 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
   ].filter((value): value is ActiveFilter => Boolean(value));
   const directoryReset = listHref({ ...query, search: "", lastResort: "all", filler: "all", travelLegId: null, placeType: null, region: null, hasPhone: false, hasEmail: false, hasFollowUp: false, hasBooking: false, hasLocations: false, showMembers: false, page: 1 });
 
+  useEffect(() => { setSearchValue(query.search); }, [query.search]);
+  useEffect(() => {
+    if (searchValue === query.search) return;
+    const id = window.setTimeout(() => setLocation(listHref({ ...query, search: searchValue.trim(), page: 1 })), 150);
+    return () => window.clearTimeout(id);
+  }, [query, query.search, searchValue, setLocation]);
+  useEffect(() => {
+    if (!loading && searchValue === query.search) setPendingSearch(false);
+  }, [loading, query.search, searchValue]);
+  const searching = pendingSearch || loading;
+
   return (
     <div className="grid gap-4">
       <form action="/profiles" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm" method="get">
         {query.directoryView && query.directoryView !== "all" ? <input name="view" type="hidden" value={query.directoryView} /> : null}
         <div className="flex flex-col gap-2 sm:flex-row">
-          <label className="min-w-0 flex-1">
+          <label className="relative min-w-0 flex-1">
             <span className="sr-only">Search profiles and contacts</span>
-            <input className="min-h-11 w-full" defaultValue={query.search} name="q" placeholder="Search profiles, contacts, cities, phone, email…" type="search" />
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input className="min-h-11 w-full pr-10" name="q" onChange={(event) => { setSearchValue(event.currentTarget.value); setPendingSearch(true); }} placeholder="Search profiles, contacts, cities, phone, email…" style={{ paddingLeft: "3rem" }} type="search" value={searchValue} />
+            {searching ? <span aria-label="Searching profiles" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-orange-700" role="status"><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /></span> : null}
           </label>
           <label className="grid min-w-[12rem] gap-1 text-xs font-semibold text-slate-600">
             <span>Sort by</span>
@@ -100,7 +116,6 @@ export function OrganizationList({ organizations, query, travelLegs, afterSearch
             </select>
           </label>
           <div className="flex items-end gap-2">
-            <button className="button-primary flex-1 sm:flex-none" type="submit">Search</button>
             <Link className="button-secondary flex-1 text-center sm:flex-none" href={directoryReset}>Clear</Link>
           </div>
         </div>

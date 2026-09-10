@@ -164,7 +164,8 @@ export default function OrganizationsPage() {
         <ContactDirectoryView search={search} basePath="/profiles" fixedParams={{ view: "contacts" }} />
       ) : (
         <div>
-          {loading ? <p className="text-slate-500">Loading profiles…</p> : error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} /> : null}
+          {error ? <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 p-4"><p className="text-rose-700">{error}</p></div> : null}
+          {data ? <OrganizationList organizations={organizationPage} query={query} travelLegs={data.travelLegs ?? []} afterSearch={familySection} loading={loading} /> : loading ? <p className="text-slate-500">Loading profiles…</p> : null}
           <section className="mt-5 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-3" aria-label="Profile utilities">
             <div className="flex flex-wrap items-center gap-2">
               <EventFamilySuggestions compact onChanged={loadProfiles} />
