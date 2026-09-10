@@ -276,13 +276,13 @@ git commit -m "feat: validate email review links"
 
 **Interfaces:**
 - Produces: `CONVENTION_REVIEW_TEMPLATE_CODES: readonly string[]`
-- Produces: `BossWorkRequestService.createConventionEmailReviewSet(input)`
+- Produces: `BossWorkRequestService.createConventionEmailReviewSet(input): Promise<{ detail: BossWorkRequestDetail; created: boolean }>`
 - Produces: `BossWorkRequestRepository.createTemplateReviewSet(input)`
 - Consumes: `templateFingerprint` and the schema from Task 1
 
 - [ ] **Step 1: Write the failing PGlite creation tests**
 
-Create a focused PGlite setup with the six required tables: `boss_accounts`, `communication_templates`, `boss_work_requests`, `boss_work_request_events`, `communication_template_reviews`, and the referenced fields/constraints.
+Create a focused PGlite setup with the five required tables: `boss_accounts`, `communication_templates`, `boss_work_requests`, `boss_work_request_events`, and `communication_template_reviews`, including the referenced fields and constraints.
 
 Seed the exact seven codes exported by `CONVENTION_REVIEW_TEMPLATE_CODES`. Assert:
 
@@ -326,7 +326,7 @@ export function conventionReviewSetFingerprint(
 
 - [ ] **Step 4: Implement atomic repository creation**
 
-`createTemplateReviewSet` receives the request values and seven snapshot values. Open one database transaction, insert the deduplicated request, resolve the existing request on conflict, and insert all seven review rows only when the request was newly created. Return the ordered detail.
+`createTemplateReviewSet` receives the request values and seven snapshot values. Open one database transaction, insert the deduplicated request, resolve the existing request on conflict, and insert all seven review rows only when the request was newly created. Return `{ detail, created }`, where `created` is false when the deduplication key resolved an existing request.
 
 No service call may create the request first and insert reviews afterward.
 
@@ -402,7 +402,7 @@ Expected: FAIL because decisions still target the single request review.
 
 - [ ] **Step 3: Return ordered review collections**
 
-Change both owner and Boss detail loads from `.limit(1)` to `.orderBy(asc(communicationTemplateReviews.position))`. Return:
+Change both owner and Boss detail loads from `.limit(1)` to `.orderBy(asc(communicationTemplateReviews.position))`. In the service detail methods, map each snapshot through `extractTemplateReviewLinks` so both owner and Boss responses receive authoritative `links` and `blockedLinks`. Return:
 
 ```ts
 {
@@ -559,7 +559,7 @@ Export the sample value map and renderer, import it in `SettingsCommunicationTem
 
 - [ ] **Step 4: Extend types and API calls**
 
-`TemplateReview` gains `position`, `templateNameSnapshot`, `verifiedLinks`, `links`, and `blockedLinks`. `BossWorkRequestDetail` gains `templateReviews: TemplateReview[]`.
+`TemplateReview` gains `position`, `templateNameSnapshot`, `verifiedLinks: { href: string; label: string; verifiedAt: string }[]`, `links: { href: string; label: string }[]`, and `blockedLinks: { rawHref: string; label: string; reason: string }[]`. `BossWorkRequestDetail` gains `templateReviews: TemplateReview[]`.
 
 Add:
 
@@ -819,7 +819,7 @@ Run:
 ```bash
 git diff --check main...HEAD
 git status --short
-rg -n "TBD|TODO|FIXME|lorem|javascript:|data:"   lib/db/src/boss-work-request-schema.ts   lib/db/migrations/20260910_convention_email_review_set.sql   artifacts/api-server/src/features/boss-work-requests   artifacts/api-server/src/routes/communication-templates.ts   artifacts/api-server/src/routes/boss-work-requests.ts   artifacts/adventure-zone/src/components/boss-work-requests/EmailTemplateReview.tsx   artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.tsx
+rg -n "T[B]D|T[O]DO|F[I]XME|l[o]rem|javascript:|data:"   lib/db/src/boss-work-request-schema.ts   lib/db/migrations/20260910_convention_email_review_set.sql   artifacts/api-server/src/features/boss-work-requests   artifacts/api-server/src/routes/communication-templates.ts   artifacts/api-server/src/routes/boss-work-requests.ts   artifacts/adventure-zone/src/components/boss-work-requests/EmailTemplateReview.tsx   artifacts/adventure-zone/src/pages/SettingsCommunicationTemplatesPage.tsx
 ```
 
 Expected: `git diff --check` is clean; `git status --short` shows only intentional work; placeholder scan has no unfinished implementation markers. Test fixtures may contain `javascript:` and `data:` only in the link-blocking tests.
@@ -849,7 +849,7 @@ Using Dave access:
 If verification required a correction, rerun the failed command and then the full commands in Steps 1–3 before committing:
 
 ```bash
-git add <only-the-files-corrected-during-verification>
+git add --update
 git commit -m "fix: complete convention email review verification"
 ```
 
