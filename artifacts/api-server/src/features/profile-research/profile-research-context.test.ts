@@ -38,6 +38,8 @@ function profile(overrides: Partial<EventProfile> = {}): EventProfile {
       actRecordId: null,
     }],
     notes: [],
+    scoutNotes: [],
+    history: [],
     followUps: [],
     groups: [],
     sourceProvenance: [],
