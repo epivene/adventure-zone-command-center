@@ -111,16 +111,27 @@ export class BossWorkRequestRepository {
   async createTemplateReview(input: {
     requestId: string;
     templateId: string;
+    position: number;
+    templateNameSnapshot: string;
     contentFingerprint: string;
     subjectSnapshot: string | null;
     bodySnapshot: string;
     bodyFormatSnapshot: "plain_text" | "html";
     templateVersion: string | null;
+    verifiedLinks?: Array<{ href: string; label: string; verifiedAt: string }>;
   }) {
-    return (await this.database.insert(communicationTemplateReviews).values(input)
-      .onConflictDoNothing({ target: communicationTemplateReviews.requestId })
+    return (await this.database.insert(communicationTemplateReviews).values({
+      ...input,
+      verifiedLinks: input.verifiedLinks ?? [],
+    })
+      .onConflictDoNothing({
+        target: [communicationTemplateReviews.requestId, communicationTemplateReviews.templateId],
+      })
       .returning())[0] ?? (await this.database.select().from(communicationTemplateReviews)
-        .where(eq(communicationTemplateReviews.requestId, input.requestId)).limit(1))[0]!;
+        .where(and(
+          eq(communicationTemplateReviews.requestId, input.requestId),
+          eq(communicationTemplateReviews.templateId, input.templateId),
+        )).limit(1))[0]!;
   }
 
   async saveDraft(input: {
