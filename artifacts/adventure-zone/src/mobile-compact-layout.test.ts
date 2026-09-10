@@ -12,12 +12,12 @@ describe("mobile compact layout", () => {
     expect(main).toContain("import './mobile-compact.css';");
   });
 
-  it("uses a 90 percent root scale only on small phone widths", () => {
+  it("uses a 94 percent root scale only on small phone widths", () => {
     expect(css).toContain("@media (max-width: 640px)");
-    expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*?html\s*\{[\s\S]*?font-size:\s*90%;/);
+    expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*?html\s*\{[\s\S]*?font-size:\s*94%;/);
   });
 
-  it("keeps touch controls at least 44px tall on small phones", () => {
-    expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*?button[\s\S]*?min-height:\s*44px;/);
+  it("keeps touch controls at least 46px tall on small phones", () => {
+    expect(css).toMatch(/@media \(max-width: 640px\)[\s\S]*?button[\s\S]*?min-height:\s*46px;/);
   });
 });
