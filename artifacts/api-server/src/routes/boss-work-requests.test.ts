@@ -10,6 +10,10 @@ describe("Boss work request route boundaries", () => {
     expect(routes.match(/requireBoss/g)?.length).toBeGreaterThanOrEqual(6);
     expect(routes).toContain('"/boss/work-requests"');
     expect(routes).toContain("req.bossAccount!.accountId");
+    expect(routes).toContain(
+      '"/boss/work-requests/:requestId/template-reviews/:reviewId/decision"',
+    );
+    expect(routes).toContain("service.decideTemplateReview");
   });
 
   it("mounts Dave routes before the owner gate and Owner routes after it", () => {
