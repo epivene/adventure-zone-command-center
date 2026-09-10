@@ -462,6 +462,81 @@ describe("loadManagerScopedMapData", () => {
     expect(result.events).toEqual([]);
   });
 
+
+  it("builds a current-to-next navigation route for leg-assigned events without trip stops", async () => {
+    const currentBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000214",
+      bookingName: "Meeteetse Annual Labor Day Celebration",
+      city: "Meeteetse",
+      region: "WY",
+      latitude: null,
+      longitude: null,
+      startsAt: new Date("2026-09-05T17:00:00Z"),
+      endsAt: new Date("2026-09-07T17:00:00Z"),
+      operationalEndsAt: new Date("2026-09-09T00:00:00Z"),
+    };
+    const nextBooking = {
+      ...assignedBookingWithoutTrip,
+      bookingId: "00000000-0000-4000-8000-000000000215",
+      bookingName: "Blanding City Fall Festival",
+      city: "Blanding",
+      region: "UT",
+      latitude: null,
+      longitude: null,
+      startsAt: new Date("2026-09-12T17:00:00Z"),
+      endsAt: new Date("2026-09-12T17:00:00Z"),
+    };
+    const dependencies = deps([], [currentBooking, nextBooking]);
+    dependencies.tripRepository = {
+      async listTrips() { return []; },
+      async listStops() { return []; },
+      async listSegments() { return []; },
+      async getTravelLegDefaults() { return { mpg: 10 }; },
+    };
+    dependencies.lifecycleRepository = {
+      async getCurrentForLeg() { return { bookingId: currentBooking.bookingId }; },
+      async getLatestCheckedOutForLeg() { return null; },
+    };
+    dependencies.eventLocationResolver = async (events) => events.map((event) => event.bookingId === currentBooking.bookingId
+      ? { ...event, latitude: 44.1586, longitude: -108.8715 }
+      : { ...event, latitude: 37.6242, longitude: -109.4782 });
+    dependencies.routingEstimator = {
+      async estimate(from, to) {
+        expect(from).toEqual({ latitude: 44.1586, longitude: -108.8715 });
+        expect(to).toEqual({ latitude: 37.6242, longitude: -109.4782 });
+        return { miles: 525, minutes: 510, source: "cached", estimatedAt: new Date() };
+      },
+    };
+
+    const result = await loadManagerScopedMapData(
+      dependencies,
+      kristyLegId,
+      new Date("2026-09-09T16:00:00Z"),
+    );
+
+    expect(result.route?.trip).toMatchObject({
+      id: `manager-navigation:${kristyLegId}`,
+      navigationOnly: true,
+      startLabel: "Meeteetse Annual Labor Day Celebration",
+      endLabel: "Blanding City Fall Festival",
+      endLatitude: null,
+      endLongitude: null,
+      mpg: 10,
+    });
+    expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([nextBooking.bookingId]);
+    expect(result.route?.segments).toEqual([expect.objectContaining({
+      fromLabel: "Meeteetse Annual Labor Day Celebration",
+      toLabel: "Blanding City Fall Festival",
+      effectiveMiles: 525,
+      effectiveMinutes: 510,
+    })]);
+    expect(result.events.map((event) => event.bookingId)).toEqual([
+      currentBooking.bookingId,
+      nextBooking.bookingId,
+    ]);
+  });
+
   it("includes a shared meetup but only the counterpart leg identity", async () => {
     const result = await loadManagerScopedMapData(deps([meetup()]), kristyLegId, new Date("2026-08-19T00:00:00Z"));
 

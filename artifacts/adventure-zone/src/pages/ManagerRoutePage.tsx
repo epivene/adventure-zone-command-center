@@ -37,13 +37,13 @@ export default function ManagerRoutePage() {
       setActiveContext({ kind: "booking", recordId: detailBookingId, label: event?.bookingName ?? "Event" });
       return () => setActiveContext(null);
     }
-    if (data?.route?.trip.id) {
+    if (data?.route?.trip.id && !data.route.trip.navigationOnly) {
       setActiveContext({ kind: "route", recordId: data.route.trip.id, label: data.route.trip.name });
       return () => setActiveContext(null);
     }
     setActiveContext(null);
     return undefined;
-  }, [data?.route?.trip.id, data?.route?.trip.name, detailBookingId, map.data?.events, data?.events, setActiveContext]);
+  }, [data?.route?.trip.id, data?.route?.trip.name, data?.route?.trip.navigationOnly, detailBookingId, map.data?.events, data?.events, setActiveContext]);
 
   if (error) return <p role="alert">{error}</p>;
   if (!data) return <p>Loading schedule…</p>;
@@ -52,6 +52,7 @@ export default function ManagerRoutePage() {
   const nextEvent = data.nextEvent;
   const detailEvent = scheduledEvents.find((event) => event.bookingId === detailBookingId) ?? null;
   const canLoadLifecycle = detailEvent && !["declined", "cancelled"].includes(String(detailEvent.status));
+  const reportTripId = data.route?.trip.navigationOnly ? null : data.route?.trip.id ?? null;
 
   return (
     <div className="grid gap-4">
@@ -72,12 +73,12 @@ export default function ManagerRoutePage() {
         {scheduledEvents.length ? scheduledEvents.map((event) => <button key={event.bookingId} className={`rounded-xl border bg-white p-4 text-left ${focusedBookingId === event.bookingId ? "ring-2 ring-orange-400" : ""}`} onClick={() => { setFocusedBookingId(event.bookingId); setDetailBookingId(event.bookingId); }} type="button"><div className="flex items-start justify-between gap-2"><h3 className="font-bold">{event.bookingName}</h3>{incompleteIds.has(event.bookingId) ? <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-800">Wrap-up incomplete</span> : null}</div><p className="text-sm text-slate-600">{event.city}, {event.region}</p><EventScheduleWindow startsAt={event.startsAt} endsAt={event.endsAt} operationalStartsAt={event.operationalStartsAt} operationalEndsAt={event.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-700" /></button>) : <p>No scheduled events.</p>}
       </section>
 
-      <ReportScheduleIssue tripId={data.route?.trip.id ?? null} />
+      <ReportScheduleIssue tripId={reportTripId} />
 
       <ResponsiveDetailSheet open={Boolean(detailEvent)} onOpenChange={(open) => { if (!open) setDetailBookingId(null); }} title={detailEvent?.bookingName ?? "Event"}>
         {detailEvent ? <div className="grid gap-4">
-          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Event details</h2><p className="mt-2 text-sm text-slate-700">{[detailEvent.city, detailEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><EventScheduleWindow startsAt={detailEvent.startsAt} endsAt={detailEvent.endsAt} operationalStartsAt={detailEvent.operationalStartsAt} operationalEndsAt={detailEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" />{canLoadLifecycle ? <div className="mt-4 border-t pt-3"><EventLifecycleAction bookingId={detailEvent.bookingId} allowCheckIn={detailEvent.status === "confirmed"} onChanged={(next) => { if (next.wrapUpStatus === "incomplete") setIncompleteIds((current) => new Set(current).add(detailEvent.bookingId)); }} /></div> : null}</section>
-          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Schedule changes</h2><p className="mt-1 text-sm text-slate-600">The official booking is read-only here. Report anything that needs corrected.</p><div className="mt-3"><ReportScheduleIssue tripId={data.route?.trip.id ?? null} /></div></section>
+          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Event details</h2><p className="mt-2 text-sm text-slate-700">{[detailEvent.city, detailEvent.region].filter(Boolean).join(", ") || "Location not set"}</p><EventScheduleWindow startsAt={detailEvent.startsAt} endsAt={detailEvent.endsAt} operationalStartsAt={detailEvent.operationalStartsAt} operationalEndsAt={detailEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" />{canLoadLifecycle ? <div className="mt-4 border-t pt-3"><EventLifecycleAction bookingId={detailEvent.bookingId} allowCheckIn={detailEvent.status === "confirmed"} checkoutDueAt={detailEvent.operationalEndsAt ?? null} onChanged={(next) => { if (next.wrapUpStatus === "incomplete") setIncompleteIds((current) => new Set(current).add(detailEvent.bookingId)); }} /></div> : null}</section>
+          <section className="rounded-xl border border-slate-200 p-4"><h2 className="font-bold">Schedule changes</h2><p className="mt-1 text-sm text-slate-600">The official booking is read-only here. Report anything that needs corrected.</p><div className="mt-3"><ReportScheduleIssue tripId={reportTripId} /></div></section>
         </div> : null}
       </ResponsiveDetailSheet>
     </div>

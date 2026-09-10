@@ -2,14 +2,17 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+const layerProps = vi.hoisted(() => ({ showRoute: false }));
+
 vi.mock("@/components/routes/manager-route-map-shell", () => ({
   ManagerRouteMapShell: ({ children }: { children: React.ReactNode }) => <div data-testid="map-shell">{children}</div>,
   useManagerRouteMap: () => null,
 }));
 
 vi.mock("./manager-scoped-map-layers", () => ({
-  ManagerScopedMapLayers: ({ data }: any) => (
-    <div>
+  ManagerScopedMapLayers: ({ data, showRoute }: any) => {
+    layerProps.showRoute = showRoute;
+    return <div>
       {data.events.map((event: any) => <span key={event.bookingId}>{event.bookingName}</span>)}
       {data.meetups.map((meetup: any) => (
         <span key={meetup.id}>
@@ -17,8 +20,8 @@ vi.mock("./manager-scoped-map-layers", () => ({
           {meetup.counterpart.kind === "external_contact" && meetup.counterpart.phone ? ` ${meetup.counterpart.phone}` : ""}
         </span>
       ))}
-    </div>
-  ),
+    </div>;
+  },
 }));
 
 import { ManagerScopedMap } from "./manager-scoped-map";
@@ -48,6 +51,12 @@ describe("ManagerScopedMap", () => {
     render(<ManagerScopedMap data={baseData} variant="operations" />);
     expect(screen.getByText("Eastern Montana Fair")).toBeInTheDocument();
     expect(screen.queryByText("Hulk private stop")).not.toBeInTheDocument();
+  });
+
+
+  it("draws route geometry on the manager Schedule events map", () => {
+    render(<ManagerScopedMap data={baseData} variant="events" />);
+    expect(layerProps.showRoute).toBe(true);
   });
 
   it("renders a leg meetup with the counterpart name", () => {

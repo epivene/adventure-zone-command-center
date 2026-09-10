@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,6 +87,23 @@ describe("EventLifecycleAction", () => {
     expect(await screen.findByRole("link", { name: "Finish post-event checklist" })).toHaveAttribute("href", "/manager/events/booking-1/checklist/post-event");
   });
 
+
+  it("warns that checkout is late after the event buffer has ended", async () => {
+    mocks.lifecycle = {
+      ...baseLifecycle,
+      checkedInAt: "2026-09-05T16:00:00.000Z",
+      preEventChecklistState: "completed",
+      readyToOperate: true,
+    };
+    const { hook } = memoryLocation({ path: "/manager", static: false });
+    render(<Router hook={hook}><EventLifecycleAction {...({
+      bookingId: "booking-1",
+      checkoutDueAt: "2020-01-01T00:00:00.000Z",
+    } as any)} /></Router>);
+    expect(await screen.findByText("Event over — checkout late")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start checkout" })).toBeInTheDocument();
+  });
+
   it("records final departure only after post-event checklist and opens wrap-up", async () => {
     mocks.lifecycle = { ...baseLifecycle, checkedInAt: "2026-08-17T22:00:00.000Z", preEventChecklistState: "completed", postEventChecklistState: "completed", readyToOperate: true };
     const { hook, history } = memoryLocation({ path: "/manager", static: false });
@@ -102,4 +119,30 @@ describe("EventLifecycleAction", () => {
     await waitFor(() => expect(mocks.api).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "Check in" })).not.toBeInTheDocument();
   });
+  it("changes to checkout late while the page remains open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-09T23:59:59.000Z"));
+    try {
+      mocks.lifecycle = {
+        ...baseLifecycle,
+        checkedInAt: "2026-09-05T16:00:00.000Z",
+        preEventChecklistState: "completed",
+        readyToOperate: true,
+      };
+      const { hook } = memoryLocation({ path: "/manager", static: false });
+      render(<Router hook={hook}><EventLifecycleAction
+        bookingId="booking-1"
+        checkoutDueAt="2026-09-10T00:00:00.000Z"
+      /></Router>);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByText("Event over — checkout late")).not.toBeInTheDocument();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_050); });
+      expect(screen.getByText("Event over — checkout late")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+
 });

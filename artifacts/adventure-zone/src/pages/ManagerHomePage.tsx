@@ -50,7 +50,7 @@ export default function ManagerHomePage() {
   const reviewsDue = dashboard?.summary?.reviewsDueCount ?? dashboard?.reviewsDue?.length ?? 0;
   const currentMapEvent = currentLifecycle ? bookedEvents.find((event) => event.bookingId === currentLifecycle.bookingId) ?? null : null;
   const currentEvent = currentLifecycle ? { ...currentMapEvent, ...currentLifecycle } : null;
-  const nextEvent = bookedEvents.find((event) => event.bookingId !== currentLifecycle?.bookingId) ?? null;
+  const nextEvent = dashboard?.nextEvent ?? null;
   const cashOnHand = money?.cashPosition?.cashOnHandCents != null ? money.cashPosition.cashOnHandCents / 100 : null;
   const expenseTotal = money?.expenseTotalCents != null ? money.expenseTotalCents / 100 : null;
 
@@ -84,7 +84,7 @@ export default function ManagerHomePage() {
             <h2 className="text-xl font-bold">{currentEvent.bookingName || "Current event"}</h2>
             <p className="mt-1 text-sm text-slate-700">{[currentEvent.city, currentEvent.region].filter(Boolean).join(", ") || "Location not set"}</p>
             {currentMapEvent ? <EventScheduleWindow startsAt={currentMapEvent.startsAt} endsAt={currentMapEvent.endsAt} operationalStartsAt={currentMapEvent.operationalStartsAt} operationalEndsAt={currentMapEvent.operationalEndsAt} className="mt-1 grid gap-0.5 text-sm text-slate-800" /> : null}
-            <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} /></div>
+            <div className="mt-3"><EventLifecycleAction bookingId={currentEvent.bookingId} checkoutDueAt={currentMapEvent?.operationalEndsAt ?? null} /></div>
             <div className="mt-3 flex flex-wrap gap-2"><Link className="button-primary inline-flex" href={`/manager/events/${currentEvent.bookingId}/wrap-up#site-check`}>Event notes / site check</Link><Link className="button-secondary inline-flex" href="/manager/route">Open Schedule</Link><button className="button-secondary" type="button" onClick={() => askAboutEvent(currentEvent, "Current event")}>Ask Assistant</button></div>
           </div>
         </section>

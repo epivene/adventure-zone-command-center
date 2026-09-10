@@ -50,6 +50,7 @@ const managerScheduleRouteTripSchema = z.object({
   endLongitude: z.number().nullable(),
   mpg: z.number().nullable(),
   fuelPricePerGallon: z.number().nullable(),
+  navigationOnly: z.boolean().optional(),
 }).strict();
 
 const managerScheduleStopSchema = managerScheduleEventSchema.extend({

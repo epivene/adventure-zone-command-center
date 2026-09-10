@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const managerApi = vi.fn(async (path: string) => {
   if (path === "/manager/dashboard") {
@@ -18,6 +18,11 @@ const managerApi = vi.fn(async (path: string) => {
         operationalEndsAt: "2026-08-24T00:00:00.000Z",
         status: "confirmed",
       }],
+      nextEvent: {
+        bookingId: "booking-1", bookingName: "Eastern Montana Fair", city: "Miles City", region: "MT",
+        startsAt: "2026-08-18T12:00:00.000Z", endsAt: "2026-08-20T12:00:00.000Z",
+        operationalStartsAt: "2026-08-14T00:00:00.000Z", operationalEndsAt: "2026-08-24T00:00:00.000Z", status: "confirmed",
+      },
       currentLifecycle: null,
       incompleteWrapUps: [],
       reviewsDue: [],
@@ -47,6 +52,8 @@ vi.mock("@/features/manager-assistant/manager-assistant-context", () => ({
 
 import ManagerHomePage from "./ManagerHomePage";
 
+afterEach(() => { cleanup(); managerApi.mockClear(); });
+
 describe("ManagerHomePage", () => {
   it("shows the next confirmed event with check in and quick destinations", async () => {
     const { hook } = memoryLocation({ path: "/manager", static: true });
@@ -70,4 +77,25 @@ describe("ManagerHomePage", () => {
     expect(screen.getByText("$125.00")).toBeInTheDocument();
     expect(managerApi).toHaveBeenCalledWith("/manager/dashboard");
   });
+
+  it("shows the API next event instead of a retained checked-out event", async () => {
+    managerApi.mockResolvedValueOnce({
+      events: [
+        { bookingId: "meeteetse", bookingName: "Meeteetse", city: "Meeteetse", region: "WY", startsAt: "2026-09-05T17:00:00.000Z", endsAt: "2026-09-07T17:00:00.000Z", status: "confirmed" },
+        { bookingId: "blanding", bookingName: "Blanding", city: "Blanding", region: "UT", startsAt: "2026-09-12T17:00:00.000Z", endsAt: "2026-09-12T17:00:00.000Z", status: "confirmed" },
+      ],
+      nextEvent: { bookingId: "blanding", bookingName: "Blanding", city: "Blanding", region: "UT", startsAt: "2026-09-12T17:00:00.000Z", endsAt: "2026-09-12T17:00:00.000Z", status: "confirmed" },
+      currentLifecycle: null,
+      incompleteWrapUps: [],
+      reviewsDue: [],
+      money: {},
+      summary: { reviewsDueCount: 0 },
+    });
+    const { hook } = memoryLocation({ path: "/manager", static: true });
+    render(<Router hook={hook}><ManagerHomePage /></Router>);
+
+    expect(await screen.findByRole("heading", { name: "Blanding" })).toBeInTheDocument();
+    expect(screen.queryByText("Meeteetse")).not.toBeInTheDocument();
+  });
+
 });

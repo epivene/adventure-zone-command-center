@@ -112,4 +112,33 @@ describe("NextEventPlanCard", () => {
     expect(() => fireEvent.click(link)).not.toThrow();
     expect(link).toHaveAttribute("href", expect.stringContaining("destination=46.4083%2C-105.8406"));
   });
+  it("shows estimated fuel gallons when a fuel price has not been configured", () => {
+    render(<NextEventPlanCard event={event} onSelect={vi.fn()} route={{
+      trip: {
+        id: "manager-navigation:leg-1",
+        navigationOnly: true,
+        name: "Current to next",
+        startLabel: "Current",
+        startLatitude: 44.1,
+        startLongitude: -108.8,
+        endLabel: event.bookingName,
+        endLatitude: null,
+        endLongitude: null,
+        mpg: 10,
+        fuelPricePerGallon: null,
+      },
+      stops: [{ ...event, id: "navigation-stop", sortOrder: 1 }],
+      segments: [{
+        id: "navigation-segment",
+        fromLabel: "Current",
+        toLabel: event.bookingName,
+        effectiveMiles: 525,
+        effectiveMinutes: 510,
+      }],
+    }} />);
+
+    expect(screen.getByText("52.5 gal estimated fuel")).toBeInTheDocument();
+  });
+
+
 });

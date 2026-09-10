@@ -103,6 +103,60 @@ describe("manager dashboard aggregate", () => {
     expect(dashboard.summary.upcomingBookedEventsCount).toBe(1);
   });
 
+
+  it("uses the future booking as next event while an overdue event remains checked in", async () => {
+    const current = {
+      bookingId: "meeteetse",
+      bookingName: "Meeteetse",
+      city: "Meeteetse",
+      region: "WY",
+      latitude: 44.1586,
+      longitude: -108.8715,
+      startsAt: new Date("2026-09-05T17:00:00Z"),
+      endsAt: new Date("2026-09-07T17:00:00Z"),
+      operationalEndsAt: new Date("2026-09-09T00:00:00Z"),
+      status: "confirmed",
+      probability: null,
+      legName: "A",
+      legColor: "#f97316",
+    };
+    const next = {
+      ...current,
+      bookingId: "blanding",
+      bookingName: "Blanding",
+      city: "Blanding",
+      region: "UT",
+      latitude: 37.6242,
+      longitude: -109.4782,
+      startsAt: new Date("2026-09-12T17:00:00Z"),
+      endsAt: new Date("2026-09-12T17:00:00Z"),
+      operationalEndsAt: null,
+    };
+    const dashboard = await loadLegManagerDashboard(dependencies({
+      tripRepository: {
+        async listTrips() { return []; },
+        async listStops() { return []; },
+        async listSegments() { return []; },
+      },
+      bookingRepository: { async listForLeg() { return [current, next]; } },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return { bookingId: current.bookingId, checkedInAt: new Date("2026-09-05T16:00:00Z") } as any; },
+        async getLatestCheckedOutForLeg() { return null; },
+        async listIncompleteForLeg() { return []; },
+      },
+      routingEstimator: {
+        async estimate() { return { miles: 525, minutes: 510, source: "cached" as const, estimatedAt: new Date() }; },
+      },
+    } as any), A, new Date("2026-09-09T16:00:00Z"));
+
+    expect(dashboard.currentLifecycle?.bookingId).toBe("meeteetse");
+    expect(dashboard.nextEvent?.bookingId).toBe("blanding");
+    expect(dashboard.route?.segments[0]).toMatchObject({
+      effectiveMiles: 525,
+      effectiveMinutes: 510,
+    });
+  });
+
   it("returns available queue data with an explicit partial error when a secondary section fails", async () => {
     const dashboard = await loadLegManagerDashboard(dependencies({
       financeRepository: { async summary() { throw new Error("Finance unavailable"); } },
@@ -112,4 +166,25 @@ describe("manager dashboard aggregate", () => {
     expect(dashboard.money).toEqual({});
     expect(dashboard.partialErrors).toEqual([{ section: "money", message: "Finance unavailable" }]);
   });
+  it("does not label a retained checked-out event as next when its scheduled end is still in the future", async () => {
+    const retained = stop("retained-event", "2026-08-20T12:00:00Z");
+    const actualNext = stop("actual-next", "2026-08-22T12:00:00Z");
+    const dashboard = await loadLegManagerDashboard(dependencies({
+      tripRepository: {
+        async listTrips() { return [trip]; },
+        async listStops() { return [retained, actualNext]; },
+        async listSegments() { return []; },
+      },
+      bookingRepository: { async listForLeg() { return []; } },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return null; },
+        async getLatestCheckedOutForLeg() { return { bookingId: retained.bookingId, checkedOutAt: new Date("2026-08-19T00:00:00Z") } as any; },
+        async listIncompleteForLeg() { return []; },
+      },
+    }), A, new Date("2026-08-19T12:00:00Z"));
+
+    expect(dashboard.nextEvent?.bookingId).toBe(actualNext.bookingId);
+  });
+
+
 });

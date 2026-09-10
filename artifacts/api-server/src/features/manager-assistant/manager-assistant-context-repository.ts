@@ -96,7 +96,7 @@ export class PostgresManagerAssistantContextSource
 
   async getRoute(legId: string): Promise<ManagerRouteAssistantSummary | null> {
     const map = await this.scopedMap(legId);
-    if (!map.route) return null;
+    if (!map.route || map.route.trip.navigationOnly) return null;
     const trip = await new DrizzleTripRepository(db).getTrip(map.route.trip.id);
     return {
       tripId: map.route.trip.id,

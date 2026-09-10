@@ -29,13 +29,14 @@ function deviceTimeZone() {
   }
 }
 
-export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn = true, onChanged }: { bookingId: string; compact?: boolean; allowCheckIn?: boolean; onChanged?: (lifecycle: Lifecycle) => void }) {
+export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn = true, checkoutDueAt = null, onChanged }: { bookingId: string; compact?: boolean; allowCheckIn?: boolean; checkoutDueAt?: string | null; onChanged?: (lifecycle: Lifecycle) => void }) {
   const { managerApi } = useManagerAuth();
   const [, navigate] = useLocation();
   const [lifecycle, setLifecycle] = useState<Lifecycle | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [checkoutClock, setCheckoutClock] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
@@ -46,6 +47,22 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [bookingId, managerApi]);
+
+  useEffect(() => {
+    if (!checkoutDueAt) return;
+    const dueAt = new Date(checkoutDueAt).getTime();
+    if (!Number.isFinite(dueAt)) return;
+    const remaining = dueAt - Date.now();
+    if (remaining <= 0) {
+      setCheckoutClock(Date.now());
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setCheckoutClock(Date.now()),
+      Math.min(remaining + 25, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [checkoutDueAt]);
 
   async function checkIn() {
     if (busy) return;
@@ -115,18 +132,23 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
   if (lifecycle?.checkedOutAt) return <div className="grid gap-1"><p className="text-sm font-semibold text-amber-700">Checked out {time(lifecycle.checkedOutAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/wrap-up`}>Finish manager event report</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
 
   if (lifecycle?.checkedInAt) {
+    const checkoutDueTime = checkoutDueAt ? new Date(checkoutDueAt).getTime() : Number.NaN;
+    const checkoutLate = Number.isFinite(checkoutDueTime) && checkoutClock >= checkoutDueTime;
+    const checkoutLateNotice = checkoutLate
+      ? <p className="text-sm font-bold text-rose-700">Event over — checkout late</p>
+      : null;
     const preState = lifecycle.preEventChecklistState ?? "not_started";
     const postState = lifecycle.postEventChecklistState ?? "not_started";
     if (preState !== "completed") {
-      return <div className="grid gap-2"><p className="text-sm font-semibold text-emerald-700">Checked in {time(lifecycle.checkedInAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/pre-event`}>Finish pre-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+      return <div className="grid gap-2">{checkoutLateNotice}<p className="text-sm font-semibold text-emerald-700">Checked in {time(lifecycle.checkedInAt)}</p><Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/pre-event`}>Finish pre-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
     }
     if (postState === "in_progress") {
-      return <div className="grid gap-2">{lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Pre-event checklist complete · Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Pre-event checklist complete · Ready to operate is blocked by a safety condition</p>}<Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/post-event`}>Finish post-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+      return <div className="grid gap-2">{checkoutLateNotice}{lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Pre-event checklist complete · Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Pre-event checklist complete · Ready to operate is blocked by a safety condition</p>}<Link className="button-primary w-fit" href={`/manager/events/${bookingId}/checklist/post-event`}>Finish post-event checklist</Link>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
     }
     if (postState === "completed" || postState === "unable_to_complete") {
-      return <div className="grid gap-2"><p className="text-sm font-semibold text-amber-700">Post-event checklist {postState === "completed" ? "complete" : "exception recorded"}</p><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void completeCheckout()}>{busy ? "Completing checkout…" : "Complete checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+      return <div className="grid gap-2">{checkoutLateNotice}<p className="text-sm font-semibold text-amber-700">Post-event checklist {postState === "completed" ? "complete" : "exception recorded"}</p><button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void completeCheckout()}>{busy ? "Completing checkout…" : "Complete checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
     }
-    return <div className="grid gap-2">{lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Ready to operate is blocked by a safety condition. Keep the affected attraction out of service and follow owner/admin direction.</p>}<button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void startCheckout()}>{busy ? "Starting checkout…" : "Start checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
+    return <div className="grid gap-2">{checkoutLateNotice ?? (lifecycle.readyToOperate ? <p className="text-sm font-semibold text-emerald-700">Ready to operate</p> : <p className="text-sm font-semibold text-rose-700">Ready to operate is blocked by a safety condition. Keep the affected attraction out of service and follow owner/admin direction.</p>)}<button className="button-primary w-fit" disabled={busy} type="button" onClick={() => void startCheckout()}>{busy ? "Starting checkout…" : "Start checkout"}</button>{error ? <p className="text-sm text-red-700">{error}</p> : null}</div>;
   }
 
   if (!allowCheckIn) return null;

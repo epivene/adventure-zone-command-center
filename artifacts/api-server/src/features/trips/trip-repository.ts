@@ -199,6 +199,15 @@ export class DrizzleTripRepository implements TripRepository {
     return query;
   }
 
+  async getTravelLegDefaults(travelLegId: string): Promise<{ mpg: number | null }> {
+    const [leg] = await this.database
+      .select({ mpg: travelLegs.defaultMpg })
+      .from(travelLegs)
+      .where(eq(travelLegs.id, travelLegId))
+      .limit(1);
+    return leg ?? { mpg: null };
+  }
+
   async updateTrip(
     id: string,
     values: Partial<Omit<TripRecord, "id" | "createdAt" | "updatedAt">>,
