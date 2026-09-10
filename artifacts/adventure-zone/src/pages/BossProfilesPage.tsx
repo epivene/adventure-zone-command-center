@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useSearch } from "wouter";
-import { MapPin, Search, UserRound } from "lucide-react";
+import { LoaderCircle, MapPin, Search, UserRound } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
 import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
 
@@ -31,9 +31,11 @@ export default function BossProfilesPage() {
   const [page, setPage] = useState(() => Math.max(1, Number(params.get("page") ?? 1) || 1));
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     let active = true;
+    setIsSearching(true);
     const timeout = window.setTimeout(() => {
       const qs = new URLSearchParams();
       const term = query.trim();
@@ -41,7 +43,8 @@ export default function BossProfilesPage() {
       if (page > 1) qs.set("page", String(page));
       bossGet<Page>(`/boss/profiles?${qs}`)
         .then((next) => { if (active) { setData(next); setError(""); } })
-        .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); });
+        .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); })
+        .finally(() => { if (active) setIsSearching(false); });
     }, query.trim() ? 150 : 0);
     return () => { active = false; window.clearTimeout(timeout); };
   }, [query, page]);
@@ -58,7 +61,8 @@ export default function BossProfilesPage() {
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Search profiles</span>
           <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pr-3" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search profiles, contacts, or cities" style={{ paddingLeft: "3rem" }} value={query} />
+          <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pr-10" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search profiles, contacts, or cities" style={{ paddingLeft: "3rem" }} value={query} />
+          {isSearching ? <span aria-label="Searching profiles" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-primary" role="status"><LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /></span> : null}
         </label>
       </div>
       {error ? <p className="rounded-xl bg-destructive/10 p-4 text-destructive" role="alert">{error}</p> : null}
