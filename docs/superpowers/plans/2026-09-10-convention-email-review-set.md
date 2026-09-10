@@ -864,7 +864,7 @@ git commit -m "feat: show convention email decisions to owner"
 - [ ] **Step 1: Run the complete focused API suite**
 
 ```bash
-pnpm --filter @workspace/api-server exec vitest run   src/features/boss-work-requests/template-review-links.test.ts   src/features/boss-work-requests/convention-email-review-set.pglite.test.ts   src/features/boss-work-requests/boss-work-request-service.test.ts   src/routes/communication-templates.test.ts   src/routes/boss-work-requests.test.ts
+pnpm --filter @workspace/api-server exec vitest run   src/features/boss-work-requests/convention-email-review-set-migration.pglite.test.ts   src/features/boss-work-requests/template-review-links.test.ts   src/features/boss-work-requests/convention-email-review-set.pglite.test.ts   src/features/boss-work-requests/boss-work-request-service.test.ts   src/routes/communication-templates.test.ts   src/routes/boss-work-requests.test.ts
 ```
 
 Expected: PASS with zero failures.
