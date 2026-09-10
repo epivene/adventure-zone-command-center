@@ -130,7 +130,7 @@ export class BossWorkRequestRepository {
     payload: ConventionNotesPayload;
   }) {
     const request = await this.getAssignedRequest(input.requestId, input.bossAccountId);
-    if (request.type !== "rapid_convention_notes" || ["applied", "cancelled"].includes(request.state)) {
+    if (!["rapid_convention_notes", "convention_planning_questionnaire"].includes(request.type) || ["applied", "cancelled"].includes(request.state)) {
       throw new BossWorkRequestConflictError("This convention form is no longer editable.");
     }
     const saved = await this.database.insert(bossConventionDrafts).values(input)
@@ -150,7 +150,7 @@ export class BossWorkRequestRepository {
     if (request.state === "waiting_on_dave") {
       await this.transition(input.requestId, "in_progress", "boss", input.bossAccountId);
     }
-    return { accepted: current.clientRevision === input.clientRevision, draft: current };
+    return { accepted: saved.length > 0, draft: current };
   }
 
   async submitConvention(input: {
@@ -160,7 +160,7 @@ export class BossWorkRequestRepository {
     payload: ConventionNotesPayload;
   }) {
     const request = await this.getAssignedRequest(input.requestId, input.bossAccountId);
-    if (request.type !== "rapid_convention_notes" || ["applied", "cancelled"].includes(request.state)) {
+    if (!["rapid_convention_notes", "convention_planning_questionnaire"].includes(request.type) || ["applied", "cancelled"].includes(request.state)) {
       throw new BossWorkRequestConflictError("This convention request is closed.");
     }
     return this.database.transaction(async (tx) => {
