@@ -5,6 +5,7 @@ import { bossGet, bossPatch } from "@/lib/boss-auth-context";
 import { OfficeProfileEditor } from "@/components/office/office-profile-editor";
 import { BossProfileEmails } from "@/components/boss/boss-profile-emails";
 import { ConventionHistory } from "@/components/profiles/convention-history";
+import type { GoogleProfileEmailList } from "@/features/google-workspace/google-workspace-client";
 
 type Contact = { id: string; name: string; role: string | null; jobTitle: string | null; isPrimary: boolean; phone: string | null; email: string | null; locationName: string | null };
 type Booking = { id: string; name: string; city: string; region: string; startsAt: string | null; endsAt: string | null; status: string };
@@ -44,6 +45,7 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(null);
+  const [emailCount, setEmailCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +63,28 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
     setOpenSection(null);
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let active = true;
+    setEmailCount(0);
+    void bossGet<GoogleProfileEmailList>(
+      `/boss/google-workspace/profiles/${encodeURIComponent(profileId)}/emails`,
+    ).then((result) => {
+      if (!active) return;
+      const conversations = Array.isArray(result.conversations)
+        ? result.conversations
+        : [];
+      const historical = Array.isArray(result.historicalConversations)
+        ? result.historicalConversations
+        : [];
+      setEmailCount(new Set(
+        [...conversations, ...historical].map((email) => email.threadId),
+      ).size);
+    }).catch(() => {
+      if (active) setEmailCount(0);
+    });
+    return () => { active = false; };
+  }, [profileId]);
 
   if (error) return <p className="rounded-xl bg-destructive/10 p-4 text-destructive" role="alert">{error}</p>;
   if (!profile) return <p className="text-sm text-muted-foreground">Loading profile…</p>;
@@ -121,7 +145,7 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
             <section className="grid gap-3 sm:grid-cols-3">
               <StatCard active={openSection === "contacts"} icon={<UsersRound className="h-4 w-4" />} label="Contacts" onClick={() => toggle("contacts")} value={profile.contacts.length} />
               <StatCard active={openSection === "events"} icon={<CalendarDays className="h-4 w-4" />} label="Bookings" onClick={() => toggle("events")} value={profile.bookings.length} />
-              <StatCard active={openSection === "emails"} icon={<Mail className="h-4 w-4" />} label="Emails" onClick={() => toggle("emails")} value={0} />
+              <StatCard active={openSection === "emails"} icon={<Mail className="h-4 w-4" />} label="Emails" onClick={() => toggle("emails")} value={emailCount} />
             </section>
 
             {openSection === null ? <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(300px,0.85fr)]">
