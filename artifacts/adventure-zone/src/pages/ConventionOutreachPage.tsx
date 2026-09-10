@@ -116,6 +116,7 @@ export default function ConventionOutreachPage({
     [page, setPage] = useState(0),
     [view, setView] = useState<"cards" | "game">("cards");
   const [error, setError] = useState(""),
+    [gameError, setGameError] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [note, setNote] = useState("");
@@ -151,6 +152,7 @@ export default function ConventionOutreachPage({
     setEditing(null);
     setGameEditing(null);
     setSavedCard("");
+    setGameError("");
     setRollover(false);
     setPlanEditing(false);
     setPage(0);
@@ -183,6 +185,53 @@ export default function ConventionOutreachPage({
       await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveGameCard(member: Member) {
+    setBusy(true);
+    setGameError("");
+    try {
+      await request(
+        `/${member.edition_id}/members/${member.id}/convention-response`,
+        "PATCH",
+        {
+          revision: member.revision,
+          conventionResponse: member.data.conventionResponse,
+        },
+      );
+      setSavedCard(member.id);
+      setGameEditing(null);
+      await reload();
+    } catch (cause) {
+      setGameError(
+        cause instanceof Error ? cause.message : "Could not save this card.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function refreshGameCard(
+    member: Member,
+    response: NonNullable<Data["conventionResponse"]>,
+  ) {
+    setBusy(true);
+    setGameError("");
+    try {
+      const current = await request<Detail>(`/${member.edition_id}`);
+      setDetail(current);
+      const latest = current.members.find((item) => item.id === member.id);
+      if (!latest)
+        throw new Error("This convention card is no longer available.");
+      setGameEditing({
+        ...latest,
+        data: { ...latest.data, conventionResponse: response },
+      });
+    } catch (cause) {
+      setGameError(
+        cause instanceof Error ? cause.message : "Could not reload this card.",
+      );
     } finally {
       setBusy(false);
     }
@@ -562,7 +611,10 @@ export default function ConventionOutreachPage({
               edition={detail.edition}
               members={filtered}
               savedCard={savedCard}
-              edit={setGameEditing}
+              edit={(member) => {
+                setGameError("");
+                setGameEditing(member);
+              }}
             />
           ) : (
             <>
@@ -727,24 +779,15 @@ export default function ConventionOutreachPage({
       )}
       {gameEditing && (
         <ConventionCardEditor
+          key={`${gameEditing.id}:${gameEditing.revision}`}
           member={gameEditing}
           busy={busy}
+          error={gameError}
           cancel={() => setGameEditing(null)}
-          save={(m) =>
-            void act(async () => {
-              await request(
-                `/${m.edition_id}/members/${m.id}/convention-response`,
-                "PATCH",
-                {
-                  revision: m.revision,
-                  conventionResponse: m.data.conventionResponse,
-                },
-              );
-              setSavedCard(m.id);
-              setGameEditing(null);
-              await reload();
-            })
+          reload={(response) =>
+            void refreshGameCard(gameEditing, response)
           }
+          save={(member) => void saveGameCard(member)}
         />
       )}
     </main>
@@ -763,10 +806,13 @@ function ConventionGame({
   savedCard: string;
   edit: (member: Member) => void;
 }) {
-  const summary = (member: Member) =>
-    member.data.notes ||
-    member.data.reason ||
-    `Past attendance: ${member.data.attendance.replaceAll("_", " ")}`;
+  const summary = (member: Member) => {
+    const value =
+      member.data.notes ||
+      member.data.reason ||
+      `Past attendance: ${member.data.attendance.replaceAll("_", " ")}`;
+    return value.length > 240 ? `${value.slice(0, 237)}...` : value;
+  };
   return (
     <section
       className={`${box} overflow-x-auto print:overflow-visible print:border-0 print:p-0`}
@@ -811,6 +857,11 @@ function ConventionGame({
                   {member.data.contact || "No contact listed"}
                   {member.data.email ? ` · ${member.data.email}` : ""}
                 </span>
+                {response?.contact && (
+                  <span className="mt-1 block text-sm font-semibold">
+                    Spoke with {response.contact}
+                  </span>
+                )}
                 <span className="mt-2 block text-sm text-muted-foreground">
                   {summary(member)}
                 </span>
@@ -870,6 +921,11 @@ function ConventionGame({
               <td className="border p-2">
                 <strong className="block">{member.data.contact || "—"}</strong>
                 <span className="break-all">{member.data.email || "—"}</span>
+                {member.data.conventionResponse?.contact && (
+                  <span className="mt-1 block">
+                    Spoke with: {member.data.conventionResponse.contact}
+                  </span>
+                )}
               </td>
               <td className="border p-2">
                 {summary(member)}
@@ -913,12 +969,16 @@ function ConventionGame({
 function ConventionCardEditor({
   member,
   busy,
+  error,
   cancel,
+  reload,
   save,
 }: {
   member: Member;
   busy: boolean;
+  error: string;
   cancel: () => void;
+  reload: (response: NonNullable<Data["conventionResponse"]>) => void;
   save: (member: Member) => void;
 }) {
   const empty = {
@@ -939,6 +999,9 @@ function ConventionCardEditor({
       aria-modal="true"
       aria-label={`${member.data.event} convention card`}
       className="fixed inset-0 z-50 overflow-auto bg-black/50 p-4 print:hidden"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !busy) cancel();
+      }}
     >
       <form
         className="mx-auto grid max-w-xl gap-4 rounded-xl bg-background p-5"
@@ -956,6 +1019,24 @@ function ConventionCardEditor({
             {member.data.notes || member.data.reason || "No event summary yet."}
           </p>
         </div>
+        {error && (
+          <div
+            role="alert"
+            className="rounded-lg bg-destructive/10 p-3 text-destructive"
+          >
+            <p>{error}</p>
+            {error.includes("changed") && (
+              <button
+                type="button"
+                className={`${button} mt-2`}
+                disabled={busy}
+                onClick={() => reload(response)}
+              >
+                Reload current card
+              </button>
+            )}
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-3">
           {([
             ["met", "Met at convention"],
@@ -967,6 +1048,7 @@ function ConventionCardEditor({
               className="flex min-h-12 items-center gap-2 rounded-lg border p-3"
             >
               <input
+                autoFocus={key === "met"}
                 type="checkbox"
                 checked={response[key]}
                 onChange={() => toggle(key)}

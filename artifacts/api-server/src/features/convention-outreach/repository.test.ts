@@ -101,7 +101,7 @@ describe("convention persistence", () => {
         edition.id,
         member.id,
         2,
-        { ...member.data, notes: "New notes" },
+        { ...responseUpdate.data, notes: "New notes" },
         { organizationId: org, contactId: contact },
         "owner",
       );
@@ -119,6 +119,11 @@ describe("convention persistence", () => {
       const updated = await repo.detail(edition.id, "boss");
       assert.equal(updated.review.reviewed_revision, 3);
       assert.equal(updated.edition.revision, 4);
+      assert.equal(
+        updated.members.find((m) => m.source_key === "S1").data
+          .conventionResponse.contact,
+        "Taylor",
+      );
       const next = await repo.rollover(edition.id, 4, "owner");
       assert.equal(next.year, 2027);
       assert.equal((await repo.rollover(edition.id, 4, "owner")).id, next.id);
