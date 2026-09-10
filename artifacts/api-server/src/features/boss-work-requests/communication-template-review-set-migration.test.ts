@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it } from "vitest";
 
@@ -6,7 +6,7 @@ const migration = new URL(
   "../../../../../lib/db/migrations/20260910_communication_template_review_sets.sql",
   import.meta.url,
 );
-const sql = existsSync(migration) ? readFileSync(migration, "utf8") : "SELECT 1";
+const sql = readFileSync(migration, "utf8");
 
 describe("communication template review-set migration", () => {
   it("backfills legacy rows and permits ordered reviews in one request", async () => {
@@ -16,7 +16,7 @@ describe("communication template review-set migration", () => {
         CREATE TABLE communication_templates (id uuid PRIMARY KEY, name text NOT NULL);
         CREATE TABLE communication_template_reviews (
           id uuid PRIMARY KEY,
-          request_id uuid NOT NULL,
+          request_id uuid NOT NULL UNIQUE,
           template_id uuid NOT NULL REFERENCES communication_templates(id),
           template_version text,
           content_fingerprint text NOT NULL,
