@@ -1,0 +1,49 @@
+{
+  "tests": "PASS",
+  "rows": 1235,
+  "isolatedFixtureCounts": [
+    {
+      "status": "created",
+      "count": 1082
+    },
+    {
+      "status": "excluded",
+      "count": 1
+    },
+    {
+      "status": "matched",
+      "count": 147
+    },
+    {
+      "status": "review",
+      "count": 5
+    }
+  ],
+  "review": [
+    {
+      "name": "Colorado Party Rentals",
+      "directory": "Colorado",
+      "reason": "Same-name profile has insufficient location evidence"
+    },
+    {
+      "name": "Willy’s Washboard Jamboree",
+      "directory": "AFA associates",
+      "reason": "Same-name profile has insufficient location evidence"
+    },
+    {
+      "name": "ACE Performance Group",
+      "directory": "Wyoming services",
+      "reason": "Same-name profile has insufficient location evidence"
+    },
+    {
+      "name": "G.L. Berg Entertainment",
+      "directory": "Wyoming services",
+      "reason": "Same-name profile has insufficient location evidence"
+    },
+    {
+      "name": "Vuelta La Luna Circus",
+      "directory": "Wyoming services",
+      "reason": "Same-name profile has insufficient location evidence"
+    }
+  ]
+}

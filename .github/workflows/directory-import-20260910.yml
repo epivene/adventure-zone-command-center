@@ -1,0 +1,26 @@
+name: Verify public directory import
+on:
+  pull_request:
+    paths:
+      - 'scripts/directory-import-20260910/**'
+      - 'lib/db/migrations/20260910_public_directory_leads.sql'
+      - '.github/workflows/directory-import-20260910.yml'
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install isolated PostgreSQL test engine
+        run: npm install --prefix "$RUNNER_TEMP/directory-import-test" --ignore-scripts --no-audit --no-fund @electric-sql/pglite@0.5.8
+      - name: Verify generated migration
+        run: |
+          node scripts/directory-import-20260910/build.mjs
+          git diff --exit-code -- lib/db/migrations/20260910_public_directory_leads.sql
+      - name: Verify matching, preservation and full source import
+        env:
+          PGLITE_MODULE: ${{ runner.temp }}/directory-import-test/node_modules/@electric-sql/pglite/dist/index.js
+        run: node scripts/directory-import-20260910/test.mjs
