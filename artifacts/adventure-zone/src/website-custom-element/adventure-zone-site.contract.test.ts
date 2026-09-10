@@ -732,8 +732,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
-    expect(dialog).toHaveTextContent("So Many Fun Things to Offer");
-    expect(dialog).toHaveTextContent("Which package would you like to see first?");
+    expect(dialog).toHaveTextContent("We have so many fun things to offer—which package would you like to see first?");
     expect(dialog).not.toHaveTextContent(/tell us about your event/i);
     expect(dialog).not.toHaveTextContent(/fill out|contact form/i);
     expect(Array.from(root.querySelectorAll("[data-convention-package]")).map((button) => button.textContent?.trim())).toEqual([
@@ -760,14 +759,14 @@ describe("adventure-zone-site inquiry contract", () => {
   );
 
   it.each([
-    ["Adventure Zone", "Adventure Zone"],
-    ["Weekend Warriors", "Warrior's Playground"],
-    ["Pirates Rebellion", "Pirate's Rebellion"],
-  ])("closes the welcome and shows the selected %s package first", (choice, packageTitle) => {
+    ["Adventure Zone", "adventure-zone", "Adventure Zone"],
+    ["Weekend Warriors", "weekend-warriors", "Warrior's Playground"],
+    ["Pirates Rebellion", "pirates-rebellion", "Pirate's Rebellion"],
+  ])("closes the welcome and shows the selected %s package first", (choice, packageKey, packageTitle) => {
     window.history.replaceState({}, "", "/?welcome=convention");
     const { root } = mountSite();
-    const card = Array.from(root.querySelectorAll<HTMLElement>(".package-card"))
-      .find((item) => item.querySelector("h3")?.textContent?.trim() === packageTitle)!;
+    const card = root.querySelector<HTMLElement>(`[data-package-key="${packageKey}"]`)!;
+    expect(card.querySelector("h3")).toHaveTextContent(packageTitle);
     const scrollIntoView = vi.fn();
     Object.defineProperty(card, "scrollIntoView", { configurable: true, value: scrollIntoView });
 
