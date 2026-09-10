@@ -1,4 +1,4 @@
-import { BriefcaseBusiness, Briefcase, MapPinned, Shield } from "lucide-react";
+import { Briefcase, MapPinned, Shield } from "lucide-react";
 import { Link } from "wouter";
 
 import { Button } from "@workspace/avz-crm/components/ui/button";
@@ -7,19 +7,13 @@ const workspaces: Array<{
   label: string;
   detail: string;
   href: string;
-  icon: typeof BriefcaseBusiness;
+  icon: typeof Briefcase;
 }> = [
   {
     label: "Boss",
     detail: "Bookings, schedule, assignments, and documents",
     href: "/boss/sign-in",
     icon: Briefcase,
-  },
-  {
-    label: "Office Coordinator",
-    detail: "Bookings, contacts, routes, and calls",
-    href: "/office/sign-in",
-    icon: BriefcaseBusiness,
   },
   {
     label: "Leg Managers",
@@ -154,8 +148,8 @@ export function CommandTerminalLanding() {
           gap: .7rem;
           grid-template-columns: 2.25rem minmax(0, 1fr);
           justify-content: start;
-           min-height: 3.8rem;
-           padding: .55rem;
+          min-height: 3.8rem;
+          padding: .55rem;
           text-align: left;
           width: 100%;
         }
@@ -165,9 +159,9 @@ export function CommandTerminalLanding() {
           border-radius: .6rem;
           color: hsl(var(--primary-foreground));
           display: flex;
-           height: 2rem;
+          height: 2rem;
           justify-content: center;
-           width: 2rem;
+          width: 2rem;
         }
         .ctl-role-link[data-active="false"] .ctl-role-icon {
           background: hsl(var(--secondary));
@@ -178,7 +172,7 @@ export function CommandTerminalLanding() {
         .ctl-role-detail {
           color: hsl(var(--primary-foreground) / .75);
           display: block;
-           font-size: .58rem;
+          font-size: .58rem;
           line-height: 1.3;
           margin-top: .2rem;
         }
