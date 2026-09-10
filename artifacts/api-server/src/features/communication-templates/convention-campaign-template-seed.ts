@@ -17,6 +17,15 @@ const legacyTemplateCodes = [
   "convention_post_event_v1",
 ] as const;
 
+const AFTER_CONVENTION_REFRESH_REVIEWER = "system:owner-approved-after-convention-refresh";
+const openTemplateReviewStates = [
+  "waiting_on_dave",
+  "in_progress",
+  "submitted_to_owner",
+  "changes_requested",
+  "returned_for_clarification",
+] as const;
+
 export const conventionCampaignTemplates = [
   {
     code: "convention_before_general_v2",
@@ -213,7 +222,16 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
         ],
         requiredPlaceholders: ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
         sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
-        reviewedBy: null,
+        reviewedBy: sql`case
+          when ${communicationTemplates.state} = 'active'
+            then ${AFTER_CONVENTION_REFRESH_REVIEWER}
+          else null
+        end`,
+        reviewedAt: sql`case
+          when ${communicationTemplates.state} = 'active'
+            then ${refreshedAt}::timestamptz
+          else null
+        end`,
         updatedAt: refreshedAt,
       },
       setWhere: sql`excluded.template_version IS DISTINCT FROM ${communicationTemplates.templateVersion}`,
@@ -221,7 +239,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
 
     const template = inserted[0] ?? (await database.select().from(communicationTemplates)
       .where(eq(communicationTemplates.code, item.code)).limit(1))[0];
-    if (!template || !dave || template.state === "active") continue;
+    if (!template) continue;
 
     const fingerprint = templateFingerprint({
       templateVersion: template.templateVersion,
@@ -229,6 +247,32 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       bodyTemplate: template.bodyTemplate,
       bodyFormat: template.bodyFormat,
     });
+
+    const staleRequests = await database.select({ id: bossWorkRequests.id })
+      .from(bossWorkRequests)
+      .innerJoin(
+        communicationTemplateReviews,
+        eq(communicationTemplateReviews.requestId, bossWorkRequests.id),
+      )
+      .where(and(
+        eq(communicationTemplateReviews.templateId, template.id),
+        sql`${communicationTemplateReviews.contentFingerprint} <> ${fingerprint}`,
+        inArray(bossWorkRequests.state, [...openTemplateReviewStates]),
+      ));
+    const staleRequestIds = staleRequests.map((request) => request.id);
+    if (staleRequestIds.length) {
+      await database.update(bossWorkRequests)
+        .set({
+          state: "cancelled",
+          completedAt: refreshedAt,
+          updatedAt: refreshedAt,
+          deduplicationKey: null,
+        })
+        .where(inArray(bossWorkRequests.id, staleRequestIds));
+    }
+
+    if (!dave || template.state === "active") continue;
+
     await service.createOwnerRequest({
       type: "email_template_approval",
       assignedBossAccountId: dave.id,
