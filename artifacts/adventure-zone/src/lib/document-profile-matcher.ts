@@ -30,6 +30,7 @@ const EVENT_DOCUMENT_CATEGORIES = new Set([
 ]);
 
 const DOCUMENT_NOISE = /\b(?:certificate\s+of\s+insurance|vendor\s+application|deposit\s+receipt|adventure\s+zone|contract|agreement|proposal|quote|coi|permit|inspection|application|packet|form|signed|signature|revised|revision|updated|final|draft|copy|both|adventure)\b/gi;
+const PROFILE_CATEGORY_PREFIX = /^county\s+fair\s*[-:]\s*/i;
 
 function normalize(value: string) {
   return value
@@ -65,13 +66,18 @@ export function buildProfileSearchQuery(document: Pick<ProfileMatchDocument, "di
 
 function scoreProfile(document: ProfileMatchDocument, profile: ProfileMatchOption) {
   const query = normalize(buildProfileSearchQuery(document));
-  const profileName = normalize(profile.name);
+  const hasCountyFairPrefix = PROFILE_CATEGORY_PREFIX.test(profile.name);
+  const profileName = normalize(profile.name.replace(PROFILE_CATEGORY_PREFIX, ""));
+  const comparableQuery = hasCountyFairPrefix ? normalize(query.replace(/\bcounty\s+fair\b/g, " ")) : query;
   const nameTokens = profileName.split(" ").filter(Boolean);
   if (!query || !profileName || (nameTokens.length < 2 && profileName.length < 7)) return null;
 
   const documentText = normalize(`${document.displayName} ${document.originalFilename}`);
-  const exactQuery = query === profileName;
-  const fullNamePresent = containsPhrase(query, profileName) || containsPhrase(documentText, profileName);
+  const comparableDocumentText = hasCountyFairPrefix
+    ? normalize(documentText.replace(/\bcounty\s+fair\b/g, " "))
+    : documentText;
+  const exactQuery = comparableQuery === profileName;
+  const fullNamePresent = containsPhrase(comparableQuery, profileName) || containsPhrase(comparableDocumentText, profileName);
   if (!exactQuery && !fullNamePresent) return null;
 
   let confidence = exactQuery ? 0.98 : 0.97;
