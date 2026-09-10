@@ -287,6 +287,9 @@ function returningCustomerOutreach(html: string): string {
     .replace(/<td><a href="mailto:[^"]+"[^>]*>SCHEDULE A TIME TO MEET[\s\S]*?<\/a><\/td>\s*<td width="15" class="[^"]+button-gap"><\/td>/g, "")
     .replace("padding-top:37px;padding-bottom:39px;background:#ffca05!important;background-color:#ffca05!important;border-bottom:2px solid #0f1729", "padding:26px 38px 0;background:#f8f6f1")
     .replace('style="margin-top:24px"><tbody><tr>', 'style="margin-top:0"><tbody><tr>')
+    .replace(/(<div class="[^"]*fine"[^>]*>)([\s\S]*?)(<\/div>)/g,
+      (_match, start, footer, end) => start + footer.replace(/<a\b([^>]*)>/g,
+        '<a$1 style="color:#ffffff!important;-webkit-text-fill-color:#ffffff;text-decoration:underline">') + end)
     .replace("See you at the conference!", "We’d love to work with you again!")
     .replace(/—/g, ", ");
 }
@@ -304,7 +307,7 @@ export const conventionCampaignTemplates = conventionCampaignTemplateSources.map
       ? "TEMPLATE 1 — General Outreach — Returning Customers"
       : "TEMPLATE 3 — General Outreach — Past Event") : template.name,
     subjectTemplate: reconnect ? "Let’s reconnect and get your next event scheduled" : template.subjectTemplate,
-    templateVersion: reconnect ? "2026-09-returning-customer-outreach-v14" : "2026-09-early-bird-refresh-v10",
+    templateVersion: reconnect ? "2026-09-returning-customer-outreach-v15" : "2026-09-early-bird-refresh-v10",
     bodyTemplate: reconnect ? returningCustomerOutreach(body) : body,
   };
 });
@@ -454,7 +457,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
   // Use a durable request identity so opening templates again (or completing the
   // review and clearing its dedupe key) cannot create another review task.
   if (!dave) return;
-  const reviewOwnerId = "system:returning-customer-outreach-review-v14";
+  const reviewOwnerId = "system:returning-customer-outreach-review-v15";
   const existing = await database.select({ id: bossWorkRequests.id })
     .from(bossWorkRequests).where(and(
       eq(bossWorkRequests.assignedBossAccountId, dave.id),
@@ -463,7 +466,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
   if (existing.length) return;
   const outreach = await database.select().from(communicationTemplates).where(and(
     inArray(communicationTemplates.code, ["convention_before_general_v2", "convention_before_past_event_v2"]),
-    eq(communicationTemplates.templateVersion, "2026-09-returning-customer-outreach-v14"),
+    eq(communicationTemplates.templateVersion, "2026-09-returning-customer-outreach-v15"),
   ));
   if (outreach.length !== 2 || outreach.some(template => template.state === "archived")) return;
   outreach.sort((a, b) => a.code.localeCompare(b.code));
