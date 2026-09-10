@@ -34,10 +34,10 @@ type ArchiveAccess = {
     contactId: string | null;
     gmailThreadId: string;
   }): Promise<ArchivedProfileEmailThread>;
-  listSavedForOrganization(
+  listSavedForOrganization?(
     organizationId: string,
   ): Promise<ArchivedProfileEmailThread[]>;
-  getSavedByProviderThread(input: {
+  getSavedByProviderThread?(input: {
     organizationId: string;
     gmailThreadId: string;
   }): Promise<ArchivedProfileEmailThread | null>;
@@ -176,7 +176,8 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
         const organizationId = req.params.organizationId;
         const [mappings, savedThreads] = await Promise.all([
           validationRepository.listApprovedForOrganization(organizationId),
-          archiveService.listSavedForOrganization(organizationId),
+          archiveService.listSavedForOrganization?.(organizationId) ??
+            Promise.resolve([]),
         ]);
         const grouped = mappingsByThread(mappings);
 
@@ -333,10 +334,12 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
               contactId: null,
               gmailThreadId: threadId,
             })
-          : await archiveService.getSavedByProviderThread({
-              organizationId,
-              gmailThreadId: threadId,
-            });
+          : archiveService.getSavedByProviderThread
+            ? await archiveService.getSavedByProviderThread({
+                organizationId,
+                gmailThreadId: threadId,
+              })
+            : null;
         if (!archived) {
           res.status(404).json({ error: "GOOGLE_WORKSPACE_PROFILE_EMAIL_NOT_FOUND" });
           return;
