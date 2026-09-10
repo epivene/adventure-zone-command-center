@@ -245,4 +245,35 @@ describe("convention persistence", () => {
       await db.close();
     }
   });
+
+  it("finds a known profile by its exact organization ID", async () => {
+    const db = new PGlite();
+    try {
+      await db.exec(`CREATE TABLE organizations(id uuid PRIMARY KEY,name text,city text,region text,place_type text);
+        CREATE TABLE contacts(id uuid PRIMARY KEY,organization_id uuid,email text,first_name text,last_name text);
+        CREATE TABLE organization_contacts(organization_id uuid,contact_id uuid,active boolean DEFAULT true);`);
+      const organizationId = "00000000-0000-4000-8000-000000000010";
+      await db.query(
+        "INSERT INTO organizations VALUES($1,'Park County Fair (Fairplay) CO','Fairplay','CO','other')",
+        [organizationId],
+      );
+      const client = {
+        query: async (sql: string, values?: unknown[]) => ({
+          rows: (await db.query(sql, values)).rows as any[],
+        }),
+      };
+      const repo = new ConventionRepository({
+        ...client,
+        connect: async () => client,
+      });
+
+      const matches = await repo.searchProfiles(organizationId);
+
+      assert.equal(matches.length, 1);
+      assert.equal(matches[0].organizationId, organizationId);
+      assert.equal(matches[0].name, "Park County Fair (Fairplay) CO");
+    } finally {
+      await db.close();
+    }
+  });
 });
