@@ -1,13 +1,38 @@
 import { createHash } from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import { communicationTemplates } from "@/db/schema";
 import type { ConventionNotesPayload } from "@workspace/db/boss-work-request-schema";
 import { compareWorkRequestUrgency } from "./boss-work-request-state";
+import { extractSnapshotLinks } from "./email-template-snapshot-links";
 import { BossWorkRequestConflictError, BossWorkRequestNotFoundError, BossWorkRequestRepository } from "./boss-work-request-repository";
 
 type Database = NodePgDatabase<typeof schema>;
+
+export const CONVENTION_REVIEW_TEMPLATE_CODES = [
+  "convention_before_general_v2",
+  "convention_before_new_event_v2",
+  "convention_before_past_event_v2",
+  "convention_during_new_event_v2",
+  "convention_during_past_event_v2",
+  "convention_after_new_event_v2",
+  "convention_after_past_event_v2",
+] as const;
+
+function withSnapshotLinks<T extends {
+  templateReviews: Array<{ bodySnapshot: string }>;
+}>(detail: T) {
+  const templateReviews = detail.templateReviews.map((review) => ({
+    ...review,
+    ...extractSnapshotLinks(review.bodySnapshot),
+  }));
+  return {
+    ...detail,
+    templateReviews,
+    templateReview: templateReviews.length === 1 ? templateReviews[0] : null,
+  };
+}
 
 export function templateFingerprint(input: {
   templateVersion: string | null;
@@ -40,7 +65,7 @@ export class BossWorkRequestService {
   async bossDetail(requestId: string, bossAccountId: string) {
     const detail = await this.repository.getForBoss(requestId, bossAccountId);
     if (!detail) throw new BossWorkRequestNotFoundError("Work request not found.");
-    return detail;
+    return withSnapshotLinks(detail);
   }
 
   async ownerQueue() {
@@ -56,7 +81,7 @@ export class BossWorkRequestService {
   async ownerDetail(requestId: string) {
     const detail = await this.repository.getForOwner(requestId);
     if (!detail) throw new BossWorkRequestNotFoundError("Work request not found.");
-    return detail;
+    return withSnapshotLinks(detail);
   }
 
   async createOwnerRequest(input: {
@@ -113,6 +138,59 @@ export class BossWorkRequestService {
     return this.ownerDetail(created.request.id);
   }
 
+  async createConventionTemplateReviewSet(input: {
+    assignedBossAccountId: string;
+    priority: "normal" | "high" | "urgent";
+    dueAt?: Date | null;
+    instructions?: string | null;
+    ownerId: string;
+  }) {
+    const templates = await this.database.select().from(communicationTemplates)
+      .where(inArray(communicationTemplates.code, [...CONVENTION_REVIEW_TEMPLATE_CODES]));
+    const byCode = new Map(templates.map((template) => [template.code, template]));
+    const ordered = CONVENTION_REVIEW_TEMPLATE_CODES.map((code) => byCode.get(code));
+    if (ordered.some((template) => !template || template.ownerKind !== "company")) {
+      throw new BossWorkRequestNotFoundError("The complete seven-email convention set is not available.");
+    }
+
+    const snapshots = ordered.map((template, position) => {
+      const item = template!;
+      const contentFingerprint = templateFingerprint({
+        templateVersion: item.templateVersion,
+        subjectTemplate: item.subjectTemplate,
+        bodyTemplate: item.bodyTemplate,
+        bodyFormat: item.bodyFormat,
+      });
+      return {
+        templateId: item.id,
+        position,
+        templateNameSnapshot: item.name,
+        templateVersion: item.templateVersion,
+        contentFingerprint,
+        subjectSnapshot: item.subjectTemplate,
+        bodySnapshot: item.bodyTemplate,
+        bodyFormatSnapshot: item.bodyFormat,
+      };
+    });
+    const setFingerprint = createHash("sha256")
+      .update(snapshots.map((item) => `${item.templateId}:${item.contentFingerprint}`).join("|"))
+      .digest("hex");
+    const created = await this.repository.createTemplateReviewSet({
+      request: {
+        priority: input.priority,
+        title: "Review convention email set (7 emails)",
+        instructions: input.instructions
+          ?? "Preview every convention email, open and test each link, then approve it or request changes.",
+        dueAt: input.dueAt,
+        createdByOwnerId: input.ownerId,
+        assignedBossAccountId: input.assignedBossAccountId,
+        deduplicationKey: `convention-template-review-set:${setFingerprint}`,
+      },
+      reviews: snapshots,
+    });
+    return this.ownerDetail(created.request.id);
+  }
+
   saveConventionDraft(input: {
     requestId: string;
     bossAccountId: string;
@@ -140,17 +218,58 @@ export class BossWorkRequestService {
     return this.repository.updateConventionSubmission(input);
   }
 
+  async decideTemplateReview(input: {
+    requestId: string;
+    reviewId: string;
+    bossAccountId: string;
+    decision: "approved" | "changes_requested";
+    note?: string | null;
+    verifiedLinks: string[];
+  }) {
+    const detail = await this.bossDetail(input.requestId, input.bossAccountId);
+    const review = detail.templateReviews.find((item) => item.id === input.reviewId);
+    if (!review) throw new BossWorkRequestNotFoundError("Template review not found.");
+
+    let evidence: Array<{ href: string; label: string; verifiedAt: string }> = [];
+    if (input.decision === "approved") {
+      if (review.blockedLinks.length) {
+        throw new BossWorkRequestConflictError("This email has blocked or unresolved links that must be fixed.");
+      }
+      const submitted = new Set(input.verifiedLinks);
+      const expected = new Set(review.safeLinks.map((link) => link.href));
+      if (submitted.size !== expected.size || [...expected].some((href) => !submitted.has(href))) {
+        throw new BossWorkRequestConflictError("Test and confirm every link before approving this email.");
+      }
+      const verifiedAt = new Date().toISOString();
+      evidence = review.safeLinks.map((link) => ({ ...link, verifiedAt }));
+    }
+
+    return this.repository.decideTemplateReview({
+      requestId: input.requestId,
+      reviewId: input.reviewId,
+      bossAccountId: input.bossAccountId,
+      decision: input.decision,
+      note: input.note,
+      expectedFingerprint: review.contentFingerprint,
+      verifiedLinks: evidence,
+    });
+  }
+
   async decideTemplate(input: {
     requestId: string;
     bossAccountId: string;
     decision: "approved" | "changes_requested";
     note?: string | null;
+    verifiedLinks?: string[];
   }) {
     const detail = await this.bossDetail(input.requestId, input.bossAccountId);
-    if (!detail.templateReview) throw new BossWorkRequestNotFoundError("Template review not found.");
-    return this.repository.decideTemplate({
+    if (detail.templateReviews.length !== 1) {
+      throw new BossWorkRequestConflictError("Choose a specific email in this review set.");
+    }
+    return this.decideTemplateReview({
       ...input,
-      expectedFingerprint: detail.templateReview.contentFingerprint,
+      reviewId: detail.templateReviews[0].id,
+      verifiedLinks: input.verifiedLinks ?? [],
     });
   }
 
