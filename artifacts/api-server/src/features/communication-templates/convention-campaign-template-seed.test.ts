@@ -47,6 +47,26 @@ describe("convention campaign template seed", () => {
     ]);
   });
 
+  it("turns both after-convention messages into package-closing emails", () => {
+    const afterConvention = conventionCampaignTemplates.filter((template) =>
+      template.code.startsWith("convention_after_"),
+    );
+
+    expect(afterConvention).toHaveLength(2);
+    for (const template of afterConvention) {
+      expect(template.templateVersion).toBe("2026-09-after-convention-close-v3");
+      expect(template.bodyTemplate).toContain(
+        'href="https://www.the-adventure-zone.com/?welcome=convention"',
+      );
+      expect(template.bodyTemplate).toContain("SEE YOUR PACKAGE OPTIONS");
+      expect(template.bodyTemplate).not.toContain("EXPLORE THE WEBSITE");
+      expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).toContain("background:#0f1729");
+      expect(template.bodyTemplate).toContain("background:#ffca05");
+      expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
+    }
+  });
+
   it("keeps the finalized Gmail design and the agreed Early Bird addition", () => {
     const expectedHeadlines = [
       "LET’S PLAN",
