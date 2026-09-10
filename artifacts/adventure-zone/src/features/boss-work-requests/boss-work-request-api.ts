@@ -25,6 +25,11 @@ export const updateConventionNotes = (requestId: string, submissionId: string, p
 
 export const decideEmailTemplate = (
   requestId: string,
+  reviewId: string,
   decision: "approved" | "changes_requested",
-  note?: string | null,
-) => bossPost(`/boss/work-requests/${requestId}/template-decision`, { decision, note });
+  note: string | null,
+  verifiedLinks: string[],
+) => bossPost(
+  `/boss/work-requests/${requestId}/template-reviews/${reviewId}/decision`,
+  { decision, note, verifiedLinks },
+);
