@@ -51,6 +51,52 @@ describe("outreach owner routes", () => {
     }
     expect(touches).not.toHaveBeenCalled();
   });
+  it("requires owner authentication and explicit same-event evidence for identity binding", async () => {
+    const { url, token, touches } = await setup(true);
+    const path =
+      url + "/opportunities/10000000-0000-4000-8000-000000000001/bind-booking";
+    const payload = `manager.${Date.now() + 60000}`;
+    const manager = `${payload}.${createHmac("sha256", "planner-test-secret").update(payload).digest("base64url")}`;
+    for (const authorization of [undefined, `Bearer ${manager}`]) {
+      expect(
+        (
+          await fetch(path, {
+            method: "POST",
+            headers: authorization ? { Authorization: authorization } : {},
+          })
+        ).status,
+      ).toBe(401);
+    }
+    const valid = {
+      bookingId: "40000000-0000-4000-8000-000000000001",
+      confirmedEventYear: 2026,
+      confirmedSameEvent: true,
+      reason: "Verified organizer event identity",
+      sourceReference: "https://example.com/event",
+    };
+    for (const invalid of [
+      { ...valid, confirmedSameEvent: false },
+      { ...valid, confirmedSameEvent: undefined },
+      { ...valid, sourceReference: " " },
+      { ...valid, reason: "" },
+      { ...valid, confirmedEventYear: 1999 },
+      { ...valid, bookingId: "typed-name" },
+    ]) {
+      expect(
+        (
+          await fetch(path, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(invalid),
+          })
+        ).status,
+      ).toBe(400);
+    }
+    expect(touches).not.toHaveBeenCalled();
+  });
   it("returns disabled state and rejects every mutation without planner table access", async () => {
     const { url, token, touches } = await setup();
     const headers = {

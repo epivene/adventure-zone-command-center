@@ -67,6 +67,7 @@ export const outreachCandidates = pgTable(
     manualRank: integer("manual_rank").notNull().default(0),
     snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
     cadenceOverride: jsonb("cadence_override").$type<{
+      timelineReviewed?: boolean;
       days: [number, number, number];
       minimumGapDays: number;
       reason: string;

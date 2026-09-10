@@ -1,3 +1,4 @@
+import { hasActivePursuit } from "./outreach-active-pursuit";
 import type {
   CandidateDTO,
   CandidateWaitingDTO,
@@ -74,13 +75,23 @@ export function applyPortfolioPriority(
       planner.openings.find((o) => o.id === c.openingId)?.title ?? "Opening",
     reason,
   });
-  for (const c of [...planner.candidates].sort(compareOutreachPriority)) {
+  for (const c of [...planner.candidates].sort(
+    (a, b) =>
+      Number(hasActivePursuit(b)) - Number(hasActivePursuit(a)) ||
+      compareOutreachPriority(a, b),
+  )) {
     const check = c.lastAllocationCheck,
       target = check?.target;
     if (c.releasedAt || c.outreach.state === "closed") {
       c.portfolio = {
-        state: "inactive",
-        reason: "Pursuit is closed.",
+        state:
+          c.releasedAt && c.outreach.state === "needs_review"
+            ? "attention"
+            : "inactive",
+        reason:
+          c.releasedAt && c.outreach.state === "needs_review"
+            ? c.outreach.reason
+            : "Pursuit is closed.",
         competing: [],
       };
       continue;
@@ -146,6 +157,14 @@ export function applyPortfolioPriority(
     );
     const decision = capacityDecision(target, projection, []);
     if (decision.status !== "fits" || shared.length) {
+      for (const prior of shared.length ? shared : relevant)
+        if (attention(prior.candidate))
+          prior.candidate.portfolio.competing.push(
+            named(
+              c,
+              "Another candidate competes for this pursuit's equipment or packages; its lower priority does not reserve capacity.",
+            ),
+          );
       const competitors = (shared.length ? shared : relevant).map((s) =>
         named(
           s.candidate,
@@ -185,6 +204,14 @@ export function applyPortfolioPriority(
       ? []
       : unverifiedAdjacentPursuits(target, projection.stops, virtual);
     if (routeCompetitors.length) {
+      for (const prior of routeCompetitors)
+        if (attention(prior.candidate))
+          prior.candidate.portfolio.competing.push(
+            named(
+              c,
+              "Travel to this other prospective event remains unverified.",
+            ),
+          );
       const competing = routeCompetitors.map((p) =>
         named(
           p.candidate,
@@ -199,9 +226,10 @@ export function applyPortfolioPriority(
       continue;
     }
     if (
-      (!["ready", "follow_up"].includes(c.outreach.state) ||
+      (!["ready", "follow_up", "advance"].includes(c.outreach.state) ||
         (c.outreach.dueAt && new Date(c.outreach.dueAt) > now)) &&
       !active &&
+      !hasActivePursuit(c) &&
       !c.liveHoldId
     ) {
       c.portfolio = {
@@ -212,7 +240,11 @@ export function applyPortfolioPriority(
       continue;
     }
     c.portfolio = {
-      state: active ? "attention" : "first_choice",
+      state: active
+        ? "attention"
+        : c.outreach.state === "waiting"
+          ? "waiting"
+          : "first_choice",
       reason: active
         ? "Active conversation remains visible. Conversation itself does not reserve equipment."
         : "First-choice pursuit using current verified capacity; a live hold is required for a specific offer.",

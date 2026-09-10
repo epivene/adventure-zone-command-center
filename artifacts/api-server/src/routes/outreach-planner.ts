@@ -184,7 +184,9 @@ export function createOutreachPlannerRouter(
   );
   router.post(
     "/opportunities/:id/bind-booking",
-    run((req) => service.bindOpportunity(String(req.params.id), req.body, actor(req))),
+    run((req) =>
+      service.bindOpportunity(String(req.params.id), req.body, actor(req)),
+    ),
   );
   router.get(
     "/opportunities",

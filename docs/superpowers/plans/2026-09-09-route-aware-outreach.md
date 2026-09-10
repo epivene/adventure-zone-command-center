@@ -167,8 +167,8 @@ Define fixtures with verified inputs; cover every requirement above with meaning
 - [x] Verify migrations twice on isolated PGlite and targeted domain/API/UI tests.
 - [x] Typecheck modified units; build production bundles where complete dependency graph is available. Record baseline failures separately.
 - [x] Inspect diff for unrelated changes, permissions, stale evidence and duplicate writes.
-- [ ] Create a reviewable feature branch/PR with precise tested scope and rollout instructions.
-- [ ] Report actual completion and any unverified live behavior. No production data mutation or external communication.
+- [x] Create a reviewable feature branch/PR with precise tested scope and rollout instructions.
+- [x] Report actual completion and any unverified live behavior. No production data mutation or external communication.
 
 
 ## Task 3 dependency slices

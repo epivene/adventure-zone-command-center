@@ -39,6 +39,7 @@ export type OutreachDecision = {
   nextStage: OutreachAttempt["stage"] | null;
 };
 export type OutreachCadence = {
+  timelineReviewed?: boolean;
   days: [number, number, number];
   minimumGapDays: number;
   reason: string;
@@ -51,6 +52,7 @@ export const DEFAULT_OUTREACH_CADENCE: OutreachCadence = {
 export function validCadence(policy: OutreachCadence): boolean {
   return (
     policy.days.length === 3 &&
+    (policy.timelineReviewed === undefined || typeof policy.timelineReviewed === "boolean") &&
     Number.isInteger(policy.minimumGapDays) &&
     policy.minimumGapDays > 0 &&
     policy.minimumGapDays <= 3650 &&
@@ -262,12 +264,17 @@ export function evaluateOutreach(
   if (input.operationalStartsOn) {
     const start = Date.parse(`${input.operationalStartsOn}T00:00:00Z`);
     const today = Date.parse(`${businessDateKey(now)}T00:00:00Z`);
-    if (start - today <= 45 * DAY)
+    if (start - today <= 45 * DAY && policy.timelineReviewed !== true)
       return result(
         "needs_review",
-        "Operational start is within 45 days; review the timeline without shortening outreach cadence.",
+        "Operational start is within 45 days; record an explicit timeline review with the owner-selected cadence.",
       );
   }
+  if (input.tier === "dedicated")
+    return result(
+      "needs_review",
+      "Set a dedicated renewal review or decision date before pursuing this returning event.",
+    );
   if (!completed.length) {
     if (!Object.hasOwn(ranks, input.tier) || input.tier === "unclassified")
       return result(

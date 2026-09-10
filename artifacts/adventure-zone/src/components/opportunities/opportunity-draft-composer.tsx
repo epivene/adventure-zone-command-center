@@ -63,8 +63,8 @@ export function OpportunityDraftComposer({
   const [error, setError] = useState<string | null>(null);
   const [reviewApproved, setReviewApproved] = useState(false);
   const outreachReviewState = useOutreachPlannerEnabled();
-  const outreachReviewEnabled = outreachReviewState === true;
-  const outreachReviewChecking = outreachReviewState === null;
+  const outreachReviewEnabled = outreachReviewState.enabled === true;
+  const outreachReviewChecking = outreachReviewState.enabled === null;
 
   useEffect(() => {
     setCurrentDraft(draft);
@@ -137,6 +137,10 @@ export function OpportunityDraftComposer({
   }
 
   async function sendNow() {
+    if (outreachReviewState.enabled === null) {
+      setError("Confirm the outreach review requirement before sending.");
+      return;
+    }
     setBusy("send");
     setError(null);
     try {
@@ -155,6 +159,10 @@ export function OpportunityDraftComposer({
   }
 
   async function schedule() {
+    if (outreachReviewState.enabled === null) {
+      setError("Confirm the outreach review requirement before scheduling.");
+      return;
+    }
     if (!scheduledFor) {
       setError("Choose a date and time before scheduling.");
       return;
@@ -208,6 +216,7 @@ export function OpportunityDraftComposer({
         </div>
       ) : null}
       {error ? <p className="rounded-xl bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p> : null}
+      {outreachReviewState.error ? <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900" role="alert"><p>Could not confirm whether exact outreach review is required: {outreachReviewState.error}</p><button className="button-secondary mt-2 min-h-11" type="button" onClick={outreachReviewState.retry}>Retry outreach review check</button></div> : null}
 
       <label className="grid gap-1 text-sm font-semibold">
         Subject

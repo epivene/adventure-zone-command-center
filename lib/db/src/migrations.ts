@@ -96,7 +96,8 @@ const migrationFiles = [
   },
   {
     name: "020_assisted_calling.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
   },
   {
     name: "021_call_session_metadata.sql",
@@ -423,7 +424,8 @@ const migrationFiles = [
   },
   {
     name: "20260905_boss_workspace.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
   },
   {
     name: "20260906_adobe_contracts.sql",
@@ -506,22 +508,6 @@ const migrationFiles = [
       ) AS ready`,
   },
   {
-    name: "20260909c_convention_outreach.sql",
-    markerSql: `SELECT to_regclass(current_schema() || '.convention_editions') IS NOT NULL
-      AND to_regclass(current_schema() || '.convention_members') IS NOT NULL
-      AND to_regclass(current_schema() || '.convention_history') IS NOT NULL
-      AND to_regclass(current_schema() || '.convention_reviews') IS NOT NULL AS ready`,
-  },
-  {
-    name: "20260909d_template_review_repair.sql",
-    markerSql: `SELECT EXISTS (
-      SELECT 1 FROM pg_trigger
-      WHERE tgrelid = to_regclass(current_schema() || '.communication_template_reviews')
-        AND tgname = 'communication_template_reviews_supersede_pending'
-        AND NOT tgisinternal
-    ) AS ready`,
-  },
-  {
     name: "20260909_outreach_planner.sql",
     markerSql: `SELECT
       (SELECT count(*) = 5 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('outreach_openings','outreach_candidates','outreach_attempts','outreach_research_tasks','outreach_audit'))
@@ -537,8 +523,12 @@ const migrationFiles = [
       (SELECT count(*)=3 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('outreach_allocation_mutex','outreach_booking_demand','outreach_holds'))
       AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_allocation_mutex','generation'),('outreach_booking_demand','facts_fingerprint'),('outreach_booking_demand','quantities'),('outreach_booking_demand','resource_ids'),('outreach_booking_demand','revision'),('outreach_booking_demand','actor'),('outreach_booking_demand','reason'),('outreach_booking_demand','updated_at'),('outreach_holds','candidate_id'),('outreach_holds','booking_id'),('outreach_holds','opportunity_id'),('outreach_holds','leg_id'),('outreach_holds','event_starts_on'),('outreach_holds','event_ends_on'),('outreach_holds','starts_on'),('outreach_holds','ends_on'),('outreach_holds','quantities'),('outreach_holds','resource_ids'),('outreach_holds','location'),('outreach_holds','demand_fingerprint'),('outreach_holds','revision'),('outreach_holds','state'),('outreach_holds','owner'),('outreach_holds','expires_at'),('outreach_holds','ended_at'),('outreach_holds','created_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
       AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_holds_active_booking_unique','outreach_holds_live_window'))
-      AND (SELECT count(*)=3 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_holds_state_valid','outreach_holds_window_valid','outreach_holds_lifecycle_valid'))
+      AND (SELECT count(*)=17 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_allocation_mutex_pkey','outreach_allocation_mutex_id_check','outreach_booking_demand_pkey','outreach_booking_demand_quantities_check','outreach_booking_demand_resource_ids_check','outreach_booking_demand_revision_check','outreach_booking_demand_actor_check','outreach_booking_demand_reason_check','outreach_holds_pkey','outreach_holds_quantities_check','outreach_holds_resource_ids_check','outreach_holds_revision_check','outreach_holds_owner_check','outreach_holds_location_check','outreach_holds_state_valid','outreach_holds_window_valid','outreach_holds_lifecycle_valid'))
       AND (SELECT count(*)=5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_booking_demand'),to_regclass(current_schema() || '.outreach_holds')))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_booking_demand','booking_id','bookings'),('outreach_holds','candidate_id','outreach_candidates'),('outreach_holds','booking_id','bookings'),('outreach_holds','opportunity_id','booking_opportunities'),('outreach_holds','leg_id','travel_legs')) expected(child_table,child_column,parent_table) WHERE NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.contype='f' AND c.conrelid=to_regclass(current_schema() || '.' || expected.child_table) AND c.confrelid=to_regclass(current_schema() || '.' || expected.parent_table) AND c.conkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=c.conrelid AND attname=expected.child_column)] AND c.confkey=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=c.confrelid AND attname='id')]))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_allocation_mutex','id'),('outreach_allocation_mutex','generation'),('outreach_booking_demand','booking_id'),('outreach_booking_demand','quantities'),('outreach_booking_demand','resource_ids'),('outreach_booking_demand','facts_fingerprint'),('outreach_booking_demand','revision'),('outreach_booking_demand','actor'),('outreach_booking_demand','reason'),('outreach_booking_demand','updated_at'),('outreach_holds','id'),('outreach_holds','candidate_id'),('outreach_holds','booking_id'),('outreach_holds','opportunity_id'),('outreach_holds','leg_id'),('outreach_holds','event_starts_on'),('outreach_holds','event_ends_on'),('outreach_holds','starts_on'),('outreach_holds','ends_on'),('outreach_holds','quantities'),('outreach_holds','resource_ids'),('outreach_holds','location'),('outreach_holds','demand_fingerprint'),('outreach_holds','revision'),('outreach_holds','state'),('outreach_holds','owner'),('outreach_holds','expires_at'),('outreach_holds','created_at')) required(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=required.table_name AND actual.column_name=required.column_name WHERE actual.column_name IS NULL OR actual.is_nullable<>'NO')
+      AND to_regprocedure('outreach_quantities_valid(jsonb)') IS NOT NULL
+      AND to_regprocedure('outreach_resource_ids_valid(jsonb)') IS NOT NULL
       AS ready`,
   },
   {
@@ -639,8 +629,7 @@ export async function runActReviewMigrations(options?: {
   pool?: MigrationPool;
   migrations?: ActReviewMigration[];
 }): Promise<string[]> {
-  const migrationPool =
-    options?.pool ?? (await import("./index")).pool;
+  const migrationPool = options?.pool ?? (await import("./index")).pool;
   const migrations = options?.migrations ?? (await loadActReviewMigrations());
   const client = await migrationPool.connect();
   const applied: string[] = [];
@@ -654,6 +643,9 @@ export async function runActReviewMigrations(options?: {
       const marker = await client.query(migration.markerSql);
       if (marker.rows[0]?.["ready"] === true) continue;
       await client.query(migration.sql);
+      const repaired = await client.query(migration.markerSql);
+      if (repaired.rows[0]?.["ready"] !== true)
+        throw new Error(`Migration ${migration.name} remains incomplete after repair; deployment must stop.`);
       applied.push(migration.name);
     }
 

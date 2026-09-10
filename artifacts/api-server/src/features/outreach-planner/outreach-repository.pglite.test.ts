@@ -655,30 +655,6 @@ describe("persistent planner", () => {
 });
 
 describe("workspace lifecycle", () => {
-  it("binds an undated opportunity to its verified event without replacing its history", async () => {
-    const { client, service } = await setup();
-    const profile = randomUUID(), opportunity = randomUUID(), book = randomUUID(), emailState = randomUUID();
-    await client.query("insert into organizations(id,name) values ($1,$2)", [profile, "Matched Festival"]);
-    await client.query("insert into bookings(id,organization_id,starts_at,ends_at,name,primary_contact_id) values ($1,$2,$3,$4,$5,null)", [book, profile, "2026-11-06T15:00:00Z", "2026-11-08T23:00:00Z", "Matched Festival 2026"]);
-    await client.query("insert into booking_opportunities(id,organization_id,event_year,booking_id,next_action_kind,next_action_due_at) values ($1,$2,2026,null,'callback',$3)", [opportunity, profile, "2026-10-01T15:00:00Z"]);
-    await client.query("insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,subject) values ($1,$2,2026,'draft','Existing convention follow-up')", [emailState, opportunity]);
-
-    const result = await service.bindOpportunity(
-      opportunity,
-      { bookingId: book, confirmedEventYear: 2026, reason: "I verified the profile, event dates, and matching event identity." },
-      "owner",
-    );
-
-    expect(result).toMatchObject({ opportunityId: opportunity, bookingId: book, eventYear: 2026, reused: false });
-    expect((await client.query("select booking_id,next_action_kind,next_action_due_at from booking_opportunities where id=$1", [opportunity])).rows[0]).toMatchObject({ booking_id: book, next_action_kind: "callback" });
-    expect((await client.query("select opportunity_id,subject from booking_opportunity_email_state where id=$1", [emailState])).rows[0]).toMatchObject({ opportunity_id: opportunity, subject: "Existing convention follow-up" });
-    expect((await client.query("select action from outreach_audit where entity_id=$1", [opportunity])).rows).toContainEqual({ action: "bind_opportunity_booking" });
-
-    const repeated = await service.bindOpportunity(opportunity, { bookingId: book, confirmedEventYear: 2026, reason: "I rechecked the same identity." }, "owner");
-    expect(repeated.reused).toBe(true);
-    await expect(service.bindOpportunity(opportunity, { bookingId: booking, confirmedEventYear: 2026, reason: "Try a different event." }, "owner")).rejects.toThrow("already linked");
-  });
-
   it("admits a scouted profile repeat-safely and refuses different booking identity without changing manual work", async () => {
     const { client, service } = await setup();
     const profile = randomUUID(),

@@ -2,7 +2,7 @@ import { apiGet, apiPatch, apiPost, apiPut } from "@/lib/auth-token";
 
 export type OutreachTier = "dedicated" | "convention" | "strong" | "filler" | "unclassified";
 export type OutreachStage = "initial" | "follow_up_1" | "follow_up_2";
-export type CapacityDecision = { status: "fits" | "does_not_fit" | "needs_review"; reasons: string[] };
+export type CapacityDecision = { status: "fits" | "conflict" | "needs_review"; reasons: string[] };
 export type SourceChoice = {
   id: string;
   kind: "sent_email" | "outgoing_call" | "incoming_call" | "convention";
@@ -28,7 +28,7 @@ export type Candidate = {
   tier: OutreachTier;
   manualRank: number;
   snoozedUntil: string | null;
-  cadenceOverride: { days: [number, number, number]; minimumGapDays: number; reason: string } | null;
+  cadenceOverride: { timelineReviewed?: boolean; days: [number, number, number]; minimumGapDays: number; reason: string } | null;
   decisionDueAt: string | null;
   meaningfulReplyAt: string | null;
   conventionEndsOn: string | null;
@@ -72,13 +72,13 @@ export type Demand = { booking_id: string; quantities: Record<string, number>; r
 export type Resource = { id: string; name: string; code: string; category: string; status: string; movable: boolean; normal_travel_leg_id: string | null };
 export type RouteAnchor = { id: string; leg_id: string | null; resource_id: string | null; direction: "departure" | "return"; latitude: number; longitude: number; available_at: string; valid_until: string; recorded_at: string; revoked_at: string | null; source: string; reason: string; revision: number };
 export type AllocationCatalog = { holds: Hold[]; demands: Demand[]; resources: Resource[]; anchors?: RouteAnchor[]; reconciliationFacts?: Record<string, unknown>[]; allocationEnforcementComplete: boolean };
-export type OpportunityChoice = { id: string; organizationId: string; bookingId: string | null; organizationName: string; eventYear: number; status: string; suggestions: Candidate["suggestions"]; bookings: ProfileChoice["bookings"] };
+export type OpportunityChoice = { id: string; organizationId: string; bookingId: string | null; organizationName: string; eventYear: number; status: string; suggestions: Candidate["suggestions"] };
 export type ProfileChoice = { organizationId: string; organizationName: string; city: string | null; region: string | null; protectedReason: string | null; suggestions: Candidate["suggestions"]; bookings: { id: string; name: string; startsAt: string | null; endsAt: string | null }[] };
 export type RecoveryCatalog = { bookings: { id: string; organizationId: string | null; organizationName: string | null; name: string; startsAt: string | null; endsAt: string | null; status: string; travelLegId: string | null }[]; drafts: { id: string; kind: DraftKind; organizationId: string; opportunityId: string | null; bookingId: string | null; eventYear: number | null; subject: string | null; recipientEmail: string | null; state: string }[] };
 
 export type DraftKind = "opportunity_email" | "office_email";
 export type DraftContent = { to: string; subject: string; body: string };
-export type DraftReview = { kind: DraftKind; id: string; organizationId: string; opportunityId: string | null; bookingId: string | null; eventYear: number | null; revision: number; state: string; content: DraftContent };
+export type DraftReview = { gmailDraftId: string | null; gmailThreadId: string | null; kind: DraftKind; id: string; organizationId: string; opportunityId: string | null; bookingId: string | null; eventYear: number | null; revision: number; state: string; content: DraftContent };
 export type DraftReviewResult = {
   draft: DraftReview;
   digest: string;
@@ -99,8 +99,8 @@ export const setOpeningStatus = (id: string, status: Opening["status"], reason: 
 export const searchOpportunities = (query: string, year: number) => apiGet<OpportunityChoice[]>(`${base}/opportunities?q=${encodeURIComponent(query)}&year=${year}`);
 export const searchProfiles = (query: string, year: number) => apiGet<ProfileChoice[]>(`${base}/profiles?q=${encodeURIComponent(query)}&year=${year}`);
 export const admitProfile = (input: { organizationId: string; eventYear: number; bookingId?: string | null; reason: string }) => apiPost<{ opportunityId: string; organizationId: string; bookingId: string | null; eventYear: number; reused: boolean; reason: string }>(`${base}/opportunities/admit`, input);
-export const bindOpportunity = (id: string, input: { bookingId: string; confirmedEventYear: number; reason: string }) => apiPost<{ opportunityId: string; organizationId: string; bookingId: string; eventYear: number; reused: boolean; reason: string }>(`${base}/opportunities/${id}/bind-booking`, input);
-export const addCandidate = (input: { openingId: string; opportunityId: string; tier: OutreachTier; manualRank: number; reason?: string }) => apiPost(`${base}/candidates`, input);
+export const bindOpportunity = (id: string, input: { bookingId: string; confirmedEventYear: number; confirmedSameEvent: true; reason: string; sourceReference: string }) => apiPost<{ opportunityId: string; organizationId: string; bookingId: string; eventYear: number; reused: boolean; reason: string; sourceReference: string }>(`${base}/opportunities/${id}/bind-booking`, input);
+export const addCandidate = (input: { openingId: string; opportunityId: string; tier: OutreachTier; manualRank: number; reason?: string }) => apiPost<Candidate>(`${base}/candidates`, input);
 export const patchCandidate = (id: string, input: Record<string, unknown>) => apiPatch(`${base}/candidates/${id}`, input);
 export const checkCandidate = (id: string) => apiPost(`${base}/candidates/${id}/check`, {});
 export const reviewHistory = (id: string, reason: string) => apiPost(`${base}/candidates/${id}/history-review`, { reason });

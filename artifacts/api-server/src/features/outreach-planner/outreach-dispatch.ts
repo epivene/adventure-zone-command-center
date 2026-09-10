@@ -1,4 +1,4 @@
-import { outreachContactBlock } from "./outreach-contact-safety";
+import { outreachDispatchProtection } from "./outreach-contact-safety";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -30,6 +30,12 @@ export type DraftReview = {
   contactId: string | null;
   opportunityId: string | null;
   bookingId: string | null;
+  // Unassigned Office mail also binds to the profile's known event identities.
+  opportunityIdentities?: {
+    opportunityId: string;
+    bookingId: string;
+    eventYear: number;
+  }[];
   eventYear: number | null;
   officeAccountId: string | null;
   templateCategory: string | null;
@@ -159,9 +165,18 @@ export async function readDispatchDraft(
     throw conflict(
       "Draft recipient identity or event year changed; recreate the draft from the current opportunity.",
     );
+  const opportunityIdentities =
+    kind === "office_email" && !r.booking_id
+      ? rowsOf<{ opportunityId: string; bookingId: string; eventYear: number }>(
+          await db.execute(
+            sql`select id as "opportunityId",booking_id as "bookingId",event_year as "eventYear" from booking_opportunities where organization_id=${r.organization_id}::uuid and booking_id is not null and (${r.event_year ?? null}::integer is null or event_year=${r.event_year ?? null}::integer) order by event_year,id`,
+          ),
+        )
+      : [];
   return {
     kind,
     id,
+    ...(opportunityIdentities.length ? { opportunityIdentities } : {}),
     organizationId: r.organization_id,
     contactId: r.contact_id,
     opportunityId: r.opportunity_id ?? null,
@@ -216,7 +231,7 @@ export class OutreachDispatch implements DispatchSafety {
     );
     const dispatch = await this.lookup(kind, id);
     const reviewReasons: string[] = [];
-    const blocked = await outreachContactBlock(this.db, {
+    const blocked = await outreachDispatchProtection(this.db, {
       ...draft,
       recipientEmail: draft.content.to,
     });
@@ -272,6 +287,11 @@ export class OutreachDispatch implements DispatchSafety {
         throw conflict(
           "Draft identity changed during review. Refresh the preview.",
         );
+      const blocked = await outreachDispatchProtection(tx, {
+        ...current,
+        recipientEmail: preview.draft.content.to,
+      });
+      if (blocked) throw conflict(blocked);
       if (["sent", "discarded"].includes(current.state))
         throw conflict("This draft can no longer be approved for delivery.");
       if (await this.lookup(kind, id, tx))
@@ -366,7 +386,7 @@ export class OutreachDispatch implements DispatchSafety {
     return withAllocationTransaction(this.db, async (tx) => {
       const draft = await readDispatchDraft(tx, kind, id);
       draft.content = content;
-      const blocked = await outreachContactBlock(tx, {
+      const blocked = await outreachDispatchProtection(tx, {
         ...draft,
         recipientEmail: content.to,
       });
@@ -501,7 +521,7 @@ export class OutreachDispatch implements DispatchSafety {
           throw conflict(
             "Draft identity or content was edited while preparing delivery.",
           );
-        const blocked = await outreachContactBlock(tx, {
+        const blocked = await outreachDispatchProtection(tx, {
           ...current.payload,
           recipientEmail: current.payload.content.to,
         });

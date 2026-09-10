@@ -9,9 +9,9 @@ import { BUSINESS_TIME_ZONE } from "@/lib/business-date";
 import {
   addCandidate,
   admitProfile,
+  bindOpportunity,
   advanceCandidate,
   assignOfficeIdentity,
-  bindOpportunity,
   checkCandidate,
   createHold,
   createOpening,
@@ -60,6 +60,7 @@ const panel = "rounded-xl border border-slate-200 bg-white p-4 shadow-sm";
 const input = "min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal";
 const tiers: OutreachTier[] = ["dedicated", "convention", "strong", "filler", "unclassified"];
 const stages: OutreachStage[] = ["initial", "follow_up_1", "follow_up_2"];
+const scoutRadii = [25, 50, 100, 150, 200, 300] as const;
 
 function label(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
@@ -70,7 +71,7 @@ function date(value: string | null | undefined) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: dateOnly ? "UTC" : BUSINESS_TIME_ZONE }).format(new Date(dateOnly ? `${value}T12:00:00Z` : value));
 }
 function instant(value: string | null | undefined) {
-  return value ? new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TIME_ZONE }).format(new Date(value)) : "Not set";
+  return value ? `${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: BUSINESS_TIME_ZONE }).format(new Date(value))} (${BUSINESS_TIME_ZONE})` : "Not set";
 }
 function toIso(value: string) {
   const parsed = new Date(value);
@@ -145,6 +146,7 @@ function CandidatePicker({ opening, reload }: { opening: Opening; reload(): Prom
   const [selectedProfile, setSelectedProfile] = useState<ProfileChoice | null>(null);
   const [bookingId, setBookingId] = useState("");
   const [tier, setTier] = useState<OutreachTier>("unclassified");
+  const [conventionEndsOn, setConventionEndsOn] = useState("");
   const [rank, setRank] = useState(0);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -160,42 +162,91 @@ function CandidatePicker({ opening, reload }: { opening: Opening; reload(): Prom
   function suggestions(items: Candidate["suggestions"]) {
     return items.length ? <p className="mt-1 text-xs text-slate-600">Profile suggestion: {items.map((item) => `${label(item.tier)} — ${item.reason}${item.conventionYear ? ` (${item.conventionYear} convention)` : ""}`).join("; ")}. Choose the tier for this event year.</p> : null;
   }
+  function switchMode(next: "opportunity" | "profile") {
+    setMode(next); setOpportunities([]); setProfiles([]); setSelectedOpportunity(null); setSelectedProfile(null); setBookingId(""); setConventionEndsOn(""); setError("");
+  }
   async function submit() {
     if (!reason.trim()) { setError("Record why this profile and event year belong in the opening."); return; }
     setBusy(true); setError("");
     try {
-      let opportunityId = selectedOpportunity?.id;
-      if (selectedOpportunity && !selectedOpportunity.bookingId && bookingId) {
-        await bindOpportunity(selectedOpportunity.id, { bookingId, confirmedEventYear: opening.eventYear, reason: reason.trim() });
-      }
-      if (!opportunityId && selectedProfile) {
+      let opportunityId = mode === "opportunity" ? selectedOpportunity?.id : undefined;
+      if (mode === "profile" && selectedProfile) {
         opportunityId = (await admitProfile({ organizationId: selectedProfile.organizationId, eventYear: opening.eventYear, bookingId: bookingId || null, reason: reason.trim() })).opportunityId;
       }
       if (!opportunityId) throw new Error("Choose an existing opportunity or profile.");
-      await addCandidate({ openingId: opening.id, opportunityId, tier, manualRank: rank, reason: tier === "convention" || mode === "profile" ? reason.trim() : undefined });
-      setQuery(""); setOpportunities([]); setProfiles([]); setSelectedOpportunity(null); setSelectedProfile(null); setReason(""); await reload();
+      const added = await addCandidate({ openingId: opening.id, opportunityId, tier, manualRank: rank, reason: tier === "convention" || mode === "profile" ? reason.trim() : undefined });
+      if (tier === "convention" && conventionEndsOn) await patchCandidate(added.id, { conventionEndsOn, reason: reason.trim() });
+      setQuery(""); setOpportunities([]); setProfiles([]); setSelectedOpportunity(null); setSelectedProfile(null); setBookingId(""); setConventionEndsOn(""); setReason(""); await reload();
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not add the candidate."); }
     finally { setBusy(false); }
   }
   return <Details title="Add an existing opportunity or saved Scout profile">
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Candidate source"><button className={mode === "opportunity" ? "button-primary" : "button-secondary"} type="button" onClick={() => setMode("opportunity")}>Existing opportunity</button><button className={mode === "profile" ? "button-primary" : "button-secondary"} type="button" onClick={() => setMode("profile")}>Saved profile</button></div>
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Candidate source"><button className={mode === "opportunity" ? "button-primary" : "button-secondary"} type="button" onClick={() => switchMode("opportunity")}>Existing opportunity</button><button className={mode === "profile" ? "button-primary" : "button-secondary"} type="button" onClick={() => switchMode("profile")}>Saved profile</button></div>
     <div className="flex flex-col gap-2 sm:flex-row"><label className="min-w-0 flex-1 text-sm font-semibold">Search by name<input className={`${input} mt-1`} value={query} onChange={(event) => setQuery(event.target.value)} /></label><button className="button-secondary min-h-11 self-end" disabled={busy} type="button" onClick={() => void search()}>Search</button></div>
-    {mode === "opportunity" && opportunities.length ? <div className="grid gap-2">{opportunities.map((item) => <button className={`min-h-11 rounded-lg border p-3 text-left ${selectedOpportunity?.id === item.id ? "border-pink-500 bg-pink-50" : "border-slate-200"}`} key={item.id} type="button" onClick={() => { setSelectedOpportunity(item); setTier(item.suggestions[0]?.tier ?? "unclassified"); setBookingId(""); }}><strong>{item.organizationName}</strong><span className="block text-sm text-slate-600">{item.eventYear} · {label(item.status)}{item.bookingId ? " · linked event" : " · dates need review"}</span>{suggestions(item.suggestions)}</button>)}</div> : null}
+    {mode === "opportunity" && opportunities.length ? <div className="grid gap-2">{opportunities.map((item) => <button className={`min-h-11 rounded-lg border p-3 text-left ${selectedOpportunity?.id === item.id ? "border-pink-500 bg-pink-50" : "border-slate-200"}`} key={item.id} type="button" onClick={() => { setSelectedOpportunity(item); setTier(item.suggestions[0]?.tier ?? "unclassified"); }}><strong>{item.organizationName}</strong><span className="block text-sm text-slate-600">{item.eventYear} · {label(item.status)}{item.bookingId ? " · linked event" : " · dates need review"}</span>{suggestions(item.suggestions)}</button>)}</div> : null}
     {mode === "profile" && profiles.length ? <div className="grid gap-2">{profiles.map((item) => <button className={`min-h-11 rounded-lg border p-3 text-left ${selectedProfile?.organizationId === item.organizationId ? "border-pink-500 bg-pink-50" : "border-slate-200"}`} key={item.organizationId} type="button" onClick={() => { setSelectedProfile(item); setTier(item.suggestions[0]?.tier ?? "unclassified"); setBookingId(""); }}><strong>{item.organizationName}</strong><span className="block text-sm text-slate-600">{[item.city, item.region].filter(Boolean).join(", ") || "Location needs review"}</span>{item.protectedReason ? <span className="block text-sm font-semibold text-rose-700">Protected: {item.protectedReason}</span> : null}{suggestions(item.suggestions)}</button>)}</div> : null}
     {selectedProfile?.bookings.length ? <label className="grid gap-1 text-sm font-semibold">Matching event booking (optional; identity must match)<select className={input} value={bookingId} onChange={(event) => setBookingId(event.target.value)}><option value="">No verified matching booking yet</option>{selectedProfile.bookings.map((item) => <option value={item.id} key={item.id}>{item.name} · {date(item.startsAt)}</option>)}</select></label> : null}
-    {selectedOpportunity && !selectedOpportunity.bookingId && selectedOpportunity.bookings?.length ? <label className="grid gap-1 text-sm font-semibold">Verified matching event<select className={input} value={bookingId} onChange={(event) => setBookingId(event.target.value)}><option value="">Keep event identity in review</option>{selectedOpportunity.bookings.map((item) => <option value={item.id} key={item.id}>{item.name} · {date(item.startsAt)}</option>)}</select><span className="font-normal text-slate-600">Confirming this event preserves the opportunity's drafts, contact history, and next action.</span></label> : null}
-    {(selectedOpportunity || selectedProfile) ? <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Tier for {opening.eventYear}<select className={input} value={tier} onChange={(event) => setTier(event.target.value as OutreachTier)}>{tiers.map((item) => <option value={item} key={item}>{label(item)}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Rank<input className={input} type="number" min="0" value={rank} onChange={(event) => setRank(Number(event.target.value))} /></label><label className="grid gap-1 text-sm font-semibold sm:col-span-2">Classification/admission reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="sm:col-span-2"><ErrorMessage value={error} /><button className="button-primary mt-2 min-h-11" disabled={busy} type="button" onClick={() => void submit()}>{busy ? "Adding…" : "Add to opening"}</button></div></div> : <ErrorMessage value={error} />}
+    {(mode === "opportunity" ? selectedOpportunity : selectedProfile) ? <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Tier for {opening.eventYear}<select className={input} value={tier} onChange={(event) => setTier(event.target.value as OutreachTier)}>{tiers.map((item) => <option value={item} key={item}>{label(item)}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Rank<input className={input} type="number" min="0" value={rank} onChange={(event) => setRank(Number(event.target.value))} /></label>{tier === "convention" ? <label className="grid gap-1 text-sm font-semibold sm:col-span-2">Reviewed convention end date (optional)<input className={input} type="date" value={conventionEndsOn} onChange={(event) => setConventionEndsOn(event.target.value)} /><span className="font-normal text-slate-600">Leave unknown dates blank; membership year alone does not establish this date.</span></label> : null}<label className="grid gap-1 text-sm font-semibold sm:col-span-2">Classification/admission reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><div className="sm:col-span-2"><ErrorMessage value={error} /><button className="button-primary mt-2 min-h-11" disabled={busy} type="button" onClick={() => void submit()}>{busy ? "Adding…" : "Add to opening"}</button></div></div> : <ErrorMessage value={error} />}
+  </Details>;
+}
+
+function OpportunityIdentityControl({ candidate, reload }: { candidate: Candidate; reload(): Promise<void> }) {
+  const [query, setQuery] = useState(candidate.organizationName);
+  const [bookings, setBookings] = useState<ProfileChoice["bookings"]>([]);
+  const [bookingId, setBookingId] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [reason, setReason] = useState("");
+  const [sourceReference, setSourceReference] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [searched, setSearched] = useState(false);
+  const selected = bookings.find((item) => item.id === bookingId);
+  async function search() {
+    setBusy(true); setError("");
+    try {
+      const profiles = await searchProfiles(query.trim(), candidate.eventYear);
+      setBookings(profiles.find((item) => item.organizationId === candidate.organizationId)?.bookings ?? []);
+      setBookingId(""); setConfirmed(false); setSearched(true);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not find matching bookings."); }
+    finally { setBusy(false); }
+  }
+  async function bind() {
+    if (!selected || !confirmed || !reason.trim() || !sourceReference.trim()) return;
+    setBusy(true); setError("");
+    try {
+      await bindOpportunity(candidate.opportunityId, { bookingId: selected.id, confirmedEventYear: candidate.eventYear, confirmedSameEvent: true, reason: reason.trim(), sourceReference: sourceReference.trim() });
+      await reload();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not resolve event identity."); }
+    finally { setBusy(false); }
+  }
+  return <Details title="Resolve event identity">
+    <p className="text-sm text-amber-900">Current opportunity: {candidate.organizationName} · {candidate.eventYear}. Select this same event's verified booking. Capacity remains in review until exact demand and allocation are checked.</p>
+    <fieldset disabled={busy} className="grid min-w-0 gap-3">
+      <label className="grid gap-1 text-sm font-semibold">Profile name<input className={input} value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+      <p className="text-sm">Event year: {candidate.eventYear}</p>
+      <button className="button-secondary min-h-11 w-fit" disabled={!query.trim()} type="button" onClick={() => void search()}>Find matching bookings</button>
+      {searched && !bookings.length ? <p className="text-sm text-amber-900">No booking found on this profile for this year. Verify and save the actual event booking first.</p> : null}
+      {bookings.length ? <label className="grid gap-1 text-sm font-semibold">Verified matching event<select className={input} value={bookingId} onChange={(event) => { setBookingId(event.target.value); setConfirmed(false); }}><option value="">Choose the same event</option>{bookings.map((item) => <option key={item.id} value={item.id} disabled={!item.startsAt || !item.endsAt}>{item.name} · {date(item.startsAt)} – {date(item.endsAt)}</option>)}</select></label> : null}
+      {selected ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><strong>{selected.name}</strong><p>Actual event dates: {date(selected.startsAt)} – {date(selected.endsAt)}</p><p>Current opportunity year: {candidate.eventYear}</p></div> : null}
+      <label className="grid gap-1 text-sm font-semibold">Identity resolution reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
+      <label className="grid gap-1 text-sm font-semibold">Identity evidence / source reference<input className={input} value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} placeholder="Event website, correspondence or source record" /></label>
+      <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={confirmed} disabled={!selected} onChange={(event) => setConfirmed(event.target.checked)} />I confirm this booking is the same event as this opportunity.</label>
+      <button className="button-primary min-h-11 w-fit" disabled={!selected || !confirmed || !reason.trim() || !sourceReference.trim()} type="button" onClick={() => void bind()}>{busy ? "Resolving…" : "Confirm event identity"}</button>
+    </fieldset>
+    <ErrorMessage value={error} />
   </Details>;
 }
 
 function CandidateCard({ candidate, opening, planner, allocations, reload }: { candidate: Candidate; opening: Opening; planner: Planner; allocations: AllocationCatalog | null; reload(): Promise<void> }) {
   const [tier, setTier] = useState(candidate.tier);
   const [rank, setRank] = useState(candidate.manualRank);
+  const [conventionEndsOn, setConventionEndsOn] = useState(candidate.conventionEndsOn ?? "");
   const [reason, setReason] = useState("");
   const [decisionDue, setDecisionDue] = useState(localInput(candidate.decisionDueAt));
   const [snoozedUntil, setSnoozedUntil] = useState(localInput(candidate.snoozedUntil));
   const [cadence, setCadence] = useState(candidate.cadenceOverride?.days.join(",") ?? "7,14,21");
   const [minimumGap, setMinimumGap] = useState(candidate.cadenceOverride?.minimumGapDays ?? 7);
+  const [timelineReviewed, setTimelineReviewed] = useState(candidate.cadenceOverride?.timelineReviewed ?? false);
   const [cadenceReason, setCadenceReason] = useState(candidate.cadenceOverride?.reason ?? "");
   const [sourceId, setSourceId] = useState("");
   const [sourceReason, setSourceReason] = useState("");
@@ -213,7 +264,8 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
   const href = `${profileHref}${profileHref.includes("?") ? "&" : "?"}from=today&workItemId=outreach-${candidate.id}`;
   const advanceReasons = [
     candidate.outreach.state !== "advance" ? candidate.outreach.reason : "",
-    candidate.portfolio.state !== "first_choice" ? candidate.portfolio.reason : "",
+    candidate.releasedAt ? "This pursuit is already released." : "",
+    candidate.waitingForCandidateId ? candidate.waitingFor?.reason ?? "Resolve the leading pursuit first." : "",
     candidate.liveHoldId ? "Release or resolve the live hold first." : "",
     candidate.sources.reviewReasons.length ? "Resolve source review first." : "",
     candidate.sources.manualNextActions.length ? "An existing callback remains visible and must be handled first." : "",
@@ -226,7 +278,7 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
   }
   async function editPriority() {
     if (!reason.trim()) { setError("Explain this classification or rank change."); return; }
-    await mutate("priority", () => patchCandidate(candidate.id, { tier, manualRank: rank, reason: reason.trim() }));
+    await mutate("priority", () => patchCandidate(candidate.id, { tier, manualRank: rank, ...(tier === "convention" ? { conventionEndsOn: conventionEndsOn || null } : {}), reason: reason.trim() }));
   }
   async function saveTiming(kind: "decision" | "snooze") {
     if (!reason.trim()) { setError("Record why this timing is changing."); return; }
@@ -238,14 +290,14 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
   async function saveCadence() {
     const days = cadence.split(",").map((item) => Number(item.trim()));
     if (days.length !== 3 || days.some((day) => !Number.isInteger(day)) || !cadenceReason.trim() || !reason.trim()) { setError("Enter three increasing whole-day offsets, the override reason, and the audit reason."); return; }
-    await mutate("cadence", () => patchCandidate(candidate.id, { cadenceOverride: { days, minimumGapDays: minimumGap, reason: cadenceReason.trim() }, reason: reason.trim() }));
+    await mutate("cadence", () => patchCandidate(candidate.id, { cadenceOverride: { days, minimumGapDays: minimumGap, reason: cadenceReason.trim(), timelineReviewed }, reason: reason.trim() }));
   }
   async function saveDemand() {
     const quantities = Object.fromEntries(Object.entries(demand).filter(([, quantity]) => quantity > 0));
     if (!Object.keys(quantities).length || !resources.length || !reason.trim()) { setError("Select positive package quantities, every required physical resource, and a review reason."); return; }
     await mutate("demand", () => saveCandidateDemand(candidate.id, { quantities, resourceIds: resources, completePhysicalDemandReviewed: true, reason: reason.trim() }));
   }
-  const capacityClass = candidate.capacity.status === "fits" ? "bg-emerald-50 text-emerald-800" : candidate.capacity.status === "does_not_fit" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900";
+  const capacityClass = candidate.capacity.status === "fits" ? "bg-emerald-50 text-emerald-800" : candidate.capacity.status === "conflict" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-900";
   return <article className="min-w-0 rounded-xl border border-pink-100 bg-white p-4 shadow-sm" data-work-item-id={`outreach-${candidate.id}`}>
     <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><Link className="break-words text-lg font-bold text-slate-950 hover:text-pink-700" href={href} onClick={() => saveTodayReturnContext({ filter: "outreach", workItemId: `outreach-${candidate.id}`, scrollY: window.scrollY })}>{candidate.organizationName}</Link><p className="mt-1 text-sm text-slate-600">{candidate.eventYear} · {label(candidate.tier)} · rank {candidate.manualRank}</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${capacityClass}`}>{candidate.capacity.status === "fits" ? "Verified fit" : label(candidate.capacity.status)}</span></div>
     <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
@@ -253,21 +305,27 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
       <div><dt className="font-semibold text-slate-500">Opening dates</dt><dd>{date(opening.startsOn)} – {date(opening.endsOn)}</dd></div>
       <div><dt className="font-semibold text-slate-500">Leg and packages</dt><dd>{openingLeg} · {packageText(opening, planner)}</dd></div>
       <div><dt className="font-semibold text-slate-500">Next action</dt><dd>{candidate.outreach.reason}{candidate.outreach.dueAt ? ` · ${instant(candidate.outreach.dueAt)}` : ""}</dd></div>
-      <div><dt className="font-semibold text-slate-500">Contact evidence</dt><dd>{candidate.sources.choices.length ? `${candidate.sources.choices.length} actual source${candidate.sources.choices.length === 1 ? "" : "s"}; ${candidate.attempts.length} linked` : "No successful send or completed call evidence"}</dd></div>
+      <div><dt className="font-semibold text-slate-500">Contact evidence</dt><dd>{candidate.sources.choices.length ? `${candidate.sources.choices.length} actual source${candidate.sources.choices.length === 1 ? "" : "s"}; ${candidate.attempts.length} linked` : "No successful send or completed call evidence"}<span className="block text-slate-500">Sources checked {instant(candidate.sources.checkedAt)}; candidate checked {instant(candidate.checkedAt)}</span></dd></div>
       <div><dt className="font-semibold text-slate-500">Portfolio priority</dt><dd>{candidate.portfolio.reason}</dd></div>
+      <div><dt className="font-semibold text-slate-500">Allocation freshness</dt><dd>{candidate.lastAllocationCheck ? `${label(candidate.lastAllocationCheck.freshness)} · checked ${instant(candidate.lastAllocationCheck.checkedAt)}` : "No saved allocation check — review"}</dd></div>
     </dl>
     {candidate.waitingFor ? <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm"><strong>Waiting for {candidate.waitingFor.organizationName}:</strong> {candidate.waitingFor.reason}</p> : null}
     {candidate.portfolio.competing.length ? <p className="mt-2 text-sm text-slate-600">Competes with {candidate.portfolio.competing.map((item) => `${item.organizationName} for ${item.openingTitle}`).join(", ")}.</p> : null}
     <ErrorMessage value={error} />
     <div className="mt-3 grid gap-2">
+      {!candidate.bookingId ? <OpportunityIdentityControl candidate={candidate} reload={reload} /> : null}
       <Details title="Decision, snooze, classification and rank">
         <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Tier for this event year<select className={input} value={tier} onChange={(event) => setTier(event.target.value as OutreachTier)}>{tiers.map((item) => <option key={item}>{item}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Rank<input className={input} min="0" type="number" value={rank} onChange={(event) => setRank(Number(event.target.value))} /></label></div>
         {candidate.suggestions.length ? <p className="text-sm text-slate-600">Profile context: {candidate.suggestions.map((item) => `${label(item.tier)} — ${item.reason}${item.conventionYear ? `; convention ${item.conventionYear}` : ""}`).join(" · ")}</p> : null}
+        {tier === "convention" ? <label className="grid gap-1 text-sm font-semibold">Reviewed convention end date (optional)<input className={input} type="date" value={conventionEndsOn} onChange={(event) => setConventionEndsOn(event.target.value)} /><span className="font-normal text-slate-600">Current evidence: {candidate.conventionEndsOn ? date(candidate.conventionEndsOn) : "unknown — remains in review"}.</span></label> : null}
         <label className="grid gap-1 text-sm font-semibold">Audit reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label>
         <button className="button-secondary min-h-11 w-fit" disabled={!!busy} type="button" onClick={() => void editPriority()}>{busy === "priority" ? "Saving…" : "Save classification and rank"}</button>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Decision due ({deviceZone()})<input className={input} type="datetime-local" value={decisionDue} onChange={(event) => setDecisionDue(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Snooze routine outreach until ({deviceZone()})<input className={input} type="datetime-local" value={snoozedUntil} onChange={(event) => setSnoozedUntil(event.target.value)} /></label></div>
-        <div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" disabled={!!busy} type="button" onClick={() => void saveTiming("decision")}>Save decision date</button><button className="button-secondary min-h-11" disabled={!!busy} type="button" onClick={() => void saveTiming("snooze")}>Save snooze</button></div>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">{candidate.tier === "dedicated" ? "Renewal review / decision due" : "Decision due"} ({deviceZone()})<input className={input} type="datetime-local" value={decisionDue} onChange={(event) => setDecisionDue(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Snooze routine outreach until ({deviceZone()})<input className={input} type="datetime-local" value={snoozedUntil} onChange={(event) => setSnoozedUntil(event.target.value)} /></label></div>
+        <div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" disabled={!!busy} type="button" onClick={() => void saveTiming("decision")}>{candidate.tier === "dedicated" ? "Save renewal review date" : "Save decision date"}</button><button className="button-secondary min-h-11" disabled={!!busy} type="button" onClick={() => void saveTiming("snooze")}>Save snooze</button></div>
+        {candidate.releasedAt ? <div className="grid gap-2 rounded-lg bg-amber-50 p-3"><p className="text-sm">This pursuit remains released. Classify the late message below, enter a decision date and audit reason, then explicitly resume only if fresh availability permits. Existing competing pursuits must be resolved first. No old hold is restored.</p><button className="button-secondary min-h-11 w-fit" disabled={!!busy || !decisionDue || !reason.trim()} type="button" onClick={() => void mutate("resume", () => patchCandidate(candidate.id, { resumeReleased: true, decisionDueAt: toIso(decisionDue), reason: reason.trim() }))}>Recheck availability and resume pursuit</button></div> : null}
+        {candidate.tier === "dedicated" ? <p className="text-sm text-amber-900">Returning dedicated events require an explicit renewal review or decision date. Prior participation does not reserve equipment.</p> : null}
         <div className="grid gap-3 sm:grid-cols-3"><label className="grid gap-1 text-sm font-semibold">Cadence days<input className={input} value={cadence} onChange={(event) => setCadence(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Minimum gap days<input className={input} min="1" type="number" value={minimumGap} onChange={(event) => setMinimumGap(Number(event.target.value))} /></label><label className="grid gap-1 text-sm font-semibold">Cadence override reason<input className={input} value={cadenceReason} onChange={(event) => setCadenceReason(event.target.value)} /></label></div>
+        <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={timelineReviewed} onChange={(event) => setTimelineReviewed(event.target.checked)} />I reviewed the urgent operational timeline and approve this cadence.</label>
         <p className="text-xs text-slate-500">Default is 7 / 14 / 21 days. A shorter cadence cannot bypass missing evidence, replies, decisions, or callbacks.</p><button className="button-secondary min-h-11 w-fit" disabled={!!busy} type="button" onClick={() => void saveCadence()}>Save cadence override</button>
       </Details>
       <Details title="Actual contact history and source review">
@@ -275,7 +333,7 @@ function CandidateCard({ candidate, opening, planner, allocations, reload }: { c
         {candidate.sources.reviewReasons.map((item) => <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900" key={item}>{item}</p>)}
         <label className="grid gap-1 text-sm font-semibold">Successful send or completed call<select className={input} value={sourceId} onChange={(event) => setSourceId(event.target.value)}><option value="">Choose actual evidence</option>{candidate.sources.choices.map((choice) => <option key={choice.id} value={choice.id}>{label(choice.kind)} · {instant(choice.occurredAt)} · {choice.reason}</option>)}</select></label>
         <label className="grid gap-1 text-sm font-semibold">What you checked<textarea className={input} value={sourceReason} onChange={(event) => setSourceReason(event.target.value)} /></label>
-        <div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" disabled={!!busy || !sourceId || !candidate.outreach.nextStage} type="button" onClick={() => void mutate("attempt", () => linkAttempt(candidate.id, { sourceId, stage: candidate.outreach.nextStage!, confirmedEventYear: candidate.eventYear, reason: sourceReason || undefined }))}>Link as {candidate.outreach.nextStage ? label(candidate.outreach.nextStage) : "next stage"}</button><button className="button-secondary min-h-11" disabled={!!busy || !sourceId || !sourceReason.trim()} type="button" onClick={() => void mutate("source", () => reviewSource(candidate.id, { sourceId, classification: "not_cadence", confirmedEventYear: candidate.eventYear, reason: sourceReason.trim() }))}>Reviewed, not cadence</button><button className="button-secondary min-h-11" disabled={!!busy || !sourceReason.trim() || candidate.sources.historyFingerprint === "unverified"} type="button" onClick={() => void mutate("history", () => reviewHistory(candidate.id, sourceReason.trim()))}>Save history review</button></div>
+        <div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" disabled={!!busy || !sourceId || !candidate.outreach.nextStage} type="button" onClick={() => void mutate("attempt", () => linkAttempt(candidate.id, { sourceId, stage: candidate.outreach.nextStage!, confirmedEventYear: candidate.eventYear, reason: sourceReason || undefined }))}>Link as {candidate.outreach.nextStage ? label(candidate.outreach.nextStage) : "next stage"}</button><button className="button-secondary min-h-11" disabled={!!busy || !sourceId || !sourceReason.trim()} type="button" onClick={() => void mutate("additional-source", () => reviewSource(candidate.id, { sourceId, classification: "additional_attempt", confirmedEventYear: candidate.eventYear, reason: sourceReason.trim() }))}>Reviewed as additional attempt</button><button className="button-secondary min-h-11" disabled={!!busy || !sourceId || !sourceReason.trim()} type="button" onClick={() => void mutate("source", () => reviewSource(candidate.id, { sourceId, classification: "not_cadence", confirmedEventYear: candidate.eventYear, reason: sourceReason.trim() }))}>Reviewed, not cadence</button><button className="button-secondary min-h-11" disabled={!!busy || !sourceReason.trim() || candidate.sources.historyFingerprint === "unverified"} type="button" onClick={() => void mutate("history", () => reviewHistory(candidate.id, sourceReason.trim()))}>Save history review</button></div>
         {(candidate.sources.inboundObservations ?? []).some((item) => item.state !== "reviewed") ? <div className="grid gap-3 rounded-lg border border-amber-200 p-3"><h4 className="font-semibold">Review observed inbound message</h4><label className="grid gap-1 text-sm font-semibold">Message<select className={input} value={inboundId} onChange={(event) => setInboundId(event.target.value)}><option value="">Choose a message/thread</option>{candidate.sources.inboundObservations!.filter((item) => item.state !== "reviewed").map((item) => <option value={item.id} key={item.id}>{item.messageId} · {item.receivedAt ? instant(item.receivedAt) : "received time needs review"}</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Classification<select className={input} value={inboundClass} onChange={(event) => setInboundClass(event.target.value as typeof inboundClass)}><option value="meaningful_reply">Meaningful reply</option><option value="conversation">Conversation</option><option value="not_reply">Not a reply</option></select></label><label className="grid gap-1 text-sm font-semibold">Source reference<input className={input} value={inboundReference} onChange={(event) => setInboundReference(event.target.value)} /></label><button className="button-secondary min-h-11 w-fit" disabled={!!busy || !inboundId || !inboundReference.trim() || !sourceReason.trim()} type="button" onClick={() => void mutate("inbound", () => reviewInbound(inboundId, { classification: inboundClass, opportunityId: inboundClass === "not_reply" ? null : candidate.opportunityId, reason: sourceReason.trim(), sourceReference: inboundReference.trim() }))}>Save inbound review</button></div> : null}
       </Details>
       <Details title="Demand, hold and allocation audit">
@@ -297,7 +355,7 @@ function ResearchForm({ opening, planner, onCreated }: { opening: Opening; plann
   const [anchor, setAnchor] = useState("");
   const [results, setResults] = useState<GeocodeCandidate[]>([]);
   const [selected, setSelected] = useState<GeocodeCandidate | null>(null);
-  const [radius, setRadius] = useState(100);
+  const [radius, setRadius] = useState<(typeof scoutRadii)[number]>(100);
   const [regions, setRegions] = useState("");
   const [targetCount, setTargetCount] = useState(3);
   const [busy, setBusy] = useState("");
@@ -319,16 +377,18 @@ function ResearchForm({ opening, planner, onCreated }: { opening: Opening; plann
     finally { setBusy(""); }
   }
   function launchScout() {
-    openAssistant(`Scout events around ${selected?.displayName ?? anchor} from ${opening.startsOn} through ${opening.endsOn}. Use the saved criteria “${criteria}” and review results before adding a profile.`);
+    const adjacentRegions = regions.split(",").map((item) => item.trim()).filter(Boolean);
+    const criteriaSummary = `${criteria.trim()} Dates ${opening.startsOn} through ${opening.endsOn}; radius ${radius} miles around ${selected?.displayName ?? anchor}; adjacent regions ${adjacentRegions.join(", ") || "none"}; packages ${packageText(opening, planner)}; target ${targetCount} distinct qualifying profiles.`;
+    openAssistant("", { anchorLabel: selected?.displayName ?? anchor, radiusMiles: radius, dateStart: opening.startsOn, dateEnd: opening.endsOn, criteriaSummary });
   }
   return <Details title={`Find leads for ${opening.title}`}>
     <p className="text-sm text-slate-600">Saving criteria creates a review task. It does not start web research or add business data.</p>
     <label className="grid gap-1 text-sm font-semibold">What qualifies<textarea className={input} value={criteria} onChange={(event) => setCriteria(event.target.value)} /></label>
     <div className="flex flex-col gap-2 sm:flex-row"><label className="min-w-0 flex-1 text-sm font-semibold">Search location or address<input className={`${input} mt-1`} value={anchor} onChange={(event) => { setAnchor(event.target.value); setSelected(null); }} /></label><button className="button-secondary min-h-11 self-end" disabled={busy === "geocode" || !anchor.trim()} type="button" onClick={() => void geocode()}>{busy === "geocode" ? "Looking…" : "Find location"}</button></div>
     {results.length ? <fieldset><legend className="text-sm font-semibold">Choose the actual location</legend><div className="mt-2 grid gap-2">{results.map((item) => <label className="flex min-h-11 items-center gap-2 rounded-lg border p-2 text-sm" key={`${item.latitude}:${item.longitude}`}><input type="radio" name={`research-location-${opening.id}`} checked={selected?.latitude === item.latitude && selected?.longitude === item.longitude} onChange={() => setSelected(item)} />{item.displayName}</label>)}</div></fieldset> : null}
-    <div className="grid gap-3 sm:grid-cols-3"><label className="grid gap-1 text-sm font-semibold">Radius miles<input className={input} type="number" min="1" max="2000" value={radius} onChange={(event) => setRadius(Number(event.target.value))} /></label><label className="grid gap-1 text-sm font-semibold">Adjacent regions<input className={input} placeholder="OH, PA" value={regions} onChange={(event) => setRegions(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Backup target<input className={input} type="number" min="1" max="100" value={targetCount} onChange={(event) => setTargetCount(Number(event.target.value))} /></label></div>
+    <div className="grid gap-3 sm:grid-cols-3"><label className="grid gap-1 text-sm font-semibold">Radius miles<select className={input} value={radius} onChange={(event) => setRadius(Number(event.target.value) as typeof radius)}>{scoutRadii.map((value) => <option key={value} value={value}>{value} miles</option>)}</select></label><label className="grid gap-1 text-sm font-semibold">Adjacent regions<input className={input} placeholder="OH, PA" value={regions} onChange={(event) => setRegions(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Backup target<input className={input} type="number" min="1" max="100" value={targetCount} onChange={(event) => setTargetCount(Number(event.target.value))} /></label></div>
     <p className="text-sm"><strong>Dates:</strong> {date(opening.startsOn)} – {date(opening.endsOn)} · <strong>Packages:</strong> {packageText(opening, planner)}</p>
-    <ErrorMessage value={error} /><div className="flex flex-wrap gap-2"><button className="button-primary min-h-11" disabled={!!busy} type="button" onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save research task"}</button><button className="button-secondary min-h-11" disabled={!selected || !criteria.trim()} type="button" onClick={launchScout}>Open Lead Scout with these facts</button></div>
+    <ErrorMessage value={error} /><div className="flex flex-wrap gap-2"><button className="button-primary min-h-11" disabled={!!busy} type="button" onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save research task"}</button><button className="button-secondary min-h-11" disabled={!selected || !criteria.trim()} type="button" onClick={launchScout}>Open Lead Scout with saved criteria</button></div>
   </Details>;
 }
 
@@ -445,8 +505,26 @@ function CommittedBookingRecovery({ planner, allocations, reload }: { planner: P
   </Details>;
 }
 
+function OpeningStatusControls({ opening, reload }: { opening: Opening; reload(): Promise<void> }) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState<Opening["status"] | "">("");
+  const [error, setError] = useState("");
+  async function save(status: "filled" | "closed") {
+    if (!reason.trim()) { setError("Record why this opening is being filled or closed."); return; }
+    setBusy(status); setError("");
+    try { await setOpeningStatus(opening.id, status, reason.trim()); setReason(""); await reload(); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update the opening."); }
+    finally { setBusy(""); }
+  }
+  return <div className="grid min-w-0 gap-2 sm:min-w-72"><label className="grid gap-1 text-sm font-semibold">Fill or close reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><ErrorMessage value={error} /><div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" disabled={!!busy || !reason.trim()} type="button" onClick={() => void save("filled")}>{busy === "filled" ? "Saving…" : "Mark filled"}</button><button className="button-secondary min-h-11" disabled={!!busy || !reason.trim()} type="button" onClick={() => void save("closed")}>{busy === "closed" ? "Saving…" : "Close"}</button></div></div>;
+}
+
+function qualifiedOpportunityCount(task: ResearchTask) {
+  return new Set(task.results?.filter((item) => item.qualified).map((item) => item.opportunityId) ?? []).size;
+}
+
 function groupCandidates(planner: Planner) {
-  const active = planner.candidates.filter((item) => !item.releasedAt);
+  const active = planner.candidates.filter((item) => !item.releasedAt || item.portfolio.state === "attention");
   const attention = active.filter((item) => item.portfolio.state === "attention" || item.portfolio.state === "needs_review" || ["reply", "decision", "advance", "needs_review"].includes(item.outreach.state) || item.capacity.status !== "fits" || item.sources.reviewReasons.length > 0);
   const attentionIds = new Set(attention.map((item) => item.id));
   return {
@@ -456,11 +534,14 @@ function groupCandidates(planner: Planner) {
   };
 }
 
-function DispatchRecovery() {
+function DispatchRecovery({ planner }: { planner: Planner }) {
   const [rows, setRows] = useState<Dispatch[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState("");
-  const [outcome, setOutcome] = useState<"sent" | "not_sent">("not_sent");
+  const [outcome, setOutcome] = useState<"sent" | "not_sent" | "">("");
+  const [terminated, setTerminated] = useState(false);
+  const delivery = rows.find((item) => item.id === selected);
+  const deliveryName = (item: Dispatch) => `${planner.candidates.find((c) => c.organizationId === item.payload.organizationId)?.organizationName ?? item.payload.organizationId} · ${item.payload.eventYear ?? "year unassigned"} · ${item.payload.content.to} · ${item.payload.content.subject} · dispatch ${item.id}`;
   const [sourceReference, setSourceReference] = useState("");
   const [reason, setReason] = useState("");
   const [messageId, setMessageId] = useState("");
@@ -469,13 +550,13 @@ function DispatchRecovery() {
   const [error, setError] = useState("");
   async function load() { setBusy(true); setError(""); try { setRows((await getDispatches()).filter((item) => ["dispatching", "uncertain"].includes(item.state))); setLoaded(true); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not load delivery review."); } finally { setBusy(false); } }
   async function save() {
-    if (!selected || !sourceReference.trim() || !reason.trim() || (outcome === "sent" && (!messageId.trim() || !toIso(sentAt)))) { setError("Record the terminated provider operation, source reference, review reason, and sent evidence when applicable."); return; }
+    if (!delivery || !outcome || !terminated || !sourceReference.trim() || !reason.trim() || (outcome === "sent" && (!messageId.trim() || !toIso(sentAt)))) { setError("Record the terminated provider operation, source reference, review reason, and sent evidence when applicable."); return; }
     setBusy(true); setError("");
     try { await reconcileDispatch(selected, { outcome, providerOperationTerminated: true, sourceReference: sourceReference.trim(), reason: reason.trim(), ...(outcome === "sent" ? { messageId: messageId.trim(), sentAt: toIso(sentAt) } : {}) }); setSelected(""); await load(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reconcile the delivery."); }
     finally { setBusy(false); }
   }
-  return <Details title="Uncertain delivery reconciliation"><p className="text-sm text-slate-600">An uncertain or in-progress provider outcome cannot be resent. Check the provider first, confirm the operation ended, and record the evidence.</p><button className="button-secondary min-h-11 w-fit" disabled={busy} type="button" onClick={() => void load()}>{busy ? "Loading…" : "Load delivery review"}</button><ErrorMessage value={error} />{loaded && !rows.length ? <p className="text-sm text-slate-600">No unresolved deliveries.</p> : null}{rows.length ? <><label className="grid gap-1 text-sm font-semibold">Delivery<select className={input} value={selected} onChange={(event) => setSelected(event.target.value)}><option value="">Choose an unresolved delivery</option>{rows.map((item) => <option value={item.id} key={item.id}>{label(item.draftKind)} · {label(item.state)} · review after {instant(item.reviewAfter)}</option>)}</select></label>{selected ? <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Verified outcome<select className={input} value={outcome} onChange={(event) => setOutcome(event.target.value as typeof outcome)}><option value="not_sent">Confirmed not sent</option><option value="sent">Confirmed sent</option></select></label><label className="grid gap-1 text-sm font-semibold">Provider source reference<input className={input} value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} /></label>{outcome === "sent" ? <><label className="grid gap-1 text-sm font-semibold">Provider message ID<input className={input} value={messageId} onChange={(event) => setMessageId(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Actual sent time ({deviceZone()})<input className={input} type="datetime-local" value={sentAt} onChange={(event) => setSentAt(event.target.value)} /></label></> : null}<label className="grid gap-1 text-sm font-semibold sm:col-span-2">What you checked<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><button className="button-secondary min-h-11 w-fit sm:col-span-2" disabled={busy} type="button" onClick={() => void save()}>Save provider reconciliation</button></div> : null}</> : null}</Details>;
+  return <Details title="Uncertain delivery reconciliation"><p className="text-sm text-slate-600">An uncertain or in-progress provider outcome cannot be resent. Check the provider first, confirm the operation ended, and record the evidence.</p><button className="button-secondary min-h-11 w-fit" disabled={busy} type="button" onClick={() => void load()}>{busy ? "Loading…" : "Load delivery review"}</button><ErrorMessage value={error} />{loaded && !rows.length ? <p className="text-sm text-slate-600">No unresolved deliveries.</p> : null}{rows.length ? <><label className="grid gap-1 text-sm font-semibold">Delivery<select className={input} value={selected} onChange={(event) => { setSelected(event.target.value); setOutcome(""); setTerminated(false); setSourceReference(""); setReason(""); setMessageId(""); setSentAt(""); }}><option value="">Choose an unresolved delivery</option>{rows.map((item) => <option value={item.id} key={item.id}>{deliveryName(item)} · {label(item.state)}</option>)}</select></label>{delivery ? <div className="grid gap-3 sm:grid-cols-2"><section className="grid min-w-0 gap-2 rounded-lg border bg-white p-3 text-sm sm:col-span-2" aria-label="Selected delivery evidence"><strong className="break-words">{deliveryName(delivery)}</strong><p>Draft: {delivery.draftKind} / {delivery.draftId}</p><p>Profile: {delivery.payload.organizationId} · Opportunity: {delivery.payload.opportunityId ?? "unassigned"} · Booking: {delivery.payload.bookingId ?? "unassigned"}</p><p className="break-words">Exact recipient: {delivery.payload.content.to}</p><p className="break-words">Exact subject: {delivery.payload.content.subject}</p><pre className="whitespace-pre-wrap break-words font-sans" aria-label="Exact dispatched body">{delivery.payload.content.body}</pre><p>Provider error: {delivery.lastError ?? "None recorded"}</p><p>Provider draft: {delivery.payload.gmailDraftId ?? "Not recorded"} · Thread: {delivery.payload.gmailThreadId ?? "Not recorded"}</p><p>Review after: {instant(delivery.reviewAfter)}</p>{delivery.confirmation ? <pre className="whitespace-pre-wrap break-words">{JSON.stringify(delivery.confirmation, null, 2)}</pre> : null}</section><label className="flex min-h-11 items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={terminated} onChange={(event) => setTerminated(event.target.checked)} />I verified this exact provider operation has terminated.</label><label className="grid gap-1 text-sm font-semibold">Verified outcome<select className={input} value={outcome} onChange={(event) => setOutcome(event.target.value as typeof outcome)}><option value="">Choose the verified outcome</option><option value="not_sent">Confirmed not sent</option><option value="sent">Confirmed sent</option></select></label><label className="grid gap-1 text-sm font-semibold">Provider source reference<input className={input} value={sourceReference} onChange={(event) => setSourceReference(event.target.value)} /></label>{outcome === "sent" ? <><label className="grid gap-1 text-sm font-semibold">Provider message ID<input className={input} value={messageId} onChange={(event) => setMessageId(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Actual sent time ({deviceZone()})<input className={input} type="datetime-local" value={sentAt} onChange={(event) => setSentAt(event.target.value)} /></label></> : null}<label className="grid gap-1 text-sm font-semibold sm:col-span-2">What you checked<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><button className="button-secondary min-h-11 w-fit sm:col-span-2" disabled={busy || !terminated || !outcome} type="button" onClick={() => void save()}>Save provider reconciliation</button></div> : null}</> : null}</Details>;
 }
 
 export function OutreachPlanner() {
@@ -510,11 +591,11 @@ export function OutreachPlanner() {
     <ErrorMessage value={error} />{allocationError ? <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900" role="alert">Allocation details need retry: {allocationError}</p> : null}
     {!activeOpenings.length ? <OpeningSetup planner={planner} reload={reload} /> : null}
 
+    <details className={`${panel} ${groups.attention.length ? "border-amber-300" : ""}`} open={groups.attention.length > 0}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Needs review <span className="text-sm text-slate-500">({groups.attention.length})</span></summary><p className="mb-3 mt-1 text-sm text-slate-600">Replies, decisions, conflicts, stale checks, missing dates, unknown tiers, and source errors stay here until reviewed.</p><div className="grid gap-3">{groups.attention.length ? groups.attention.map(card) : <p className="text-sm text-slate-600">Nothing currently needs review.</p>}<DispatchRecovery planner={planner} /></div></details>
     <details className={panel} open={groups.contact.length > 0}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Contact next <span className="text-sm text-slate-500">({groups.contact.length})</span></summary><p className="mb-3 mt-1 text-sm text-slate-600">Only cross-opening first choices with current fitting evidence and a due cadence action appear here.</p><div className="grid gap-3">{groups.contact.length ? groups.contact.map(card) : <p className="text-sm text-slate-600">No candidate is both first choice and currently ready. Review the sections below.</p>}</div></details>
     <details className={panel}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Waiting / follow-ups <span className="text-sm text-slate-500">({groups.waiting.length})</span></summary><div className="mt-3 grid gap-3">{groups.waiting.length ? groups.waiting.map(card) : <p className="text-sm text-slate-600">No routine outreach is waiting.</p>}</div></details>
-    <details className={panel}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Route openings and backups <span className="text-sm text-slate-500">({activeOpenings.length})</span></summary><div className="mt-3 grid gap-4">{activeOpenings.map((opening) => { const candidates = planner.candidates.filter((item) => item.openingId === opening.id && !item.releasedAt); return <section className="rounded-xl border border-slate-200 p-3" key={opening.id}><div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{opening.title}</h3><p className="text-sm text-slate-600">{date(opening.startsOn)} – {date(opening.endsOn)} · {planner.legs.find((item) => item.id === opening.legId)?.name ?? "Leg needs review"}</p><p className="text-sm text-slate-600">{packageText(opening, planner)}</p></div><div className="flex flex-wrap gap-2"><button className="button-secondary min-h-11" type="button" onClick={() => { const reason = window.prompt("Why is this opening filled?"); if (reason?.trim()) void setOpeningStatus(opening.id, "filled", reason.trim()).then(reload); }}>Mark filled</button><button className="button-secondary min-h-11" type="button" onClick={() => { const reason = window.prompt("Why is this opening closing?"); if (reason?.trim()) void setOpeningStatus(opening.id, "closed", reason.trim()).then(reload); }}>Close</button></div></div><div className="mt-3 grid gap-2">{candidates.map(card)}</div><div className="mt-3"><CandidatePicker opening={opening} reload={reload} /></div></section>; })}{activeOpenings.length ? <OpeningSetup planner={planner} reload={reload} /> : null}<AllocationReview allocations={allocations} planner={planner} reload={reload} /><CommittedBookingRecovery allocations={allocations} planner={planner} reload={reload} /></div></details>
-    <details className={panel}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Find more leads <span className="text-sm text-slate-500">({planner.researchTasks.filter((item) => item.status !== "completed").length})</span></summary><div className="mt-3 grid gap-3">{activeOpenings.map((opening) => <ResearchForm key={opening.id} opening={opening} planner={planner} onCreated={reload} />)}{planner.researchTasks.length ? <ul className="grid gap-2">{planner.researchTasks.map((task) => { const taskOpening = planner.openings.find((item) => item.id === task.openingId); return <li className="rounded-lg border p-3 text-sm" key={task.id}><strong>{task.criteria}</strong><p>{label(task.status)} · {task.results?.filter((item) => item.qualified).length ?? 0} of {task.targetCount} qualifying profiles</p><p className="text-slate-600">Only results with verified dates, contact, fit, source URL, and checked date count.</p>{task.results?.length ? <ul className="mt-2 grid gap-1">{task.results.map((result) => <li className="rounded bg-slate-50 p-2" key={`${result.opportunityId}:${result.sourceUrl}`}><a className="break-words font-semibold text-pink-700 underline" href={result.sourceUrl} rel="noreferrer" target="_blank">Reviewed source</a> · {result.qualified ? "Qualifies for research target" : "Missing or unverified facts"}<p>{result.note}</p></li>)}</ul> : null}{taskOpening && task.status !== "completed" ? <div className="mt-2"><ResearchResultForm opening={taskOpening} planner={planner} reload={reload} task={task} /></div> : null}</li>; })}</ul> : null}</div></details>
-    <details className={`${panel} ${groups.attention.length ? "border-amber-300" : ""}`} open={groups.attention.length > 0}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Needs review <span className="text-sm text-slate-500">({groups.attention.length})</span></summary><p className="mb-3 mt-1 text-sm text-slate-600">Replies, decisions, conflicts, stale checks, missing dates, unknown tiers, and source errors stay here until reviewed.</p><div className="grid gap-3">{groups.attention.length ? groups.attention.map(card) : <p className="text-sm text-slate-600">Nothing currently needs review.</p>}<DispatchRecovery /></div></details>
+    <details className={panel}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Route openings and backups <span className="text-sm text-slate-500">({activeOpenings.length})</span></summary><div className="mt-3 grid gap-4">{activeOpenings.map((opening) => { const candidates = planner.candidates.filter((item) => item.openingId === opening.id && !item.releasedAt); return <section className="rounded-xl border border-slate-200 p-3" key={opening.id}><div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-bold">{opening.title}</h3><p className="text-sm text-slate-600">{date(opening.startsOn)} – {date(opening.endsOn)} · {planner.legs.find((item) => item.id === opening.legId)?.name ?? "Leg needs review"}</p><p className="text-sm text-slate-600">{packageText(opening, planner)}</p></div><OpeningStatusControls opening={opening} reload={reload} /></div><div className="mt-3 grid gap-2">{candidates.map(card)}</div><div className="mt-3"><CandidatePicker opening={opening} reload={reload} /></div></section>; })}{activeOpenings.length ? <OpeningSetup planner={planner} reload={reload} /> : null}<AllocationReview allocations={allocations} planner={planner} reload={reload} /><CommittedBookingRecovery allocations={allocations} planner={planner} reload={reload} /></div></details>
+    <details className={panel}><summary className="min-h-11 cursor-pointer py-2 text-lg font-bold">Find more leads <span className="text-sm text-slate-500">({planner.researchTasks.filter((item) => item.status !== "completed").length})</span></summary><div className="mt-3 grid gap-3">{activeOpenings.map((opening) => <ResearchForm key={opening.id} opening={opening} planner={planner} onCreated={reload} />)}{planner.researchTasks.length ? <ul className="grid gap-2">{planner.researchTasks.map((task) => { const taskOpening = planner.openings.find((item) => item.id === task.openingId); return <li className="rounded-lg border p-3 text-sm" key={task.id}><strong>{task.criteria}</strong><p>{label(task.status)} · {qualifiedOpportunityCount(task)} of {task.targetCount} qualifying profiles</p><p className="text-slate-600">Only distinct opportunities with verified dates, contact, fit, source URL, and checked date count.</p>{task.results?.length ? <ul className="mt-2 grid gap-1">{task.results.map((result) => <li className="rounded bg-slate-50 p-2" key={`${result.opportunityId}:${result.sourceUrl}`}><a className="break-words font-semibold text-pink-700 underline" href={result.sourceUrl} rel="noreferrer" target="_blank">Reviewed source</a> · {result.qualified ? "Qualifies for research target" : "Missing or unverified facts"}<p>{result.note}</p></li>)}</ul> : null}{taskOpening && task.status !== "completed" ? <div className="mt-2"><ResearchResultForm opening={taskOpening} planner={planner} reload={reload} task={task} /></div> : null}</li>; })}</ul> : null}</div></details>
   </section>;
 }
 
@@ -523,13 +604,17 @@ function looksHtml(body: string) {
 }
 
 export function useOutreachPlannerEnabled() {
-  const [enabled, setEnabled] = useState<boolean | null>(null);
+  const [state, setState] = useState<{ enabled: boolean | null; error: string | null }>({ enabled: null, error: null });
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
-    void getPlanner().then((value) => { if (active) setEnabled(value.enabled); }).catch(() => { if (active) setEnabled(false); });
+    setState({ enabled: null, error: null });
+    void getPlanner()
+      .then((value) => { if (active) setState({ enabled: value.enabled, error: null }); })
+      .catch((cause) => { if (active) setState({ enabled: null, error: cause instanceof Error ? cause.message : "Could not check the outreach review requirement." }); });
     return () => { active = false; };
-  }, []);
-  return enabled;
+  }, [attempt]);
+  return { ...state, retry: () => setAttempt((value) => value + 1) };
 }
 
 export function OutreachDraftReviewControl({ kind, draftId, content, dirty = false, onApprovalChange }: { kind: DraftKind; draftId: string; content?: DraftContent; dirty?: boolean; onApprovalChange?(current: boolean): void }) {
@@ -553,14 +638,15 @@ export function OutreachDraftReviewControl({ kind, draftId, content, dirty = fal
     snapshotRef.current = snapshot;
     generation.current += 1;
   }
-  useEffect(() => { setReview(null); setAllocations(null); setHoldId(""); onApprovalChange?.(false); }, [snapshot]);
+  useEffect(() => { setReview(null); setAllocations(null); setHoldId(""); setBusy(""); setError(""); onApprovalChange?.(false); }, [snapshot]);
   function current(requestGeneration: number, requestSnapshot: string) {
     return generation.current === requestGeneration && snapshotRef.current === requestSnapshot;
   }
   async function load() {
     if (dirty) { setError("Save these subject and body changes before reviewing the final opportunity email."); return; }
+    if (snapshotRef.current !== snapshot) return;
     const requestGeneration = ++generation.current;
-    const requestSnapshot = snapshotRef.current;
+    const requestSnapshot = snapshot;
     setBusy("review"); setError("");
     try {
       const next = await reviewDraftContent(kind, draftId, content ?? {});
@@ -596,12 +682,17 @@ export function OutreachDraftReviewControl({ kind, draftId, content, dirty = fal
   }
   async function assignIdentity() {
     if (!identityOpportunityId || !identityReason.trim()) { setError("Choose the verified event-year opportunity and record what you checked."); return; }
+    if (snapshotRef.current !== snapshot) return;
+    const requestGeneration = ++generation.current;
+    const requestSnapshot = snapshot;
     setBusy("identity"); setError("");
     try {
       await assignOfficeIdentity(draftId, { opportunityId: identityOpportunityId, reason: identityReason.trim() });
-      generation.current += 1; setReview(null); setAllocations(null); setHoldId(""); onApprovalChange?.(false);
+      if (!current(requestGeneration, requestSnapshot)) return;
+      setReview(null); setAllocations(null); setHoldId(""); onApprovalChange?.(false);
       await load();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not assign the draft identity."); setBusy(""); }
+    } catch (cause) { if (current(requestGeneration, requestSnapshot)) setError(cause instanceof Error ? cause.message : "Could not assign the draft identity."); }
+    finally { if (current(requestGeneration, requestSnapshot)) setBusy(""); }
   }
   const hasExactIdentity = !!review?.draft.opportunityId && !!review.draft.bookingId && review.draft.eventYear !== null;
   const matchingHolds = hasExactIdentity ? allocations?.holds.filter((hold) => hold.state === "active" && hold.booking_id === review!.draft.bookingId && hold.opportunity_id === review!.draft.opportunityId) ?? [] : [];
@@ -613,7 +704,7 @@ export function OutreachDraftReviewControl({ kind, draftId, content, dirty = fal
       {review.reviewReasons.map((item) => <p className="rounded-lg bg-amber-50 p-2 text-sm text-amber-900" key={item}>{item}</p>)}
       {kind === "office_email" && !hasExactIdentity ? <section className="grid gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3" aria-label="Assign Office draft event identity"><div><h5 className="font-bold">Assign the verified event-year opportunity</h5><p className="text-sm text-amber-900">Search by organization or event name and year. Specific offers remain unavailable until the draft has exact opportunity and booking identity.</p></div><div className="grid gap-2 sm:grid-cols-[1fr_8rem_auto] sm:items-end"><label className="grid gap-1 text-sm font-semibold">Opportunity name<input className={input} value={identityQuery} onChange={(event) => setIdentityQuery(event.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Event year<input className={input} type="number" min="2000" max="2200" value={identityYear} onChange={(event) => setIdentityYear(Number(event.target.value))} /></label><button className="button-secondary min-h-11" disabled={busy !== "" || !identityQuery.trim()} type="button" onClick={() => void searchIdentity()}>Search</button></div>{identityOptions.length ? <label className="grid gap-1 text-sm font-semibold">Verified opportunity<select className={input} value={identityOpportunityId} onChange={(event) => setIdentityOpportunityId(event.target.value)}><option value="">Choose the matching opportunity</option>{identityOptions.map((item) => <option key={item.id} value={item.id}>{item.organizationName} · {item.eventYear} · {item.bookingId ? "linked event" : "booking needs review"}</option>)}</select></label> : null}<label className="grid gap-1 text-sm font-semibold">Identity review reason<textarea className={input} value={identityReason} onChange={(event) => setIdentityReason(event.target.value)} /></label><button className="button-secondary min-h-11 w-fit" disabled={busy !== "" || !identityOpportunityId || !identityReason.trim()} type="button" onClick={() => void assignIdentity()}>{busy === "identity" ? "Assigning…" : "Assign identity and refresh review"}</button></section> : null}
       <div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1 text-sm font-semibold">Intent<select className={input} value={intent} onChange={(event) => setIntent(event.target.value as typeof intent)}><option value="exploratory">Exploratory outreach</option><option value="administrative">Administrative message</option><option value="specific_offer">Specific offer</option></select></label><label className="grid gap-1 text-sm font-semibold">Cadence stage (optional)<select className={input} value={stage} onChange={(event) => setStage(event.target.value as OutreachStage | "")}><option value="">No cadence stage</option>{stages.map((item) => <option key={item} value={item}>{label(item)}</option>)}</select></label></div>
-      {intent === "specific_offer" ? <label className="grid gap-1 text-sm font-semibold">Matching live hold<select className={input} value={holdId} onChange={(event) => setHoldId(event.target.value)}><option value="">Choose a matching live hold</option>{matchingHolds.map((hold) => <option key={hold.id} value={hold.id}>Expires {instant(hold.expires_at)} ({BUSINESS_TIME_ZONE}) · {Object.values(hold.quantities).reduce((sum, value) => sum + value, 0)} requested</option>)}</select>{!hasExactIdentity ? <span className="font-normal text-amber-900">Assign exact opportunity, booking, and event-year identity before choosing a hold.</span> : !matchingHolds.length ? <span className="font-normal text-amber-900">No matching live hold is available. Create and verify it in Today first.</span> : null}</label> : null}
+      {intent === "specific_offer" ? <label className="grid gap-1 text-sm font-semibold">Matching live hold<select className={input} value={holdId} onChange={(event) => setHoldId(event.target.value)}><option value="">Choose a matching live hold</option>{matchingHolds.map((hold) => <option key={hold.id} value={hold.id}>Expires {instant(hold.expires_at)} · {Object.values(hold.quantities).reduce((sum, value) => sum + value, 0)} requested</option>)}</select>{!hasExactIdentity ? <span className="font-normal text-amber-900">Assign exact opportunity, booking, and event-year identity before choosing a hold.</span> : !matchingHolds.length ? <span className="font-normal text-amber-900">No matching live hold is available. Create and verify it in Today first.</span> : null}</label> : null}
       <label className="grid gap-1 text-sm font-semibold">Approval reason<textarea className={input} value={reason} onChange={(event) => setReason(event.target.value)} /></label><button className="button-primary min-h-11 w-fit" disabled={!!busy || !reason.trim()} type="button" onClick={() => void approve()}>{busy === "approve" ? "Approving…" : "Approve this exact final content"}</button>{review.approvalCurrent ? <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800" role="status">Exact final content and intent are approved for the guarded send path.</p> : null}</div> : null}
   </section>;
 }
@@ -621,8 +712,9 @@ export function OutreachDraftReviewControl({ kind, draftId, content, dirty = fal
 export function OutreachProfileSummary({ organizationId }: { organizationId: string }) {
   const [planner, setPlanner] = useState<Planner | null>(null);
   useEffect(() => { let active = true; void getPlanner().then((value) => { if (active) setPlanner(value); }).catch(() => undefined); return () => { active = false; }; }, [organizationId]);
+  const reload = async () => { setPlanner(await getPlanner()); };
   if (!planner?.enabled) return null;
   const candidates = planner.candidates.filter((item) => item.organizationId === organizationId);
   if (!candidates.length) return <section className={panel}><h2 className="font-bold">Outreach openings</h2><p className="mt-1 text-sm text-slate-600">This profile is not currently in an outreach opening. Add it by name from Today after selecting the correct event year and booking identity.</p></section>;
-  return <section className={panel} aria-labelledby="profile-outreach-title"><h2 className="font-bold" id="profile-outreach-title">Outreach openings</h2><div className="mt-3 grid gap-2">{candidates.map((candidate) => { const opening = planner.openings.find((item) => item.id === candidate.openingId); return <div className="rounded-lg bg-slate-50 p-3 text-sm" key={candidate.id}><div className="flex flex-wrap justify-between gap-2"><strong>{opening?.title ?? "Unknown opening"} · {candidate.eventYear}</strong><span>{label(candidate.portfolio.state)}</span></div><p className="mt-1">{candidate.portfolio.reason}</p><p className="text-slate-600">Actual event: {date(candidate.eventStartsAt)}{candidate.eventEndsAt ? ` – ${date(candidate.eventEndsAt)}` : ""} · {label(candidate.tier)}</p>{candidate.capacity.status !== "fits" ? <p className="mt-1 font-semibold text-amber-900">Availability remains {label(candidate.capacity.status)}.</p> : null}</div>; })}</div></section>;
+  return <section className={panel} aria-labelledby="profile-outreach-title"><h2 className="font-bold" id="profile-outreach-title">Outreach openings</h2><div className="mt-3 grid gap-2">{candidates.map((candidate) => { const opening = planner.openings.find((item) => item.id === candidate.openingId); return <div className="rounded-lg bg-slate-50 p-3 text-sm" key={candidate.id}><div className="flex flex-wrap justify-between gap-2"><strong>{opening?.title ?? "Unknown opening"} · {candidate.eventYear}</strong><span>{label(candidate.portfolio.state)}</span></div><p className="mt-1">{candidate.portfolio.reason}</p><p className="text-slate-600">Actual event: {date(candidate.eventStartsAt)}{candidate.eventEndsAt ? ` – ${date(candidate.eventEndsAt)}` : ""} · {label(candidate.tier)}</p>{candidate.capacity.status !== "fits" ? <p className="mt-1 font-semibold text-amber-900">Availability remains {label(candidate.capacity.status)}.</p> : null}{!candidate.bookingId ? <OpportunityIdentityControl candidate={candidate} reload={reload} /> : null}{candidate.releasedAt && candidate.portfolio.state === "attention" ? <Link className="font-semibold text-pink-700 underline" href="/today">Review late reply and current availability in Today</Link> : null}</div>; })}</div></section>;
 }
