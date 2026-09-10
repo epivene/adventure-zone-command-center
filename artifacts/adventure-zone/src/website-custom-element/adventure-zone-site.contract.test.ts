@@ -732,14 +732,15 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(dialog).toHaveAttribute("aria-labelledby", "convention-welcome-title");
     expect(dialog).toHaveTextContent("CONVENTION EXCLUSIVE");
-    expect(dialog).toHaveTextContent("It’s So Nice to See You Again!");
-    expect(dialog).toHaveTextContent("Thank you for taking a moment to reconnect with The Adventure Zone.");
-    expect(dialog).not.toHaveTextContent("after the convention");
-    expect(dialog).toHaveTextContent("As a convention guest, you may qualify for special booking savings.");
-    expect(dialog).not.toHaveTextContent("Welcome, Convention Guests!");
-    expect(root.querySelector("[data-convention-claim]")).toHaveTextContent("Tell Us About Your Event");
-    expect(root.querySelector(".convention-form-note")).not.toHaveAttribute("hidden");
-    expect(root.querySelector(".convention-form-note")).toHaveTextContent("Your convention visit will automatically be included with your inquiry.");
+    expect(dialog).toHaveTextContent("We have so many fun things to offer—which package would you like to see first?");
+    expect(dialog).not.toHaveTextContent(/tell us about your event/i);
+    expect(dialog).not.toHaveTextContent(/fill out|contact form/i);
+    expect(Array.from(root.querySelectorAll("[data-convention-package]")).map((button) => button.textContent?.trim())).toEqual([
+      "Adventure Zone",
+      "Weekend Warriors",
+      "Pirates Rebellion",
+    ]);
+    expect(root.querySelector(".convention-form-note")).toHaveAttribute("hidden");
     expect(dialog?.textContent).not.toMatch(/12%|7 days|15 days/i);
     expect(root.querySelector("[data-convention-close]")).toHaveAttribute("aria-label", "Close convention welcome");
     expect(root.activeElement).toBe(dialog);
@@ -757,21 +758,26 @@ describe("adventure-zone-site inquiry contract", () => {
     },
   );
 
-  it("closes the welcome and scrolls to Contact from the primary action", () => {
+  it.each([
+    ["Adventure Zone", "adventure-zone", "Adventure Zone"],
+    ["Weekend Warriors", "weekend-warriors", "Warrior's Playground"],
+    ["Pirates Rebellion", "pirates-rebellion", "Pirate's Rebellion"],
+  ])("closes the welcome and shows the selected %s package first", (choice, packageKey, packageTitle) => {
     window.history.replaceState({}, "", "/?welcome=convention");
     const { root } = mountSite();
-    const contact = root.querySelector<HTMLElement>("#contact")!;
+    const card = root.querySelector<HTMLElement>(`[data-package-key="${packageKey}"]`)!;
+    expect(card.querySelector("h3")).toHaveTextContent(packageTitle);
     const scrollIntoView = vi.fn();
-    Object.defineProperty(contact, "scrollIntoView", { configurable: true, value: scrollIntoView });
+    Object.defineProperty(card, "scrollIntoView", { configurable: true, value: scrollIntoView });
 
-    root.querySelector<HTMLButtonElement>("[data-convention-claim]")!.click();
+    root.querySelector<HTMLButtonElement>(`[data-convention-package="${choice}"]`)!.click();
 
     expect(root.querySelector(".convention-welcome")).toHaveAttribute("hidden");
     expect(scrollIntoView).toHaveBeenCalledWith({ behavior: "smooth", block: "start" });
     expect(document.body.style.overflow).toBe("");
   });
 
-  it.each(["[data-convention-explore]", "[data-convention-close]", "[data-convention-backdrop]"])(
+  it.each(["[data-convention-close]", "[data-convention-backdrop]"])(
     "dismisses without scrolling from %s",
     (selector) => {
       window.history.replaceState({}, "", "/?welcome=convention");
@@ -789,14 +795,14 @@ describe("adventure-zone-site inquiry contract", () => {
   it("dismisses on Escape and keeps Tab focus inside the dialog", () => {
     window.history.replaceState({}, "", "/?welcome=convention");
     const { root } = mountSite();
-    const claim = root.querySelector<HTMLButtonElement>("[data-convention-claim]")!;
+    const firstPackage = root.querySelector<HTMLButtonElement>('[data-convention-package="Adventure Zone"]')!;
     const close = root.querySelector<HTMLButtonElement>("[data-convention-close]")!;
 
     close.focus();
     root.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
-    expect(root.activeElement).toBe(claim);
+    expect(root.activeElement).toBe(firstPackage);
 
-    claim.focus();
+    firstPackage.focus();
     root.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
     expect(root.activeElement).toBe(close);
 

@@ -501,9 +501,10 @@
     .convention-dialog .convention-offer { margin-top: 20px; padding: 16px; background: var(--az-white); border-left: 5px solid var(--az-pink); }
     .convention-close { position: absolute; top: 10px; right: 10px; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--az-cream); background: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
     .convention-close .az-icon { width: 22px; height: 22px; }
-    .convention-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
-    .convention-actions .button { width: 100%; min-height: 48px; padding: 12px 14px; }
-    .convention-actions .outline { color: var(--az-navy); background: var(--az-cream); border-color: var(--az-navy); }
+    .convention-package-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 26px; }
+    .convention-package-grid .button { width: 100%; min-height: 64px; padding: 12px 10px; line-height: 1.2; }
+    .convention-package-grid .button:nth-child(2) { color: var(--az-navy); background: var(--az-yellow); }
+    .convention-package-grid .button:nth-child(3) { color: var(--az-white); background: var(--az-pink); }
     .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .form-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; margin-top: 28px; }
     .form-helper { max-width: 520px; margin: 0; color: var(--az-muted); font-size: 13px; font-weight: 800; }
@@ -735,7 +736,7 @@
       .step-card p { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
       .convention-dialog { width: min(560px, calc(100vw - 32px)); padding: 52px 20px 24px; box-shadow: 6px 6px 0 var(--az-pink); }
       .convention-dialog h2 { font-size: clamp(2rem, 11vw, 3rem); }
-      .convention-actions { grid-template-columns: minmax(0, 1fr); }
+      .convention-package-grid { grid-template-columns: minmax(0, 1fr); }
     }
 
     @media (min-width: 480px) and (max-width: 767px) {
@@ -783,8 +784,8 @@
     }).join("")}</div></div></details>`;
   }
 
-  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
-    return `<article class="package-card">
+  function packageCard({ key, flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
+    return `<article class="package-card" data-package-key="${key}">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
       <div class="package-image"><img src="${image}" alt="${alt}" loading="lazy"></div>
       <div class="package-content">
@@ -845,12 +846,13 @@
       <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title" tabindex="-1">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
-        <h2 class="display" id="convention-welcome-title">It’s So Nice to See You Again!</h2>
-        <p>Thank you for taking a moment to reconnect with The Adventure Zone. We’re genuinely glad you’re here.</p>
-        <p class="convention-offer">As a convention guest, you may qualify for special booking savings. Tell us a little about your event and we’ll help you explore the best fit.</p>
-        <div class="convention-actions">
-          <button class="button" type="button" data-convention-claim>Tell Us About Your Event</button>
-          <button class="button outline" type="button" data-convention-explore>Explore the Site</button>
+        <h2 class="display" id="convention-welcome-title">Let’s Keep the Fun Going</h2>
+        <p>We already know who you are and we’re ready to help you choose the package that will make your event unforgettable.</p>
+        <p class="convention-offer">We have so many fun things to offer—which package would you like to see first?</p>
+        <div class="convention-package-grid">
+          <button class="button" type="button" data-convention-package="Adventure Zone">Adventure Zone</button>
+          <button class="button" type="button" data-convention-package="Weekend Warriors">Weekend Warriors</button>
+          <button class="button" type="button" data-convention-package="Pirates Rebellion">Pirates Rebellion</button>
         </div>
       </section>
     </div>`;
@@ -917,9 +919,9 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
         <div class="package-grid">
-          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
-          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
+          ${packageCard({ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
+          ${packageCard({ key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>
 
@@ -986,7 +988,6 @@
       this.abortController = new AbortController();
       this.bindInteractions();
       if (this.isConventionVisit()) {
-        this.shadowRoot.querySelector(".convention-form-note")?.removeAttribute("hidden");
         this.openConventionWelcome();
       }
       this.updateScrollState();
@@ -1028,8 +1029,9 @@
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
-      root.querySelector("[data-convention-claim]").addEventListener("click", () => this.closeConventionWelcome({ scrollToContact: true }), { signal });
-      root.querySelector("[data-convention-explore]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
+      root.querySelectorAll("[data-convention-package]").forEach((button) => {
+        button.addEventListener("click", () => this.showConventionPackage(button.dataset.conventionPackage), { signal });
+      });
       root.querySelector("[data-convention-close]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
       root.querySelector("[data-convention-backdrop]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
       root.addEventListener("keydown", (event) => this.handleConventionKeydown(event), { signal });
@@ -1106,14 +1108,27 @@
       });
     }
 
-    closeConventionWelcome({ scrollToContact = false } = {}) {
+    closeConventionWelcome() {
       const welcome = this.shadowRoot.querySelector(".convention-welcome");
       if (!welcome || !this.conventionOpen) return;
       this.conventionOpen = false;
       welcome.classList.remove("open");
       welcome.hidden = true;
       document.body.style.overflow = this.previousBodyOverflow;
-      if (scrollToContact) this.scrollToId("contact");
+    }
+
+    showConventionPackage(choice) {
+      const packageKey = {
+        "Adventure Zone": "adventure-zone",
+        "Weekend Warriors": "weekend-warriors",
+        "Pirates Rebellion": "pirates-rebellion",
+      }[choice];
+      const card = packageKey
+        ? this.shadowRoot.querySelector(`[data-package-key="${packageKey}"]`)
+        : null;
+      if (!card) return;
+      this.closeConventionWelcome();
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     handleConventionKeydown(event) {
