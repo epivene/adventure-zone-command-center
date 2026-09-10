@@ -21,6 +21,15 @@ describe("validateAuthoredTemplateText", () => {
       .toThrow("INVALID_TEMPLATE_PLACEHOLDER");
   });
 
+  it("accepts the location placeholders used by convention campaign emails", () => {
+    expect(validateAuthoredTemplateText({
+      subjectTemplate: "Meet at {{boothOrMeetingLocation}}",
+      bodyTemplate: "Convention dates: {{conventionDates}}",
+    })).toEqual({
+      placeholders: ["boothOrMeetingLocation", "conventionDates"],
+    });
+  });
+
   it("deduplicates placeholders in first-use order", () => {
     expect(validateAuthoredTemplateText({
       subjectTemplate: "{{eventName}}",
