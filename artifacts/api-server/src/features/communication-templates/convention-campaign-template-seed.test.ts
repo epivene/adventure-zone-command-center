@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a089a09c456995c",
+        gmailMessageId: "1a089c0ded0832ae",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a089a129b007ebc",
+        gmailMessageId: "1a089c0f9f39560f",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a089a13d2f04da6",
+        gmailMessageId: "1a089c110e2edf66",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a089a156c1641b0",
+        gmailMessageId: "1a089c12900c1e47",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a089a16eaf9672a",
+        gmailMessageId: "1a089c1419815116",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a089a1d92113a2f",
+        gmailMessageId: "1a089c19716cfd15",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a089a203ec8a9fb",
+        gmailMessageId: "1a089c1b1aa32212",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -68,15 +68,23 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
-      expect(template.bodyTemplate).toContain("SEE YOUR PACKAGE OPTIONS");
+      expect(template.bodyTemplate).toContain("SEE MORE!");
       expect(template.bodyTemplate).not.toContain("EXPLORE THE WEBSITE");
       expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).toContain("background:#0f1729");
       expect(template.bodyTemplate).toContain("background:#ffca05");
       expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
       expect(template.bodyTemplate).not.toMatch(
-        /what you’re planning|your plans for 2027|begin planning for 2027|already know your dates|tell us a little about your event/i,
+        /what (?:are|you’re) planning|your plans for 2027|begin planning for 2027|already know your dates|tell us (?:a little )?about your event|event dates/i,
       );
+      expect(template.bodyTemplate).not.toMatch(
+        /ready for another adventure|let’s bring the fun back|choose which Adventure Zone experience|thank you again for trusting|we’d be honored to return|planning our return/i,
+      );
+      expect(template.bodyTemplate).toContain("START PLANNING 2027");
+      expect(template.bodyTemplate).toContain(
+        "subject=Planning%20%5BEvent%20Name%5D%20for%202027",
+      );
+      expect(template.bodyTemplate).toContain(">SEE MORE!</a>");
     }
   });
 
@@ -84,6 +92,9 @@ describe("convention campaign template seed", () => {
     for (const template of conventionCampaignTemplates) {
       expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).toContain("border-right:14px solid #ff0a8a");
+      expect(template.bodyTemplate).toContain('width="340"');
+      expect(template.bodyTemplate.indexOf("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL"))
+        .toBeLessThan(template.bodyTemplate.indexOf("adventure-zone-logo-navy.png"));
 
       const trailer = template.bodyTemplate.match(
         /<a href="([^"]+)"[^>]*><img src="https:\/\/adventure-zone-command-center-1\.onrender\.com\/assets\/adventure-zone-mini-trailer\.gif"[^>]*alt="([^"]+)"/,
@@ -235,7 +246,7 @@ describe("convention campaign template seed", () => {
       request_state: "cancelled",
       deduplication_key: null,
     });
-    expect(afterFirstRun.rows[0].body_template).toContain("SEE YOUR PACKAGE OPTIONS");
+    expect(afterFirstRun.rows[0].body_template).toContain("SEE MORE!");
     expect(afterFirstRun.rows[0].reviewed_at).toBeInstanceOf(Date);
     expect(afterFirstRun.rows[0].completed_at).toBeInstanceOf(Date);
 
