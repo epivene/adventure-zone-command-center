@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, ExternalLink, Monitor, Smartphone } from "lucide-react";
+import { buildEmailPreview } from "@/lib/email-preview";
 import { decideEmailTemplate } from "@/features/boss-work-requests/boss-work-request-api";
 import type {
   BossWorkRequestDetail,
@@ -63,7 +64,7 @@ export function EmailTemplateReview({
         </div>
       </section>
       <ReviewItem
-        key={selected.id}
+        key={`${selected.id}:${selected.contentFingerprint}`}
         requestId={detail.request.id}
         review={selected}
         reload={reload}
@@ -152,7 +153,7 @@ function ReviewItem({
         <div className="mt-4 overflow-auto rounded-xl border bg-slate-100 p-2 sm:p-4">
           <div className={`mx-auto overflow-hidden rounded-lg bg-white transition-all ${previewWidth === "mobile" ? "max-w-[390px]" : "max-w-[760px]"}`}>
             {review.bodyFormatSnapshot === "html"
-              ? <iframe title="Email template preview" sandbox="" srcDoc={review.bodySnapshot} className="min-h-[38rem] w-full" />
+              ? <iframe title="Email template preview" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={buildEmailPreview(review.bodySnapshot)} className="min-h-[38rem] w-full" />
               : <pre className="min-h-64 whitespace-pre-wrap p-5 font-sans text-sm text-slate-900">{review.bodySnapshot}</pre>}
           </div>
         </div>

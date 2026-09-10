@@ -17,6 +17,7 @@ import type {
   ConventionNotesPayload,
 } from "@workspace/db/boss-work-request-schema";
 import { assertTransition } from "./boss-work-request-state";
+import { refreshEmailLogos } from "../communication-templates/email-logo-refresh";
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -43,6 +44,7 @@ export class BossWorkRequestRepository {
     const request = (await this.database.select().from(bossWorkRequests)
       .where(and(eq(bossWorkRequests.id, id), eq(bossWorkRequests.assignedBossAccountId, bossAccountId))).limit(1))[0];
     if (!request) return null;
+    await refreshEmailLogos(this.database);
     const [draft, submissions, review, events] = await Promise.all([
       this.database.select().from(bossConventionDrafts)
         .where(and(eq(bossConventionDrafts.requestId, id), eq(bossConventionDrafts.bossAccountId, bossAccountId))).limit(1),
@@ -68,6 +70,7 @@ export class BossWorkRequestRepository {
     const request = (await this.database.select().from(bossWorkRequests)
       .where(eq(bossWorkRequests.id, id)).limit(1))[0];
     if (!request) return null;
+    await refreshEmailLogos(this.database);
     const [submissions, review, events] = await Promise.all([
       this.database.select().from(bossConventionSubmissions)
         .where(eq(bossConventionSubmissions.requestId, id)).orderBy(desc(bossConventionSubmissions.createdAt)),
