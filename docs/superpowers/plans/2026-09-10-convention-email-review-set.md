@@ -322,7 +322,7 @@ Expected: FAIL because the set creator does not exist.
 
 - [ ] **Step 3: Define the canonical set**
 
-`CONVENTION_REVIEW_TEMPLATE_CODES` must be an explicit seven-entry tuple matching the source definitions in `convention-campaign-template-seed.ts`; do not discover templates with a broad category query.
+`CONVENTION_REVIEW_TEMPLATE_CODES` must be an explicit seven-entry tuple matching the source definitions in `convention-campaign-template-seed.ts`; do not discover templates with a broad category query. Assign positions zero through six from this tuple and never from database return order.
 
 Add:
 
