@@ -784,8 +784,8 @@
     }).join("")}</div></div></details>`;
   }
 
-  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
-    return `<article class="package-card">
+  function packageCard({ key, flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
+    return `<article class="package-card" data-package-key="${key}">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
       <div class="package-image"><img src="${image}" alt="${alt}" loading="lazy"></div>
       <div class="package-content">
@@ -846,9 +846,9 @@
       <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title" tabindex="-1">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
-        <h2 class="display" id="convention-welcome-title">So Many Fun Things to Offer</h2>
+        <h2 class="display" id="convention-welcome-title">Let’s Keep the Fun Going</h2>
         <p>We already know who you are and we’re ready to help you choose the package that will make your event unforgettable.</p>
-        <p class="convention-offer">Which package would you like to see first?</p>
+        <p class="convention-offer">We have so many fun things to offer—which package would you like to see first?</p>
         <div class="convention-package-grid">
           <button class="button" type="button" data-convention-package="Adventure Zone">Adventure Zone</button>
           <button class="button" type="button" data-convention-package="Weekend Warriors">Weekend Warriors</button>
@@ -919,9 +919,9 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
         <div class="package-grid">
-          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
-          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
+          ${packageCard({ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
+          ${packageCard({ key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>
 
@@ -1118,15 +1118,17 @@
     }
 
     showConventionPackage(choice) {
-      const packageTitle = {
-        "Adventure Zone": "Adventure Zone",
-        "Weekend Warriors": "Warrior's Playground",
-        "Pirates Rebellion": "Pirate's Rebellion",
+      const packageKey = {
+        "Adventure Zone": "adventure-zone",
+        "Weekend Warriors": "weekend-warriors",
+        "Pirates Rebellion": "pirates-rebellion",
       }[choice];
-      const card = Array.from(this.shadowRoot.querySelectorAll(".package-card"))
-        .find((item) => item.querySelector("h3")?.textContent?.trim() === packageTitle);
+      const card = packageKey
+        ? this.shadowRoot.querySelector(`[data-package-key="${packageKey}"]`)
+        : null;
+      if (!card) return;
       this.closeConventionWelcome();
-      card?.scrollIntoView({ behavior: "smooth", block: "start" });
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     handleConventionKeydown(event) {
