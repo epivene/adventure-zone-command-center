@@ -26,12 +26,115 @@ const openTemplateReviewStates = [
   "returned_for_clarification",
 ] as const;
 
-export const conventionCampaignTemplates = [
+const normalWebsiteUrl = "https://www.the-adventure-zone.com/";
+const conventionWebsiteUrl = `${normalWebsiteUrl}?welcome=convention`;
+const originalTrailerImageUrl = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mini-trailer.gif";
+const seeMoreTrailerImageUrl = "https://static.wixstatic.com/media/0e6e2c_87ad0198e4da4141ac40d29751d007d3~mv2.gif";
+const learnMoreTrailerImageUrl = "https://static.wixstatic.com/media/0e6e2c_5f0944f0c0cc45a590bac43c77ec5411~mv2.gif";
+const originalLogoImageUrl = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-logo-navy.png";
+const combinedLogoImageUrl = "https://static.wixstatic.com/media/0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2.png";
+
+function updateConventionEmailPresentation(
+  html: string,
+  stage: "before_or_during" | "after",
+): string {
+  const withoutExistingBanner = html
+    .replace(
+    /<tr><td align="center"[^>]*><span[^>]*>AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL<\/span><\/td><\/tr>\r?\n?/g,
+    "",
+    )
+    .replace(
+      /<tr><td align="center" style="background:#0f1729;padding:2px 24px 23px"><table[\s\S]*?AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL[\s\S]*?<\/table><\/td><\/tr>\r?\n?/g,
+      "",
+    )
+    .replace(
+      /<tr><td align="center" style="background:#0f1729;padding:0 24px 21px;color:#ff0a8a;font-size:13px;line-height:18px;font-weight:900;letter-spacing:1\.2px">AMERICA’S BEST BOUNCE HOUSE CARNIVAL<\/td><\/tr>\r?\n?/g,
+      "",
+    );
+  const withCombinedLogo = withoutExistingBanner.replace(originalLogoImageUrl, combinedLogoImageUrl);
+  const destination = stage === "after" ? conventionWebsiteUrl : normalWebsiteUrl;
+  const trailerLabel = stage === "after" ? "tap to learn more!" : "tap to see more!";
+  const trailerImageUrl = stage === "after" ? learnMoreTrailerImageUrl : seeMoreTrailerImageUrl;
+  const withTrailerDestination = withCombinedLogo.replace(
+    new RegExp(
+      `<a href="https:\\/\\/youtu\\.be\\/MWD0SdAWZpc\\?is=TwYW3RxUGQxsdfbk" target="_blank" title="Watch The Adventure Zone in action" style="display:block;text-decoration:none;border:0;"><img src="${originalTrailerImageUrl.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}" width="612" alt="The Adventure Zone mini trailer — tap to watch the video"`,
+    ),
+    `<a href="${destination}" target="_blank" title="Explore The Adventure Zone" style="display:block;text-decoration:none;border:0;"><img src="${trailerImageUrl}" width="612" alt="The Adventure Zone mini trailer — ${trailerLabel}"`,
+  );
+
+  if (stage !== "after") return withTrailerDestination;
+
+  return withTrailerDestination
+    .replace(
+      "Let’s keep the conversation going and talk about your plans for {{eventName}}.",
+      "Let’s keep the conversation going and explore the Adventure Zone package options.",
+    )
+    .replace(
+      "Whether we had the opportunity to speak directly or simply crossed paths during the conference, we’d still love to learn more about <strong>{{eventName}}</strong> and your plans for 2027.",
+      "Whether we had the opportunity to speak directly or simply crossed paths during the conference, it was wonderful reconnecting around <strong>{{eventName}}</strong>.",
+    )
+    .replace(
+      '<div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">Reply and tell us a little about your event, including your dates, location, and what you’re hoping to create.</div>',
+      "",
+    )
+    .replace(
+      "As you begin planning for 2027, we’d be excited to talk about returning and helping make your next event another memorable one.",
+      "We’d be excited to explore how The Adventure Zone could help make your next event memorable.",
+    )
+    .replace(
+      '<div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">If you already know your dates or have ideas for next year, reply and send them our way so we can start looking at availability and the best package for your event.</div>',
+      "",
+    )
+    .replace(
+      "Share your dates and plans for {{eventName}}, and we’ll help you find the right Adventure Zone package for 2027.",
+      "Explore our package options and choose which Adventure Zone experience you’d like to see first.",
+    )
+    .replace(
+      "It was great reconnecting at <strong>{{conventionName}}</strong>. Thank you again for trusting The Adventure Zone to be part of <strong>{{eventName}}</strong> in the past—we’ve loved bringing the attractions, crew, and energy to your community.",
+      "It was great reconnecting at <strong>{{conventionName}}</strong> and catching up about <strong>{{eventName}}</strong>.",
+    )
+    .replace(
+      "We’d be honored to return to <strong>{{eventName}}</strong> and create more great memories together.",
+      "We’d love to continue the conversation about <strong>{{eventName}}</strong>.",
+    )
+    .replace(
+      /(<td class="[^"]+pad" style=")padding-top:37px;padding-bottom:39px;background:#ffca05!important;background-color:#ffca05!important;border-bottom:2px solid #0f1729(">)/g,
+      "$1padding:0 38px 34px;background:#f8f6f1$2",
+    )
+    .replace(
+      /<div style="font-size:12px;line-height:16px;font-weight:800;letter-spacing:1\.1px;color:#0f1729!important">(?:WHAT ARE YOU PLANNING\?|READY FOR ANOTHER ADVENTURE\?)<\/div>\r?\n?/g,
+      "",
+    )
+    .replace(
+      /<div style="font-size:30px;line-height:34px;font-weight:900;color:#0f1729!important;margin-top:7px">(?:Tell us about \{\{eventName\}\}\.|Let’s bring the fun back\.)<\/div>\r?\n?/g,
+      "",
+    )
+    .replace(
+      /<div style="font-size:15px;line-height:23px;color:#0f1729!important;margin-top:12px">(?:Send us your event dates, location, and ideas\. We’ll help you explore the package that fits your community best\.|Explore our package options and choose which Adventure Zone experience you’d like to see first\.)<\/div>\r?\n?/g,
+      "",
+    )
+    .replace(
+      /(<table role="presentation" class="[^"]+stack") style="margin-top:24px">/g,
+      '$1 style="margin-top:0">',
+    )
+    .replace(
+      "subject=Planning%20our%20return%20to%20%5BEvent%20Name%5D",
+      "subject=Planning%20%5BEvent%20Name%5D%20for%202027",
+    )
+    .replace("TELL US ABOUT YOUR EVENT  →", "START PLANNING 2027  →")
+    .replace(/SEE YOUR PACKAGE OPTIONS/g, "SEE MORE!")
+    .replace(
+      /<tr><td class="[^"]+pad" style="padding-top:31px;padding-bottom:30px;background:#f8f6f1">[\s\S]*?<\/td><\/tr>\r?\n(?=<tr><td style="background:#0f1729;border-top:5px solid #ff0a8a)/g,
+      "",
+    );
+}
+
+const conventionCampaignTemplateSources = [
   {
     code: "convention_before_general_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-1697086144767202972",
-    gmailMessageId: "1a0847e159516da1",
+    gmailMessageId: "1a08b34342ec736b",
     name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
     subjectTemplate: "Let’s connect at {{conventionName}}",
     bodyTemplate: [
@@ -48,7 +151,7 @@ export const conventionCampaignTemplates = [
     code: "convention_before_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-5407934870856350671",
-    gmailMessageId: "1a084a2f40feb499",
+    gmailMessageId: "1a08b345758b9e5c",
     name: "TEMPLATE 2 — BEFORE Convention — New Event",
     subjectTemplate: "Meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -65,7 +168,7 @@ export const conventionCampaignTemplates = [
     code: "convention_before_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r8082858796036362003",
-    gmailMessageId: "1a084a30b8f72f15",
+    gmailMessageId: "1a08b347344784f6",
     name: "TEMPLATE 3 — BEFORE Convention — Past Event",
     subjectTemplate: "Let’s reconnect at {{conventionName}}",
     bodyTemplate: [
@@ -82,7 +185,7 @@ export const conventionCampaignTemplates = [
     code: "convention_during_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-8856964011374508299",
-    gmailMessageId: "1a084a31eb26862c",
+    gmailMessageId: "1a08b34c8b3bf6d2",
     name: "TEMPLATE 4 — DURING Convention — New Event",
     subjectTemplate: "Come meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -99,7 +202,7 @@ export const conventionCampaignTemplates = [
     code: "convention_during_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r4015326584847664626",
-    gmailMessageId: "1a084a3353ce3f92",
+    gmailMessageId: "1a08b34ea768ec8f",
     name: "TEMPLATE 5 — DURING Convention — Past Event",
     subjectTemplate: "We’re at {{conventionName}} — come catch up",
     bodyTemplate: [
@@ -116,7 +219,7 @@ export const conventionCampaignTemplates = [
     code: "convention_after_new_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r7096158685165323453",
-    gmailMessageId: "1a08975b5738b040",
+    gmailMessageId: "1a08b350a6c9f2cb",
     name: "TEMPLATE 6 — AFTER Convention — New Event",
     subjectTemplate: "Great connecting at {{conventionName}}",
     bodyTemplate: [
@@ -133,7 +236,7 @@ export const conventionCampaignTemplates = [
     code: "convention_after_past_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r-1391915929973957682",
-    gmailMessageId: "1a08975cc9c100c8",
+    gmailMessageId: "1a08b356539ed66e",
     name: "TEMPLATE 7 — AFTER Convention — Past Event",
     subjectTemplate: "Great seeing you at {{conventionName}}",
     bodyTemplate: [
@@ -147,6 +250,15 @@ export const conventionCampaignTemplates = [
     ].join(""),
   }
 ] as const;
+
+export const conventionCampaignTemplates = conventionCampaignTemplateSources.map((template) => ({
+  ...template,
+  templateVersion: "2026-09-combined-logo-v7",
+  bodyTemplate: updateConventionEmailPresentation(
+    template.bodyTemplate,
+    template.code.startsWith("convention_after_") ? "after" : "before_or_during",
+  ),
+}));
 
 export async function ensureConventionCampaignTemplateSeed(database: Database): Promise<void> {
   const service = new BossWorkRequestService(database);

@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a0847e159516da1",
+        gmailMessageId: "1a08b34342ec736b",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a084a2f40feb499",
+        gmailMessageId: "1a08b345758b9e5c",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a084a30b8f72f15",
+        gmailMessageId: "1a08b347344784f6",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a084a31eb26862c",
+        gmailMessageId: "1a08b34c8b3bf6d2",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a084a3353ce3f92",
+        gmailMessageId: "1a08b34ea768ec8f",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a08975b5738b040",
+        gmailMessageId: "1a08b350a6c9f2cb",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a08975cc9c100c8",
+        gmailMessageId: "1a08b356539ed66e",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -64,17 +64,58 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-after-convention-close-v4");
+      expect(template.templateVersion).toBe("2026-09-combined-logo-v7");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
-      expect(template.bodyTemplate).toContain("SEE YOUR PACKAGE OPTIONS");
+      expect(template.bodyTemplate).toContain("SEE MORE!");
       expect(template.bodyTemplate).not.toContain("EXPLORE THE WEBSITE");
-      expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).toContain("background:#0f1729");
       expect(template.bodyTemplate).toContain("background:#ffca05");
       expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
+      expect(template.bodyTemplate).not.toMatch(
+        /what (?:are|you’re) planning|your plans for 2027|begin planning for 2027|already know your dates|tell us (?:a little )?about your event|event dates/i,
+      );
+      expect(template.bodyTemplate).not.toMatch(
+        /ready for another adventure|let’s bring the fun back|choose which Adventure Zone experience|thank you again for trusting|we’d be honored to return|planning our return/i,
+      );
+      expect(template.bodyTemplate).not.toMatch(
+        /We’d love to continue the conversation and explore whether The Adventure Zone could be a good fit for your community|Let’s keep the conversation going!|Looking forward to what comes next!/i,
+      );
+      expect(template.bodyTemplate).toContain("START PLANNING 2027");
+      expect(template.bodyTemplate).toContain(
+        "subject=Planning%20%5BEvent%20Name%5D%20for%202027",
+      );
+      expect(template.bodyTemplate).toContain(">SEE MORE!</a>");
     }
+  });
+
+  it("keeps the original header structure with the combined logo and uses the visibly updated GIF for each stage", () => {
+    for (const template of conventionCampaignTemplates) {
+      expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).not.toContain("border-right:14px solid #ff0a8a");
+      expect(template.bodyTemplate).not.toContain("adventure-zone-logo-navy.png");
+      expect(template.bodyTemplate.match(/0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2\.png/g))
+        .toHaveLength(1);
+
+      const trailer = template.bodyTemplate.match(
+        /<a href="([^"]+)"[^>]*><img src="(https:\/\/static\.wixstatic\.com\/media\/[^"]+\.gif)"[^>]*alt="([^"]+)"/,
+      );
+      expect(trailer).not.toBeNull();
+      if (template.code.startsWith("convention_after_")) {
+        expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/?welcome=convention");
+        expect(trailer?.[2]).toBe("https://static.wixstatic.com/media/0e6e2c_5f0944f0c0cc45a590bac43c77ec5411~mv2.gif");
+        expect(trailer?.[3]).toBe("The Adventure Zone mini trailer — tap to learn more!");
+      } else {
+        expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/");
+        expect(trailer?.[2]).toBe("https://static.wixstatic.com/media/0e6e2c_87ad0198e4da4141ac40d29751d007d3~mv2.gif");
+        expect(trailer?.[3]).toBe("The Adventure Zone mini trailer — tap to see more!");
+      }
+    }
+
+    expect(conventionCampaignTemplates[5].bodyTemplate).toContain("INSERT SOMETHING THEY SHARED");
+    expect(conventionCampaignTemplates[6].bodyTemplate).toContain("INSERT A SPECIFIC MEMORY");
   });
 
   it("refreshes an active template without an availability or audit gap", async () => {
@@ -207,13 +248,13 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-after-convention-close-v4",
+      template_version: "2026-09-combined-logo-v7",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
       deduplication_key: null,
     });
-    expect(afterFirstRun.rows[0].body_template).toContain("SEE YOUR PACKAGE OPTIONS");
+    expect(afterFirstRun.rows[0].body_template).toContain("SEE MORE!");
     expect(afterFirstRun.rows[0].reviewed_at).toBeInstanceOf(Date);
     expect(afterFirstRun.rows[0].completed_at).toBeInstanceOf(Date);
 
