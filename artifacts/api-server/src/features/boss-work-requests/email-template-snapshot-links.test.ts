@@ -42,6 +42,7 @@ describe("extractSnapshotLinks", () => {
   it("uses parsed attributes instead of matching anchor-like text", () => {
     expect(extractSnapshotLinks(`
       <p>&lt;a href="https://fake.example"&gt;not a link&lt;/a&gt;</p>
+      <a name="section">not a destination</a>
       <a HREF="https://real.example?a=1&amp;b=2">Real</a>
     `)).toEqual({
       safeLinks: [{ href: "https://real.example/?a=1&b=2", label: "Real" }],
