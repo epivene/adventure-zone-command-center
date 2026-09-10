@@ -34,13 +34,16 @@ The current convention seed defines seven templates with codes beginning with `c
 
 Keep the existing `email_template_approval` work-request type. A request may now own one or more `communication_template_reviews` rows.
 
-Change the uniqueness rule from one review per request to one review per request/template:
+Change the uniqueness rule from one review per request to one review per request/template, and persist the review order and display name:
 
 - remove `communication_template_reviews_request_unique`;
+- add `position` as a non-negative integer with a default of zero;
+- add `template_name_snapshot` as non-null text, backfilled from the referenced template;
 - add a unique index on `(request_id, template_id)`;
+- add a unique index on `(request_id, position)`;
 - add an index on `(request_id, decision)`.
 
-Existing one-template requests remain valid.
+New batch items receive positions zero through six in the server's canonical order. Existing one-template requests are backfilled to position zero and remain valid.
 
 ### Link verification evidence
 
@@ -119,7 +122,7 @@ Parse anchor links from the immutable HTML snapshot and show a checklist beneath
 
 Each unique HTTP(S) destination shows:
 
-- the readable button/link label;
+- the readable anchor text, falling back to a linked image's alt text and then the host name;
 - the exact destination URL;
 - **Test link**, opening that exact URL in a new tab with `noopener,noreferrer`;
 - **Link works** confirmation.
