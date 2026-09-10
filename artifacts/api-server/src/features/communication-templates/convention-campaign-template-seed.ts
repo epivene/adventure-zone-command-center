@@ -34,7 +34,6 @@ const learnMoreTrailerImageUrl = "https://static.wixstatic.com/media/0e6e2c_5f09
 const originalLogoImageUrl = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-logo-navy.png";
 const combinedLogoImageUrl = "https://static.wixstatic.com/media/0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2.png";
 
-
 const approvedEarlyBirdBlock = '<tr><td style="padding:0 38px 34px;background:#f8f6f1"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#0f1729;border:3px solid #0f1729"><tr><td style="padding:0"><div style="padding:10px 20px;background:#ff0a8a;color:#ffffff;font-size:12px;line-height:16px;font-weight:900;letter-spacing:1.2px">EARLY BIRD BOOKING OFFER</div><div style="padding:20px"><div style="font-size:30px;line-height:34px;font-weight:900;color:#ffca05">SAVE 10%</div><div style="margin-top:8px;font-size:20px;line-height:27px;font-weight:900;color:#ffffff">Secure your event with a deposit by <span style="display:inline-block;margin-top:5px;padding:3px 8px;background:#ffca05;color:#0f1729">{{earlyBirdDeadline}}</span></div><div style="margin-top:11px;font-size:15px;line-height:23px;color:#f8f6f1">Our Early Bird offer is available across the upcoming season for a short time, making now a great time to secure your date.</div></div></td></tr></table></td></tr>';
 
 function standardizeEarlyBirdBlock(html: string): string {
@@ -61,7 +60,8 @@ function updateConventionEmailPresentation(
       /<tr><td align="center" style="background:#0f1729;padding:0 24px 21px;color:#ff0a8a;font-size:13px;line-height:18px;font-weight:900;letter-spacing:1\.2px">AMERICA’S BEST BOUNCE HOUSE CARNIVAL<\/td><\/tr>\r?\n?/g,
       "",
     );
-  const withOriginalLogo = standardizeEarlyBirdBlock(withoutExistingBanner)\n    .replace(combinedLogoImageUrl, originalLogoImageUrl);
+  const withOriginalLogo = standardizeEarlyBirdBlock(withoutExistingBanner)
+    .replace(combinedLogoImageUrl, originalLogoImageUrl);
   const destination = stage === "after" ? conventionWebsiteUrl : normalWebsiteUrl;
   const trailerLabel = stage === "after" ? "tap to learn more!" : "tap to see more!";
   const trailerImageUrl = stage === "after" ? learnMoreTrailerImageUrl : seeMoreTrailerImageUrl;
