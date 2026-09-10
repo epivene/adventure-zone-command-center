@@ -43,7 +43,7 @@ export default function BossContactsPage() {
     let active = true;
     const term = search.trim();
     const timeout = window.setTimeout(() => {
-      setLoading(true);
+      setLoading(contacts.length === 0);
       setError(null);
       const path = term ? `/boss/contacts?q=${encodeURIComponent(term)}` : "/boss/contacts";
       void bossGet<{ contacts: BossContact[] } | BossContact[]>(path)
@@ -54,7 +54,7 @@ export default function BossContactsPage() {
           if (active) setError(cause instanceof Error ? cause.message : "Could not load contacts.");
         })
         .finally(() => { if (active) setLoading(false); });
-    }, term ? 250 : 0);
+    }, term ? 150 : 0);
     return () => { active = false; window.clearTimeout(timeout); };
   }, [search, reloadKey]);
 
@@ -69,9 +69,9 @@ export default function BossContactsPage() {
       <BossProfileDirectoryNav active="contacts" />
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          className="pl-9"
+          style={{ paddingLeft: "3rem" }}
           placeholder="Search contacts…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -88,7 +88,7 @@ export default function BossContactsPage() {
         </div>
       ) : null}
 
-      {loading ? (
+      {loading && contacts.length === 0 ? (
         <div className="grid gap-3">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
