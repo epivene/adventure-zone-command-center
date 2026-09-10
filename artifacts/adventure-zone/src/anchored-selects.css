@@ -1,0 +1,51 @@
+/* Keep native form values, validation, labels and keyboard support while using
+   an anchored picker instead of the phone's operating-system picker. Browsers
+   without customizable select support retain their working native control.
+   https://developer.chrome.com/blog/a-customizable-select */
+@supports (appearance: base-select) {
+  @media screen and (max-width: 767px) {
+    select:not([multiple]):not([size]),
+    select:not([multiple])[size='1'] {
+      appearance: base-select;
+      min-width: 0;
+    }
+
+    select:not([multiple]):not([size])::picker(select),
+    select:not([multiple])[size='1']::picker(select) {
+      appearance: base-select;
+      /* Preserve the browser's anchor positioning and edge-flipping rules. */
+      margin-block: 4px;
+      max-block-size: min(20rem, calc(100dvh - 2rem));
+      max-inline-size: calc(100vw - 1rem);
+      overflow: auto;
+      overscroll-behavior: contain;
+      border: 1px solid hsl(var(--border));
+      border-radius: var(--radius);
+      background: hsl(var(--popover));
+      color: hsl(var(--popover-foreground));
+      box-shadow: 0 8px 24px hsl(var(--foreground) / 0.18);
+      padding: 4px;
+    }
+
+    select:not([multiple]):not([size]) option,
+    select:not([multiple])[size='1'] option {
+      min-height: 44px;
+      padding: 0.5rem 0.75rem;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      border-radius: 0.25rem;
+    }
+
+    select:not([multiple]):not([size]) option:checked,
+    select:not([multiple])[size='1'] option:checked {
+      background: hsl(var(--secondary));
+      color: hsl(var(--secondary-foreground));
+    }
+
+    select:not([multiple]):not([size]) option:focus-visible,
+    select:not([multiple])[size='1'] option:focus-visible {
+      outline: 2px solid hsl(var(--ring));
+      outline-offset: -2px;
+    }
+  }
+}
