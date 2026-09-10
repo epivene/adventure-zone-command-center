@@ -162,6 +162,20 @@ describe("OpportunityEmailService", () => {
     expect(dependencies.emailRepository.create).toHaveBeenCalledWith(expect.objectContaining({ purpose: "follow_up" }));
   });
 
+  it("never invokes Gmail for a legacy draft with a note-like recipient", async () => {
+    const existing = record({ recipientEmail: "use the website contact form" });
+    const dependencies = deps(existing);
+    const service = new OpportunityEmailService(dependencies);
+
+    await expect(service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "44444444-4444-4444-8444-444444444444",
+    })).rejects.toThrow(/sendable email/i);
+
+    expect(dependencies.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
+  });
+
   it("saves manual edits to the same Gmail draft and records one meaningful update without creating a follow-up", async () => {
     const existing = record();
     const dependencies = deps(existing);
