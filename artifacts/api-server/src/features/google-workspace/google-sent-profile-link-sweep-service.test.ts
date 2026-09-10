@@ -58,7 +58,17 @@ class FakeRepository implements GoogleSentProfileLinkSweepRepository {
   constructor(
     private readonly messageTargets = new Map<string, { id: string; name: string }>(),
     private readonly threadTargets = new Map<string, { id: string; name: string }>(),
+    private readonly labelTargets = new Map<string, { id: string; name: string }>(),
   ) {}
+
+  async profileTargetsByLabelIds(labelIds: string[]) {
+    return new Map(
+      labelIds.flatMap((id) => {
+        const target = this.labelTargets.get(id);
+        return target ? [[id, target] as const] : [];
+      }),
+    );
+  }
 
   async mappedTargets(input: {
     messageIds: string[];
@@ -134,6 +144,44 @@ function classifier(
 }
 
 describe("GoogleSentProfileLinkSweepService", () => {
+  it("uses an existing Gmail profile label as the authoritative profile match", async () => {
+    const item = message({
+      id: "alamosa-outreach",
+      threadId: "alamosa-thread",
+      labels: ["SENT", "Label_alamosa"],
+      dateMs: Date.UTC(2026, 7, 25),
+      subject: "Alamosa ARTs Festival Sept 5th 2026",
+      to: "societyhall@example.org",
+    });
+    const repository = new FakeRepository(
+      new Map(),
+      new Map(),
+      new Map([["Label_alamosa", { id: "org-alamosa", name: "Alamosa ARTs Festival" }]]),
+    );
+    const service = new GoogleSentProfileLinkSweepService({
+      connection: { createReadClient: async () => client([item]) },
+      repository,
+      classifier: classifier({
+        "alamosa-outreach": { outcome: "ignored", evidenceCodes: [] },
+      }),
+    });
+
+    const result = await service.run({
+      after: new Date(Date.UTC(2026, 7, 1)),
+      before: new Date(Date.UTC(2026, 8, 1)),
+      repair: true,
+    });
+
+    expect(result.counts.linked).toBe(1);
+    expect(repository.linked).toEqual([
+      expect.objectContaining({
+        messageId: "alamosa-outreach",
+        organizationId: "org-alamosa",
+        evidenceCodes: ["gmail_profile_label", "sent_profile_link_sweep"],
+      }),
+    ]);
+  });
+
   it("repairs unmapped sent mail, inherits an existing thread target, and queues ambiguity", async () => {
     const after = Date.UTC(2026, 0, 1);
     const before = Date.UTC(2027, 0, 1);
