@@ -6,6 +6,7 @@ import { Input } from "@workspace/avz-crm/components/ui/input";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { bossGet } from "@/lib/boss-auth-context";
 import type { BossContact } from "@/lib/boss-types";
+import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
 
 function ContactRow({ contact }: { contact: BossContact }) {
   const name = [contact.firstName, contact.lastName].filter(Boolean).join(" ") || "Contact";
@@ -64,6 +65,8 @@ export default function BossContactsPage() {
         <h1 className="mt-0.5 text-2xl font-bold text-foreground">Contacts</h1>
         <p className="mt-1 text-sm text-muted-foreground">Search contacts by name, profile, location, email, or phone.</p>
       </header>
+
+      <BossProfileDirectoryNav active="contacts" />
 
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

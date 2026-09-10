@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { MapPin, Search, UserRound } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
+import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
 
 type ProfileRecord = {
   id: string;
@@ -64,6 +65,7 @@ export default function BossProfilesPage() {
         <h1 className="mt-1 text-2xl font-bold">Profiles</h1>
         <p className="mt-1 text-sm text-muted-foreground">Event organizations, contacts, locations, bookings, and history.</p>
       </header>
+      <BossProfileDirectoryNav active="profiles" />
       <form className="flex gap-2" onSubmit={submit}>
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Search profiles</span>
