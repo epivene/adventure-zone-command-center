@@ -16,6 +16,7 @@ import { ensureDesignStudioSchemaBeforeListen } from "./design-studio-required-s
 import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required-startup";
 import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
 import { ensureGoogleDriveBackupSchemaBeforeListen } from "./google-drive-backup-required-startup";
+import { ensureCommunicationTemplateReviewSetSchemaBeforeListen } from "./communication-template-review-set-required-startup";
 
 const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
 const REQUIRED_SCHEMA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
@@ -66,6 +67,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureInboundCalling?: RequiredStep;
   ensureOfficeCoordinator?: RequiredStep;
   ensureBoss?: RequiredStep;
+  ensureCommunicationTemplateReviewSets?: RequiredStep;
   ensureWebsiteInquiries?: RequiredStep;
   ensureProfileFiller?: RequiredStep;
   ensureProfileTouch?: RequiredStep;
@@ -138,6 +140,11 @@ export async function runRequiredSchemaStartup(dependencies?: {
   await runRequired(
     "required Boss schema",
     dependencies?.ensureBoss ?? ensureBossSchemaBeforeListen,
+  );
+  await runRequired(
+    "required communication template review-set schema",
+    dependencies?.ensureCommunicationTemplateReviewSets
+      ?? ensureCommunicationTemplateReviewSetSchemaBeforeListen,
   );
   await runRequired(
     "required website inquiry schema",
