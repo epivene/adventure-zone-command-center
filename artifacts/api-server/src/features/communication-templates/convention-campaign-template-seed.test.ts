@@ -2,6 +2,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { afterEach, describe, expect, it } from "vitest";
 import * as schema from "@/db/schema";
+import { templateFingerprint } from "@/features/boss-work-requests/boss-work-request-service";
 import {
   conventionCampaignTemplates,
   ensureConventionCampaignTemplateSeed,
@@ -138,6 +139,53 @@ describe("convention campaign template seed", () => {
     `);
     const database = drizzle(client, { schema });
 
+    const matchingTemplate = conventionCampaignTemplates[0];
+    const matchingFingerprint = templateFingerprint({
+      templateVersion: matchingTemplate.templateVersion,
+      subjectTemplate: matchingTemplate.subjectTemplate,
+      bodyTemplate: matchingTemplate.bodyTemplate,
+      bodyFormat: "html",
+    });
+    await client.query(
+      `insert into communication_templates (
+        id, code, template_version, name, category, subject_template, body_template,
+        body_format, access_scope, state, owner_kind
+      ) values ($1, $2, $3, $4, 'convention_campaign', $5, $6, 'html', 'office', 'draft', 'company')`,
+      [
+        "44444444-4444-4444-8444-444444444444",
+        matchingTemplate.code,
+        matchingTemplate.templateVersion,
+        matchingTemplate.name,
+        matchingTemplate.subjectTemplate,
+        matchingTemplate.bodyTemplate,
+      ],
+    );
+    await client.query(
+      `insert into boss_work_requests (
+        id, type, state, title, assigned_boss_account_id, deduplication_key
+      ) values ($1, 'email_template_approval', 'waiting_on_dave', $2, $3, $4)`,
+      [
+        "55555555-5555-4555-8555-555555555555",
+        "Review matching finalized template",
+        "33333333-3333-4333-8333-333333333333",
+        "template-review:matching",
+      ],
+    );
+    await client.query(
+      `insert into communication_template_reviews (
+        request_id, template_id, template_version, content_fingerprint,
+        subject_snapshot, body_snapshot, body_format_snapshot
+      ) values ($1, $2, $3, $4, $5, $6, 'html')`,
+      [
+        "55555555-5555-4555-8555-555555555555",
+        "44444444-4444-4444-8444-444444444444",
+        matchingTemplate.templateVersion,
+        matchingFingerprint,
+        matchingTemplate.subjectTemplate,
+        matchingTemplate.bodyTemplate,
+      ],
+    );
+
     await ensureConventionCampaignTemplateSeed(database as never);
     const afterFirstRun = await client.query<{
       template_version: string;
@@ -169,6 +217,21 @@ describe("convention campaign template seed", () => {
     expect(afterFirstRun.rows[0].reviewed_at).toBeInstanceOf(Date);
     expect(afterFirstRun.rows[0].completed_at).toBeInstanceOf(Date);
 
+    const matchingReview = await client.query<{
+      request_state: string;
+      completed_at: Date;
+      deduplication_key: string | null;
+    }>(`
+      select state as request_state, completed_at, deduplication_key
+      from boss_work_requests
+      where id = '55555555-5555-4555-8555-555555555555'
+    `);
+    expect(matchingReview.rows).toEqual([{
+      request_state: "cancelled",
+      completed_at: expect.any(Date),
+      deduplication_key: null,
+    }]);
+
     const finalizedAvailability = await client.query<{
       state: string;
       template_count: number;
@@ -189,7 +252,7 @@ describe("convention campaign template seed", () => {
         (select count(*)::int from communication_templates) as template_count,
         (select count(*)::int from boss_work_requests) as request_count
     `);
-    expect(afterSecondRun.rows).toEqual([{ template_count: 7, request_count: 1 }]);
+    expect(afterSecondRun.rows).toEqual([{ template_count: 7, request_count: 2 }]);
   });
 
   it("keeps the finalized Gmail design and the agreed Early Bird addition", () => {
