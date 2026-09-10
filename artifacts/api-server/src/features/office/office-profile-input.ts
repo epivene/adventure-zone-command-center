@@ -1,8 +1,19 @@
 import { z } from "zod";
 
+import {
+  normalizeContactEmailValue,
+  normalizeSendableContactEmail,
+} from "@/features/contacts/contact-email-value";
+
 const nullableText = (max = 4000) => z.union([z.string().max(max), z.null()]).transform((value) => value?.trim() || null);
-const nullableEmail = z.union([z.string(), z.null()])
-  .transform((value) => value?.trim().toLowerCase() || null);
+const nullableContactEmail = z.union([z.string(), z.null()])
+  .transform(normalizeContactEmailValue);
+const nullableLocationEmail = z.union([z.string(), z.null()])
+  .transform(normalizeContactEmailValue)
+  .refine(
+    (value) => value === null || normalizeSendableContactEmail(value) !== null,
+    "Enter a valid email address.",
+  );
 
 const officeContactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),
@@ -30,7 +41,7 @@ export const officeContactInputSchema = z.object({
   lastName: z.string().trim().max(160),
   jobTitle: nullableText(240),
   relationshipRole: nullableText(240),
-  email: nullableEmail,
+  email: nullableContactEmail,
   address1: nullableText(400),
   address2: nullableText(400),
   city: nullableText(120),
@@ -53,7 +64,7 @@ export const officeLocationInputSchema = z.object({
   postalCode: nullableText(20).optional(),
   website: nullableText(2048).optional(),
   phone: nullableText(80).optional(),
-  email: nullableEmail.optional(),
+  email: nullableLocationEmail.optional(),
 }).strict().refine((value) => Object.values(value).some((item) => item !== undefined), { message: "No location changes provided." });
 
 export const officeNoteInputSchema = z.object({
