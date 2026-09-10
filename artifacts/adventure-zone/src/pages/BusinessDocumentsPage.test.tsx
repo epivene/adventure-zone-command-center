@@ -188,7 +188,7 @@ describe("BusinessDocumentsPage", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Find strong matches" }));
     expect(await screen.findByText("Found 1 strong match. Review it before linking.")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Link 1 strong matches" }));
+    fireEvent.click(screen.getByRole("button", { name: "Link 1 strong match" }));
 
     await waitFor(() => expect(mocks.linkProfile).toHaveBeenCalledWith(
       "contract-1",
