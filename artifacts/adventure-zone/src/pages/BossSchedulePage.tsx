@@ -9,6 +9,7 @@ import { EventCalendar, type CalendarEvent } from "@/components/calendar/event-c
 import { EventMap } from "@/components/routes/event-map";
 import { RouteConflictWarning } from "@/components/routes/route-conflict-warning";
 import { ScheduleViewToggle, type ScheduleView } from "@/components/schedule/schedule-view-toggle";
+import { dedupeCalendarBookings } from "@/features/calendar/calendar-dedupe";
 import { asScheduleCalendarEvent, isBookedForSchedule } from "@/features/calendar/schedule-booking-state";
 import type { MapEvent } from "@/features/routes/map-data";
 import { findSameLegDateConflicts } from "@/features/routes/route-conflicts";
@@ -160,7 +161,10 @@ export default function BossSchedulePage() {
 
   useEffect(() => { void load(); }, []);
 
-  const mapEvents = useMemo(() => (schedule?.bookings ?? []).map(asMapEvent), [schedule?.bookings]);
+  const mapEvents = useMemo(
+    () => dedupeCalendarBookings((schedule?.bookings ?? []).map(asMapEvent) as any[]) as MapEvent[],
+    [schedule?.bookings],
+  );
   const travelLegs = useMemo(() => (schedule?.legs ?? []).map(asTravelLeg), [schedule?.legs]);
   const activeLegs = travelLegs.filter((leg) => !leg.archivedAt);
   const scopedEvents = useMemo(() => mapEvents.filter((event) => {
@@ -168,11 +172,14 @@ export default function BossSchedulePage() {
     if (status !== "all") {
       if (status === "confirmed" ? !isBookedForSchedule(event) : event.status !== status) return false;
     }
-    if (event.startsAt && String(event.startsAt.getFullYear()) !== season) return false;
+    if (!event.startsAt || String(event.startsAt.getFullYear()) !== season) return false;
     return true;
   }), [legId, mapEvents, season, status]);
   const potentialCount = scopedEvents.filter((event) => !isBookedForSchedule(event)).length;
-  const routeConflicts = useMemo(() => findSameLegDateConflicts(scopedEvents), [scopedEvents]);
+  const conflictEvents = status !== "all" || showPotential
+    ? scopedEvents
+    : scopedEvents.filter((event) => isBookedForSchedule(event));
+  const routeConflicts = useMemo(() => findSameLegDateConflicts(conflictEvents), [conflictEvents]);
   const extraFilterCount = Number(Boolean(legId)) + Number(status !== "all");
   const calendarEvents = useMemo(() => {
     const visible = status !== "all" || showPotential

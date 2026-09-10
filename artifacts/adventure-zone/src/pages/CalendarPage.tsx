@@ -266,7 +266,9 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
   }, [season, currentYear, todayKey]);
 
   useEffect(() => {
-    const { from, to } = buildDateWindow(activeMonth);
+    const { from, to } = season && /^\d{4}$/.test(season)
+      ? { from: `${season}-01-01`, to: `${season}-12-31` }
+      : buildDateWindow(activeMonth);
     setLoading(true);
     Promise.all([
       apiGet<CalendarEvent[]>(`/calendar?from=${from}&to=${to}`),
@@ -296,7 +298,7 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
-  }, [activeMonth]);
+  }, [activeMonth, season]);
 
   async function resolveReview(reviewId: string, resolution: "link_existing" | "create_new", bookingId?: string) {
     setBusyReviewId(reviewId);
@@ -331,9 +333,6 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
     return [...dedupeCalendarBookings(bookings as any[]), ...reviewEvents, ...activities] as CalendarEvent[];
   }, [scopedEvents]);
 
-  const routeConflicts = useMemo(() => findSameLegDateConflicts(
-    displayEvents.filter((event) => !isActActivity(event)) as any[],
-  ), [displayEvents]);
   const hasExplicitStatusFilter = Boolean(status && status !== "all");
   const potentialBookingCount = useMemo(() => displayEvents.filter((event) =>
     !isActActivity(event) &&
@@ -355,6 +354,11 @@ export function CalendarContent({ season, legId, status, embedded = false, onVis
         : asScheduleCalendarEvent(event as any)
     ) as CalendarEvent[];
   }, [displayEvents, hasExplicitStatusFilter, showPotential]);
+  const routeConflicts = useMemo(() => findSameLegDateConflicts(
+    filteredEvents.filter((event) =>
+      !isActActivity(event) && !isGoogleOperationalReview(event)
+    ) as any[],
+  ), [filteredEvents]);
 
   const handleMonthChange = useCallback((month: string) => {
     setActiveMonth(month);
