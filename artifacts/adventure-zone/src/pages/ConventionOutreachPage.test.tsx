@@ -119,6 +119,51 @@ describe("convention workspace", () => {
     ).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("keeps every convention year available from Dave's direct Game shortcut", async () => {
+    searchValue.current = "?view=game";
+    const original = fetcher.getMockImplementation()!;
+    const western = {
+      ...edition,
+      id: "edition-2",
+      convention: "Western Fairs",
+      year: 2027,
+      member_count: 0,
+      unresolved_count: 0,
+    };
+    fetcher.mockImplementation((path: string, options?: RequestInit) => {
+      if (path.endsWith("/edition-2")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              edition: western,
+              members: [],
+              review: null,
+              history: [],
+            }),
+          ),
+        );
+      }
+      if (path === "/boss/conventions") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ editions: [western, edition] })),
+        );
+      }
+      return original(path, options);
+    });
+
+    render(<ConventionOutreachPage boss />);
+
+    expect(
+      await screen.findByRole("table", {
+        name: "Western Fairs 2027 convention game",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Year" })).toHaveValue("");
+    expect(
+      screen.getByRole("option", { name: "Heartland 2026 (2)" }),
+    ).toBeInTheDocument();
+  });
+
   it("turns the live convention roster into a printable game sheet", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     render(<ConventionOutreachPage boss />);

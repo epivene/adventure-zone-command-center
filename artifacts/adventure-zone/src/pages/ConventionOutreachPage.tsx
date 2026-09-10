@@ -184,7 +184,6 @@ export default function ConventionOutreachPage({
               list.editions.find((edition) => !edition.archived_at) ||
               list.editions[0];
             if (newest) {
-              setYear(String(newest.year));
               setSelected(newest.id);
             }
           }
