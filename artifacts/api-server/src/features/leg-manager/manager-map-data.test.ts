@@ -492,6 +492,7 @@ describe("loadManagerScopedMapData", () => {
       async listTrips() { return []; },
       async listStops() { return []; },
       async listSegments() { return []; },
+      async getTravelLegDefaults() { return { mpg: 10 }; },
     };
     dependencies.lifecycleRepository = {
       async getCurrentForLeg() { return { bookingId: currentBooking.bookingId }; },
@@ -521,6 +522,7 @@ describe("loadManagerScopedMapData", () => {
       endLabel: "Blanding City Fall Festival",
       endLatitude: null,
       endLongitude: null,
+      mpg: 10,
     });
     expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([nextBooking.bookingId]);
     expect(result.route?.segments).toEqual([expect.objectContaining({
