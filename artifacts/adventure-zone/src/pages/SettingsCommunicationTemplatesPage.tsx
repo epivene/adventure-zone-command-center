@@ -37,6 +37,38 @@ const placeholderTokens = [
   "additionalInsuredInfo",
 ];
 
+const previewPlaceholderValues: Record<string, string> = {
+  contactName: "Jamie",
+  eventName: "Example Community Event",
+  eventCity: "Your City",
+  eventState: "WY",
+  eventDates: "July 10–12, 2027",
+  senderName: "Desiree",
+  senderPhone: "(555) 555-0123",
+  senderEmail: "desiree@example.com",
+  packageName: "Adventure Zone",
+  packagePrice: "$0.00",
+  packageDuration: "three days",
+  followUpDate: "October 1, 2026",
+  conventionName: "Example Convention",
+  additionalInsuredWording: "Example additional insured wording",
+  additionalInsuredInfo: "Example insurance information",
+  earlyBirdDeadline: "December 31, 2026",
+};
+
+function samplePlaceholder(token: string) {
+  return previewPlaceholderValues[token]
+    ?? token.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
+}
+
+function renderExample(value: string) {
+  return value.replace(/\{\{([a-zA-Z0-9_]+)\}\}/g, (_match, token: string) => samplePlaceholder(token));
+}
+
+function looksHtml(value: string) {
+  return /<\/?(?:html|body|div|p|table|br|span|h[1-6]|img|a)\b/i.test(value);
+}
+
 function stateLabel(state: TemplateState) {
   return state === "active" ? "Active" : state === "reviewed" ? "Reviewed" : state === "archived" ? "Archived" : "Draft";
 }
@@ -74,6 +106,7 @@ export default function SettingsCommunicationTemplatesPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingBody, setEditingBody] = useState(false);
   const [newTemplate, setNewTemplate] = useState<NewTemplate>(blankTemplate);
 
   async function load() {
@@ -99,10 +132,15 @@ export default function SettingsCommunicationTemplatesPage() {
     templates.filter((template) => groupTitle(template) === title),
   ])), [templates]);
 
+  const exampleSubject = useMemo(() => renderExample(subject), [subject]);
+  const exampleBody = useMemo(() => renderExample(body), [body]);
+  const selectedIsHtml = selected?.bodyFormat === "html" || looksHtml(body);
+
   useEffect(() => {
     if (!selected) return;
     setSubject(selected.subjectTemplate ?? "");
     setBody(selected.bodyTemplate);
+    setEditingBody(false);
     setMessage("");
     setError("");
   }, [selected?.id]);
@@ -227,7 +265,21 @@ export default function SettingsCommunicationTemplatesPage() {
        </section> : selected ? <section className="grid gap-4 rounded-xl border bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-bold uppercase tracking-wide text-slate-500">{selected.code}</p><h2 className="text-xl font-bold">{selected.name}</h2>{selected.creatorDisplayName ? <p className="mt-1 text-sm text-slate-600">Created by {selected.creatorDisplayName}</p> : null}</div><span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold">{stateLabel(selected.state)}</span></div>
         <label className="grid gap-1 text-sm font-bold">Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} /></label>
-        <label className="grid gap-1 text-sm font-bold">Body<textarea rows={14} value={body} onChange={(event) => setBody(event.target.value)} /></label>
+        <section className="grid gap-3" aria-label="Live email preview">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div><p className="text-sm font-bold">Live email preview</p><p className="mt-1 text-xs text-slate-500">Example names and dates stand in for placeholders. The saved template keeps the placeholders.</p></div>
+            {selectedIsHtml ? <button className="button-secondary" type="button" onClick={() => setEditingBody((current) => !current)}>{editingBody ? "Hide HTML" : "Edit HTML"}</button> : null}
+          </div>
+          <div className="overflow-hidden rounded-xl border bg-white">
+            <div className="border-b bg-slate-50 p-3"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Subject</p><p className="mt-1 break-words font-semibold">{exampleSubject || "(No subject)"}</p></div>
+            {selectedIsHtml
+              ? <iframe className="min-h-[42rem] w-full bg-white" sandbox="" srcDoc={exampleBody} title="Email body preview" />
+              : <pre className="min-h-40 whitespace-pre-wrap break-words p-4 font-sans text-sm">{exampleBody}</pre>}
+          </div>
+        </section>
+        {selectedIsHtml
+          ? editingBody ? <label className="grid gap-1 text-sm font-bold">Email HTML source<textarea aria-label="Email HTML source" className="font-mono text-xs" rows={18} value={body} onChange={(event) => setBody(event.target.value)} /><span className="text-xs font-normal text-slate-500">Changes appear in the preview above as you type.</span></label> : null
+          : <label className="grid gap-1 text-sm font-bold">Body<textarea rows={14} value={body} onChange={(event) => setBody(event.target.value)} /></label>}
         <div><p className="text-sm font-bold">Insert placeholder</p><div className="mt-2 flex flex-wrap gap-2">{placeholderTokens.map((token) => <div className="flex overflow-hidden rounded-full border" key={token}><button className="px-2 py-1 text-xs" type="button" onClick={() => insert(token, "subject")}>{token} → subject</button><button className="border-l px-2 py-1 text-xs" type="button" onClick={() => insert(token, "body")}>body</button></div>)}</div></div>
         <p className="rounded-lg bg-slate-50 p-3 text-sm text-slate-600">Required for this template: {selected.requiredPlaceholders.length ? selected.requiredPlaceholders.join(", ") : "None"}</p>
         {message ? <p role="status" className="rounded-lg bg-emerald-50 p-3 font-semibold text-emerald-800">{message}</p> : null}
