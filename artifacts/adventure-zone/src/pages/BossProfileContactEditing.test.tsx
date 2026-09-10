@@ -72,6 +72,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("Dave profile and contact pages", () => {
+  it("gives Dave the owner profile layout without booking or assistant controls", async () => {
+    mocks.bossGet.mockResolvedValue({ profile });
+    render(<BossProfilePage profileId={profileId} />);
+
+    expect(await screen.findByText("Relationships / Profiles")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Contacts/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bookings/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Emails/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Ask Assistant/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Add event|Create contract/i })).not.toBeInTheDocument();
+  });
+
   it("lets Dave edit and save an event profile", async () => {
     mocks.bossGet.mockResolvedValue({ profile });
     render(<BossProfilePage profileId={profileId} />);
