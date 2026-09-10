@@ -52,10 +52,16 @@ function updateConventionEmailPresentation(
       "",
     );
   const withOriginalLogo = withoutExistingBanner.replace(combinedLogoImageUrl, originalLogoImageUrl);
+  const withCenteredHeaderCopy = withOriginalLogo
+    .replace(
+      /background:#0f1729;padding:16px 38px 36px;border-bottom:7px solid #ff0a8a"/g,
+      'background:#0f1729;padding:16px 38px 36px;border-bottom:7px solid #ff0a8a;text-align:center"',
+    )
+    .replace(/margin:19px 0 17px/g, "margin:19px auto 17px");
   const destination = stage === "after" ? conventionWebsiteUrl : normalWebsiteUrl;
   const trailerLabel = stage === "after" ? "tap to learn more!" : "tap to see more!";
   const trailerImageUrl = stage === "after" ? learnMoreTrailerImageUrl : seeMoreTrailerImageUrl;
-  const withTrailerDestination = withOriginalLogo.replace(
+  const withTrailerDestination = withCenteredHeaderCopy.replace(
     new RegExp(
       `<a href="https:\\/\\/youtu\\.be\\/MWD0SdAWZpc\\?is=TwYW3RxUGQxsdfbk" target="_blank" title="Watch The Adventure Zone in action" style="display:block;text-decoration:none;border:0;"><img src="${originalTrailerImageUrl.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}" width="612" alt="The Adventure Zone mini trailer — tap to watch the video"`,
     ),
@@ -134,7 +140,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_general_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-1697086144767202972",
-    gmailMessageId: "1a08b3f7f050efe7",
+    gmailMessageId: "1a08b43c89b62f52",
     name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
     subjectTemplate: "Let’s connect at {{conventionName}}",
     bodyTemplate: [
@@ -151,7 +157,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-5407934870856350671",
-    gmailMessageId: "1a08b3fcc1c666f2",
+    gmailMessageId: "1a08b43e715a4506",
     name: "TEMPLATE 2 — BEFORE Convention — New Event",
     subjectTemplate: "Meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -168,7 +174,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r8082858796036362003",
-    gmailMessageId: "1a08b3fed41dae09",
+    gmailMessageId: "1a08b4403bb30df1",
     name: "TEMPLATE 3 — BEFORE Convention — Past Event",
     subjectTemplate: "Let’s reconnect at {{conventionName}}",
     bodyTemplate: [
@@ -185,7 +191,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_during_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-8856964011374508299",
-    gmailMessageId: "1a08b40082a31fd6",
+    gmailMessageId: "1a08b44588ae768b",
     name: "TEMPLATE 4 — DURING Convention — New Event",
     subjectTemplate: "Come meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -202,7 +208,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_during_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r4015326584847664626",
-    gmailMessageId: "1a08b404f2e866ec",
+    gmailMessageId: "1a08b447893cb43a",
     name: "TEMPLATE 5 — DURING Convention — Past Event",
     subjectTemplate: "We’re at {{conventionName}} — come catch up",
     bodyTemplate: [
@@ -219,7 +225,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_after_new_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r7096158685165323453",
-    gmailMessageId: "1a08b406ac58e5d2",
+    gmailMessageId: "1a08b449607f7420",
     name: "TEMPLATE 6 — AFTER Convention — New Event",
     subjectTemplate: "Great connecting at {{conventionName}}",
     bodyTemplate: [
@@ -236,7 +242,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_after_past_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r-1391915929973957682",
-    gmailMessageId: "1a08b40877b4c617",
+    gmailMessageId: "1a08b44eef713040",
     name: "TEMPLATE 7 — AFTER Convention — Past Event",
     subjectTemplate: "Great seeing you at {{conventionName}}",
     bodyTemplate: [
