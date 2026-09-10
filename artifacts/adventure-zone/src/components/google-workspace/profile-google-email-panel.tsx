@@ -26,6 +26,9 @@ function savedCopyLabel(thread: GoogleThreadDetail): string | null {
   if (thread.sourceState === "saved_copy_gmail_unavailable") {
     return "Showing saved copy";
   }
+  if (thread.sourceState === "saved_copy_not_synced") {
+    return "Saved in app; no longer synced";
+  }
   return thread.savedCopy ? "Saved in app" : null;
 }
 
