@@ -107,10 +107,32 @@ describe("convention workspace", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Profile linked")).toBeInTheDocument();
     expect(screen.getByText("Profile needed")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+      "href",
+      "/boss/profiles/profile-1",
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Print Game Sheet" }));
     expect(print).toHaveBeenCalledOnce();
+    fireEvent.change(screen.getByLabelText("Email group"), {
+      target: { value: "replacement" },
+    });
+    expect(screen.queryByText("Sweet Corn Festival")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cards" }));
+    expect(screen.getByText(/Replacement only/)).toBeInTheDocument();
     print.mockRestore();
+  });
+
+  it("links profiles through the admin path in Game view", async () => {
+    render(<ConventionOutreachPage />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Convention Game" }),
+    );
+
+    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+      "href",
+      "/profiles/profile-1",
+    );
   });
 
   it("keeps replacement and special-handling contacts visible in the simple view", async () => {

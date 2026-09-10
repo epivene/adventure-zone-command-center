@@ -113,8 +113,8 @@ export function BossShell({ children }: { children: ReactNode }) {
   const { boss, signOut } = useBossAuth();
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground">
-      <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur">
+    <div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
+      <header className="sticky top-0 z-20 border-b border-border bg-card/95 backdrop-blur print:hidden">
         <div className="mx-auto max-w-7xl px-4 py-2 md:px-6">
           <div className="flex items-center gap-2">
             <Link href="/boss" className="min-w-0 font-bold text-foreground text-sm leading-tight">
@@ -141,8 +141,8 @@ export function BossShell({ children }: { children: ReactNode }) {
           ) : null}
         </div>
       </header>
-      <main className="mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-6 xl:pb-8">{children}</main>
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden">
+      <main className="mx-auto max-w-7xl px-3 py-4 pb-24 md:px-8 md:py-6 xl:pb-8 print:max-w-none print:p-0">{children}</main>
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card px-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] pt-1 xl:hidden print:hidden">
         <nav aria-label="Boss navigation" className="flex gap-0.5 overflow-x-auto">
           {navItems.map((item) => <NavLink key={item.href} item={item} mobile />)}
         </nav>

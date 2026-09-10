@@ -31,6 +31,9 @@ describe("Dave profile navigation", () => {
     render(<BossShell><div>Content</div></BossShell>);
 
     const navigation = screen.getByRole("navigation", { name: "Boss navigation" });
+    expect(screen.getByRole("banner")).toHaveClass("print:hidden");
+    expect(screen.getByText("Content").closest("main")).toHaveClass("print:p-0");
+    expect(navigation.parentElement).toHaveClass("print:hidden");
     expect(navigation.querySelector('a[href="/boss/profiles"]')).not.toBeNull();
     expect(navigation.querySelector('a[href="/boss/contacts"]')).toBeNull();
   });

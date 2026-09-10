@@ -728,6 +728,7 @@ function ConventionGame({
     <section
       className={`${box} overflow-x-auto print:overflow-visible print:border-0 print:p-0`}
     >
+      <style>{`@media print { @page { size: landscape; margin: 0.35in; } }`}</style>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold">
@@ -750,7 +751,7 @@ function ConventionGame({
         aria-label={`${edition.convention} ${edition.year} convention game`}
         className="w-full min-w-[1100px] border-collapse text-left text-sm print:min-w-0 print:text-[9px]"
       >
-        <thead>
+        <thead className="print:table-header-group">
           <tr className="bg-muted print:bg-transparent">
             <th className="border p-2">Event / profile</th>
             <th className="border p-2">Contact</th>
