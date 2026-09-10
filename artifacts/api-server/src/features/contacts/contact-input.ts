@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { normalizeContactEmailValue } from "@/features/contacts/contact-email-value";
 import { contactSyncStateValues } from "@/features/contacts/contact-types";
 
 export const requiredContactTextSchema = z.string().trim().min(1);
@@ -8,7 +9,7 @@ export const nullableContactTextSchema = z
   .transform((value) => value?.trim() || null);
 export const nullableContactEmailSchema = z
   .union([z.string(), z.null()])
-  .transform((value) => value?.trim().toLowerCase() || null);
+  .transform(normalizeContactEmailValue);
 
 export const contactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),
