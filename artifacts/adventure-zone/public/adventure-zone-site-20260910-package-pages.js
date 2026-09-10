@@ -751,6 +751,13 @@
     .package-dialog { position: fixed; inset: 0; width: min(920px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain; border: 4px solid var(--az-navy); background: var(--az-cream); color: var(--az-navy); box-shadow: 8px 8px 0 var(--az-pink); }
     .package-dialog::backdrop { background: rgba(15,23,41,.82); }
     .package-dialog-close { position: sticky; display: flex; align-items: center; justify-content: center; top: 12px; margin: 12px 12px -60px auto; width: 48px; height: 48px; z-index: 2; background: var(--az-cream); color: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
+    .package-video { width: 100%; aspect-ratio: 16 / 9; background: var(--az-navy); }
+    .package-video iframe { display: block; width: 100%; height: 100%; border: 0; }
+    .video-section { background: var(--az-navy); color: var(--az-cream); scroll-margin-top: 100px; }
+    .video-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+    .video-grid h3 { font-size: 24px; margin: 0 0 16px; }
+    .video-package-link { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--az-yellow); font-weight: 800; }
+    @media (max-width: 767px) { .video-grid { grid-template-columns: minmax(0, 1fr); gap: 32px; } }
     .package-detail-photo { width: 100%; height: clamp(200px, 32vw, 360px); object-fit: cover; }
     .package-detail-body { padding: clamp(20px, 4vw, 40px); }
     .package-detail-body h1, .package-detail-body h2 { margin: 0 0 20px; font-size: clamp(32px, 6vw, 54px); line-height: 1; }
@@ -812,16 +819,30 @@
   }
 
   function packageDefinitions() {
-    return [{ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) },
+    return [{ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Pirate-themed attractions", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) },
       { key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) },
       { key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) }];
+  }
+
+  const packageVideoIds = Object.freeze({
+    "adventure-zone": "MWD0SdAWZpc",
+    "pirates-rebellion": "tgjwa1LvghI",
+    "weekend-warriors": "-xTjCJz9RmI",
+  });
+
+  function packageVideoMarkup(item) {
+    return `<div class="package-video"><iframe src="https://www.youtube.com/embed/${packageVideoIds[item.key]}?rel=0&playsinline=1" title="${item.title} video" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+  }
+
+  function packageVideosMarkup() {
+    return `<section class="section video-section" id="videos"><div class="container"><h2 class="display">See The Fun In Action</h2><div class="video-grid">${packageDefinitions().map(item => `<article><h3 class="display">${item.title}</h3>${packageVideoMarkup(item)}<a class="video-package-link" href="${packagePath(item.key)}">Explore ${item.title} ${icon("arrow")}</a></article>`).join("")}</div></div></section>`;
   }
 
   function packageDetailMarkup(item, standalone = false) {
     const heading = standalone ? "h1" : "h2";
     const lineup = item.lineup.replace('<details class="attraction-lineup"><summary>View Attraction Lineup</summary>', '<section class="package-lineup">').replace('</details>', '</section>');
     return `<div class="package-detail">
-      <img class="package-detail-photo" src="${item.image}" alt="${item.alt}">
+      ${packageVideoMarkup(item)}
       <div class="package-detail-body"><${heading} class="display" id="package-detail-title">${item.title}</${heading}>
       <p>${item.copy}</p><ul>${item.features.map(feature => `<li>${feature}</li>`).join("")}</ul>
       ${item.ammo ? `<p>${item.ammo}</p>` : ""}
@@ -945,6 +966,8 @@
         <span class="marquee-item">${icon("star")}25+ Years of Fun</span>
       </div></section>
 
+      ${packageVideosMarkup()}
+
       <section class="section about" id="about"><div class="container">
         <div class="about-layout">
           <div><div class="tag">${icon("star")}About The Adventure Zone</div><h2 class="display">Built For The<br><span class="pink">Big Day.</span></h2><div class="body-large"><p>The Adventure Zone is a traveling inflatable carnival built for fairs, festivals, rodeos, and community events across the West.</p><p>With nearly three decades in the amusement business and experience at more than 500 events, our crew knows how to bring a full attraction footprint to the field and run it with care.</p><p>Family owned and operated, The Adventure Zone combines personal service with professional standards, experienced staffing, and reliable execution to help make your event safe, successful, and unforgettable.</p></div></div>
@@ -1005,7 +1028,7 @@
         ${formMarkup()}
       </div></div></section>
 
-      <footer class="footer" id="videos"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
+      <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
       <dialog class="package-dialog" aria-labelledby="package-detail-title"><button type="button" class="package-dialog-close" data-package-close aria-label="Close package details">${icon("close")}</button><div class="package-dialog-content"></div></dialog>
@@ -1141,6 +1164,7 @@
       this.packagePreviousOverflow = null;
       this.packageOpener?.focus({ preventScroll: true });
       this.packageOpener = null;
+      this.shadowRoot.querySelector(".package-dialog-content")?.replaceChildren();
     }
 
     setupResizeEvents() {
@@ -1568,4 +1592,5 @@
     customElements.define("adventure-zone-mascot", AdventureZoneMascot);
   }
 })();
+
 
