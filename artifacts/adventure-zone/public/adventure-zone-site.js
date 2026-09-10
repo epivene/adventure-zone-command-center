@@ -746,6 +746,29 @@
       .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
+
+    .package-details-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 22px; padding: 14px 0; color: var(--az-navy); font-weight: 900; border-top: 2px solid var(--az-navy); }
+    .package-dialog { position: fixed; inset: 0; width: min(920px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); margin: auto; padding: 0; overflow: auto; overscroll-behavior: contain; border: 4px solid var(--az-navy); background: var(--az-cream); color: var(--az-navy); box-shadow: 8px 8px 0 var(--az-pink); }
+    .package-dialog::backdrop { background: rgba(15,23,41,.82); }
+    .package-dialog-close { position: sticky; display: flex; align-items: center; justify-content: center; top: 12px; margin: 12px 12px -60px auto; width: 48px; height: 48px; z-index: 2; background: var(--az-cream); color: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
+    .package-detail-photo { width: 100%; height: clamp(200px, 32vw, 360px); object-fit: cover; }
+    .package-detail-body { padding: clamp(20px, 4vw, 40px); }
+    .package-detail-body h1, .package-detail-body h2 { margin: 0 0 20px; font-size: clamp(32px, 6vw, 54px); line-height: 1; }
+    .package-detail-body p, .package-detail-body li { font-size: 16px; line-height: 1.6; }
+    .package-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 22px; margin: 24px 0 36px; }
+    .package-detail-actions a { color: var(--az-navy); font-weight: 800; text-decoration: underline; }
+    .package-lineup .attraction-lineup-content { position: static; width: auto; max-height: none; overflow: visible; margin: 0; padding: 0; border: 0; box-shadow: none; }
+    .package-page { max-width: 1000px; margin: 0 auto; background: var(--az-cream); }
+    .package-page-header { padding: 22px; background: var(--az-navy); }
+    .package-page-header .logo { max-width: 240px; }
+    .package-page .contact { padding: 20px; }
+    @media (max-width: 639px) {
+      .package-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border: 0; box-shadow: none; }
+      .package-detail-actions { align-items: stretch; flex-direction: column; }
+      .package-detail-actions .button { width: 100%; }
+      .package-lineup .attraction-lineup-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+
     .az-site.wix-preview-frame .tube-man-position { display: none; }
 
     @media (max-width: 639px) {
@@ -784,6 +807,30 @@
     }).join("")}</div></div></details>`;
   }
 
+  function packagePath(key) {
+    return "/" + ({ "adventure-zone": "adventure-zone-package", "pirates-rebellion": "pirates-rebellion-package", "weekend-warriors": "warriors-playground-package" })[key];
+  }
+
+  function packageDefinitions() {
+    return [{ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) },
+      { key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) },
+      { key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) }];
+  }
+
+  function packageDetailMarkup(item, standalone = false) {
+    const heading = standalone ? "h1" : "h2";
+    const lineup = item.lineup.replace('<details class="attraction-lineup"><summary>View Attraction Lineup</summary>', '<section class="package-lineup">').replace('</details>', '</section>');
+    return `<div class="package-detail">
+      <img class="package-detail-photo" src="${item.image}" alt="${item.alt}">
+      <div class="package-detail-body"><${heading} class="display" id="package-detail-title">${item.title}</${heading}>
+      <p>${item.copy}</p><ul>${item.features.map(feature => `<li>${feature}</li>`).join("")}</ul>
+      ${item.ammo ? `<p>${item.ammo}</p>` : ""}
+      <p><strong>${item.price} for 1–4 days.</strong> Extended events: additional pricing applies.</p>
+      <p>Our crew handles setup, operation, and teardown. Tell us your location and dates so the booking team can confirm availability and site requirements.</p>
+      <div class="package-detail-actions"><button type="button" class="button" data-package-book="${item.key}">Ask About This Package</button>${standalone ? '<a href="/?section=packages">Compare all packages</a>' : `<a href="${packagePath(item.key)}">Open package page</a>`}</div>
+      <h3 class="display">Possible Attraction Lineup</h3>${lineup}</div></div>`;
+  }
+
   function packageCard({ key, flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
     return `<article class="package-card" data-package-key="${key}">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
@@ -793,7 +840,7 @@
         <p class="package-copy">${copy}</p>
         <ul class="package-features">${features.map((item) => `<li>${icon("check")}${item}</li>`).join("")}</ul>
         ${ammo ? `<span class="ammo">${ammo}</span>` : ""}
-        ${lineup || ""}
+        ${lineup ? `<a class="package-details-link" href="${packagePath(key)}" data-package-open="${key}" aria-haspopup="dialog">View Package &amp; Attractions ${icon("arrow")}</a>` : ""}
         <div class="package-price"><div class="price-label">Flat Rate</div><div class="price display">${price}</div><div class="price-days">For 1–4 Days</div><div class="extended-rate">Extended events: additional pricing applies</div></div>
       </div>
     </article>`;
@@ -919,9 +966,9 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
         <div class="package-grid">
-          ${packageCard({ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
-          ${packageCard({ key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
-          ${packageCard({ key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
+          ${packageDefinitions().map(packageCard).join("")}
+          
+          
         </div>
       </div></section>
 
@@ -961,6 +1008,7 @@
       <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
+      <dialog class="package-dialog" aria-labelledby="package-detail-title"><button type="button" class="package-dialog-close" data-package-close aria-label="Close package details">${icon("close")}</button><div class="package-dialog-content"></div></dialog>
     </div>`;
   }
 
@@ -979,6 +1027,8 @@
       this.teamLayoutTimer = null;
       this.conventionOpen = false;
       this.previousBodyOverflow = "";
+      this.packagePreviousOverflow = null;
+      this.packageOpener = null;
     }
 
     connectedCallback() {
@@ -1011,11 +1061,32 @@
       this.resizeObserver?.disconnect();
       window.clearTimeout(this.teamLayoutTimer);
       if (this.conventionOpen) document.body.style.overflow = this.previousBodyOverflow;
+      this.restorePackageDialog();
     }
 
     bindInteractions() {
       const signal = this.abortController.signal;
       const root = this.shadowRoot;
+      root.querySelectorAll("[data-package-open]").forEach(link => {
+        link.addEventListener("click", event => {
+          if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          if (this.openPackageDialog(link.dataset.packageOpen, link)) event.preventDefault();
+        }, { signal });
+      });
+      const packageDialog = root.querySelector(".package-dialog");
+      root.querySelector("[data-package-close]").addEventListener("click", () => packageDialog.close(), { signal });
+      packageDialog.addEventListener("close", () => this.restorePackageDialog(), { signal });
+      packageDialog.addEventListener("click", event => {
+        if (event.target === packageDialog) packageDialog.close();
+        const booking = event.target.closest("[data-package-book]");
+        if (booking) {
+          this.selectPackage(booking.dataset.packageBook);
+          this.restorePackageDialog();
+          packageDialog.close();
+          this.scrollToId("contact");
+          root.querySelector('[name="name"]').focus({ preventScroll: true });
+        }
+      }, { signal });
       const menuButton = root.querySelector(".menu-toggle");
       menuButton.addEventListener("click", () => this.toggleMenu(), { signal });
       root.querySelectorAll('a[href^="#"]').forEach((link) => {
@@ -1041,6 +1112,35 @@
           this.emitResize();
         });
       }, { signal }));
+    }
+
+    selectPackage(key) {
+      const item = packageDefinitions().find(item => item.key === key);
+      const select = this.shadowRoot.querySelector('[name="packageInterest"]');
+      if (item && select) select.value = item.title;
+    }
+
+    openPackageDialog(key, opener) {
+      const item = packageDefinitions().find(item => item.key === key);
+      const dialog = this.shadowRoot.querySelector(".package-dialog");
+      if (!item || !dialog || typeof dialog.showModal !== "function") return false;
+      this.closeConventionWelcome();
+      if (dialog.open) return true;
+      dialog.querySelector(".package-dialog-content").innerHTML = packageDetailMarkup(item);
+      this.packageOpener = opener;
+      this.packagePreviousOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      dialog.showModal();
+      dialog.querySelector("[data-package-close]").focus();
+      return true;
+    }
+
+    restorePackageDialog() {
+      if (this.packagePreviousOverflow === null) return;
+      document.body.style.overflow = this.packagePreviousOverflow;
+      this.packagePreviousOverflow = null;
+      this.packageOpener?.focus({ preventScroll: true });
+      this.packageOpener = null;
     }
 
     setupResizeEvents() {
@@ -1431,6 +1531,36 @@
     }
   }
 
+  class AdventureZonePackage extends AdventureZoneSite {
+    static get observedAttributes() { return ["package-key"]; }
+    attributeChangedCallback() {
+      if (this.isConnected) { this.disconnectedCallback(); this.connectedCallback(); }
+    }
+    connectedCallback() {
+      const path = window.location.pathname.replace(/\/$/, "");
+      const key = this.getAttribute("package-key");
+      const item = packageDefinitions().find(item => key ? item.key === key : packagePath(item.key) === path);
+      if (!item) {
+        this.shadowRoot.innerHTML = `<style>${styles}</style><div class="az-site package-page"><p>Please choose a package from <a href="/?section=packages">The Adventure Zone homepage</a>.</p></div>`;
+        this.setupResizeEvents();
+        return;
+      }
+      this.shadowRoot.innerHTML = `<style>${styles}</style><div class="az-site package-page"><header class="package-page-header"><a href="/" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a></header>${packageDetailMarkup(item, true)}<section class="contact" id="contact"><h2 class="display">Ask About Your Event</h2>${formMarkup()}</section></div>`;
+      this.abortController = new AbortController();
+      const signal = this.abortController.signal;
+      this.selectPackage(item.key);
+      this.shadowRoot.querySelector('[data-package-book]').addEventListener('click', () => {
+        this.scrollToId('contact');
+        this.shadowRoot.querySelector('[name="name"]').focus({ preventScroll: true });
+      }, { signal });
+      this.shadowRoot.querySelector('.contact-form').addEventListener('submit', event => this.submitInquiry(event), { signal });
+      this.setupResizeEvents();
+    }
+  }
+  if (!customElements.get("adventure-zone-package")) {
+    customElements.define("adventure-zone-package", AdventureZonePackage);
+  }
+
   if (!customElements.get("adventure-zone-site")) {
     customElements.define("adventure-zone-site", AdventureZoneSite);
   }
@@ -1438,3 +1568,4 @@
     customElements.define("adventure-zone-mascot", AdventureZoneMascot);
   }
 })();
+
