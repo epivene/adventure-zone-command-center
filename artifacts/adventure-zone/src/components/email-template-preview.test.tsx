@@ -28,12 +28,12 @@ describe("email preview fitting", () => {
   it("fits the full email to a phone and updates when its container changes", () => {
     const { unmount } = render(<EmailTemplatePreview title="Review" html="<p>Email</p>" />);
     const frame = screen.getByTitle("Review") as HTMLIFrameElement;
-    expect(frame.style.width).toBe("760px");
-    expect(frame.style.transform).toBe("scale(0.4)");
+    expect(frame.style.width).toBe("700px");
+    expect(frame.style.transform).toBe("scale(0.4342857142857143)");
     expect(frame.parentElement?.style.width).toBe("304px");
-    expect(frame.style.height).toBe("250%");
+    expect(frame.style.height).toBe("230.26315789473685%");
     act(() => { width = 570; resize(); });
-    expect(frame.style.transform).toBe("scale(0.75)");
+    expect(frame.style.transform).toBe("scale(0.8142857142857143)");
     act(() => { width = 1200; resize(); });
     expect(frame.style.transform).toBe("scale(1)");
     unmount();
@@ -46,10 +46,10 @@ describe("email preview fitting", () => {
     const document = frame.srcdoc;
     fireEvent.click(screen.getByRole("button", { name: "Full size" }));
     expect(frame.style.transform).toBe("scale(1)");
-    expect(frame.parentElement?.style.width).toBe("760px");
+    expect(frame.parentElement?.style.width).toBe("700px");
     expect(screen.getByText("Swipe sideways to see the rest.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Fit to screen" }));
-    expect(frame.style.transform).toBe("scale(0.4)");
+    expect(frame.style.transform).toBe("scale(0.4342857142857143)");
     expect(frame.srcdoc).toBe(document);
   });
 
