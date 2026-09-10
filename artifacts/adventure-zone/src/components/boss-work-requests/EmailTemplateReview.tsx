@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ExternalLink, Monitor, Smartphone } from "lucide-react";
-import { buildEmailPreview } from "@/lib/email-preview";
+import { Check, ExternalLink } from "lucide-react";
+import { EmailTemplatePreview } from "@/components/email-template-preview";
 import { decideEmailTemplate } from "@/features/boss-work-requests/boss-work-request-api";
 import type {
   BossWorkRequestDetail,
@@ -32,7 +32,7 @@ export function EmailTemplateReview({
   if (!selected) return <p>Email previews are unavailable.</p>;
 
   return (
-    <div className="grid gap-5">
+    <div className="grid min-w-0 gap-4">
       <section className="rounded-xl border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -86,7 +86,6 @@ function ReviewItem({
   const [verified, setVerified] = useState<Set<string>>(
     () => new Set(review.verifiedLinks.map((item) => item.href)),
   );
-  const [previewWidth, setPreviewWidth] = useState<"desktop" | "mobile">("desktop");
   const [working, setWorking] = useState(false);
   const [error, setError] = useState("");
   const finished = review.decision !== "pending";
@@ -128,34 +127,18 @@ function ReviewItem({
   }
 
   return (
-    <div className="grid gap-5">
-      <section className="rounded-xl border bg-card p-4 sm:p-6">
+    <div className="grid min-w-0 gap-4">
+      <section className="min-w-0 rounded-xl border bg-card p-3 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-primary">{review.templateNameSnapshot}</p>
             <h2 className="mt-2 text-lg font-bold">{review.subjectSnapshot || "(No subject)"}</h2>
           </div>
-          <div className="flex rounded-lg border p-1">
-            <button
-              type="button"
-              aria-label="Desktop preview"
-              onClick={() => setPreviewWidth("desktop")}
-              className={`rounded-md p-2 ${previewWidth === "desktop" ? "bg-primary text-primary-foreground" : ""}`}
-            ><Monitor className="h-4 w-4" /></button>
-            <button
-              type="button"
-              aria-label="Mobile preview"
-              onClick={() => setPreviewWidth("mobile")}
-              className={`rounded-md p-2 ${previewWidth === "mobile" ? "bg-primary text-primary-foreground" : ""}`}
-            ><Smartphone className="h-4 w-4" /></button>
-          </div>
         </div>
-        <div className="mt-4 overflow-auto rounded-xl border bg-slate-100 p-2 sm:p-4">
-          <div className={`mx-auto overflow-hidden rounded-lg bg-white transition-all ${previewWidth === "mobile" ? "max-w-[390px]" : "max-w-[760px]"}`}>
-            {review.bodyFormatSnapshot === "html"
-              ? <iframe title="Email template preview" sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={buildEmailPreview(review.bodySnapshot)} className="min-h-[38rem] w-full" />
-              : <pre className="min-h-64 whitespace-pre-wrap p-5 font-sans text-sm text-slate-900">{review.bodySnapshot}</pre>}
-          </div>
+        <div className="mt-4 min-w-0 overflow-hidden rounded-xl border">
+          {review.bodyFormatSnapshot === "html"
+            ? <EmailTemplatePreview title="Email template preview" html={review.bodySnapshot} />
+            : <pre className="min-h-64 whitespace-pre-wrap break-words p-4 font-sans text-sm">{review.bodySnapshot}</pre>}
         </div>
       </section>
 

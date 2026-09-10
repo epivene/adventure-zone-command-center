@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardPenLine, MailCheck, Plus, RefreshCw, X } from "lucide-react";
 import { apiFetch } from "@/lib/auth-token";
-import { buildEmailPreview } from "@/lib/email-preview";
+import { EmailTemplatePreview } from "@/components/email-template-preview";
 import { Link } from "wouter";
 import { ConventionPlanningAnswers } from "@/components/boss-work-requests/ConventionPlanningForm";
 import { OwnerConventionReview } from "@/components/boss-work-requests/OwnerConventionReview";
@@ -122,7 +122,7 @@ export default function DaveRequestsPage() {
                         )}
                         <div className="overflow-hidden rounded-lg border bg-white">
                           {review.bodyFormatSnapshot === "html"
-                            ? <iframe title={`Reviewed email ${index + 1}`} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={buildEmailPreview(review.bodySnapshot)} className="min-h-[30rem] w-full" />
+                            ? <EmailTemplatePreview title={`Reviewed email ${index + 1}`} html={review.bodySnapshot} />
                             : <pre className="whitespace-pre-wrap p-4 font-sans text-sm text-slate-900">{review.bodySnapshot}</pre>}
                         </div>
                       </div>
