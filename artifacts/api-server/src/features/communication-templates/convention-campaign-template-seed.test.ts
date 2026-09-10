@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a0847e159516da1",
+        gmailMessageId: "1a089a09c456995c",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a084a2f40feb499",
+        gmailMessageId: "1a089a129b007ebc",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a084a30b8f72f15",
+        gmailMessageId: "1a089a13d2f04da6",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a084a31eb26862c",
+        gmailMessageId: "1a089a156c1641b0",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a084a3353ce3f92",
+        gmailMessageId: "1a089a16eaf9672a",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a08975b5738b040",
+        gmailMessageId: "1a089a1d92113a2f",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a08975cc9c100c8",
+        gmailMessageId: "1a089a203ec8a9fb",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -64,7 +64,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-after-convention-close-v4");
+      expect(template.templateVersion).toBe("2026-09-convention-banner-links-v5");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
@@ -74,6 +74,28 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate).toContain("background:#0f1729");
       expect(template.bodyTemplate).toContain("background:#ffca05");
       expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
+      expect(template.bodyTemplate).not.toMatch(
+        /what you’re planning|your plans for 2027|begin planning for 2027|already know your dates|tell us a little about your event/i,
+      );
+    }
+  });
+
+  it("uses an angled carnival banner and the right trailer destination for each campaign stage", () => {
+    for (const template of conventionCampaignTemplates) {
+      expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).toContain("border-right:14px solid #ff0a8a");
+
+      const trailer = template.bodyTemplate.match(
+        /<a href="([^"]+)"[^>]*><img src="https:\/\/adventure-zone-command-center-1\.onrender\.com\/assets\/adventure-zone-mini-trailer\.gif"[^>]*alt="([^"]+)"/,
+      );
+      expect(trailer).not.toBeNull();
+      if (template.code.startsWith("convention_after_")) {
+        expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/?welcome=convention");
+        expect(trailer?.[2]).toBe("The Adventure Zone mini trailer — tap to learn more!");
+      } else {
+        expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/");
+        expect(trailer?.[2]).toBe("The Adventure Zone mini trailer — tap to see more!");
+      }
     }
   });
 
@@ -207,7 +229,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-after-convention-close-v4",
+      template_version: "2026-09-convention-banner-links-v5",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
