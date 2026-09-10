@@ -84,6 +84,21 @@ describe("Dave profile and contact pages", () => {
     expect(screen.queryByRole("button", { name: /Add event|Create contract/i })).not.toBeInTheDocument();
   });
 
+  it("shows the linked Gmail conversation count instead of a hard-coded zero", async () => {
+    mocks.bossGet.mockImplementation(async (path: string) => {
+      if (path.includes("/google-workspace/profiles/")) {
+        return {
+          conversations: [{ threadId: "current-thread" }],
+          historicalConversations: [{ threadId: "older-thread" }],
+        };
+      }
+      return { profile };
+    });
+    render(<BossProfilePage profileId={profileId} />);
+
+    expect(await screen.findByRole("button", { name: /2 Emails/ })).toBeInTheDocument();
+  });
+
   it("lets Dave edit and save an event profile", async () => {
     mocks.bossGet.mockResolvedValue({ profile });
     render(<BossProfilePage profileId={profileId} />);
