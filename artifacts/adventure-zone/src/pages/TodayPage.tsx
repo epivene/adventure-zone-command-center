@@ -10,6 +10,7 @@ import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scou
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
 import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
 import { deriveTodayFocus } from "@/features/today/today-focus";
+import { OutreachPlanner } from "@/components/today/outreach-planner";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
@@ -282,6 +283,8 @@ export default function TodayPage() {
           </details>
         ) : null}
       </section>
+
+      <OutreachPlanner />
 
       {visibleRouteWarningCount > 0 ? (
         <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-sm" aria-label="Needs attention">

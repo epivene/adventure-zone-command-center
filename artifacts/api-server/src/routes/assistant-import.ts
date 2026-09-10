@@ -1,3 +1,5 @@
+import { fingerprint } from "@/features/outreach-planner/outreach-capacity-evidence";
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { Router, type IRouter } from "express";
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
@@ -36,6 +38,16 @@ router.use((req, res, next) => {
   if (!isEventProfileImport && !isProfileContactUpsert && !isProfileSearch) {
     res.status(404).json({ error: "Not found" });
     return;
+  }
+  if (isEventProfileImport) {
+    const booking = req.body?.booking;
+    const submittedFacts = booking ? Object.fromEntries(["enabled", "name", "startsAt", "endsAt", "status", "travelLegId"].map((key) => [key, booking[key] ?? null])) : null;
+    // Server-only marker set after token authentication, including the new-profile fallback.
+    res.locals.assistantImportProvenance = {
+      integration: "authenticated-assistant-import", route: "POST /assistant-import/event-profiles",
+      requestId: typeof req.headers["x-request-id"] === "string" ? req.headers["x-request-id"].slice(0, 200) : null,
+      receivedAt: new Date().toISOString(), payloadHash: fingerprint(submittedFacts), submittedFacts,
+    };
   }
   next();
 });
@@ -77,7 +89,7 @@ router.post("/profile-contacts", async (req, res): Promise<void> => {
 
   try {
     const now = new Date();
-    const result = await db.transaction(async (transaction) => {
+    const result = await reconcileCapacityFacts(db, "assistant-history-import",async (transaction) => {
       const [organization] = await transaction
         .select({ id: organizations.id })
         .from(organizations)
@@ -236,8 +248,9 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
     const importedContacts = Array.isArray(req.body?.contacts) ? req.body.contacts : [];
     const importedBooking = req.body?.booking ?? null;
     const now = new Date();
+    const provenance = res.locals.assistantImportProvenance;
 
-    const result = await db.transaction(async (transaction) => {
+    const result = await reconcileCapacityFacts(db, "assistant-history-import",async (transaction) => {
       const renameExisting = requestedProfileId && req.body?.renameExisting === true;
       const organizationValues: Record<string, unknown> = {
         ...(requestedProfileId && !renameExisting ? {} : { name }),
@@ -455,7 +468,7 @@ router.post("/event-profiles", async (req, res, next): Promise<void> => {
       }
 
       return { bookingId, contactId };
-    });
+    }, {provenance});
 
     res.json({
       ok: true,

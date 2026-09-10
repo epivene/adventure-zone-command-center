@@ -11,7 +11,7 @@ type DrizzleDatabase = typeof database;
 export class RouteDriveTimeEstimator implements DriveTimeEstimator {
   private readonly estimator: RoutingEstimator;
 
-  constructor(database: DrizzleDatabase) {
+  constructor(database: DrizzleDatabase, private readonly requireFresh = false) {
     this.estimator = new RoutingEstimator(
       new OsrmRoutingProvider(),
       new DrizzleRoutingCacheStore(database),
@@ -19,7 +19,8 @@ export class RouteDriveTimeEstimator implements DriveTimeEstimator {
   }
 
   async estimateMinutes(from: DrivePoint, to: DrivePoint): Promise<number | null> {
-    const estimate = await this.estimator.estimate(from, to, { preferLive: false });
+    const estimate = await this.estimator.estimate(from, to, { preferLive: this.requireFresh });
+    if (this.requireFresh && estimate?.source !== "live") return null;
     return estimate ? Math.round(estimate.minutes) : null;
   }
 }

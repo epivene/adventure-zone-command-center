@@ -1,3 +1,4 @@
+import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
@@ -77,6 +78,7 @@ router.get("/bookings", async (req, res): Promise<void> => {
     const bookings = await bookingRepo().listBookings();
     res.json({ bookings });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to list bookings");
     res.status(500).json({ error: "Failed to list bookings" });
   }
@@ -100,6 +102,7 @@ router.post("/bookings", async (req, res): Promise<void> => {
     res.locals.operationalCalendarBookingId = booking.id;
     res.status(201).json({ ok: true, bookingId: booking.id });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to create booking");
     res.status(500).json({ ok: false, error: "Could not create booking" });
   }
@@ -115,6 +118,7 @@ router.post("/bookings/complete-follow-up", async (req, res): Promise<void> => {
     }
     res.json(result ?? { ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to complete follow-up");
     res.status(500).json({ ok: false, error: "Could not complete follow-up" });
   }
@@ -134,6 +138,7 @@ router.post("/bookings/configure-packages", async (req, res): Promise<void> => {
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to configure packages");
     res.status(500).json({ ok: false, error: "The package setup could not be saved. Try again." });
   }
@@ -153,6 +158,7 @@ router.post("/bookings/add-special-request", async (req, res): Promise<void> => 
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to add special request");
     res.status(500).json({ ok: false, error: "The special request could not be added. Try again." });
   }
@@ -172,6 +178,7 @@ router.post("/bookings/decide-special-request", async (req, res): Promise<void> 
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to decide special request");
     res.status(500).json({ ok: false, error: "The request decision could not be saved. Try again." });
   }
@@ -195,6 +202,7 @@ router.post("/bookings/configure-resources", async (req, res): Promise<void> => 
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to configure resources");
     res.status(500).json({ ok: false, error: "The resource assignments could not be saved. Try again." });
   }
@@ -218,6 +226,7 @@ router.post("/bookings/acknowledge-conflict", async (req, res): Promise<void> =>
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to acknowledge conflict");
     res.status(500).json({ ok: false, error: "The conflict override could not be saved. Try again." });
   }
@@ -250,6 +259,7 @@ router.get("/bookings/:id", async (req, res): Promise<void> => {
       legAssignment,
     });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to get booking");
     res.status(500).json({ error: "Failed to get booking" });
   }
@@ -288,6 +298,7 @@ router.patch("/bookings/:id", async (req, res): Promise<void> => {
     }
     res.json({ ok: true });
   } catch (err) {
+    if (err instanceof OutreachError) { res.status(err.status).json({ok:false,error:err.message}); return; }
     req.log.error({ err }, "Failed to update booking");
     res.status(500).json({ ok: false, error: "Could not update booking" });
   }

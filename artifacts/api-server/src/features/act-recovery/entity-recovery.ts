@@ -1,3 +1,5 @@
+import { allocationEnabled, activeAllocationTransactions } from "@/features/outreach-planner/outreach-allocation";
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
@@ -104,6 +106,7 @@ export class ActEntityRecovery {
   }
 
   async recoverEntity(candidate: RecoveryCandidate): Promise<RecoveryApplyResult> {
+    if(allocationEnabled() && !activeAllocationTransactions.has(this.database)) return reconcileCapacityFacts(this.database,"act-history-import",async tx=>new ActEntityRecovery(tx as unknown as DrizzleDatabase,new ActRecoverySourceLinkResolver(tx as unknown as DrizzleDatabase)).recoverEntity(candidate));
     if (candidate.streamType === "opportunity") return this.recoverOpportunity(candidate);
     if (candidate.streamType === "group") return this.recoverGroup(candidate);
 

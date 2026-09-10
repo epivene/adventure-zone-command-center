@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import {
   and,
   asc,
@@ -349,7 +350,7 @@ implements BookingRelationshipRepository {
     input: ChangeBookingPlaceInput,
     now: Date,
   ): Promise<BookingRelationshipWriteResult<ChangeBookingPlaceResult>> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const locked = await lockBookingRelationshipParents(transaction, {
         bookingId: input.bookingId,
         additionalOrganizationIds: [input.organizationId],
@@ -441,7 +442,7 @@ implements BookingRelationshipRepository {
     input: ReplaceBookingPeopleInput,
     now: Date,
   ): Promise<BookingRelationshipWriteResult<BookingPersonSelection[]>> {
-    return this.database.transaction(async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => {
       const selectedIds = input.people.map(({ contactId }) => contactId);
       const locked = await lockBookingRelationshipParents(transaction, {
         bookingId: input.bookingId,

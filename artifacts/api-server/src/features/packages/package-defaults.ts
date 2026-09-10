@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -193,5 +194,5 @@ export const DEFAULT_PACKAGE_TEMPLATE_SEED_SQL = `
 export async function ensureDefaultPackageTemplates(
   database: DrizzleDatabase,
 ): Promise<void> {
-  await database.execute(sql.raw(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL));
+  await reconcileCapacityFacts(database,"package-inventory",async tx=>{ await tx.execute(sql.raw(DEFAULT_PACKAGE_TEMPLATE_SEED_SQL)); });
 }

@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -89,7 +90,7 @@ export class DrizzleResourceIntelligenceSettingsRepository {
     const parsed = resourceInputSchema.parse(input);
     const base = await this.baseRepository.upsertResource(parsed, actorId);
 
-    await this.database.execute(sql`
+    await reconcileCapacityFacts(this.database,"resource-inventory",async tx=>tx.execute(sql`
       update resources
       set
         package_count_category = ${parsed.packageCountCategory},
@@ -101,7 +102,7 @@ export class DrizzleResourceIntelligenceSettingsRepository {
         inspection_identity_notes = ${parsed.inspectionIdentityNotes},
         updated_at = now()
       where id = ${base.id}::uuid
-    `);
+    `));
 
     const current = rowsOf<IntelligenceRow>(
       await this.database.execute(sql`

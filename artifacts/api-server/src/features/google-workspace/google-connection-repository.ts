@@ -1,3 +1,4 @@
+import { rawCalendarFactQuery } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
 import {
@@ -215,7 +216,7 @@ export class PostgresGoogleConnectionRepository {
     // tests and integrations; the new role-aware shape is isolated to David's
     // operational-calendar connection.
     const result = connectionRole === "workspace"
-      ? await this.pool.query(
+      ? await rawCalendarFactQuery(this.pool,
           `WITH upserted AS (
              INSERT INTO google_workspace_connections (
                account_email, encrypted_refresh_token, granted_scopes, google_subject,
@@ -241,7 +242,7 @@ export class PostgresGoogleConnectionRepository {
            ) SELECT * FROM upserted`,
           [email, encryptedRefreshToken, JSON.stringify(grantedScopes), googleSubject, input.now],
         )
-      : await this.pool.query(
+      : await rawCalendarFactQuery(this.pool,
           `WITH upserted AS (
              INSERT INTO google_workspace_connections (
                account_email, role, operational_calendar_id,
@@ -439,7 +440,7 @@ export class PostgresGoogleConnectionRepository {
   async markReauthorizationRequired(errorCode: string, connectionRole: GoogleConnectionRole = "workspace"): Promise<void> {
     const code = errorCode.trim() || "invalid_grant";
     if (connectionRole === "workspace") {
-      await this.pool.query(
+      await rawCalendarFactQuery(this.pool,
         `WITH changed AS (
            UPDATE google_workspace_connections
               SET status = 'reauthorization_required', last_error_code = $1, updated_at = now()
@@ -453,7 +454,7 @@ export class PostgresGoogleConnectionRepository {
       );
       return;
     }
-    await this.pool.query(
+    await rawCalendarFactQuery(this.pool,
       `WITH changed AS (
          UPDATE google_workspace_connections
             SET status = 'reauthorization_required', last_error_code = $1, updated_at = now()
@@ -472,7 +473,7 @@ export class PostgresGoogleConnectionRepository {
     const where = connectionRole === "workspace"
       ? "status <> 'disconnected' AND (role = 'workspace' OR role IS NULL)"
       : "status <> 'disconnected' AND role = 'operational_calendar'";
-    await this.pool.query(
+    await rawCalendarFactQuery(this.pool,
       `WITH changed AS (
          UPDATE google_workspace_connections
             SET status = 'disconnected', disconnected_at = $1, updated_at = $1

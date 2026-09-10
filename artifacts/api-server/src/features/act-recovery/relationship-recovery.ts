@@ -1,3 +1,5 @@
+import { allocationEnabled, activeAllocationTransactions } from "@/features/outreach-planner/outreach-allocation";
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as applicationDatabase } from "@/db/client";
@@ -29,6 +31,7 @@ export class ActRelationshipRecovery {
   }
 
   async recoverRelationship(candidate: RecoveryCandidate): Promise<RecoveryApplyResult> {
+    if(allocationEnabled() && !activeAllocationTransactions.has(this.database)) return reconcileCapacityFacts(this.database,"act-history-import",async tx=>new ActRelationshipRecovery(tx as unknown as DrizzleDatabase,new ActRecoverySourceLinkResolver(tx as unknown as DrizzleDatabase)).recoverRelationship(candidate));
     const resolved = await this.resolver.resolveRelationship(candidate.sourceRecordId);
     if (resolved.kind === "invalid") {
       return {

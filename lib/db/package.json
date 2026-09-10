@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./outreach-planner-schema": "./src/outreach-planner-schema.ts",
     "./migrations": "./src/migrations.ts",
     "./business-drive-migrations": "./src/business-drive-migrations.ts",
     "./schema": "./src/schema/index.ts",

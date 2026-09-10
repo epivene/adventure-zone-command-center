@@ -7,6 +7,7 @@ import type {
   OutreachCompletion,
 } from "@/features/opportunity-email/opportunity-email-types";
 import { FollowUpAfterSend } from "./follow-up-after-send";
+import { OutreachDraftReviewControl, useOutreachPlannerEnabled } from "@/components/today/outreach-planner";
 
 type Props = {
   draft: OpportunityEmailDraft;
@@ -60,6 +61,10 @@ export function OpportunityDraftComposer({
   const [followUpReferenceAt, setFollowUpReferenceAt] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reviewApproved, setReviewApproved] = useState(false);
+  const outreachReviewState = useOutreachPlannerEnabled();
+  const outreachReviewEnabled = outreachReviewState === true;
+  const outreachReviewChecking = outreachReviewState === null;
 
   useEffect(() => {
     setCurrentDraft(draft);
@@ -69,7 +74,10 @@ export function OpportunityDraftComposer({
 
   useEffect(() => {
     setFollowUpReferenceAt(null);
+    setReviewApproved(false);
   }, [draft.id]);
+
+  const dirty = subject !== currentDraft.subject || body !== currentDraft.body;
 
   const statusText = useMemo(() => {
     if (currentDraft.state === "scheduled" && currentDraft.scheduledFor) {
@@ -219,15 +227,23 @@ export function OpportunityDraftComposer({
 
       <div className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_auto] sm:items-end">
         <label className="grid gap-1 text-sm font-semibold">
-          Schedule date & time
+          Schedule date &amp; time ({Intl.DateTimeFormat().resolvedOptions().timeZone || "your device timezone"})
           <input aria-label="Schedule date and time" className="rounded-lg border border-slate-300 px-3 py-2 font-normal" type="datetime-local" value={scheduledFor} onChange={(event) => setScheduledFor(event.target.value)} />
         </label>
-        <button className="button-secondary" disabled={busy !== null} type="button" onClick={() => void schedule()}>Schedule</button>
+        <button className="button-secondary" disabled={busy !== null || outreachReviewChecking || (outreachReviewEnabled && (dirty || !reviewApproved))} title={outreachReviewEnabled ? !reviewApproved ? "Review and approve the exact final content first." : dirty ? "Save draft changes before scheduling." : undefined : undefined} type="button" onClick={() => void schedule()}>Schedule</button>
       </div>
+
+      {outreachReviewEnabled ? <OutreachDraftReviewControl
+        content={{ to: currentDraft.recipientEmail, subject: currentDraft.subject, body: currentDraft.body }}
+        dirty={dirty}
+        draftId={currentDraft.id}
+        kind="opportunity_email"
+        onApprovalChange={setReviewApproved}
+      /> : null}
 
       <div className="flex flex-wrap justify-end gap-2">
         <button className="button-secondary" disabled={busy !== null} type="button" onClick={() => void save()}>{busy === "save" ? "Saving…" : "Save Draft"}</button>
-        <button className="button-primary" disabled={busy !== null} type="button" onClick={() => void sendNow()}>{busy === "send" ? "Sending…" : "Send"}</button>
+        <button className="button-primary" disabled={busy !== null || outreachReviewChecking || (outreachReviewEnabled && (dirty || !reviewApproved))} title={outreachReviewEnabled ? !reviewApproved ? "Review and approve the exact final content first." : dirty ? "Save draft changes before sending." : undefined : undefined} type="button" onClick={() => void sendNow()}>{busy === "send" ? "Sending…" : "Send"}</button>
       </div>
 
       {followUpReferenceAt ? (

@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -187,7 +188,8 @@ export class OperationalCalendarLinkRepository {
     reservedEndsAt: Date;
     syncedAt: Date;
   }): Promise<OperationalCalendarLink> {
-    const [row] = await this.db.insert(googleOperationalCalendarLinks).values({
+    return reconcileCapacityFacts(this.db,"calendar-sync",async tx => {
+    const [row] = await tx.insert(googleOperationalCalendarLinks).values({
       connectionId: input.connectionId,
       calendarId: input.calendarId,
       googleEventId: input.googleEventId,
@@ -221,12 +223,15 @@ export class OperationalCalendarLinkRepository {
     }).returning();
     if (!row) throw new Error("GOOGLE_OPERATIONAL_CALENDAR_LINK_SAVE_FAILED");
     return toLink(row);
+    });
   }
 
   async recordSyncError(input: { linkId: string; errorCode: string; now: Date }): Promise<void> {
-    await this.db.update(googleOperationalCalendarLinks)
+    await reconcileCapacityFacts(this.db,"calendar-sync",async tx => {
+    await tx.update(googleOperationalCalendarLinks)
       .set({ lastErrorCode: input.errorCode, updatedAt: input.now })
       .where(eq(googleOperationalCalendarLinks.id, input.linkId));
+    });
   }
 
   async createReview(input: {
@@ -303,7 +308,7 @@ export class OperationalCalendarLinkRepository {
     bookingId?: string;
     reviewedBy: string;
   }): Promise<{ state: "accepted"; bookingId: string; created: boolean }> {
-    return this.db.transaction(async (tx) => {
+    return reconcileCapacityFacts(this.db, "operational-calendar-link",async (tx) => {
       const [review] = await tx.select().from(googleOperationalCalendarReviews)
         .where(eq(googleOperationalCalendarReviews.id, input.reviewId))
         .limit(1)

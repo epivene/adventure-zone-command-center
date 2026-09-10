@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { asc, eq, sql } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
@@ -87,7 +88,7 @@ router.post("/settings/resource-source-candidates/:candidateId/link", async (req
     return;
   }
 
-  await db.transaction(async (transaction) => {
+  await reconcileCapacityFacts(db,"resource-inventory",async (transaction) => {
     await transaction.execute(sql`
       update resources
       set

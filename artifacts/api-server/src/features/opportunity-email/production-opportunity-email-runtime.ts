@@ -1,7 +1,11 @@
+import { createProductionOutreachDispatch } from "../outreach-planner/production-outreach-dispatch";
+import { replayActualOutreach } from "../outreach-planner/outreach-events";
 import { createOpportunityEmailRuntime } from "./opportunity-email-runtime";
 import type { ReadyToSendSource } from "./ready-to-send-service";
 
-type SharedRuntimeDependencies = Parameters<typeof createOpportunityEmailRuntime>[0];
+type SharedRuntimeDependencies = Parameters<
+  typeof createOpportunityEmailRuntime
+>[0];
 
 export function assembleProductionOpportunityEmailRuntime(input: {
   emailService: SharedRuntimeDependencies["emailService"];
@@ -103,8 +107,11 @@ export async function createProductionOpportunityEmailRuntime() {
   const contextSources = new ProductionDraftContextSources({
     opportunities,
     profiles: {
-      get: (organizationId: string, eventYear: number, bookingId: string | null) =>
-        profiles.getProfile(organizationId, eventYear, bookingId),
+      get: (
+        organizationId: string,
+        eventYear: number,
+        bookingId: string | null,
+      ) => profiles.getProfile(organizationId, eventYear, bookingId),
     },
     recipients: {
       list: (organizationId: string, eventYear: number) =>
@@ -129,14 +136,18 @@ export async function createProductionOpportunityEmailRuntime() {
         const [row] = await db
           .select({ value: count() })
           .from(bookingOpportunityEmailState)
-          .where(and(
-            eq(bookingOpportunityEmailState.opportunityId, opportunityId),
-            eq(bookingOpportunityEmailState.state, "sent"),
-          ));
+          .where(
+            and(
+              eq(bookingOpportunityEmailState.opportunityId, opportunityId),
+              eq(bookingOpportunityEmailState.state, "sent"),
+            ),
+          );
         return Number(row?.value ?? 0);
       },
       async currentDraftId(opportunityId: string) {
-        return (await emails.getCurrentForOpportunity(opportunityId))?.id ?? null;
+        return (
+          (await emails.getCurrentForOpportunity(opportunityId))?.id ?? null
+        );
       },
     },
     availability,
@@ -155,6 +166,10 @@ export async function createProductionOpportunityEmailRuntime() {
     activity,
   });
   const emailService = new OpportunityEmailService({
+    dispatchSafety: createProductionOutreachDispatch(db),
+    outreachEvents: {
+      replay: (opportunityId) => replayActualOutreach(db, opportunityId),
+    },
     contextResolver,
     emailRepository: emails,
     draftGenerator: writer,
@@ -181,12 +196,15 @@ type ProductionOpportunityEmailRuntime = Awaited<
   ReturnType<typeof createProductionOpportunityEmailRuntime>
 >;
 
-let productionRuntimePromise: Promise<ProductionOpportunityEmailRuntime> | null = null;
+let productionRuntimePromise: Promise<ProductionOpportunityEmailRuntime> | null =
+  null;
 
 export function getProductionOpportunityEmailRuntime(): Promise<ProductionOpportunityEmailRuntime> {
-  productionRuntimePromise ??= createProductionOpportunityEmailRuntime().catch((error) => {
-    productionRuntimePromise = null;
-    throw error;
-  });
+  productionRuntimePromise ??= createProductionOpportunityEmailRuntime().catch(
+    (error) => {
+      productionRuntimePromise = null;
+      throw error;
+    },
+  );
   return productionRuntimePromise;
 }

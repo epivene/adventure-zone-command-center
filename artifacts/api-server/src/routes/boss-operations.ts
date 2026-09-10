@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { and, eq, isNull } from "drizzle-orm";
@@ -79,7 +80,7 @@ router.get("/boss/legs", requireBoss, async (_req, res) => {
 router.patch("/boss/legs/:legId", requireBoss, async (req, res): Promise<void> => {
   const legId = routeId(req.params.legId), value = legPatch.safeParse(req.body); if (!z.string().uuid().safeParse(legId).success || !value.success) { res.status(400).json({ error: value.success ? "Invalid leg ID." : value.error.issues[0]?.message ?? "Review leg changes." }); return; }
   // sortOrder is intentionally not writable here: unique ordered legs must be reordered atomically.
-  const [leg] = await db.update(travelLegs).set({ ...value.data, updatedAt: new Date() }).where(eq(travelLegs.id, legId)).returning(); if (!leg) { res.status(404).json({ error: "Leg not found." }); return; } res.json({ leg });
+  const [leg] = await reconcileCapacityFacts(db,"resource-inventory",async tx=>tx.update(travelLegs).set({ ...value.data, updatedAt: new Date() }).where(eq(travelLegs.id, legId)).returning()); if (!leg) { res.status(404).json({ error: "Leg not found." }); return; } res.json({ leg });
 });
 router.put("/boss/bookings/:bookingId/leg", requireBoss, async (req, res): Promise<void> => {
   const bookingId = routeId(req.params.bookingId), value = legReassignment.safeParse(req.body);

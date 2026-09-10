@@ -522,6 +522,80 @@ const migrationFiles = [
     ) AS ready`,
   },
   {
+    name: "20260909_outreach_planner.sql",
+    markerSql: `SELECT
+      (SELECT count(*) = 5 FROM information_schema.tables WHERE table_schema = current_schema() AND table_name IN ('outreach_openings','outreach_candidates','outreach_attempts','outreach_research_tasks','outreach_audit'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_openings','id'),('outreach_openings','title'),('outreach_openings','event_year'),('outreach_openings','starts_on'),('outreach_openings','ends_on'),('outreach_openings','leg_id'),('outreach_openings','quantities'),('outreach_openings','created_at'),('outreach_openings','status'),('outreach_candidates','id'),('outreach_candidates','opening_id'),('outreach_candidates','opportunity_id'),('outreach_candidates','tier'),('outreach_candidates','manual_rank'),('outreach_candidates','decision_due_at'),('outreach_candidates','meaningful_reply_at'),('outreach_candidates','convention_ends_on'),('outreach_candidates','released_at'),('outreach_candidates','checked_at'),('outreach_candidates','source_snapshot'),('outreach_candidates','created_at'),('outreach_candidates','history_review'),('outreach_attempts','id'),('outreach_attempts','candidate_id'),('outreach_attempts','source_id'),('outreach_attempts','stage'),('outreach_attempts','occurred_at'),('outreach_attempts','actor'),('outreach_attempts','created_at'),('outreach_research_tasks','id'),('outreach_research_tasks','opening_id'),('outreach_research_tasks','criteria'),('outreach_research_tasks','status'),('outreach_research_tasks','created_at'),('outreach_research_tasks','results'),('outreach_audit','id'),('outreach_audit','actor'),('outreach_audit','action'),('outreach_audit','entity_id'),('outreach_audit','detail'),('outreach_audit','created_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*) = 5 FROM pg_indexes WHERE schemaname = current_schema() AND indexname IN ('outreach_candidates_membership_unique','outreach_candidates_live_opportunity_unique','outreach_attempts_source_unique','outreach_attempts_stage_unique','outreach_research_criteria_unique'))
+      AND (SELECT count(*) = 6 FROM pg_constraint WHERE connamespace = current_schema()::regnamespace AND conname IN ('outreach_openings_status_valid','outreach_openings_window_valid','outreach_openings_quantities_valid','outreach_candidates_rank_valid','outreach_candidates_tier_valid','outreach_attempts_stage_valid'))
+      AND (SELECT count(*) = 5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_openings'),to_regclass(current_schema() || '.outreach_candidates'),to_regclass(current_schema() || '.outreach_attempts'),to_regclass(current_schema() || '.outreach_research_tasks')))
+      AS ready`,
+  },
+  {
+    name: "20260909_outreach_allocation.sql",
+    markerSql: `SELECT
+      (SELECT count(*)=3 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('outreach_allocation_mutex','outreach_booking_demand','outreach_holds'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_allocation_mutex','generation'),('outreach_booking_demand','facts_fingerprint'),('outreach_booking_demand','quantities'),('outreach_booking_demand','resource_ids'),('outreach_booking_demand','revision'),('outreach_booking_demand','actor'),('outreach_booking_demand','reason'),('outreach_booking_demand','updated_at'),('outreach_holds','candidate_id'),('outreach_holds','booking_id'),('outreach_holds','opportunity_id'),('outreach_holds','leg_id'),('outreach_holds','event_starts_on'),('outreach_holds','event_ends_on'),('outreach_holds','starts_on'),('outreach_holds','ends_on'),('outreach_holds','quantities'),('outreach_holds','resource_ids'),('outreach_holds','location'),('outreach_holds','demand_fingerprint'),('outreach_holds','revision'),('outreach_holds','state'),('outreach_holds','owner'),('outreach_holds','expires_at'),('outreach_holds','ended_at'),('outreach_holds','created_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_holds_active_booking_unique','outreach_holds_live_window'))
+      AND (SELECT count(*)=3 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_holds_state_valid','outreach_holds_window_valid','outreach_holds_lifecycle_valid'))
+      AND (SELECT count(*)=5 FROM pg_constraint WHERE contype='f' AND conrelid IN (to_regclass(current_schema() || '.outreach_booking_demand'),to_regclass(current_schema() || '.outreach_holds')))
+      AS ready`,
+  },
+  {
+    name: "20260909_outreach_commitments.sql",
+    markerSql: `SELECT
+      (SELECT count(*)=3 FROM information_schema.tables WHERE table_schema=current_schema() AND table_name IN ('outreach_write_receipts','outreach_reconciliation_facts','outreach_route_anchors'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('outreach_write_receipts','transaction_id'),('outreach_write_receipts','mode'),('outreach_write_receipts','source'),('outreach_write_receipts','validated'),('outreach_write_receipts','dirty'),('outreach_write_receipts','created_at'),('outreach_reconciliation_facts','id'),('outreach_reconciliation_facts','source'),('outreach_reconciliation_facts','actor'),('outreach_reconciliation_facts','reason'),('outreach_reconciliation_facts','booking_ids'),('outreach_reconciliation_facts','facts_fingerprint'),('outreach_reconciliation_facts','state'),('outreach_reconciliation_facts','detail'),('outreach_reconciliation_facts','created_at'),('outreach_reconciliation_facts','resolved_at'),('outreach_route_anchors','id'),('outreach_route_anchors','leg_id'),('outreach_route_anchors','resource_id'),('outreach_route_anchors','direction'),('outreach_route_anchors','latitude'),('outreach_route_anchors','longitude'),('outreach_route_anchors','available_at'),('outreach_route_anchors','valid_until'),('outreach_route_anchors','source'),('outreach_route_anchors','reason'),('outreach_route_anchors','actor'),('outreach_route_anchors','identity_fingerprint'),('outreach_route_anchors','revision'),('outreach_route_anchors','recorded_at'),('outreach_route_anchors','revoked_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=11 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_write_receipts_mode_check','outreach_reconciliation_facts_state_check','outreach_route_anchors_direction_check','outreach_route_anchors_latitude_check','outreach_route_anchors_longitude_check','outreach_route_anchors_source_check','outreach_route_anchors_reason_check','outreach_route_anchors_check','outreach_route_anchors_check1','outreach_route_anchors_leg_id_fkey','outreach_route_anchors_resource_id_fkey'))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_anchors_identity_live','outreach_reconciliation_pending'))
+      AND EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='outreach_capacity_validation' AND tgrelid=to_regclass(current_schema() || '.outreach_write_receipts'))
+      AND NOT EXISTS (SELECT 1 FROM (VALUES ('bookings'),('booking_operational_windows'),('booking_package_selections'),('booking_resource_assignments'),('booking_resource_package_attributions'),('package_templates'),('resources'),('travel_legs'),('google_operational_calendar_links'),('google_workspace_calendar_scopes'),('google_workspace_connections'),('outreach_holds'),('outreach_booking_demand'),('outreach_route_anchors'),('outreach_reconciliation_facts')) expected(name) WHERE to_regclass(current_schema() || '.' || expected.name) IS NOT NULL AND NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='outreach_capacity_guard' AND tgrelid=to_regclass(current_schema() || '.' || expected.name))) AS ready`,
+  },
+  {
+    name: "20260909c_convention_outreach.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.convention_editions') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_members') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_history') IS NOT NULL
+      AND to_regclass(current_schema() || '.convention_reviews') IS NOT NULL AS ready`,
+  },
+  {
+    name: "20260909d_template_review_repair.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_trigger
+      WHERE tgrelid = to_regclass(current_schema() || '.communication_template_reviews')
+        AND tgname = 'communication_template_reviews_supersede_pending'
+        AND NOT tgisinternal
+    ) AS ready`,
+  },
+  {
+    name: "20260909_outreach_dispatch.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.outreach_dispatches') IS NOT NULL
+      AND to_regclass(current_schema() || '.outreach_offer_approvals') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('outreach_offer_approvals','draft_kind'),('outreach_offer_approvals','draft_id'),('outreach_offer_approvals','digest'),('outreach_offer_approvals','intent'),('outreach_offer_approvals','hold_id'),('outreach_offer_approvals','hold_revision'),('outreach_offer_approvals','stage'),('outreach_offer_approvals','actor'),('outreach_offer_approvals','reason'),('outreach_offer_approvals','approved_at'),('outreach_dispatches','id'),('outreach_dispatches','draft_kind'),('outreach_dispatches','draft_id'),('outreach_dispatches','hold_id'),('outreach_dispatches','hold_revision'),('outreach_dispatches','digest'),('outreach_dispatches','intent'),('outreach_dispatches','stage'),('outreach_dispatches','payload'),('outreach_dispatches','state'),('outreach_dispatches','confirmation'),('outreach_dispatches','last_error'),('outreach_dispatches','review_after'),('outreach_dispatches','created_at'),('outreach_dispatches','updated_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=9 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_offer_approvals_pkey','outreach_offer_intent_check','outreach_offer_kind_check','outreach_offer_hold_check','outreach_offer_hold_fk','outreach_dispatches_pkey','outreach_dispatch_state_check','outreach_dispatch_hold_fk','outreach_dispatch_confirmed_check'))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_dispatch_one_delivery','outreach_dispatch_unresolved_hold'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_dispatch_guard' AND tgrelid=to_regclass(current_schema() || '.outreach_dispatches'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_hold_delivery_guard' AND tgrelid=to_regclass(current_schema() || '.outreach_holds'))
+      AND position('dispatch_attempt_count' in coalesce(pg_get_functiondef(to_regprocedure(current_schema() || '.outreach_draft_revision()')),'')) > 0
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('booking_opportunity_email_state'),('office_email_drafts')) expected(name) WHERE to_regclass(current_schema() || '.' || expected.name) IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_draft_content_revision' AND tgrelid=to_regclass(current_schema() || '.' || expected.name)) OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=expected.name AND column_name='outreach_content_revision')))
+      AND to_regclass(current_schema() || '.outreach_inbound_observations') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('id'),('message_id'),('thread_id'),('organization_id'),('opportunity_id'),('event_year'),('received_at'),('metadata'),('state'),('classification'),('reviewed_opportunity_id'),('reviewed_at'),('actor'),('reason'),('source_reference')) expected(name) WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_inbound_observations' AND column_name=expected.name))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_inbound_message_identity','outreach_inbound_review'))
+      AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_dispatches' AND column_name='verification')
+      AND to_regclass(current_schema() || '.outreach_source_reviews') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('candidate_id'),('source_id'),('classification'),('occurred_at'),('actor'),('reason'),('reviewed_at')) expected(name) WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_source_reviews' AND column_name=expected.name))
+      AND (SELECT count(*)=2 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_source_reviews_pkey','outreach_source_review_classification'))
+      AND EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass(current_schema() || '.outreach_inbound_observations') AND conname='outreach_inbound_pkey')
+      AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_dispatches' AND column_name='tracking_state') AS ready`,
+  },
+  {
+    name: "20260910_outreach_workspace.sql",
+    markerSql: `SELECT NOT EXISTS(SELECT 1 FROM (VALUES ('outreach_candidates','snoozed_until'),('outreach_candidates','cadence_override'),('outreach_research_tasks','qualification_criteria'),('outreach_research_tasks','target_count')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND to_regprocedure(current_schema() || '.outreach_valid_cadence(jsonb)') IS NOT NULL
+      AND (SELECT count(*)=3 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_candidates_cadence_valid','outreach_research_target_valid','outreach_research_qualification_valid'))
+      AND to_regclass(current_schema() || '.outreach_candidates_snoozed_idx') IS NOT NULL AS ready`,
+  },
+  {
     name: "20260910_convention_planning_questionnaire.sql",
     markerSql: `SELECT EXISTS (
       SELECT 1 FROM pg_constraint

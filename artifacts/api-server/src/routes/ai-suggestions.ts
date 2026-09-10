@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 /**
  * AI history analysis routes — suggest future bookings from Act! history.
  *
@@ -223,7 +224,7 @@ router.post("/ai-suggestions/:id/accept", async (req, res): Promise<void> => {
     // Create the booking and, when the suggestion carries a linked contact,
     // the booking_contacts row required by the primary-contact FK — in one
     // transaction so a failure can't leave a half-linked booking.
-    const booking = await (db as any).transaction(async (tx: any) => {
+    const booking = await commitmentTransaction(db, async (tx: any) => {
       const [created] = await tx
         .insert(bookings)
         .values({
