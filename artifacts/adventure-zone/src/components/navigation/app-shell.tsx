@@ -131,10 +131,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [location]);
 
   return (
-    <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground">
+    <IncomingCallingProvider><div className="min-h-[100dvh] bg-background text-foreground print:min-h-0">
       <AssistantNavigationContextSync />
       {!immersiveProfile ? (
-        <header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block">
+        <header className="sticky top-0 z-20 hidden border-b border-border bg-card/95 backdrop-blur md:block print:hidden">
           <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2.5 lg:px-6">
             <WorkspaceSwitcher workspace={workspace} />
             {primaryItems.length ? (
@@ -181,21 +181,21 @@ export function AppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       {workspace === "operations" ? (
-        <div className="fixed right-4 top-4 z-30 md:hidden">
+        <div className="fixed right-4 top-4 z-30 md:hidden print:hidden">
           <MessageBubbleLink href="/manager-communications" label="Messages" unreadCount={unreadMessages} />
         </div>
       ) : null}
 
-      <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8">
+      <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0">
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
-        <IncomingCallPanel />
+        <div className="print:hidden"><IncomingCallPanel /></div>
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
-      {!immersiveProfile ? <AssistantLauncher placement="floating" /> : null}
-      {assistantRequested ? <Suspense fallback={null}><AssistantDrawer /></Suspense> : null}
-      {!immersiveProfile ? <MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /> : null}
+      {!immersiveProfile ? <div className="print:hidden"><AssistantLauncher placement="floating" /></div> : null}
+      {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
+      {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /></div> : null}
     </div></IncomingCallingProvider>
   );
 }

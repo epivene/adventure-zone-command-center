@@ -106,7 +106,8 @@ export default function ConventionOutreachPage({
     [detail, setDetail] = useState<Detail | null>(null),
     [query, setQuery] = useState(""),
     [group, setGroup] = useState(""),
-    [page, setPage] = useState(0);
+    [page, setPage] = useState(0),
+    [view, setView] = useState<"cards" | "game">("cards");
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
@@ -184,8 +185,8 @@ export default function ConventionOutreachPage({
           .includes(query.toLowerCase()),
     ) || [];
   return (
-    <main className="mx-auto grid max-w-6xl gap-4 p-4">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <main className="mx-auto grid max-w-6xl gap-4 p-4 print:max-w-none print:p-0">
+      <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
         <h1 className="text-2xl font-bold">Convention Outreach</h1>
         <Link href={boss ? "/boss" : "/dave-requests"} className={button}>
           Workspace
@@ -202,7 +203,7 @@ export default function ConventionOutreachPage({
           </button>
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 print:hidden">
         <label>
           Year{" "}
           <select
@@ -317,7 +318,7 @@ export default function ConventionOutreachPage({
         </div>
       ) : (
         <>
-          <section className={box}>
+          <section className={`${box} print:hidden`}>
             <h2 className="text-xl font-bold">
               {detail.edition.convention} {detail.edition.year}
             </h2>
@@ -348,11 +349,13 @@ export default function ConventionOutreachPage({
             </details>
           </section>
           {detail.edition.archived_at && (
-            <p className={box}>Archived year · History stays available.</p>
+            <p className={`${box} print:hidden`}>
+              Archived year · History stays available.
+            </p>
           )}
           {!boss && (
             <button
-              className={button}
+              className={`${button} print:hidden`}
               disabled={busy}
               onClick={() => setPlanEditing(!planEditing)}
             >
@@ -377,7 +380,7 @@ export default function ConventionOutreachPage({
               }
             />
           )}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 print:hidden">
             <input
               aria-label="Search contacts"
               placeholder="Search contacts and events"
@@ -405,9 +408,37 @@ export default function ConventionOutreachPage({
                 </option>
               ))}
             </select>
+            <div
+              role="group"
+              aria-label="Convention display"
+              className="flex rounded-lg border p-1"
+            >
+              <button
+                type="button"
+                aria-pressed={view === "cards"}
+                className={`${button} border-0 ${view === "cards" ? "bg-muted font-semibold" : ""}`}
+                onClick={() => {
+                  setView("cards");
+                  setPage(0);
+                }}
+              >
+                Cards
+              </button>
+              <button
+                type="button"
+                aria-pressed={view === "game"}
+                className={`${button} border-0 ${view === "game" ? "bg-muted font-semibold" : ""}`}
+                onClick={() => {
+                  setView("game");
+                  setPage(0);
+                }}
+              >
+                Convention Game
+              </button>
+            </div>
           </div>
           {!boss && !detail.edition.archived_at && (
-            <section className={box}>
+            <section className={`${box} print:hidden`}>
               <label>
                 Import list (JSON)
                 <input
@@ -511,105 +542,121 @@ export default function ConventionOutreachPage({
               )}
             </section>
           )}
-          <p className="text-sm">{filtered.length} matching entries</p>
-          {filtered.slice(page * 25, (page + 1) * 25).map((m) => (
-            <article key={m.id} className={box}>
-              <div className="flex flex-wrap justify-between gap-2">
-                <div>
-                  <h3 className="font-bold">{m.data.event}</h3>
-                  <p>
-                    {m.data.contact} {m.data.email}
+          <p className="text-sm print:hidden">
+            {filtered.length} matching entries
+          </p>
+          {view === "game" ? (
+            <ConventionGame
+              boss={boss}
+              edition={detail.edition}
+              members={filtered}
+            />
+          ) : (
+            <>
+              {filtered.slice(page * 25, (page + 1) * 25).map((m) => (
+                <article key={m.id} className={box}>
+                  <div className="flex flex-wrap justify-between gap-2">
+                    <div>
+                      <h3 className="font-bold">{m.data.event}</h3>
+                      <p>
+                        {m.data.contact} {m.data.email}
+                      </p>
+                    </div>
+                    <span>
+                      {labels[m.data.group]} ·{" "}
+                      {m.data.outcome.replaceAll("_", " ")}
+                    </span>
+                  </div>
+                  {m.data.group === "replacement" && (
+                    <p className="mt-2 font-semibold">
+                      Replacement only. Adventure Zone does not operate beside
+                      another inflatable provider.
+                    </p>
+                  )}
+                  {m.data.group === "special" && (
+                    <p className="mt-2 font-semibold">
+                      Personal handling. Keep out of bulk email.
+                    </p>
+                  )}
+                  <p className="mt-2 whitespace-pre-wrap">{m.data.reason}</p>
+                  <p className="whitespace-pre-wrap">{m.data.notes}</p>
+                  {m.data.nextAction && (
+                    <p className="mt-2">Next: {m.data.nextAction}</p>
+                  )}
+                  <p className="text-sm">
+                    Past attendance evidence:{" "}
+                    {m.data.attendance.replaceAll("_", " ")}
                   </p>
-                </div>
+                  <details>
+                    <summary>Sources</summary>
+                    <p className="whitespace-pre-wrap">
+                      {m.data.sources || "No source recorded"}
+                    </p>
+                  </details>
+                  {m.data.research && (
+                    <details>
+                      <summary>Detailed research notes</summary>
+                      <dl className="mt-2 grid gap-2">
+                        {Object.entries(m.data.research)
+                          .filter(([, value]) => value)
+                          .map(([key, value]) => (
+                            <div key={key}>
+                              <dt className="font-semibold">{key}</dt>
+                              <dd className="whitespace-pre-wrap">{value}</dd>
+                            </div>
+                          ))}
+                      </dl>
+                    </details>
+                  )}
+                  <div className="mt-3 flex gap-2">
+                    {m.organization_id ? (
+                      <Link
+                        className={button}
+                        href={`${boss ? "/boss" : ""}/profiles/${m.organization_id}`}
+                      >
+                        Open Profile
+                      </Link>
+                    ) : (
+                      <span>Profile link needed</span>
+                    )}
+                    {!boss && !detail.edition.archived_at && (
+                      <button
+                        disabled={busy}
+                        className={button}
+                        onClick={() => setEditing(structuredClone(m))}
+                      >
+                        Edit notes / link profile
+                      </button>
+                    )}
+                  </div>
+                  {m.organization_id && (
+                    <MemberContext member={m} boss={boss} />
+                  )}
+                </article>
+              ))}
+              <div className="flex gap-3">
+                <button
+                  className={button}
+                  disabled={page === 0}
+                  onClick={() => setPage(page - 1)}
+                >
+                  Previous
+                </button>
                 <span>
-                  {labels[m.data.group]} · {m.data.outcome.replaceAll("_", " ")}
+                  Page {page + 1} of{" "}
+                  {Math.max(1, Math.ceil(filtered.length / 25))}
                 </span>
+                <button
+                  className={button}
+                  disabled={(page + 1) * 25 >= filtered.length}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Next
+                </button>
               </div>
-              {m.data.group === "replacement" && (
-                <p className="mt-2 font-semibold">
-                  Replacement only. Adventure Zone does not operate beside
-                  another inflatable provider.
-                </p>
-              )}
-              {m.data.group === "special" && (
-                <p className="mt-2 font-semibold">
-                  Personal handling. Keep out of bulk email.
-                </p>
-              )}
-              <p className="mt-2 whitespace-pre-wrap">{m.data.reason}</p>
-              <p className="whitespace-pre-wrap">{m.data.notes}</p>
-              {m.data.nextAction && (
-                <p className="mt-2">Next: {m.data.nextAction}</p>
-              )}
-              <p className="text-sm">
-                Past attendance evidence:{" "}
-                {m.data.attendance.replaceAll("_", " ")}
-              </p>
-              <details>
-                <summary>Sources</summary>
-                <p className="whitespace-pre-wrap">
-                  {m.data.sources || "No source recorded"}
-                </p>
-              </details>
-              {m.data.research && (
-                <details>
-                  <summary>Detailed research notes</summary>
-                  <dl className="mt-2 grid gap-2">
-                    {Object.entries(m.data.research)
-                      .filter(([, value]) => value)
-                      .map(([key, value]) => (
-                        <div key={key}>
-                          <dt className="font-semibold">{key}</dt>
-                          <dd className="whitespace-pre-wrap">{value}</dd>
-                        </div>
-                      ))}
-                  </dl>
-                </details>
-              )}
-              <div className="mt-3 flex gap-2">
-                {m.organization_id ? (
-                  <Link
-                    className={button}
-                    href={`${boss ? "/boss" : ""}/profiles/${m.organization_id}`}
-                  >
-                    Open Profile
-                  </Link>
-                ) : (
-                  <span>Profile link needed</span>
-                )}
-                {!boss && !detail.edition.archived_at && (
-                  <button
-                    disabled={busy}
-                    className={button}
-                    onClick={() => setEditing(structuredClone(m))}
-                  >
-                    Edit notes / link profile
-                  </button>
-                )}
-              </div>
-              {m.organization_id && <MemberContext member={m} boss={boss} />}
-            </article>
-          ))}
-          <div className="flex gap-3">
-            <button
-              className={button}
-              disabled={page === 0}
-              onClick={() => setPage(page - 1)}
-            >
-              Previous
-            </button>
-            <span>
-              Page {page + 1} of {Math.max(1, Math.ceil(filtered.length / 25))}
-            </span>
-            <button
-              className={button}
-              disabled={(page + 1) * 25 >= filtered.length}
-              onClick={() => setPage(page + 1)}
-            >
-              Next
-            </button>
-          </div>
-          <section className={box}>
+            </>
+          )}
+          <section className={`${box} print:hidden`}>
             <label>
               My review notes
               <textarea
@@ -635,7 +682,7 @@ export default function ConventionOutreachPage({
               Save notes and mark reviewed
             </button>
           </section>
-          <details className={box}>
+          <details className={`${box} print:hidden`}>
             <summary>List history</summary>
             {detail.history.map((h) => (
               <p key={h.id}>
@@ -666,6 +713,112 @@ export default function ConventionOutreachPage({
         />
       )}
     </main>
+  );
+}
+function ConventionGame({
+  boss,
+  edition,
+  members,
+}: {
+  boss: boolean;
+  edition: Edition;
+  members: Member[];
+}) {
+  return (
+    <section
+      className={`${box} overflow-x-auto print:overflow-visible print:border-0 print:p-0`}
+    >
+      <style>{`@media print { @page { size: landscape; margin: 0.35in; } }`}</style>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">
+            {edition.convention} {edition.year} Convention Game
+          </h2>
+          <p className="text-sm text-muted-foreground print:text-black">
+            {members.length} people and organizations from the live convention
+            roster
+          </p>
+        </div>
+        <button
+          type="button"
+          className={`${button} print:hidden`}
+          onClick={() => window.print()}
+        >
+          Print Game Sheet
+        </button>
+      </div>
+      <table
+        aria-label={`${edition.convention} ${edition.year} convention game`}
+        className="w-full min-w-[1100px] border-collapse text-left text-sm print:min-w-0 print:text-[9px]"
+      >
+        <thead className="print:table-header-group">
+          <tr className="bg-muted print:bg-transparent">
+            <th className="border p-2">Event / profile</th>
+            <th className="border p-2">Contact</th>
+            <th className="border p-2">Group</th>
+            <th className="border p-2">Attendance</th>
+            <th className="border p-2">Outreach</th>
+            <th className="border p-2">Next action</th>
+            <th className="border p-2 text-center">Met</th>
+            <th className="border p-2 text-center">Follow up</th>
+            <th className="min-w-36 border p-2">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((member) => (
+            <tr key={member.id} className="break-inside-avoid align-top">
+              <td className="border p-2">
+                {member.organization_id ? (
+                  <Link
+                    className="font-semibold underline print:no-underline"
+                    href={`${boss ? "/boss" : ""}/profiles/${member.organization_id}`}
+                  >
+                    {member.data.event}
+                  </Link>
+                ) : (
+                  <strong>{member.data.event}</strong>
+                )}
+                <span className="mt-1 block text-xs">
+                  {member.organization_id ? "Profile linked" : "Profile needed"}
+                </span>
+              </td>
+              <td className="border p-2">
+                <strong className="block">{member.data.contact || "—"}</strong>
+                <span className="break-all">{member.data.email || "—"}</span>
+              </td>
+              <td className="border p-2">
+                {labels[member.data.group] || member.data.group}
+              </td>
+              <td className="border p-2">
+                {member.data.attendance.replaceAll("_", " ")}
+              </td>
+              <td className="border p-2">
+                {member.data.outcome.replaceAll("_", " ")}
+              </td>
+              <td className="border p-2">{member.data.nextAction || "—"}</td>
+              <td
+                className="border p-2 text-center text-lg"
+                aria-label={`Met ${member.data.event}`}
+              >
+                ☐
+              </td>
+              <td
+                className="border p-2 text-center text-lg"
+                aria-label={`Follow up ${member.data.event}`}
+              >
+                ☐
+              </td>
+              <td className="border p-2">
+                <span className="block min-h-10 border-b border-dashed" />
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {!members.length && (
+        <p className="py-6 text-center">No roster entries match these filters.</p>
+      )}
+    </section>
   );
 }
 function MemberEditor({
