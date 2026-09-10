@@ -4,6 +4,7 @@ import { db as defaultDb } from "@/db/client";
 import { contacts, organizations } from "@/db/schema";
 
 import { PostgresGoogleConnectionRepository } from "./google-connection-repository";
+import { GoogleProfileEmailArchiveService } from "./google-profile-email-archive-service";
 import type {
   GoogleLabelSummary,
   GoogleMessageMetadata,
@@ -125,6 +126,14 @@ type ValidationRepositoryAccess = {
 
 type InboundLabelerAccess = {
   labelNewThreadMatches(messages: GoogleValidationRow[]): Promise<void>;
+};
+
+type ArchiveAccess = {
+  archiveApprovedThread(input: {
+    organizationId: string;
+    contactId: string | null;
+    gmailThreadId: string;
+  }): Promise<unknown>;
 };
 
 type DrizzleDb = typeof defaultDb;
@@ -356,6 +365,7 @@ export class GoogleRecentValidationService {
   private readonly contactProfileResolver: ContactProfileResolverAccess;
   private readonly validationRepository: ValidationRepositoryAccess;
   private readonly inboundLabeler: InboundLabelerAccess;
+  private readonly archiver: ArchiveAccess;
 
   constructor(options?: {
     connection?: ConnectionAccess;
@@ -365,6 +375,7 @@ export class GoogleRecentValidationService {
     contactProfileResolver?: ContactProfileResolverAccess;
     validationRepository?: ValidationRepositoryAccess;
     inboundLabeler?: InboundLabelerAccess;
+    archiver?: ArchiveAccess;
   }) {
     this.connection =
       options?.connection ?? new PostgresGoogleConnectionRepository();
@@ -385,6 +396,11 @@ export class GoogleRecentValidationService {
       (options
         ? { labelNewThreadMatches: async () => undefined }
         : new GoogleInboundProfileLabeler());
+    this.archiver =
+      options?.archiver ??
+      (options
+        ? { archiveApprovedThread: async () => undefined }
+        : new GoogleProfileEmailArchiveService());
   }
 
   async run(
@@ -533,6 +549,22 @@ export class GoogleRecentValidationService {
       markProcessed: () =>
         this.validationRepository.upsertRows(persistableMappings(matched)),
     });
+    const archiveTargets = new Map<string, GoogleValidationRow>();
+    for (const row of matched) {
+      if (row.resolvedOrganization) archiveTargets.set(row.threadId, row);
+    }
+    for (const row of archiveTargets.values()) {
+      try {
+        await this.archiver.archiveApprovedThread({
+          organizationId: row.resolvedOrganization!.id,
+          contactId: row.matchedContact?.id ?? null,
+          gmailThreadId: row.threadId,
+        });
+      } catch {
+        // A durable copy retry is independent from CRM matching. The approved
+        // mapping remains available so the next sync can repair the archive.
+      }
+    }
     try {
       await this.inboundLabeler.labelNewThreadMatches(matched);
     } catch {

@@ -403,6 +403,9 @@ export function createGoogleWorkspaceReadClient(input: {
         "GOOGLE_WORKSPACE_API_REQUEST_FAILED",
       ));
     }
+    if (response.status === 404) {
+      throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+    }
     if (!response.ok) {
       throw clientError("GOOGLE_WORKSPACE_API_REQUEST_FAILED");
     }

@@ -91,6 +91,7 @@ describe("GoogleRecentValidationService", () => {
       ),
     };
     const upsertRows = vi.fn(async () => undefined);
+    const archiveApprovedThread = vi.fn(async () => undefined);
 
     const service = new GoogleRecentValidationService({
       connection: { createReadClient: async () => client },
@@ -111,6 +112,7 @@ describe("GoogleRecentValidationService", () => {
         }),
       },
       validationRepository: validationRepository(upsertRows),
+      archiver: { archiveApprovedThread },
     });
 
     const result = await service.run(100);
@@ -132,6 +134,11 @@ describe("GoogleRecentValidationService", () => {
         evidenceCodes: ["exact_contact_email", "contact_active_organization"],
       },
     ]);
+    expect(archiveApprovedThread).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      contactId: "c1",
+      gmailThreadId: "thread-m1",
+    });
   });
 
   it("moves an exact contact match to review when the contact belongs to multiple active profiles and persists the review item", async () => {

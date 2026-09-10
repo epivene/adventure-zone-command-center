@@ -175,8 +175,18 @@ export type GoogleHistoricalBatchResult = {
   state: GoogleHistoricalBackfillStatus;
 };
 
+export type ProfileEmailArchiveState = "pending" | "complete" | "partial" | "failed";
+export type ProfileEmailSourceState =
+  | "synced"
+  | "saved_copy_gmail_missing"
+  | "saved_copy_gmail_unavailable";
+
 export type GoogleProfileEmailConversation = {
+  conversationId?: string;
   threadId: string;
+  savedCopy?: boolean;
+  archiveState?: ProfileEmailArchiveState;
+  sourceState?: ProfileEmailSourceState;
   subject: string;
   from: string;
   to: string;
@@ -220,6 +230,12 @@ export type GoogleThreadMessage = {
 
 export type GoogleThreadDetail = {
   id: string;
+  conversationId?: string;
+  savedCopy?: boolean;
+  archiveState?: ProfileEmailArchiveState;
+  sourceState?: ProfileEmailSourceState;
+  lastSyncedAt?: string | null;
+  lastGmailErrorCode?: string | null;
   subject: string;
   originalGmailUrl: string;
   messages: GoogleThreadMessage[];
@@ -324,6 +340,11 @@ export async function resolveGoogleWorkspaceValidationReview(
   organizationId: string;
   threadId: string;
   gmailSync: GoogleProfileLabelSyncResult;
+  archiveSync?: {
+    conversationId: string | null;
+    state: ProfileEmailArchiveState | "retry_required";
+    errorCode: string | null;
+  };
 }> {
   return responseJson(
     await apiFetch(
@@ -426,6 +447,22 @@ export async function getGoogleProfileEmailThread(
   return responseJson<GoogleThreadDetail>(
     await apiFetch(
       `/google-workspace/profiles/${encodeURIComponent(organizationId)}/emails/${encodeURIComponent(threadId)}`,
+    ),
+  );
+}
+
+export async function replyToGoogleProfileEmail(
+  organizationId: string,
+  conversationId: string,
+  bodyText: string,
+): Promise<GoogleThreadDetail> {
+  return responseJson<GoogleThreadDetail>(
+    await apiFetch(
+      `/google-workspace/profiles/${encodeURIComponent(organizationId)}/email-conversations/${encodeURIComponent(conversationId)}/reply`,
+      {
+        method: "POST",
+        body: JSON.stringify({ bodyText }),
+      },
     ),
   );
 }

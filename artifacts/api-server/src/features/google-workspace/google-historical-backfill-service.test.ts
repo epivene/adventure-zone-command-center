@@ -97,6 +97,31 @@ describe("GoogleHistoricalBackfillService", () => {
     }));
   });
 
+  it("archives each approved historical thread after its profile mapping is saved", async () => {
+    const archiveApprovedThread = vi.fn(async () => undefined);
+    const service = new GoogleHistoricalBackfillService({
+      connection: { createReadClient: async () => readClient(["m1"], null) },
+      repository: repository(),
+      classifier: {
+        classify: async () => ({
+          outcome: "attached" as const,
+          organization: { id: "org-1", name: "Known Event" },
+          evidenceCodes: ["historical_match"],
+        }),
+      },
+      validationRepository: validationRepository(),
+      archiver: { archiveApprovedThread },
+    });
+
+    await service.runNextBatch();
+
+    expect(archiveApprovedThread).toHaveBeenCalledWith({
+      organizationId: "org-1",
+      contactId: null,
+      gmailThreadId: "thread-m1",
+    });
+  });
+
   it("blocks a second batch until the first historical batch is approved", async () => {
     const service = new GoogleHistoricalBackfillService({
       connection: { createReadClient: async () => readClient(["m1"]) },

@@ -128,7 +128,7 @@ describe("PostgresGoogleProfileEmailArchiveRepository", () => {
     });
 
     const sourceUpsert = query.mock.calls.find(([sql]) =>
-      String(sql).includes("google_workspace_profile_email_thread_sources"),
+      String(sql).includes("INSERT INTO google_workspace_profile_email_thread_sources"),
     );
     expect(sourceUpsert?.[1]).toEqual([
       "conversation-1",

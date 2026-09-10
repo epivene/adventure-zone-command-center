@@ -7,6 +7,7 @@ import {
   getGoogleProfileEmailThread,
   getGoogleProfileFiles,
   openGoogleProfileFile,
+  replyToGoogleProfileEmail,
   type GoogleProfileEmailConversation,
   type GoogleProfileFile,
   type GoogleThreadDetail,
@@ -16,6 +17,16 @@ function fileSize(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;
   if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(1)} KB`;
   return `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+function savedCopyLabel(thread: GoogleThreadDetail): string | null {
+  if (thread.sourceState === "saved_copy_gmail_missing") {
+    return "Saved in app; no longer in Gmail";
+  }
+  if (thread.sourceState === "saved_copy_gmail_unavailable") {
+    return "Showing saved copy";
+  }
+  return thread.savedCopy ? "Saved in app" : null;
 }
 
 function conversationYear(conversation: GoogleProfileEmailConversation): number | null {
@@ -50,14 +61,20 @@ function ThreadDetail({
   organizationId,
   thread,
   onFilesCopied,
+  onThreadUpdated,
 }: {
   organizationId: string;
   thread: GoogleThreadDetail;
   onFilesCopied(files: GoogleProfileFile[]): void;
+  onThreadUpdated(thread: GoogleThreadDetail): void;
 }) {
   const [copying, setCopying] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [replying, setReplying] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
   const attachments = thread.messages.flatMap((message) => message.attachments);
+  const savedLabel = savedCopyLabel(thread);
 
   async function saveAttachments() {
     setCopying(true);
@@ -69,6 +86,30 @@ function ThreadDetail({
       setCopyError(caught instanceof Error ? caught.message : "Could not save attachments.");
     } finally {
       setCopying(false);
+    }
+  }
+
+  async function sendReply() {
+    const bodyText = replyText.trim();
+    if (!bodyText || !thread.conversationId) return;
+    setReplying(true);
+    setReplyError(null);
+    try {
+      const updated = await replyToGoogleProfileEmail(
+        organizationId,
+        thread.conversationId,
+        bodyText,
+      );
+      onThreadUpdated(updated);
+      setReplyText("");
+    } catch (caught) {
+      setReplyError(
+        caught instanceof Error
+          ? caught.message
+          : "Could not send. Your reply is still here so you can retry.",
+      );
+    } finally {
+      setReplying(false);
     }
   }
 
@@ -89,17 +130,22 @@ function ThreadDetail({
               {copying ? "Saving attachments…" : "Save attachments to Files"}
             </button>
           ) : null}
-          <a
+          {thread.sourceState !== "saved_copy_gmail_missing" ? <a
             className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline dark:text-orange-300"
             href={thread.originalGmailUrl}
             rel="noreferrer"
             target="_blank"
           >
             Open in Gmail <ExternalLink className="h-3.5 w-3.5" />
-          </a>
+          </a> : null}
         </div>
       </div>
       {copyError ? <p className="text-xs font-medium text-rose-700">{copyError}</p> : null}
+      {savedLabel ? (
+        <p className="w-fit rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200">
+          {savedLabel}
+        </p>
+      ) : null}
       {thread.messages.map((message) => (
         <article
           className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
@@ -140,6 +186,39 @@ function ThreadDetail({
           ) : null}
         </article>
       ))}
+      {thread.conversationId ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/50">
+          <label
+            className="text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
+            htmlFor={`profile-email-reply-${thread.conversationId}`}
+          >
+            Reply from the app
+          </label>
+          <textarea
+            className="mt-2 min-h-28 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-100"
+            disabled={replying}
+            id={`profile-email-reply-${thread.conversationId}`}
+            onChange={(event) => setReplyText(event.target.value)}
+            placeholder="Write a reply…"
+            value={replyText}
+          />
+          {replyError ? (
+            <p className="mt-2 text-xs font-medium text-rose-700 dark:text-rose-300">
+              Could not send. Your reply was kept. {replyError}
+            </p>
+          ) : null}
+          <div className="mt-2 flex justify-end">
+            <button
+              className="button-primary px-4 py-2 text-sm"
+              disabled={replying || !replyText.trim()}
+              onClick={() => void sendReply()}
+              type="button"
+            >
+              {replying ? "Sending…" : "Send reply"}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -208,6 +287,7 @@ function ConversationCard({
       {thread ? (
         <ThreadDetail
           onFilesCopied={onFilesCopied}
+          onThreadUpdated={setThread}
           organizationId={organizationId}
           thread={thread}
         />
@@ -338,7 +418,7 @@ export function ProfileGoogleEmailPanel({
             Google history
           </h2>
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            Current Gmail conversations stay up front. Earlier matched Gmail remains available below as relationship history, along with saved Gmail attachments for this profile.
+            Emails assigned to this profile are saved in the app automatically, including attachment copies. They remain available here even if the Gmail original is deleted.
           </p>
           <div className="mt-3 flex gap-2 border-b border-slate-200 dark:border-slate-700">
             <button

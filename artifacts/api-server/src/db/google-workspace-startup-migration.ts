@@ -174,6 +174,74 @@ export async function ensureGoogleWorkspaceSchema(
           (connection_id, updated_at DESC)
         WHERE review_state = 'pending';
 
+      CREATE TABLE IF NOT EXISTS google_workspace_profile_email_threads (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        organization_id uuid NOT NULL
+          REFERENCES organizations(id) ON DELETE RESTRICT,
+        contact_id uuid
+          REFERENCES contacts(id) ON DELETE SET NULL,
+        subject text NOT NULL DEFAULT '',
+        original_gmail_url text,
+        archive_state text NOT NULL DEFAULT 'pending',
+        last_synced_at timestamptz,
+        last_gmail_error_code text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_profile_email_threads_state_valid
+          CHECK (archive_state IN ('pending','complete','partial','failed'))
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_profile_email_threads_org_idx
+        ON google_workspace_profile_email_threads
+          (connection_id, organization_id, last_synced_at DESC);
+
+      CREATE TABLE IF NOT EXISTS google_workspace_profile_email_thread_sources (
+        conversation_id uuid NOT NULL
+          REFERENCES google_workspace_profile_email_threads(id) ON DELETE CASCADE,
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        gmail_thread_id text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (connection_id, gmail_thread_id),
+        CONSTRAINT google_workspace_profile_email_thread_sources_identity_nonblank
+          CHECK (btrim(gmail_thread_id) <> ''),
+        CONSTRAINT google_workspace_profile_email_thread_sources_conversation_unique
+          UNIQUE (conversation_id, gmail_thread_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS google_workspace_profile_email_messages (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id uuid NOT NULL
+          REFERENCES google_workspace_profile_email_threads(id) ON DELETE CASCADE,
+        connection_id uuid NOT NULL
+          REFERENCES google_workspace_connections(id) ON DELETE CASCADE,
+        gmail_message_id text NOT NULL,
+        gmail_thread_id text NOT NULL,
+        internal_date_ms bigint,
+        from_value text NOT NULL DEFAULT '',
+        to_value text NOT NULL DEFAULT '',
+        cc_value text NOT NULL DEFAULT '',
+        subject text NOT NULL DEFAULT '',
+        date_value text NOT NULL DEFAULT '',
+        direction text NOT NULL DEFAULT 'unknown',
+        body_text text NOT NULL DEFAULT '',
+        attachments_json jsonb NOT NULL DEFAULT '[]'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        CONSTRAINT google_workspace_profile_email_messages_source_unique
+          UNIQUE (connection_id, gmail_message_id),
+        CONSTRAINT google_workspace_profile_email_messages_identity_nonblank
+          CHECK (btrim(gmail_message_id) <> '' AND btrim(gmail_thread_id) <> ''),
+        CONSTRAINT google_workspace_profile_email_messages_direction_valid
+          CHECK (direction IN ('incoming','outgoing','unknown')),
+        CONSTRAINT google_workspace_profile_email_messages_attachments_array
+          CHECK (jsonb_typeof(attachments_json) = 'array')
+      );
+      CREATE INDEX IF NOT EXISTS google_workspace_profile_email_messages_conversation_idx
+        ON google_workspace_profile_email_messages
+          (connection_id, conversation_id, internal_date_ms, created_at);
+
       CREATE TABLE IF NOT EXISTS google_workspace_profile_files (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         connection_id uuid NOT NULL
