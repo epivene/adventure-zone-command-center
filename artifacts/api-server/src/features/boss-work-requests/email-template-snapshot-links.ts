@@ -64,6 +64,10 @@ export function extractSnapshotLinks(html: string): SnapshotLinks {
   function visit(node: Node) {
     if (isElement(node) && node.tagName.toLowerCase() === "a") {
       const rawHref = attribute(node, "href").trim();
+      if (!rawHref) {
+        childNodes(node).forEach(visit);
+        return;
+      }
       let reason: BlockedSnapshotLink["reason"] | null = null;
       let normalizedHref: string | undefined;
 
