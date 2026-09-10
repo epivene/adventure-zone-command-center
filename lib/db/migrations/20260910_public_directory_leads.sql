@@ -120,6 +120,18 @@ BEGIN
    IF coalesce(cardinality(candidates),0)=1 THEN person_id:=candidates[1];
    ELSIF coalesce(cardinality(candidates),0)>1 THEN result_reason:='Organization matched; duplicate named contacts need review';
    ELSE
+    -- A person can legitimately represent more than one organization. Require name plus email globally.
+    SELECT array_agg(id ORDER BY id) INTO candidates FROM contacts c
+     WHERE nullif(r->>'email','') IS NOT NULL AND lower(trim(c.email))=lower(r->>'email')
+       AND pg_temp.directory_name(c.first_name||' '||c.last_name)=pg_temp.directory_name(r->>'contact');
+    IF coalesce(cardinality(candidates),0)=1 THEN
+     person_id:=candidates[1];
+     INSERT INTO organization_contacts(organization_id,contact_id,role,is_primary,active,source)
+     VALUES(org_id,person_id,'Published directory affiliation; current role unverified',false,true,batch_key)
+     ON CONFLICT(organization_id,contact_id) DO NOTHING;
+    ELSIF coalesce(cardinality(candidates),0)>1 THEN
+     result_reason:='Organization matched; duplicate global named/email contacts need review';
+    ELSE
     person_names:=regexp_split_to_array(r->>'contact','\s+');
     INSERT INTO contacts(first_name,last_name,email,phone,normalized_phone)
     VALUES(person_names[1],array_to_string(person_names[2:cardinality(person_names)],' '),nullif(r->>'email',''),nullif(r->>'phone',''),
@@ -128,6 +140,7 @@ BEGIN
     INSERT INTO organization_contacts(organization_id,contact_id,role,is_primary,active,source)
     VALUES(org_id,person_id,'Published directory contact; current role unverified',false,true,batch_key);
     UPDATE contacts SET organization_id=org_id WHERE id=person_id;
+    END IF;
    END IF;
   END IF;
   note_body:=concat('Public directory research — retrieved September 10, 2026', E'\n',

@@ -31,7 +31,8 @@ await db.query("INSERT INTO convention_members(edition_id,source_key,organizatio
 await db.exec("INSERT INTO organizations(name,region) VALUES ('Duplicate County Fair','WY'),('Duplicate County Fair','WY'),('Unknown County Fair',NULL)");
 const unlinked={sourceKey:'unlinked',event:'Another County Fair',contact:'Robin Doe',email:'',group:'confirm',outcome:'not_contacted',notes:'Needs research',attendance:'unknown'};
 await db.query("INSERT INTO convention_members(edition_id,source_key,data) VALUES ($1,'unlinked',$2)",[edition.id,JSON.stringify(unlinked)]);
-const fixtures=[row(),row({name:'Example County Fair',region:'CO',sourceKey:'co',edition:null,group:'ShoWorks',contact:'',email:'',website:'',phone:''}),row({name:'Duplicate County Fair',sourceKey:'dup',website:'',phone:''}),row({name:'Unknown County Fair',sourceKey:'unknown',website:'',phone:''}),row({name:'Another County Fair',sourceKey:'another',contact:'Robin Doe',email:'',website:'',phone:''}),row({name:'Unlinked Alias',sourceKey:'bad-known',knownOrganizationId:'00000000-0000-0000-0000-000000000001'}),row({name:'The Adventure Zone',sourceKey:'self'})];
+const floating=await one(db,"INSERT INTO contacts(first_name,last_name,email) VALUES ('Robin','Doe','robin@example.org') RETURNING id");
+const fixtures=[row(),row({name:'Example County Fair',region:'CO',sourceKey:'co',edition:null,group:'ShoWorks',contact:'',email:'',website:'',phone:''}),row({name:'Duplicate County Fair',sourceKey:'dup',website:'',phone:''}),row({name:'Unknown County Fair',sourceKey:'unknown',website:'',phone:''}),row({name:'Another County Fair',sourceKey:'another',contact:'Robin Doe',email:'robin@example.org',website:'',phone:''}),row({name:'Unlinked Alias',sourceKey:'bad-known',knownOrganizationId:'00000000-0000-0000-0000-000000000001'}),row({name:'The Adventure Zone',sourceKey:'self'})];
 await run(db,fixtures);
 assert.equal((await one(db,'SELECT count(*)::int n FROM organizations')).n,6,'different-state fair created, duplicates held');
 assert.equal((await one(db,'SELECT email FROM contacts WHERE id=$1',[contact.id])).email,'current@example.org');
@@ -40,6 +41,7 @@ for(const [k,v] of Object.entries(special))if(k!=='research')assert.deepEqual(af
 assert.equal(after.research.existing,'preserve');
 assert.equal((await one(db,"SELECT count(*)::int n FROM convention_members WHERE data->>'event'='Another County Fair'")).n,1);
 assert.ok((await one(db,"SELECT organization_id FROM convention_members WHERE source_key='unlinked'")).organization_id);
+assert.equal((await one(db,"SELECT contact_id FROM directory_import_records WHERE source_key='another'")).contact_id,floating.id,'reuse an existing person with matching full name and email');
 assert.equal((await one(db,"SELECT count(*)::int n FROM directory_import_records WHERE status='review'")).n,3);
 assert.equal((await one(db,"SELECT count(*)::int n FROM directory_import_records WHERE status='excluded'")).n,1);
 const counts=async()=>one(db,"SELECT (SELECT count(*) FROM organizations)::int orgs,(SELECT count(*) FROM contacts)::int contacts,(SELECT count(*) FROM activities)::int notes,(SELECT count(*) FROM convention_members)::int cards,(SELECT count(*) FROM convention_history)::int history,(SELECT sum(revision) FROM convention_editions)::int revisions");
