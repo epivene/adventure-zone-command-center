@@ -46,6 +46,7 @@ export interface GoogleSentProfileLinkSweepRepository {
     messageIds: string[];
     threadIds: string[];
   }): Promise<GoogleSentProfileLinkTargets>;
+  profileTargetsByLabelIds(labelIds: string[]): Promise<Map<string, GoogleSentProfileTarget>>;
   upsertMappings(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(rows: GoogleValidationReviewInput[]): Promise<void>;
   validationStatus(): Promise<GoogleValidationStatus>;
@@ -272,10 +273,15 @@ export class GoogleSentProfileLinkSweepService {
       sentInWindow += sentMessages.length;
       if (!sentMessages.length) continue;
 
-      const targets = await this.repository.mappedTargets({
-        messageIds: [...new Set(sentMessages.map((message) => message.id))],
-        threadIds: [...new Set(sentMessages.map((message) => message.threadId))],
-      });
+      const [targets, profileLabelTargets] = await Promise.all([
+        this.repository.mappedTargets({
+          messageIds: [...new Set(sentMessages.map((message) => message.id))],
+          threadIds: [...new Set(sentMessages.map((message) => message.threadId))],
+        }),
+        this.repository.profileTargetsByLabelIds([
+          ...new Set(sentMessages.flatMap((message) => message.labelIds)),
+        ]),
+      ]);
       const threadTargets = new Map(targets.byThread);
 
       for (const message of sentMessages) {
@@ -307,6 +313,68 @@ export class GoogleSentProfileLinkSweepService {
             internalDateMs: message.internalDateMs,
             organizationId: inherited.id,
             organizationName: inherited.name,
+            evidenceCodes,
+          });
+          continue;
+        }
+
+        const labeledTargets = new Map(
+          message.labelIds.flatMap((labelId) => {
+            const target = profileLabelTargets.get(labelId);
+            return target ? [[target.id, target] as const] : [];
+          }),
+        );
+        if (labeledTargets.size === 1) {
+          const organization = [...labeledTargets.values()][0]!;
+          const evidenceCodes = [
+            "gmail_profile_label",
+            "sent_profile_link_sweep",
+          ];
+          mappings.push({
+            messageId: message.id,
+            threadId: message.threadId,
+            organizationId: organization.id,
+            contactId: null,
+            evidenceCodes,
+          });
+          linked.push({
+            messageId: message.id,
+            threadId: message.threadId,
+            subject: message.headers.subject,
+            to: message.headers.to,
+            internalDateMs: message.internalDateMs,
+            organizationId: organization.id,
+            organizationName: organization.name,
+            evidenceCodes,
+          });
+          threadTargets.set(message.threadId, organization);
+          continue;
+        }
+        if (labeledTargets.size > 1) {
+          const candidates = [...labeledTargets.values()];
+          const evidenceCodes = [
+            "gmail_profile_label_conflict",
+            "sent_profile_link_sweep",
+          ];
+          const row: GoogleValidationReviewInput = {
+            messageId: message.id,
+            threadId: message.threadId,
+            subject: message.headers.subject,
+            from: message.headers.from,
+            to: message.headers.to,
+            internalDateMs: message.internalDateMs,
+            evidenceCodes,
+            candidates,
+            hasAttachments: message.hasAttachments,
+          };
+          reviews.push(row);
+          needsReview.push({
+            messageId: message.id,
+            threadId: message.threadId,
+            subject: message.headers.subject,
+            to: message.headers.to,
+            internalDateMs: message.internalDateMs,
+            candidates,
             evidenceCodes,
           });
           continue;
@@ -475,6 +543,38 @@ implements GoogleSentProfileLinkSweepRepository {
       }
     }
     return { byMessage, byThread };
+  }
+
+  async profileTargetsByLabelIds(
+    labelIds: string[],
+  ): Promise<Map<string, GoogleSentProfileTarget>> {
+    if (!labelIds.length) return new Map();
+    const connectionId = await this.connectionId();
+    const result = await this.pool.query(
+      `SELECT
+         l.gmail_label_id,
+         o.id::text AS organization_id,
+         o.name AS organization_name
+       FROM google_workspace_profile_labels l
+       INNER JOIN organizations o
+         ON o.id = l.organization_id
+        AND o.consolidated_into_id IS NULL
+       WHERE l.connection_id = $1
+         AND l.state = 'active'
+         AND l.gmail_label_id = ANY($2::text[])
+       ORDER BY l.gmail_label_id`,
+      [connectionId, labelIds],
+    );
+    return new Map(result.rows.flatMap((row) =>
+      typeof row.gmail_label_id === "string"
+      && typeof row.organization_id === "string"
+      && typeof row.organization_name === "string"
+        ? [[row.gmail_label_id, {
+            id: row.organization_id,
+            name: row.organization_name,
+          }] as const]
+        : [],
+    ));
   }
 
   async upsertMappings(rows: GoogleValidationMappingInput[]): Promise<void> {
