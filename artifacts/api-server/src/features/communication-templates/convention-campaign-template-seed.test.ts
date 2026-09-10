@@ -35,12 +35,12 @@ describe("convention campaign template seed", () => {
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
-        code: "convention_after_new_event_v2",
+        code: "convention_after_new_event_v3",
         gmailMessageId: "1a084a3877bde871",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
-        code: "convention_after_past_event_v2",
+        code: "convention_after_past_event_v3",
         gmailMessageId: "1a084a39fdd1790d",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
