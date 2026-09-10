@@ -9,7 +9,7 @@ let pg: PGlite;
 afterEach(async () => { await pg?.close(); });
 
 describe("saved email logo refresh", () => {
-  it.each([old, next])("updates active templates and pending snapshots only, preserving wording, layout, approvals and repeatability", async (source) => {
+  it.each([old, next, "video-only"])("updates active templates and pending snapshots only, preserving wording, layout, approvals and repeatability", async (source) => {
     pg = new PGlite();
     await pg.exec(`
       create table communication_templates(id text primary key, code text default 'convention_after_new_v2', body_template text not null, body_format text not null, state text not null, reviewed_by text, reviewed_at timestamptz, updated_at timestamptz default now());
@@ -19,7 +19,7 @@ describe("saved email logo refresh", () => {
       create unique index reviews_template on communication_template_reviews(request_id,template_id);
       create table boss_work_request_events(request_id text, actor_kind text, actor_id text, prior_state text, new_state text, note text);
     `);
-    const body = `<table><tr><td style="background:#0f1729"><img src="${source}" width="390" style="height:auto;max-width:92%"></td></tr><tr><td style="background:#0f1729"><span class="eyebrow">CONFERENCE SEASON</span><p>My edited wording</p></td></tr></table>`;
+    const body = source === "video-only" ? `<p>My edited wording</p><a href="https://youtu.be/-xTjCJz9RmI?feature=shared">Watch Warrior’s Playground</a>` : `<table><tr><td style="background:#0f1729"><img src="${source}" width="390" style="height:auto;max-width:92%"></td></tr><tr><td style="background:#0f1729"><span class="eyebrow">CONFERENCE SEASON</span><p>My edited wording</p></td></tr></table>`;
     for (const [id, state] of [["one", "active"], ["two", "draft"], ["three", "archived"]]) {
       await pg.query("insert into communication_templates(id,body_template,body_format,state,reviewed_by) values ($1,$2,'html',$3,'Dave')", [id, body, state]);
     }
@@ -45,4 +45,5 @@ describe("saved email logo refresh", () => {
     expect((await pg.query<{deduplication_key:string}>("select deduplication_key from boss_work_requests where id='open'")).rows[0].deduplication_key).not.toBe("convention-template-review-set:old");
   });
 });
+
 
