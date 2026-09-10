@@ -76,7 +76,10 @@ describe("EventCalendar profile navigation", () => {
 
     const { container } = render(<EventCalendar events={[openEndedPotential]} initialMonth="2026-09" />);
 
-    expect(container.querySelectorAll('[data-testid^="booking-span-potential-open-ended-"]')).toHaveLength(1);
+    const spans = container.querySelectorAll('[data-testid^="booking-span-potential-open-ended-"]');
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.getAttribute("data-start-column")).toBe("2");
+    expect(spans[0]?.getAttribute("data-end-column")).toBe("5");
   });
 
   it("renders potential shows dimmer than booked shows", () => {
