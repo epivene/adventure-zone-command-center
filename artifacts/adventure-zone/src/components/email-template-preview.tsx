@@ -7,7 +7,10 @@ export function EmailTemplatePreview({ html, title }: { html: string; title: str
   const [availableWidth, setAvailableWidth] = useState(0);
   const [fit, setFit] = useState(true);
   const document = useMemo(() => buildEmailPreview(html), [html]);
-  const canvasWidth = 760;
+  // Most of our branded emails are built around a 600–640px content area.
+  // A 700px preview canvas keeps the complete email visible while making the
+  // fitted phone view a little easier to read.
+  const canvasWidth = 700;
   const scale = fit && availableWidth > 0 ? Math.min(1, availableWidth / canvasWidth) : 1;
 
   useEffect(() => {
