@@ -95,7 +95,10 @@ export class BossWorkRequestService {
       await this.repository.createTemplateReview({
         requestId: created.request.id,
         templateId: template.id,
+        position: 0,
+        templateNameSnapshot: template.name,
         templateVersion: template.templateVersion,
+        verifiedLinks: [],
         contentFingerprint: templateFingerprint({
           templateVersion: template.templateVersion,
           subjectTemplate: template.subjectTemplate,
