@@ -14,6 +14,10 @@ describe("owner inquiry navigation menu", () => {
     expect(mobile).toContain("websiteInquiryCount={websiteInquiryCount}");
   });
 
+  it("hides the Office Coordinator shortcut from the Booking menu", () => {
+    expect(source).not.toContain('{ href: "/office-coordinator", label: "Office Coordinator" }');
+  });
+
   it("keeps the Marketing workspace focused on marketing work", () => {
     const marketingBlock = source.match(/const marketingGroups:[\s\S]*?const adminToolsGroups/)?.[0] ?? "";
     expect(marketingBlock).toContain('href: "/marketing"');
