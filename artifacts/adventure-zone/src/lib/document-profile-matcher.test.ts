@@ -30,6 +30,23 @@ describe("document profile matcher", () => {
     });
   });
 
+  it("matches profiles whose event name follows a filing category prefix", () => {
+    const prefixedDocument = {
+      ...document,
+      displayName: "Elmore County Fair (Glenns Ferry) ID 2026",
+      originalFilename: "Elmore County Fair (Glenns Ferry) ID 2026.docx",
+    };
+
+    expect(chooseStrongProfileMatch(prefixedDocument, [
+      { id: "elmore", name: "County Fair - Elmore (Glenns Ferry) ID", city: "Glenns Ferry", region: "ID" },
+      { id: "boundary", name: "County Fair - Boundary (Bonners Ferry) ID", city: "Bonners Ferry", region: "ID" },
+    ])).toEqual({
+      profile: { id: "elmore", name: "County Fair - Elmore (Glenns Ferry) ID", city: "Glenns Ferry", region: "ID" },
+      confidence: 0.99,
+      reason: "Profile name and location match the document name",
+    });
+  });
+
   it("refuses ambiguous and weak results", () => {
     expect(chooseStrongProfileMatch(document, [
       { id: "p1", name: "Great Northern Fair", city: "Havre", region: "MT" },
