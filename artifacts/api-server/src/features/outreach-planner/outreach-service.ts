@@ -1,3 +1,6 @@
+import { rowsOf } from "./outreach-sources";
+import { searchProfiles, admitProfile } from "./outreach-workspace";
+import { applyPortfolioPriority } from "./outreach-portfolio";
 import { sql } from "drizzle-orm";
 import { replayActualOutreach } from "./outreach-events";
 import {
@@ -21,12 +24,15 @@ import {
 import { OutreachRepository, OutreachError } from "./outreach-repository";
 import {
   openingInput,
+  profileAdmissionInput,
+  researchResultInput,
   candidateInput,
   candidatePatch,
   attemptInput,
   researchInput,
   historyReviewInput,
   type PlannerDTO,
+  type RecoveryCatalogDTO,
   type CandidateDTO,
 } from "./outreach-dto";
 export const isOutreachPlannerEnabled = () =>
@@ -55,6 +61,7 @@ export class OutreachService {
     await replayActualOutreach(this.repository.db).catch(() => undefined);
     const now = this.clock();
     const planner = await this.repository.load(now);
+    let portfolioFacts: AllocationFacts | null = null;
     if (
       this.allocation &&
       planner.candidates.some((c) => c.sourceSnapshot?.allocationCheck)
@@ -64,6 +71,7 @@ export class OutreachService {
       let currentFacts: AllocationFacts | null = null;
       try {
         currentFacts = await loadAllocationFacts(this.repository.db);
+        portfolioFacts = currentFacts;
         currentFingerprint = fingerprint(currentFacts);
       } catch {
         /* stale, actionable */
@@ -117,8 +125,23 @@ export class OutreachService {
                 ],
               },
         };
+        c.capacity = c.lastAllocationCheck.capacity;
       }
     }
+    const labels = [
+      ...planner.packages.flatMap((p) => [
+        [p.id, p.name],
+        [p.code, p.name],
+      ]),
+      ...planner.legs.map((l) => [l.id, l.name]),
+      ...(portfolioFacts?.bookings ?? []).map((b) => [b.id, b.name]),
+      ...(portfolioFacts?.resources ?? []).map((r) => [r.id, r.name]),
+    ];
+    for (const c of planner.candidates)
+      c.capacityDisplayReasons = c.capacity.reasons.map((reason) =>
+        labels.reduce((text, [id, name]) => text.replaceAll(id, name), reason),
+      );
+    applyPortfolioPriority(planner, portfolioFacts, now);
     return planner;
   }
   async createOpening(body: unknown, actor: string) {
@@ -390,14 +413,24 @@ export class OutreachService {
   }
   async research(id: string, body: unknown, actor: string) {
     this.gate();
-    const { criteria } = researchInput.parse(body);
+    const input = researchInput.parse(body);
     return this.repository.transaction(actor, "create_research", async (r) => {
       const opening = (await r.load(this.clock())).openings.find(
         (x) => x.id === id,
       );
       if (!opening) throw new OutreachError(404, "Opening not found.");
-      const derived = `${opening.eventYear}; ${opening.startsOn} to ${opening.endsOn}; leg ${opening.legId ?? "unassigned"}; packages ${JSON.stringify(opening.quantities)}\n${criteria}`;
-      const value = await r.research(id, derived);
+      if (
+        input.qualificationCriteria.startsOn < opening.startsOn ||
+        input.qualificationCriteria.endsOn > opening.endsOn ||
+        Object.entries(input.qualificationCriteria.quantities).some(
+          ([code, q]) => (opening.quantities[code] ?? 0) < q,
+        )
+      )
+        throw new OutreachError(
+          400,
+          "Research dates and packages must fit the selected opening criteria.",
+        );
+      const value = await r.research(id, input, this.clock());
       return { id: value.id, value };
     });
   }
@@ -444,27 +477,59 @@ export class OutreachService {
       .parse(query);
     return this.repository.opportunities(q, year);
   }
+  async recoveryCatalog(query: unknown): Promise<RecoveryCatalogDTO> {
+    this.gate();
+    const { q } = z
+      .object({ q: z.string().trim().max(200).default("") })
+      .parse(query);
+    const bookings = rowsOf<RecoveryCatalogDTO["bookings"][number]>(
+      await this.repository.db.execute(
+        sql`select b.id,b.organization_id as "organizationId",g.name as "organizationName",b.name,b.starts_at as "startsAt",b.ends_at as "endsAt",b.status,b.travel_leg_id as "travelLegId" from bookings b left join organizations g on g.id=b.organization_id where b.name ilike ${`%${q}%`} or g.name ilike ${`%${q}%`} order by b.starts_at desc nulls last,b.id limit 100`,
+      ),
+    );
+    const drafts = rowsOf<RecoveryCatalogDTO["drafts"][number]>(
+      await this.repository.db.execute(
+        sql`select d.id,'opportunity_email' as kind,d.organization_id as "organizationId",d.opportunity_id as "opportunityId",o.booking_id as "bookingId",d.event_year as "eventYear",d.subject,d.recipient_email as "recipientEmail",d.state from booking_opportunity_email_state d join booking_opportunities o on o.id=d.opportunity_id join organizations g on g.id=d.organization_id where d.state not in ('sent','discarded') and (g.name ilike ${`%${q}%`} or d.subject ilike ${`%${q}%`}) union all select d.id,'office_email',d.organization_id,o.id,d.booking_id,d.event_year,d.subject,d.recipient_email,d.state from office_email_drafts d join organizations g on g.id=d.organization_id left join booking_opportunities o on o.organization_id=d.organization_id and o.event_year=d.event_year and (d.booking_id is null or o.booking_id=d.booking_id) where d.state not in ('sent','discarded') and (g.name ilike ${`%${q}%`} or d.subject ilike ${`%${q}%`}) limit 100`,
+      ),
+    );
+    return JSON.parse(
+      JSON.stringify({ bookings, drafts }),
+    ) as RecoveryCatalogDTO;
+  }
+  async searchProfiles(query: unknown) {
+    this.gate();
+    const { q, year } = z
+      .object({
+        q: z.string().trim().max(200).default(""),
+        year: z.coerce.number().int().min(2000).max(2200),
+      })
+      .parse(query);
+    return searchProfiles(this.repository, q, year);
+  }
+  async admitProfile(body: unknown, actor: string) {
+    this.gate();
+    const input = profileAdmissionInput.parse(body);
+    return this.repository.transaction(
+      actor,
+      "admit_profile_year",
+      async (r) => {
+        const value = await admitProfile(r, input);
+        return {
+          id: value.opportunityId,
+          value,
+          opportunityId: value.opportunityId,
+        };
+      },
+    );
+  }
   async saveResearchResults(id: string, body: unknown, actor: string) {
     this.gate();
     const { results } = z
-      .object({
-        results: z
-          .array(
-            z
-              .object({
-                opportunityId: z.string().uuid(),
-                sourceUrl: z.string().url(),
-                note: z.string().trim().min(1),
-              })
-              .strict(),
-          )
-          .min(1)
-          .max(100),
-      })
+      .object({ results: z.array(researchResultInput).min(1).max(100) })
       .strict()
       .parse(body);
     return this.repository.transaction(actor, "research_results", async (r) => {
-      const value = await r.researchResults(id, results);
+      const value = await r.researchResults(id, results, this.clock());
       return { id, value };
     });
   }

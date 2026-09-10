@@ -92,11 +92,18 @@ insert into booking_package_selections values ('${booking}','${pkg}');
   await client.exec(
     `alter table booking_opportunity_email_state add organization_id uuid default '${org}',add contact_id uuid,add recipient_email text default 'owner@example.com',add subject text default 'Availability',add body text default 'Reviewed offer',add gmail_draft_id text default 'draft1',add gmail_thread_id text,add scheduled_for timestamptz,add last_failure_code text,add last_failure_message text;`,
   );
+  await client.exec(`alter table package_templates add name text default 'Adventure Zone';
+    create table contacts(id uuid primary key,email text);
+    create table communication_blocks(id uuid primary key default gen_random_uuid(),active boolean default true,target_type text,organization_id uuid,contact_id uuid,normalized_email text,reason text);
+    create table convention_editions(id uuid primary key,year integer);
+    create table convention_members(id uuid primary key,edition_id uuid,organization_id uuid);
+  `);
   for (const name of [
     "20260909_outreach_planner.sql",
     "20260909_outreach_allocation.sql",
     "20260909_outreach_commitments.sql",
     "20260909_outreach_dispatch.sql",
+    "20260910_outreach_workspace.sql",
   ]) {
     const migration = await readFile(`../../lib/db/migrations/${name}`, "utf8");
     await client.exec(migration);
@@ -1394,6 +1401,56 @@ describe("content-bound dispatch ledger", () => {
     );
     return { ...f, id, hold, dispatch, preview, kind };
   }
+  it.each(["opportunity_email", "office_email"] as const)(
+    "%s rechecks exact DO NOT SEND targets and override recipient before submission",
+    async (kind) => {
+      const f = await reviewed(kind, "exploratory");
+      await f.client.exec(
+        `insert into communication_blocks(target_type,reason) values ('internal_preview','Preview only'),('lead_import_row','Unrelated import row');`,
+      );
+      const overrides = { to: "Override@Example.com" };
+      const review = await f.dispatch.review(kind, f.id, overrides);
+      await f.dispatch.approve(
+        kind,
+        f.id,
+        {
+          digest: review.digest,
+          intent: "exploratory",
+          holdId: null,
+          stage: "initial",
+          overrides,
+          reason: "Reviewed override recipient",
+        },
+        "owner",
+      );
+      await f.client.exec(
+        `insert into communication_blocks(target_type,normalized_email,reason) values ('recipient_email','override@example.com','Owner suppression');`,
+      );
+      await expect(
+        f.dispatch.claim(kind, f.id, review.draft.content),
+      ).rejects.toThrow("DO NOT SEND");
+      await f.client.exec(
+        `update communication_blocks set active=false where target_type='recipient_email'`,
+      );
+      const claim = await f.dispatch.claim(kind, f.id, review.draft.content);
+      await f.dispatch.assertCurrent(claim);
+      expect((await f.dispatch.list())[0]).toMatchObject({
+        id: claim.id,
+        draftId: f.id,
+        draftKind: kind,
+        state: "dispatching",
+      });
+      await f.client.exec(
+        `insert into communication_blocks(target_type,organization_id,reason) values ('organization','${org}','Stop all outreach');`,
+      );
+      await expect(f.dispatch.assertCurrent(claim)).rejects.toMatchObject({
+        code: "OUTREACH_SEND_RECHECK_FAILED",
+      });
+      expect(
+        (await f.service.get()).candidates[0].sources.protectedReason,
+      ).toContain("DO NOT SEND");
+    },
+  );
   it.each(["opportunity_email", "office_email"] as const)(
     "%s permits only the final approved content and one contender",
     async (kind) => {

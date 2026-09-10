@@ -13,6 +13,7 @@ export type OutreachAttempt = {
   successful: boolean;
 };
 export type OutreachPolicyInput = {
+  snoozedUntil?: string | null;
   tier: OutreachTier;
   status: string;
   attempts: OutreachAttempt[];
@@ -37,6 +38,32 @@ export type OutreachDecision = {
   reason: string;
   nextStage: OutreachAttempt["stage"] | null;
 };
+export type OutreachCadence = {
+  days: [number, number, number];
+  minimumGapDays: number;
+  reason: string;
+};
+export const DEFAULT_OUTREACH_CADENCE: OutreachCadence = {
+  days: [7, 14, 21],
+  minimumGapDays: 7,
+  reason: "Default cadence",
+};
+export function validCadence(policy: OutreachCadence): boolean {
+  return (
+    policy.days.length === 3 &&
+    Number.isInteger(policy.minimumGapDays) &&
+    policy.minimumGapDays > 0 &&
+    policy.minimumGapDays <= 3650 &&
+    !!policy.reason.trim() &&
+    policy.days.every(
+      (day, index) =>
+        Number.isInteger(day) &&
+        day > 0 &&
+        day <= 3650 &&
+        day - (policy.days[index - 1] ?? 0) >= policy.minimumGapDays,
+    )
+  );
+}
 const DAY = 86_400_000;
 const ranks: Record<OutreachTier, number> = {
   dedicated: 0,
@@ -135,6 +162,7 @@ function routineWeekday(due: Date): Date {
 export function evaluateOutreach(
   input: OutreachPolicyInput,
   now: Date,
+  policy: OutreachCadence = DEFAULT_OUTREACH_CADENCE,
 ): OutreachDecision {
   if (closed.has(input.status)) return result("closed", "Pursuit is closed.");
   if (input.blockedReason) return result("needs_review", input.blockedReason);
@@ -194,6 +222,23 @@ export function evaluateOutreach(
         "Successful stages must form a strictly ordered initial and two follow-ups.",
       );
   }
+  if (!validCadence(policy))
+    return result(
+      "needs_review",
+      "Cadence requires increasing positive days and an explicit minimum gap and reason.",
+    );
+  if (
+    input.latestActualAttemptAt &&
+    (!instant(input.latestActualAttemptAt) ||
+      instant(input.latestActualAttemptAt)! > now)
+  )
+    return result(
+      "needs_review",
+      "Additional actual outreach has an invalid date.",
+    );
+  const snooze = input.snoozedUntil ? instant(input.snoozedUntil) : null;
+  if (input.snoozedUntil && !snooze)
+    return result("needs_review", "Snooze date is invalid.");
   // An explicit decision remains actionable even when the operational timeline is short.
   if (decision)
     return result(
@@ -231,6 +276,12 @@ export function evaluateOutreach(
       );
     if (input.tier === "convention" && !input.conventionEndsOn)
       return result("needs_review", "Convention end date is missing.");
+    if (snooze && snooze > now)
+      return result(
+        "waiting",
+        "Owner snoozed routine outreach; existing callbacks and replies retain priority.",
+        snooze,
+      );
     return result(
       "ready",
       "No successful initial outreach is recorded.",
@@ -240,6 +291,12 @@ export function evaluateOutreach(
       "initial",
     );
   }
+  if (snooze && snooze > now)
+    return result(
+      "waiting",
+      "Owner snoozed routine outreach; existing callbacks and replies retain priority.",
+      snooze,
+    );
   const first = instant(completed[0].occurredAt)!;
   let last = instant(completed[completed.length - 1].occurredAt)!;
   if (input.latestActualAttemptAt) {
@@ -254,8 +311,8 @@ export function evaluateOutreach(
   const due = routineWeekday(
     new Date(
       Math.max(
-        first.getTime() + completed.length * 7 * DAY,
-        last.getTime() + 7 * DAY,
+        first.getTime() + policy.days[completed.length - 1] * DAY,
+        last.getTime() + policy.minimumGapDays * DAY,
       ),
     ),
   );

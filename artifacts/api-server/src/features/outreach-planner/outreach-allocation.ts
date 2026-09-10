@@ -336,7 +336,7 @@ export class OutreachAllocation {
           !prepared.travelReasons.length &&
           decision.status !== "needs_review",
       },
-      allocationEnforcementComplete: false,
+      allocationEnforcementComplete: true,
     };
   }
   async evaluateCommitment(bookingId: string) {
@@ -370,7 +370,7 @@ export class OutreachAllocation {
           factsFingerprint: null,
           travelVerified: false,
         },
-        allocationEnforcementComplete: false,
+        allocationEnforcementComplete: true,
       } satisfies AllocationCheckDTO;
     }
   }
@@ -393,7 +393,7 @@ export class OutreachAllocation {
           factsFingerprint: null,
           travelVerified: false,
         },
-        allocationEnforcementComplete: false,
+        allocationEnforcementComplete: true,
       } satisfies AllocationCheckDTO;
     const holds = (await loadAllocationFacts(this.db)).holds;
     const own = holds.find(
@@ -479,7 +479,7 @@ export class OutreachAllocation {
             sql`select * from outreach_reconciliation_facts order by created_at desc limit 200`,
           ),
         ),
-        allocationEnforcementComplete: false,
+        allocationEnforcementComplete: true,
       };
     });
   }

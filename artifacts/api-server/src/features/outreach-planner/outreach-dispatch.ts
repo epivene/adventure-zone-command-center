@@ -1,3 +1,4 @@
+import { outreachContactBlock } from "./outreach-contact-safety";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import {
@@ -54,6 +55,23 @@ export type DispatchClaim = {
   } | null;
   review_after: string;
   verification?: { factsFingerprint: string; validUntil: string };
+};
+export type DispatchDTO = {
+  id: string;
+  draftKind: DraftKind;
+  draftId: string;
+  holdId: string | null;
+  state: DispatchClaim["state"];
+  intent: "exploratory" | "administrative" | "specific_offer";
+  stage: "initial" | "follow_up_1" | "follow_up_2" | null;
+  payload: DraftReview;
+  confirmation: DispatchClaim["confirmation"];
+  reviewAfter: string;
+  verification: DispatchClaim["verification"] | null;
+  lastError: string | null;
+  trackingState: string;
+  createdAt: string;
+  updatedAt: string;
 };
 export interface DispatchSafety {
   enabled(): boolean;
@@ -198,6 +216,11 @@ export class OutreachDispatch implements DispatchSafety {
     );
     const dispatch = await this.lookup(kind, id);
     const reviewReasons: string[] = [];
+    const blocked = await outreachContactBlock(this.db, {
+      ...draft,
+      recipientEmail: draft.content.to,
+    });
+    if (blocked) reviewReasons.push(blocked);
     if (!approval || approval.digest !== dispatchDigest(draft))
       reviewReasons.push(
         "Review intent for this exact final content and recipient.",
@@ -343,6 +366,11 @@ export class OutreachDispatch implements DispatchSafety {
     return withAllocationTransaction(this.db, async (tx) => {
       const draft = await readDispatchDraft(tx, kind, id);
       draft.content = content;
+      const blocked = await outreachContactBlock(tx, {
+        ...draft,
+        recipientEmail: content.to,
+      });
+      if (blocked) throw conflict(blocked);
       if (["sent", "discarded"].includes(draft.state))
         throw conflict("This email has already been sent or discarded.");
       if (await this.lookup(kind, id, tx))
@@ -443,6 +471,7 @@ export class OutreachDispatch implements DispatchSafety {
     });
   }
   async assertCurrent(claim: DispatchClaim) {
+    if (!this.enabled()) return;
     try {
       await withAllocationTransaction(this.db, async (tx) => {
         const [current] = rowsOf<DispatchClaim>(
@@ -472,6 +501,11 @@ export class OutreachDispatch implements DispatchSafety {
           throw conflict(
             "Draft identity or content was edited while preparing delivery.",
           );
+        const blocked = await outreachContactBlock(tx, {
+          ...current.payload,
+          recipientEmail: current.payload.content.to,
+        });
+        if (blocked) throw conflict(blocked);
         if (current.hold_id) {
           const [h] = rowsOf<HoldFact>(
             await tx.execute(
@@ -558,13 +592,30 @@ export class OutreachDispatch implements DispatchSafety {
       );
     });
   }
-  async list() {
+  async list(): Promise<DispatchDTO[]> {
     this.gate();
-    return rowsOf<DispatchClaim>(
+    const rows = rowsOf<any>(
       await this.db.execute(
         sql`select * from outreach_dispatches order by created_at desc limit 200`,
       ),
     );
+    return rows.map((row) => ({
+      id: row.id,
+      draftKind: row.draft_kind,
+      draftId: row.draft_id,
+      holdId: row.hold_id,
+      state: row.state,
+      intent: row.intent,
+      stage: row.stage,
+      payload: row.payload,
+      confirmation: row.confirmation,
+      reviewAfter: new Date(row.review_after).toISOString(),
+      verification: row.verification ?? null,
+      lastError: row.last_error,
+      trackingState: row.tracking_state,
+      createdAt: new Date(row.created_at).toISOString(),
+      updatedAt: new Date(row.updated_at).toISOString(),
+    }));
   }
   async reconcile(id: string, body: unknown, actor: string) {
     this.gate();

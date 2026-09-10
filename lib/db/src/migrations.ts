@@ -574,6 +574,13 @@ const migrationFiles = [
       AND EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass(current_schema() || '.outreach_inbound_observations') AND conname='outreach_inbound_pkey')
       AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_dispatches' AND column_name='tracking_state') AS ready`,
   },
+  {
+    name: "20260910_outreach_workspace.sql",
+    markerSql: `SELECT NOT EXISTS(SELECT 1 FROM (VALUES ('outreach_candidates','snoozed_until'),('outreach_candidates','cadence_override'),('outreach_research_tasks','qualification_criteria'),('outreach_research_tasks','target_count')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND to_regprocedure(current_schema() || '.outreach_valid_cadence(jsonb)') IS NOT NULL
+      AND (SELECT count(*)=3 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_candidates_cadence_valid','outreach_research_target_valid','outreach_research_qualification_valid'))
+      AND to_regclass(current_schema() || '.outreach_candidates_snoozed_idx') IS NOT NULL AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

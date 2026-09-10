@@ -65,6 +65,10 @@ describe("outreach owner routes", () => {
     });
     const id = "10000000-0000-4000-8000-000000000001";
     for (const [method, path] of [
+      ["GET", "/profiles?year=2026"],
+      ["GET", "/recovery"],
+      ["GET", "/dispatches"],
+      ["POST", "/opportunities/admit"],
       ["POST", "/route-anchors"],
       ["POST", `/reconciliations/${id}/source-review`],
       ["POST", `/route-anchors/${id}/revoke`],
@@ -86,7 +90,13 @@ describe("outreach owner routes", () => {
       ["POST", `/holds/${id}/extend`],
     ])
       expect(
-        (await fetch(url + path, { method, headers, body: "{}" })).status,
+        (
+          await fetch(url + path, {
+            method,
+            headers,
+            body: method === "GET" ? undefined : "{}",
+          })
+        ).status,
       ).toBe(404);
     expect(touches).not.toHaveBeenCalled();
     expect((await fetch(url + "/allocations", { headers })).status).toBe(404);

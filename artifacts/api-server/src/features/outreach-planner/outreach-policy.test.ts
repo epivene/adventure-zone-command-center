@@ -235,3 +235,88 @@ it.each(["constructor", "toString", "__proto__", "unknown"])(
     expect(compareOutreachPriority(classified, unknown)).toBeLessThan(0);
   },
 );
+
+describe("owner cadence and snooze", () => {
+  const short = {
+    days: [2, 4, 6] as [number, number, number],
+    minimumGapDays: 2,
+    reason: "Owner reviewed the available timeline",
+  };
+  it("uses explicit increasing days and still waits after a delayed follow-up", () => {
+    expect(
+      evaluateOutreach(
+        { ...base, attempts: [initial] },
+        new Date("2026-09-03T18:00:00Z"),
+        short,
+      ).state,
+    ).toBe("follow_up");
+    expect(
+      evaluateOutreach(
+        {
+          ...base,
+          attempts: [initial, { ...first, occurredAt: "2026-09-29T18:00:00Z" }],
+        },
+        now,
+        short,
+      ).dueAt,
+    ).toBe("2026-10-01T18:00:00.000Z");
+    expect(
+      evaluateOutreach(base, now, { ...short, days: [2, 2, 3] }).state,
+    ).toBe("needs_review");
+    expect(
+      evaluateOutreach(base, now, { ...short, minimumGapDays: 0 }).state,
+    ).toBe("needs_review");
+  });
+  it("keeps replies, decisions and uncertain evidence above a snooze", () => {
+    const input = { ...base, snoozedUntil: "2026-11-01T18:00:00Z" };
+    expect(evaluateOutreach(input, now, short).state).toBe("waiting");
+    expect(
+      evaluateOutreach({ ...input, tier: "unclassified" }, now, short).state,
+    ).toBe("needs_review");
+    expect(
+      evaluateOutreach(
+        { ...input, tier: "convention", conventionEndsOn: null },
+        now,
+        short,
+      ).state,
+    ).toBe("needs_review");
+    expect(
+      evaluateOutreach(
+        { ...input, meaningfulReplyAt: initial.occurredAt },
+        now,
+        short,
+      ).state,
+    ).toBe("reply");
+    expect(
+      evaluateOutreach(
+        { ...input, decisionDueAt: initial.occurredAt },
+        now,
+        short,
+      ).state,
+    ).toBe("decision");
+    expect(
+      evaluateOutreach(
+        { ...input, blockedReason: "Source unavailable" },
+        now,
+        short,
+      ).state,
+    ).toBe("needs_review");
+    expect(
+      evaluateOutreach(
+        { ...input, latestActualAttemptAt: "2026-11-01T18:00:00Z" },
+        now,
+        short,
+      ).state,
+    ).toBe("needs_review");
+    expect(
+      evaluateOutreach(
+        {
+          ...input,
+          attempts: [{ ...initial, occurredAt: "2026-11-01T18:00:00Z" }],
+        },
+        now,
+        short,
+      ).state,
+    ).toBe("needs_review");
+  });
+});

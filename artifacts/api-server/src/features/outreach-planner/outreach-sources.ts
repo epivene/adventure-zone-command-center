@@ -1,3 +1,4 @@
+import { outreachContactBlock } from "./outreach-contact-safety";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { evaluateCapacity } from "./capacity-policy";
@@ -73,6 +74,11 @@ export async function readOutreachSources(
     )
       result.protectedReason =
         "Protected contact or territory hold requires owner review.";
+    result.protectedReason =
+      (await outreachContactBlock(db, {
+        organizationId: op.organization_id,
+        contactId: op.contact_id,
+      })) ?? result.protectedReason;
     if (op.next_action_due_at)
       result.manualNextActions.push({
         id: `opportunity:${opportunityId}`,
@@ -125,7 +131,19 @@ export async function readOutreachSources(
           sql`select id,message_id,thread_id,opportunity_id,event_year,received_at,state,classification,reviewed_opportunity_id from outreach_inbound_observations where organization_id=${op.organization_id}::uuid and (opportunity_id is null or opportunity_id=${opportunityId}::uuid) order by received_at`,
         ),
       );
-      result.inboundObservations = inbound;
+      result.inboundObservations = inbound.map((row) => ({
+        id: row.id,
+        messageId: row.message_id,
+        threadId: row.thread_id,
+        opportunityId: row.opportunity_id,
+        eventYear: row.event_year,
+        receivedAt: row.received_at
+          ? new Date(row.received_at).toISOString()
+          : null,
+        state: row.state,
+        classification: row.classification,
+        reviewedOpportunityId: row.reviewed_opportunity_id,
+      }));
       if (inbound.some((m) => m.state === "needs_review"))
         result.protectedReason =
           "Received email needs owner reply, conversation or non-reply classification; event year may need review.";

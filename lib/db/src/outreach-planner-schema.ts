@@ -65,6 +65,12 @@ export const outreachCandidates = pgTable(
       .notNull()
       .default("unclassified"),
     manualRank: integer("manual_rank").notNull().default(0),
+    snoozedUntil: timestamp("snoozed_until", { withTimezone: true }),
+    cadenceOverride: jsonb("cadence_override").$type<{
+      days: [number, number, number];
+      minimumGapDays: number;
+      reason: string;
+    }>(),
     decisionDueAt: timestamp("decision_due_at", { withTimezone: true }),
     meaningfulReplyAt: timestamp("meaningful_reply_at", { withTimezone: true }),
     conventionEndsOn: date("convention_ends_on"),
@@ -125,10 +131,38 @@ export const outreachResearchTasks = pgTable(
       .notNull()
       .references(() => outreachOpenings.id),
     criteria: text("criteria").notNull(),
+    qualificationCriteria: jsonb("qualification_criteria").$type<{
+      startsOn: string;
+      endsOn: string;
+      quantities: Record<string, number>;
+      geography: {
+        latitude: number;
+        longitude: number;
+        radiusMiles: number;
+        adjacentRegions: string[];
+      };
+    }>(),
+    targetCount: integer("target_count").notNull().default(3),
     status: text("status").notNull().default("pending"),
     results:
       jsonb("results").$type<
-        { opportunityId: string; sourceUrl: string; note: string }[]
+        {
+          opportunityId: string;
+          sourceUrl: string;
+          note: string;
+          checkedAt?: string;
+          startsOn?: string;
+          endsOn?: string;
+          contact?: string;
+          quantities?: Record<string, number>;
+          latitude?: number;
+          longitude?: number;
+          region?: string;
+          dateConfidence?: "verified" | "unknown";
+          contactConfidence?: "verified" | "unknown";
+          fitConfidence?: "verified" | "unknown";
+          qualified?: boolean;
+        }[]
       >(),
     createdAt: created(),
   },

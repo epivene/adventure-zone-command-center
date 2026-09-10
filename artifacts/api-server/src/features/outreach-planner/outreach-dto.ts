@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { validCadence } from "./outreach-policy";
 import { parseBusinessDate } from "../../lib/business-date";
 import type {
   outreachOpenings,
@@ -51,10 +52,27 @@ export const candidateInput = z
     reason: z.string().trim().min(1).max(2000).optional(),
   })
   .strict();
+export const cadenceInput = z
+  .object({
+    days: z.tuple([
+      z.number().int().positive().max(3650),
+      z.number().int().positive().max(3650),
+      z.number().int().positive().max(3650),
+    ]),
+    minimumGapDays: z.number().int().positive().max(3650),
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .strict()
+  .refine(
+    validCadence,
+    "Days must strictly increase by at least the explicit minimum gap.",
+  );
 export const candidatePatch = z
   .object({
     tier: candidateInput.shape.tier.optional(),
     manualRank: candidateInput.shape.manualRank.optional(),
+    snoozedUntil: instant.nullable().optional(),
+    cadenceOverride: cadenceInput.nullable().optional(),
     decisionDueAt: instant.nullable().optional(),
     conventionEndsOn: date.nullable().optional(),
     meaningfulReplyAt: instant.nullable().optional(),
@@ -69,9 +87,117 @@ export const attemptInput = z
     reason: z.string().trim().min(1).max(2000).optional(),
   })
   .strict();
+export const qualificationCriteriaInput = z
+  .object({
+    startsOn: date,
+    endsOn: date,
+    quantities: z
+      .record(z.string().min(1), z.number().int().positive())
+      .refine((v) => Object.keys(v).length > 0),
+    geography: z
+      .object({
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        radiusMiles: z.number().positive().max(2000),
+        adjacentRegions: z.array(z.string().trim().min(1)).max(50).default([]),
+      })
+      .strict(),
+  })
+  .strict()
+  .refine((v) => v.startsOn <= v.endsOn, "Dates must be ordered.");
 export const researchInput = z
-  .object({ criteria: z.string().trim().min(1).max(4000) })
+  .object({
+    criteria: z.string().trim().min(1).max(4000),
+    qualificationCriteria: qualificationCriteriaInput,
+    targetCount: z.number().int().min(1).max(100).default(3),
+  })
   .strict();
+export const researchResultInput = z
+  .object({
+    opportunityId: z.string().uuid(),
+    sourceUrl: z
+      .string()
+      .url()
+      .refine(
+        (value) => ["https:", "http:"].includes(new URL(value).protocol),
+        "Use an HTTP source URL.",
+      ),
+    note: z.string().trim().min(1).max(4000),
+    checkedAt: instant,
+    startsOn: date.optional(),
+    endsOn: date.optional(),
+    contact: z.string().trim().min(1).optional(),
+    quantities: z
+      .record(z.string().min(1), z.number().int().positive())
+      .optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    region: z.string().trim().min(1).optional(),
+    dateConfidence: z.enum(["verified", "unknown"]),
+    contactConfidence: z.enum(["verified", "unknown"]),
+    fitConfidence: z.enum(["verified", "unknown"]),
+  })
+  .strict();
+export type ResearchResultInput = z.infer<typeof researchResultInput>;
+export type ResearchInput = z.infer<typeof researchInput>;
+export const profileAdmissionInput = z
+  .object({
+    organizationId: z.string().uuid(),
+    eventYear: z.number().int().min(2000).max(2200),
+    bookingId: z.string().uuid().nullable().optional(),
+    reason: z.string().trim().min(1).max(2000),
+  })
+  .strict();
+export type ProfileAdmissionInput = z.infer<typeof profileAdmissionInput>;
+export type ProfileChoiceDTO = {
+  organizationId: string;
+  organizationName: string;
+  city: string | null;
+  region: string | null;
+  protectedReason: string | null;
+  suggestions: ClassificationSuggestionDTO[];
+  bookings: {
+    id: string;
+    name: string;
+    startsAt: string | null;
+    endsAt: string | null;
+  }[];
+};
+export type ClassificationSuggestionDTO = {
+  tier: "filler" | "convention";
+  reason: string;
+  conventionYear?: number;
+};
+export type OpportunityChoiceDTO = {
+  id: string;
+  organizationId: string;
+  bookingId: string | null;
+  organizationName: string;
+  eventYear: number;
+  status: string;
+  suggestions: ClassificationSuggestionDTO[];
+};
+export type ProfileAdmissionDTO = {
+  opportunityId: string;
+  organizationId: string;
+  bookingId: string | null;
+  eventYear: number;
+  reused: boolean;
+  reason: string;
+};
+export type CandidateWaitingDTO = {
+  candidateId: string;
+  organizationName: string;
+  openingId: string;
+  openingTitle: string;
+  reason: string;
+};
+export type PortfolioDecisionDTO = {
+  state: "first_choice" | "waiting" | "needs_review" | "attention" | "inactive";
+  reason: string;
+  competing: CandidateWaitingDTO[];
+};
+
 export type OpeningInput = z.infer<typeof openingInput>;
 export type CandidateInput = z.infer<typeof candidateInput>;
 export type CandidatePatch = z.infer<typeof candidatePatch>;
@@ -84,6 +210,9 @@ type JsonDates<T> = {
       : T[K];
 };
 export type OpeningDTO = JsonDates<typeof outreachOpenings.$inferSelect>;
+export type ResearchTaskDTO = JsonDates<
+  typeof outreachResearchTasks.$inferSelect
+>;
 export type SourceChoice = {
   id: string;
   kind: "sent_email" | "outgoing_call" | "incoming_call" | "convention";
@@ -103,22 +232,22 @@ export type SourcesDTO = {
   capacity: CapacityDecision;
   historyFingerprint: string;
   sourceReviews?: {
-    source_id: string;
+    sourceId: string;
     classification: "additional_attempt" | "not_cadence";
-    occurred_at: string;
+    occurredAt: string;
     reason: string;
   }[];
   pendingSourceReviewIds?: string[];
   inboundObservations?: {
     id: string;
-    message_id: string;
-    thread_id: string;
-    opportunity_id: string | null;
-    event_year: number | null;
-    received_at: string | null;
+    messageId: string;
+    threadId: string;
+    opportunityId: string | null;
+    eventYear: number | null;
+    receivedAt: string | null;
     state: string;
     classification: string | null;
-    reviewed_opportunity_id: string | null;
+    reviewedOpportunityId: string | null;
   }[];
   observedInterestAt?: string;
   observedConversationAt?: string;
@@ -132,12 +261,20 @@ export type SourcesDTO = {
   allocationCheck?: AllocationCheckDTO;
 };
 export type CandidateDTO = JsonDates<typeof outreachCandidates.$inferSelect> & {
+  organizationId: string;
+  bookingId: string | null;
+  eventStartsAt: string | null;
+  eventEndsAt: string | null;
+  suggestions: ClassificationSuggestionDTO[];
+  waitingFor: CandidateWaitingDTO | null;
+  portfolio: PortfolioDecisionDTO;
   organizationName: string;
   eventYear: number;
   opportunityStatus: string;
   attempts: JsonDates<typeof outreachAttempts.$inferSelect>[];
   outreach: OutreachDecision;
   capacity: CapacityDecision;
+  capacityDisplayReasons: string[];
   sources: SourcesDTO;
   waitingForCandidateId: string | null;
   liveHoldId?: string | null;
@@ -147,11 +284,13 @@ export type PlannerDTO = {
   enabled: boolean;
   openings: OpeningDTO[];
   candidates: CandidateDTO[];
-  researchTasks: JsonDates<typeof outreachResearchTasks.$inferSelect>[];
-  legs: { id: string; name: string }[];
+  researchTasks: ResearchTaskDTO[];
+  legs: { id: string; name: string; active: boolean }[];
   packages: {
     id: string;
     code: string;
+    name: string;
+    active: boolean;
     normalCapacity: number;
     temporaryUnavailableQuantity: number;
   }[];
@@ -197,7 +336,7 @@ export type AllocationCheckDTO = {
     calendarEventFingerprint: string | null;
     sourceErrors: string[];
   };
-  allocationEnforcementComplete: false;
+  allocationEnforcementComplete: boolean;
 };
 export type AllocationCatalogDTO = {
   holds: HoldFact[];
@@ -205,5 +344,33 @@ export type AllocationCatalogDTO = {
   resources: AllocationFacts["resources"];
   anchors?: AllocationFacts["anchors"];
   reconciliationFacts?: Record<string, unknown>[];
-  allocationEnforcementComplete: false;
+  allocationEnforcementComplete: boolean;
 };
+
+export type RecoveryCatalogDTO = {
+  bookings: {
+    id: string;
+    organizationId: string | null;
+    organizationName: string | null;
+    name: string;
+    startsAt: string | null;
+    endsAt: string | null;
+    status: string;
+    travelLegId: string | null;
+  }[];
+  drafts: {
+    id: string;
+    kind: "opportunity_email" | "office_email";
+    organizationId: string;
+    opportunityId: string | null;
+    bookingId: string | null;
+    eventYear: number | null;
+    subject: string | null;
+    recipientEmail: string | null;
+    state: string;
+  }[];
+};
+export type SourceReviewDTO = NonNullable<SourcesDTO["sourceReviews"]>[number];
+export type InboundObservationDTO = NonNullable<
+  SourcesDTO["inboundObservations"]
+>[number];

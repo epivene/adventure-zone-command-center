@@ -1,3 +1,9 @@
+import { businessDateKey } from "../../lib/business-date";
+import {
+  classificationSuggestions,
+  qualifiesResearchResult,
+} from "./outreach-workspace";
+import { outreachContactBlock } from "./outreach-contact-safety";
 import { rowsOf } from "./outreach-sources";
 import { randomUUID } from "node:crypto";
 import { hasActivePursuit } from "./outreach-active-pursuit";
@@ -21,6 +27,9 @@ import type {
   CandidateInput,
   CandidatePatch,
   AttemptInput,
+  ResearchInput,
+  ResearchResultInput,
+  OpportunityChoiceDTO,
   OpeningDTO,
   CandidateDTO,
   PlannerDTO,
@@ -79,7 +88,7 @@ export class OutreachRepository {
               bookingId: op.bookingId,
               kind: "note",
               subject: "Outreach planner",
-              body: `${actor}: ${action}\n${JSON.stringify(result.value)}`,
+              body: `${action.replaceAll("_", " ").replace(/^./, (letter) => letter.toUpperCase())}.${typeof result.value === "object" && result.value && "reason" in result.value ? ` Reason: ${String(result.value.reason)}` : ""} Recorded by ${actor}.`,
               occurredAt: new Date(),
               timelineSortAt: new Date(),
             });
@@ -195,6 +204,23 @@ export class OutreachRepository {
         sources.historyFingerprint !== "unverified"
       )
         sources.reviewReasons = [];
+      if (
+        sources.choices.some(
+          (source) =>
+            !Number.isFinite(new Date(source.occurredAt).getTime()) ||
+            new Date(source.occurredAt) > now,
+        )
+      )
+        sources.protectedReason =
+          "Source evidence has invalid or future dates; correct the source before routine outreach.";
+      const [event] = rowsOf<{
+        starts_at: string | null;
+        ends_at: string | null;
+      }>(
+        await this.db.execute(
+          sql`select starts_at,ends_at from bookings where id=${op.bookingId}::uuid`,
+        ),
+      );
       const attempts = json<CandidateDTO["attempts"]>(
         await this.db
           .select()
@@ -205,7 +231,7 @@ export class OutreachRepository {
         process.env.OUTREACH_PLANNER_ENABLED === "true"
           ? rowsOf(
               await this.db.execute(
-                sql`select source_id,classification,occurred_at,reason from outreach_source_reviews where candidate_id=${c.id}::uuid`,
+                sql`select source_id as "sourceId",classification,occurred_at as "occurredAt",reason from outreach_source_reviews where candidate_id=${c.id}::uuid`,
               ),
             )
           : [];
@@ -216,8 +242,8 @@ export class OutreachRepository {
           !attempts.some((a) => a.sourceId === s.id) &&
           !sources.sourceReviews?.some(
             (r) =>
-              r.source_id === s.id &&
-              new Date(r.occurred_at).getTime() ===
+              r.sourceId === s.id &&
+              new Date(r.occurredAt).getTime() ===
                 new Date(s.occurredAt).getTime(),
           ),
       );
@@ -242,7 +268,7 @@ export class OutreachRepository {
           latestActualAttemptAt:
             sources.sourceReviews
               .filter((r) => r.classification === "additional_attempt")
-              .map((r) => new Date(r.occurred_at).toISOString())
+              .map((r) => new Date(r.occurredAt).toISOString())
               .sort()
               .at(-1) ?? null,
           meaningfulReplyAt:
@@ -251,7 +277,10 @@ export class OutreachRepository {
             null,
           decisionDueAt: c.decisionDueAt?.toISOString() ?? null,
           conventionEndsOn: c.conventionEndsOn,
-          operationalStartsOn: opening.startsOn,
+          snoozedUntil: c.snoozedUntil?.toISOString() ?? null,
+          operationalStartsOn: event?.starts_at
+            ? businessDateKey(new Date(event.starts_at))
+            : null,
           blockedReason:
             sources.protectedReason ??
             (sources.observedConversationAt &&
@@ -262,6 +291,7 @@ export class OutreachRepository {
               : null),
         },
         now,
+        c.cadenceOverride ?? undefined,
       );
       if (
         sources.reviewReasons.length &&
@@ -292,12 +322,32 @@ export class OutreachRepository {
       }
       candidates.push({
         ...json<Omit<CandidateDTO, "sources">>(c),
+        organizationId: op.organizationId,
+        bookingId: op.bookingId,
+        eventStartsAt: event?.starts_at
+          ? new Date(event.starts_at).toISOString()
+          : null,
+        eventEndsAt: event?.ends_at
+          ? new Date(event.ends_at).toISOString()
+          : null,
+        suggestions: await classificationSuggestions(
+          this.db,
+          op.organizationId,
+        ),
+        waitingFor: null,
+        portfolio: {
+          state: "needs_review",
+          reason:
+            "Run a current allocation check before selecting first-choice pursuit.",
+          competing: [],
+        },
         organizationName: row.organizationName,
         eventYear: op.eventYear,
         opportunityStatus: op.status,
         attempts,
         outreach,
         capacity: sources.capacity,
+        capacityDisplayReasons: sources.capacity.reasons,
         sources,
         waitingForCandidateId: null,
         liveHoldId: liveHolds.find((h) => h.candidateId === c.id)?.id ?? null,
@@ -313,8 +363,16 @@ export class OutreachRepository {
       );
       const active = eligible.filter(hasActivePursuit);
       const first = active[0] ?? eligible[0];
-      if (first && first.id !== c.id && !c.releasedAt)
+      if (first && first.id !== c.id && !c.releasedAt) {
         c.waitingForCandidateId = first.id;
+        c.waitingFor = {
+          candidateId: first.id,
+          organizationName: first.organizationName,
+          openingId: first.openingId,
+          openingTitle: openings.find((o) => o.id === first.openingId)!.title,
+          reason: `${first.organizationName} is the current pursuit for this opening.`,
+        };
+      }
     }
     return {
       enabled: true,
@@ -322,12 +380,18 @@ export class OutreachRepository {
       candidates,
       researchTasks: json(await this.db.select().from(outreachResearchTasks)),
       legs: await this.db
-        .select({ id: travelLegs.id, name: travelLegs.name })
+        .select({
+          id: travelLegs.id,
+          name: travelLegs.name,
+          active: sql<boolean>`${travelLegs.archivedAt} is null`,
+        })
         .from(travelLegs),
       packages: await this.db
         .select({
           id: packageTemplates.id,
           code: packageTemplates.code,
+          name: packageTemplates.name,
+          active: packageTemplates.active,
           normalCapacity: packageTemplates.normalCapacity,
           temporaryUnavailableQuantity:
             packageTemplates.temporaryUnavailableQuantity,
@@ -336,6 +400,26 @@ export class OutreachRepository {
     };
   }
   async opening(input: OpeningInput) {
+    if (
+      !input.legId ||
+      !rowsOf(
+        await this.db.execute(
+          sql`select id from travel_legs where id=${input.legId}::uuid and archived_at is null`,
+        ),
+      ).length
+    )
+      throw new OutreachError(400, "Select a configured active travel leg.");
+    const packages = rowsOf<{ code: string }>(
+      await this.db.execute(
+        sql`select code from package_templates where active=true`,
+      ),
+    );
+    if (
+      Object.keys(input.quantities).some(
+        (code) => !packages.some((p) => p.code === code),
+      )
+    )
+      throw new OutreachError(400, "Select only configured active packages.");
     const [row] = await this.db
       .insert(outreachOpenings)
       .values(input)
@@ -360,6 +444,34 @@ export class OutreachRepository {
         400,
         "Opportunity event year must match the opening.",
       );
+    const [profile] = rowsOf<{
+      last_resort: boolean;
+      consolidated: string | null;
+    }>(
+      await this.db.execute(
+        sql`select last_resort,to_jsonb(g)->>'consolidated_into_id' as consolidated from organizations g where id=${op.organizationId}::uuid`,
+      ),
+    );
+    if (!profile || profile.consolidated)
+      throw new OutreachError(
+        409,
+        "Select an active profile; this profile is missing or consolidated.",
+      );
+    const protectedReason = await outreachContactBlock(this.db, {
+      organizationId: op.organizationId,
+      contactId: op.contactId,
+    });
+    if (
+      profile.last_resort ||
+      op.emailAutomationProtected ||
+      (op.status === "territory_hold" && !op.territoryExceptionApproved) ||
+      protectedReason
+    )
+      throw new OutreachError(
+        409,
+        protectedReason ??
+          "Protected contact or territory hold requires owner review.",
+      );
     const [row] = await this.db
       .insert(outreachCandidates)
       .values(input)
@@ -372,6 +484,12 @@ export class OutreachRepository {
       .update(outreachCandidates)
       .set({
         ...fields,
+        snoozedUntil:
+          fields.snoozedUntil === undefined
+            ? undefined
+            : fields.snoozedUntil === null
+              ? null
+              : new Date(fields.snoozedUntil),
         decisionDueAt:
           fields.decisionDueAt === undefined
             ? undefined
@@ -426,7 +544,7 @@ export class OutreachRepository {
       .returning();
     return row;
   }
-  async research(openingId: string, criteria: string) {
+  async research(openingId: string, input: ResearchInput, now: Date) {
     const [opening] = await this.db
       .select()
       .from(outreachOpenings)
@@ -439,16 +557,39 @@ export class OutreachRepository {
       );
     const [row] = await this.db
       .insert(outreachResearchTasks)
-      .values({ openingId, criteria })
+      .values({ openingId, ...input })
       .onConflictDoUpdate({
         target: [
           outreachResearchTasks.openingId,
           outreachResearchTasks.criteria,
         ],
-        set: { criteria },
+        set: {
+          qualificationCriteria: input.qualificationCriteria,
+          targetCount: input.targetCount,
+          status: "pending",
+        },
       })
       .returning();
-    return row;
+    const results = (row.results ?? []).map((result) => ({
+      ...result,
+      qualified: qualifiesResearchResult(
+        result,
+        row.qualificationCriteria,
+        now,
+      ),
+    }));
+    const qualifiedCount = new Set(
+      results.filter((r) => r.qualified).map((r) => r.opportunityId),
+    ).size;
+    const [updated] = await this.db
+      .update(outreachResearchTasks)
+      .set({
+        results,
+        status: qualifiedCount >= row.targetCount ? "completed" : "pending",
+      })
+      .where(eq(outreachResearchTasks.id, row.id))
+      .returning();
+    return updated;
   }
   async reviewHistory(
     id: string,
@@ -487,11 +628,15 @@ export class OutreachRepository {
       );
     return row;
   }
-  async opportunities(search: string, year: number) {
-    return this.db
+  async opportunities(
+    search: string,
+    year: number,
+  ): Promise<OpportunityChoiceDTO[]> {
+    const rows = await this.db
       .select({
         id: bookingOpportunities.id,
         organizationId: bookingOpportunities.organizationId,
+        bookingId: bookingOpportunities.bookingId,
         organizationName: organizations.name,
         eventYear: bookingOpportunities.eventYear,
         status: bookingOpportunities.status,
@@ -505,14 +650,21 @@ export class OutreachRepository {
         and(
           eq(bookingOpportunities.eventYear, year),
           ilike(organizations.name, `%${search}%`),
+          sql`to_jsonb(${organizations})->>'consolidated_into_id' is null`,
         ),
       )
       .limit(50);
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        suggestions: await classificationSuggestions(
+          this.db,
+          row.organizationId,
+        ),
+      })),
+    );
   }
-  async researchResults(
-    id: string,
-    results: { opportunityId: string; sourceUrl: string; note: string }[],
-  ) {
+  async researchResults(id: string, results: ResearchResultInput[], now: Date) {
     const [task] = await this.db
       .select()
       .from(outreachResearchTasks)
@@ -539,9 +691,35 @@ export class OutreachRepository {
           "Research result must match opening event year.",
         );
     }
+    const merged = new Map(
+      (task.results ?? []).map((r) => [`${r.opportunityId}|${r.sourceUrl}`, r]),
+    );
+    for (const result of results) {
+      if (new Date(result.checkedAt) > now)
+        throw new OutreachError(
+          400,
+          "Research checked date cannot be in the future.",
+        );
+
+      merged.set(`${result.opportunityId}|${result.sourceUrl}`, { ...result });
+    }
+    const values = [...merged.values()].map((result) => ({
+      ...result,
+      qualified: qualifiesResearchResult(
+        result,
+        task.qualificationCriteria,
+        now,
+      ),
+    }));
+    const qualifiedCount = new Set(
+      values.filter((r) => r.qualified).map((r) => r.opportunityId),
+    ).size;
     const [row] = await this.db
       .update(outreachResearchTasks)
-      .set({ results, status: "completed" })
+      .set({
+        results: values,
+        status: qualifiedCount >= task.targetCount ? "completed" : "pending",
+      })
       .where(eq(outreachResearchTasks.id, id))
       .returning();
     return row;

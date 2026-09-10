@@ -171,6 +171,18 @@ export function createOutreachPlannerRouter(
     ),
   );
   router.get(
+    "/recovery",
+    run((req) => service.recoveryCatalog(req.query)),
+  );
+  router.get(
+    "/profiles",
+    run((req) => service.searchProfiles(req.query)),
+  );
+  router.post(
+    "/opportunities/admit",
+    run((req) => service.admitProfile(req.body, actor(req))),
+  );
+  router.get(
     "/opportunities",
     run((req) => service.searchOpportunities(req.query)),
   );
