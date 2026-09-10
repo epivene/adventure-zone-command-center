@@ -65,4 +65,37 @@ describe("EventCalendar profile navigation", () => {
     expect(container.querySelector('a[href="/bookings/booking-1"]')).toBeNull();
   });
 
+  it("does not stretch an open-ended potential show across every week", () => {
+    const openEndedPotential = {
+      ...linkedEvent,
+      id: "potential-open-ended",
+      status: "possible",
+      probability: "possible",
+      endsAt: new Date("9999-12-30T00:00:00.000Z"),
+    } as CalendarEvent;
+
+    const { container } = render(<EventCalendar events={[openEndedPotential]} initialMonth="2026-09" />);
+
+    const spans = container.querySelectorAll('[data-testid^="booking-span-potential-open-ended-"]');
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.getAttribute("data-start-column")).toBe("2");
+    expect(spans[0]?.getAttribute("data-end-column")).toBe("5");
+  });
+
+  it("renders potential shows dimmer than booked shows", () => {
+    const potential = {
+      ...linkedEvent,
+      id: "potential-dimmed",
+      status: "possible",
+      probability: "possible",
+    } as CalendarEvent;
+
+    const { container } = render(<EventCalendar events={[linkedEvent, potential]} initialMonth="2026-09" />);
+
+    const bookedSpan = container.querySelector('[data-testid^="booking-span-booking-1-"]') as HTMLElement;
+    const potentialSpan = container.querySelector('[data-testid^="booking-span-potential-dimmed-"]') as HTMLElement;
+    expect(bookedSpan.style.opacity).toBe("1");
+    expect(potentialSpan.style.opacity).toBe("0.55");
+  });
+
 });

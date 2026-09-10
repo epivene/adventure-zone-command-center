@@ -22,3 +22,39 @@ export function normalizeCalendarBookingDates<T extends CalendarBookingDates>(ev
 
   return event;
 }
+
+
+type ScheduleCalendarBookingDates = CalendarBookingDates & {
+  actualStartsAt?: Date | null;
+  actualEndsAt?: Date | null;
+  operationalWindowSource?: string | null;
+  source?: string;
+};
+
+function addUtcDays(value: Date, days: number) {
+  const result = new Date(value);
+  result.setUTCDate(result.getUTCDate() + days);
+  return result;
+}
+
+export function calendarBookingDisplayDates<T extends ScheduleCalendarBookingDates>(event: T): T {
+  const normalized = normalizeCalendarBookingDates(event);
+  if (
+    !normalized.startsAt
+    || normalized.operationalWindowSource
+    || normalized.source === "google_operational_review"
+  ) {
+    return normalized;
+  }
+
+  const actualStart = normalized.actualStartsAt ?? normalized.startsAt;
+  const actualEnd = normalized.actualEndsAt ?? normalized.endsAt ?? actualStart;
+  return {
+    ...normalized,
+    actualStartsAt: actualStart,
+    actualEndsAt: actualEnd,
+    startsAt: addUtcDays(actualStart, -2),
+    endsAt: addUtcDays(actualEnd, 1),
+    operationalWindowSource: "default_buffer",
+  };
+}
