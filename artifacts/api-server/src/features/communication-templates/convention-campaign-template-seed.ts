@@ -17,7 +17,7 @@ const legacyTemplateCodes = [
   "convention_post_event_v1",
 ] as const;
 
-const AFTER_CONVENTION_REFRESH_REVIEWER = "system:owner-approved-after-convention-refresh";
+const CONVENTION_FINALIZED_REVIEWER = "system:owner-approved-convention-finalized";
 const openTemplateReviewStates = [
   "waiting_on_dave",
   "in_progress",
@@ -114,9 +114,9 @@ export const conventionCampaignTemplates = [
   },
   {
     code: "convention_after_new_event_v2",
-    templateVersion: "2026-09-after-convention-close-v3",
+    templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r7096158685165323453",
-    gmailMessageId: "1a084a3877bde871",
+    gmailMessageId: "1a08975b5738b040",
     name: "TEMPLATE 6 — AFTER Convention — New Event",
     subjectTemplate: "Great connecting at {{conventionName}}",
     bodyTemplate: [
@@ -131,9 +131,9 @@ export const conventionCampaignTemplates = [
   },
   {
     code: "convention_after_past_event_v2",
-    templateVersion: "2026-09-after-convention-close-v3",
+    templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r-1391915929973957682",
-    gmailMessageId: "1a084a39fdd1790d",
+    gmailMessageId: "1a08975cc9c100c8",
     name: "TEMPLATE 7 — AFTER Convention — Past Event",
     subjectTemplate: "Great seeing you at {{conventionName}}",
     bodyTemplate: [
@@ -189,7 +189,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       channel: "email",
       category: "convention_campaign",
       accessScope: "office",
-      state: "draft",
+      state: "active",
       bodyFormat: "html",
       allowedPlaceholders: [
         "contactName",
@@ -203,7 +203,8 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       ownerKind: "company",
       createdByKind: "system",
       sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
-      reviewedBy: null,
+      reviewedBy: CONVENTION_FINALIZED_REVIEWER,
+      reviewedAt: refreshedAt,
     }).onConflictDoUpdate({
       target: communicationTemplates.code,
       set: {
@@ -222,19 +223,15 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
         ],
         requiredPlaceholders: ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
         sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
-        reviewedBy: sql`case
-          when ${communicationTemplates.state} = 'active'
-            then ${AFTER_CONVENTION_REFRESH_REVIEWER}
-          else null
-        end`,
-        reviewedAt: sql`case
-          when ${communicationTemplates.state} = 'active'
-            then ${refreshedAt}::timestamptz
-          else null
-        end`,
+        state: "active",
+        reviewedBy: CONVENTION_FINALIZED_REVIEWER,
+        reviewedAt: refreshedAt,
         updatedAt: refreshedAt,
       },
-      setWhere: sql`excluded.template_version IS DISTINCT FROM ${communicationTemplates.templateVersion}`,
+      setWhere: sql`
+        excluded.template_version IS DISTINCT FROM ${communicationTemplates.templateVersion}
+        or ${communicationTemplates.state} IS DISTINCT FROM 'active'
+      `,
     }).returning();
 
     const template = inserted[0] ?? (await database.select().from(communicationTemplates)
@@ -248,7 +245,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       bodyFormat: template.bodyFormat,
     });
 
-    const staleRequests = await database.select({ id: bossWorkRequests.id })
+    const openReviewRequests = await database.select({ id: bossWorkRequests.id })
       .from(bossWorkRequests)
       .innerJoin(
         communicationTemplateReviews,
@@ -256,11 +253,10 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       )
       .where(and(
         eq(communicationTemplateReviews.templateId, template.id),
-        sql`${communicationTemplateReviews.contentFingerprint} <> ${fingerprint}`,
         inArray(bossWorkRequests.state, [...openTemplateReviewStates]),
       ));
-    const staleRequestIds = staleRequests.map((request) => request.id);
-    if (staleRequestIds.length) {
+    const openReviewRequestIds = openReviewRequests.map((request) => request.id);
+    if (openReviewRequestIds.length) {
       await database.update(bossWorkRequests)
         .set({
           state: "cancelled",
@@ -268,7 +264,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
           updatedAt: refreshedAt,
           deduplicationKey: null,
         })
-        .where(inArray(bossWorkRequests.id, staleRequestIds));
+        .where(inArray(bossWorkRequests.id, openReviewRequestIds));
     }
 
     if (!dave || template.state === "active") continue;
