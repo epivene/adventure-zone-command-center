@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import { replayActualOutreach } from "./outreach-events";
 import {
   saveRouteAnchor,
   reviewImportedClaimSource,
@@ -50,6 +52,7 @@ export class OutreachService {
         legs: [],
         packages: [],
       };
+    await replayActualOutreach(this.repository.db).catch(() => undefined);
     const now = this.clock();
     const planner = await this.repository.load(now);
     if (
@@ -206,6 +209,7 @@ export class OutreachService {
             "Select a verified successful send or completed outgoing call for this event year.",
           );
         if (
+          (source.explicitStage && source.explicitStage !== input.stage) ||
           (source.purpose === "new_outreach" && input.stage !== "initial") ||
           (source.purpose === "follow_up" && input.stage === "initial")
         )
@@ -231,6 +235,56 @@ export class OutreachService {
             confirmedEventYear: input.confirmedEventYear,
             reason: input.reason,
           },
+          opportunityId: c.opportunityId,
+        };
+      },
+    );
+  }
+  async reviewActualSource(id: string, body: unknown, actor: string) {
+    this.gate();
+    const input = z
+      .object({
+        sourceId: z.string().trim().min(1),
+        classification: z.enum(["additional_attempt", "not_cadence"]),
+        confirmedEventYear: z.number().int().optional(),
+        reason: z.string().trim().min(1).max(2000),
+      })
+      .strict()
+      .parse(body);
+    return this.repository.transaction(
+      actor,
+      "review_actual_outreach_source",
+      async (r) => {
+        const c = await this.find(r, id),
+          source = c.sources.choices.find((s) => s.id === input.sourceId);
+        if (
+          !source ||
+          (!source.eligible &&
+            !(
+              source.requiresEventYearConfirmation &&
+              input.confirmedEventYear === c.eventYear
+            )) ||
+          new Date(source.occurredAt) > this.clock() ||
+          c.attempts.some((a) => a.sourceId === source.id)
+        )
+          throw new OutreachError(
+            409,
+            "Select an unlinked actual outgoing source and verify its exact event year.",
+          );
+        if (
+          input.classification === "additional_attempt" &&
+          c.attempts.length !== 3
+        )
+          throw new OutreachError(
+            409,
+            "Link the initial outreach and two follow-up stages first.",
+          );
+        await r.db.execute(
+          sql`insert into outreach_source_reviews(candidate_id,source_id,classification,occurred_at,actor,reason) values (${id}::uuid,${source.id},${input.classification},${new Date(source.occurredAt)},${actor},${input.reason}) on conflict(candidate_id,source_id) do update set classification=excluded.classification,occurred_at=excluded.occurred_at,actor=excluded.actor,reason=excluded.reason,reviewed_at=now()`,
+        );
+        return {
+          id,
+          value: { ...input, occurredAt: source.occurredAt },
           opportunityId: c.opportunityId,
         };
       },

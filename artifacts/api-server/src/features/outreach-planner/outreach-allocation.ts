@@ -1,3 +1,4 @@
+import { assertNoUnresolvedHoldDispatch } from "./outreach-dispatch";
 import { sql } from "drizzle-orm";
 import type { db as runtimeDb } from "@workspace/db";
 import { OutreachError, OutreachRepository } from "./outreach-repository";
@@ -559,6 +560,7 @@ export class OutreachAllocation {
         ),
       );
       if (!h) throw new OutreachError(404, "Hold not found.");
+      await assertNoUnresolvedHoldDispatch(tx, holdId);
       if (h.state !== "active") return h;
       const [value] = rowsOf<HoldFact>(
         await tx.execute(
@@ -602,6 +604,7 @@ export class OutreachAllocation {
           409,
           "Expired or released holds cannot be extended.",
         );
+      await assertNoUnresolvedHoldDispatch(tx, holdId);
       if (new Date(expiresAt) <= new Date(current.expires_at))
         throw new OutreachError(400, "Extension must move expiry later.");
       this.requireFits(

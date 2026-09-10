@@ -1,3 +1,4 @@
+import { rowsOf } from "./outreach-sources";
 import { randomUUID } from "node:crypto";
 import { hasActivePursuit } from "./outreach-active-pursuit";
 import { eq, sql, ilike, and } from "drizzle-orm";
@@ -200,6 +201,31 @@ export class OutreachRepository {
           .from(outreachAttempts)
           .where(eq(outreachAttempts.candidateId, c.id)),
       );
+      sources.sourceReviews =
+        process.env.OUTREACH_PLANNER_ENABLED === "true"
+          ? rowsOf(
+              await this.db.execute(
+                sql`select source_id,classification,occurred_at,reason from outreach_source_reviews where candidate_id=${c.id}::uuid`,
+              ),
+            )
+          : [];
+      const pending = sources.choices.filter(
+        (s) =>
+          (s.eligible || s.requiresEventYearConfirmation) &&
+          new Date(s.occurredAt) <= now &&
+          !attempts.some((a) => a.sourceId === s.id) &&
+          !sources.sourceReviews?.some(
+            (r) =>
+              r.source_id === s.id &&
+              new Date(r.occurred_at).getTime() ===
+                new Date(s.occurredAt).getTime(),
+          ),
+      );
+      sources.pendingSourceReviewIds = pending.map((s) => s.id);
+      if (pending.length)
+        sources.reviewReasons.push(
+          "Actual outreach remains unlinked. Review its event year and cadence stage before advancing.",
+        );
       let outreach = evaluateOutreach(
         {
           tier: c.tier,
@@ -213,6 +239,12 @@ export class OutreachRepository {
             stage: a.stage,
             successful: true,
           })),
+          latestActualAttemptAt:
+            sources.sourceReviews
+              .filter((r) => r.classification === "additional_attempt")
+              .map((r) => new Date(r.occurred_at).toISOString())
+              .sort()
+              .at(-1) ?? null,
           meaningfulReplyAt:
             c.meaningfulReplyAt?.toISOString() ??
             sources.observedInterestAt ??

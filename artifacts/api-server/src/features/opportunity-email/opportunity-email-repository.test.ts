@@ -1,9 +1,11 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { bookingOpportunityEmailState } from "@/db/schema";
 import { OpportunityEmailRepository } from "./opportunity-email-repository";
+import { ScheduledEmailDispatcher } from "./scheduled-email-dispatcher";
 
 const ORGANIZATION_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OPPORTUNITY_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -74,12 +76,28 @@ beforeEach(async () => {
     create unique index booking_opportunity_email_state_schedule_request_unique
       on booking_opportunity_email_state(schedule_request_key)
       where schedule_request_key is not null;
+    create table outreach_holds (
+      id uuid primary key,
+      state text not null default 'active',
+      expires_at timestamptz not null default now()
+    );
+    create table outreach_write_receipts (
+      transaction_id bigint primary key,
+      dirty boolean not null default false,
+      validated boolean not null default false
+    );
 
     insert into organizations (id, name) values ('${ORGANIZATION_ID}', 'Permanent Event Profile');
     insert into contacts (id, first_name, last_name) values ('${CONTACT_ID}', 'Casey', 'Organizer');
     insert into booking_opportunities (id, organization_id, event_year)
     values ('${OPPORTUNITY_ID}', '${ORGANIZATION_ID}', 2026);
   `);
+  await client.exec(
+    await readFile(
+      "../../lib/db/migrations/20260909_outreach_dispatch.sql",
+      "utf8",
+    ),
+  );
 
   const database = drizzle(client, { schema: { bookingOpportunityEmailState } });
   repository = new OpportunityEmailRepository(database as never);
@@ -132,6 +150,41 @@ describe("OpportunityEmailRepository", () => {
 
     expect(first?.id).toBe(due.id);
     expect(second).toBeNull();
+  });
+
+  it("keeps reviewed content identity stable across the real scheduled lease path", async () => {
+    const due = await repository.create(
+      makeDraft({
+        state: "scheduled",
+        scheduledFor: new Date("2026-08-28T13:55:00.000Z"),
+        scheduleRequestKey: "schedule-reviewed",
+      }),
+    );
+    const before = (
+      await client.query<{ outreach_content_revision: number }>(
+        "select outreach_content_revision from booking_opportunity_email_state where id=$1",
+        [due.id],
+      )
+    ).rows[0].outreach_content_revision;
+    let observedRevision: number | null = null;
+    const delivery = {
+      sendDraft: vi.fn(async () => {
+        observedRevision = (
+          await client.query<{ outreach_content_revision: number }>(
+            "select outreach_content_revision from booking_opportunity_email_state where id=$1",
+            [due.id],
+          )
+        ).rows[0].outreach_content_revision;
+      }),
+    };
+
+    await new ScheduledEmailDispatcher({ store: repository, delivery }).runOne({
+      workerId: "scheduled-worker",
+      now: NOW,
+    });
+
+    expect(delivery.sendDraft).toHaveBeenCalledOnce();
+    expect(observedRevision).toBe(before);
   });
 
   it("does not claim future scheduled work", async () => {

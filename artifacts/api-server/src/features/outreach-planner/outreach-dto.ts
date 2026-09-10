@@ -92,6 +92,7 @@ export type SourceChoice = {
   reason: string;
   purpose?: string;
   requiresEventYearConfirmation?: boolean;
+  explicitStage?: "initial" | "follow_up_1" | "follow_up_2";
 };
 export type SourcesDTO = {
   checkedAt: string;
@@ -101,6 +102,24 @@ export type SourcesDTO = {
   manualNextActions: { id: string; kind: string; dueAt: string }[];
   capacity: CapacityDecision;
   historyFingerprint: string;
+  sourceReviews?: {
+    source_id: string;
+    classification: "additional_attempt" | "not_cadence";
+    occurred_at: string;
+    reason: string;
+  }[];
+  pendingSourceReviewIds?: string[];
+  inboundObservations?: {
+    id: string;
+    message_id: string;
+    thread_id: string;
+    opportunity_id: string | null;
+    event_year: number | null;
+    received_at: string | null;
+    state: string;
+    classification: string | null;
+    reviewed_opportunity_id: string | null;
+  }[];
   observedInterestAt?: string;
   observedConversationAt?: string;
   capacityObservations?: {
@@ -185,6 +204,6 @@ export type AllocationCatalogDTO = {
   demands: DemandFact[];
   resources: AllocationFacts["resources"];
   anchors?: AllocationFacts["anchors"];
-  reconciliationFacts?: Record<string,unknown>[];
+  reconciliationFacts?: Record<string, unknown>[];
   allocationEnforcementComplete: false;
 };

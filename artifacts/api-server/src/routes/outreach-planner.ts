@@ -1,3 +1,6 @@
+import { reviewInboundObservation } from "../features/outreach-planner/outreach-inbound";
+import { createProductionOutreachDispatch } from "../features/outreach-planner/production-outreach-dispatch";
+import { draftKindInput } from "../features/outreach-planner/outreach-dispatch";
 import {
   Router,
   type IRouter,
@@ -44,6 +47,66 @@ export function createOutreachPlannerRouter(
         next(error);
       }
     };
+  const dispatch = () => {
+    service.gate();
+    return createProductionOutreachDispatch(service.repository.db);
+  };
+  router.put(
+    "/drafts/office_email/:id/identity",
+    run((req) =>
+      dispatch().assignOfficeIdentity(
+        String(req.params.id),
+        req.body,
+        (req as Request & { userId: string }).userId,
+      ),
+    ),
+  );
+  router.post(
+    "/drafts/:kind/:id/review-content",
+    run((req) =>
+      dispatch().review(
+        draftKindInput.parse(req.params.kind),
+        String(req.params.id),
+        req.body,
+      ),
+    ),
+  );
+  router.put(
+    "/drafts/:kind/:id/approval",
+    run((req) =>
+      dispatch().approve(
+        draftKindInput.parse(req.params.kind),
+        String(req.params.id),
+        req.body,
+        (req as Request & { userId: string }).userId,
+      ),
+    ),
+  );
+  router.post(
+    "/inbound-observations/:id/review",
+    run((req) =>
+      reviewInboundObservation(
+        dispatch().db,
+        String(req.params.id),
+        req.body,
+        (req as Request & { userId: string }).userId,
+      ),
+    ),
+  );
+  router.get(
+    "/dispatches",
+    run(() => dispatch().list()),
+  );
+  router.post(
+    "/dispatches/:id/reconcile",
+    run((req) =>
+      dispatch().reconcile(
+        String(req.params.id),
+        req.body,
+        (req as Request & { userId: string }).userId,
+      ),
+    ),
+  );
   const actor = (req: Request) => (req as Request & { userId: string }).userId;
   router.post(
     "/reconciliations/:id/source-review",
@@ -155,6 +218,12 @@ export function createOutreachPlannerRouter(
     "/candidates/:id/attempts",
     run((req) =>
       service.recordAttempt(String(req.params.id), req.body, actor(req)),
+    ),
+  );
+  router.post(
+    "/candidates/:id/source-review",
+    run((req) =>
+      service.reviewActualSource(String(req.params.id), req.body, actor(req)),
     ),
   );
   router.post(

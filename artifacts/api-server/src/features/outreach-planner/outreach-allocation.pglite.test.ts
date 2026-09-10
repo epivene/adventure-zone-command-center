@@ -61,6 +61,8 @@ create table booking_opportunities(id uuid primary key,organization_id uuid refe
 create table package_templates(id uuid primary key,code text,normal_capacity integer,temporary_unavailable_quantity integer);
 create table follow_ups(id uuid primary key,organization_id uuid,booking_id uuid,contact_id uuid,kind text,due_at timestamptz,completed_at timestamptz);
 create table booking_opportunity_email_state(id uuid primary key,opportunity_id uuid,event_year integer,state text,sent_at timestamptz,gmail_message_id text,purpose text);
+create table communication_templates(id uuid primary key,code text,category text);
+create table office_email_drafts(id uuid primary key,organization_id uuid,contact_id uuid,booking_id uuid,event_year integer,communication_template_id uuid,office_account_id uuid,state text,sent_at timestamptz,sent_message_id text,recipient_email text,subject text,body text,last_send_error text);
 create table call_sessions(id uuid primary key,organization_id uuid,booking_id uuid,ended_at timestamptz,direction text,disposition text,contact_id uuid);
 create table boss_convention_submissions(id uuid primary key,applied_at timestamptz,applied_organization_id uuid,applied_contact_id uuid);
 create table booking_operational_windows(booking_id uuid,starts_at timestamptz,ends_at timestamptz);
@@ -87,10 +89,14 @@ insert into travel_legs values ('${leg2}','Leg 2',null);
 insert into bookings(id,starts_at,ends_at,status,travel_leg_id) values ('${booking}','2026-10-10','2026-10-11','new_lead','${leg}');
 insert into booking_package_selections values ('${booking}','${pkg}');
 `);
+  await client.exec(
+    `alter table booking_opportunity_email_state add organization_id uuid default '${org}',add contact_id uuid,add recipient_email text default 'owner@example.com',add subject text default 'Availability',add body text default 'Reviewed offer',add gmail_draft_id text default 'draft1',add gmail_thread_id text,add scheduled_for timestamptz,add last_failure_code text,add last_failure_message text;`,
+  );
   for (const name of [
     "20260909_outreach_planner.sql",
     "20260909_outreach_allocation.sql",
     "20260909_outreach_commitments.sql",
+    "20260909_outreach_dispatch.sql",
   ]) {
     const migration = await readFile(`../../lib/db/migrations/${name}`, "utf8");
     await client.exec(migration);
@@ -1338,4 +1344,549 @@ describe("legacy imported physical assignments", () => {
       ).toBe("fits");
     },
   );
+});
+
+describe("content-bound dispatch ledger", () => {
+  async function reviewed(
+    kind: "opportunity_email" | "office_email" = "opportunity_email",
+    intent: "specific_offer" | "exploratory" = "specific_offer",
+  ) {
+    const f = await setup();
+    const hold =
+      intent === "specific_offer"
+        ? await f.allocation.createHold(
+            f.candidate.id,
+            "2026-08-03T18:00:00Z",
+            "owner",
+          )
+        : null;
+    const id = randomUUID();
+    if (kind === "opportunity_email")
+      await f.client.query(
+        "insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,purpose) values ($1,$2,2026,'draft','new_outreach')",
+        [id, op],
+      );
+    else
+      await f.client.query(
+        "insert into office_email_drafts(id,organization_id,event_year,booking_id,state,recipient_email,subject,body) values ($1,$2,2026,$3,'submitted','owner@example.com','Availability','Reviewed offer')",
+        [id, org, booking],
+      );
+    const { OutreachDispatch } = await import("./outreach-dispatch");
+    const dispatch = new OutreachDispatch(
+      f.db,
+      f.allocation,
+      undefined,
+      () => true,
+      f.allocation.clock,
+    );
+    const preview = await dispatch.review(kind, id);
+    await dispatch.approve(
+      kind,
+      id,
+      {
+        digest: preview.digest,
+        intent,
+        holdId: hold?.id ?? null,
+        stage: "initial",
+        reason: "Reviewed exact recipient and offer",
+      },
+      "owner",
+    );
+    return { ...f, id, hold, dispatch, preview, kind };
+  }
+  it.each(["opportunity_email", "office_email"] as const)(
+    "%s permits only the final approved content and one contender",
+    async (kind) => {
+      const f = await reviewed(kind);
+      await expect(
+        f.dispatch.claim(kind, f.id, {
+          ...f.preview.draft.content,
+          body: "Unreviewed promise",
+        }),
+      ).rejects.toThrow(/exact final/);
+      const result = await Promise.allSettled([
+        f.dispatch.claim(kind, f.id, f.preview.draft.content),
+        f.dispatch.claim(kind, f.id, f.preview.draft.content),
+      ]);
+      expect(result.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+      expect(
+        (await f.client.query("select * from outreach_dispatches")).rows,
+      ).toHaveLength(1);
+      await expect(
+        f.allocation.releaseHold(f.hold!.id, "owner"),
+      ).rejects.toThrow(/unresolved delivery/);
+      await expect(
+        f.allocation.extendHold(f.hold!.id, "2026-08-04T18:00:00Z", "owner"),
+      ).rejects.toThrow(/unresolved delivery/);
+    },
+  );
+  it("edits then restores content still invalidate revision; hold revisions and identity cannot reuse approval", async () => {
+    const f = await reviewed();
+    await f.client.query(
+      "update booking_opportunity_email_state set body='Changed' where id=$1",
+      [f.id],
+    );
+    await f.client.query(
+      "update booking_opportunity_email_state set body='Reviewed offer' where id=$1",
+      [f.id],
+    );
+    expect((await f.dispatch.review(f.kind, f.id)).approvalCurrent).toBe(false);
+    await expect(
+      f.dispatch.claim(f.kind, f.id, f.preview.draft.content),
+    ).rejects.toThrow(/exact final/);
+    const now = await f.dispatch.review(f.kind, f.id);
+    await f.dispatch.approve(
+      f.kind,
+      f.id,
+      {
+        digest: now.digest,
+        intent: "specific_offer",
+        holdId: f.hold!.id,
+        stage: null,
+        reason: "Re-reviewed",
+      },
+      "owner",
+    );
+    await f.allocation.extendHold(f.hold!.id, "2026-08-04T18:00:00Z", "owner");
+    await expect(
+      f.dispatch.claim(f.kind, f.id, now.draft.content),
+    ).rejects.toThrow(/Hold changed/);
+    await f.client.query(
+      "update booking_opportunities set event_year=2027 where id=$1",
+      [op],
+    );
+    await expect(f.dispatch.review(f.kind, f.id)).rejects.toThrow(
+      /identity or event year/,
+    );
+  });
+  it("uncertainty survives real expiry and blocks new allocations until owner outcome reconciliation", async () => {
+    const f = await reviewed();
+    const claim = await f.dispatch.claim(f.kind, f.id, f.preview.draft.content);
+    expect(await f.dispatch.fail(claim, new Error("network timeout"))).toBe(
+      false,
+    );
+    f.setNow("2026-08-04T18:00:00Z");
+    const catalog = await f.allocation.list();
+    expect(catalog.holds.find((h) => h.id === f.hold!.id)?.state).toBe(
+      "expired",
+    );
+    expect(
+      (await f.allocation.evaluateCommitment(booking)).capacity.reasons.join(
+        " ",
+      ),
+    ).toMatch(/unresolved specific-offer/);
+    await expect(f.dispatch.recover(f.kind, f.id)).rejects.toThrow(
+      /outcome requires review/,
+    );
+    await f.dispatch.reconcile(
+      claim.id,
+      {
+        outcome: "not_sent",
+        providerOperationTerminated: true,
+        sourceReference: "Provider terminal rejection receipt",
+        reason: "Verified no message was delivered",
+      },
+      "owner",
+    );
+    expect(await f.dispatch.recover(f.kind, f.id)).toBeNull();
+    expect(
+      (await f.allocation.evaluateCommitment(booking)).capacity.reasons.join(
+        " ",
+      ),
+    ).not.toMatch(/unresolved specific-offer/);
+  });
+  it("confirmed success atomically saves the actual source and replays without permitting another send", async () => {
+    const f = await reviewed();
+    const claim = await f.dispatch.claim(f.kind, f.id, f.preview.draft.content);
+    const confirmation = {
+      messageId: "actual-message",
+      threadId: "actual-thread",
+      sentAt: new Date("2026-08-01T18:00:10Z"),
+    };
+    await expect(confirm(f)).rejects.toThrow();
+    await f.dispatch.assertCurrent(claim);
+    await f.dispatch.finish(claim, confirmation);
+    await f.dispatch.finish(claim, confirmation);
+    expect(
+      (
+        await f.client.query(
+          "select state,gmail_message_id,body from booking_opportunity_email_state where id=$1",
+          [f.id],
+        )
+      ).rows[0],
+    ).toMatchObject({
+      state: "sent",
+      gmail_message_id: "actual-message",
+      body: f.preview.draft.content.body,
+    });
+    expect(
+      (await f.dispatch.recover(f.kind, f.id))?.confirmation?.messageId,
+    ).toBe("actual-message");
+    await expect(
+      f.dispatch.claim(f.kind, f.id, f.preview.draft.content),
+    ).rejects.toThrow(/already been sent/);
+    const { replayActualOutreach } = await import("./outreach-events");
+    await replayActualOutreach(f.db, op);
+    await replayActualOutreach(f.db, op);
+    expect(
+      (await f.client.query("select source_id,stage from outreach_attempts"))
+        .rows,
+    ).toEqual([{ source_id: "gmail:actual-message", stage: "initial" }]);
+    await confirm(f);
+    expect(
+      (await f.allocation.list()).holds.find((h) => h.id === f.hold!.id)?.state,
+    ).toBe("converted");
+  });
+  it("definite rejection allows retry; unknown-year specific offers need identity review", async () => {
+    const f = await reviewed("office_email", "exploratory");
+    const claim = await f.dispatch.claim(f.kind, f.id, f.preview.draft.content);
+    expect(
+      await f.dispatch.fail(
+        claim,
+        Object.assign(new Error("Rejected"), { code: "MAIL_SEND_REJECTED" }),
+      ),
+    ).toBe(true);
+    expect(await f.dispatch.recover(f.kind, f.id)).toBeNull();
+    await f.client.query(
+      "update office_email_drafts set event_year=null,booking_id=null where id=$1",
+      [f.id],
+    );
+    const p = await f.dispatch.review(f.kind, f.id);
+    await expect(
+      f.dispatch.approve(
+        f.kind,
+        f.id,
+        {
+          digest: p.digest,
+          intent: "specific_offer",
+          holdId: randomUUID(),
+          stage: null,
+          reason: "Unknown year",
+        },
+        "owner",
+      ),
+    ).rejects.toThrow(/exact booking/);
+    await f.dispatch.approve(
+      f.kind,
+      f.id,
+      {
+        digest: p.digest,
+        intent: "administrative",
+        holdId: null,
+        stage: null,
+        reason: "Explicit account administration",
+      },
+      "owner",
+    );
+    await f.dispatch.assignOfficeIdentity(
+      f.id,
+      { opportunityId: op, reason: "Owner selected the correct dated booking" },
+      "owner",
+    );
+    expect((await f.dispatch.review(f.kind, f.id)).draft).toMatchObject({
+      opportunityId: op,
+      bookingId: booking,
+      eventYear: 2026,
+    });
+  });
+
+  it("records OAuth token rejection as not sent and permits reviewed retry", async () => {
+    const f = await reviewed();
+    const claim = await f.dispatch.claim(f.kind, f.id, f.preview.draft.content);
+    const { createGoogleGmailDeliveryClient } =
+      await import("../google-workspace/google-gmail-delivery-client");
+    const fetcher = vi.fn(async () =>
+      Response.json({ error: "invalid_grant" }, { status: 400 }),
+    );
+    const client = createGoogleGmailDeliveryClient({
+      environment: {
+        clientId: "test",
+        clientSecret: "test",
+        redirectUri: "https://example.com",
+        appOrigin: "https://example.com",
+        tokenEncryptionKey: new Uint8Array(32),
+      },
+      refreshToken: "expired",
+      fetcher,
+    });
+    let failure: unknown;
+    try {
+      await client.sendGmailDraft({ draftId: "draft", raw: "YWJj" });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(failure).toMatchObject({
+      code: "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED",
+    });
+    expect(await f.dispatch.fail(claim, failure)).toBe(true);
+    expect(
+      (
+        await f.client.query(
+          "select state from outreach_dispatches where id=$1",
+          [claim.id],
+        )
+      ).rows[0],
+    ).toEqual({ state: "not_sent" });
+    expect(await f.dispatch.recover(f.kind, f.id)).toBeNull();
+  });
+});
+
+describe("actual inbound and call source replay", () => {
+  it("persists actual inbound receipt idempotently, pauses even reviewed history, and never mistakes it for interest", async () => {
+    const f = await setup();
+    const { observeInboundOutreach, reviewInboundObservation } =
+      await import("./outreach-inbound");
+    await f.client.query(
+      "insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,purpose,sent_at,gmail_message_id,gmail_thread_id) values ($1,$2,2026,'sent','new_outreach','2026-07-01','sent','thread')",
+      [randomUUID(), op],
+    );
+    const message = {
+      id: "incoming",
+      threadId: "thread",
+      internalDateMs: Date.parse("2026-07-02T12:00:00Z"),
+      labelIds: ["INBOX"],
+      resolvedOrganization: { id: org, name: "Event" },
+      from: "contact@example.com",
+      to: "owner@example.com",
+      evidenceCodes: ["existing_thread_association"],
+    } as any;
+    await observeInboundOutreach(
+      f.db,
+      [
+        message,
+        { ...message, id: "sent-copy", labelIds: ["SENT", "INBOX"] },
+        { ...message, id: "profile-review", threadId: "unknown-thread" },
+      ],
+      f.allocation.clock(),
+    );
+    await observeInboundOutreach(f.db, [message], f.allocation.clock());
+    const rows = (
+      await f.client.query<{
+        id: string;
+        message_id: string;
+        opportunity_id: string | null;
+        event_year: number | null;
+        state: string;
+      }>("select * from outreach_inbound_observations")
+    ).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.message_id === "incoming")).toMatchObject({
+      opportunity_id: op,
+      event_year: 2026,
+      state: "needs_review",
+    });
+    expect(
+      rows.find((row) => row.message_id === "profile-review"),
+    ).toMatchObject({
+      opportunity_id: null,
+      event_year: null,
+      state: "needs_review",
+    });
+    await f.service.reviewHistory(
+      f.candidate.id,
+      { reason: "Reviewed stored history" },
+      "owner",
+    );
+    const c = (await f.service.get()).candidates[0];
+    expect(c.sources.protectedReason).toMatch(/Received email/);
+    expect(c.sources.observedInterestAt).toBeUndefined();
+    expect(c.outreach.state).toBe("needs_review");
+    await reviewInboundObservation(
+      f.db,
+      (rows.find((row) => row.message_id === "incoming") as { id: string }).id,
+      {
+        classification: "meaningful_reply",
+        opportunityId: op,
+        reason: "Actual interested reply reviewed",
+        sourceReference: "Gmail incoming",
+      },
+      "owner",
+    );
+    await reviewInboundObservation(
+      f.db,
+      (
+        rows.find((row) => row.message_id === "profile-review") as {
+          id: string;
+        }
+      ).id,
+      {
+        classification: "not_reply",
+        opportunityId: null,
+        reason: "Owner reviewed unrelated profile mail",
+        sourceReference: "Gmail incoming",
+      },
+      "owner",
+    );
+    expect((await f.service.get()).candidates[0].outreach.state).toBe("reply");
+  });
+
+  it("keeps explicitly administrative sends out of cadence evidence", async () => {
+    const f = await setup();
+    const opportunityDraftId = randomUUID();
+    await f.client.query(
+      "insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,purpose,sent_at,gmail_message_id) values ($1,$2,2026,'sent','new_outreach','2026-07-01','admin-message')",
+      [opportunityDraftId, op],
+    );
+    await f.client.query(
+      `insert into outreach_dispatches
+        (draft_kind,draft_id,digest,intent,payload,state,confirmation,review_after)
+       values ('opportunity_email',$1,$2,'administrative',$3,'sent',$4,now())`,
+      [
+        opportunityDraftId,
+        "a".repeat(64),
+        JSON.stringify({ opportunityId: op, eventYear: 2026 }),
+        JSON.stringify({ messageId: "admin-message", sentAt: "2026-07-01" }),
+      ],
+    );
+    const officeDraftId = randomUUID();
+    await f.client.query(
+      "insert into office_email_drafts(id,organization_id,event_year,booking_id,state,sent_at,sent_message_id,recipient_email,subject,body) values ($1,$2,null,null,'sent','2026-07-02','office-admin','owner@example.com','Account','Administrative')",
+      [officeDraftId, org],
+    );
+    await f.client.query(
+      `insert into outreach_dispatches
+        (draft_kind,draft_id,digest,intent,payload,state,confirmation,review_after)
+       values ('office_email',$1,$2,'administrative',$3,'sent',$4,now())`,
+      [
+        officeDraftId,
+        "b".repeat(64),
+        JSON.stringify({ opportunityId: null, eventYear: null }),
+        JSON.stringify({ messageId: "office-admin", sentAt: "2026-07-02" }),
+      ],
+    );
+
+    const candidate = (await f.service.get()).candidates[0];
+    const opportunitySource = candidate.sources.choices.find(
+      (source) => source.id === "gmail:admin-message",
+    );
+    const officeSource = candidate.sources.choices.find((source) =>
+      source.id.startsWith(`office-email:${officeDraftId}:`),
+    );
+    expect(opportunitySource).toMatchObject({ eligible: false });
+    expect(officeSource).toMatchObject({
+      eligible: false,
+      requiresEventYearConfirmation: false,
+    });
+    expect(candidate.sources.pendingSourceReviewIds).not.toContain(
+      opportunitySource?.id,
+    );
+    expect(candidate.sources.pendingSourceReviewIds).not.toContain(
+      officeSource?.id,
+    );
+  });
+
+  it("persists a read archived message as inbound review evidence", async () => {
+    const f = await setup();
+    const { observeInboundOutreach } = await import("./outreach-inbound");
+    await f.client.query(
+      "insert into booking_opportunity_email_state(id,opportunity_id,event_year,state,purpose,sent_at,gmail_message_id,gmail_thread_id) values ($1,$2,2026,'sent','new_outreach','2026-07-01','sent','archived-thread')",
+      [randomUUID(), op],
+    );
+    await observeInboundOutreach(
+      f.db,
+      [
+        {
+          id: "archived-reply",
+          threadId: "archived-thread",
+          internalDateMs: Date.parse("2026-07-02T12:00:00Z"),
+          labelIds: [],
+          resolvedOrganization: { id: org, name: "Event" },
+          from: "contact@example.com",
+          to: "owner@example.com",
+          evidenceCodes: ["existing_thread_association"],
+        } as any,
+      ],
+      f.allocation.clock(),
+    );
+
+    expect(
+      (
+        await f.client.query(
+          "select state from outreach_inbound_observations where message_id='archived-reply'",
+        )
+      ).rows[0],
+    ).toEqual({ state: "needs_review" });
+  });
+
+  it("completed outgoing calls expose pending stage review; a later unlinked actual attempt prevents old-chain advancement", async () => {
+    const f = await setup();
+    for (const [stage, date] of [
+      ["initial", "2026-07-01"],
+      ["follow_up_1", "2026-07-09"],
+      ["follow_up_2", "2026-07-18"],
+    ])
+      await f.client.query(
+        "insert into outreach_attempts(candidate_id,source_id,stage,occurred_at,actor) values ($1,$2,$3,$4,'owner')",
+        [f.candidate.id, stage, stage, date],
+      );
+    const id = randomUUID();
+    await f.client.query(
+      "insert into call_sessions(id,organization_id,booking_id,ended_at,direction,disposition) values ($1,$2,$3,'2026-07-31','outgoing','no_answer')",
+      [id, org, booking],
+    );
+    await f.service.reviewHistory(
+      f.candidate.id,
+      { reason: "History reviewed after new call" },
+      "owner",
+    );
+    const c = (await f.service.get()).candidates[0];
+    expect(c.sources.pendingSourceReviewIds).toContain(`call:${id}`);
+    expect(c.outreach.state).toBe("needs_review");
+    await expect(f.service.advance(f.candidate.id, "owner")).rejects.toThrow(
+      /Only the leading pursuit/,
+    );
+    await f.service.reviewActualSource(
+      f.candidate.id,
+      {
+        sourceId: `call:${id}`,
+        classification: "additional_attempt",
+        reason: "Owner confirms an additional attempt",
+      },
+      "owner",
+    );
+    expect((await f.service.get()).candidates[0].outreach.state).toBe(
+      "waiting",
+    );
+  });
+});
+
+describe("dispatch migration repair", () => {
+  it("restores late dispatch metadata and review indexes without losing the ledger", async () => {
+    const f = await setup();
+    const dispatchId = randomUUID();
+    await f.client.query(
+      `insert into outreach_dispatches
+        (id,draft_kind,draft_id,digest,intent,payload,state,review_after)
+       values ($1,'opportunity_email',$2,$3,'exploratory','{}','not_sent',now())`,
+      [dispatchId, randomUUID(), "a".repeat(64)],
+    );
+    await f.client.exec(`
+      drop index outreach_inbound_review;
+      alter table outreach_dispatches drop column tracking_state;
+      alter table outreach_source_reviews drop constraint outreach_source_review_classification;
+      drop function outreach_draft_revision() cascade;
+    `);
+
+    const entry = (await loadActReviewMigrations()).find(
+      ({ name }) => name === "20260909_outreach_dispatch.sql",
+    )!;
+    expect(
+      (await f.client.query<{ ready: boolean }>(entry.markerSql)).rows[0].ready,
+    ).toBe(false);
+    await f.client.exec(entry.sql);
+
+    expect(
+      (await f.client.query<{ ready: boolean }>(entry.markerSql)).rows[0].ready,
+    ).toBe(true);
+    expect(
+      (
+        await f.client.query(
+          "select id,tracking_state from outreach_dispatches where id=$1",
+          [dispatchId],
+        )
+      ).rows[0],
+    ).toEqual({ id: dispatchId, tracking_state: "pending" });
+  });
 });

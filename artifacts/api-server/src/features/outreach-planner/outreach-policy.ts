@@ -16,6 +16,7 @@ export type OutreachPolicyInput = {
   tier: OutreachTier;
   status: string;
   attempts: OutreachAttempt[];
+  latestActualAttemptAt?: string | null;
   meaningfulReplyAt: string | null;
   decisionDueAt: string | null;
   conventionEndsOn: string | null;
@@ -240,7 +241,16 @@ export function evaluateOutreach(
     );
   }
   const first = instant(completed[0].occurredAt)!;
-  const last = instant(completed[completed.length - 1].occurredAt)!;
+  let last = instant(completed[completed.length - 1].occurredAt)!;
+  if (input.latestActualAttemptAt) {
+    const actual = instant(input.latestActualAttemptAt);
+    if (!actual || actual > now)
+      return result(
+        "needs_review",
+        "Additional actual outreach has an invalid date.",
+      );
+    if (actual > last) last = actual;
+  }
   const due = routineWeekday(
     new Date(
       Math.max(

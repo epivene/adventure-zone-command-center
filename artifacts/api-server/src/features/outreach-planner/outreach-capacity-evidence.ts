@@ -147,6 +147,7 @@ export type AllocationFacts = {
   demands: DemandFact[];
   holds: HoldFact[];
   anchors?: RouteAnchorFact[];
+  unresolvedDispatches?: { id: string; hold_id: string }[];
   unverifiedClaims?: {
     id: string;
     booking_ids: string[];
@@ -270,6 +271,7 @@ export async function loadAllocationFacts(
     'demands',(select coalesce(jsonb_agg(to_jsonb(t) order by t.booking_id),'[]') from outreach_booking_demand t),
     'holds',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from outreach_holds t),
     'anchors',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from outreach_route_anchors t),
+    'unresolvedDispatches',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select id,hold_id from outreach_dispatches where hold_id is not null and state in ('dispatching','uncertain')) t),
     'unverifiedClaims',(select coalesce(jsonb_agg(to_jsonb(t) order by t.id),'[]') from (select id,booking_ids,detail from outreach_reconciliation_facts where source='assistant-history-import' and state='needs_review') t)
   ) as facts`),
     )[0].facts,
@@ -578,6 +580,11 @@ export function projectReservations(
       confidence: "verified",
     });
     projection.stops.push({ ...x, bookingId: `hold:${h.id}` });
+  }
+  if (f.unresolvedDispatches?.length) {
+    projection.reasons.push(
+      "An unresolved specific-offer delivery may reserve shared capacity. Reconcile the provider outcome before allocating.",
+    );
   }
   if (f.unverifiedClaims?.length) {
     // Leg and physical-resource histories are independent. A later equipment

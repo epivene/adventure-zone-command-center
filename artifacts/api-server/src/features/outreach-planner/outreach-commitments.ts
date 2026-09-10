@@ -1,3 +1,4 @@
+import { assertNoUnresolvedHoldDispatch } from "./outreach-dispatch";
 import { rowsOf } from "./outreach-sources";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { sql } from "drizzle-orm";
@@ -193,6 +194,7 @@ export async function commitmentTransaction<T>(
           throw new OutreachError(409, result.capacity.reasons.join(" "));
         if (evidence.ownHoldId) {
           const hold = after.holds.find((h) => h.id === evidence.ownHoldId)!;
+          await assertNoUnresolvedHoldDispatch(tx, hold.id);
           await tx.execute(
             sql`update outreach_holds set state='converted',ended_at=${allocation.clock()},revision=revision+1 where id=${hold.id}::uuid and state='active'`,
           );

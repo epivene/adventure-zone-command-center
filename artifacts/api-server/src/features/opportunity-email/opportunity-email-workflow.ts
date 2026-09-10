@@ -7,18 +7,31 @@ type OpportunityRecord = {
 
 type OpportunityStore = {
   get(id: string): Promise<OpportunityRecord | null>;
-  update(id: string, patch: {
-    status?: "needs_review" | "contacted";
-    nextActionKind?: string | null;
-    nextActionDueAt?: Date | null;
-    holdReason?: string | null;
-  }): Promise<unknown>;
+  update(
+    id: string,
+    patch: {
+      status?: "needs_review" | "contacted";
+      nextActionKind?: string | null;
+      nextActionDueAt?: Date | null;
+      holdReason?: string | null;
+    },
+  ): Promise<unknown>;
 };
 
 type OpportunityEmailActivity = {
-  recordDraftCreated(input: { opportunityId: string; draftId: string }): Promise<void>;
-  recordDraftUpdated(input: { opportunityId: string; draftId: string }): Promise<void>;
-  recordScheduled(input: { opportunityId: string; draftId: string; scheduledFor: Date }): Promise<void>;
+  recordDraftCreated(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void>;
+  recordDraftUpdated(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void>;
+  recordScheduled(input: {
+    opportunityId: string;
+    draftId: string;
+    scheduledFor: Date;
+  }): Promise<void>;
   recordSent(input: {
     opportunityId: string;
     draftId: string;
@@ -41,12 +54,17 @@ type OpportunityEmailActivity = {
 };
 
 export class OpportunityEmailWorkflowCoordinator {
-  constructor(private readonly deps: {
-    opportunities: OpportunityStore;
-    activity: OpportunityEmailActivity;
-  }) {}
+  constructor(
+    private readonly deps: {
+      opportunities: OpportunityStore;
+      activity: OpportunityEmailActivity;
+    },
+  ) {}
 
-  async record(input: { opportunityId: string; blocker: DraftBlocker }): Promise<void> {
+  async record(input: {
+    opportunityId: string;
+    blocker: DraftBlocker;
+  }): Promise<void> {
     await this.deps.opportunities.update(input.opportunityId, {
       status: "needs_review",
       nextActionKind: "review_email_draft",
@@ -60,11 +78,17 @@ export class OpportunityEmailWorkflowCoordinator {
     });
   }
 
-  async recordDraftCreated(input: { opportunityId: string; draftId: string }): Promise<void> {
+  async recordDraftCreated(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void> {
     await this.deps.activity.recordDraftCreated(input);
   }
 
-  async recordDraftUpdated(input: { opportunityId: string; draftId: string }): Promise<void> {
+  async recordDraftUpdated(input: {
+    opportunityId: string;
+    draftId: string;
+  }): Promise<void> {
     await this.deps.activity.recordDraftUpdated(input);
   }
 
@@ -87,8 +111,9 @@ export class OpportunityEmailWorkflowCoordinator {
     if (opportunity?.status === "ready_to_contact") {
       await this.deps.opportunities.update(input.opportunityId, {
         status: "contacted",
-        nextActionKind: null,
-        nextActionDueAt: null,
+        ...(process.env.OUTREACH_PLANNER_ENABLED === "true"
+          ? {}
+          : { nextActionKind: null, nextActionDueAt: null }),
         holdReason: null,
       });
     }

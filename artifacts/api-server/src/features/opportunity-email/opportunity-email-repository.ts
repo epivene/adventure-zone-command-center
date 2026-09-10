@@ -42,14 +42,17 @@ function toRecord(row: OpportunityEmailRow): OpportunityEmailRecord {
 export class OpportunityEmailRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  async getCurrentForOpportunity(opportunityId: string): Promise<OpportunityEmailRecord | null> {
+  async getCurrentForOpportunity(
+    opportunityId: string,
+  ): Promise<OpportunityEmailRecord | null> {
     const [row] = await this.database
       .select()
       .from(bookingOpportunityEmailState)
       .where(eq(bookingOpportunityEmailState.opportunityId, opportunityId))
       .orderBy(desc(bookingOpportunityEmailState.updatedAt))
       .limit(1);
-    if (!row || !["draft", "scheduled", "failed"].includes(row.state)) return null;
+    if (!row || !["draft", "scheduled", "failed"].includes(row.state))
+      return null;
     return toRecord(row);
   }
 
@@ -62,7 +65,9 @@ export class OpportunityEmailRepository {
     return row ? toRecord(row) : null;
   }
 
-  async create(input: CreateOpportunityEmailInput): Promise<OpportunityEmailRecord> {
+  async create(
+    input: CreateOpportunityEmailInput,
+  ): Promise<OpportunityEmailRecord> {
     const [row] = await this.database
       .insert(bookingOpportunityEmailState)
       .values({
@@ -91,14 +96,34 @@ export class OpportunityEmailRepository {
     return toRecord(row);
   }
 
-  async update(id: string, patch: UpdateOpportunityEmailInput, now = new Date()): Promise<OpportunityEmailRecord> {
-    const values: Partial<typeof bookingOpportunityEmailState.$inferInsert> = { updatedAt: now };
+  async update(
+    id: string,
+    patch: UpdateOpportunityEmailInput,
+    now = new Date(),
+  ): Promise<OpportunityEmailRecord> {
+    const values: Partial<typeof bookingOpportunityEmailState.$inferInsert> = {
+      updatedAt: now,
+    };
     for (const key of [
-      "contactId", "purpose", "state", "gmailDraftId", "gmailMessageId", "gmailThreadId",
-      "recipientEmail", "recipientName", "subject", "body", "scheduledFor", "sentAt",
-      "lastFailureCode", "lastFailureMessage", "sendRequestKey", "scheduleRequestKey",
+      "contactId",
+      "purpose",
+      "state",
+      "gmailDraftId",
+      "gmailMessageId",
+      "gmailThreadId",
+      "recipientEmail",
+      "recipientName",
+      "subject",
+      "body",
+      "scheduledFor",
+      "sentAt",
+      "lastFailureCode",
+      "lastFailureMessage",
+      "sendRequestKey",
+      "scheduleRequestKey",
     ] as const) {
-      if (patch[key] !== undefined) (values as Record<string, unknown>)[key] = patch[key];
+      if (patch[key] !== undefined)
+        (values as Record<string, unknown>)[key] = patch[key];
     }
     const [row] = await this.database
       .update(bookingOpportunityEmailState)
@@ -109,7 +134,9 @@ export class OpportunityEmailRepository {
     return toRecord(row);
   }
 
-  async findBySendRequestKey(requestKey: string): Promise<OpportunityEmailRecord | null> {
+  async findBySendRequestKey(
+    requestKey: string,
+  ): Promise<OpportunityEmailRecord | null> {
     const [row] = await this.database
       .select()
       .from(bookingOpportunityEmailState)
@@ -118,7 +145,9 @@ export class OpportunityEmailRepository {
     return row ? toRecord(row) : null;
   }
 
-  async findByScheduleRequestKey(requestKey: string): Promise<OpportunityEmailRecord | null> {
+  async findByScheduleRequestKey(
+    requestKey: string,
+  ): Promise<OpportunityEmailRecord | null> {
     const [row] = await this.database
       .select()
       .from(bookingOpportunityEmailState)
@@ -131,7 +160,13 @@ export class OpportunityEmailRepository {
     const rows = await this.database
       .select()
       .from(bookingOpportunityEmailState)
-      .where(inArray(bookingOpportunityEmailState.state, ["draft", "scheduled", "failed"]))
+      .where(
+        inArray(bookingOpportunityEmailState.state, [
+          "draft",
+          "scheduled",
+          "failed",
+        ]),
+      )
       .orderBy(desc(bookingOpportunityEmailState.updatedAt));
     return rows.map(toRecord);
   }
@@ -145,15 +180,26 @@ export class OpportunityEmailRepository {
       const [candidate] = await tx
         .select({ id: bookingOpportunityEmailState.id })
         .from(bookingOpportunityEmailState)
-        .where(and(
-          eq(bookingOpportunityEmailState.state, "scheduled"),
-          lte(bookingOpportunityEmailState.scheduledFor, input.now),
-          or(
-            sql`${bookingOpportunityEmailState.dispatchLeaseExpiresAt} is null`,
-            lte(bookingOpportunityEmailState.dispatchLeaseExpiresAt, input.now),
+        .where(
+          and(
+            eq(bookingOpportunityEmailState.state, "scheduled"),
+            process.env.OUTREACH_PLANNER_ENABLED === "true"
+              ? sql`not exists(select 1 from outreach_dispatches d where d.draft_kind='opportunity_email' and d.draft_id=${bookingOpportunityEmailState.id} and d.state in ('dispatching','uncertain'))`
+              : undefined,
+            lte(bookingOpportunityEmailState.scheduledFor, input.now),
+            or(
+              sql`${bookingOpportunityEmailState.dispatchLeaseExpiresAt} is null`,
+              lte(
+                bookingOpportunityEmailState.dispatchLeaseExpiresAt,
+                input.now,
+              ),
+            ),
           ),
-        ))
-        .orderBy(bookingOpportunityEmailState.scheduledFor, bookingOpportunityEmailState.id)
+        )
+        .orderBy(
+          bookingOpportunityEmailState.scheduledFor,
+          bookingOpportunityEmailState.id,
+        )
         .limit(1)
         .for("update", { skipLocked: true });
       if (!candidate) return null;
@@ -172,7 +218,11 @@ export class OpportunityEmailRepository {
     });
   }
 
-  async releaseLease(draftId: string, workerId: string, now: Date): Promise<void> {
+  async releaseLease(
+    draftId: string,
+    workerId: string,
+    now: Date,
+  ): Promise<void> {
     await this.database
       .update(bookingOpportunityEmailState)
       .set({
@@ -180,9 +230,11 @@ export class OpportunityEmailRepository {
         dispatchLeaseExpiresAt: null,
         updatedAt: now,
       })
-      .where(and(
-        eq(bookingOpportunityEmailState.id, draftId),
-        eq(bookingOpportunityEmailState.dispatchLeaseOwner, workerId),
-      ));
+      .where(
+        and(
+          eq(bookingOpportunityEmailState.id, draftId),
+          eq(bookingOpportunityEmailState.dispatchLeaseOwner, workerId),
+        ),
+      );
   }
 }

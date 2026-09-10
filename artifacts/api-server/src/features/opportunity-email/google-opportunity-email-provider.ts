@@ -1,3 +1,4 @@
+import type { DispatchContent } from "../outreach-planner/outreach-dispatch";
 import { buildGmailRawMessage } from "@/features/google-workspace/google-api-client";
 import type { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 
@@ -57,10 +58,24 @@ export class GoogleOpportunityEmailProvider implements GmailDraftProvider {
     });
   }
 
-  async sendDraft(input: { draftId: string }) {
+  async sendDraft(input: {
+    draftId: string;
+    content?: DispatchContent;
+    threadId?: string | null;
+    beforeSend?: () => Promise<void>;
+  }) {
     const connected = await this.connection.createGmailDeliveryClient();
     if (!connected) throw notConnected();
-    const sent = await connected.client.sendGmailDraft(input);
+    const sent = await connected.client.sendGmailDraft({
+      draftId: input.draftId,
+      ...(input.content
+        ? {
+            raw: buildGmailRawMessage(input.content),
+            threadId: input.threadId,
+            beforeSend: input.beforeSend,
+          }
+        : {}),
+    });
     return {
       messageId: sent.messageId,
       threadId: sent.threadId,
@@ -74,9 +89,10 @@ export class GoogleOpportunityEmailProvider implements GmailDraftProvider {
     try {
       const metadata = await read.getMessageMetadata(input.messageId);
       if (!metadata.labelIds.includes("SENT")) return null;
-      const sentAt = metadata.internalDateMs === null
-        ? this.clock.now()
-        : new Date(metadata.internalDateMs);
+      const sentAt =
+        metadata.internalDateMs === null
+          ? this.clock.now()
+          : new Date(metadata.internalDateMs);
       if (!Number.isFinite(sentAt.getTime())) return null;
       return {
         messageId: metadata.id,

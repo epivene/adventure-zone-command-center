@@ -96,7 +96,8 @@ const migrationFiles = [
   },
   {
     name: "020_assisted_calling.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.contact_phones') IS NOT NULL AS ready",
   },
   {
     name: "021_call_session_metadata.sql",
@@ -423,7 +424,8 @@ const migrationFiles = [
   },
   {
     name: "20260905_boss_workspace.sql",
-    markerSql: "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
+    markerSql:
+      "SELECT to_regclass(current_schema() || '.boss_assignments') IS NOT NULL AS ready",
   },
   {
     name: "20260906_adobe_contracts.sql",
@@ -551,6 +553,27 @@ const migrationFiles = [
         AND NOT tgisinternal
     ) AS ready`,
   },
+  {
+    name: "20260909_outreach_dispatch.sql",
+    markerSql: `SELECT to_regclass(current_schema() || '.outreach_dispatches') IS NOT NULL
+      AND to_regclass(current_schema() || '.outreach_offer_approvals') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('outreach_offer_approvals','draft_kind'),('outreach_offer_approvals','draft_id'),('outreach_offer_approvals','digest'),('outreach_offer_approvals','intent'),('outreach_offer_approvals','hold_id'),('outreach_offer_approvals','hold_revision'),('outreach_offer_approvals','stage'),('outreach_offer_approvals','actor'),('outreach_offer_approvals','reason'),('outreach_offer_approvals','approved_at'),('outreach_dispatches','id'),('outreach_dispatches','draft_kind'),('outreach_dispatches','draft_id'),('outreach_dispatches','hold_id'),('outreach_dispatches','hold_revision'),('outreach_dispatches','digest'),('outreach_dispatches','intent'),('outreach_dispatches','stage'),('outreach_dispatches','payload'),('outreach_dispatches','state'),('outreach_dispatches','confirmation'),('outreach_dispatches','last_error'),('outreach_dispatches','review_after'),('outreach_dispatches','created_at'),('outreach_dispatches','updated_at')) expected(table_name,column_name) LEFT JOIN information_schema.columns actual ON actual.table_schema=current_schema() AND actual.table_name=expected.table_name AND actual.column_name=expected.column_name WHERE actual.column_name IS NULL)
+      AND (SELECT count(*)=9 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_offer_approvals_pkey','outreach_offer_intent_check','outreach_offer_kind_check','outreach_offer_hold_check','outreach_offer_hold_fk','outreach_dispatches_pkey','outreach_dispatch_state_check','outreach_dispatch_hold_fk','outreach_dispatch_confirmed_check'))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_dispatch_one_delivery','outreach_dispatch_unresolved_hold'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_dispatch_guard' AND tgrelid=to_regclass(current_schema() || '.outreach_dispatches'))
+      AND EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_hold_delivery_guard' AND tgrelid=to_regclass(current_schema() || '.outreach_holds'))
+      AND position('dispatch_attempt_count' in coalesce(pg_get_functiondef(to_regprocedure(current_schema() || '.outreach_draft_revision()')),'')) > 0
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('booking_opportunity_email_state'),('office_email_drafts')) expected(name) WHERE to_regclass(current_schema() || '.' || expected.name) IS NOT NULL AND (NOT EXISTS(SELECT 1 FROM pg_trigger WHERE tgname='outreach_draft_content_revision' AND tgrelid=to_regclass(current_schema() || '.' || expected.name)) OR NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name=expected.name AND column_name='outreach_content_revision')))
+      AND to_regclass(current_schema() || '.outreach_inbound_observations') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('id'),('message_id'),('thread_id'),('organization_id'),('opportunity_id'),('event_year'),('received_at'),('metadata'),('state'),('classification'),('reviewed_opportunity_id'),('reviewed_at'),('actor'),('reason'),('source_reference')) expected(name) WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_inbound_observations' AND column_name=expected.name))
+      AND (SELECT count(*)=2 FROM pg_indexes WHERE schemaname=current_schema() AND indexname IN ('outreach_inbound_message_identity','outreach_inbound_review'))
+      AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_dispatches' AND column_name='verification')
+      AND to_regclass(current_schema() || '.outreach_source_reviews') IS NOT NULL
+      AND NOT EXISTS(SELECT 1 FROM (VALUES ('candidate_id'),('source_id'),('classification'),('occurred_at'),('actor'),('reason'),('reviewed_at')) expected(name) WHERE NOT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_source_reviews' AND column_name=expected.name))
+      AND (SELECT count(*)=2 FROM pg_constraint WHERE connamespace=current_schema()::regnamespace AND conname IN ('outreach_source_reviews_pkey','outreach_source_review_classification'))
+      AND EXISTS(SELECT 1 FROM pg_constraint WHERE conrelid=to_regclass(current_schema() || '.outreach_inbound_observations') AND conname='outreach_inbound_pkey')
+      AND EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='outreach_dispatches' AND column_name='tracking_state') AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -586,8 +609,7 @@ export async function runActReviewMigrations(options?: {
   pool?: MigrationPool;
   migrations?: ActReviewMigration[];
 }): Promise<string[]> {
-  const migrationPool =
-    options?.pool ?? (await import("./index")).pool;
+  const migrationPool = options?.pool ?? (await import("./index")).pool;
   const migrations = options?.migrations ?? (await loadActReviewMigrations());
   const client = await migrationPool.connect();
   const applied: string[] = [];
