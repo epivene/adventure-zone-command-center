@@ -521,6 +521,15 @@ const migrationFiles = [
         AND NOT tgisinternal
     ) AS ready`,
   },
+  {
+    name: "20260910_convention_planning_questionnaire.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid = to_regclass(current_schema() || '.boss_work_requests')
+        AND conname = 'boss_work_requests_type_valid'
+        AND pg_get_constraintdef(oid) LIKE '%convention_planning_questionnaire%'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
