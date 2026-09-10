@@ -23,6 +23,8 @@ export const allowedTemplatePlaceholders = [
   "packageDuration",
   "followUpDate",
   "conventionName",
+  "conventionDates",
+  "boothOrMeetingLocation",
   "additionalInsuredWording",
   "additionalInsuredInfo",
   "personalNote",
