@@ -23,13 +23,13 @@ router.get("/manager/map", requireManager, async (req, res) => {
       tripRepository: new DrizzleTripRepository(db),
       bookingRepository: new DrizzleManagerMapBookingRepository(db),
       routingEstimator: managerRoutingEstimator,
+      eventLocationResolver: (events) => resolveManagerMapEventLocations(events, managerMapGeocoder),
       handoffRepository: new HandoffRepository(db),
       lifecycleRepository: new EventLifecycleRepository(db),
     },
     req.legManager!.legId,
   );
-  const events = await resolveManagerMapEventLocations(payload.events, managerMapGeocoder);
-  res.json(managerScopedMapResponseSchema.parse({ ...payload, events }));
+  res.json(managerScopedMapResponseSchema.parse(payload));
 });
 
 export default router;
