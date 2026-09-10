@@ -45,12 +45,12 @@ describe("convention campaign template seed", () => {
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a084a3877bde871",
+        gmailMessageId: "1a08975b5738b040",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a084a39fdd1790d",
+        gmailMessageId: "1a08975cc9c100c8",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -63,7 +63,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-after-convention-close-v3");
+      expect(template.templateVersion).toBe("2026-09-after-convention-close-v4");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
@@ -159,15 +159,29 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-after-convention-close-v3",
+      template_version: "2026-09-after-convention-close-v4",
       state: "active",
-      reviewed_by: "system:owner-approved-after-convention-refresh",
+      reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
       deduplication_key: null,
     });
     expect(afterFirstRun.rows[0].body_template).toContain("SEE YOUR PACKAGE OPTIONS");
     expect(afterFirstRun.rows[0].reviewed_at).toBeInstanceOf(Date);
     expect(afterFirstRun.rows[0].completed_at).toBeInstanceOf(Date);
+
+    const finalizedAvailability = await client.query<{
+      state: string;
+      template_count: number;
+    }>(`
+      select state, count(*)::int as template_count
+      from communication_templates
+      where category = 'convention_campaign'
+      group by state
+      order by state
+    `);
+    expect(finalizedAvailability.rows).toEqual([
+      { state: "active", template_count: 7 },
+    ]);
 
     await ensureConventionCampaignTemplateSeed(database as never);
     const afterSecondRun = await client.query<{ template_count: number; request_count: number }>(`
