@@ -166,4 +166,25 @@ describe("manager dashboard aggregate", () => {
     expect(dashboard.money).toEqual({});
     expect(dashboard.partialErrors).toEqual([{ section: "money", message: "Finance unavailable" }]);
   });
+  it("does not label a retained checked-out event as next when its scheduled end is still in the future", async () => {
+    const retained = stop("retained-event", "2026-08-20T12:00:00Z");
+    const actualNext = stop("actual-next", "2026-08-22T12:00:00Z");
+    const dashboard = await loadLegManagerDashboard(dependencies({
+      tripRepository: {
+        async listTrips() { return [trip]; },
+        async listStops() { return [retained, actualNext]; },
+        async listSegments() { return []; },
+      },
+      bookingRepository: { async listForLeg() { return []; } },
+      lifecycleRepository: {
+        async getCurrentForLeg() { return null; },
+        async getLatestCheckedOutForLeg() { return { bookingId: retained.bookingId, checkedOutAt: new Date("2026-08-19T00:00:00Z") } as any; },
+        async listIncompleteForLeg() { return []; },
+      },
+    }), A, new Date("2026-08-19T12:00:00Z"));
+
+    expect(dashboard.nextEvent?.bookingId).toBe(actualNext.bookingId);
+  });
+
+
 });
