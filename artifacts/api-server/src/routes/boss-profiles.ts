@@ -1,4 +1,7 @@
 import { Router, type IRouter } from "express";
+import { desc, eq } from "drizzle-orm";
+import { officeEmailDrafts } from "@/db/schema";
+import { createGoogleWorkspaceProfileEmailRouter } from "./google-workspace-profile-email";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
@@ -43,6 +46,30 @@ router.get("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<v
   } catch (error) {
     req.log.error({ err: error }, "Failed to load Boss profile");
     res.status(500).json({ error: "Could not load profile." });
+  }
+});
+
+router.use("/boss/google-workspace", requireBoss, createGoogleWorkspaceProfileEmailRouter({ profilePath: "/profiles", emailsOnly: true }));
+
+router.get("/boss/profiles/:profileId/email-drafts", requireBoss, async (req, res): Promise<void> => {
+  const profileId = param(req.params.profileId);
+  if (!uuid.safeParse(profileId).success) { res.status(400).json({ error: "Invalid profile ID." }); return; }
+  try {
+    const drafts = await db.select({
+      id: officeEmailDrafts.id,
+      subject: officeEmailDrafts.subject,
+      body: officeEmailDrafts.body,
+      recipientEmail: officeEmailDrafts.recipientEmail,
+      state: officeEmailDrafts.state,
+      sentAt: officeEmailDrafts.sentAt,
+      updatedAt: officeEmailDrafts.updatedAt,
+    }).from(officeEmailDrafts)
+      .where(eq(officeEmailDrafts.organizationId, profileId))
+      .orderBy(desc(officeEmailDrafts.updatedAt));
+    res.json({ drafts });
+  } catch (error) {
+    req.log?.error?.({ err: error }, "Failed to load Boss profile emails");
+    res.status(500).json({ error: "Could not load profile email drafts." });
   }
 });
 
