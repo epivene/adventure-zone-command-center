@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -119,4 +119,30 @@ describe("EventLifecycleAction", () => {
     await waitFor(() => expect(mocks.api).toHaveBeenCalled());
     expect(screen.queryByRole("button", { name: "Check in" })).not.toBeInTheDocument();
   });
+  it("changes to checkout late while the page remains open", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-09T23:59:59.000Z"));
+    try {
+      mocks.lifecycle = {
+        ...baseLifecycle,
+        checkedInAt: "2026-09-05T16:00:00.000Z",
+        preEventChecklistState: "completed",
+        readyToOperate: true,
+      };
+      const { hook } = memoryLocation({ path: "/manager", static: false });
+      render(<Router hook={hook}><EventLifecycleAction
+        bookingId="booking-1"
+        checkoutDueAt="2026-09-10T00:00:00.000Z"
+      /></Router>);
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.queryByText("Event over — checkout late")).not.toBeInTheDocument();
+
+      await act(async () => { await vi.advanceTimersByTimeAsync(1_050); });
+      expect(screen.getByText("Event over — checkout late")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+
 });
