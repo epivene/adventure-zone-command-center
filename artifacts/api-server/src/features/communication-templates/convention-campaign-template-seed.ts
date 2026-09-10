@@ -262,14 +262,46 @@ const conventionCampaignTemplateSources = [
   }
 ] as const;
 
-export const conventionCampaignTemplates = conventionCampaignTemplateSources.map((template) => ({
-  ...template,
-  templateVersion: "2026-09-early-bird-refresh-v10",
-  bodyTemplate: replaceEmailLogo(updateConventionEmailPresentation(
+
+function isReturningCustomerOutreach(code: string): boolean {
+  return code === "convention_before_general_v2" || code === "convention_before_past_event_v2";
+}
+
+/** General reconnect outreach for customers served within the last five years. */
+function returningCustomerOutreach(html: string): string {
+  const intro = '<tr><td style="padding:0 38px 31px;background:#f8f6f1"><div style="font-size:16px;line-height:25px;color:#26324a">Hi {{contactName}},</div><div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">We’ve loved being part of <strong>{{eventName}}</strong>, and we’d love to bring the fun back! We’re reaching out to the customers we’ve worked with over the past five years to reconnect and start getting your next event scheduled.</div><div style="font-size:16px;line-height:25px;color:#26324a;margin-top:15px">Send us your event dates and location so we can check availability and help you choose the right package. Now is a great time to plan ahead and take advantage of our <strong>10% Early Bird booking offer</strong>.</div></td></tr>';
+  return html
+    .replace("Let’s connect during the conference and talk about plans for your upcoming event.", "Let’s reconnect and get your next event scheduled. Save 10% with our Early Bird booking offer.")
+    .replace("IT’S CONVENTION SEASON!", "LET’S RECONNECT!")
+    .replace(/LET’S (?:PLAN|MAKE)<br><span style="color:#ffca05">(?:SOMETHING BIG\.|MORE GREAT MEMORIES\.)<\/span>/, 'LET’S BRING<br><span style="color:#ffca05">THE FUN BACK!</span>')
+    .replace(approvedEarlyBirdBlock, "")
+    .replace(/<tr>\s*<td class="[^"]+pad" style="padding-top:36px;padding-bottom:31px;background:#f8f6f1">[\s\S]*?<\/td>\s*<\/tr>/, approvedEarlyBirdBlock.replace("padding:0 38px 34px", "padding:28px 38px 24px") + intro)
+    .replace("WILL WE SEE YOU THERE?", "READY FOR ANOTHER ADVENTURE?")
+    .replace(/Let’s (?:connect|reconnect) at \{\{conventionName\}\}\./g, "Let’s get your next event scheduled.")
+    .replace(/We’ll be there \{\{conventionDates\}\} at \{\{boothOrMeetingLocation\}\}\.[\s\S]*?(?=<\/div>)/, "Reply with your dates and location, and we’ll check availability and help you take the next step.")
+    .replace(/subject=[^"]*(?=")/g, "subject=Let%E2%80%99s%20plan%20our%20next%20event")
+    .replace(/SCHEDULE A TIME TO MEET/g, "CONTACT US")
+    .replace("See you at the conference!", "We’d love to work with you again!")
+    .replace(/—/g, ", ");
+}
+
+
+export const conventionCampaignTemplates = conventionCampaignTemplateSources.map((template) => {
+  const reconnect = isReturningCustomerOutreach(template.code);
+  const body = replaceEmailLogo(updateConventionEmailPresentation(
     template.bodyTemplate,
     template.code.startsWith("convention_after_") ? "after" : "before_or_during",
-  ), template.code),
-}));
+  ), template.code);
+  return {
+    ...template,
+    name: reconnect ? (template.code === "convention_before_general_v2"
+      ? "TEMPLATE 1 — General Outreach — Returning Customers"
+      : "TEMPLATE 3 — General Outreach — Past Event") : template.name,
+    subjectTemplate: reconnect ? "Let’s reconnect and get your next event scheduled" : template.subjectTemplate,
+    templateVersion: reconnect ? "2026-09-returning-customer-outreach-v11" : "2026-09-early-bird-refresh-v10",
+    bodyTemplate: reconnect ? returningCustomerOutreach(body) : body,
+  };
+});
 
 export async function ensureConventionCampaignTemplateSeed(database: Database): Promise<void> {
   const service = new BossWorkRequestService(database);
@@ -322,7 +354,9 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
         "boothOrMeetingLocation",
         "earlyBirdDeadline",
       ],
-      requiredPlaceholders: ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
+      requiredPlaceholders: isReturningCustomerOutreach(item.code)
+        ? ["contactName", "eventName", "earlyBirdDeadline"]
+        : ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
       ownerKind: "company",
       createdByKind: "system",
       sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
@@ -344,7 +378,9 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
           "boothOrMeetingLocation",
           "earlyBirdDeadline",
         ],
-        requiredPlaceholders: ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
+        requiredPlaceholders: isReturningCustomerOutreach(item.code)
+        ? ["contactName", "eventName", "earlyBirdDeadline"]
+        : ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
         sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
         state: "active",
         reviewedBy: CONVENTION_FINALIZED_REVIEWER,
