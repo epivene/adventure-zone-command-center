@@ -124,7 +124,7 @@ export default function ConventionOutreachPage({
     [group, setGroup] = useState(""),
     [page, setPage] = useState(0),
     [view, setView] = useState<"cards" | "game">(
-      requestedView === "game" ? "game" : "cards",
+      boss || requestedView === "game" ? "game" : "cards",
     );
   const [error, setError] = useState(""),
     [gameError, setGameError] = useState(""),
@@ -278,7 +278,7 @@ export default function ConventionOutreachPage({
   return (
     <main className="mx-auto grid max-w-6xl gap-4 p-4 print:max-w-none print:p-0">
       <header className="flex flex-wrap items-center justify-between gap-3 print:hidden">
-        <h1 className="text-2xl font-bold">Convention Outreach</h1>
+        <h1 className="text-2xl font-bold">{boss ? "Conventions" : "Convention Outreach"}</h1>
         <Link href={boss ? "/boss" : "/dave-requests"} className={button}>
           Workspace
         </Link>
@@ -398,8 +398,8 @@ export default function ConventionOutreachPage({
                   {e.convention} {e.year}
                 </strong>
                 <p>
-                  {e.member_count} entries · {e.unresolved_count} need profile
-                  links
+                  {e.member_count} entries
+                  {!boss && <> · {e.unresolved_count} need profile links</>}
                 </p>
               </button>
             ))}
@@ -413,31 +413,31 @@ export default function ConventionOutreachPage({
             <h2 className="text-xl font-bold">
               {detail.edition.convention} {detail.edition.year}
             </h2>
-            {detail.edition.summary && (
+            {!boss && detail.edition.summary && (
               <p className="mt-3 whitespace-pre-wrap">
                 {detail.edition.summary}
               </p>
             )}
-            {detail.edition.recommendation && (
+            {!boss && detail.edition.recommendation && (
               <p className="mt-3 whitespace-pre-wrap">
                 {detail.edition.recommendation}
               </p>
             )}
             <p className="mt-2 text-sm">
               {detail.members.length} entries
-              {detail.review
+              {!boss && detail.review
                 ? detail.review.reviewed_revision === detail.edition.revision
                   ? " · Reviewed"
                   : " · Updated since review"
                 : ""}
             </p>
-            <details>
+            {!boss && <details>
               <summary>Research sources</summary>
               <p className="whitespace-pre-wrap">
                 {detail.edition.sources ||
                   "Sources are listed with each contact."}
               </p>
-            </details>
+            </details>}
           </section>
           {detail.edition.archived_at && (
             <p className={`${box} print:hidden`}>
@@ -482,7 +482,7 @@ export default function ConventionOutreachPage({
                 setPage(0);
               }}
             />
-            <select
+            {!boss && <select
               aria-label="Email group"
               className={`${field} max-w-xs`}
               value={group}
@@ -498,8 +498,8 @@ export default function ConventionOutreachPage({
                   {detail.members.filter((m) => m.data.group === key).length})
                 </option>
               ))}
-            </select>
-            <div
+            </select>}
+            {!boss && <div
               role="group"
               aria-label="Convention display"
               className="flex rounded-lg border p-1"
@@ -526,7 +526,7 @@ export default function ConventionOutreachPage({
               >
                 Convention Game
               </button>
-            </div>
+            </div>}
           </div>
           {!boss && !detail.edition.archived_at && (
             <section className={`${box} print:hidden`}>
@@ -636,7 +636,7 @@ export default function ConventionOutreachPage({
           <p className="text-sm print:hidden">
             {filtered.length} matching entries
           </p>
-          {view === "game" ? (
+          {boss || view === "game" ? (
             <ConventionGame
               boss={boss}
               edition={detail.edition}
@@ -753,7 +753,7 @@ export default function ConventionOutreachPage({
               </div>
             </>
           )}
-          <section className={`${box} print:hidden`}>
+          {!boss && <section className={`${box} print:hidden`}>
             <label>
               My review notes
               <textarea
@@ -778,8 +778,8 @@ export default function ConventionOutreachPage({
             >
               Save notes and mark reviewed
             </button>
-          </section>
-          <details className={`${box} print:hidden`}>
+          </section>}
+          {!boss && <details className={`${box} print:hidden`}>
             <summary>List history</summary>
             {detail.history.map((h) => (
               <p key={h.id}>
@@ -787,7 +787,7 @@ export default function ConventionOutreachPage({
                 {h.kind.replaceAll("_", " ")}
               </p>
             ))}
-          </details>
+          </details>}
         </>
       )}
       {editing && !boss && (
@@ -911,7 +911,7 @@ function ConventionGame({
                   {savedCard === member.id && <strong>Saved</strong>}
                 </span>
               </button>
-              <div className="mt-3 border-t pt-3 text-sm">
+              {(member.organization_id || !boss) && <div className="mt-3 border-t pt-3 text-sm">
                 {member.organization_id ? (
                   <Link
                     className="underline"
@@ -923,7 +923,7 @@ function ConventionGame({
                 ) : (
                   <span>Profile needed</span>
                 )}
-              </div>
+              </div>}
             </article>
           );
         })}
