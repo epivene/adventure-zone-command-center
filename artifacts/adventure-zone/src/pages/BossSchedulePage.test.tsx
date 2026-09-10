@@ -50,7 +50,7 @@ describe("Boss schedule planning views", () => {
         travelLegColor: null,
       }, {
         id: "20000000-0000-4000-8000-000000000004",
-        organizationId: "30000000-0000-4000-8000-000000000004",
+        organizationId: "30000000-0000-4000-8000-000000000001",
         name: "Potential County Fair",
         city: "Logan",
         region: "UT",
