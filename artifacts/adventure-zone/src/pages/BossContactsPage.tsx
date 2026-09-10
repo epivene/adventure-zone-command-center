@@ -19,7 +19,7 @@ function ContactRow({ contact }: { contact: BossContact }) {
         <p className="font-semibold text-foreground truncate">{name}</p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {contact.organizationName ? `${contact.organizationName} · ` : ""}
-          {contact.role ? `${contact.role} · ` : ""}
+          {contact.role || contact.jobTitle ? `${contact.role ?? contact.jobTitle} · ` : ""}
           {[contact.city, contact.region].filter(Boolean).join(", ")}
         </p>
       </div>
@@ -36,35 +36,33 @@ export default function BossContactsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
 
-  async function load() {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await bossGet<{ contacts: BossContact[] } | BossContact[]>("/boss/contacts");
-      setContacts(Array.isArray(data) ? data : (data.contacts ?? []));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not load contacts.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => { void load(); }, []);
-
-  const filtered = contacts.filter((c) => {
-    const q = search.trim().toLowerCase();
-    if (!q) return true;
-    return [c.firstName, c.lastName, c.email, c.phone, c.organizationName, c.city, c.region]
-      .some((v) => v?.toString().toLowerCase().includes(q));
-  });
+  useEffect(() => {
+    let active = true;
+    const term = search.trim();
+    const timeout = window.setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      const path = term ? `/boss/contacts?q=${encodeURIComponent(term)}` : "/boss/contacts";
+      void bossGet<{ contacts: BossContact[] } | BossContact[]>(path)
+        .then((data) => {
+          if (active) setContacts(Array.isArray(data) ? data : (data.contacts ?? []));
+        })
+        .catch((cause) => {
+          if (active) setError(cause instanceof Error ? cause.message : "Could not load contacts.");
+        })
+        .finally(() => { if (active) setLoading(false); });
+    }, term ? 250 : 0);
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [search, reloadKey]);
 
   return (
     <div className="grid gap-5" data-testid="boss-contacts-page">
       <header>
         <p className="text-xs font-bold uppercase tracking-widest text-primary">Boss</p>
         <h1 className="mt-0.5 text-2xl font-bold text-foreground">Contacts</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Read-only visibility across all contacts.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Search contacts by name, profile, location, email, or phone.</p>
       </header>
 
       <div className="relative">
@@ -81,7 +79,7 @@ export default function BossContactsPage() {
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert">
           <span className="text-destructive">{error}</span>
-          <Button onClick={() => void load()} variant="outline" size="sm" className="ml-3">
+          <Button onClick={() => setReloadKey((value) => value + 1)} variant="outline" size="sm" className="ml-3">
             <RefreshCw className="mr-1 h-3.5 w-3.5" /> Retry
           </Button>
         </div>
@@ -91,14 +89,14 @@ export default function BossContactsPage() {
         <div className="grid gap-3">
           {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
         </div>
-      ) : filtered.length === 0 ? (
+      ) : contacts.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center" data-testid="contacts-empty">
           <p className="font-semibold text-foreground">No contacts found.</p>
           {search ? <p className="mt-1 text-sm text-muted-foreground">Try a different search.</p> : null}
         </div>
       ) : (
         <div className="grid gap-2">
-          {filtered.map((c) => <ContactRow key={c.id} contact={c} />)}
+          {contacts.map((c) => <ContactRow key={c.id} contact={c} />)}
         </div>
       )}
     </div>

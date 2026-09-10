@@ -8,7 +8,9 @@ const DRAFT_ID = "33333333-3333-4333-8333-333333333333";
 const SENT_AT = new Date("2026-08-27T18:30:00.000Z");
 const SCHEDULED_FOR = new Date("2026-08-28T14:00:00.000Z");
 
-function record(overrides: Partial<OpportunityEmailRecord> = {}): OpportunityEmailRecord {
+function record(
+  overrides: Partial<OpportunityEmailRecord> = {},
+): OpportunityEmailRecord {
   const now = new Date("2026-08-27T18:00:00.000Z");
   return {
     id: DRAFT_ID,
@@ -41,10 +43,16 @@ function dependencies(existing: OpportunityEmailRecord = record()) {
   const emailRepository = {
     getCurrentForOpportunity: vi.fn(async () => existing),
     getById: vi.fn(async () => existing),
-    findBySendRequestKey: vi.fn(async (_key: string) => null as OpportunityEmailRecord | null),
-    findByScheduleRequestKey: vi.fn(async (_key: string) => null as OpportunityEmailRecord | null),
+    findBySendRequestKey: vi.fn(
+      async (_key: string) => null as OpportunityEmailRecord | null,
+    ),
+    findByScheduleRequestKey: vi.fn(
+      async (_key: string) => null as OpportunityEmailRecord | null,
+    ),
     create: vi.fn(),
-    update: vi.fn(async (_id: string, patch: Partial<OpportunityEmailRecord>) => record({ ...existing, ...patch })),
+    update: vi.fn(async (_id: string, patch: Partial<OpportunityEmailRecord>) =>
+      record({ ...existing, ...patch }),
+    ),
   };
   return {
     contextResolver: { resolve: vi.fn() },
@@ -53,9 +61,16 @@ function dependencies(existing: OpportunityEmailRecord = record()) {
     gmailDraftProvider: {
       createDraft: vi.fn(),
       updateDraft: vi.fn(),
-      sendDraft: vi.fn(async () => ({ messageId: "gmail-sent-1", threadId: "thread-1", sentAt: SENT_AT })),
+      sendDraft: vi.fn(async (_input?: unknown) => ({
+        messageId: "gmail-sent-1",
+        threadId: "thread-1",
+        sentAt: SENT_AT,
+      })),
       scheduleDraft: vi.fn(async () => ({ scheduledFor: SCHEDULED_FOR })),
-      reconcileSend: vi.fn(async () => null),
+      reconcileSend: vi.fn(
+        async () =>
+          null as { messageId: string; threadId: string; sentAt: Date } | null,
+      ),
     },
     blockerSink: { record: vi.fn() },
     workflowSink: {
@@ -71,36 +86,106 @@ describe("OpportunityEmailService delivery", () => {
     const deps = dependencies();
     const service = new OpportunityEmailService(deps as any);
 
-    const result = await service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "send-1" });
-
-    expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledWith({ draftId: "gmail-draft-1" });
-    expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
-      state: "sent",
-      sentAt: SENT_AT,
-      sendRequestKey: "send-1",
-      gmailMessageId: "gmail-sent-1",
-      gmailThreadId: "thread-1",
-    }));
-    expect(deps.workflowSink.recordSent).toHaveBeenCalledWith(expect.objectContaining({
+    const result = await service.sendDraft({
       opportunityId: OPPORTUNITY_ID,
       draftId: DRAFT_ID,
-      sentAt: SENT_AT,
-    }));
+      requestKey: "send-1",
+    });
+
+    expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledWith({
+      draftId: "gmail-draft-1",
+    });
+    expect(deps.emailRepository.update).toHaveBeenCalledWith(
+      DRAFT_ID,
+      expect.objectContaining({
+        state: "sent",
+        sentAt: SENT_AT,
+        sendRequestKey: "send-1",
+        gmailMessageId: "gmail-sent-1",
+        gmailThreadId: "thread-1",
+      }),
+    );
+    expect(deps.workflowSink.recordSent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+        sentAt: SENT_AT,
+      }),
+    );
     expect(result.followUpReferenceAt).toEqual(SENT_AT);
+  });
+
+  it("finalizes the Early Bird date before Gmail send and records it after confirmation", async () => {
+    const deps = dependencies(record({ eventYear: 2027 }));
+    deps.gmailDraftProvider.updateDraft.mockResolvedValueOnce({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-1",
+      threadId: null,
+    });
+    const promotion = {
+      prepareBody: vi.fn(async () => ({
+        body: "Current edited body\n\nEarly Bird Promo:\nOffer ends September 26, 2026.",
+        eligible: true,
+        deadlineDate: "2026-09-26",
+      })),
+      recordConfirmedSend: vi.fn(async () => null),
+    };
+    const service = new OpportunityEmailService({
+      ...deps,
+      promotion,
+      now: () => new Date("2026-08-27T18:00:00Z"),
+    } as any);
+
+    await service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "send-with-promo",
+    });
+
+    expect(deps.gmailDraftProvider.updateDraft).toHaveBeenCalledWith({
+      draftId: "gmail-draft-1",
+      to: "booking@example.com",
+      subject: "Adventure Zone for Sample County Fair",
+      body: expect.stringContaining("Early Bird Promo"),
+    });
+    expect(
+      deps.gmailDraftProvider.updateDraft.mock.invocationCallOrder[0],
+    ).toBeLessThan(
+      deps.gmailDraftProvider.sendDraft.mock.invocationCallOrder[0],
+    );
+    expect(promotion.recordConfirmedSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        emailRecordId: DRAFT_ID,
+        opportunityId: OPPORTUNITY_ID,
+        organizationId: "22222222-2222-4222-8222-222222222222",
+        eventYear: 2027,
+        sentAt: SENT_AT,
+        gmailMessageId: "gmail-sent-1",
+        gmailThreadId: "thread-1",
+      }),
+    );
   });
 
   it("records app-owned scheduled state without pretending the email has been sent", async () => {
     const deps = dependencies();
     const service = new OpportunityEmailService(deps as any);
 
-    const result = await service.scheduleDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "schedule-1", scheduledFor: SCHEDULED_FOR });
-
-    expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
-      state: "scheduled",
+    const result = await service.scheduleDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "schedule-1",
       scheduledFor: SCHEDULED_FOR,
-      scheduleRequestKey: "schedule-1",
-      sentAt: null,
-    }));
+    });
+
+    expect(deps.emailRepository.update).toHaveBeenCalledWith(
+      DRAFT_ID,
+      expect.objectContaining({
+        state: "scheduled",
+        scheduledFor: SCHEDULED_FOR,
+        scheduleRequestKey: "schedule-1",
+        sentAt: null,
+      }),
+    );
     expect(deps.workflowSink.recordScheduled).toHaveBeenCalled();
     expect(deps.workflowSink.recordSent).not.toHaveBeenCalled();
     expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
@@ -110,7 +195,12 @@ describe("OpportunityEmailService delivery", () => {
     const deps = dependencies();
     const service = new OpportunityEmailService(deps as any);
 
-    await service.scheduleDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "schedule-app-owned", scheduledFor: SCHEDULED_FOR });
+    await service.scheduleDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "schedule-app-owned",
+      scheduledFor: SCHEDULED_FOR,
+    });
 
     expect(deps.gmailDraftProvider.scheduleDraft).not.toHaveBeenCalled();
     expect(deps.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
@@ -118,27 +208,51 @@ describe("OpportunityEmailService delivery", () => {
 
   it("preserves the draft and records failure without advancing workflow", async () => {
     const deps = dependencies();
-    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(Object.assign(new Error("provider down"), { code: "GMAIL_SEND_FAILED" }));
+    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(
+      Object.assign(new Error("provider down"), { code: "GMAIL_SEND_FAILED" }),
+    );
     const service = new OpportunityEmailService(deps as any);
 
-    await expect(service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "send-fail" })).rejects.toThrow("GMAIL_SEND_FAILED");
+    await expect(
+      service.sendDraft({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+        requestKey: "send-fail",
+      }),
+    ).rejects.toThrow("GMAIL_SEND_FAILED");
 
-    expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
-      state: "failed",
-      lastFailureCode: "GMAIL_SEND_FAILED",
-      sendRequestKey: "send-fail",
-    }));
-    expect(deps.workflowSink.recordFailure).toHaveBeenCalledWith(expect.objectContaining({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID }));
+    expect(deps.emailRepository.update).toHaveBeenCalledWith(
+      DRAFT_ID,
+      expect.objectContaining({
+        state: "failed",
+        lastFailureCode: "GMAIL_SEND_FAILED",
+        sendRequestKey: "send-fail",
+      }),
+    );
+    expect(deps.workflowSink.recordFailure).toHaveBeenCalledWith(
+      expect.objectContaining({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+      }),
+    );
     expect(deps.workflowSink.recordSent).not.toHaveBeenCalled();
   });
 
   it("reuses a prior confirmed send for the same request key", async () => {
-    const prior = record({ state: "sent", sentAt: SENT_AT, sendRequestKey: "same-send" });
+    const prior = record({
+      state: "sent",
+      sentAt: SENT_AT,
+      sendRequestKey: "same-send",
+    });
     const deps = dependencies(prior);
     deps.emailRepository.findBySendRequestKey.mockResolvedValueOnce(prior);
     const service = new OpportunityEmailService(deps as any);
 
-    const result = await service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "same-send" });
+    const result = await service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "same-send",
+    });
 
     expect(deps.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
     expect(result.draft).toBe(prior);
@@ -147,11 +261,23 @@ describe("OpportunityEmailService delivery", () => {
 
   it("reconciles an uncertain send using the stored Gmail message ID before allowing retry", async () => {
     const deps = dependencies();
-    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(Object.assign(new Error("timeout"), { code: "GMAIL_SEND_OUTCOME_UNCERTAIN" }));
-    deps.gmailDraftProvider.reconcileSend.mockResolvedValueOnce({ messageId: "gmail-message-1", threadId: "thread-2", sentAt: SENT_AT });
+    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(
+      Object.assign(new Error("timeout"), {
+        code: "GMAIL_SEND_OUTCOME_UNCERTAIN",
+      }),
+    );
+    deps.gmailDraftProvider.reconcileSend.mockResolvedValueOnce({
+      messageId: "gmail-message-1",
+      threadId: "thread-2",
+      sentAt: SENT_AT,
+    });
     const service = new OpportunityEmailService(deps as any);
 
-    const result = await service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "uncertain-1" });
+    const result = await service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "uncertain-1",
+    });
 
     expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledTimes(1);
     expect(deps.gmailDraftProvider.reconcileSend).toHaveBeenCalledWith({
@@ -164,28 +290,175 @@ describe("OpportunityEmailService delivery", () => {
 
   it("does not attempt uncertain-send reconciliation without a stored Gmail message ID", async () => {
     const deps = dependencies(record({ gmailMessageId: null }));
-    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(Object.assign(new Error("timeout"), { code: "GMAIL_SEND_OUTCOME_UNCERTAIN" }));
+    deps.gmailDraftProvider.sendDraft.mockRejectedValueOnce(
+      Object.assign(new Error("timeout"), {
+        code: "GMAIL_SEND_OUTCOME_UNCERTAIN",
+      }),
+    );
     const service = new OpportunityEmailService(deps as any);
 
-    await expect(service.sendDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "uncertain-no-id" }))
-      .rejects.toThrow("GMAIL_SEND_OUTCOME_UNCERTAIN");
+    await expect(
+      service.sendDraft({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+        requestKey: "uncertain-no-id",
+      }),
+    ).rejects.toThrow("GMAIL_SEND_OUTCOME_UNCERTAIN");
     expect(deps.gmailDraftProvider.reconcileSend).not.toHaveBeenCalled();
   });
 
   it("retries a failed scheduled intent on the same draft without generating a new message", async () => {
-    const failed = record({ state: "failed", scheduledFor: SCHEDULED_FOR, lastFailureCode: "SCHEDULE_FAILED" });
+    const failed = record({
+      state: "failed",
+      scheduledFor: SCHEDULED_FOR,
+      lastFailureCode: "SCHEDULE_FAILED",
+    });
     const deps = dependencies(failed);
     const service = new OpportunityEmailService(deps as any);
 
-    const result = await service.retryDraft({ opportunityId: OPPORTUNITY_ID, draftId: DRAFT_ID, requestKey: "retry-1" });
+    const result = await service.retryDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "retry-1",
+    });
 
     expect(deps.gmailDraftProvider.createDraft).not.toHaveBeenCalled();
     expect(deps.gmailDraftProvider.scheduleDraft).not.toHaveBeenCalled();
-    expect(deps.emailRepository.update).toHaveBeenCalledWith(DRAFT_ID, expect.objectContaining({
-      state: "scheduled",
-      scheduledFor: SCHEDULED_FOR,
-      scheduleRequestKey: "retry-1",
-    }));
+    expect(deps.emailRepository.update).toHaveBeenCalledWith(
+      DRAFT_ID,
+      expect.objectContaining({
+        state: "scheduled",
+        scheduledFor: SCHEDULED_FOR,
+        scheduleRequestKey: "retry-1",
+      }),
+    );
     expect(result.followUpReferenceAt).toEqual(SCHEDULED_FOR);
+  });
+});
+
+describe("reviewed offer provider boundary", () => {
+  function safety() {
+    let state = "none";
+    const claim = { id: "claim" };
+    return {
+      enabled: () => true,
+      recover: vi.fn(async () => {
+        if (state === "dispatching" || state === "uncertain")
+          throw new Error("Delivery outcome requires review");
+        return null;
+      }),
+      claim: vi.fn(async () => {
+        state = "dispatching";
+        return claim;
+      }),
+      assertCurrent: vi.fn(async () => undefined),
+      finish: vi.fn(async () => {
+        state = "sent";
+      }),
+      fail: vi.fn(async () => {
+        state = "uncertain";
+        return false;
+      }),
+    };
+  }
+  it("binds final promo-prepared content into the provider request, without mutating an externally editable draft", async () => {
+    const deps = dependencies(),
+      guard = safety();
+    const service = new OpportunityEmailService({
+      ...deps,
+      dispatchSafety: guard,
+      promotion: {
+        prepareBody: vi.fn(async () => ({ body: "Final promotional content" })),
+        recordConfirmedSend: vi.fn(),
+      },
+    } as any);
+    const result = await service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "guarded",
+    });
+    expect(guard.claim).toHaveBeenCalledWith("opportunity_email", DRAFT_ID, {
+      to: "booking@example.com",
+      subject: record().subject,
+      body: "Final promotional content",
+    });
+    const sent = deps.gmailDraftProvider.sendDraft.mock.calls[0][0] as any;
+    expect(sent.content.body).toBe("Final promotional content");
+    await sent.beforeSend();
+    expect(guard.assertCurrent).toHaveBeenCalled();
+    expect(deps.gmailDraftProvider.updateDraft).not.toHaveBeenCalled();
+    expect(result.draft.state).toBe("sent");
+  });
+  it("cannot deliver twice when provider succeeded but durable confirmation failed", async () => {
+    const deps = dependencies(),
+      guard = safety();
+    guard.finish.mockRejectedValue(new Error("DB unavailable"));
+    const service = new OpportunityEmailService({
+      ...deps,
+      dispatchSafety: guard,
+    } as any);
+    const input = {
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "one",
+    };
+    await expect(service.sendDraft(input)).rejects.toThrow("DB unavailable");
+    await expect(
+      service.sendDraft({ ...input, requestKey: "two" }),
+    ).rejects.toThrow(/outcome requires review/);
+    expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledTimes(1);
+    expect(guard.fail).not.toHaveBeenCalled();
+  });
+  it("returns confirmed send with tracking review when source/promo/workflow hooks fail", async () => {
+    const deps = dependencies();
+    deps.workflowSink.recordSent.mockRejectedValue(new Error("workflow down"));
+    const result = await new OpportunityEmailService({
+      ...deps,
+      dispatchSafety: safety(),
+      outreachEvents: {
+        replay: vi.fn(async () => {
+          throw new Error("source repair");
+        }),
+      },
+    } as any).sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "one",
+    });
+    expect(result).toMatchObject({
+      draft: { state: "sent" },
+      trackingReviewRequired: true,
+    });
+    expect(deps.workflowSink.recordFailure).not.toHaveBeenCalled();
+  });
+  it("preserves an uncertain provider outcome as review and rechecks scheduled/retry content", async () => {
+    const deps = dependencies(
+        record({ state: "scheduled", scheduledFor: SCHEDULED_FOR }),
+      ),
+      guard = safety();
+    deps.gmailDraftProvider.sendDraft.mockRejectedValue(
+      new Error("transport reset"),
+    );
+    const service = new OpportunityEmailService({
+      ...deps,
+      dispatchSafety: guard,
+    } as any);
+    await expect(
+      service.sendDraft({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+        requestKey: "scheduled",
+      }),
+    ).rejects.toThrow("OUTREACH_DELIVERY_OUTCOME_REVIEW_REQUIRED");
+    expect(guard.claim).toHaveBeenCalledTimes(1);
+    await expect(
+      service.sendDraft({
+        opportunityId: OPPORTUNITY_ID,
+        draftId: DRAFT_ID,
+        requestKey: "retry",
+      }),
+    ).rejects.toThrow(/outcome requires review/);
+    expect(deps.gmailDraftProvider.sendDraft).toHaveBeenCalledTimes(1);
+    expect(deps.emailRepository.update).not.toHaveBeenCalled();
   });
 });

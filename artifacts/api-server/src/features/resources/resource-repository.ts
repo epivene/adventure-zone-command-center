@@ -1,3 +1,4 @@
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -372,7 +373,7 @@ export class DrizzleResourceRepository implements ResourceRepository {
   transaction<T>(
     operation: (transaction: ResourceTransaction) => Promise<T>,
   ): Promise<T> {
-    return this.database.transaction((transaction) =>
+    return commitmentTransaction(this.database, (transaction) =>
       operation(new DrizzleResourceTransaction(transaction)),
     );
   }
@@ -504,7 +505,7 @@ implements ResourceSettingsRepository {
     actorId: string,
   ): Promise<ResourceInventoryRecord> {
     try {
-      return await this.database.transaction(async (transaction) => {
+      return await reconcileCapacityFacts(this.database, "resource-inventory", async (transaction) => {
         const [currentRow] = input.id
           ? await transaction
               .select()

@@ -6,6 +6,7 @@ import {
   profileSearchMatches,
   profileSearchTermMatches,
 } from "./profile-search";
+import * as profileSearch from "./profile-search";
 
 const routeSource = readFileSync("src/routes/organization-forgiving-search.ts", "utf8");
 const indexSource = readFileSync("src/routes/index.ts", "utf8");
@@ -20,14 +21,32 @@ describe("forgiving profile search", () => {
     expect(buildProfileSearchTerms("amy@gm")).toEqual(["amy", "gm"]);
     expect(buildProfileSearchTerms("(720) 272-7467")).toEqual(["720", "272", "7467"]);
     expect(buildProfileSearchTerms("720272")).toEqual(["720272"]);
+    expect(profileSearchTermMatches("7202727467", "(720) 272-7467")).toBe(true);
   });
 
-  it("matches close misspellings without making short searches fuzzy", () => {
+  it("finds Wyoming when the user types wryomin", () => {
+    expect(profileSearchTermMatches("wryomin", "Wyoming")).toBe(true);
+  });
+
+  it("matches a misspelled contact name to the profile that contains that contact", () => {
+    expect(profileSearchMatches(["jonsen"], ["Rock Springs Fair", "Mary Johnson", "Wyoming"])).toBe(true);
+  });
+
+  it("keeps short searches strict", () => {
     expect(profileSearchTermMatches("denvr", "Denver")).toBe(true);
     expect(profileSearchTermMatches("adventure", "Adventur")).toBe(true);
     expect(profileSearchTermMatches("co", "Colorado")).toBe(true);
     expect(profileSearchTermMatches("ca", "co")).toBe(false);
     expect(profileSearchMatches(["denvr", "festval"], ["Denver", "Mountain Festival"])).toBe(true);
+  });
+
+  it("ranks exact matches ahead of close spelling suggestions", () => {
+    const score = (profileSearch as Record<string, unknown>).profileSearchScore as
+      | ((terms: string[], values: string[]) => number | null)
+      | undefined;
+    expect(score?.(["wyoming"], ["Wyoming County Fair"])).toBeLessThan(
+      score?.(["wyoming"], ["Wryomin County Fair"]) ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it("matches every normalized term across profile, contact, and location fields", () => {
@@ -43,7 +62,7 @@ describe("forgiving profile search", () => {
     expect(routeSource).toContain("sql.join(termConditions, sql.raw(\" and \"))");
   });
 
-  it("keeps the forgiving search on the normal Profiles endpoint and ahead of the legacy route", () => {
+  it("keeps forgiving profile search on the normal Profiles endpoint", () => {
     expect(routeSource).toContain('router.get("/organizations"');
     expect(routeSource).toContain("if (!query.search) return next();");
     expect(indexSource).toContain('import organizationForgivingSearchRouter from "./organization-forgiving-search"');

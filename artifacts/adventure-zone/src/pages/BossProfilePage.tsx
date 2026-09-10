@@ -1,7 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "wouter";
 import { CalendarDays, MapPin, UserRound } from "lucide-react";
-import { bossGet } from "@/lib/boss-auth-context";
+import { bossGet, bossPatch } from "@/lib/boss-auth-context";
+import { OfficeProfileEditor } from "@/components/office/office-profile-editor";
+import { BossProfileEmails } from "@/components/boss/boss-profile-emails";
+import { ConventionHistory } from "@/components/profiles/convention-history";
 
 type Profile = {
   id: string;
@@ -61,14 +64,19 @@ function date(value: string) {
 export default function BossProfilePage({ profileId }: { profileId: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState("");
+  const [editing, setEditing] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    bossGet<{ profile: Profile }>(`/boss/profiles/${profileId}`)
-      .then((result) => { if (active) { setProfile(result.profile); setError(""); } })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profile."); });
-    return () => { active = false; };
+  const load = useCallback(async () => {
+    try {
+      const result = await bossGet<{ profile: Profile }>(`/boss/profiles/${profileId}`);
+      setProfile(result.profile);
+      setError("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load profile.");
+    }
   }, [profileId]);
+
+  useEffect(() => { setProfile(null); setEditing(false); void load(); }, [load]);
 
   if (error) return <p className="rounded-xl bg-destructive/10 p-4 text-destructive" role="alert">{error}</p>;
   if (!profile) return <p className="text-sm text-muted-foreground">Loading profile…</p>;
@@ -77,7 +85,11 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
 
   return (
     <div className="grid gap-4" data-testid="boss-profile-page">
-      <Link className="text-sm font-semibold text-primary hover:underline" href="/boss/profiles">← Profiles</Link>
+      <ConventionHistory profileId={profileId} boss />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link className="text-sm font-semibold text-primary hover:underline" href="/boss/profiles">← Profiles</Link>
+        <button className="button-secondary" onClick={() => setEditing((value) => !value)} type="button">{editing ? "Close Edit" : "Edit Profile"}</button>
+      </div>
       <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
         <div className="grid gap-4 sm:grid-cols-[6rem_minmax(0,1fr)] sm:items-center">
           <div className="mx-auto size-24 overflow-hidden rounded-full bg-primary/10 sm:mx-0">
@@ -98,12 +110,16 @@ export default function BossProfilePage({ profileId }: { profileId: string }) {
         {profile.description ? <p className="mt-4 whitespace-pre-wrap text-sm text-muted-foreground">{profile.description}</p> : null}
       </section>
 
+      {editing ? <OfficeProfileEditor profile={profile} onCancel={() => setEditing(false)} onSaved={async () => { setEditing(false); await load(); }} saveProfile={(id, input) => bossPatch(`/boss/profiles/${id}`, input)} /> : null}
+
+      <BossProfileEmails key={profile.id} organizationId={profile.id} />
+
       <section className="rounded-xl border border-border bg-card p-4">
         <h2 className="text-lg font-bold">Contacts ({profile.contacts.length})</h2>
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {profile.contacts.length ? profile.contacts.map((contact) => (
             <article className="rounded-lg border border-border p-3" key={contact.id}>
-              <p className="font-bold">{contact.name}{contact.isPrimary ? <span className="ml-2 text-xs text-primary">Primary</span> : null}</p>
+              <p className="font-bold"><Link className="text-primary hover:underline" href={`/boss/contacts/${contact.id}`}>{contact.name}</Link>{contact.isPrimary ? <span className="ml-2 text-xs text-primary">Primary</span> : null}</p>
               <p className="text-sm text-muted-foreground">{contact.role || contact.jobTitle || "Contact"}</p>
               {contact.phone ? <p className="mt-2 text-sm">{contact.phone}</p> : null}
               {contact.email ? <a className="text-sm text-primary hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a> : null}

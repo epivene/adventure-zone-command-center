@@ -145,6 +145,8 @@ function conversationYear(conversation: {
 }
 
 export function createGoogleWorkspaceProfileEmailRouter(options?: {
+  profilePath?: string;
+  emailsOnly?: boolean;
   connection?: ConnectionAccess;
   validationRepository?: ValidationAccess;
   fileService?: FileAccess;
@@ -152,6 +154,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   replyService?: ReplyAccess;
 }): IRouter {
   const router: IRouter = Router();
+  const profilePath = options?.profilePath ?? "/google-workspace/profiles";
   const validationRepository =
     options?.validationRepository ?? new PostgresGoogleValidationRepository();
   const fileService = options?.fileService ?? new GoogleProfileFileService();
@@ -160,7 +163,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   const replyService = options?.replyService ?? new GoogleProfileEmailReplyService();
 
   router.get(
-    "/google-workspace/profiles/:organizationId/emails",
+    `${profilePath}/:organizationId/emails`,
     async (req, res): Promise<void> => {
       try {
         const mappings = await validationRepository.listApprovedForOrganization(
@@ -268,7 +271,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   );
 
   router.get(
-    "/google-workspace/profiles/:organizationId/emails/:threadId",
+    `${profilePath}/:organizationId/emails/:threadId`,
     async (req, res): Promise<void> => {
       try {
         const ownsThread =
@@ -317,8 +320,11 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
     },
   );
 
+  // Boss access exposes only conversation reads, never file-copy or write actions.
+  if (options?.emailsOnly) return router;
+
   router.post(
-    "/google-workspace/profiles/:organizationId/email-conversations/:conversationId/reply",
+    `${profilePath}/:organizationId/email-conversations/:conversationId/reply`,
     async (req, res): Promise<void> => {
       const parsed = replySchema.safeParse(req.body ?? {});
       if (!parsed.success) {

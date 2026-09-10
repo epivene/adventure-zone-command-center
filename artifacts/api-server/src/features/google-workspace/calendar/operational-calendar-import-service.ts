@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { createHash } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 
@@ -154,6 +156,16 @@ export class OperationalCalendarImportService {
       pageToken = page.nextPageToken;
     } while (pageToken);
 
+    if (allocationEnabled()) {
+      return reconcileCapacityFacts(this.db,"operational-calendar-import",async tx => {
+        const scoped = new OperationalCalendarImportService(tx as unknown as DrizzleDatabase,this.clientProvider,undefined,this.now);
+        return scoped.applyFetchedEvents(connection,events);
+      });
+    }
+    return this.applyFetchedEvents(connection,events);
+  }
+
+  private async applyFetchedEvents(connection:{connectionId:string;calendarId:string},events:OperationalCalendarEvent[]) {
     let matched = 0;
     let updated = 0;
     let created = 0;
@@ -462,7 +474,7 @@ export class OperationalCalendarImportService {
     reservedEnd: Date;
     managerLegId: string;
   }) {
-    return this.db.transaction(async (tx) => {
+    return reconcileCapacityFacts(this.db,"operational-calendar-import",async (tx) => {
       const [organization] = await tx.insert(organizations).values({
         name: input.parsed.eventName,
         city: input.parsed.city,

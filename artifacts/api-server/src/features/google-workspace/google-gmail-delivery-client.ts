@@ -2,8 +2,10 @@ import type { GoogleWorkspaceEnvironment } from "./google-workspace-env";
 import type { GoogleWorkspaceFetch } from "./google-api-types";
 
 const tokenEndpoint = "https://oauth2.googleapis.com/token";
-const gmailDraftsEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me/drafts";
-const gmailMessagesEndpoint = "https://gmail.googleapis.com/gmail/v1/users/me/messages";
+const gmailDraftsEndpoint =
+  "https://gmail.googleapis.com/gmail/v1/users/me/drafts";
+const gmailMessagesEndpoint =
+  "https://gmail.googleapis.com/gmail/v1/users/me/messages";
 
 type GoogleDeliveryClientError = Error & { code: string };
 
@@ -26,10 +28,14 @@ function validRaw(value: string): string {
   return value;
 }
 
-async function responseJson(response: Response): Promise<Record<string, unknown>> {
+async function responseJson(
+  response: Response,
+): Promise<Record<string, unknown>> {
   try {
     const body = await response.json();
-    return body && typeof body === "object" ? body as Record<string, unknown> : {};
+    return body && typeof body === "object"
+      ? (body as Record<string, unknown>)
+      : {};
   } catch {
     return {};
   }
@@ -45,7 +51,12 @@ export type GoogleGmailDeliveryClient = {
     messageId: string;
     threadId: string | null;
   }>;
-  sendGmailDraft(input: { draftId: string }): Promise<{
+  sendGmailDraft(input: {
+    draftId: string;
+    raw?: string;
+    threadId?: string | null;
+    beforeSend?: () => Promise<void>;
+  }): Promise<{
     messageId: string;
     threadId: string | null;
   }>;
@@ -60,13 +71,17 @@ export function createGoogleGmailDeliveryClient(input: {
   const fetcher = input.fetcher ?? fetch;
   const refreshToken = input.refreshToken.trim();
   if (!refreshToken) throw clientError("GOOGLE_WORKSPACE_NOT_AUTHENTICATED");
-  const timeoutMs = typeof input.timeoutMs === "number" && Number.isFinite(input.timeoutMs) && input.timeoutMs > 0
-    ? Math.min(input.timeoutMs, 30_000)
-    : 10_000;
+  const timeoutMs =
+    typeof input.timeoutMs === "number" &&
+    Number.isFinite(input.timeoutMs) &&
+    input.timeoutMs > 0
+      ? Math.min(input.timeoutMs, 30_000)
+      : 10_000;
   let accessToken: { value: string; expiresAt: number } | null = null;
 
   async function currentAccessToken(signal: AbortSignal): Promise<string> {
-    if (accessToken && Date.now() < accessToken.expiresAt) return accessToken.value;
+    if (accessToken && Date.now() < accessToken.expiresAt)
+      return accessToken.value;
     const response = await fetcher(tokenEndpoint, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -80,15 +95,18 @@ export function createGoogleGmailDeliveryClient(input: {
     });
     const payload = await responseJson(response);
     if (!response.ok) {
-      if (payload.error === "invalid_grant") throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+      if (payload.error === "invalid_grant")
+        throw clientError("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
       throw clientError("GOOGLE_WORKSPACE_OAUTH_TOKEN_REQUEST_FAILED");
     }
     if (typeof payload.access_token !== "string" || !payload.access_token) {
       throw clientError("GOOGLE_WORKSPACE_OAUTH_RESPONSE_INVALID");
     }
-    const expiresIn = typeof payload.expires_in === "number" && Number.isFinite(payload.expires_in)
-      ? Math.max(0, payload.expires_in)
-      : 3600;
+    const expiresIn =
+      typeof payload.expires_in === "number" &&
+      Number.isFinite(payload.expires_in)
+        ? Math.max(0, payload.expires_in)
+        : 3600;
     accessToken = {
       value: payload.access_token,
       expiresAt: Date.now() + Math.max(0, expiresIn - 60) * 1000,
@@ -124,86 +142,141 @@ export function createGoogleGmailDeliveryClient(input: {
   return {
     async sendGmailMessage({ raw, threadId }) {
       const safeRaw = validRaw(raw);
-      const safeThreadId = threadId === undefined ? undefined : validDraftId(threadId);
-      return bounded("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN", async (token, signal) => {
-        const response = await fetcher(`${gmailMessagesEndpoint}/send`, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            raw: safeRaw,
-            ...(safeThreadId ? { threadId: safeThreadId } : {}),
-          }),
-          signal,
-        });
-        const payload = await responseJson(response);
-        if (response.status === 404) {
-          throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
-        }
-        if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_FAILED");
-        if (typeof payload.id !== "string" || !payload.id) {
-          throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
-        }
-        return {
-          messageId: payload.id,
-          threadId: typeof payload.threadId === "string" && payload.threadId ? payload.threadId : null,
-        };
-      });
+      const safeThreadId =
+        threadId === undefined ? undefined : validDraftId(threadId);
+      return bounded(
+        "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
+        async (token, signal) => {
+          const response = await fetcher(`${gmailMessagesEndpoint}/send`, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              raw: safeRaw,
+              ...(safeThreadId ? { threadId: safeThreadId } : {}),
+            }),
+            signal,
+          });
+          const payload = await responseJson(response);
+          if (response.status === 404)
+            throw clientError("GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND");
+          if (!response.ok)
+            throw clientError(
+              response.status >= 400 &&
+                response.status < 500 &&
+                response.status !== 408
+                ? "GOOGLE_WORKSPACE_GMAIL_SEND_REJECTED"
+                : "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
+            );
+          if (typeof payload.id !== "string" || !payload.id) {
+            throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
+          }
+          return {
+            messageId: payload.id,
+            threadId:
+              typeof payload.threadId === "string" && payload.threadId
+                ? payload.threadId
+                : null,
+          };
+        },
+      );
     },
 
     async updateGmailDraft({ draftId, raw }) {
       const safeDraftId = validDraftId(draftId);
       const safeRaw = validRaw(raw);
-      return bounded("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN", async (token, signal) => {
-        const response = await fetcher(`${gmailDraftsEndpoint}/${safeDraftId}`, {
-          method: "PUT",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ message: { raw: safeRaw } }),
-          signal,
-        });
-        const payload = await responseJson(response);
-        if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_UPDATE_FAILED");
-        const message = payload.message && typeof payload.message === "object"
-          ? payload.message as Record<string, unknown>
-          : null;
-        if (typeof payload.id !== "string" || !payload.id || !message || typeof message.id !== "string" || !message.id) {
-          throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
-        }
-        return {
-          draftId: payload.id,
-          messageId: message.id,
-          threadId: typeof message.threadId === "string" && message.threadId ? message.threadId : null,
-        };
-      });
+      return bounded(
+        "GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN",
+        async (token, signal) => {
+          const response = await fetcher(
+            `${gmailDraftsEndpoint}/${safeDraftId}`,
+            {
+              method: "PUT",
+              headers: {
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({ message: { raw: safeRaw } }),
+              signal,
+            },
+          );
+          const payload = await responseJson(response);
+          if (!response.ok)
+            throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_UPDATE_FAILED");
+          const message =
+            payload.message && typeof payload.message === "object"
+              ? (payload.message as Record<string, unknown>)
+              : null;
+          if (
+            typeof payload.id !== "string" ||
+            !payload.id ||
+            !message ||
+            typeof message.id !== "string" ||
+            !message.id
+          ) {
+            throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
+          }
+          return {
+            draftId: payload.id,
+            messageId: message.id,
+            threadId:
+              typeof message.threadId === "string" && message.threadId
+                ? message.threadId
+                : null,
+          };
+        },
+      );
     },
 
-    async sendGmailDraft({ draftId }) {
+    async sendGmailDraft({ draftId, raw, threadId, beforeSend }) {
       const safeDraftId = validDraftId(draftId);
-      return bounded("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN", async (token, signal) => {
-        const response = await fetcher(`${gmailDraftsEndpoint}/send`, {
-          method: "POST",
-          headers: {
-            authorization: `Bearer ${token}`,
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({ id: safeDraftId }),
-          signal,
-        });
-        const payload = await responseJson(response);
-        if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_FAILED");
-        if (typeof payload.id !== "string" || !payload.id) {
-          throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
-        }
-        return {
-          messageId: payload.id,
-          threadId: typeof payload.threadId === "string" && payload.threadId ? payload.threadId : null,
-        };
-      });
+      const safeRaw = raw === undefined ? undefined : validRaw(raw);
+      return bounded(
+        "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
+        async (token, signal) => {
+          await beforeSend?.();
+          const response = await fetcher(`${gmailDraftsEndpoint}/send`, {
+            method: "POST",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              id: safeDraftId,
+              ...(safeRaw
+                ? {
+                    message: {
+                      raw: safeRaw,
+                      ...(threadId ? { threadId } : {}),
+                    },
+                  }
+                : {}),
+            }),
+            signal,
+          });
+          const payload = await responseJson(response);
+          if (!response.ok)
+            throw clientError(
+              response.status >= 400 &&
+                response.status < 500 &&
+                response.status !== 408
+                ? "GOOGLE_WORKSPACE_GMAIL_SEND_REJECTED"
+                : "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
+            );
+          if (typeof payload.id !== "string" || !payload.id) {
+            throw clientError("GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN");
+          }
+          return {
+            messageId: payload.id,
+            threadId:
+              typeof payload.threadId === "string" && payload.threadId
+                ? payload.threadId
+                : null,
+          };
+        },
+      );
     },
   };
 }

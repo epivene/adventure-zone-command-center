@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -102,7 +103,7 @@ export class ProfileResearchApplyService {
 
       try {
         const value = validatedValue(suggestion.field, suggestion.suggestedValue);
-        const outcome = await this.database.transaction(async (tx: any) => {
+        const outcome = await commitmentTransaction(this.database, async (tx: any) => {
           if (suggestion.targetKind === "organization") {
             const current = await currentOrganizationValue(tx, input.profileId, suggestion.field);
             if (current === undefined) return "missing" as const;

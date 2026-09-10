@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -193,7 +194,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
     await this.ensureIntelligenceColumns();
     const data = parsed.data;
     const base = await this.baseRepository.updatePackageTemplate(data, actorId);
-    await this.database.execute(sql`
+    await reconcileCapacityFacts(this.database,"package-inventory",async tx=>tx.execute(sql`
       update package_templates
       set
         base_price_cents = ${data.basePriceCents},
@@ -210,7 +211,7 @@ export class DrizzlePackageIntelligenceSettingsRepository {
         knowledge_review_note = ${data.knowledgeReviewNote},
         updated_at = now()
       where id = ${data.id}::uuid
-    `);
+    `));
 
     return {
       ...base,

@@ -5,6 +5,7 @@ import * as eventFamilySchema from "./event-family-schema";
 import * as paperNoteSchema from "./paper-note-schema";
 import * as businessSourceSchema from "./business-source-schema";
 import * as commercialOfferSchema from "./commercial-offer-schema";
+import * as earlyBirdPromoSchema from "./early-bird-promo-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
@@ -55,6 +56,7 @@ const finalConnectionString = normalizeDatabaseConnectionString(connectionString
 
 export const pool = new Pool({
   connectionString: finalConnectionString,
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
   application_name: "adventure-zone-command-center-api",
   ...databasePoolTimeouts(),
 });
@@ -64,16 +66,20 @@ export const pool = new Pool({
 // leaving the main pool available to resolve labels and persist job state.
 export const gmailThreadLockPool = new Pool({
   connectionString: finalConnectionString,
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
   application_name: "adventure-zone-command-center-gmail-thread-lock",
   max: 2,
   ...databasePoolTimeouts(),
 });
+import * as outreachPlannerSchema from "./outreach-planner-schema";
 const schema = {
+  ...outreachPlannerSchema,
   ...coreSchema,
   ...eventFamilySchema,
   ...paperNoteSchema,
   ...businessSourceSchema,
   ...commercialOfferSchema,
+  ...earlyBirdPromoSchema,
   ...eventChecklistSchema,
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
@@ -108,6 +114,7 @@ export * from "./event-family-schema";
 export * from "./paper-note-schema";
 export * from "./business-source-schema";
 export * from "./commercial-offer-schema";
+export * from "./early-bird-promo-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
@@ -129,3 +136,5 @@ export * from "./business-document-schema";
 export * from "./google-drive-backup-schema";
 
 
+
+export * from "./outreach-planner-schema";

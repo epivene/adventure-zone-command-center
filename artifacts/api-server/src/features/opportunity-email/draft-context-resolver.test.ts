@@ -86,6 +86,31 @@ describe("DraftContextResolver", () => {
     expect(context.packageAvailability).toEqual({ adventureZone: "available" });
   });
 
+  it("ignores note-like contact email values when choosing a recipient", async () => {
+    const deps = sources();
+    deps.listRecipientCandidates.mockResolvedValue([
+      {
+        contactId: "note-contact",
+        email: "Use the website contact form",
+        name: "Website Form",
+        verifiedAt: new Date("2026-09-01T12:00:00.000Z"),
+        source: "profile",
+      },
+      {
+        contactId: "sendable-contact",
+        email: "information@rockymountaintrainshow.com",
+        name: "Train Show",
+        verifiedAt: new Date("2026-08-25T12:00:00.000Z"),
+        source: "profile",
+      },
+    ]);
+
+    const context = await new DraftContextResolver(deps).resolve(OPPORTUNITY_ID);
+
+    expect(context.contactId).toBe("sendable-contact");
+    expect(context.recipientEmail).toBe("information@rockymountaintrainshow.com");
+  });
+
   it("marks equally current conflicting verified recipients as ambiguous and does not guess relationship history", async () => {
     const deps = sources();
     deps.listRecipientCandidates.mockResolvedValue([

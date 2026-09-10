@@ -1,13 +1,19 @@
 import { Router, type IRouter } from "express";
+import { desc, eq } from "drizzle-orm";
+import { officeEmailDrafts } from "@/db/schema";
+import { createGoogleWorkspaceProfileEmailRouter } from "./google-workspace-profile-email";
 import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
+import { OfficeProfileEditor } from "@/features/office/office-profile-editor";
+import { officeProfileInputSchema } from "@/features/office/office-profile-input";
 import { OfficeProfileService } from "@/features/office/office-profile-service";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
 const profiles = new OfficeProfileService(db);
+const editor = new OfficeProfileEditor(db);
 const uuid = z.string().uuid();
 
 function param(value: string | string[] | undefined) {
@@ -43,6 +49,53 @@ router.get("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<v
   } catch (error) {
     req.log.error({ err: error }, "Failed to load Boss profile");
     res.status(500).json({ error: "Could not load profile." });
+  }
+});
+
+router.patch("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<void> => {
+  const profileId = param(req.params.profileId);
+  const parsed = officeProfileInputSchema.safeParse(req.body);
+  if (!uuid.safeParse(profileId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid profile ID." : parsed.error.issues[0]?.message ?? "Review the profile changes." });
+    return;
+  }
+  try {
+    const actor = {
+      accountId: req.bossAccount!.accountId,
+      displayName: req.bossAccount!.displayName,
+    };
+    if (!(await editor.updateProfile(profileId, parsed.data, actor))) {
+      res.status(404).json({ error: "Profile not found." });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed Boss profile edit");
+    res.status(500).json({ error: "Could not save the profile changes." });
+  }
+});
+
+router.use("/boss/google-workspace", requireBoss, createGoogleWorkspaceProfileEmailRouter({ profilePath: "/profiles", emailsOnly: true }));
+
+router.get("/boss/profiles/:profileId/email-drafts", requireBoss, async (req, res): Promise<void> => {
+  const profileId = param(req.params.profileId);
+  if (!uuid.safeParse(profileId).success) { res.status(400).json({ error: "Invalid profile ID." }); return; }
+  try {
+    const drafts = await db.select({
+      id: officeEmailDrafts.id,
+      subject: officeEmailDrafts.subject,
+      body: officeEmailDrafts.body,
+      recipientEmail: officeEmailDrafts.recipientEmail,
+      state: officeEmailDrafts.state,
+      sentAt: officeEmailDrafts.sentAt,
+      updatedAt: officeEmailDrafts.updatedAt,
+    }).from(officeEmailDrafts)
+      .where(eq(officeEmailDrafts.organizationId, profileId))
+      .orderBy(desc(officeEmailDrafts.updatedAt));
+    res.json({ drafts });
+  } catch (error) {
+    req.log?.error?.({ err: error }, "Failed to load Boss profile emails");
+    res.status(500).json({ error: "Could not load profile email drafts." });
   }
 });
 

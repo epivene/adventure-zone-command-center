@@ -1,3 +1,4 @@
+import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import { Router, type IRouter, type Response } from "express";
 import { z } from "zod";
 
@@ -67,7 +68,10 @@ export type OpportunityDraftRouteService = {
     opportunityId: string;
     draftId: string;
     requestKey: string;
-  }): Promise<{ draft: OpportunityEmailRecord; followUpReferenceAt: Date | null }>;
+  }): Promise<{
+    draft: OpportunityEmailRecord;
+    followUpReferenceAt: Date | null;
+  }>;
 };
 
 type RouteOptions = {
@@ -82,25 +86,51 @@ function parseOpportunityId(value: unknown): string | null {
 }
 
 function sendServiceError(res: Response, error: unknown): void {
-  const code = error && typeof error === "object" && "code" in error
-    ? String((error as ServiceError).code ?? "")
-    : error instanceof Error
-      ? error.message
-      : "";
+  if (error instanceof OutreachError) {
+    res.status(error.status).json({ ok: false, error: error.message });
+    return;
+  }
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as ServiceError).code ?? "")
+      : error instanceof Error
+        ? error.message
+        : "";
 
-  if (code === "OPPORTUNITY_EMAIL_DRAFT_NOT_FOUND" || code === "BOOKING_OPPORTUNITY_NOT_FOUND") {
-    res.status(404).json({ ok: false, error: "Draft or Opportunity not found." });
+  if (code === "OUTREACH_DELIVERY_OUTCOME_REVIEW_REQUIRED") {
+    res
+      .status(409)
+      .json({
+        ok: false,
+        error:
+          "Delivery outcome requires review. Check the provider and reconcile the dispatch before retrying.",
+      });
+    return;
+  }
+  if (
+    code === "OPPORTUNITY_EMAIL_DRAFT_NOT_FOUND" ||
+    code === "BOOKING_OPPORTUNITY_NOT_FOUND"
+  ) {
+    res
+      .status(404)
+      .json({ ok: false, error: "Draft or Opportunity not found." });
     return;
   }
   if (code === "OPPORTUNITY_EMAIL_DRAFT_MISMATCH") {
-    res.status(409).json({ ok: false, error: "Draft does not belong to this Opportunity." });
+    res
+      .status(409)
+      .json({ ok: false, error: "Draft does not belong to this Opportunity." });
     return;
   }
   if (code === "OPPORTUNITY_EMAIL_REWRITE_UNAVAILABLE") {
-    res.status(503).json({ ok: false, error: "Draft rewrite is temporarily unavailable." });
+    res
+      .status(503)
+      .json({ ok: false, error: "Draft rewrite is temporarily unavailable." });
     return;
   }
-  res.status(500).json({ ok: false, error: "Opportunity email operation failed." });
+  res
+    .status(500)
+    .json({ ok: false, error: "Opportunity email operation failed." });
 }
 
 export function createOpportunityDraftsRouter(
@@ -112,13 +142,19 @@ export function createOpportunityDraftsRouter(
 
   router.post("/:id/drafts", async (req, res): Promise<void> => {
     const opportunityId = parseOpportunityId(req.params.id);
-    const body = z.object({ purpose: purposeSchema }).strict().safeParse(req.body);
+    const body = z
+      .object({ purpose: purposeSchema })
+      .strict()
+      .safeParse(req.body);
     if (!opportunityId || !body.success) {
       res.status(400).json({ ok: false, error: "Invalid draft request." });
       return;
     }
     try {
-      const result = await service.createDraft({ opportunityId, purpose: body.data.purpose });
+      const result = await service.createDraft({
+        opportunityId,
+        purpose: body.data.purpose,
+      });
       if (!result.ok) {
         res.status(409).json({ ok: false, blocker: result.blocker });
         return;
@@ -164,13 +200,21 @@ export function createOpportunityDraftsRouter(
 
   router.post("/:id/draft/rewrite", async (req, res): Promise<void> => {
     const opportunityId = parseOpportunityId(req.params.id);
-    const body = editableDraftSchema.extend({ action: rewriteActionSchema }).strict().safeParse(req.body);
+    const body = editableDraftSchema
+      .extend({ action: rewriteActionSchema })
+      .strict()
+      .safeParse(req.body);
     if (!opportunityId || !body.success) {
-      res.status(400).json({ ok: false, error: "Invalid draft rewrite request." });
+      res
+        .status(400)
+        .json({ ok: false, error: "Invalid draft rewrite request." });
       return;
     }
     try {
-      const result = await service.rewriteDraft({ opportunityId, ...body.data });
+      const result = await service.rewriteDraft({
+        opportunityId,
+        ...body.data,
+      });
       res.json({ ok: true, ...result });
     } catch (error) {
       sendServiceError(res, error);
@@ -179,7 +223,10 @@ export function createOpportunityDraftsRouter(
 
   router.post("/:id/draft/send", async (req, res): Promise<void> => {
     const opportunityId = parseOpportunityId(req.params.id);
-    const body = z.object({ draftId: uuidSchema, requestKey: requestKeySchema }).strict().safeParse(req.body);
+    const body = z
+      .object({ draftId: uuidSchema, requestKey: requestKeySchema })
+      .strict()
+      .safeParse(req.body);
     if (!opportunityId || !body.success) {
       res.status(400).json({ ok: false, error: "Invalid send request." });
       return;
@@ -194,17 +241,27 @@ export function createOpportunityDraftsRouter(
 
   router.post("/:id/draft/schedule", async (req, res): Promise<void> => {
     const opportunityId = parseOpportunityId(req.params.id);
-    const body = z.object({
-      draftId: uuidSchema,
-      requestKey: requestKeySchema,
-      scheduledFor: z.coerce.date(),
-    }).strict().safeParse(req.body);
-    if (!opportunityId || !body.success || body.data.scheduledFor.getTime() <= now().getTime()) {
+    const body = z
+      .object({
+        draftId: uuidSchema,
+        requestKey: requestKeySchema,
+        scheduledFor: z.coerce.date(),
+      })
+      .strict()
+      .safeParse(req.body);
+    if (
+      !opportunityId ||
+      !body.success ||
+      body.data.scheduledFor.getTime() <= now().getTime()
+    ) {
       res.status(400).json({ ok: false, error: "Invalid schedule request." });
       return;
     }
     try {
-      const result = await service.scheduleDraft({ opportunityId, ...body.data });
+      const result = await service.scheduleDraft({
+        opportunityId,
+        ...body.data,
+      });
       res.json({ ok: true, ...result });
     } catch (error) {
       sendServiceError(res, error);
@@ -213,7 +270,10 @@ export function createOpportunityDraftsRouter(
 
   router.post("/:id/draft/retry", async (req, res): Promise<void> => {
     const opportunityId = parseOpportunityId(req.params.id);
-    const body = z.object({ draftId: uuidSchema, requestKey: requestKeySchema }).strict().safeParse(req.body);
+    const body = z
+      .object({ draftId: uuidSchema, requestKey: requestKeySchema })
+      .strict()
+      .safeParse(req.body);
     if (!opportunityId || !body.success) {
       res.status(400).json({ ok: false, error: "Invalid retry request." });
       return;

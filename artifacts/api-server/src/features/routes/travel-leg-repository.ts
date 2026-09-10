@@ -1,3 +1,4 @@
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { asc, eq, gt, isNotNull, isNull, sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -181,7 +182,7 @@ export class DrizzleTravelLegRepository implements TravelLegRepository {
   transaction<T>(
     operation: (transaction: TravelLegEditorTransaction) => Promise<T>,
   ): Promise<T> {
-    return this.database.transaction((transaction) =>
+    return commitmentTransaction(this.database, (transaction) =>
       operation({
         listForUpdate: async () =>
           transaction

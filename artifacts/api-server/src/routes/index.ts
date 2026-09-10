@@ -1,3 +1,4 @@
+import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
 import healthRouter from "./health";
@@ -20,6 +21,7 @@ import activitiesRouter from "./activities";
 import callsRouter from "./calls";
 import needsAnswerRouter from "./needs-answer";
 import eventProfilesRouter from "./event-profiles";
+import earlyBirdPromoRouter from "./early-bird-promo";
 import eventProfileDescriptionRouter from "./event-profile-description";
 import eventProfileVenueSummaryRouter from "./event-profile-venue-summary";
 import profileResearchRouter from "./profile-research";
@@ -59,6 +61,7 @@ import bossAuthRouter from "./boss-auth";
 import bossDashboardRouter from "./boss-dashboard";
 import bossWorkRequestsRouter from "./boss-work-requests";
 import bossWorkRequestsOwnerRouter from "./boss-work-requests-owner";
+import conventionOutreachRouter, { bossConventionRouter } from "./convention-outreach";
 import communicationTemplatesRouter from "./communication-templates";
 import bossAssignmentsRouter from "./boss-assignments";
 import bossOperationsRouter from "./boss-operations";
@@ -178,6 +181,7 @@ router.use(websiteInquiriesRouter);
 router.use(officeTasksRouter);
 router.use(bossDashboardRouter);
 router.use(bossWorkRequestsRouter);
+router.use(bossConventionRouter);
 router.use(bossAssignmentsRouter);
 router.use(bossOperationsRouter);
 router.use(bossDocumentsRouter);
@@ -228,6 +232,8 @@ router.use(createTwilioInboundVoiceWebhooksRouter({
 }));
 
 router.use(requireOwnerMiddleware);
+router.use("/outreach-planner", createOutreachPlannerRouter());
+router.use(conventionOutreachRouter);
 router.use(async (req, _res, next) => {
   leakedFixtureCleanup ??= cleanupLeakedConsolidationTestFixtures(db);
   try {
@@ -305,6 +311,7 @@ router.use(createInboundComputerCallingRouter({
 }));
 router.use(needsAnswerRouter);
 router.use(eventProfilesRouter);
+router.use(earlyBirdPromoRouter);
 router.use(eventProfileDescriptionRouter);
 router.use(eventProfileVenueSummaryRouter);
 router.use(profileResearchRouter);
@@ -330,5 +337,6 @@ router.use(contractsRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
+
 
 

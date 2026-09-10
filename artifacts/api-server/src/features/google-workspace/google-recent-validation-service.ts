@@ -1,3 +1,5 @@
+import { observeInboundOutreach } from "../outreach-planner/outreach-inbound";
+import { persistMappedOutreachObservation } from "./google-validation-outreach-persistence";
 import { db as defaultDb } from "@/db/client";
 import { contacts, organizations } from "@/db/schema";
 
@@ -13,7 +15,10 @@ import {
   type ContactProfileResolution,
 } from "./google-contact-profile-resolver";
 import { matchGoogleBodyToProfiles } from "./google-body-profile-matcher";
-import { GoogleScopeService, type GoogleSavedScope } from "./google-scope-service";
+import {
+  GoogleScopeService,
+  type GoogleSavedScope,
+} from "./google-scope-service";
 import {
   PostgresGoogleValidationRepository,
   type GoogleValidationMappingInput,
@@ -34,7 +39,9 @@ import {
 const BUSINESS_HINT_ROOTS = ["potential shows"] as const;
 const MAX_BODY_EVIDENCE_CHARS = 50_000;
 
-export function businessHintLabelIds(labels: GoogleLabelSummary[]): Set<string> {
+export function businessHintLabelIds(
+  labels: GoogleLabelSummary[],
+): Set<string> {
   const ids = new Set<string>();
   for (const label of labels) {
     if (label.type !== "user") continue;
@@ -202,7 +209,8 @@ export class PostgresGoogleValidationEvidenceRepository implements EvidenceAcces
 
 function directOrganizationCandidate(candidates: GoogleRelevanceCandidate[]) {
   const direct = candidates.filter(
-    (candidate) => candidate.kind === "organization" || candidate.kind === "profile",
+    (candidate) =>
+      candidate.kind === "organization" || candidate.kind === "profile",
   );
   return direct.length === 1
     ? { id: direct[0].id, name: direct[0].name }
@@ -243,22 +251,29 @@ function toRow(
   };
 }
 
-function persistableMappings(rows: GoogleValidationRow[]): GoogleValidationMappingInput[] {
+function persistableMappings(
+  rows: GoogleValidationRow[],
+): GoogleValidationMappingInput[] {
   return rows.flatMap((row) => {
     if (!row.resolvedOrganization) return [];
-    return [{
-      messageId: row.id,
-      threadId: row.threadId,
-      organizationId: row.resolvedOrganization.id,
-      contactId: row.matchedContact?.id ?? null,
-      evidenceCodes: row.evidenceCodes,
-    }];
+    return [
+      {
+        messageId: row.id,
+        threadId: row.threadId,
+        organizationId: row.resolvedOrganization.id,
+        contactId: row.matchedContact?.id ?? null,
+        evidenceCodes: row.evidenceCodes,
+      },
+    ];
   });
 }
 
-function reviewCandidates(row: GoogleValidationRow): Array<{ id: string; name: string }> {
+function reviewCandidates(
+  row: GoogleValidationRow,
+): Array<{ id: string; name: string }> {
   const unique = new Map<string, { id: string; name: string }>();
-  for (const candidate of row.organizationCandidates) unique.set(candidate.id, candidate);
+  for (const candidate of row.organizationCandidates)
+    unique.set(candidate.id, candidate);
   for (const candidate of row.candidates) {
     if (candidate.kind === "organization" || candidate.kind === "profile") {
       unique.set(candidate.id, { id: candidate.id, name: candidate.name });
@@ -267,7 +282,9 @@ function reviewCandidates(row: GoogleValidationRow): Array<{ id: string; name: s
   return [...unique.values()];
 }
 
-function persistableReviewItems(rows: GoogleValidationRow[]): GoogleValidationReviewInput[] {
+function persistableReviewItems(
+  rows: GoogleValidationRow[],
+): GoogleValidationReviewInput[] {
   return rows.map((row) => ({
     messageId: row.id,
     threadId: row.threadId,
@@ -317,15 +334,17 @@ async function withTransientBodyEvidence(input: {
     }
     if (bodyMatch.status === "review") {
       const candidates = new Map(
-        [...input.result.candidates, ...bodyMatch.candidates].map((candidate) => [
-          `${candidate.kind}:${candidate.id}`,
-          candidate,
-        ]),
+        [...input.result.candidates, ...bodyMatch.candidates].map(
+          (candidate) => [`${candidate.kind}:${candidate.id}`, candidate],
+        ),
       );
       return {
         status: "review",
         evidenceCodes: [
-          ...new Set([...input.result.evidenceCodes, ...bodyMatch.evidenceCodes]),
+          ...new Set([
+            ...input.result.evidenceCodes,
+            ...bodyMatch.evidenceCodes,
+          ]),
         ],
         candidates: [...candidates.values()],
       };
@@ -358,9 +377,11 @@ export class GoogleRecentValidationService {
     inboundLabeler?: InboundLabelerAccess;
     archiver?: ArchiveAccess;
   }) {
-    this.connection = options?.connection ?? new PostgresGoogleConnectionRepository();
+    this.connection =
+      options?.connection ?? new PostgresGoogleConnectionRepository();
     this.scope = options?.scope ?? new GoogleScopeService();
-    this.evidence = options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
+    this.evidence =
+      options?.evidence ?? new PostgresGoogleValidationEvidenceRepository();
     this.learning =
       options?.learning ??
       (options
@@ -393,14 +414,17 @@ export class GoogleRecentValidationService {
       throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
     }
 
-    const [savedScope, evidenceSnapshot, learned, labels, accountIdentity] = await Promise.all([
-      this.scope.getSaved(),
-      this.evidence.load(),
-      this.learning.load(),
-      client.listLabels(),
-      client.accountIdentity(),
-    ]);
-    const relevanceLabelIds = new Set(savedScope.labels.map((label) => label.id));
+    const [savedScope, evidenceSnapshot, learned, labels, accountIdentity] =
+      await Promise.all([
+        this.scope.getSaved(),
+        this.evidence.load(),
+        this.learning.load(),
+        client.listLabels(),
+        client.accountIdentity(),
+      ]);
+    const relevanceLabelIds = new Set(
+      savedScope.labels.map((label) => label.id),
+    );
     for (const id of businessHintLabelIds(labels)) relevanceLabelIds.add(id);
     const labelsById = new Map(labels.map((label) => [label.id, label]));
     const mailboxEmails = new Set([
@@ -408,9 +432,12 @@ export class GoogleRecentValidationService {
       accountIdentity.email.trim().toLowerCase(),
     ]);
     const refs = await client.listRecentMessageRefs(checkedLimit);
-    const processed = options?.skipProcessed && this.validationRepository.processedMessageIds
-      ? await this.validationRepository.processedMessageIds(refs.map((ref) => ref.id))
-      : new Set<string>();
+    const processed =
+      options?.skipProcessed && this.validationRepository.processedMessageIds
+        ? await this.validationRepository.processedMessageIds(
+            refs.map((ref) => ref.id),
+          )
+        : new Set<string>();
 
     const matched: GoogleValidationRow[] = [];
     const needsReview: GoogleValidationRow[] = [];
@@ -446,7 +473,9 @@ export class GoogleRecentValidationService {
       );
       if (result.status === "matched" && contactCandidates.length === 1) {
         const contact = contactCandidates[0];
-        const resolution = await this.contactProfileResolver.resolve(contact.id);
+        const resolution = await this.contactProfileResolver.resolve(
+          contact.id,
+        );
         if (resolution.status === "resolved" && resolution.organization) {
           matched.push(
             toRow(
@@ -512,7 +541,14 @@ export class GoogleRecentValidationService {
       else ignored.push(row);
     }
 
-    await this.validationRepository.upsertRows(persistableMappings(matched));
+    // The mapping is the processed marker used by background sweeps. Persist
+    // planner evidence first so a failed observation remains replayable.
+    await persistMappedOutreachObservation({
+      observe: () =>
+        observeInboundOutreach(defaultDb, [...matched, ...needsReview]),
+      markProcessed: () =>
+        this.validationRepository.upsertRows(persistableMappings(matched)),
+    });
     const archiveTargets = new Map<string, GoogleValidationRow>();
     for (const row of matched) {
       if (row.resolvedOrganization) archiveTargets.set(row.threadId, row);

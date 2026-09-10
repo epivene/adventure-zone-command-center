@@ -145,7 +145,7 @@ describe("runActReviewMigrations", () => {
     const client = {
       async query(sql: string) {
         queries.push(sql);
-        if (sql === "marker:014") return { rows: [{ ready: false }] };
+        if (sql === "marker:014") return { rows: [{ ready: queries.includes("migration:014") }] };
         if (sql === "marker:015") return { rows: [{ ready: true }] };
         return { rows: [] };
       },
@@ -166,6 +166,7 @@ describe("runActReviewMigrations", () => {
       "SELECT pg_advisory_lock(hashtext('adventure-zone:act-review-migrations'))",
       "marker:014",
       "migration:014",
+      "marker:014",
       "marker:015",
       "SELECT pg_advisory_unlock(hashtext('adventure-zone:act-review-migrations'))",
       "release",
@@ -204,4 +205,11 @@ describe("runActReviewMigrations", () => {
       "release",
     ]);
   });
+});
+
+
+it("final review stops deployment when a migration remains unready after repair", async () => {
+  const queries: string[] = [];
+  await expect(runActReviewMigrations({ pool: { connect: async () => ({ query: async (sql: string) => { queries.push(sql); return { rows: [{ ready: false }] }; }, release: () => undefined }) }, migrations: [{ name: "partial-allocation", markerSql: "check", sql: "repair" }] })).rejects.toThrow(/remains incomplete after repair/);
+  expect(queries.filter((q) => q === "check")).toHaveLength(2);
 });

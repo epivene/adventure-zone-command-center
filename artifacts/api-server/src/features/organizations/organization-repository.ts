@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import {
   and,
   asc,
@@ -268,7 +269,7 @@ export async function reviewOrganizationFamily(
   );
   const groupKey = organizationFamilyGroupKey(candidateIds);
 
-  const outcome = await database.transaction(async (transaction) => {
+  const outcome = await reconcileCapacityFacts(database, "canonical-merge",async (transaction) => {
     await lockOrganizationFamilyMutationSnapshot(transaction);
     const [review] = await transaction
       .select({
@@ -476,7 +477,7 @@ export async function persistProposedOrganizationFamilies(
     );
   if (!eligibleProposals.length) return;
 
-  await database.transaction(async (transaction) => {
+  await reconcileCapacityFacts(database, "canonical-merge",async (transaction) => {
     await lockOrganizationFamilyMutationSnapshot(transaction);
     await transaction
       .insert(organizationFamilyReviews)
@@ -783,7 +784,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     input: SetLastResortInput,
     changedAt: Date,
   ): Promise<boolean> {
-    return this.database.transaction(async (transaction) => {
+    return reconcileCapacityFacts(this.database, "canonical-merge",async (transaction) => {
       const [before] = await transaction
         .select()
         .from(organizations)
@@ -1391,7 +1392,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     };
     const outcome = outerTransaction
       ? await merge(outerTransaction)
-      : await this.database.transaction(merge);
+      : await reconcileCapacityFacts(this.database, "canonical-merge",merge);
 
     if (outcome === "family_conflict") {
       throw new OrganizationConflictError(organizationMergeFamilyConflictMessage);

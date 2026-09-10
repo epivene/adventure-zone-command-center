@@ -1,3 +1,5 @@
+import { allocationEnabled } from "@/features/outreach-planner/outreach-allocation";
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { eq } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -57,6 +59,7 @@ export interface UndoTransaction {
 export interface UndoRepository {
   transaction<T>(
     operation: (transaction: UndoTransaction) => Promise<T>,
+    entryId?: string,
   ): Promise<T>;
 }
 
@@ -224,7 +227,7 @@ export class UndoService {
       });
 
       return ok(undefined);
-    });
+    }, entryId);
   }
 }
 
@@ -508,11 +511,14 @@ class DrizzleUndoTransaction implements UndoTransaction {
 export class DrizzleUndoRepository implements UndoRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  transaction<T>(
+  async transaction<T>(
     operation: (transaction: UndoTransaction) => Promise<T>,
+    entryId?: string,
   ): Promise<T> {
-    return this.database.transaction((transaction) =>
+    const entry=allocationEnabled() && entryId ? (await this.database.select().from(auditEntries).where(eq(auditEntries.id,entryId)).limit(1))[0] : null;
+    return commitmentTransaction(this.database, (transaction) =>
       operation(new DrizzleUndoTransaction(transaction)),
+      {source:"audit-undo",bookingIds:entry?.entityType==="booking"?[entry.entityId]:[]},
     );
   }
 }

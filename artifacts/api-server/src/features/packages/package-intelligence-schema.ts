@@ -1,3 +1,4 @@
+import { rawCalendarFactQuery } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import type { Pool } from "pg";
 import { pool as defaultPool } from "@workspace/db";
 
@@ -13,7 +14,7 @@ import { pool as defaultPool } from "@workspace/db";
 export async function ensurePackageIntelligenceSchema(
   pool: Pool = defaultPool,
 ): Promise<void> {
-  await pool.query(`
+  await rawCalendarFactQuery(pool, `
     ALTER TABLE package_templates
       ADD COLUMN IF NOT EXISTS base_price_cents integer,
       ADD COLUMN IF NOT EXISTS minimum_attraction_count integer,
@@ -238,5 +239,5 @@ export async function ensurePackageIntelligenceSchema(
             CHECK (package_count_category IN ('main_attraction', 'game_extra', 'special_shared'));
       END IF;
     END $$;
-  `);
+  `,undefined,"package-inventory-schema-backfill");
 }

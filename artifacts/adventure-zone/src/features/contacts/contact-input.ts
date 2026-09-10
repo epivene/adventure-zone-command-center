@@ -11,10 +11,6 @@ export const nullableContactEmailSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .refine(
-    (value) => value.length === 0 || z.email().safeParse(value).success,
-    "Enter a valid email address.",
-  )
   .transform((value) => value || null);
 
 export const contactPhoneInputSchema = z.object({

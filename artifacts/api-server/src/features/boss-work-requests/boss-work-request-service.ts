@@ -60,7 +60,7 @@ export class BossWorkRequestService {
   }
 
   async createOwnerRequest(input: {
-    type: "rapid_convention_notes" | "email_template_approval";
+    type: "rapid_convention_notes" | "email_template_approval" | "convention_planning_questionnaire";
     assignedBossAccountId: string;
     title: string;
     instructions?: string | null;

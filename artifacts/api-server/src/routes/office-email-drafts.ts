@@ -22,6 +22,8 @@ const createSchema = z.object({
   organizationId: uuid,
   contactId: uuid,
   communicationTemplateId: uuid.nullable().optional(),
+  bookingId: uuid.nullable().optional(),
+  eventYear: z.number().int().min(2000).max(2200).nullable().optional(),
   subject: z.string().trim().min(1).max(500),
   body: z.string().trim().min(1).max(50000),
   coordinatorNote: nullableNote.optional(),
@@ -42,6 +44,7 @@ function emailError(res: any, error: unknown) {
     EMAIL_REQUIRED: "That contact does not have an email address.",
     SEND_LOCKED: "This email is already being processed.",
     INVALID_TEMPLATE: "That email template is not available in the Booking Workspace.",
+    INVALID_BOOKING: "That booking is not part of this profile.",
     UNRESOLVED_TEMPLATE_FIELD: "Finish the missing template details before submitting this email.",
   } as const;
   res.status(error.code === "NOT_FOUND" ? 404 : error.code === "SEND_LOCKED" ? 409 : 400).json({ error: messages[error.code] });
@@ -64,6 +67,8 @@ router.post("/office/email-drafts", requireOffice, async (req, res): Promise<voi
       accountId: req.officeAccount!.accountId,
       ...parsed.data,
       communicationTemplateId: parsed.data.communicationTemplateId ?? null,
+      bookingId: parsed.data.bookingId ?? null,
+      eventYear: parsed.data.eventYear ?? null,
       coordinatorNote: parsed.data.coordinatorNote ?? null,
     });
     res.status(201).json({ draft });

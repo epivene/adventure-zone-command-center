@@ -59,8 +59,12 @@ export type BossContact = {
   phone?: string | null;
   organizationName?: string | null;
   role?: string | null;
+  jobTitle?: string | null;
+  address1?: string | null;
+  address2?: string | null;
   city?: string | null;
   region?: string | null;
+  postalCode?: string | null;
   [key: string]: unknown;
 };
 

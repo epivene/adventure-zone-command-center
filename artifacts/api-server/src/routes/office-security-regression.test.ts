@@ -58,6 +58,39 @@ describe("Office Coordinator security regression", () => {
     expect(ownerSource).toContain('/office-admin/email-drafts/:draftId/send');
   });
 
+  it("allows Office and Dave to save any manual contact email value", () => {
+    const base = {
+      firstName: "Rocky Mountain Train Show",
+      lastName: "",
+      jobTitle: null,
+      relationshipRole: null,
+      address1: null,
+      address2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+      phones: [],
+    };
+
+    expect(officeContactInputSchema.parse({
+      ...base,
+      email: "Information@RockyMountainTrainShow.com",
+    }).email).toBe("information@rockymountaintrainshow.com");
+    expect(officeContactInputSchema.parse({
+      ...base,
+      email: "Use the website contact form",
+    }).email).toBe("use the website contact form");
+  });
+
+  it("continues to validate location email fields separately", () => {
+    expect(officeLocationInputSchema.safeParse({
+      email: "Use the website contact form",
+    }).success).toBe(false);
+    expect(officeLocationInputSchema.parse({
+      email: "Information@RockyMountainTrainShow.com",
+    }).email).toBe("information@rockymountaintrainshow.com");
+  });
+
   it("rejects strategic and operational fields from factual Office edit schemas", () => {
     expect(officeProfileInputSchema.safeParse({ name: "Fair", lastResort: true }).success).toBe(false);
     expect(officeProfileInputSchema.safeParse({ name: "Fair", probability: "likely" }).success).toBe(false);

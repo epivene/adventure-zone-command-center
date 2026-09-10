@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const requestTypeSchema = z.enum(["rapid_convention_notes", "email_template_approval"]);
+export const requestTypeSchema = z.enum(["rapid_convention_notes", "email_template_approval", "convention_planning_questionnaire"]);
 export const requestStateSchema = z.enum([
   "waiting_on_dave", "in_progress", "submitted_to_owner", "changes_requested",
   "returned_for_clarification", "approved", "applied", "cancelled",
@@ -8,6 +8,8 @@ export const requestStateSchema = z.enum([
 export const requestPrioritySchema = z.enum(["normal", "high", "urgent"]);
 
 export const conventionNotesSchema = z.object({
+  planningAnswers: z.record(z.string().max(80), z.string().max(4000))
+    .refine((answers) => Object.keys(answers).length <= 40, "Too many answers.").optional(),
   eventName: z.string().trim().min(1).max(240),
   organizationName: z.string().trim().max(240).optional(),
   contactName: z.string().trim().max(240).optional(),

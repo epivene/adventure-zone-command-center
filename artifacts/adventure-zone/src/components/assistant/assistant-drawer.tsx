@@ -118,7 +118,7 @@ function candidateScoutPrefill(candidate: LeadScoutCandidate): ScoutContextPrefi
 }
 
 export function AssistantDrawer() {
-  const { activeContext, explicitContext, clearExplicitContext, selectExplicitContext, closeAssistant, isOpen, prefill } = useAssistantContext();
+  const { activeContext, explicitContext, clearExplicitContext, selectExplicitContext, closeAssistant, isOpen, prefill, scoutLaunchPrefill } = useAssistantContext();
   const [, setLocation] = useLocation();
   const [contextBundle, setContextBundle] = useState<AssistantContextBundle | null>(null);
   const [brief, setBrief] = useState<BookingBrief | null>(null);
@@ -148,7 +148,8 @@ export function AssistantDrawer() {
   useEffect(() => {
     if (!isOpen) return;
     setQuestion(prefill);
-  }, [isOpen, prefill]);
+    if (scoutLaunchPrefill) setDrawerMode("scout");
+  }, [activeContext, isOpen, prefill, scoutLaunchPrefill]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -422,14 +423,15 @@ export function AssistantDrawer() {
                 <button className="button-secondary" onClick={restorePreviousScoutRun} type="button">Back to Previous Scout Results</button>
               ) : null}
               {drawerMode === "scout" && !leadScoutRun ? (
-                <ScoutLaunchForm
+                <>{scoutLaunchPrefill ? <p className="rounded-lg border border-pink-200 bg-pink-50 p-3 text-sm text-slate-700"><strong>Saved planner criteria:</strong> {scoutLaunchPrefill.criteriaSummary}</p> : null}<ScoutLaunchForm
                   disabled={scoutActionBusy}
-                  initialAnchor={scoutPrefill?.label ?? ""}
-                  initialDateStart={scoutPrefill?.initialDateStart ?? ""}
-                  initialDateEnd={scoutPrefill?.initialDateEnd ?? ""}
-                  key={scoutPrefill ? `${scoutPrefill.kind}:${scoutPrefill.recordId ?? scoutPrefill.label}` : "general-scout"}
+                  initialAnchor={scoutLaunchPrefill?.anchorLabel ?? scoutPrefill?.label ?? ""}
+                  initialDateStart={scoutLaunchPrefill?.dateStart ?? scoutPrefill?.initialDateStart ?? ""}
+                  initialDateEnd={scoutLaunchPrefill?.dateEnd ?? scoutPrefill?.initialDateEnd ?? ""}
+                  initialRadiusMiles={scoutLaunchPrefill?.radiusMiles}
+                  key={scoutLaunchPrefill ? `planner:${scoutLaunchPrefill.anchorLabel}:${scoutLaunchPrefill.dateStart}:${scoutLaunchPrefill.dateEnd}:${scoutLaunchPrefill.radiusMiles}` : scoutPrefill ? `${scoutPrefill.kind}:${scoutPrefill.recordId ?? scoutPrefill.label}` : "general-scout"}
                   onSubmit={handleScoutLaunch}
-                />
+                /></>
               ) : null}
               {drawerMode === "assistant" && generalResponse ? <p className="text-sm text-slate-700">{generalResponse.kind === "answer" ? generalResponse.answer.text : generalResponse.text}</p> : null}
               {drawerMode === "scout" && leadScoutRun ? (
@@ -461,14 +463,15 @@ export function AssistantDrawer() {
                 <button className="button-secondary" onClick={restorePreviousScoutRun} type="button">Back to Previous Scout Results</button>
               ) : null}
               {!leadScoutRun ? (
-                <ScoutLaunchForm
+                <>{scoutLaunchPrefill ? <p className="rounded-lg border border-pink-200 bg-pink-50 p-3 text-sm text-slate-700"><strong>Saved planner criteria:</strong> {scoutLaunchPrefill.criteriaSummary}</p> : null}<ScoutLaunchForm
                   disabled={scoutActionBusy}
-                  initialAnchor={scoutPrefill?.label ?? availableContextPrefill?.label ?? ""}
-                  initialDateStart={scoutPrefill?.initialDateStart ?? availableContextPrefill?.initialDateStart ?? ""}
-                  initialDateEnd={scoutPrefill?.initialDateEnd ?? availableContextPrefill?.initialDateEnd ?? ""}
-                  key={`${scoutPrefill?.kind ?? activeContext?.kind}:${scoutPrefill?.recordId ?? activeContext?.recordId ?? scoutPrefill?.label ?? "scout"}`}
+                  initialAnchor={scoutLaunchPrefill?.anchorLabel ?? scoutPrefill?.label ?? availableContextPrefill?.label ?? ""}
+                  initialDateStart={scoutLaunchPrefill?.dateStart ?? scoutPrefill?.initialDateStart ?? availableContextPrefill?.initialDateStart ?? ""}
+                  initialDateEnd={scoutLaunchPrefill?.dateEnd ?? scoutPrefill?.initialDateEnd ?? availableContextPrefill?.initialDateEnd ?? ""}
+                  initialRadiusMiles={scoutLaunchPrefill?.radiusMiles}
+                  key={scoutLaunchPrefill ? `planner:${scoutLaunchPrefill.anchorLabel}:${scoutLaunchPrefill.dateStart}:${scoutLaunchPrefill.dateEnd}:${scoutLaunchPrefill.radiusMiles}` : `${scoutPrefill?.kind ?? activeContext?.kind}:${scoutPrefill?.recordId ?? activeContext?.recordId ?? scoutPrefill?.label ?? "scout"}`}
                   onSubmit={handleScoutLaunch}
-                />
+                /></>
               ) : (
                 <LeadDiscoveryResults
                   run={leadScoutRun}

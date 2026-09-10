@@ -1,4 +1,4 @@
-export type BossWorkRequestType = "rapid_convention_notes" | "email_template_approval";
+export type BossWorkRequestType = "rapid_convention_notes" | "email_template_approval" | "convention_planning_questionnaire";
 export type BossWorkRequestState =
   | "waiting_on_dave" | "in_progress" | "submitted_to_owner" | "changes_requested"
   | "returned_for_clarification" | "approved" | "applied" | "cancelled";
@@ -18,6 +18,7 @@ export type BossWorkRequest = {
 };
 
 export type ConventionNotes = {
+  planningAnswers?: Record<string, string>;
   eventName: string;
   organizationName?: string;
   contactName?: string;
@@ -65,6 +66,7 @@ export type TemplateReview = {
 };
 
 export type BossWorkRequestDetail = {
+  events?: { actorKind: string; newState: string; note: string | null; createdAt: string }[];
   request: BossWorkRequest;
   draft: ConventionDraft | null;
   submissions: ConventionSubmission[];

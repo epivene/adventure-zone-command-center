@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, asc, eq, inArray, or } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -54,17 +55,17 @@ export class MigrationRelationshipApplyRepository {
 
   applyOrganizationContact(operation: MigrationApplyOperation): Promise<MigrationRelationshipApplyResult> {
     if (operation.targetEntityType !== "organization_contact") throw new Error("Expected an Organization-Contact apply operation.");
-    return this.database.transaction((transaction) => this.applyOrganizationContactIn(transaction, operation));
+    return reconcileCapacityFacts(this.database, "act-history-import",(transaction) => this.applyOrganizationContactIn(transaction, operation));
   }
 
   applyBooking(operation: MigrationApplyOperation): Promise<MigrationRelationshipApplyResult> {
     if (operation.targetEntityType !== "booking") throw new Error("Expected a Booking apply operation.");
-    return this.database.transaction((transaction) => this.applyBookingIn(transaction, operation));
+    return reconcileCapacityFacts(this.database, "act-history-import",(transaction) => this.applyBookingIn(transaction, operation));
   }
 
   applyBookingContact(operation: MigrationApplyOperation): Promise<MigrationRelationshipApplyResult> {
     if (operation.targetEntityType !== "booking_contact") throw new Error("Expected a Booking-Contact apply operation.");
-    return this.database.transaction((transaction) => this.applyBookingContactIn(transaction, operation));
+    return reconcileCapacityFacts(this.database, "act-history-import",(transaction) => this.applyBookingContactIn(transaction, operation));
   }
 
   private async lockOperation(transaction: Transaction, operation: MigrationApplyOperation) {

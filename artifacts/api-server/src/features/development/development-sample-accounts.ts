@@ -1,3 +1,4 @@
+import { reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { bossAccounts, legManagerAccess, officeAccounts, travelLegs } from "@/db/schema";
@@ -43,7 +44,7 @@ export async function ensureDevelopmentSampleAccounts(): Promise<void> {
       })
       .from(travelLegs);
 
-    await db.insert(travelLegs).values({
+    await reconcileCapacityFacts(db,"resource-inventory",async tx=>tx.insert(travelLegs).values({
       id: DEVELOPMENT_SAMPLE_LEG_ID,
       name: DEVELOPMENT_SAMPLE_LOGINS.manager.legName,
       color: "#F97316",
@@ -51,7 +52,7 @@ export async function ensureDevelopmentSampleAccounts(): Promise<void> {
       baseAddress: "Denver, CO",
       defaultVehicleName: "Demo Adventure Van",
       defaultMpg: 22,
-    });
+    }));
   }
 
   const existingOffice = await db

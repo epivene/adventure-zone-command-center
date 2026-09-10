@@ -204,6 +204,7 @@ export type GoogleProfileEmailList = {
   liveGmail: true;
   unavailableThreadCount: number;
   conversations: GoogleProfileEmailConversation[];
+  historicalConversations?: GoogleProfileEmailConversation[];
 };
 
 export type GoogleThreadAttachment = {

@@ -86,6 +86,27 @@ describe("ContactForm phone submission", () => {
     ));
   });
 
+  it("submits any manual value entered in the email field", async () => {
+    const onSubmit = vi.fn().mockResolvedValue({ ok: true });
+    render(
+      <ContactForm
+        initialValues={initialValues}
+        onSubmit={onSubmit}
+        successPath="/contacts/contact-1"
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "Use the website contact form" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save contact" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "use the website contact form" }),
+      undefined,
+    ));
+  });
+
   it("prevents editing or removing a suppressed phone row", () => {
     render(
       <ContactForm

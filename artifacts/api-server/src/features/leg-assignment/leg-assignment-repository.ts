@@ -1,3 +1,4 @@
+import { commitmentTransaction } from "@/features/outreach-planner/outreach-commitments";
 import { asc, eq, isNull } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -241,6 +242,8 @@ export class LegAssignmentRepository implements LegAssignmentStore {
   }
 
   async assignLeg(bookingId: string, travelLegId: string): Promise<void> {
-    await this.db.update(bookings).set({ travelLegId, updatedAt: new Date() }).where(eq(bookings.id, bookingId));
+    await commitmentTransaction(this.db, async tx => {
+      await tx.update(bookings).set({ travelLegId, updatedAt: new Date() }).where(eq(bookings.id, bookingId));
+    });
   }
 }

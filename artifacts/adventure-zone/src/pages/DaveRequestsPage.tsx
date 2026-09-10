@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardPenLine, MailCheck, Plus, RefreshCw, X } from "lucide-react";
 import { apiFetch } from "@/lib/auth-token";
+import { Link } from "wouter";
+import { ConventionPlanningAnswers } from "@/components/boss-work-requests/ConventionPlanningForm";
 import { OwnerConventionReview } from "@/components/boss-work-requests/OwnerConventionReview";
 import type { BossWorkRequest, BossWorkRequestDetail } from "@/features/boss-work-requests/boss-work-request-types";
 import {
@@ -50,6 +52,7 @@ export default function DaveRequestsPage() {
 
   return (
     <main className="mx-auto grid max-w-6xl gap-5 p-4 sm:p-6">
+      <Link href="/conventions" className="rounded-xl border bg-card p-4 font-semibold">Convention Outreach — yearly lists and profile history</Link>
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div><p className="text-xs font-bold uppercase tracking-wider text-primary">Owner Workspace</p><h1 className="text-2xl font-bold">Dave Requests</h1><p className="text-sm text-muted-foreground">Give Dave forms or email previews, then review what comes back.</p></div>
         <div className="flex gap-2">
@@ -65,7 +68,7 @@ export default function DaveRequestsPage() {
         <section className="grid content-start gap-2">
           {items.length === 0 && <p className="rounded-xl border bg-card p-5 text-center text-sm text-muted-foreground">Nothing in this section.</p>}
           {items.map((request) => {
-            const Icon = request.type === "rapid_convention_notes" ? ClipboardPenLine : MailCheck;
+            const Icon = request.type !== "email_template_approval" ? ClipboardPenLine : MailCheck;
             return <button key={request.id} onClick={() => void open(request)} className={`flex gap-3 rounded-xl border bg-card p-4 text-left ${selected?.request.id === request.id ? "border-primary ring-1 ring-primary" : ""}`}>
               <Icon className="mt-0.5 h-5 w-5 text-primary" /><span><span className="block font-bold">{request.title}</span><span className="text-xs text-muted-foreground">{request.priority} · {request.state.replaceAll("_", " ")}</span></span>
             </button>;
@@ -75,7 +78,13 @@ export default function DaveRequestsPage() {
           {!selected ? <p className="text-center text-muted-foreground">Choose a request to review it.</p> : (
             <div className="grid gap-4">
               <div><h2 className="text-xl font-bold">{selected.request.title}</h2><p className="text-sm text-muted-foreground">{selected.request.instructions}</p></div>
-              {selected.request.type === "rapid_convention_notes" ? (
+              {selected.request.type === "convention_planning_questionnaire" ? (
+                <div className="grid gap-4">
+                  {selected.submissions.length === 0 && <p>Dave has not submitted answers yet.</p>}
+                  {selected.submissions.map((submission) => <section key={submission.id} className="rounded-xl border p-4"><p className="mb-3 text-sm text-muted-foreground">Submitted {new Date(submission.createdAt).toLocaleString()}</p><ConventionPlanningAnswers answers={submission.payload.planningAnswers ?? {}} /></section>)}
+                  {selected.request.state === "submitted_to_owner" && <button className="min-h-11 rounded-lg border px-4 font-semibold" onClick={async () => { const note=window.prompt("What does Dave need to clarify?"); if(note) { try { await returnWorkRequest(selected.request.id,note); await reload(); } catch(cause) { setError(cause instanceof Error ? cause.message : "Could not return questionnaire."); } } }}>Return for Clarification</button>}
+                </div>
+              ) : selected.request.type === "rapid_convention_notes" ? (
                 <div className="grid gap-3">
                   {selected.submissions.length === 0 && <p className="rounded-lg bg-muted p-4 text-sm">Dave has not submitted notes yet.</p>}
                   {selected.submissions.map((submission) => <OwnerConventionReview key={submission.id} requestId={selected.request.id} submission={submission} reload={reload} />)}

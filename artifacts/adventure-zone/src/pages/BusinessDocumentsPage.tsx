@@ -5,9 +5,11 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import {
   businessDocumentsApi,
+  type BusinessDocumentProfileOption,
   type BusinessDocumentRecord,
 } from "@/lib/business-documents-api";
 import { DocumentReviewQueue } from "@/components/business-documents/document-review-queue";
+import { DocumentProfileLinker, type ProfileLinkSuggestion } from "@/components/business-documents/document-profile-linker";
 import { groupBusinessDocuments, isMediaDocument } from "./business-document-organization";
 
 type View = "all" | "media" | "contracts" | "vendor_applications" | "templates" | "insurance" | "review";
@@ -15,7 +17,7 @@ type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 export type BusinessDocumentsClient = Pick<typeof businessDocumentsApi,
   "listAll" | "open" | "update" | "deleteDocument" | "reviewItems" | "searchProfiles" | "reviewAction"
->;
+> & { linkProfile?: typeof businessDocumentsApi.linkProfile };
 
 type BusinessDocumentsPageProps = {
   api?: BusinessDocumentsClient;
@@ -79,6 +81,11 @@ export default function BusinessDocumentsPage({
   const [editName, setEditName] = useState("");
   const [editCategory, setEditCategory] = useState<BusinessDocumentRecord["category"]>("other");
   const [editNotes, setEditNotes] = useState("");
+  const [editProfileQuery, setEditProfileQuery] = useState("");
+  const [editProfileResults, setEditProfileResults] = useState<BusinessDocumentProfileOption[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<BusinessDocumentProfileOption | null>(null);
+  const [searchingProfiles, setSearchingProfiles] = useState(false);
+  const [linkingId, setLinkingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -149,7 +156,67 @@ export default function BusinessDocumentsPage({
     setEditName(document.displayName);
     setEditCategory(document.category);
     setEditNotes(document.notes ?? "");
+    setEditProfileQuery("");
+    setEditProfileResults([]);
+    setSelectedProfile(null);
     setError(null);
+  }
+
+  async function searchEditProfiles() {
+    const profileQuery = editProfileQuery.trim();
+    if (!profileQuery) return;
+    setSearchingProfiles(true);
+    setError(null);
+    try {
+      setEditProfileResults(await api.searchProfiles(profileQuery));
+    } catch {
+      setError("Could not search profiles.");
+    } finally {
+      setSearchingProfiles(false);
+    }
+  }
+
+  async function linkEditedDocument(document: BusinessDocumentRecord) {
+    const linkProfile = api.linkProfile;
+    if (!selectedProfile || !linkProfile) return;
+    setLinkingId(document.id);
+    setError(null);
+    try {
+      await linkProfile(document.id, selectedProfile.id);
+      setDocuments((current) => current.map((item) => item.id === document.id ? {
+        ...item,
+        links: [...item.links, {
+          id: `new-profile-${selectedProfile.id}`,
+          targetKind: "profile" as const,
+          targetId: selectedProfile.id,
+          targetLabel: selectedProfile.name,
+        }],
+      } : item));
+      setSelectedProfile(null);
+      setEditProfileQuery("");
+      setEditProfileResults([]);
+    } catch {
+      setError("Could not link that profile to the document.");
+    } finally {
+      setLinkingId(null);
+    }
+  }
+
+  function recordBulkLinks(suggestions: ProfileLinkSuggestion[]) {
+    const linkedByDocument = new Map(suggestions.map((suggestion) => [suggestion.documentId, suggestion.profile]));
+    setDocuments((current) => current.map((document) => {
+      const profile = linkedByDocument.get(document.id);
+      if (!profile) return document;
+      return {
+        ...document,
+        links: [...document.links, {
+          id: `new-profile-${profile.id}`,
+          targetKind: "profile" as const,
+          targetId: profile.id,
+          targetLabel: profile.name,
+        }],
+      };
+    }));
   }
 
   async function saveDocument(document: BusinessDocumentRecord) {
@@ -296,6 +363,10 @@ export default function BusinessDocumentsPage({
       {error ? <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading documents…</p> : null}
 
+      {view !== "review" && !loading && api.linkProfile ? (
+        <DocumentProfileLinker api={{ searchProfiles: api.searchProfiles, linkProfile: api.linkProfile }} documents={documents} onLinked={recordBulkLinks} />
+      ) : null}
+
       {view === "review" ? <DocumentReviewQueue api={api} /> : null}
 
       {view !== "review" && !loading && !visibleDocuments.length ? (
@@ -344,6 +415,28 @@ export default function BusinessDocumentsPage({
                   <label className="grid gap-1 text-xs font-semibold">Document notes
                     <textarea className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm" onChange={(event) => setEditNotes(event.target.value)} value={editNotes} />
                   </label>
+                  {document.links.some((link) => link.targetKind === "profile") ? (
+                    <p className="text-xs text-muted-foreground">Linked profile: {document.links.find((link) => link.targetKind === "profile")?.targetLabel ?? "Profile linked"}</p>
+                  ) : api.linkProfile ? (
+                    <div className="grid gap-2 rounded-md border border-border p-2">
+                      <label className="grid gap-1 text-xs font-semibold">Find a profile to link
+                        <div className="flex gap-2">
+                          <input className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm" onChange={(event) => setEditProfileQuery(event.target.value)} value={editProfileQuery} />
+                          <Button disabled={searchingProfiles || !editProfileQuery.trim()} onClick={() => void searchEditProfiles()} size="sm" type="button" variant="outline">{searchingProfiles ? "Searching…" : "Search"}</Button>
+                        </div>
+                      </label>
+                      {editProfileResults.length ? (
+                        <div className="grid gap-1" role="listbox" aria-label="Profile search results">
+                          {editProfileResults.map((profile) => (
+                            <button aria-selected={selectedProfile?.id === profile.id} className={`rounded-md border p-2 text-left text-sm ${selectedProfile?.id === profile.id ? "border-primary bg-primary/10" : "border-border"}`} key={profile.id} onClick={() => setSelectedProfile(profile)} role="option" type="button">
+                              <span className="font-semibold">{profile.name}</span>{profile.city || profile.region ? <span className="text-muted-foreground"> · {[profile.city, profile.region].filter(Boolean).join(", ")}</span> : null}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                      <Button disabled={!selectedProfile || linkingId === document.id} onClick={() => void linkEditedDocument(document)} size="sm" type="button" variant="outline">{linkingId === document.id ? "Linking…" : "Link selected profile"}</Button>
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button disabled={savingId === document.id} onClick={() => void saveDocument(document)} size="sm" type="button">
                       {savingId === document.id ? "Saving…" : "Save document"}

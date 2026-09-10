@@ -26,6 +26,7 @@ export type ScoutLaunchFormProps = {
   initialAnchor?: string;
   initialDateStart?: string;
   initialDateEnd?: string;
+  initialRadiusMiles?: RadiusScoutSubmission["radiusMiles"];
   disabled?: boolean;
   onSubmit: (submission: RadiusScoutSubmission) => void | Promise<void>;
 };
@@ -47,11 +48,12 @@ export function ScoutLaunchForm({
   initialAnchor = "",
   initialDateStart = "",
   initialDateEnd = "",
+  initialRadiusMiles = 100,
   disabled = false,
   onSubmit,
 }: ScoutLaunchFormProps) {
   const [anchorLabel, setAnchorLabel] = useState(initialAnchor);
-  const [radiusMiles, setRadiusMiles] = useState<(typeof radiusOptions)[number]>(100);
+  const [radiusMiles, setRadiusMiles] = useState<(typeof radiusOptions)[number]>(initialRadiusMiles);
   const [dateStart, setDateStart] = useState(initialDateStart);
   const [dateEnd, setDateEnd] = useState(initialDateEnd);
   const [categories, setCategories] = useState<ScoutEventCategory[]>(categoryOptions.map((option) => option.value));

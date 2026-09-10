@@ -1,3 +1,4 @@
+import { commitmentTransaction, reconcileCapacityFacts } from "@/features/outreach-planner/outreach-commitments";
 import { and, asc, eq, inArray } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
@@ -461,7 +462,7 @@ export class DrizzlePackageRepository implements PackageRepository {
   transaction<T>(
     operation: (transaction: PackageTransaction) => Promise<T>,
   ): Promise<T> {
-    return this.database.transaction((transaction) =>
+    return commitmentTransaction(this.database, (transaction) =>
       operation(new DrizzlePackageTransaction(transaction)),
     );
   }
@@ -523,7 +524,7 @@ implements PackageSettingsRepository {
     input: PackageTemplateInput,
     actorId: string,
   ): Promise<PackageTemplateSettingsRecord> {
-    return this.database.transaction(async (transaction) => {
+    return reconcileCapacityFacts(this.database, "package-inventory", async (transaction) => {
       const [current] = await transaction
         .select({
           id: packageTemplates.id,
