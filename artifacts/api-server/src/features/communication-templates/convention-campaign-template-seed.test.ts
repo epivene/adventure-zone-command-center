@@ -21,37 +21,37 @@ describe("convention campaign template seed", () => {
     }))).toEqual([
       {
         code: "convention_before_general_v2",
-        gmailMessageId: "1a089c0ded0832ae",
+        gmailMessageId: "1a089d39ffb4ac0e",
         name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
       },
       {
         code: "convention_before_new_event_v2",
-        gmailMessageId: "1a089c0f9f39560f",
+        gmailMessageId: "1a089d410a9c6c47",
         name: "TEMPLATE 2 — BEFORE Convention — New Event",
       },
       {
         code: "convention_before_past_event_v2",
-        gmailMessageId: "1a089c110e2edf66",
+        gmailMessageId: "1a089d42b974325e",
         name: "TEMPLATE 3 — BEFORE Convention — Past Event",
       },
       {
         code: "convention_during_new_event_v2",
-        gmailMessageId: "1a089c12900c1e47",
+        gmailMessageId: "1a089d4484514e6c",
         name: "TEMPLATE 4 — DURING Convention — New Event",
       },
       {
         code: "convention_during_past_event_v2",
-        gmailMessageId: "1a089c1419815116",
+        gmailMessageId: "1a089d4bb691e927",
         name: "TEMPLATE 5 — DURING Convention — Past Event",
       },
       {
         code: "convention_after_new_event_v2",
-        gmailMessageId: "1a089c19716cfd15",
+        gmailMessageId: "1a089d4f26182f80",
         name: "TEMPLATE 6 — AFTER Convention — New Event",
       },
       {
         code: "convention_after_past_event_v2",
-        gmailMessageId: "1a089c1b1aa32212",
+        gmailMessageId: "1a089d55760281da",
         name: "TEMPLATE 7 — AFTER Convention — Past Event",
       },
     ]);
@@ -64,13 +64,13 @@ describe("convention campaign template seed", () => {
 
     expect(afterConvention).toHaveLength(2);
     for (const template of afterConvention) {
-      expect(template.templateVersion).toBe("2026-09-convention-banner-links-v5");
+      expect(template.templateVersion).toBe("2026-09-convention-header-gifs-v6");
       expect(template.bodyTemplate).toContain(
         'href="https://www.the-adventure-zone.com/?welcome=convention"',
       );
       expect(template.bodyTemplate).toContain("SEE MORE!");
       expect(template.bodyTemplate).not.toContain("EXPLORE THE WEBSITE");
-      expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).toContain("background:#0f1729");
       expect(template.bodyTemplate).toContain("background:#ffca05");
       expect(template.bodyTemplate).toContain("{{earlyBirdDeadline}}");
@@ -80,6 +80,9 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate).not.toMatch(
         /ready for another adventure|let’s bring the fun back|choose which Adventure Zone experience|thank you again for trusting|we’d be honored to return|planning our return/i,
       );
+      expect(template.bodyTemplate).not.toMatch(
+        /We’d love to continue the conversation and explore whether The Adventure Zone could be a good fit for your community|Let’s keep the conversation going!|Looking forward to what comes next!/i,
+      );
       expect(template.bodyTemplate).toContain("START PLANNING 2027");
       expect(template.bodyTemplate).toContain(
         "subject=Planning%20%5BEvent%20Name%5D%20for%202027",
@@ -88,26 +91,30 @@ describe("convention campaign template seed", () => {
     }
   });
 
-  it("uses an angled carnival banner and the right trailer destination for each campaign stage", () => {
+  it("keeps the original header with a pink carnival line and uses the visibly updated GIF for each stage", () => {
     for (const template of conventionCampaignTemplates) {
-      expect(template.bodyTemplate).toContain("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL");
-      expect(template.bodyTemplate).toContain("border-right:14px solid #ff0a8a");
-      expect(template.bodyTemplate).toContain('width="340"');
-      expect(template.bodyTemplate.indexOf("AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL"))
-        .toBeLessThan(template.bodyTemplate.indexOf("adventure-zone-logo-navy.png"));
+      expect(template.bodyTemplate).toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
+      expect(template.bodyTemplate).not.toContain("border-right:14px solid #ff0a8a");
+      expect(template.bodyTemplate.indexOf("adventure-zone-logo-navy.png"))
+        .toBeLessThan(template.bodyTemplate.indexOf("AMERICA’S BEST BOUNCE HOUSE CARNIVAL"));
 
       const trailer = template.bodyTemplate.match(
-        /<a href="([^"]+)"[^>]*><img src="https:\/\/adventure-zone-command-center-1\.onrender\.com\/assets\/adventure-zone-mini-trailer\.gif"[^>]*alt="([^"]+)"/,
+        /<a href="([^"]+)"[^>]*><img src="(https:\/\/static\.wixstatic\.com\/media\/[^"]+\.gif)"[^>]*alt="([^"]+)"/,
       );
       expect(trailer).not.toBeNull();
       if (template.code.startsWith("convention_after_")) {
         expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/?welcome=convention");
-        expect(trailer?.[2]).toBe("The Adventure Zone mini trailer — tap to learn more!");
+        expect(trailer?.[2]).toBe("https://static.wixstatic.com/media/0e6e2c_5f0944f0c0cc45a590bac43c77ec5411~mv2.gif");
+        expect(trailer?.[3]).toBe("The Adventure Zone mini trailer — tap to learn more!");
       } else {
         expect(trailer?.[1]).toBe("https://www.the-adventure-zone.com/");
-        expect(trailer?.[2]).toBe("The Adventure Zone mini trailer — tap to see more!");
+        expect(trailer?.[2]).toBe("https://static.wixstatic.com/media/0e6e2c_87ad0198e4da4141ac40d29751d007d3~mv2.gif");
+        expect(trailer?.[3]).toBe("The Adventure Zone mini trailer — tap to see more!");
       }
     }
+
+    expect(conventionCampaignTemplates[5].bodyTemplate).toContain("INSERT SOMETHING THEY SHARED");
+    expect(conventionCampaignTemplates[6].bodyTemplate).toContain("INSERT A SPECIFIC MEMORY");
   });
 
   it("refreshes an active template without an availability or audit gap", async () => {
@@ -240,7 +247,7 @@ describe("convention campaign template seed", () => {
 
     expect(afterFirstRun.rows).toHaveLength(1);
     expect(afterFirstRun.rows[0]).toMatchObject({
-      template_version: "2026-09-convention-banner-links-v5",
+      template_version: "2026-09-convention-header-gifs-v6",
       state: "active",
       reviewed_by: "system:owner-approved-convention-finalized",
       request_state: "cancelled",
