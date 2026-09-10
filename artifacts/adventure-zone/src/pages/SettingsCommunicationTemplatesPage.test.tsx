@@ -162,4 +162,39 @@ describe("SettingsCommunicationTemplatesPage", () => {
     });
     await waitFor(() => expect(screen.getByText('Created "Proposal follow-up" as a draft. Review it before activating.')).toBeInTheDocument());
   });
+
+  it("shows a live rendered preview for designed HTML while keeping source editing available", async () => {
+    apiFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ templates: [{
+        id: "00000000-0000-4000-8000-000000000006",
+        code: "convention_preview",
+        name: "Convention preview",
+        channel: "email",
+        category: "outreach",
+        subjectTemplate: "Let’s connect at {{conventionName}}",
+        bodyTemplate: "<table><tbody><tr><td>Hello <strong>{{contactName}}</strong></td></tr></tbody></table>",
+        bodyFormat: "html",
+        requiredPlaceholders: ["contactName", "conventionName"],
+        accessScope: "office",
+        state: "active",
+        ownerKind: "company",
+        creatorDisplayName: null,
+      }] }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    render(<SettingsCommunicationTemplatesPage />);
+
+    const preview = await screen.findByTitle("Email body preview");
+    expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>");
+    expect(screen.getByText("Let’s connect at Example Convention")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Email HTML source")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit HTML" }));
+    fireEvent.change(screen.getByLabelText("Email HTML source"), {
+      target: { value: "<p>Updated for {{contactName}}</p>" },
+    });
+
+    expect(preview.getAttribute("srcdoc")).toContain("Updated for Jamie");
+  });
+
 });
