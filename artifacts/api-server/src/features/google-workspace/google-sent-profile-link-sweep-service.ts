@@ -565,7 +565,7 @@ implements GoogleSentProfileLinkSweepRepository {
        ORDER BY l.gmail_label_id`,
       [connectionId, labelIds],
     );
-    return new Map(result.rows.flatMap((row) =>
+    return new Map<string, GoogleSentProfileTarget>(result.rows.flatMap((row) =>
       typeof row.gmail_label_id === "string"
       && typeof row.organization_id === "string"
       && typeof row.organization_name === "string"
