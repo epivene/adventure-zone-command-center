@@ -443,4 +443,47 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
     });
   }
   await refreshEmailLogos(database);
+
+  // Backfill the owner-requested review even when v11 was already deployed.
+  // Use a durable request identity so opening templates again (or completing the
+  // review and clearing its dedupe key) cannot create another review task.
+  if (!dave) return;
+  const reviewOwnerId = "system:returning-customer-outreach-review-v11";
+  const existing = await database.select({ id: bossWorkRequests.id })
+    .from(bossWorkRequests).where(and(
+      eq(bossWorkRequests.assignedBossAccountId, dave.id),
+      eq(bossWorkRequests.createdByOwnerId, reviewOwnerId),
+    )).limit(1);
+  if (existing.length) return;
+  const outreach = await database.select().from(communicationTemplates).where(and(
+    inArray(communicationTemplates.code, ["convention_before_general_v2", "convention_before_past_event_v2"]),
+    eq(communicationTemplates.templateVersion, "2026-09-returning-customer-outreach-v11"),
+  ));
+  if (outreach.length !== 2 || outreach.some(template => template.state === "archived")) return;
+  outreach.sort((a, b) => a.code.localeCompare(b.code));
+  await service.repository.createTemplateReviewSet({
+    request: {
+      assignedBossAccountId: dave.id,
+      createdByOwnerId: reviewOwnerId,
+      deduplicationKey: reviewOwnerId,
+      title: "Review returning customer outreach (2 emails)",
+      instructions: "Updated general outreach for customers from the past five years. Preview both emails with the Early Bird card at the top, test the links, and approve or leave notes.",
+      priority: "normal",
+    },
+    reviews: outreach.map((template, position) => ({
+      templateId: template.id,
+      position,
+      templateNameSnapshot: template.name,
+      templateVersion: template.templateVersion,
+      subjectSnapshot: template.subjectTemplate,
+      bodySnapshot: template.bodyTemplate,
+      bodyFormatSnapshot: template.bodyFormat,
+      contentFingerprint: templateFingerprint({
+        templateVersion: template.templateVersion,
+        subjectTemplate: template.subjectTemplate,
+        bodyTemplate: template.bodyTemplate,
+        bodyFormat: template.bodyFormat,
+      }),
+    })),
+  });
 }
