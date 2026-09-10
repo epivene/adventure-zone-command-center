@@ -8,11 +8,7 @@ export const nullableContactTextSchema = z
   .transform((value) => value?.trim() || null);
 export const nullableContactEmailSchema = z
   .union([z.string(), z.null()])
-  .transform((value) => value?.trim().toLowerCase() || null)
-  .refine(
-    (value) => value === null || z.string().email().safeParse(value).success,
-    "Enter a valid email address.",
-  );
+  .transform((value) => value?.trim().toLowerCase() || null);
 
 export const contactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),
