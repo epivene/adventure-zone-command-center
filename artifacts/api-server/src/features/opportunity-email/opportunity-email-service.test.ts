@@ -82,6 +82,11 @@ function deps(existing: OpportunityEmailRecord | null = null, resolvedContext = 
     gmailDraftProvider: {
       createDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-1", threadId: null })),
       updateDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-2", threadId: "thread-1" })),
+      sendDraft: vi.fn(async () => ({
+        messageId: "gmail-message-3",
+        threadId: "thread-1",
+        sentAt: new Date("2026-08-27T18:00:00.000Z"),
+      })),
     },
     blockerSink: { record: vi.fn(async () => undefined) },
     workflowSink: {
@@ -160,6 +165,20 @@ describe("OpportunityEmailService", () => {
     expect(result.ok).toBe(true);
     expect(dependencies.draftGenerator.generate).toHaveBeenCalledWith(expect.objectContaining({ purpose: "follow_up" }));
     expect(dependencies.emailRepository.create).toHaveBeenCalledWith(expect.objectContaining({ purpose: "follow_up" }));
+  });
+
+  it("never invokes Gmail for a legacy draft with a note-like recipient", async () => {
+    const existing = record({ recipientEmail: "use the website contact form" });
+    const dependencies = deps(existing);
+    const service = new OpportunityEmailService(dependencies);
+
+    await expect(service.sendDraft({
+      opportunityId: OPPORTUNITY_ID,
+      draftId: DRAFT_ID,
+      requestKey: "44444444-4444-4444-8444-444444444444",
+    })).rejects.toThrow(/sendable email/i);
+
+    expect(dependencies.gmailDraftProvider.sendDraft).not.toHaveBeenCalled();
   });
 
   it("saves manual edits to the same Gmail draft and records one meaningful update without creating a follow-up", async () => {

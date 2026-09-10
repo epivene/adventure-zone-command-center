@@ -65,6 +65,25 @@ describe("Office delivery outcome safety", () => {
     await sent.beforeSend();
     expect(d.dispatchSafety.assertCurrent).toHaveBeenCalled();
   });
+  it("never invokes delivery for a note-like stored recipient", async () => {
+    const d = deps();
+    d.drafts.claimForSend.mockResolvedValue({
+      ...(await d.drafts.claimForSend()),
+      recipientEmail: "use the website contact form",
+    });
+
+    await expect(
+      new OfficeEmailSendCoordinator(d as any).send({
+        draftId: "draft",
+        overrides: {},
+      }),
+    ).rejects.toThrow(/sendable email/i);
+
+    expect(d.delivery.send).not.toHaveBeenCalled();
+    expect(d.dispatchSafety.claim).not.toHaveBeenCalled();
+    expect(d.drafts.restoreSubmittedAfterFailure).toHaveBeenCalled();
+  });
+
   it("never restores submitted after confirmed delivery even when DB markSent fails", async () => {
     const d = deps();
     d.drafts.markSent.mockRejectedValue(new Error("DB failure"));

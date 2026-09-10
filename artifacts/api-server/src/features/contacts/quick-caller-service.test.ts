@@ -82,6 +82,22 @@ describe("quick caller duplicate gate", () => {
     });
   });
 
+  it("allows manually entered contact text in the email field", async () => {
+    const repository = repositoryWith([]);
+    const result = await submitQuickCaller(
+      { ...baseInput, email: "Use the website contact form" },
+      repository,
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      contactId: "99999999-9999-4999-8999-999999999999",
+    });
+    expect(repository.createQuickCaller).toHaveBeenCalledWith(
+      expect.objectContaining({ email: "use the website contact form" }),
+    );
+  });
+
   it("blocks a hidden exact duplicate behind eight likely candidates even with continuation", async () => {
     const candidates: DuplicateCandidate[] = Array.from(
       { length: 8 },

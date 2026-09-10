@@ -66,7 +66,7 @@ export class DrizzleOfficeEmailRepository {
       )
       .limit(1);
     if (!row) throw new OfficeEmailError("CONTACT_NOT_LINKED");
-    const email = row.email?.trim().toLowerCase() ?? "";
+    const email = normalizeSendableContactEmail(row.email);
     if (!email) throw new OfficeEmailError("EMAIL_REQUIRED");
     return email;
   }

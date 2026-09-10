@@ -3,6 +3,7 @@ import type {
   DispatchClaim,
 } from "../outreach-planner/outreach-dispatch";
 import type { EarlyBirdPromoService } from "@/features/early-bird-promo/early-bird-promo-service";
+import { normalizeSendableContactEmail } from "@/features/contacts/contact-email-value";
 import type { MailDelivery } from "./mail-delivery";
 
 type ClaimedOfficeDraft = {
@@ -70,7 +71,7 @@ export class OfficeEmailSendCoordinator {
           contactId: recovered.payload.contactId!,
         }
       : await this.deps.drafts.claimForSend(input.draftId);
-    const recipientEmail = recovered
+    const requestedRecipient = recovered
       ? claimed.recipientEmail
       : (input.overrides.recipientEmail ?? claimed.recipientEmail);
     const subject = recovered
@@ -86,6 +87,9 @@ export class OfficeEmailSendCoordinator {
     let providerInvoked = false;
     let deliveredKnown = !!recovered;
     try {
+      const recipientEmail = normalizeSendableContactEmail(requestedRecipient);
+      if (!recipientEmail)
+        throw new Error("The saved contact value is not a sendable email address.");
       const prepared =
         !recovered && this.deps.promotion && claimed.eventYear
           ? await this.deps.promotion.prepareBody({

@@ -183,23 +183,44 @@ describe("contact phone routes", () => {
     expect(createContact).not.toHaveBeenCalled();
   });
 
-  it("continues to reject a nonblank invalid email address", async () => {
-    const response = await request(app).post("/contacts").send({
-      firstName: "Ada",
-      lastName: "Lovelace",
+  it("accepts the Rocky Mountain Train Show email address", async () => {
+    await request(app).post("/contacts").send({
+      firstName: "Rocky Mountain Train Show",
+      lastName: "",
       organizationName: null,
       jobTitle: null,
-      email: "not-an-email",
+      email: "Information@RockyMountainTrainShow.com",
       phone: null,
       address1: null,
       address2: null,
       city: null,
       region: null,
       postalCode: null,
-    }).expect(400);
+    }).expect(201);
 
-    expect(response.body.error).toBe("Enter a valid email address.");
-    expect(createContact).not.toHaveBeenCalled();
+    expect(createContact).toHaveBeenCalledWith(expect.objectContaining({
+      email: "information@rockymountaintrainshow.com",
+    }));
+  });
+
+  it("accepts a manually entered contact value even when it is not sendable", async () => {
+    await request(app).post("/contacts").send({
+      firstName: "Ada",
+      lastName: "Lovelace",
+      organizationName: null,
+      jobTitle: null,
+      email: "Use the website contact form",
+      phone: null,
+      address1: null,
+      address2: null,
+      city: null,
+      region: null,
+      postalCode: null,
+    }).expect(201);
+
+    expect(createContact).toHaveBeenCalledWith(expect.objectContaining({
+      email: "use the website contact form",
+    }));
   });
 
   it("rejects an invalid replacement without changing existing phone rows", async () => {

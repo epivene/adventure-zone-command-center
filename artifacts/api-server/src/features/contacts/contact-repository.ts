@@ -35,6 +35,7 @@ import type {
   DuplicateCandidate,
   DuplicateReason,
 } from "@/features/caller-finder/caller-finder-types";
+import { normalizeSendableContactEmail } from "@/features/contacts/contact-email-value";
 import type { ContactInput } from "@/features/contacts/contact-input";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import {
@@ -93,7 +94,7 @@ async function queryQuickCallerExactExists(
   input: QuickCallerInput,
 ): Promise<boolean> {
   const normalizedPhone = normalizeUsPhone(input.phone);
-  const normalizedEmail = normalizedText(input.email);
+  const normalizedEmail = normalizeSendableContactEmail(input.email);
   if (!normalizedPhone && !normalizedEmail) return false;
 
   const phoneMatch = normalizedPhone
@@ -115,7 +116,7 @@ async function queryQuickCallerDuplicates(
   input: QuickCallerInput,
 ): Promise<DuplicateCandidate[]> {
   const normalizedPhone = normalizeUsPhone(input.phone);
-  const normalizedEmail = normalizedText(input.email);
+  const normalizedEmail = normalizeSendableContactEmail(input.email);
   const normalizedName = normalizedText(
     [input.firstName, input.lastName].filter(Boolean).join(" "),
   );
@@ -849,9 +850,10 @@ export class DrizzleContactRepository implements CallerFinderRepository {
       }
 
       const normalizedPhone = normalizeUsPhone(input.phone);
+      const normalizedEmail = normalizeSendableContactEmail(input.email);
       const duplicateLocks = [
         normalizedPhone ? `phone:${normalizedPhone}` : null,
-        input.email ? `email:${normalizedText(input.email)}` : null,
+        normalizedEmail ? `email:${normalizedEmail}` : null,
         `name-organization:${normalizedText(
           [input.firstName, input.lastName, input.organizationName].join(" "),
         )}`,
