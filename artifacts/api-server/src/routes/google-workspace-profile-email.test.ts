@@ -84,6 +84,32 @@ const defaultMappings = [
   },
 ];
 
+const savedThread = {
+  id: "conversation-thread-1",
+  organizationId: "org-1",
+  contactId: "contact-1",
+  subject: "County Fair follow up",
+  originalGmailUrl: "https://mail.google.com/mail/u/0/#all/thread-1",
+  providerThreadIds: ["thread-1"],
+  archiveState: "complete" as const,
+  lastSyncedAt: "2026-09-09T12:00:00.000Z",
+  lastGmailErrorCode: null,
+  messages: [{
+    id: "saved-m1",
+    gmailMessageId: "m1",
+    gmailThreadId: "thread-1",
+    internalDateMs: 1000,
+    from: "fair@example.org",
+    to: "zone@example.com",
+    cc: "",
+    subject: "County Fair follow up",
+    date: "Mon, 24 Aug 2026 10:00:00 -0600",
+    direction: "incoming" as const,
+    bodyText: "We would like to book you again.",
+    attachments: [],
+  }],
+};
+
 function appFor(options?: {
   ownsThread?: boolean;
   copyFiles?: ReturnType<typeof vi.fn>;
@@ -92,6 +118,7 @@ function appFor(options?: {
   client?: GoogleWorkspaceReadClient | null;
   mappings?: typeof defaultMappings;
   archiveThread?: ReturnType<typeof vi.fn>;
+  savedThreads?: typeof savedThread[];
   reply?: ReturnType<typeof vi.fn>;
 }) {
   const app = express();
@@ -133,6 +160,20 @@ function appFor(options?: {
       })),
     };
   });
+  const savedThreads = options?.savedThreads ?? [];
+  const archiveService = {
+    archiveApprovedThread: archiveThread,
+    listSavedForOrganization: async (organizationId: string) =>
+      organizationId === "org-1" ? savedThreads : [],
+    getSavedByProviderThread: async (input: {
+      organizationId: string;
+      gmailThreadId: string;
+    }) => savedThreads.find(
+      (thread) =>
+        thread.organizationId === input.organizationId &&
+        thread.providerThreadIds.includes(input.gmailThreadId),
+    ) ?? null,
+  };
   app.use(express.json());
   app.use(
     createGoogleWorkspaceProfileEmailRouter({
@@ -144,7 +185,7 @@ function appFor(options?: {
           organizationId === "org-1" ? options?.mappings ?? defaultMappings : [],
         organizationOwnsApprovedThread: async () => options?.ownsThread ?? true,
       },
-      archiveService: { archiveApprovedThread: archiveThread },
+      archiveService,
       replyService: {
         reply: options?.reply ?? vi.fn(async () => { throw new Error("unused"); }),
       },
@@ -196,6 +237,54 @@ describe("Google Workspace profile email routes", () => {
         },
       ],
     });
+  });
+
+  it("shows the saved archive when an old Gmail link is no longer active", async () => {
+    const archiveThread = vi.fn();
+    const response = await request(
+      appFor({ mappings: [], savedThreads: [savedThread], archiveThread }),
+    ).get("/google-workspace/profiles/org-1/emails");
+
+    expect(response.status).toBe(200);
+    expect(archiveThread).not.toHaveBeenCalled();
+    expect(response.body.conversations).toHaveLength(1);
+    expect(response.body.conversations[0]).toMatchObject({
+      threadId: "thread-1",
+      conversationId: "conversation-thread-1",
+      savedCopy: true,
+      sourceState: "saved_copy_not_synced",
+    });
+  });
+
+  it("shows one live version when the same conversation is both linked and saved", async () => {
+    const response = await request(
+      appFor({ savedThreads: [savedThread] }),
+    ).get("/google-workspace/profiles/org-1/emails");
+
+    expect(response.status).toBe(200);
+    expect(response.body.conversations).toHaveLength(1);
+    expect(response.body.conversations[0]).toMatchObject({
+      threadId: "thread-1",
+      conversationId: "conversation-thread-1",
+      savedCopy: false,
+      sourceState: "synced",
+    });
+  });
+
+  it("opens a saved conversation after its Gmail link is no longer active", async () => {
+    const response = await request(
+      appFor({ mappings: [], savedThreads: [savedThread] }),
+    ).get("/google-workspace/profiles/org-1/emails/thread-1");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      conversationId: "conversation-thread-1",
+      savedCopy: true,
+      sourceState: "saved_copy_not_synced",
+    });
+    expect(response.body.messages[0].bodyText).toBe(
+      "We would like to book you again.",
+    );
   });
 
   it("does not require Google when the profile has no matched Gmail", async () => {
