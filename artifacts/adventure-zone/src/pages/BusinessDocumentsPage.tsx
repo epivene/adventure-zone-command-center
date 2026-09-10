@@ -16,8 +16,8 @@ type View = "all" | "media" | "contracts" | "vendor_applications" | "templates" 
 type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 export type BusinessDocumentsClient = Pick<typeof businessDocumentsApi,
-  "listAll" | "open" | "update" | "deleteDocument" | "reviewItems" | "searchProfiles" | "reviewAction" | "linkProfile"
->;
+  "listAll" | "open" | "update" | "deleteDocument" | "reviewItems" | "searchProfiles" | "reviewAction"
+> & { linkProfile?: typeof businessDocumentsApi.linkProfile };
 
 type BusinessDocumentsPageProps = {
   api?: BusinessDocumentsClient;
@@ -177,11 +177,12 @@ export default function BusinessDocumentsPage({
   }
 
   async function linkEditedDocument(document: BusinessDocumentRecord) {
-    if (!selectedProfile) return;
+    const linkProfile = api.linkProfile;
+    if (!selectedProfile || !linkProfile) return;
     setLinkingId(document.id);
     setError(null);
     try {
-      await api.linkProfile(document.id, selectedProfile.id);
+      await linkProfile(document.id, selectedProfile.id);
       setDocuments((current) => current.map((item) => item.id === document.id ? {
         ...item,
         links: [...item.links, {
@@ -362,7 +363,9 @@ export default function BusinessDocumentsPage({
       {error ? <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{error}</p> : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading documents…</p> : null}
 
-      {view !== "review" && !loading ? <DocumentProfileLinker api={api} documents={documents} onLinked={recordBulkLinks} /> : null}
+      {view !== "review" && !loading && api.linkProfile ? (
+        <DocumentProfileLinker api={{ searchProfiles: api.searchProfiles, linkProfile: api.linkProfile }} documents={documents} onLinked={recordBulkLinks} />
+      ) : null}
 
       {view === "review" ? <DocumentReviewQueue api={api} /> : null}
 
@@ -414,7 +417,7 @@ export default function BusinessDocumentsPage({
                   </label>
                   {document.links.some((link) => link.targetKind === "profile") ? (
                     <p className="text-xs text-muted-foreground">Linked profile: {document.links.find((link) => link.targetKind === "profile")?.targetLabel ?? "Profile linked"}</p>
-                  ) : (
+                  ) : api.linkProfile ? (
                     <div className="grid gap-2 rounded-md border border-border p-2">
                       <label className="grid gap-1 text-xs font-semibold">Find a profile to link
                         <div className="flex gap-2">
@@ -433,7 +436,7 @@ export default function BusinessDocumentsPage({
                       ) : null}
                       <Button disabled={!selectedProfile || linkingId === document.id} onClick={() => void linkEditedDocument(document)} size="sm" type="button" variant="outline">{linkingId === document.id ? "Linking…" : "Link selected profile"}</Button>
                     </div>
-                  )}
+                  ) : null}
                   <div className="flex flex-wrap gap-2">
                     <Button disabled={savingId === document.id} onClick={() => void saveDocument(document)} size="sm" type="button">
                       {savingId === document.id ? "Saving…" : "Save document"}
