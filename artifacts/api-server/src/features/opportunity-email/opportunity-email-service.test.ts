@@ -82,6 +82,11 @@ function deps(existing: OpportunityEmailRecord | null = null, resolvedContext = 
     gmailDraftProvider: {
       createDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-1", threadId: null })),
       updateDraft: vi.fn(async () => ({ draftId: "gmail-draft-1", messageId: "gmail-message-2", threadId: "thread-1" })),
+      sendDraft: vi.fn(async () => ({
+        messageId: "gmail-message-3",
+        threadId: "thread-1",
+        sentAt: new Date("2026-08-27T18:00:00.000Z"),
+      })),
     },
     blockerSink: { record: vi.fn(async () => undefined) },
     workflowSink: {
