@@ -6,11 +6,14 @@ import { z } from "zod";
 import { db } from "@workspace/db";
 import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repository";
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
+import { OfficeProfileEditor } from "@/features/office/office-profile-editor";
+import { officeProfileInputSchema } from "@/features/office/office-profile-input";
 import { OfficeProfileService } from "@/features/office/office-profile-service";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
 const profiles = new OfficeProfileService(db);
+const editor = new OfficeProfileEditor(db);
 const uuid = z.string().uuid();
 
 function param(value: string | string[] | undefined) {
@@ -46,6 +49,29 @@ router.get("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<v
   } catch (error) {
     req.log.error({ err: error }, "Failed to load Boss profile");
     res.status(500).json({ error: "Could not load profile." });
+  }
+});
+
+router.patch("/boss/profiles/:profileId", requireBoss, async (req, res): Promise<void> => {
+  const profileId = param(req.params.profileId);
+  const parsed = officeProfileInputSchema.safeParse(req.body);
+  if (!uuid.safeParse(profileId).success || !parsed.success) {
+    res.status(400).json({ error: parsed.success ? "Invalid profile ID." : parsed.error.issues[0]?.message ?? "Review the profile changes." });
+    return;
+  }
+  try {
+    const actor = {
+      accountId: req.bossAccount!.accountId,
+      displayName: req.bossAccount!.displayName,
+    };
+    if (!(await editor.updateProfile(profileId, parsed.data, actor))) {
+      res.status(404).json({ error: "Profile not found." });
+      return;
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed Boss profile edit");
+    res.status(500).json({ error: "Could not save the profile changes." });
   }
 });
 
