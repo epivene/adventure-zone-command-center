@@ -189,4 +189,51 @@ describe("convention workspace", () => {
       ).toBeInTheDocument(),
     );
   });
+  it("searches the current visible profile query when the input is ahead of React state", async () => {
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation((path: string, options?: RequestInit) => {
+      if (path.includes("/profile-search?q=visible")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              profiles: [
+                {
+                  organizationId: "visible-profile",
+                  contactId: "visible-contact",
+                  name: "Visible Fair",
+                  contact: "Current Contact",
+                  email: "current@example.com",
+                },
+              ],
+            }),
+          ),
+        );
+      }
+      if (path.includes("/profile-search")) {
+        return Promise.resolve(new Response(JSON.stringify({ profiles: [] })));
+      }
+      return original(path, options);
+    });
+
+    render(<ConventionOutreachPage />);
+    expect(await screen.findByText("Sweet Corn Festival")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Edit notes / link profile",
+      })[1],
+    );
+    const profileSearch = screen.getByLabelText(
+      "Find profile",
+    ) as HTMLInputElement;
+    const valueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    valueSetter?.call(profileSearch, "visible");
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+
+    expect(
+      await screen.findByRole("button", { name: /Visible Fair/ }),
+    ).toBeInTheDocument();
+  });
 });
