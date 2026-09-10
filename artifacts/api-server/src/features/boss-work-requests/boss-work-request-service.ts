@@ -6,6 +6,7 @@ import { communicationTemplates } from "@/db/schema";
 import type { ConventionNotesPayload } from "@workspace/db/boss-work-request-schema";
 import { compareWorkRequestUrgency } from "./boss-work-request-state";
 import { extractSnapshotLinks } from "./email-template-snapshot-links";
+import { validateAuthoredTemplateText } from "../communication-templates/communication-template-authoring";
 import { BossWorkRequestConflictError, BossWorkRequestNotFoundError, BossWorkRequestRepository } from "./boss-work-request-repository";
 
 type Database = NodePgDatabase<typeof schema>;
@@ -149,12 +150,21 @@ export class BossWorkRequestService {
       .where(inArray(communicationTemplates.code, [...CONVENTION_REVIEW_TEMPLATE_CODES]));
     const byCode = new Map(templates.map((template) => [template.code, template]));
     const ordered = CONVENTION_REVIEW_TEMPLATE_CODES.map((code) => byCode.get(code));
-    if (ordered.some((template) => !template || template.ownerKind !== "company")) {
+    if (ordered.some((template) =>
+      !template
+      || template.ownerKind !== "company"
+      || template.state === "archived"
+      || template.channel !== "email"
+    )) {
       throw new BossWorkRequestNotFoundError("The complete seven-email convention set is not available.");
     }
 
     const snapshots = ordered.map((template, position) => {
       const item = template!;
+      validateAuthoredTemplateText({
+        subjectTemplate: item.subjectTemplate,
+        bodyTemplate: item.bodyTemplate,
+      });
       const contentFingerprint = templateFingerprint({
         templateVersion: item.templateVersion,
         subjectTemplate: item.subjectTemplate,
@@ -237,7 +247,11 @@ export class BossWorkRequestService {
       }
       const submitted = new Set(input.verifiedLinks);
       const expected = new Set(review.safeLinks.map((link) => link.href));
-      if (submitted.size !== expected.size || [...expected].some((href) => !submitted.has(href))) {
+      if (
+        submitted.size !== input.verifiedLinks.length
+        || submitted.size !== expected.size
+        || [...expected].some((href) => !submitted.has(href))
+      ) {
         throw new BossWorkRequestConflictError("Test and confirm every link before approving this email.");
       }
       const verifiedAt = new Date().toISOString();
