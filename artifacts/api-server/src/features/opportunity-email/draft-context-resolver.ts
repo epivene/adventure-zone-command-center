@@ -1,3 +1,5 @@
+import { normalizeSendableContactEmail } from "@/features/contacts/contact-email-value";
+
 export type DraftRecipientSource = "profile" | "gmail" | "act" | "other";
 
 export type DraftRecipientCandidate = {
@@ -62,17 +64,15 @@ export type DraftContextSources = {
   getPackageAvailability(opportunityId: string): Promise<unknown>;
 };
 
-function normalizeEmail(value: string | null): string | null {
-  const normalized = value?.trim().toLowerCase() ?? "";
-  return normalized.length > 0 ? normalized : null;
-}
-
 function chooseRecipient(candidates: DraftRecipientCandidate[]): {
   candidate: DraftRecipientCandidate | null;
   ambiguous: boolean;
 } {
   const usable = candidates
-    .map((candidate) => ({ ...candidate, email: normalizeEmail(candidate.email) }))
+    .map((candidate) => ({
+      ...candidate,
+      email: normalizeSendableContactEmail(candidate.email),
+    }))
     .filter((candidate): candidate is DraftRecipientCandidate & { email: string } => Boolean(candidate.email))
     .sort((left, right) => {
       const leftTime = left.verifiedAt?.getTime() ?? 0;
