@@ -78,7 +78,7 @@ export class ConventionRepository {
       concat_ws(' ',c.first_name,c.last_name) AS contact
       FROM organizations o LEFT JOIN contacts c ON c.organization_id=o.id OR EXISTS
         (SELECT 1 FROM organization_contacts oc WHERE oc.organization_id=o.id AND oc.contact_id=c.id AND oc.active=true)
-      WHERE position(lower($1) in lower(o.name))>0 OR position(lower($1) in lower(coalesce(c.email,'')))>0
+      WHERE o.id::text=$1 OR position(lower($1) in lower(o.name))>0 OR position(lower($1) in lower(coalesce(c.email,'')))>0
       ORDER BY o.name,c.id LIMIT 30`,
         [query],
       )
