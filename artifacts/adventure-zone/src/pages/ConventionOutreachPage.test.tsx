@@ -134,4 +134,59 @@ describe("convention workspace", () => {
     );
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
+  it("keeps the newest profile search results when an older request finishes last", async () => {
+    const original = fetcher.getMockImplementation()!;
+    let resolveOld!: (response: Response) => void;
+    let resolveNew!: (response: Response) => void;
+    const oldResponse = new Promise<Response>((resolve) => {
+      resolveOld = resolve;
+    });
+    const newResponse = new Promise<Response>((resolve) => {
+      resolveNew = resolve;
+    });
+    fetcher.mockImplementation((path: string, options?: RequestInit) => {
+      if (path.includes("/profile-search?q=old")) return oldResponse;
+      if (path.includes("/profile-search?q=new")) return newResponse;
+      return original(path, options);
+    });
+
+    render(<ConventionOutreachPage />);
+    expect(await screen.findByText("Sweet Corn Festival")).toBeInTheDocument();
+    fireEvent.click(
+      screen.getAllByRole("button", {
+        name: "Edit notes / link profile",
+      })[1],
+    );
+    const profileSearch = screen.getByLabelText("Find profile");
+    fireEvent.change(profileSearch, { target: { value: "old" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+    fireEvent.change(profileSearch, { target: { value: "new" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search profiles" }));
+
+    resolveNew(
+      new Response(
+        JSON.stringify({
+          profiles: [
+            {
+              organizationId: "new-profile",
+              contactId: "new-contact",
+              name: "Newest Fair",
+              contact: "Current Contact",
+              email: "current@example.com",
+            },
+          ],
+        }),
+      ),
+    );
+    expect(
+      await screen.findByRole("button", { name: /Newest Fair/ }),
+    ).toBeInTheDocument();
+
+    resolveOld(new Response(JSON.stringify({ profiles: [] })));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /Newest Fair/ }),
+      ).toBeInTheDocument(),
+    );
+  });
 });
