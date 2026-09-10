@@ -1,4 +1,4 @@
-import { and, eq, ilike, inArray } from "drizzle-orm";
+import { and, eq, ilike, inArray, sql } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "@/db/schema";
 import {
@@ -15,8 +15,6 @@ const legacyTemplateCodes = [
   "convention_pre_event_v1",
   "convention_during_event_v1",
   "convention_post_event_v1",
-  "convention_after_new_event_v2",
-  "convention_after_past_event_v2",
 ] as const;
 
 export const conventionCampaignTemplates = [
@@ -106,7 +104,7 @@ export const conventionCampaignTemplates = [
     ].join(""),
   },
   {
-    code: "convention_after_new_event_v3",
+    code: "convention_after_new_event_v2",
     templateVersion: "2026-09-after-convention-close-v3",
     gmailDraftId: "r7096158685165323453",
     gmailMessageId: "1a084a3877bde871",
@@ -123,7 +121,7 @@ export const conventionCampaignTemplates = [
     ].join(""),
   },
   {
-    code: "convention_after_past_event_v3",
+    code: "convention_after_past_event_v2",
     templateVersion: "2026-09-after-convention-close-v3",
     gmailDraftId: "r-1391915929973957682",
     gmailMessageId: "1a084a39fdd1790d",
@@ -176,6 +174,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
 
   for (const item of conventionCampaignTemplates) {
     const { gmailDraftId, gmailMessageId, ...templateValues } = item;
+    const refreshedAt = new Date();
     const inserted = await database.insert(communicationTemplates).values({
       ...templateValues,
       channel: "email",
@@ -196,7 +195,29 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       createdByKind: "system",
       sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
       reviewedBy: null,
-    }).onConflictDoNothing({ target: communicationTemplates.code }).returning();
+    }).onConflictDoUpdate({
+      target: communicationTemplates.code,
+      set: {
+        templateVersion: templateValues.templateVersion,
+        name: templateValues.name,
+        subjectTemplate: templateValues.subjectTemplate,
+        bodyTemplate: templateValues.bodyTemplate,
+        bodyFormat: "html",
+        allowedPlaceholders: [
+          "contactName",
+          "eventName",
+          "conventionName",
+          "conventionDates",
+          "boothOrMeetingLocation",
+          "earlyBirdDeadline",
+        ],
+        requiredPlaceholders: ["contactName", "eventName", "conventionName", "earlyBirdDeadline"],
+        sourceNote: `Gmail draft ${gmailDraftId} (message ${gmailMessageId}) with the approved Early Bird and convention-closing updates.`,
+        reviewedBy: null,
+        updatedAt: refreshedAt,
+      },
+      setWhere: sql`excluded.template_version IS DISTINCT FROM ${communicationTemplates.templateVersion}`,
+    }).returning();
 
     const template = inserted[0] ?? (await database.select().from(communicationTemplates)
       .where(eq(communicationTemplates.code, item.code)).limit(1))[0];
