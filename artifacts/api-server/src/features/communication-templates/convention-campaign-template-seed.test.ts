@@ -107,7 +107,7 @@ describe("convention campaign template seed", () => {
     }
   });
 
-  it("keeps the original pre-banner header and uses the visibly updated GIF for each stage", () => {
+  it("keeps the seamless header and uses the visibly updated GIF for each stage", () => {
     for (const template of conventionCampaignTemplates) {
       expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).not.toContain("border-right:14px solid #ff0a8a");
@@ -115,7 +115,7 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate.match(/adventure-zone-logo-tagline-20260910\.png/g))
         .toHaveLength(1);
       expect(template.bodyTemplate).toMatch(
-        /<td style="background:#0f1729;padding:16px 38px 36px;border-bottom:7px solid #ff0a8a">/,
+        /<td style="background:#0f1729;padding:20px 38px 36px;border:0;border-bottom:7px solid #ff0a8a;text-align:left">/,
       );
       expect(template.bodyTemplate).toContain("margin:19px 0 17px");
       expect(template.bodyTemplate).not.toContain("white-space:nowrap;text-align:center");
@@ -352,3 +352,4 @@ describe("convention campaign template seed", () => {
     }
   });
 });
+

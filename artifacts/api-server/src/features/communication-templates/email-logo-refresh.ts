@@ -8,14 +8,14 @@ const previousLogo = "https://adventure-zone-command-center-1.onrender.com/asset
 const fingerprint = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Refresh the logo and convention header without re-seeding authored body copy. */
-export function replaceEmailLogo(html: string): string {
+export function replaceEmailLogo(html: string, code = ""): string {
   return updateConventionHeader(html.replace(/(<img\b[^>]*\bsrc\s*=\s*)(["'])([^"']+)\2/gi,
     (match, prefix: string, quote: string, src: string) => src === previousLogo
-      ? `${prefix}${quote}${EMAIL_LOGO_URL}${quote}` : match));
+      ? `${prefix}${quote}${EMAIL_LOGO_URL}${quote}` : match), code);
 }
 
 type ReviewRow = {
-  id: string; template_id: string; template_version: string | null;
+  code: string; id: string; template_id: string; template_version: string | null;
   subject_snapshot: string | null; body_snapshot: string;
   body_format_snapshot: "html" | "plain_text"; content_fingerprint: string; decision: string;
 };
@@ -28,19 +28,20 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
       select p.id, p.state, p.deduplication_key from boss_work_requests p
       where p.state in ('waiting_on_dave','in_progress','submitted_to_owner','changes_requested','returned_for_clarification')
         and exists (select 1 from communication_template_reviews r where r.request_id=p.id
-          and r.decision='pending' and r.body_format_snapshot='html' and (strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v2"') = 0)))
+          and r.decision='pending' and r.body_format_snapshot='html' and (strpos(r.body_snapshot, ${previousLogo}) > 0 or (strpos(r.body_snapshot, ${EMAIL_LOGO_URL}) > 0 and strpos(r.body_snapshot, 'data-convention-header="v3"') = 0)))
       order by p.id for update
     `);
     for (const request of requests.rows) {
       const result = await tx.execute<ReviewRow>(sql`
         select id, template_id, template_version, subject_snapshot, body_snapshot,
+          (select code from communication_templates where id=communication_template_reviews.template_id) as code,
           body_format_snapshot, content_fingerprint, decision
         from communication_template_reviews where request_id=${request.id} order by position
       `);
       let changed = false;
       for (const review of result.rows) {
         if (review.decision !== "pending" || review.body_format_snapshot !== "html") continue;
-        const body = replaceEmailLogo(review.body_snapshot);
+        const body = replaceEmailLogo(review.body_snapshot, review.code);
         if (body === review.body_snapshot) continue;
         review.content_fingerprint = fingerprint({
           templateVersion: review.template_version,
@@ -62,12 +63,12 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
         values (${request.id},'system','system:email-logo-refresh',${request.state},${request.state},
           'Updated the logo and convention header in pending email previews. Completed decisions remain unchanged; please review the updated previews.')`);
     }
-    const templates = await tx.execute<{id: string; body_template: string}>(sql`
-      select id, body_template from communication_templates
-      where body_format='html' and (strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v2"') = 0)) order by id for update
+    const templates = await tx.execute<{id: string; code: string; body_template: string}>(sql`
+      select id, code, body_template from communication_templates
+      where body_format='html' and (strpos(body_template, ${previousLogo}) > 0 or (strpos(body_template, ${EMAIL_LOGO_URL}) > 0 and strpos(body_template, 'data-convention-header="v3"') = 0)) order by id for update
     `);
     for (const template of templates.rows) {
-      const body = replaceEmailLogo(template.body_template);
+      const body = replaceEmailLogo(template.body_template, template.code);
       if (body === template.body_template) continue;
       await tx.execute(sql`update communication_templates set body_template=${body},
         state=case when state='active' then 'reviewed' else state end,
@@ -75,5 +76,6 @@ export async function refreshEmailLogos(database: Pick<NodePgDatabase<any>, "tra
     }
   });
 }
+
 
 

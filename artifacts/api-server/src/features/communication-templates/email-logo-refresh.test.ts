@@ -12,7 +12,7 @@ describe("saved email logo refresh", () => {
   it.each([old, next])("updates active templates and pending snapshots only, preserving wording, layout, approvals and repeatability", async (source) => {
     pg = new PGlite();
     await pg.exec(`
-      create table communication_templates(id text primary key, body_template text not null, body_format text not null, state text not null, reviewed_by text, reviewed_at timestamptz, updated_at timestamptz default now());
+      create table communication_templates(id text primary key, code text default 'convention_after_new_v2', body_template text not null, body_format text not null, state text not null, reviewed_by text, reviewed_at timestamptz, updated_at timestamptz default now());
       create table boss_work_requests(id text primary key, state text not null, deduplication_key text, updated_at timestamptz default now());
       create table communication_template_reviews(id text primary key, request_id text not null references boss_work_requests(id), template_id text not null references communication_templates(id), position integer not null, template_version text, subject_snapshot text, body_snapshot text not null, body_format_snapshot text not null, content_fingerprint text not null, decision text not null, verified_links jsonb not null default '[]', updated_at timestamptz default now());
       create unique index reviews_position on communication_template_reviews(request_id,position);
@@ -30,11 +30,11 @@ describe("saved email logo refresh", () => {
     const db = drizzle(pg) as unknown as Parameters<typeof refreshEmailLogos>[0];
     await refreshEmailLogos(db);
     const templates = (await pg.query<{id:string;body_template:string;state:string;reviewed_by:string|null}>("select * from communication_templates order by id")).rows;
-    expect(templates.find(t => t.id === "one")).toMatchObject({body_template: replaceEmailLogo(body),state:"reviewed",reviewed_by:null});
-    expect(templates.find(t => t.id === "two")).toMatchObject({body_template:replaceEmailLogo(body),state:"draft"});
-    expect(templates.find(t => t.id === "three")).toMatchObject({body_template:replaceEmailLogo(body),state:"archived"});
+    expect(templates.find(t => t.id === "one")).toMatchObject({body_template: replaceEmailLogo(body, "convention_after_new_v2"),state:"reviewed",reviewed_by:null});
+    expect(templates.find(t => t.id === "two")).toMatchObject({body_template:replaceEmailLogo(body, "convention_after_new_v2"),state:"draft"});
+    expect(templates.find(t => t.id === "three")).toMatchObject({body_template:replaceEmailLogo(body, "convention_after_new_v2"),state:"archived"});
     const reviews = (await pg.query<{id:string;body_snapshot:string;content_fingerprint:string;decision:string}>("select * from communication_template_reviews order by id")).rows;
-    expect(reviews.find(r => r.id === "pending")).toMatchObject({body_snapshot:replaceEmailLogo(body),decision:"pending"});
+    expect(reviews.find(r => r.id === "pending")).toMatchObject({body_snapshot:replaceEmailLogo(body, "convention_after_new_v2"),decision:"pending"});
     expect(reviews.find(r => r.id === "pending")?.content_fingerprint).toMatch(/^[a-f0-9]{64}$/);
     expect(reviews.find(r => r.id === "decided")).toMatchObject({body_snapshot:body,content_fingerprint:"old-fingerprint",decision:"approved"});
     expect(reviews.find(r => r.id === "historic")).toMatchObject({body_snapshot:body,content_fingerprint:"old-fingerprint"});
@@ -45,3 +45,4 @@ describe("saved email logo refresh", () => {
     expect((await pg.query<{deduplication_key:string}>("select deduplication_key from boss_work_requests where id='open'")).rows[0].deduplication_key).not.toBe("convention-template-review-set:old");
   });
 });
+

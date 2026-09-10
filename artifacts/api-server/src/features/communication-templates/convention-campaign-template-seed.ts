@@ -268,7 +268,7 @@ export const conventionCampaignTemplates = conventionCampaignTemplateSources.map
   bodyTemplate: replaceEmailLogo(updateConventionEmailPresentation(
     template.bodyTemplate,
     template.code.startsWith("convention_after_") ? "after" : "before_or_during",
-  )),
+  ), template.code),
 }));
 
 export async function ensureConventionCampaignTemplateSeed(database: Database): Promise<void> {
