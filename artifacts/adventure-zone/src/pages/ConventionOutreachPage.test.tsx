@@ -151,7 +151,9 @@ describe("convention workspace", () => {
     fireEvent.change(screen.getByLabelText("Convention notes"), {
       target: { value: "Wants the five-attraction package." },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save convention card" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save convention card" }),
+    );
 
     await waitFor(() =>
       expect(fetcher).toHaveBeenCalledWith(

@@ -1038,7 +1038,10 @@ function MemberEditor({
     [error, setError] = useState("");
   const searchSequence = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
-  const change = (key: keyof Data, value: string) =>
+  const change = (
+    key: "group" | "outcome" | "notes" | "reason" | "sources" | "nextAction",
+    value: string,
+  ) =>
     set({ ...m, data: { ...m.data, [key]: value } });
   return (
     <div
