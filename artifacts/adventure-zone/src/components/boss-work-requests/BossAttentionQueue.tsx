@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, ClipboardPenLine, MailCheck } from "lucide-r
 import { getBossWorkQueue } from "@/features/boss-work-requests/boss-work-request-api";
 import type { BossWorkRequestQueue } from "@/features/boss-work-requests/boss-work-request-types";
 
-const label = (type: string) => type === "rapid_convention_notes" ? "Convention notes" : "Email approval";
+const label = (type: string) => type === "convention_planning_questionnaire" ? "Questionnaire" : type === "rapid_convention_notes" ? "Convention notes" : "Email approval";
 
 export function BossAttentionQueue() {
   const [queue, setQueue] = useState<BossWorkRequestQueue | null>(null);
@@ -30,7 +30,7 @@ export function BossAttentionQueue() {
           <p className="mt-2 font-semibold">You’re all caught up.</p>
         </div>
       ) : queue.active.map((request) => {
-        const Icon = request.type === "rapid_convention_notes" ? ClipboardPenLine : MailCheck;
+        const Icon = request.type !== "email_template_approval" ? ClipboardPenLine : MailCheck;
         return (
           <Link key={request.id} href={`/boss/work-requests/${request.id}`}
             className="flex min-h-20 items-center gap-3 rounded-xl border bg-card p-4 shadow-sm transition hover:border-primary/50">
