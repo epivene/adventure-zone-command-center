@@ -1,5 +1,13 @@
 /** Target only the convention header; retain each message's authored headline and body. */
-export function updateConventionHeader(html: string): string {
+export function updateConventionHeader(html: string, code = ""): string {
+  const label = code.startsWith("convention_during_") ? "WE’RE HERE! LET’S CONNECT!"
+    : code.startsWith("convention_after_") ? "LET’S KEEP THE MOMENTUM GOING!"
+    : "IT’S CONVENTION SEASON!";
+  return buildConventionHeader(html).replace(/(<tr data-convention-header="v)2("[\s\S]*?<div style="font-family:Georgia,serif;[^"]*">)IT’S CONVENTION SEASON!(<\/div>)/,
+    (_match, start, header, end) => `${start}3${header}${label}${end}`);
+}
+
+function buildConventionHeader(html: string): string {
   if (html.includes('data-convention-header="v2"')) return html;
   // Fold the previously shipped two-row header back into the common input shape.
   const normalized = html.replace(
@@ -20,3 +28,4 @@ export function updateConventionHeader(html: string): string {
     },
   );
 }
+
