@@ -185,7 +185,7 @@ describe("SettingsCommunicationTemplatesPage", () => {
     render(<SettingsCommunicationTemplatesPage />);
 
     const preview = await screen.findByTitle("Email body preview");
-    expect(preview).toHaveAttribute("srcdoc", expect.stringContaining("Hello <strong>Jamie</strong>"));
+    expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>");
     expect(screen.getByText("Let’s connect at Example Convention")).toBeInTheDocument();
     expect(screen.queryByLabelText("Email HTML source")).not.toBeInTheDocument();
 
@@ -194,7 +194,7 @@ describe("SettingsCommunicationTemplatesPage", () => {
       target: { value: "<p>Updated for {{contactName}}</p>" },
     });
 
-    expect(preview).toHaveAttribute("srcdoc", expect.stringContaining("Updated for Jamie"));
+    expect(preview.getAttribute("srcdoc")).toContain("Updated for Jamie");
   });
 
 });
