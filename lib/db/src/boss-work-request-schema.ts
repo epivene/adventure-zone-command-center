@@ -18,6 +18,7 @@ import { contacts, followUps, organizations } from "./schema";
 
 export const bossWorkRequestTypeValues = [
   "rapid_convention_notes",
+  "convention_planning_questionnaire",
   "email_template_approval",
 ] as const;
 export type BossWorkRequestType = (typeof bossWorkRequestTypeValues)[number];
@@ -49,6 +50,7 @@ export type CommunicationTemplateReviewDecision =
   (typeof communicationTemplateReviewDecisionValues)[number];
 
 export type ConventionNotesPayload = {
+  planningAnswers?: Record<string, string>;
   eventName: string;
   organizationName?: string;
   contactName?: string;
@@ -83,7 +85,7 @@ export const bossWorkRequests = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    check("boss_work_requests_type_valid", sql`${table.type} in ('rapid_convention_notes','email_template_approval')`),
+    check("boss_work_requests_type_valid", sql`${table.type} in ('rapid_convention_notes','email_template_approval','convention_planning_questionnaire')`),
     check("boss_work_requests_state_valid", sql`${table.state} in ('waiting_on_dave','in_progress','submitted_to_owner','changes_requested','returned_for_clarification','approved','applied','cancelled')`),
     check("boss_work_requests_priority_valid", sql`${table.priority} in ('normal','high','urgent')`),
     index("boss_work_requests_assignee_state_due_idx").on(table.assignedBossAccountId, table.state, table.dueAt),
