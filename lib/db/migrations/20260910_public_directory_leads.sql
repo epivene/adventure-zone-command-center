@@ -39,6 +39,15 @@ CREATE OR REPLACE FUNCTION pg_temp.directory_url(value text) RETURNS text
 LANGUAGE sql IMMUTABLE AS $fn$
  SELECT regexp_replace(regexp_replace(lower(coalesce(value,'')), '^https?://(www\.)?', ''), '/+$', '')
 $fn$;
+-- Index a transaction-local identity snapshot instead of repeatedly normalizing every CRM profile.
+CREATE TEMP TABLE directory_org_identity ON COMMIT DROP AS
+ SELECT id, pg_temp.directory_name(name) AS name_key, pg_temp.directory_phone(phone) AS phone_key,
+   pg_temp.directory_url(website) AS url_key FROM organizations WHERE consolidated_into_id IS NULL;
+CREATE INDEX ON directory_org_identity(name_key);
+CREATE INDEX ON directory_org_identity(phone_key,url_key);
+CREATE TEMP TABLE directory_person_identity ON COMMIT DROP AS
+ SELECT id, pg_temp.directory_name(first_name||' '||last_name) AS name_key,lower(trim(email)) AS email_key FROM contacts;
+CREATE INDEX ON directory_person_identity(name_key,email_key);
 DO $import$
 DECLARE
  r jsonb;
@@ -74,27 +83,27 @@ BEGIN
    END IF;
   ELSE
    -- A name in a different state is a different prospect. Unknown location is not positive evidence.
-   SELECT array_agg(id ORDER BY id) INTO candidates FROM organizations o
-   WHERE o.consolidated_into_id IS NULL AND pg_temp.directory_name(o.name)=pg_temp.directory_name(r->>'name')
+   SELECT array_agg(o.id ORDER BY o.id) INTO candidates FROM organizations o JOIN pg_temp.directory_org_identity oi ON oi.id=o.id
+   WHERE o.consolidated_into_id IS NULL AND oi.name_key=pg_temp.directory_name(r->>'name')
     AND (upper(trim(coalesce(o.region,'')))=upper(r->>'region')
       OR (nullif(r->>'region','') IS NULL AND
-          ((nullif(r->>'phone','') IS NOT NULL AND pg_temp.directory_phone(o.phone)=pg_temp.directory_phone(r->>'phone'))
-           OR (nullif(r->>'website','') IS NOT NULL AND pg_temp.directory_url(o.website)=pg_temp.directory_url(r->>'website')))));
+          ((nullif(r->>'phone','') IS NOT NULL AND oi.phone_key=pg_temp.directory_phone(r->>'phone'))
+           OR (nullif(r->>'website','') IS NOT NULL AND oi.url_key=pg_temp.directory_url(r->>'website')))));
    IF coalesce(cardinality(candidates),0)=0 THEN
     -- Strong two-field identity also handles a renamed business; never use a shared email alone.
-    SELECT array_agg(id ORDER BY id) INTO candidates FROM organizations o
+    SELECT array_agg(o.id ORDER BY o.id) INTO candidates FROM organizations o JOIN pg_temp.directory_org_identity oi ON oi.id=o.id
     WHERE o.consolidated_into_id IS NULL
       AND length(pg_temp.directory_phone(r->>'phone'))=10
-      AND pg_temp.directory_phone(o.phone)=pg_temp.directory_phone(r->>'phone')
+      AND oi.phone_key=pg_temp.directory_phone(r->>'phone')
       AND nullif(r->>'website','') IS NOT NULL
-      AND pg_temp.directory_url(o.website)=pg_temp.directory_url(r->>'website')
+      AND oi.url_key=pg_temp.directory_url(r->>'website')
       AND (nullif(o.region,'') IS NULL OR nullif(r->>'region','') IS NULL OR upper(o.region)=upper(r->>'region'));
    END IF;
    IF coalesce(cardinality(candidates),0)=1 THEN org_id:=candidates[1];
    ELSIF coalesce(cardinality(candidates),0)>1 THEN result_reason:='Multiple matching profiles; review before linking';
    ELSE
-    SELECT array_agg(id ORDER BY id) INTO possible FROM organizations o
-    WHERE o.consolidated_into_id IS NULL AND pg_temp.directory_name(o.name)=pg_temp.directory_name(r->>'name')
+    SELECT array_agg(o.id ORDER BY o.id) INTO possible FROM organizations o JOIN pg_temp.directory_org_identity oi ON oi.id=o.id
+    WHERE o.consolidated_into_id IS NULL AND oi.name_key=pg_temp.directory_name(r->>'name')
       AND (nullif(o.region,'') IS NULL OR nullif(r->>'region','') IS NULL);
     IF coalesce(cardinality(possible),0)>0 THEN result_reason:='Same-name profile has insufficient location evidence';
     ELSE
@@ -103,6 +112,7 @@ BEGIN
        nullif(r->>'postalCode',''),nullif(r->>'website',''),nullif(r->>'phone',''),
        CASE WHEN length(pg_temp.directory_phone(r->>'phone'))=10 THEN '+1'||pg_temp.directory_phone(r->>'phone') END)
      RETURNING id INTO org_id;
+     INSERT INTO pg_temp.directory_org_identity(id,name_key,phone_key,url_key) VALUES(org_id,pg_temp.directory_name(r->>'name'),pg_temp.directory_phone(r->>'phone'),pg_temp.directory_url(r->>'website'));
      result_status:='created';
     END IF;
    END IF;
@@ -121,9 +131,9 @@ BEGIN
    ELSIF coalesce(cardinality(candidates),0)>1 THEN result_reason:='Organization matched; duplicate named contacts need review';
    ELSE
     -- A person can legitimately represent more than one organization. Require name plus email globally.
-    SELECT array_agg(id ORDER BY id) INTO candidates FROM contacts c
-     WHERE nullif(r->>'email','') IS NOT NULL AND lower(trim(c.email))=lower(r->>'email')
-       AND pg_temp.directory_name(c.first_name||' '||c.last_name)=pg_temp.directory_name(r->>'contact');
+    SELECT array_agg(id ORDER BY id) INTO candidates FROM pg_temp.directory_person_identity pi
+     WHERE nullif(r->>'email','') IS NOT NULL AND pi.email_key=lower(r->>'email')
+       AND pi.name_key=pg_temp.directory_name(r->>'contact');
     IF coalesce(cardinality(candidates),0)=1 THEN
      person_id:=candidates[1];
      INSERT INTO organization_contacts(organization_id,contact_id,role,is_primary,active,source)
@@ -137,6 +147,7 @@ BEGIN
     VALUES(person_names[1],array_to_string(person_names[2:cardinality(person_names)],' '),nullif(r->>'email',''),nullif(r->>'phone',''),
       CASE WHEN length(pg_temp.directory_phone(r->>'phone'))=10 THEN '+1'||pg_temp.directory_phone(r->>'phone') END)
     RETURNING id INTO person_id;
+    INSERT INTO pg_temp.directory_person_identity(id,name_key,email_key) VALUES(person_id,pg_temp.directory_name(r->>'contact'),lower(r->>'email'));
     INSERT INTO organization_contacts(organization_id,contact_id,role,is_primary,active,source)
     VALUES(org_id,person_id,'Published directory contact; current role unverified',false,true,batch_key);
     UPDATE contacts SET organization_id=org_id WHERE id=person_id;
