@@ -719,15 +719,33 @@ Expected: FAIL because the current component reads only `detail.templateReview`.
 
 - [ ] **Step 4: Split focused UI units inside the component file**
 
-Implement:
+Implement these exact component boundaries:
 
 ```ts
-function ReviewProgress({ reviews, selectedId, onSelect }: ReviewProgressProps) { /* rendered implementation */ }
-function ReviewPreview({ review, device }: ReviewPreviewProps) { /* rendered implementation */ }
-function LinkChecklist({ links, blockedLinks, checked, onCheckedChange }: LinkChecklistProps) { /* rendered implementation */ }
-function ItemDecision({ review, checkedLinks, reload }: ItemDecisionProps) { /* rendered implementation */ }
+type ReviewProgressProps = {
+  reviews: TemplateReview[];
+  selectedId: string;
+  onSelect(reviewId: string): void;
+};
+type ReviewPreviewProps = {
+  review: TemplateReview;
+  device: "desktop" | "mobile";
+};
+type LinkChecklistProps = {
+  links: TemplateReview["links"];
+  blockedLinks: TemplateReview["blockedLinks"];
+  checked: string[];
+  onCheckedChange(href: string, checked: boolean): void;
+};
+type ItemDecisionProps = {
+  requestId: string;
+  review: TemplateReview;
+  checkedLinks: string[];
+  reload(): Promise<void>;
+};
 ```
 
+`ReviewProgress` owns navigation markup only; `ReviewPreview` owns the subject and sandboxed iframe; `LinkChecklist` owns external anchors and confirmations; `ItemDecision` owns note validation and the decision request.
 Keep state keyed by `review.id`:
 
 ```ts
