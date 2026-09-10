@@ -36,6 +36,7 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [checkoutClock, setCheckoutClock] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
@@ -46,6 +47,22 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [bookingId, managerApi]);
+
+  useEffect(() => {
+    if (!checkoutDueAt) return;
+    const dueAt = new Date(checkoutDueAt).getTime();
+    if (!Number.isFinite(dueAt)) return;
+    const remaining = dueAt - Date.now();
+    if (remaining <= 0) {
+      setCheckoutClock(Date.now());
+      return;
+    }
+    const timeout = window.setTimeout(
+      () => setCheckoutClock(Date.now()),
+      Math.min(remaining + 25, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timeout);
+  }, [checkoutDueAt]);
 
   async function checkIn() {
     if (busy) return;
@@ -116,7 +133,7 @@ export function EventLifecycleAction({ bookingId, compact = false, allowCheckIn 
 
   if (lifecycle?.checkedInAt) {
     const checkoutDueTime = checkoutDueAt ? new Date(checkoutDueAt).getTime() : Number.NaN;
-    const checkoutLate = Number.isFinite(checkoutDueTime) && Date.now() >= checkoutDueTime;
+    const checkoutLate = Number.isFinite(checkoutDueTime) && checkoutClock >= checkoutDueTime;
     const checkoutLateNotice = checkoutLate
       ? <p className="text-sm font-bold text-rose-700">Event over — checkout late</p>
       : null;
