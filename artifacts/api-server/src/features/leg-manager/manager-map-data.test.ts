@@ -470,8 +470,8 @@ describe("loadManagerScopedMapData", () => {
       bookingName: "Meeteetse Annual Labor Day Celebration",
       city: "Meeteetse",
       region: "WY",
-      latitude: 44.1586,
-      longitude: -108.8715,
+      latitude: null,
+      longitude: null,
       startsAt: new Date("2026-09-05T17:00:00Z"),
       endsAt: new Date("2026-09-07T17:00:00Z"),
       operationalEndsAt: new Date("2026-09-09T00:00:00Z"),
@@ -482,8 +482,8 @@ describe("loadManagerScopedMapData", () => {
       bookingName: "Blanding City Fall Festival",
       city: "Blanding",
       region: "UT",
-      latitude: 37.6242,
-      longitude: -109.4782,
+      latitude: null,
+      longitude: null,
       startsAt: new Date("2026-09-12T17:00:00Z"),
       endsAt: new Date("2026-09-12T17:00:00Z"),
     };
@@ -497,8 +497,15 @@ describe("loadManagerScopedMapData", () => {
       async getCurrentForLeg() { return { bookingId: currentBooking.bookingId }; },
       async getLatestCheckedOutForLeg() { return null; },
     };
+    dependencies.eventLocationResolver = async (events) => events.map((event) => event.bookingId === currentBooking.bookingId
+      ? { ...event, latitude: 44.1586, longitude: -108.8715 }
+      : { ...event, latitude: 37.6242, longitude: -109.4782 });
     dependencies.routingEstimator = {
-      async estimate() { return { miles: 525, minutes: 510, source: "cached", estimatedAt: new Date() }; },
+      async estimate(from, to) {
+        expect(from).toEqual({ latitude: 44.1586, longitude: -108.8715 });
+        expect(to).toEqual({ latitude: 37.6242, longitude: -109.4782 });
+        return { miles: 525, minutes: 510, source: "cached", estimatedAt: new Date() };
+      },
     };
 
     const result = await loadManagerScopedMapData(
@@ -508,8 +515,12 @@ describe("loadManagerScopedMapData", () => {
     );
 
     expect(result.route?.trip).toMatchObject({
+      id: `manager-navigation:${kristyLegId}`,
+      navigationOnly: true,
       startLabel: "Meeteetse Annual Labor Day Celebration",
       endLabel: "Blanding City Fall Festival",
+      endLatitude: null,
+      endLongitude: null,
     });
     expect(result.route?.stops.map((stop) => stop.bookingId)).toEqual([nextBooking.bookingId]);
     expect(result.route?.segments).toEqual([expect.objectContaining({
