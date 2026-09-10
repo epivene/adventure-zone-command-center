@@ -5,6 +5,7 @@ import type {
 } from "../outreach-planner/outreach-dispatch";
 import type { DraftGenerator } from "./draft-generator";
 import type { EarlyBirdPromoService } from "@/features/early-bird-promo/early-bird-promo-service";
+import { normalizeSendableContactEmail } from "@/features/contacts/contact-email-value";
 import { evaluateDraftGuardrails, type DraftBlocker } from "./draft-guardrails";
 import type { DraftContext } from "./draft-context-resolver";
 import type {
@@ -308,6 +309,11 @@ export class OpportunityEmailService {
       return { draft: existing, followUpReferenceAt: existing.sentAt };
     if (!this.deps.gmailDraftProvider.sendDraft)
       throw serviceError("OPPORTUNITY_EMAIL_SEND_UNAVAILABLE");
+    const sendableRecipient = normalizeSendableContactEmail(
+      existing.recipientEmail,
+    );
+    if (!sendableRecipient)
+      throw serviceError("OPPORTUNITY_EMAIL_RECIPIENT_NOT_SENDABLE");
     if (this.deps.promotion) {
       const prepared = await this.deps.promotion.prepareBody({
         sourceKind: "opportunity_email",
@@ -335,7 +341,7 @@ export class OpportunityEmailService {
       }
     }
     const content = {
-      to: existing.recipientEmail,
+      to: sendableRecipient,
       subject: existing.subject,
       body: existing.body,
     };
@@ -414,6 +420,8 @@ export class OpportunityEmailService {
       input.opportunityId,
       input.draftId,
     );
+    if (!normalizeSendableContactEmail(existing.recipientEmail))
+      throw serviceError("OPPORTUNITY_EMAIL_RECIPIENT_NOT_SENDABLE");
     const draft = await this.deps.emailRepository.update(existing.id, {
       state: "scheduled",
       scheduledFor: input.scheduledFor,
