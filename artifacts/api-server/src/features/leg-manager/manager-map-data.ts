@@ -25,6 +25,7 @@ export interface ManagerMapTripRepository {
   listTrips(options: { travelLegId: string }): Promise<ManagerMapTrip[]>;
   listStops(tripId: string): Promise<TripStopRecord[]>;
   listSegments(tripId: string): Promise<TripSegmentRecord[]>;
+  getTravelLegDefaults?(travelLegId: string): Promise<{ mpg: number | null }>;
 }
 
 export interface ManagerMapBookingRepository {
@@ -65,6 +66,7 @@ export interface ManagerScheduleTripRepository {
   listTrips(options: { travelLegId: string }): Promise<ManagerMapTrip[]>;
   listStops(tripId: string): Promise<TripStopRecord[]>;
   listSegments(tripId: string): Promise<TripSegmentRecord[]>;
+  getTravelLegDefaults?(travelLegId: string): Promise<{ mpg: number | null }>;
 }
 
 export type ManagerScopedScheduleData = {
@@ -277,9 +279,10 @@ export async function loadManagerScopedScheduleData(
   now = new Date(),
   options: { alwaysVisibleBookingIds?: ReadonlySet<string>; retainBookingIdUntilNextEvent?: string } = {},
 ): Promise<ManagerScopedScheduleData> {
-  const [listedTrips, listedBookings] = await Promise.all([
+  const [listedTrips, listedBookings, routeDefaults] = await Promise.all([
     dependencies.tripRepository.listTrips({ travelLegId: legId }),
     dependencies.bookingRepository.listForLeg(legId),
+    dependencies.tripRepository.getTravelLegDefaults?.(legId) ?? Promise.resolve({ mpg: null }),
   ]);
 
   const allTrips = listedTrips
@@ -406,8 +409,8 @@ export async function loadManagerScopedScheduleData(
       { latitude: nextEvent.latitude, longitude: nextEvent.longitude },
       { preferLive: false },
     ) ?? null;
-    const configuredTrip = current?.trip
-      ?? allTrips.find((trip) => trip.mpg != null || trip.fuelPricePerGallon != null)
+    const configuredTrip = [current?.trip, ...allTrips]
+      .find((trip) => trip && (trip.mpg != null || trip.fuelPricePerGallon != null))
       ?? null;
     route = {
       trip: {
@@ -420,7 +423,7 @@ export async function loadManagerScopedScheduleData(
         endLabel: nextEvent.bookingName,
         endLatitude: null,
         endLongitude: null,
-        mpg: configuredTrip?.mpg ?? null,
+        mpg: configuredTrip?.mpg ?? routeDefaults.mpg,
         fuelPricePerGallon: configuredTrip?.fuelPricePerGallon ?? null,
       },
       stops: [{
