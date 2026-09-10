@@ -2,8 +2,7 @@ import { z } from "zod";
 
 const nullableText = (max = 4000) => z.union([z.string().max(max), z.null()]).transform((value) => value?.trim() || null);
 const nullableEmail = z.union([z.string(), z.null()])
-  .transform((value) => value?.trim().toLowerCase() || null)
-  .refine((value) => value === null || z.email().safeParse(value).success, "Enter a valid email address.");
+  .transform((value) => value?.trim().toLowerCase() || null);
 
 const officeContactPhoneInputSchema = z.object({
   id: z.string().uuid().nullable(),
