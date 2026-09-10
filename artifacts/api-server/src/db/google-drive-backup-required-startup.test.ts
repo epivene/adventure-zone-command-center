@@ -241,14 +241,38 @@ describe("Google Drive backup required schema", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(client.query).toHaveBeenNthCalledWith(1, "SET lock_timeout = '5s'");
-    expect(String(client.query.mock.calls[1]?.[0])).toContain(
+    expect(client.query).toHaveBeenNthCalledWith(2, "SET lock_timeout = '5s'");
+    expect(String(client.query.mock.calls[2]?.[0])).toContain(
       "CREATE TABLE IF NOT EXISTS google_drive_backup_jobs",
     );
-    expect(String(client.query.mock.calls[1]?.[0])).toContain(
+    expect(String(client.query.mock.calls[2]?.[0])).toContain(
       "CREATE TRIGGER google_drive_backup_contacts_enqueue",
     );
     expect(client.query).toHaveBeenLastCalledWith("RESET lock_timeout");
+    expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("does not reacquire table locks when the required schema is already ready", async () => {
+    await db.exec(migrationSql);
+    const queries: string[] = [];
+    const client = {
+      query: async (sql: string, values?: unknown[]) => {
+        queries.push(sql);
+        return db.query(sql, values);
+      },
+      release: vi.fn(),
+    };
+
+    await expect(
+      ensureGoogleDriveBackupSchemaBeforeListen({
+        pool: { connect: vi.fn(async () => client) },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain(
+      "google_drive_backup_document_links_enqueue",
+    );
     expect(client.release).toHaveBeenCalledOnce();
   });
 
@@ -256,6 +280,7 @@ describe("Google Drive backup required schema", () => {
     const client = {
       query: vi
         .fn<(sql: string) => Promise<{ rows: never[] }>>()
+        .mockResolvedValueOnce({ rows: [] })
         .mockResolvedValueOnce({ rows: [] })
         .mockRejectedValueOnce(new Error("ddl failed"))
         .mockResolvedValueOnce({ rows: [] }),
