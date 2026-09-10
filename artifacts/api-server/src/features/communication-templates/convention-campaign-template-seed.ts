@@ -245,7 +245,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       bodyFormat: template.bodyFormat,
     });
 
-    const staleRequests = await database.select({ id: bossWorkRequests.id })
+    const openReviewRequests = await database.select({ id: bossWorkRequests.id })
       .from(bossWorkRequests)
       .innerJoin(
         communicationTemplateReviews,
@@ -253,11 +253,10 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       )
       .where(and(
         eq(communicationTemplateReviews.templateId, template.id),
-        sql`${communicationTemplateReviews.contentFingerprint} <> ${fingerprint}`,
         inArray(bossWorkRequests.state, [...openTemplateReviewStates]),
       ));
-    const staleRequestIds = staleRequests.map((request) => request.id);
-    if (staleRequestIds.length) {
+    const openReviewRequestIds = openReviewRequests.map((request) => request.id);
+    if (openReviewRequestIds.length) {
       await database.update(bossWorkRequests)
         .set({
           state: "cancelled",
@@ -265,7 +264,7 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
           updatedAt: refreshedAt,
           deduplicationKey: null,
         })
-        .where(inArray(bossWorkRequests.id, staleRequestIds));
+        .where(inArray(bossWorkRequests.id, openReviewRequestIds));
     }
 
     if (!dave || template.state === "active") continue;
