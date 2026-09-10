@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { apiFetch } from "@/lib/auth-token";
 import { bossFetch } from "@/lib/boss-auth-context";
@@ -691,6 +691,7 @@ function MemberEditor({
       }[]
     >([]),
     [error, setError] = useState("");
+  const searchSequence = useRef(0);
   const change = (key: keyof Data, value: string) =>
     set({ ...m, data: { ...m.data, [key]: value } });
   return (
@@ -759,13 +760,22 @@ function MemberEditor({
           className={button}
           type="button"
           onClick={() => {
+            const sequence = ++searchSequence.current;
             setError("");
             void conventionRequest<{ profiles: typeof matches }>(
               false,
               `/profile-search?q=${encodeURIComponent(q)}`,
             )
-              .then((r) => setMatches(r.profiles))
-              .catch((e) => setError(e.message));
+              .then((r) => {
+                if (sequence === searchSequence.current) {
+                  setMatches(r.profiles);
+                }
+              })
+              .catch((e) => {
+                if (sequence === searchSequence.current) {
+                  setError(e.message);
+                }
+              });
           }}
         >
           Search profiles
