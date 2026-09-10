@@ -324,7 +324,7 @@ describe("convention campaign template seed", () => {
         (select count(*)::int from communication_templates) as template_count,
         (select count(*)::int from boss_work_requests) as request_count
     `);
-    expect(afterSecondRun.rows).toEqual([{ template_count: 7, request_count: 2 }]);
+    expect(afterSecondRun.rows).toEqual([{ template_count: 7, request_count: 3 }]);
   });
 
   it("keeps the finalized Gmail design and the agreed Early Bird addition", () => {
