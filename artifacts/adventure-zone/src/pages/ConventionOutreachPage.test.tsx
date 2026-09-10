@@ -6,11 +6,14 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-const { fetcher } = vi.hoisted(() => ({ fetcher: vi.fn() }));
+const { fetcher, searchValue } = vi.hoisted(() => ({
+  fetcher: vi.fn(),
+  searchValue: { current: "?edition=edition-1" },
+}));
 vi.mock("@/lib/auth-token", () => ({ apiFetch: fetcher }));
 vi.mock("@/lib/boss-auth-context", () => ({ bossFetch: fetcher }));
 vi.mock("wouter", () => ({
-  useSearch: () => "?edition=edition-1",
+  useSearch: () => searchValue.current,
   Link: ({ href, children, ...props }: any) => (
     <a href={href} {...props}>
       {children}
@@ -44,6 +47,7 @@ const data = {
   nextAction: "Confirm the event contact",
 };
 beforeEach(() => {
+  searchValue.current = "?edition=edition-1";
   fetcher.mockImplementation(async (path: string, options?: RequestInit) => {
     if (options?.method === "PATCH")
       return new Response(JSON.stringify({ edition }));
@@ -58,6 +62,14 @@ beforeEach(() => {
               revision: 1,
               organization_id: "profile-1",
               contact_id: null,
+              event_info: {
+                city: "Cheyenne",
+                region: "WY",
+                placeType: "fair",
+                bookingName: "County Fair",
+                startsAt: "2026-07-17T12:00:00.000Z",
+                endsAt: "2026-07-19T22:00:00.000Z",
+              },
               data,
             },
             {
@@ -93,6 +105,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 describe("convention workspace", () => {
+  it("opens Dave's direct Convention Game shortcut on the newest active list", async () => {
+    searchValue.current = "?view=game";
+    render(<ConventionOutreachPage boss />);
+
+    expect(
+      await screen.findByRole("table", {
+        name: "Heartland 2026 convention game",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Convention Game" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("turns the live convention roster into a printable game sheet", async () => {
     const print = vi.spyOn(window, "print").mockImplementation(() => {});
     render(<ConventionOutreachPage boss />);
@@ -118,6 +144,10 @@ describe("convention workspace", () => {
     expect(
       screen.queryByRole("columnheader", { name: "Next action" }),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Cheyenne, WY/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Jul 17.+Jul 19, 2026/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Fair/).length).toBeGreaterThan(0);
+    expect(screen.queryByText("Confirm the event contact")).not.toBeInTheDocument();
     expect(screen.getByText("Open linked profile")).toBeInTheDocument();
     expect(screen.getByText("Profile needed")).toBeInTheDocument();
     expect(
@@ -151,6 +181,9 @@ describe("convention workspace", () => {
         name: "Fill out County Fair convention card",
       }),
     );
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Cheyenne, WY");
+    expect(screen.getByRole("dialog")).toHaveTextContent(/Jul 17.+Jul 19, 2026/);
 
     fireEvent.click(screen.getByLabelText("Met at convention"));
     fireEvent.click(screen.getByLabelText("Interested"));

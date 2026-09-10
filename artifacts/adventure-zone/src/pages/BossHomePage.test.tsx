@@ -41,6 +41,15 @@ describe("BossHomePage", () => {
     });
   });
 
+  it("opens Dave's at-convention Game directly", async () => {
+    render(<BossHomePage />);
+
+    expect(await screen.findByRole("link", { name: /Convention Game/ })).toHaveAttribute(
+      "href",
+      "/boss/conventions?view=game",
+    );
+  });
+
   it("shows stats when dashboard has data", async () => {
     mockBossGet.mockResolvedValueOnce({
       submittedReceipts: 3,

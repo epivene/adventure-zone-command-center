@@ -8,7 +8,8 @@ describe("convention persistence", () => {
   it("imports once, keeps ambiguous contacts, rejects stale edits and preserves previous years", async () => {
     const db = new PGlite();
     try {
-      await db.exec(`CREATE TABLE organizations(id uuid PRIMARY KEY,name text); CREATE TABLE contacts(id uuid PRIMARY KEY,organization_id uuid,email text);
+      await db.exec(`CREATE TABLE organizations(id uuid PRIMARY KEY,name text,city text,region text,place_type text); CREATE TABLE contacts(id uuid PRIMARY KEY,organization_id uuid,email text);
+        CREATE TABLE bookings(id uuid PRIMARY KEY,organization_id uuid,name text,city text,region text,starts_at timestamptz,ends_at timestamptz);
         CREATE TABLE organization_contacts(organization_id uuid,contact_id uuid,active boolean DEFAULT true);`);
       const migration = await readFile(
         new URL(
@@ -30,10 +31,14 @@ describe("convention persistence", () => {
       });
       const org = "00000000-0000-4000-8000-000000000001",
         contact = "00000000-0000-4000-8000-000000000002";
-      await db.query("INSERT INTO organizations VALUES($1,$2)", [
+      await db.query("INSERT INTO organizations VALUES($1,$2,'Cheyenne','WY','fair')", [
         org,
         "County Fair",
       ]);
+      await db.query(
+        "INSERT INTO bookings VALUES($1,$2,'County Fair','Cheyenne','WY','2026-07-17T12:00:00Z','2026-07-19T22:00:00Z')",
+        ["00000000-0000-4000-8000-000000000003", org],
+      );
       await db.query("INSERT INTO contacts VALUES($1,$2,$3)", [
         contact,
         org,
@@ -80,6 +85,14 @@ describe("convention persistence", () => {
       const detail = await repo.detail(edition.id, "boss");
       assert.equal(detail.members.length, 2);
       const member = detail.members.find((m) => m.source_key === "S1");
+      assert.deepEqual(member.event_info, {
+        city: "Cheyenne",
+        region: "WY",
+        placeType: "fair",
+        bookingName: "County Fair",
+        startsAt: new Date("2026-07-17T12:00:00.000Z"),
+        endsAt: new Date("2026-07-19T22:00:00.000Z"),
+      });
       const responseUpdate = await repo.updateConventionResponse(
         edition.id,
         member.id,

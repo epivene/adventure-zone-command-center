@@ -109,9 +109,9 @@ export default function BossHomePage() {
       </header>
 
       <BossAttentionQueue />
-      <Link href="/boss/conventions" className="rounded-xl border border-border bg-card p-4 hover:border-primary/40">
-        <h2 className="font-bold">Convention Plan</h2>
-        <p className="text-sm text-muted-foreground">Yearly lists, contacts, research and follow-ups</p>
+      <Link href="/boss/conventions?view=game" className="rounded-xl border border-border bg-card p-4 hover:border-primary/40">
+        <h2 className="font-bold">Convention Game</h2>
+        <p className="text-sm text-muted-foreground">Open your at-convention cards, check off conversations, and add notes</p>
       </Link>
 
       {/* At-a-glance stat strip */}

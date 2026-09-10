@@ -6,6 +6,7 @@ import {
   Check,
   ClipboardCheck,
   ClipboardList,
+  Gamepad2,
   House,
   Moon,
   Palette,
@@ -32,6 +33,7 @@ const navItems: NavItem[] = [
   { href: "/boss", label: "Needs Attention", icon: House },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
   { href: "/boss/profiles", label: "Profiles", icon: Building2 },
+  { href: "/boss/conventions?view=game", label: "Convention Game", icon: Gamepad2 },
   { href: "/boss/receipts", label: "Receipts", icon: Receipt },
   { href: "/boss/reviews", label: "Reviews", icon: Star },
   { href: "/boss/maintenance", label: "Maintenance", icon: Wrench },
@@ -46,9 +48,10 @@ const appearanceOptions = [
 
 function NavLink({ item, mobile = false }: { item: NavItem; mobile?: boolean }) {
   const [location] = useLocation();
-  const active = item.href === "/boss"
+  const itemPath = item.href.split("?")[0];
+  const active = itemPath === "/boss"
     ? location === "/boss" || location === "/boss/"
-    : location.startsWith(item.href);
+    : location.startsWith(itemPath);
   const Icon = item.icon;
   return (
     <Link
