@@ -34,6 +34,13 @@ export type Member = {
   sources: string;
   nextAction: string;
   research: Record<string, string>;
+  conventionResponse: {
+    met: boolean;
+    interested: boolean;
+    followUp: boolean;
+    contact: string;
+    notes: string;
+  };
 };
 export class ConventionError extends Error {
   status: number;
@@ -57,6 +64,29 @@ function choice<T extends string>(
   if (!allowed.includes(v as T))
     throw new ConventionError("Invalid classification.");
   return v as T;
+}
+const emptyConventionResponse = () => ({
+  met: false,
+  interested: false,
+  followUp: false,
+  contact: "",
+  notes: "",
+});
+function conventionResponse(value: unknown): Member["conventionResponse"] {
+  if (value === undefined || value === null) return emptyConventionResponse();
+  if (typeof value !== "object" || Array.isArray(value))
+    throw new ConventionError("Invalid convention response.");
+  const v = value as Record<string, unknown>;
+  for (const key of ["met", "interested", "followUp"] as const)
+    if (v[key] !== undefined && typeof v[key] !== "boolean")
+      throw new ConventionError("Invalid convention response.");
+  return {
+    met: v.met === true,
+    interested: v.interested === true,
+    followUp: v.followUp === true,
+    contact: text(v.contact, 500),
+    notes: text(v.notes),
+  };
 }
 export function validateMember(value: unknown): Member {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -95,6 +125,7 @@ export function validateMember(value: unknown): Member {
     sources: text(v.sources),
     nextAction: text(v.nextAction),
     research,
+    conventionResponse: conventionResponse(v.conventionResponse),
   };
 }
 export type ProfileCandidate = {
@@ -134,5 +165,6 @@ export function nextYearMember(member: Member): Member {
       member.outcome === "do_not_contact" ? "do_not_contact" : "not_contacted",
     attendance: "unknown",
     nextAction: "",
+    conventionResponse: emptyConventionResponse(),
   };
 }

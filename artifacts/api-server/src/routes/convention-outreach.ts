@@ -100,6 +100,29 @@ export function createConventionRouter(
       );
     }),
   );
+  router.patch(
+    `${prefix}/:id/members/:memberId`,
+    route(async (req, res) => {
+      const input = z
+        .object({
+          revision,
+          data: z.unknown(),
+          organizationId: uuid.nullable(),
+          contactId: uuid.nullable(),
+        })
+        .parse(req.body);
+      res.json({
+        member: await repo.updateMember(
+          uuid.parse(req.params.id),
+          uuid.parse(req.params.memberId),
+          input.revision,
+          input.data,
+          input,
+          actor(req),
+        ),
+      });
+    }),
+  );
   if (boss) return router;
   router.patch(
     `${prefix}/:id`,
@@ -165,29 +188,6 @@ export function createConventionRouter(
           actor(req),
         ),
       );
-    }),
-  );
-  router.patch(
-    `${prefix}/:id/members/:memberId`,
-    route(async (req, res) => {
-      const input = z
-        .object({
-          revision,
-          data: z.unknown(),
-          organizationId: uuid.nullable(),
-          contactId: uuid.nullable(),
-        })
-        .parse(req.body);
-      res.json({
-        member: await repo.updateMember(
-          uuid.parse(req.params.id),
-          uuid.parse(req.params.memberId),
-          input.revision,
-          input.data,
-          input,
-          actor(req),
-        ),
-      });
     }),
   );
   router.post(

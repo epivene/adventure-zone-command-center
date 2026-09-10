@@ -105,9 +105,17 @@ describe("convention workspace", () => {
     expect(
       screen.getByRole("columnheader", { name: "Follow up" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Profile linked")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Event info" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Next action" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Open linked profile")).toBeInTheDocument();
     expect(screen.getByText("Profile needed")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "Open County Fair profile" }),
+    ).toHaveAttribute(
       "href",
       "/boss/profiles/profile-1",
     );
@@ -123,13 +131,62 @@ describe("convention workspace", () => {
     print.mockRestore();
   });
 
+  it("lets Dave fill out and save a linked convention card", async () => {
+    render(<ConventionOutreachPage boss />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Convention Game" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Fill out County Fair convention card",
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText("Met at convention"));
+    fireEvent.click(screen.getByLabelText("Interested"));
+    fireEvent.click(screen.getByLabelText("Follow-up needed"));
+    fireEvent.change(screen.getByLabelText("Person spoken to"), {
+      target: { value: "Taylor, fair manager" },
+    });
+    fireEvent.change(screen.getByLabelText("Convention notes"), {
+      target: { value: "Wants the five-attraction package." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save convention card" }));
+
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        "/boss/conventions/edition-1/members/one",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            revision: 1,
+            data: {
+              ...data,
+              conventionResponse: {
+                met: true,
+                interested: true,
+                followUp: true,
+                contact: "Taylor, fair manager",
+                notes: "Wants the five-attraction package.",
+              },
+            },
+            organizationId: "profile-1",
+            contactId: null,
+          }),
+        }),
+      ),
+    );
+  });
+
   it("links profiles through the admin path in Game view", async () => {
     render(<ConventionOutreachPage />);
     fireEvent.click(
       await screen.findByRole("button", { name: "Convention Game" }),
     );
 
-    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "Open County Fair profile" }),
+    ).toHaveAttribute(
       "href",
       "/profiles/profile-1",
     );
