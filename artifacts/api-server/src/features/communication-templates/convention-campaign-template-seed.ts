@@ -8,6 +8,7 @@ import {
   communicationTemplates,
 } from "@/db/schema";
 import { BossWorkRequestService, templateFingerprint } from "@/features/boss-work-requests/boss-work-request-service";
+import { refreshEmailLogos, replaceEmailLogo } from "./email-logo-refresh";
 
 type Database = NodePgDatabase<typeof schema>;
 
@@ -264,10 +265,10 @@ const conventionCampaignTemplateSources = [
 export const conventionCampaignTemplates = conventionCampaignTemplateSources.map((template) => ({
   ...template,
   templateVersion: "2026-09-early-bird-refresh-v10",
-  bodyTemplate: updateConventionEmailPresentation(
+  bodyTemplate: replaceEmailLogo(updateConventionEmailPresentation(
     template.bodyTemplate,
     template.code.startsWith("convention_after_") ? "after" : "before_or_during",
-  ),
+  )),
 }));
 
 export async function ensureConventionCampaignTemplateSeed(database: Database): Promise<void> {
@@ -352,7 +353,6 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       },
       setWhere: sql`
         excluded.template_version IS DISTINCT FROM ${communicationTemplates.templateVersion}
-        or ${communicationTemplates.state} IS DISTINCT FROM 'active'
       `,
     }).returning();
 
@@ -391,7 +391,8 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       }
     }
 
-    if (!dave || template.state === "active") continue;
+    // Existing edited/reviewed copies require an explicit send, not a new task on every read.
+    if (!inserted.length || !dave || template.state === "active") continue;
 
     await service.createOwnerRequest({
       type: "email_template_approval",
@@ -405,4 +406,5 @@ export async function ensureConventionCampaignTemplateSeed(database: Database): 
       ownerId: "system:convention-template-seed",
     });
   }
+  await refreshEmailLogos(database);
 }

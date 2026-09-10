@@ -112,7 +112,7 @@ describe("convention campaign template seed", () => {
       expect(template.bodyTemplate).not.toContain("AMERICA’S BEST BOUNCE HOUSE CARNIVAL");
       expect(template.bodyTemplate).not.toContain("border-right:14px solid #ff0a8a");
       expect(template.bodyTemplate).not.toContain("0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2.png");
-      expect(template.bodyTemplate.match(/adventure-zone-logo-navy\.png/g))
+      expect(template.bodyTemplate.match(/adventure-zone-logo-tagline-20260910\.png/g))
         .toHaveLength(1);
       expect(template.bodyTemplate).toMatch(
         /<td style="background:#0f1729;padding:16px 38px 36px;border-bottom:7px solid #ff0a8a">/,
@@ -146,6 +146,7 @@ describe("convention campaign template seed", () => {
       create table boss_accounts (
         id uuid primary key default gen_random_uuid(), display_name text not null
       );
+      insert into boss_accounts(id,display_name) values ('33333333-3333-4333-8333-333333333333','Dave');
       create table communication_templates (
         id uuid primary key default gen_random_uuid(), code text not null unique,
         template_version text, name text not null, channel text not null default 'email',
@@ -167,12 +168,19 @@ describe("convention campaign template seed", () => {
         unique (assigned_boss_account_id, deduplication_key)
       );
       create table communication_template_reviews (
-        id uuid primary key default gen_random_uuid(), request_id uuid not null unique,
+        id uuid primary key default gen_random_uuid(), request_id uuid not null,
+        position integer not null default 0, template_name_snapshot text not null default 'Email',
+        verified_links jsonb not null default '[]',
         template_id uuid not null, template_version text, content_fingerprint text not null,
         subject_snapshot text, body_snapshot text not null, body_format_snapshot text not null,
         decision text not null default 'pending', note text, decided_by_boss_account_id uuid,
         decided_at timestamptz, created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
+      );
+      create table boss_work_request_events (
+        id uuid primary key default gen_random_uuid(), request_id uuid not null,
+        actor_kind text not null, actor_id text, prior_state text, new_state text not null,
+        note text, metadata jsonb not null default '{}', created_at timestamptz not null default now()
       );
       insert into communication_templates (
         id, code, template_version, name, category, subject_template, body_template,
@@ -202,10 +210,11 @@ describe("convention campaign template seed", () => {
     const database = drizzle(client, { schema });
 
     const matchingTemplate = conventionCampaignTemplates[0];
+    const matchingBody = matchingTemplate.bodyTemplate.replace('adventure-zone-logo-tagline-20260910.png', 'adventure-zone-logo-navy.png');
     const matchingFingerprint = templateFingerprint({
       templateVersion: matchingTemplate.templateVersion,
       subjectTemplate: matchingTemplate.subjectTemplate,
-      bodyTemplate: matchingTemplate.bodyTemplate,
+      bodyTemplate: matchingBody,
       bodyFormat: "html",
     });
     await client.query(
@@ -219,7 +228,7 @@ describe("convention campaign template seed", () => {
         matchingTemplate.templateVersion,
         matchingTemplate.name,
         matchingTemplate.subjectTemplate,
-        matchingTemplate.bodyTemplate,
+        matchingBody,
       ],
     );
     await client.query(
@@ -244,7 +253,7 @@ describe("convention campaign template seed", () => {
         matchingTemplate.templateVersion,
         matchingFingerprint,
         matchingTemplate.subjectTemplate,
-        matchingTemplate.bodyTemplate,
+        matchingBody,
       ],
     );
 
@@ -289,8 +298,8 @@ describe("convention campaign template seed", () => {
       where id = '55555555-5555-4555-8555-555555555555'
     `);
     expect(matchingReview.rows).toEqual([{
-      request_state: "cancelled",
-      completed_at: expect.any(Date),
+      request_state: "waiting_on_dave",
+      completed_at: null,
       deduplication_key: null,
     }]);
 
@@ -305,7 +314,8 @@ describe("convention campaign template seed", () => {
       order by state
     `);
     expect(finalizedAvailability.rows).toEqual([
-      { state: "active", template_count: 7 },
+      { state: "active", template_count: 6 },
+      { state: "draft", template_count: 1 },
     ]);
 
     await ensureConventionCampaignTemplateSeed(database as never);

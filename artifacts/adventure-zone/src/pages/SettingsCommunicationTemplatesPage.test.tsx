@@ -172,7 +172,7 @@ describe("SettingsCommunicationTemplatesPage", () => {
         channel: "email",
         category: "outreach",
         subjectTemplate: "Let’s connect at {{conventionName}}",
-        bodyTemplate: "<table><tbody><tr><td>Hello <strong>{{contactName}}</strong></td></tr></tbody></table>",
+        bodyTemplate: '<table><tbody><tr><td>Hello <strong>{{contactName}}</strong><a href="https://example.com">Explore</a></td></tr></tbody></table>',
         bodyFormat: "html",
         requiredPlaceholders: ["contactName", "conventionName"],
         accessScope: "office",
@@ -185,6 +185,10 @@ describe("SettingsCommunicationTemplatesPage", () => {
     render(<SettingsCommunicationTemplatesPage />);
 
     const preview = await screen.findByTitle("Email body preview");
+    await waitFor(() => expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>"));
+    expect(preview).toHaveAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
+    const document = new DOMParser().parseFromString(preview.getAttribute("srcdoc")!, "text/html");
+    expect(document.querySelector("a")?.getAttribute("target")).toBe("_blank");
     expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>");
     expect(screen.getByText("Let’s connect at Example Convention")).toBeInTheDocument();
     expect(screen.queryByLabelText("Email HTML source")).not.toBeInTheDocument();

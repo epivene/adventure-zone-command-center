@@ -50,7 +50,7 @@ function labelFor(anchor: Element, normalizedHref?: string) {
   if (visibleText) return visibleText;
   const imageAlt = linkedImageAlt(anchor);
   if (imageAlt) return imageAlt;
-  if (normalizedHref) return new URL(normalizedHref).hostname;
+  if (normalizedHref) return new URL(normalizedHref).hostname || normalizedHref;
   return attribute(anchor, "href").trim() || "Unlabeled link";
 }
 
@@ -76,8 +76,10 @@ export function extractSnapshotLinks(html: string): SnapshotLinks {
       } else {
         try {
           const parsed = new URL(rawHref);
-          if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          if (!["http:", "https:", "mailto:", "tel:"].includes(parsed.protocol)) {
             reason = "unsafe_protocol";
+          } else if (!(parsed.hostname || parsed.pathname) || /[\u0000-\u001f\u007f]/.test(rawHref)) {
+            reason = "malformed_url";
           } else {
             normalizedHref = parsed.href;
           }
