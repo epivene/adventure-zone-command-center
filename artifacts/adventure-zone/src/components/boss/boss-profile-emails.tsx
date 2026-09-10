@@ -75,15 +75,13 @@ export function BossProfileEmails({ organizationId }: { organizationId: string }
     {opened ? <div className="mt-4 grid gap-3">
       {loading ? <p role="status">Loading emails…</p> : null}
       {emailError || draftError ? <div role="alert" className="text-sm text-destructive"><p>{emailError}</p><p>{draftError}</p><button type="button" className="button-secondary mt-2" disabled={loading} onClick={() => setRevision((value) => value + 1)}>Retry</button></div> : null}
-      <h3 className="font-semibold">Saved app emails & drafts</h3>
-      {!loading && !draftError && !drafts.length ? <p className="text-sm text-muted-foreground">No saved app emails or drafts for this profile.</p> : null}
+      {!loading && !draftError && !drafts.length ? <p className="text-sm text-muted-foreground">No drafts for this profile.</p> : null}
       {drafts.map((draft) => <details className="rounded-lg border border-border p-3" key={draft.id}>
         <summary className="cursor-pointer font-semibold">{draft.subject} <span className="text-sm font-normal text-muted-foreground">· {stateLabels[draft.state] ?? draft.state}</span></summary>
         <p className="mt-2 break-words text-sm text-muted-foreground">To: {draft.recipientEmail}</p>
         <p className="mt-2 whitespace-pre-wrap break-words text-sm">{draft.body}</p>
       </details>)}
-      <h3 className="mt-2 font-semibold">Linked Gmail conversations</h3>
-      {!loading && !emailError && !emails.length ? <p className="text-sm text-muted-foreground">No linked Gmail conversations for this profile.</p> : null}
+      {!loading && !emailError && !emails.length ? <p className="text-sm text-muted-foreground">No email conversations for this profile.</p> : null}
       {emails.map((conversation) => <Conversation key={conversation.threadId} organizationId={organizationId} conversation={conversation} />)}
     </div> : null}
   </section>;

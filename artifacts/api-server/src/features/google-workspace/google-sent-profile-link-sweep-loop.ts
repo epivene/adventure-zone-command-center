@@ -2,7 +2,7 @@ import { logger } from "@/lib/logger";
 import type { GoogleRecentValidationService } from "./google-recent-validation-service";
 import type { GoogleSentProfileLinkSweepService } from "./google-sent-profile-link-sweep-service";
 
-export const GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1_000;
+export const GOOGLE_SENT_PROFILE_LINK_LOOKBACK_MS = 90 * 24 * 60 * 60 * 1_000;
 export const GOOGLE_SENT_PROFILE_LINK_SWEEP_INTERVAL_MS = 60 * 60 * 1_000;
 export const GOOGLE_SENT_PROFILE_LINK_CATCHUP_INTERVAL_MS = 24 * 60 * 60 * 1_000;
 export const GOOGLE_RECENT_EMAIL_SYNC_LIMIT = 100;

@@ -19,6 +19,8 @@ it("lets Dave read saved drafts, current conversations and earlier history witho
   expect(await screen.findByText("Draft copy for Dave")).toBeInTheDocument();
   expect(screen.getByText(/Draft — not sent/)).toBeInTheDocument();
   expect(screen.getByText("Last year's fair")).toBeInTheDocument();
+  expect(screen.queryByText("Saved app emails & drafts")).not.toBeInTheDocument();
+  expect(screen.queryByText("Linked Gmail conversations")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: /Fair reply/ }));
   expect(await screen.findByText("We are interested!")).toBeInTheDocument();
   expect(api.bossGet).toHaveBeenCalledWith("/boss/google-workspace/profiles/profile-1/emails/thread-1");
