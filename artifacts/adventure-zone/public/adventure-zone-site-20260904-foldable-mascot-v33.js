@@ -4,7 +4,6 @@
   const INQUIRY_API_URL =
     "https://adventure-zone-command-center.onrender.com/api/public/website-inquiries";
   const INQUIRY_TIMEOUT_MS = 12000;
-  const GALLERY_AUTOPLAY_MS = 10000;
 
   const IMAGE = Object.freeze({
     logo: "https://static.wixstatic.com/media/0e6e2c_1517bd8d12f94f3194787c7f4f972079~mv2.png",
@@ -37,8 +36,6 @@
     galleryActionArena: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-action-arena.jpg",
     galleryRainbowSlide: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-rainbow-slide.jpg",
     galleryBungeeRun: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-bungee-run.jpg",
-    galleryDaveHost: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-dave-host.jpg",
-    galleryDesireeFoamParty: "https://adventure-zone-command-center-1.onrender.com/assets/gallery-desiree-foam-party.jpg",
     desiree: "https://static.wixstatic.com/media/0e6e2c_572447e3c82b41de9a3b2c6506085740~mv2.jpg",
     dave: "https://static.wixstatic.com/media/0e6e2c_0dfe30764eb14fbb901bcced2d089f8e~mv2.jpg",
     amy: "https://static.wixstatic.com/media/0e6e2c_8e5ec8576eef4d7eb8866eb3b49f0ee2~mv2.jpg",
@@ -63,7 +60,6 @@
     [IMAGE.spectacle01, "Children playing inside a colorful inflatable attraction"],
     [IMAGE.spectacle02, "Child sliding down a colorful inflatable slide"],
     [IMAGE.spectacle03, "Players competing inside a bright inflatable challenge course"],
-    [IMAGE.galleryDaveHost, "Adventure Zone host standing in front of colorful inflatable attractions"],
     [IMAGE.spectacle04, "Aerial view of large animal-themed inflatable slides"],
     [IMAGE.spectacle05, "Families enjoying colorful inflatable attractions at an event"],
     [IMAGE.spectacle06, "Guests playing on a large inflatable attraction"],
@@ -74,7 +70,6 @@
     [IMAGE.spectacle11, "Large-scale inflatable entertainment setup"],
     [IMAGE.spectacle12, "Colorful inflatable attractions filling an event space"],
     [IMAGE.hero, "Adventure Zone attractions filling a large outdoor event"],
-    [IMAGE.galleryDesireeFoamParty, "Adventure Zone team member smiling at a foam party"],
     [IMAGE.adventure, "Adventure Zone inflatable carnival package"],
     [IMAGE.pirate, "Pirate's Rebellion paddle boats and event display"],
     [IMAGE.warrior, "Warrior's Playground action attraction"],
@@ -138,14 +133,14 @@
     ["How much space should we plan for?", "Plan for an area about 100 feet by 100 feet—roughly 10,000 square feet—for the Adventure Zone package. It can sometimes fit in approximately 7,000 square feet. Pirate's Rebellion prefers about 7,000 square feet and can sometimes fit in approximately 5,000. Warrior's Playground prefers about 15,000 square feet and can sometimes fit in approximately 12,000. The booking team will confirm the final footprint for your event."],
     ["What electrical access is needed?", "Adventure Zone needs either three 50-amp/220-volt outlets, eighteen 110-volt outlets, or a 50 KW generator within 75 feet of the area. Pirate's Rebellion needs either one 50-amp/220-volt outlet, six 15-amp/110-volt outlets, or a 50 KW generator. Warrior's Playground needs either two 50-amp/220-volt outlets, twelve 15-amp/110-volt outlets, or a 25 KW generator. For Idaho events, an electrician may also hardwire the required breakers with approval."],
     ["Do the water attractions need a water hookup?", "Water is optional for Adventure Zone, but a faucet or hose within 75 feet is needed for wet attractions. Pirate's Rebellion uses a pool and needs water to fill and refresh it, with a closer dedicated supply helping the setup move faster. Warrior's Playground does not need water for the rides, but a faucet or hose within 75 feet is preferred for daily cleaning."],
-    ["How early do you set up and when do you tear down?", "The team needs permission to set up two days before the event and one day after the event for tear-down. The event holder provides a forklift or loader for loading the equipment back onto the trailer. If one is not available, there will be a $500 equipment fee."],
+    ["How early do you set up and when do you tear down?", "The team needs permission to set up two days before the event and one day after the event for tear-down. The event holder provides a forklift or loader for loading the equipment back onto the trailer. If one is not available, the current FAQ lists a $500 equipment-rental fee."],
     ["How are the attractions secured?", "The team provides the standard 3-foot stakes where the ground allows them. When stakes are not possible, the event organizer must provide approved alternatives such as heavy cement barricades or water barrels. The booking team will confirm the quantity and method for the selected unit and venue."],
     ["Who can participate?", "The commercial-grade attractions are designed for a wide range of ages, including adults. Bounce houses and jump-and-slide combos are generally aimed at ages 2–12, while obstacle courses and action attractions tend to appeal to older children, teens, and adults. Giant slides and water games can work across age groups."],
     ["Can we choose individual rides a la carte?", "Packages are planned as complete units rather than individual ride rentals. That keeps the traveling inventory and logistics workable across the western states. Submit the form with your event details and the team can recommend the best unit."],
-    ["What is included in each package?", "Adventure Zone includes 10 attractions. Pirate's Rebellion is the water-and-pirate package. Warrior's Playground includes the Action Pursuit Gaming Arena with Paintball, AirSoft, or Orbeez, four additional attractions, and carnival games. Each package description includes its current pricing and core features."],
+    ["What is included in each package?", "Adventure Zone includes 10 attractions. Pirate's Rebellion is the water-and-pirate package. Warrior's Playground includes the Action Pursuit Gaming Arena with Paintball, AirSoft, or Orbeez, four additional attractions, and carnival games. The package cards above show the current pricing and core identities."],
     ["What does pricing look like?", "For 1–4 days, Adventure Zone is $9,000 and Pirate's Rebellion or Warrior's Playground is $8,000. Longer events are available at higher rates; contact our booking team for extended-event pricing. Final booking details depend on the event, site, dates, and selected package."],
     ["Is a contract required?", "Yes. The current booking policy requires a signed contract for each engagement, including returning customers."],
-    ["What if our question is not listed?", "Send an inquiry with your event date, location, and questions. The booking team can confirm the site-specific requirements before anything is finalized."],
+    ["What if our question is not listed?", "Use the inquiry form below and include your event date, location, and questions. The booking team can confirm the site-specific requirements before anything is finalized."],
   ];
 
   const iconPaths = {
@@ -446,21 +441,11 @@
     .fundraising-highlight { position: relative; z-index: 1; display: inline-flex; width: fit-content; margin: -4px 0 20px; padding: 8px 12px; color: var(--az-navy); background: var(--az-yellow); border: 3px solid var(--az-navy); box-shadow: 5px 5px 0 var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .08em; line-height: 1.1; text-transform: uppercase; }
 
     .gallery { background-size: 40px 40px; background-image: linear-gradient(to right, rgba(15,23,41,.08) 2px, transparent 2px), linear-gradient(to bottom, rgba(15,23,41,.08) 2px, transparent 2px); }
-    .gallery-heading-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
-    .gallery-heading-row h2 { margin: 0; }
-    .gallery-controls { display: flex; flex: 0 0 auto; gap: 12px; }
-    .gallery-arrow { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; padding: 0; color: var(--az-navy); background: var(--az-yellow); border: 4px solid var(--az-navy); box-shadow: 5px 5px 0 var(--az-navy); cursor: pointer; transition: transform .2s ease, box-shadow .2s ease; }
-    .gallery-arrow:hover { transform: translate(2px, 2px); box-shadow: 3px 3px 0 var(--az-navy); }
-    .gallery-arrow:focus-visible { outline: 4px solid var(--az-pink); outline-offset: 3px; }
-    .gallery-arrow .az-icon { width: 22px; height: 22px; }
-    .gallery-prev .az-icon { transform: rotate(180deg); }
-    .gallery-grid { display: flex; gap: 16px; overflow-x: auto; overscroll-behavior-inline: contain; padding: 8px 8px 24px; scroll-behavior: smooth; scroll-snap-type: x mandatory; scrollbar-color: var(--az-pink) rgba(15,23,41,.15); scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
-    .gallery-grid:focus-visible { outline: 4px solid var(--az-pink); outline-offset: 4px; }
-    .gallery-grid::-webkit-scrollbar { height: 10px; }
-    .gallery-grid::-webkit-scrollbar-track { background: rgba(15,23,41,.15); }
-    .gallery-grid::-webkit-scrollbar-thumb { background: var(--az-pink); border: 2px solid var(--az-navy); }
-    .gallery-frame { position: relative; flex: 0 0 min(78vw, 340px); aspect-ratio: 4 / 5; margin: 0; overflow: hidden; background: var(--az-navy); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); scroll-snap-align: start; scroll-snap-stop: always; }
-    .gallery-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .gallery-grid { display: grid; gap: 16px; }
+    .gallery-frame { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--az-navy); border: 4px solid var(--az-navy); box-shadow: 8px 8px 0 var(--az-navy); }
+    .gallery-frame:nth-child(2) { transform: none; }
+    .gallery-frame img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 1; transition: opacity 1s ease; }
+    .gallery-frame img.fading { opacity: 0; }
     .gallery-frame::after { position: absolute; inset: 0; content: ""; pointer-events: none; opacity: 0; background: linear-gradient(to top, rgba(15,23,41,.8), transparent 60%); transition: opacity .3s ease; }
     .gallery-frame:hover::after { opacity: 1; }
 
@@ -516,9 +501,10 @@
     .convention-dialog .convention-offer { margin-top: 20px; padding: 16px; background: var(--az-white); border-left: 5px solid var(--az-pink); }
     .convention-close { position: absolute; top: 10px; right: 10px; display: inline-grid; place-items: center; width: 44px; height: 44px; padding: 0; color: var(--az-cream); background: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
     .convention-close .az-icon { width: 22px; height: 22px; }
-    .convention-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 28px; }
-    .convention-actions .button { width: 100%; min-height: 48px; padding: 12px 14px; }
-    .convention-actions .outline { color: var(--az-navy); background: var(--az-cream); border-color: var(--az-navy); }
+    .convention-package-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 26px; }
+    .convention-package-grid .button { width: 100%; min-height: 64px; padding: 12px 10px; line-height: 1.2; }
+    .convention-package-grid .button:nth-child(2) { color: var(--az-navy); background: var(--az-yellow); }
+    .convention-package-grid .button:nth-child(3) { color: var(--az-white); background: var(--az-pink); }
     .honeypot { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
     .form-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; margin-top: 28px; }
     .form-helper { max-width: 520px; margin: 0; color: var(--az-muted); font-size: 13px; font-weight: 800; }
@@ -612,8 +598,8 @@
       .safety-card { padding: 28px; }
       .booking-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 36px; }
       .booking-card { padding: 42px; }
-      .gallery-grid { gap: 24px; }
-      .gallery-frame { flex-basis: calc((100% - 24px) / 2); }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 24px; }
+      .gallery-frame:nth-child(2) { transform: translateY(48px); }
       .faq-item summary { padding: 18px 22px; font-size: 20px; }
       .faq-answer { padding: 24px; font-size: 18px; }
       .contact { padding-top: 96px; padding-bottom: 96px; }
@@ -628,7 +614,8 @@
       .desktop-book { display: flex; }
       .desktop-book .button { padding: 10px 14px; font-size: 11px; box-shadow: 5px 5px 0 var(--az-navy); }
       .package-grid { grid-template-columns: repeat(3, minmax(0,1fr)); gap: 32px; }
-      .gallery-frame { flex-basis: calc((100% - 48px) / 3); }
+      .gallery-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+      .gallery-frame:nth-child(2) { transform: none; }
     }
 
     @media (min-width: 1180px) {
@@ -653,7 +640,7 @@
     }
 
     @media (max-width: 767px) {
-      :host { min-height: 100vh; background: var(--az-navy); font-size: 13px; }
+      :host { font-size: 13px; }
       .container { width: calc(100% - 24px); }
       .site-header, .site-header.scrolled { padding: 8px 0; }
       .header-row { gap: 10px; }
@@ -725,12 +712,8 @@
       .step-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
       .step-card, .safety-card, .booking-card { padding: 16px; }
       .step-number { font-size: 32px; }
-      .gallery-heading-row { align-items: center; gap: 12px; margin-bottom: 14px; }
-      .gallery-controls { gap: 8px; }
-      .gallery-arrow { width: 40px; height: 40px; border-width: 3px; box-shadow: 4px 4px 0 var(--az-navy); }
-      .gallery-arrow .az-icon { width: 18px; height: 18px; }
-      .gallery-grid { gap: 12px; padding: 6px 6px 18px; }
-      .gallery-frame { flex-basis: min(78vw, 320px); border-width: 3px; box-shadow: 5px 5px 0 var(--az-navy); }
+      .gallery-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .gallery-frame:nth-child(2) { transform: translateY(18px); }
       .faq-item summary { padding: 13px 15px; font-size: 14px; }
       .faq-answer { padding: 16px; font-size: 13px; }
       .contact-panel, .contact-form { padding: 18px; }
@@ -753,7 +736,7 @@
       .step-card p { font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
       .convention-dialog { width: min(560px, calc(100vw - 32px)); padding: 52px 20px 24px; box-shadow: 6px 6px 0 var(--az-pink); }
       .convention-dialog h2 { font-size: clamp(2rem, 11vw, 3rem); }
-      .convention-actions { grid-template-columns: minmax(0, 1fr); }
+      .convention-package-grid { grid-template-columns: minmax(0, 1fr); }
     }
 
     @media (min-width: 480px) and (max-width: 767px) {
@@ -801,8 +784,8 @@
     }).join("")}</div></div></details>`;
   }
 
-  function packageCard({ flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
-    return `<article class="package-card">
+  function packageCard({ key, flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
+    return `<article class="package-card" data-package-key="${key}">
       ${flag ? `<div class="package-flag">${flag}</div>` : ""}
       <div class="package-image"><img src="${image}" alt="${alt}" loading="lazy"></div>
       <div class="package-content">
@@ -832,7 +815,7 @@
   }
 
   function galleryMarkup() {
-    return galleryImages.map(([source, alt], index) => `<figure class="gallery-frame"><img src="${source}" alt="${alt}" loading="${index < 3 ? "eager" : "lazy"}"></figure>`).join("");
+    return [0, 1, 2].map((slot) => `<figure class="gallery-frame"><img data-gallery-slot="${slot}" src="${galleryImages[slot][0]}" alt="${galleryImages[slot][1]}" loading="lazy"></figure>`).join("");
   }
 
   function faqMarkup() {
@@ -863,12 +846,13 @@
       <section class="convention-dialog" role="dialog" aria-modal="true" aria-labelledby="convention-welcome-title" tabindex="-1">
         <button class="convention-close" type="button" data-convention-close aria-label="Close convention welcome">${icon("close")}</button>
         <div class="tag">CONVENTION EXCLUSIVE</div>
-        <h2 class="display" id="convention-welcome-title">It’s So Nice to See You Again!</h2>
-        <p>Thank you for taking a moment to reconnect with The Adventure Zone. We’re genuinely glad you’re here.</p>
-        <p class="convention-offer">As a convention guest, you may qualify for special booking savings. Tell us a little about your event and we’ll help you explore the best fit.</p>
-        <div class="convention-actions">
-          <button class="button" type="button" data-convention-claim>Tell Us About Your Event</button>
-          <button class="button outline" type="button" data-convention-explore>Explore the Site</button>
+        <h2 class="display" id="convention-welcome-title">Let’s Keep the Fun Going</h2>
+        <p>We already know who you are and we’re ready to help you choose the package that will make your event unforgettable.</p>
+        <p class="convention-offer">We have so many fun things to offer—which package would you like to see first?</p>
+        <div class="convention-package-grid">
+          <button class="button" type="button" data-convention-package="Adventure Zone">Adventure Zone</button>
+          <button class="button" type="button" data-convention-package="Weekend Warriors">Weekend Warriors</button>
+          <button class="button" type="button" data-convention-package="Pirates Rebellion">Pirates Rebellion</button>
         </div>
       </section>
     </div>`;
@@ -880,13 +864,13 @@
         <div class="container header-row">
           <a class="logo-link" href="#hero" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a>
           <nav class="desktop-nav" aria-label="Primary navigation">
-            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#videos">Videos</a><a href="#faq">FAQ</a>
+            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
           </nav>
           <div class="desktop-book"><a class="button" href="#contact">Contact ${icon("arrow")}</a></div>
           <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
-          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#videos">Videos ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
+          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
         </nav>
       </header>
 
@@ -935,15 +919,15 @@
       <section class="section packages" id="packages"><div class="container">
         <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
         <div class="package-grid">
-          ${packageCard({ image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
-          ${packageCard({ flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
-          ${packageCard({ image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
+          ${packageCard({ key: "pirates-rebellion", image: IMAGE.pirate, alt: "Pirate's Rebellion", iconName: "anchor", title: "Pirate's Rebellion", copy: "A swashbuckling water/pirate themed adventure perfect for beating the summer heat.", features: ["Fully immersive pirate theme", "Giant water slides &amp; wet attractions"], price: "$8,000", lineup: attractionLineupMarkup(pirateAttractionCategories) })}
+          ${packageCard({ key: "adventure-zone", flag: "Flagship Experience", image: IMAGE.adventure, alt: "Adventure Zone", iconName: "star", title: "Adventure Zone", subtitle: "Something for everyone.", copy: "Our massive inflatable carnival built for max capacity and towering visual impact.", features: ["10 Premium Attractions", "Giant slides, obstacle courses &amp; bounces"], price: "$9,000", lineup: attractionLineupMarkup(adventureAttractionCategories) })}
+          ${packageCard({ key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) })}
         </div>
       </div></section>
 
       <section class="section how"><div class="container how-layout">
         <div class="how-copy"><h2 class="display">How It Works</h2><p>You provide the space and the crowd. We handle the rest.</p><a class="button" href="#contact">Check Dates</a></div>
-        <div class="step-grid">${stepCard("01", "pin", "Setup", "Our professional crew arrives early, handles all rigging, power routing, and safety checks before the gates open.")}${stepCard("02", "hardhat", "Staffing", "Every attraction is manned by our trained team. We don't rely on your volunteers to keep things safe.")}${stepCard("03", "zap", "Operation", "We manage the lines, enforce the rules, and ensure high throughput so more kids have more fun.")}${stepCard("04", "clock", "Teardown", "After the event, our crew handles teardown efficiently, leaving your grounds exactly as we found them.")}</div>
+        <div class="step-grid">${stepCard("01", "pin", "Setup", "Our professional crew arrives early, handles all rigging, power routing, and safety checks before the gates open.")}${stepCard("02", "hardhat", "Staffing", "Every attraction is manned by our trained team. We don't rely on your volunteers to keep things safe.")}${stepCard("03", "zap", "Operation", "We manage the lines, enforce the rules, and ensure high throughput so more kids have more fun.")}${stepCard("04", "clock", "Teardown", "When the event ends, we pack it all up efficiently, leaving your grounds exactly as we found them.")}</div>
       </div></section>
 
       <section class="section safety" id="safety"><div class="container">
@@ -958,10 +942,10 @@
 
       <section class="section partnerships" id="partnerships"><div class="container">
         <div class="section-heading"><h2 class="display">Booking Structures</h2></div>
-        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat package rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
+        <div class="booking-grid">${bookingCard("", "ticket", "Event-Paid", "You pay the flat daily rate. The attractions run completely free for your attendees, serving as a massive draw and value-add for your ticketed festival or community day.", ["Package reserved for your event dates", "Attractions included for attendees"])}${bookingCard("pink", "target", "Pay-For-Play", "Subject to approval. We offer percentage-of-sales or guaranteed-payment arrangements. With percentage-of-sales events, attractions come at no upfront cost, guests pay to play, and the event receives a share of ticket sales. Guaranteed arrangements are customized to the event, location, attendance, and package.", ["May be available for qualifying events", "Percentage of ticket box sales paid to the event"], "A Fun Fundraising Opportunity")}</div>
       </div></section>
 
-      <section class="section gallery" id="gallery"><div class="container"><div class="gallery-heading-row"><h2 class="display">The Spectacle</h2><div class="gallery-controls" aria-label="Gallery controls"><button class="gallery-arrow gallery-prev" type="button" aria-label="Previous photo">${icon("arrow")}</button><button class="gallery-arrow gallery-next" type="button" aria-label="Next photo">${icon("arrow")}</button></div></div><div class="gallery-grid" role="region" aria-label="The Spectacle photo gallery" tabindex="0">${galleryMarkup()}</div></div></section>
+      <section class="section gallery" id="gallery"><div class="container"><h2 class="display">The Spectacle</h2><div class="gallery-grid">${galleryMarkup()}</div></div></section>
 
       <section class="section faq" id="faq"><div class="container">
         <div class="faq-heading"><div class="tag">${icon("check")}Plan With Confidence</div><h2 class="display">FAQ</h2><p class="faq-intro">The practical details organizers ask about space, power, water, setup, safety, and booking.</p></div>
@@ -974,7 +958,7 @@
         ${formMarkup()}
       </div></div></section>
 
-      <footer class="footer" id="videos"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
+      <footer class="footer"><div class="container footer-inner"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></div></footer>
       <div class="tube-man-position" aria-hidden="true"><div class="tube-man-sway"><div class="tube-man-wobble"><img class="tube-man-image" src="${IMAGE.mascot}" alt=""></div></div></div>
       ${conventionWelcomeMarkup()}
     </div>`;
@@ -985,10 +969,9 @@
       super();
       this.attachShadow({ mode: "open" });
       this.heroIndex = 0;
+      this.galleryIndex = 0;
       this.menuOpen = false;
       this.timers = [];
-      this.galleryAutoplayTimer = null;
-      this.galleryResumeTimer = null;
       this.abortController = null;
       this.inquiryAbortController = null;
       this.pendingSubmissionId = null;
@@ -1005,7 +988,6 @@
       this.abortController = new AbortController();
       this.bindInteractions();
       if (this.isConventionVisit()) {
-        this.shadowRoot.querySelector(".convention-form-note")?.removeAttribute("hidden");
         this.openConventionWelcome();
       }
       this.updateScrollState();
@@ -1024,7 +1006,6 @@
     disconnectedCallback() {
       this.timers.forEach((timer) => window.clearInterval(timer));
       this.timers = [];
-      this.pauseGalleryAutoplay();
       this.abortController?.abort();
       this.inquiryAbortController?.abort();
       this.resizeObserver?.disconnect();
@@ -1044,29 +1025,13 @@
           this.scrollToId(link.getAttribute("href").slice(1));
         }, { signal });
       });
-      const gallery = root.querySelector(".gallery-grid");
-      root.querySelector(".gallery-prev").addEventListener("click", () => {
-        this.scrollGallery(-1);
-        this.scheduleGalleryAutoplay();
-      }, { signal });
-      root.querySelector(".gallery-next").addEventListener("click", () => {
-        this.scrollGallery(1);
-        this.scheduleGalleryAutoplay();
-      }, { signal });
-      gallery.addEventListener("pointerdown", () => this.pauseGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("pointerup", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("pointercancel", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("mouseenter", () => this.pauseGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("mouseleave", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("focusin", () => this.pauseGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("focusout", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
-      gallery.addEventListener("wheel", () => this.scheduleGalleryAutoplay(), { signal, passive: true });
       window.addEventListener("scroll", () => this.updateScrollState(), { signal, passive: true });
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
-      root.querySelector("[data-convention-claim]").addEventListener("click", () => this.closeConventionWelcome({ scrollToContact: true }), { signal });
-      root.querySelector("[data-convention-explore]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
+      root.querySelectorAll("[data-convention-package]").forEach((button) => {
+        button.addEventListener("click", () => this.showConventionPackage(button.dataset.conventionPackage), { signal });
+      });
       root.querySelector("[data-convention-close]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
       root.querySelector("[data-convention-backdrop]").addEventListener("click", () => this.closeConventionWelcome(), { signal });
       root.addEventListener("keydown", (event) => this.handleConventionKeydown(event), { signal });
@@ -1143,14 +1108,27 @@
       });
     }
 
-    closeConventionWelcome({ scrollToContact = false } = {}) {
+    closeConventionWelcome() {
       const welcome = this.shadowRoot.querySelector(".convention-welcome");
       if (!welcome || !this.conventionOpen) return;
       this.conventionOpen = false;
       welcome.classList.remove("open");
       welcome.hidden = true;
       document.body.style.overflow = this.previousBodyOverflow;
-      if (scrollToContact) this.scrollToId("contact");
+    }
+
+    showConventionPackage(choice) {
+      const packageKey = {
+        "Adventure Zone": "adventure-zone",
+        "Weekend Warriors": "weekend-warriors",
+        "Pirates Rebellion": "pirates-rebellion",
+      }[choice];
+      const card = packageKey
+        ? this.shadowRoot.querySelector(`[data-package-key="${packageKey}"]`)
+        : null;
+      if (!card) return;
+      this.closeConventionWelcome();
+      card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
 
     handleConventionKeydown(event) {
@@ -1280,7 +1258,7 @@
       const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
       if (reduced) return;
       this.timers.push(window.setInterval(() => this.rotateHero(), 6500));
-      this.startGalleryAutoplay();
+      this.timers.push(window.setInterval(() => this.rotateGallery(), 5000));
     }
 
     rotateHero() {
@@ -1291,43 +1269,20 @@
       slides[this.heroIndex].classList.add("active");
     }
 
-    startGalleryAutoplay() {
-      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-      window.clearInterval(this.galleryAutoplayTimer);
-      this.galleryAutoplayTimer = window.setInterval(() => this.scrollGallery(1), GALLERY_AUTOPLAY_MS);
-    }
-
-    pauseGalleryAutoplay() {
-      window.clearInterval(this.galleryAutoplayTimer);
-      window.clearTimeout(this.galleryResumeTimer);
-      this.galleryAutoplayTimer = null;
-      this.galleryResumeTimer = null;
-    }
-
-    scheduleGalleryAutoplay() {
-      this.pauseGalleryAutoplay();
-      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-      this.galleryResumeTimer = window.setTimeout(() => {
-        this.galleryResumeTimer = null;
-        this.scrollGallery(1);
-        this.startGalleryAutoplay();
-      }, GALLERY_AUTOPLAY_MS);
-    }
-
-    scrollGallery(direction) {
-      const gallery = this.shadowRoot.querySelector(".gallery-grid");
-      const frame = gallery?.querySelector(".gallery-frame");
-      if (!gallery || !frame) return;
-      const gap = Number.parseFloat(window.getComputedStyle(gallery).columnGap) || 0;
-      const step = frame.getBoundingClientRect().width + gap;
-      const maxScroll = Math.max(0, gallery.scrollWidth - gallery.clientWidth);
-      const next = direction > 0 && gallery.scrollLeft >= maxScroll - step / 2
-        ? 0
-        : direction < 0 && gallery.scrollLeft <= step / 2
-          ? maxScroll
-          : Math.min(maxScroll, Math.max(0, gallery.scrollLeft + direction * step));
-      const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-      gallery.scrollTo({ left: next, behavior: reduced ? "auto" : "smooth" });
+    rotateGallery() {
+      const frames = this.shadowRoot.querySelectorAll("[data-gallery-slot]");
+      if (!frames.length) return;
+      this.galleryIndex = (this.galleryIndex + 1) % galleryImages.length;
+      frames.forEach((image, slot) => {
+        const next = galleryImages[(this.galleryIndex + slot) % galleryImages.length];
+        image.classList.add("fading");
+        window.setTimeout(() => {
+          image.src = next[0];
+          image.alt = next[1];
+          image.onload = () => image.classList.remove("fading");
+          window.setTimeout(() => image.classList.remove("fading"), 80);
+        }, 120);
+      });
     }
 
     collectFormValues(form) {
