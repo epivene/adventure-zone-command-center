@@ -111,6 +111,8 @@ beforeAll(() => {
     writable: true,
     value: (callback: FrameRequestCallback) => { callback(0); return 1; },
   });
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value() { this.open = true; } });
+  Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value() { this.open = false; this.dispatchEvent(new Event("close")); } });
   window.eval(source);
 });
 
@@ -246,11 +248,9 @@ describe("adventure-zone-site inquiry contract", () => {
 
   it("keeps unopened package cards compact when one lineup opens", () => {
     const { root } = mountSite();
-    const lineups = Array.from(root.querySelectorAll<HTMLDetailsElement>(".attraction-lineup"));
-
-    lineups[1]!.open = true;
-
-    expect(lineups.map((lineup) => lineup.open)).toEqual([false, true, false]);
+    root.querySelector<HTMLAnchorElement>('[data-package-open="adventure-zone"]')!.click();
+    expect(root.querySelector<HTMLDialogElement>(".package-dialog")!.open).toBe(true);
+    expect(root.querySelectorAll(".package-card .attraction-lineup")).toHaveLength(0);
     expect(applicableStyle(root, ".package-grid", 980).alignItems).toBe("start");
   });
 
@@ -403,8 +403,8 @@ describe("adventure-zone-site inquiry contract", () => {
     const photo = bubble.querySelector<HTMLElement>(".team-photo")!;
     const label = bubble.querySelector<HTMLElement>(".team-label")!;
     const obstacle = root.querySelector<HTMLElement>(".about h2")!;
-    const details = root.querySelector<HTMLDetailsElement>(".attraction-lineup")!;
-    const hiddenLineupChip = details.querySelector<HTMLElement>(".attraction-chip-list span")!;
+    const details = root.querySelector<HTMLDetailsElement>(".faq-item")!;
+    const hiddenLineupChip = details.querySelector<HTMLElement>(".faq-answer")!;
     const layerTop = 760;
     const layerHeight = 3000;
     let obstacleTop = 790;
@@ -454,7 +454,7 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(verticalGap).toBeGreaterThanOrEqual(48);
   });
 
-  it("renders collapsed package-specific attraction lineups", () => {
+  it("opens package-specific attraction lineups in the shared dialog", () => {
     const { root } = mountSite();
     const expectedLineups = new Map<string, string[]>([
       ["Adventure Zone", [
@@ -480,14 +480,16 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(cards).toHaveLength(3);
     for (const card of cards) {
       const title = card.querySelector("h3")?.textContent?.trim() ?? "";
-      const lineup = card.querySelector<HTMLDetailsElement>("details.attraction-lineup")!;
-      expect(lineup).not.toHaveAttribute("open");
-      expect(lineup.querySelector("summary")).toHaveTextContent("View Attraction Lineup");
+      card.querySelector<HTMLAnchorElement>("[data-package-open]")!.click();
+      const dialog = root.querySelector<HTMLDialogElement>(".package-dialog")!;
+      expect(dialog.open).toBe(true);
+      const lineup = dialog.querySelector<HTMLElement>(".package-lineup")!;
       expect(lineup.querySelector(".attraction-lineup-intro")).toHaveTextContent(
         "Packages include a curated selection; attractions are not available a la carte.",
       );
       expect(Array.from(lineup.querySelectorAll(".attraction-chip-list span")).map((chip) => chip.textContent?.trim()))
         .toEqual(expectedLineups.get(title));
+      dialog.close();
     }
     const adventureCard = cards.find((card) => card.querySelector("h3")?.textContent?.trim() === "Adventure Zone");
     expect(adventureCard?.querySelector(".package-title-copy p")).toHaveTextContent("Something for everyone.");
@@ -962,3 +964,4 @@ describe("adventure-zone-site inquiry contract", () => {
     expect(source).not.toMatch(/DATABASE_URL|SESSION_SECRET|SMTP(?:_|\s).*PASS|WEBSITE_INQUIRY_ALERT_RECIPIENTS/i);
   });
 });
+
