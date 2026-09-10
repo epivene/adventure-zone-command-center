@@ -71,6 +71,13 @@ beforeEach(() => {
                 sourceKey: "two",
                 event: "Sweet Corn Festival",
                 group: "special",
+                conventionResponse: {
+                  met: true,
+                  interested: true,
+                  followUp: false,
+                  contact: "Jordan, festival chair",
+                  notes: "Asked Dave about next summer.",
+                },
               },
             },
           ],
@@ -105,9 +112,20 @@ describe("convention workspace", () => {
     expect(
       screen.getByRole("columnheader", { name: "Follow up" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Profile linked")).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Event info" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Next action" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Open linked profile")).toBeInTheDocument();
     expect(screen.getByText("Profile needed")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+    expect(
+      screen.getByText("Spoke with Jordan, festival chair"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open County Fair profile" }),
+    ).toHaveAttribute(
       "href",
       "/boss/profiles/profile-1",
     );
@@ -123,13 +141,116 @@ describe("convention workspace", () => {
     print.mockRestore();
   });
 
+  it("lets Dave fill out and save a linked convention card", async () => {
+    render(<ConventionOutreachPage boss />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Convention Game" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Fill out County Fair convention card",
+      }),
+    );
+
+    fireEvent.click(screen.getByLabelText("Met at convention"));
+    fireEvent.click(screen.getByLabelText("Interested"));
+    fireEvent.click(screen.getByLabelText("Follow-up needed"));
+    fireEvent.change(screen.getByLabelText("Person spoken to"), {
+      target: { value: "Taylor, fair manager" },
+    });
+    fireEvent.change(screen.getByLabelText("Convention notes"), {
+      target: { value: "Wants the five-attraction package." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save convention card" }),
+    );
+
+    await waitFor(() =>
+      expect(fetcher).toHaveBeenCalledWith(
+        "/boss/conventions/edition-1/members/one/convention-response",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            revision: 1,
+            conventionResponse: {
+              met: true,
+              interested: true,
+              followUp: true,
+              contact: "Taylor, fair manager",
+              notes: "Wants the five-attraction package.",
+            },
+          }),
+        }),
+      ),
+    );
+  });
+
+  it("keeps Dave's notes visible when a convention card save fails", async () => {
+    const original = fetcher.getMockImplementation()!;
+    fetcher.mockImplementation((path: string, options?: RequestInit) => {
+      if (
+        path.endsWith("/members/one/convention-response") &&
+        options?.method === "PATCH"
+      )
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: "This contact changed. Reload before saving.",
+            }),
+            { status: 409 },
+          ),
+        );
+      return original(path, options);
+    });
+    render(<ConventionOutreachPage boss />);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Convention Game" }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Fill out County Fair convention card",
+      }),
+    );
+    fireEvent.change(screen.getByLabelText("Convention notes"), {
+      target: { value: "Do not lose this conversation." },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save convention card" }),
+    );
+
+    const dialog = screen.getByRole("dialog", {
+      name: "County Fair convention card",
+    });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This contact changed. Reload before saving.",
+    );
+    expect(dialog).toContainElement(
+      screen.getByRole("button", { name: "Reload current card" }),
+    );
+    expect(screen.getByLabelText("Convention notes")).toHaveValue(
+      "Do not lose this conversation.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Reload current card" }));
+    expect(
+      await screen.findByRole("button", { name: "Use latest saved answers" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Keep my answers and retry" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Convention notes")).toHaveValue(
+      "Do not lose this conversation.",
+    );
+  });
+
   it("links profiles through the admin path in Game view", async () => {
     render(<ConventionOutreachPage />);
     fireEvent.click(
       await screen.findByRole("button", { name: "Convention Game" }),
     );
 
-    expect(screen.getByRole("link", { name: "County Fair" })).toHaveAttribute(
+    expect(
+      screen.getByRole("link", { name: "Open County Fair profile" }),
+    ).toHaveAttribute(
       "href",
       "/profiles/profile-1",
     );

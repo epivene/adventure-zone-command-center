@@ -33,6 +33,13 @@ type Data = {
   sources: string;
   nextAction: string;
   research?: Record<string, string>;
+  conventionResponse?: {
+    met: boolean;
+    interested: boolean;
+    followUp: boolean;
+    contact: string;
+    notes: string;
+  };
 };
 type Member = {
   id: string;
@@ -109,11 +116,15 @@ export default function ConventionOutreachPage({
     [page, setPage] = useState(0),
     [view, setView] = useState<"cards" | "game">("cards");
   const [error, setError] = useState(""),
+    [gameError, setGameError] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(true),
     [note, setNote] = useState("");
   const [planEditing, setPlanEditing] = useState(false);
   const [editing, setEditing] = useState<Member | null>(null),
+    [gameEditing, setGameEditing] = useState<Member | null>(null),
+    [conflictLatest, setConflictLatest] = useState<Member | null>(null),
+    [savedCard, setSavedCard] = useState(""),
     [create, setCreate] = useState(false),
     [name, setName] = useState(""),
     [newYear, setNewYear] = useState(new Date().getFullYear());
@@ -140,6 +151,10 @@ export default function ConventionOutreachPage({
     setDetail(null);
     setPreview(null);
     setEditing(null);
+    setGameEditing(null);
+    setConflictLatest(null);
+    setSavedCard("");
+    setGameError("");
     setRollover(false);
     setPlanEditing(false);
     setPage(0);
@@ -172,6 +187,63 @@ export default function ConventionOutreachPage({
       await fn();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function saveGameCard(member: Member) {
+    setBusy(true);
+    setGameError("");
+    setConflictLatest(null);
+    try {
+      await request(
+        `/${member.edition_id}/members/${member.id}/convention-response`,
+        "PATCH",
+        {
+          revision: member.revision,
+          conventionResponse: member.data.conventionResponse,
+        },
+      );
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              edition: {
+                ...current.edition,
+                revision: current.edition.revision + 1,
+              },
+              members: current.members.map((item) =>
+                item.id === member.id
+                  ? { ...member, revision: member.revision + 1 }
+                  : item,
+              ),
+            }
+          : current,
+      );
+      setSavedCard(member.id);
+      setGameEditing(null);
+    } catch (cause) {
+      setGameError(
+        cause instanceof Error ? cause.message : "Could not save this card.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function refreshGameCard(member: Member) {
+    setBusy(true);
+    setGameError("");
+    try {
+      const current = await request<Detail>(`/${member.edition_id}`);
+      setDetail(current);
+      const latest = current.members.find((item) => item.id === member.id);
+      if (!latest)
+        throw new Error("This convention card is no longer available.");
+      setConflictLatest(latest);
+    } catch (cause) {
+      setGameError(
+        cause instanceof Error ? cause.message : "Could not reload this card.",
+      );
     } finally {
       setBusy(false);
     }
@@ -550,6 +622,12 @@ export default function ConventionOutreachPage({
               boss={boss}
               edition={detail.edition}
               members={filtered}
+              savedCard={savedCard}
+              edit={(member) => {
+                setGameError("");
+                setConflictLatest(null);
+                setGameEditing(member);
+              }}
             />
           ) : (
             <>
@@ -712,6 +790,27 @@ export default function ConventionOutreachPage({
           }
         />
       )}
+      {gameEditing && (
+        <ConventionCardEditor
+          key={`${gameEditing.id}:${gameEditing.revision}`}
+          member={gameEditing}
+          busy={busy}
+          error={gameError}
+          latest={conflictLatest}
+          cancel={() => setGameEditing(null)}
+          reload={() => void refreshGameCard(gameEditing)}
+          resolve={(response) => {
+            if (!conflictLatest) return;
+            setGameEditing({
+              ...conflictLatest,
+              data: { ...conflictLatest.data, conventionResponse: response },
+            });
+            setConflictLatest(null);
+            setGameError("");
+          }}
+          save={(member) => void saveGameCard(member)}
+        />
+      )}
     </main>
   );
 }
@@ -719,11 +818,22 @@ function ConventionGame({
   boss,
   edition,
   members,
+  savedCard,
+  edit,
 }: {
   boss: boolean;
   edition: Edition;
   members: Member[];
+  savedCard: string;
+  edit: (member: Member) => void;
 }) {
+  const summary = (member: Member) => {
+    const value =
+      member.data.notes ||
+      member.data.reason ||
+      `Past attendance: ${member.data.attendance.replaceAll("_", " ")}`;
+    return value.length > 240 ? `${value.slice(0, 237)}...` : value;
+  };
   return (
     <section
       className={`${box} overflow-x-auto print:overflow-visible print:border-0 print:p-0`}
@@ -747,69 +857,125 @@ function ConventionGame({
           Print Game Sheet
         </button>
       </div>
+      <div className="grid gap-3 print:hidden sm:grid-cols-2">
+        {members.map((member) => {
+          const response = member.data.conventionResponse;
+          return (
+            <article
+              key={member.id}
+              className="rounded-xl border bg-background p-4"
+            >
+              <button
+                type="button"
+                className="w-full text-left"
+                aria-label={`Fill out ${member.data.event} convention card`}
+                onClick={() => edit(structuredClone(member))}
+              >
+                <span className="block text-lg font-bold">
+                  {member.data.event}
+                </span>
+                <span className="block text-sm">
+                  {member.data.contact || "No contact listed"}
+                  {member.data.email ? ` · ${member.data.email}` : ""}
+                </span>
+                {response?.contact && (
+                  <span className="mt-1 block text-sm font-semibold">
+                    Spoke with {response.contact}
+                  </span>
+                )}
+                <span className="mt-2 block text-sm text-muted-foreground">
+                  {summary(member)}
+                </span>
+                <span className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span>{response?.met ? "✓ Met" : "○ Not met"}</span>
+                  <span>
+                    {response?.interested
+                      ? "✓ Interested"
+                      : "○ Interest unknown"}
+                  </span>
+                  <span>
+                    {response?.followUp
+                      ? "✓ Follow up"
+                      : "○ No follow-up marked"}
+                  </span>
+                  {savedCard === member.id && <strong>Saved</strong>}
+                </span>
+              </button>
+              <div className="mt-3 border-t pt-3 text-sm">
+                {member.organization_id ? (
+                  <Link
+                    className="underline"
+                    href={`${boss ? "/boss" : ""}/profiles/${member.organization_id}`}
+                    aria-label={`Open ${member.data.event} profile`}
+                  >
+                    Open linked profile
+                  </Link>
+                ) : (
+                  <span>Profile needed</span>
+                )}
+              </div>
+            </article>
+          );
+        })}
+      </div>
       <table
         aria-label={`${edition.convention} ${edition.year} convention game`}
-        className="w-full min-w-[1100px] border-collapse text-left text-sm print:min-w-0 print:text-[9px]"
+        className="hidden w-full min-w-[1100px] border-collapse text-left text-sm print:table print:min-w-0 print:text-[9px]"
       >
         <thead className="print:table-header-group">
           <tr className="bg-muted print:bg-transparent">
             <th className="border p-2">Event / profile</th>
             <th className="border p-2">Contact</th>
-            <th className="border p-2">Group</th>
-            <th className="border p-2">Attendance</th>
-            <th className="border p-2">Outreach</th>
-            <th className="border p-2">Next action</th>
+            <th className="border p-2">Event info</th>
             <th className="border p-2 text-center">Met</th>
+            <th className="border p-2 text-center">Interested</th>
             <th className="border p-2 text-center">Follow up</th>
-            <th className="min-w-36 border p-2">Notes</th>
+            <th className="w-[38%] border p-2">Notes</th>
           </tr>
         </thead>
         <tbody>
           {members.map((member) => (
             <tr key={member.id} className="break-inside-avoid align-top">
               <td className="border p-2">
-                {member.organization_id ? (
-                  <Link
-                    className="font-semibold underline print:no-underline"
-                    href={`${boss ? "/boss" : ""}/profiles/${member.organization_id}`}
-                  >
-                    {member.data.event}
-                  </Link>
-                ) : (
-                  <strong>{member.data.event}</strong>
-                )}
-                <span className="mt-1 block text-xs">
-                  {member.organization_id ? "Profile linked" : "Profile needed"}
-                </span>
+                <strong>{member.data.event}</strong>
               </td>
               <td className="border p-2">
                 <strong className="block">{member.data.contact || "—"}</strong>
                 <span className="break-all">{member.data.email || "—"}</span>
+                {member.data.conventionResponse?.contact && (
+                  <span className="mt-1 block">
+                    Spoke with: {member.data.conventionResponse.contact}
+                  </span>
+                )}
               </td>
               <td className="border p-2">
-                {labels[member.data.group] || member.data.group}
+                {summary(member)}
+                <span className="mt-1 block text-xs">
+                  Past attendance: {member.data.attendance.replaceAll("_", " ")}
+                </span>
               </td>
-              <td className="border p-2">
-                {member.data.attendance.replaceAll("_", " ")}
-              </td>
-              <td className="border p-2">
-                {member.data.outcome.replaceAll("_", " ")}
-              </td>
-              <td className="border p-2">{member.data.nextAction || "—"}</td>
               <td
                 className="border p-2 text-center text-lg"
                 aria-label={`Met ${member.data.event}`}
               >
-                ☐
+                {member.data.conventionResponse?.met ? "☑" : "☐"}
+              </td>
+              <td
+                className="border p-2 text-center text-lg"
+                aria-label={`Interested ${member.data.event}`}
+              >
+                {member.data.conventionResponse?.interested ? "☑" : "☐"}
               </td>
               <td
                 className="border p-2 text-center text-lg"
                 aria-label={`Follow up ${member.data.event}`}
               >
-                ☐
+                {member.data.conventionResponse?.followUp ? "☑" : "☐"}
               </td>
               <td className="border p-2">
-                <span className="block min-h-10 border-b border-dashed" />
+                {member.data.conventionResponse?.notes || (
+                  <span className="block min-h-24 border-b border-dashed" />
+                )}
               </td>
             </tr>
           ))}
@@ -819,6 +985,190 @@ function ConventionGame({
         <p className="py-6 text-center">No roster entries match these filters.</p>
       )}
     </section>
+  );
+}
+function ConventionCardEditor({
+  member,
+  busy,
+  error,
+  latest,
+  cancel,
+  reload,
+  resolve,
+  save,
+}: {
+  member: Member;
+  busy: boolean;
+  error: string;
+  latest: Member | null;
+  cancel: () => void;
+  reload: () => void;
+  resolve: (response: NonNullable<Data["conventionResponse"]>) => void;
+  save: (member: Member) => void;
+}) {
+  const empty = {
+    met: false,
+    interested: false,
+    followUp: false,
+    contact: member.data.contact || "",
+    notes: "",
+  };
+  const [response, setResponse] = useState(
+    member.data.conventionResponse || empty,
+  );
+  const toggle = (key: "met" | "interested" | "followUp") =>
+    setResponse({ ...response, [key]: !response[key] });
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${member.data.event} convention card`}
+      className="fixed inset-0 z-50 overflow-auto bg-black/50 p-4 print:hidden"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && !busy) cancel();
+      }}
+    >
+      <form
+        className="mx-auto grid max-w-xl gap-4 rounded-xl bg-background p-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          save({
+            ...member,
+            data: { ...member.data, conventionResponse: response },
+          });
+        }}
+      >
+        <div>
+          <h2 className="text-xl font-bold">{member.data.event}</h2>
+          <p className="text-sm text-muted-foreground">
+            {member.data.notes || member.data.reason || "No event summary yet."}
+          </p>
+        </div>
+        {error && (
+          <div
+            role="alert"
+            className="rounded-lg bg-destructive/10 p-3 text-destructive"
+          >
+            <p>{error}</p>
+            {error.includes("changed") && !latest && (
+              <button
+                type="button"
+                className={`${button} mt-2`}
+                disabled={busy}
+                onClick={reload}
+              >
+                Reload current card
+              </button>
+            )}
+          </div>
+        )}
+        {latest && (
+          <section className="rounded-lg border border-amber-400 bg-amber-50 p-3 text-slate-950">
+            <h3 className="font-bold">Latest saved version</h3>
+            <p>
+              {latest.data.conventionResponse?.met ? "Met" : "Not met"} ·{" "}
+              {latest.data.conventionResponse?.interested
+                ? "Interested"
+                : "Interest not marked"}{" "}
+              ·{" "}
+              {latest.data.conventionResponse?.followUp
+                ? "Follow-up needed"
+                : "No follow-up marked"}
+            </p>
+            {latest.data.conventionResponse?.contact && (
+              <p>Spoke with {latest.data.conventionResponse.contact}</p>
+            )}
+            {latest.data.conventionResponse?.notes && (
+              <p className="whitespace-pre-wrap">
+                {latest.data.conventionResponse.notes}
+              </p>
+            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={button}
+                onClick={() =>
+                  resolve(
+                    latest.data.conventionResponse || {
+                      met: false,
+                      interested: false,
+                      followUp: false,
+                      contact: "",
+                      notes: "",
+                    },
+                  )
+                }
+              >
+                Use latest saved answers
+              </button>
+              <button
+                type="button"
+                className={button}
+                onClick={() => resolve(response)}
+              >
+                Keep my answers and retry
+              </button>
+            </div>
+          </section>
+        )}
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["met", "Met at convention"],
+            ["interested", "Interested"],
+            ["followUp", "Follow-up needed"],
+          ] as const).map(([key, label]) => (
+            <label
+              key={key}
+              className="flex min-h-12 items-center gap-2 rounded-lg border p-3"
+            >
+              <input
+                autoFocus={key === "met"}
+                type="checkbox"
+                checked={response[key]}
+                onChange={() => toggle(key)}
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+        <label>
+          Person spoken to
+          <input
+            className={field}
+            maxLength={500}
+            value={response.contact}
+            onChange={(event) =>
+              setResponse({ ...response, contact: event.target.value })
+            }
+          />
+        </label>
+        <label>
+          Convention notes
+          <textarea
+            className={field}
+            rows={8}
+            maxLength={12000}
+            value={response.notes}
+            onChange={(event) =>
+              setResponse({ ...response, notes: event.target.value })
+            }
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button className={button} disabled={busy}>
+            Save convention card
+          </button>
+          <button
+            type="button"
+            className={button}
+            disabled={busy}
+            onClick={cancel}
+          >
+            Cancel
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }
 function MemberEditor({
@@ -846,7 +1196,10 @@ function MemberEditor({
     [error, setError] = useState("");
   const searchSequence = useRef(0);
   const searchInput = useRef<HTMLInputElement>(null);
-  const change = (key: keyof Data, value: string) =>
+  const change = (
+    key: "group" | "outcome" | "notes" | "reason" | "sources" | "nextAction",
+    value: string,
+  ) =>
     set({ ...m, data: { ...m.data, [key]: value } });
   return (
     <div

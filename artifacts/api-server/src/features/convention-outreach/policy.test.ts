@@ -65,6 +65,13 @@ describe("convention history policy", () => {
       outcome: "interested",
       attendance: "confirmed",
       notes: "Asked about five attractions",
+      conventionResponse: {
+        met: true,
+        interested: true,
+        followUp: true,
+        contact: "Taylor",
+        notes: "Talked at the convention.",
+      },
       offerId: "old-offer",
     });
     const next = nextYearMember(original);
@@ -72,8 +79,42 @@ describe("convention history policy", () => {
     assert.equal(next.attendance, "unknown");
     assert.equal(next.group, "returning");
     assert.equal(next.notes, original.notes);
+    assert.deepEqual(next.conventionResponse, {
+      met: false,
+      interested: false,
+      followUp: false,
+      contact: "",
+      notes: "",
+    });
     assert.equal("offerId" in next, false);
     assert.equal(original.outcome, "interested");
+  });
+  it("validates the digital convention card fields", () => {
+    const member = validateMember({
+      sourceKey: "digital-card",
+      event: "County Fair",
+      conventionResponse: {
+        met: true,
+        interested: false,
+        followUp: true,
+        contact: "Taylor",
+        notes: "Call after the convention.",
+      },
+    });
+    assert.deepEqual(member.conventionResponse, {
+      met: true,
+      interested: false,
+      followUp: true,
+      contact: "Taylor",
+      notes: "Call after the convention.",
+    });
+    assert.throws(() =>
+      validateMember({
+        sourceKey: "bad-card",
+        event: "County Fair",
+        conventionResponse: { met: "yes" },
+      }),
+    );
   });
   it("preserves replacement and special handling in next year", () => {
     for (const group of ["replacement", "special", "confirm"] as const) {

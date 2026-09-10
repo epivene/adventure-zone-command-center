@@ -248,6 +248,56 @@ export class ConventionRepository {
       return result;
     });
   }
+  async updateConventionResponse(
+    id: string,
+    memberId: string,
+    revision: number,
+    response: Member["conventionResponse"],
+    actor: string,
+  ) {
+    return this.transaction(async (c) => {
+      const edition = await this.edition(c, id);
+      if (edition.archived_at)
+        throw new ConventionError("This year is archived.", 409);
+      const before = (
+        await c.query(
+          "SELECT * FROM convention_members WHERE id=$1 AND edition_id=$2 FOR UPDATE",
+          [memberId, id],
+        )
+      ).rows[0];
+      if (!before) throw new ConventionError("Contact not found.", 404);
+      if (before.revision !== revision)
+        throw new ConventionError(
+          "This contact changed. Reload before saving.",
+          409,
+        );
+      const member = validateMember({
+        ...before.data,
+        conventionResponse: response,
+      });
+      const after = (
+        await c.query(
+          `UPDATE convention_members SET data=$1,revision=revision+1,updated_at=now()
+          WHERE id=$2 AND edition_id=$3 RETURNING *`,
+          [JSON.stringify(member), memberId, id],
+        )
+      ).rows[0];
+      await c.query(
+        "UPDATE convention_editions SET revision=revision+1 WHERE id=$1",
+        [id],
+      );
+      await this.audit(
+        c,
+        id,
+        memberId,
+        "convention_response",
+        actor,
+        randomUUID(),
+        { before, after },
+      );
+      return after;
+    });
+  }
   async updateMember(
     id: string,
     memberId: string,
