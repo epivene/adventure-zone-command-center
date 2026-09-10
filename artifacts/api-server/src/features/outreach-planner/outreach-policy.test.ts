@@ -24,13 +24,13 @@ const initial: OutreachAttempt = {
 const first: OutreachAttempt = {
   ...initial,
   id: "b",
-  occurredAt: "2026-09-08T18:00:00Z",
+  occurredAt: "2026-09-04T18:00:00Z",
   stage: "follow_up_1",
 };
 const second: OutreachAttempt = {
   ...initial,
   id: "c",
-  occurredAt: "2026-09-15T18:00:00Z",
+  occurredAt: "2026-09-11T18:00:00Z",
   stage: "follow_up_2",
 };
 const now = new Date("2026-09-30T18:00:00Z");
@@ -43,12 +43,12 @@ describe("outreach evidence and cadence", () => {
       "advance",
     );
   });
-  it("uses 7/14/21 days and does not compress a delayed chase", () => {
+  it("uses day 3, 10 and 15 with full 3/7/5 gaps after delayed outreach", () => {
     expect(
-      decide({ attempts: [initial] }, new Date("2026-09-07T18:00Z")).state,
+      decide({ attempts: [initial] }, new Date("2026-09-03T18:00Z")).state,
     ).toBe("waiting");
     expect(
-      decide({ attempts: [initial, first] }, new Date("2026-09-15T18:00Z"))
+      decide({ attempts: [initial, first] }, new Date("2026-09-11T18:00Z"))
         .nextStage,
     ).toBe("follow_up_2");
     expect(
@@ -143,17 +143,17 @@ describe("outreach evidence and cadence", () => {
 });
 
 describe("policy boundaries", () => {
-  it("waits the last seven days before advancing", () => {
+  it("waits the last five days before advancing on day 15", () => {
     expect(
       decide(
         { attempts: [initial, first, second] },
-        new Date("2026-09-21T18:00:00Z"),
+        new Date("2026-09-15T18:00:00Z"),
       ).state,
     ).toBe("waiting");
     expect(
       decide(
         { attempts: [initial, first, second] },
-        new Date("2026-09-22T18:00:00Z"),
+        new Date("2026-09-16T18:00:00Z"),
       ).state,
     ).toBe("advance");
   });
@@ -193,12 +193,12 @@ describe("policy boundaries", () => {
 });
 
 it("rolls routine weekend cadence to Monday in Chicago without shortening elapsed time", () => {
-  const sunday = { ...initial, occurredAt: "2026-03-01T18:00:00Z" };
+  const wednesday = { ...initial, occurredAt: "2026-03-04T18:00:00Z" };
   expect(
-    decide({ attempts: [sunday] }, new Date("2026-03-08T19:00:00Z")).dueAt,
-  ).toBe("2026-03-09T18:00:00.000Z");
+    decide({ attempts: [wednesday] }, new Date("2026-03-08T19:00:00Z")).dueAt,
+  ).toBe("2026-03-09T17:00:00.000Z");
   expect(
-    decide({ attempts: [sunday] }, new Date("2026-03-08T19:00:00Z")).state,
+    decide({ attempts: [wednesday] }, new Date("2026-03-08T19:00:00Z")).state,
   ).toBe("waiting");
   expect(
     decide(
@@ -209,8 +209,8 @@ it("rolls routine weekend cadence to Monday in Chicago without shortening elapse
 });
 
 it.each([
-  ["2026-10-25T05:30:00Z", "2026-11-02T06:30:00.000Z"],
-  ["2026-03-01T06:30:00Z", "2026-03-09T05:30:00.000Z"],
+  ["2026-10-29T05:30:00Z", "2026-11-02T06:30:00.000Z"],
+  ["2026-03-05T06:30:00Z", "2026-03-09T05:30:00.000Z"],
 ])(
   "preserves pre-transition Sunday wall clock when rolling %s",
   (occurredAt, expected) => {
@@ -220,7 +220,7 @@ it.each([
     );
     expect(result.dueAt).toBe(expected);
     expect(new Date(result.dueAt!).getTime()).toBeGreaterThanOrEqual(
-      Date.parse(occurredAt) + 7 * 86400000,
+      Date.parse(occurredAt) + 3 * 86400000,
     );
   },
 );

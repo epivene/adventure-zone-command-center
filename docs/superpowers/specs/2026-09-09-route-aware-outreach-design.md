@@ -63,14 +63,14 @@ Default to one active first-choice pursuit per actually allocatable opening. Ind
 
 Configurable initial defaults:
 - First contact: day 0.
-- First no-response follow-up: day 7.
-- Second attempt: day 14, with phone suggested where suitable.
-- Advance to the next candidate: day 21, if attempts were actually completed and no meaningful reply or explicit decision date intervened.
+- First no-response follow-up: day 3.
+- Second attempt: day 10, with phone suggested where suitable.
+- Advance to the next candidate: day 15, if attempts were actually completed and no meaningful reply or explicit decision date intervened.
 - Convention first follow-up: within two business days after the convention ends, unless an earlier promise was recorded.
 
-Days 7/14/21 are elapsed calendar days from the actual first successful send or logged outreach attempt. Schedule routine actions using existing business-time rules and the configured business timezone. A draft, scheduled-but-unsent message, or failed send does not start the sequence.
+Days 3/10/15 are elapsed calendar days from the actual first successful send or logged outreach attempt: wait 3 days, then 7 more, then 5 more. A delayed completed stage restarts its full stage-specific wait. Schedule routine actions using existing business-time rules and the configured business timezone. A draft, scheduled-but-unsent message, or failed send does not start the sequence.
 
-Never advance solely because an unworked task became overdue. If the latest attempt was delayed, allow at least seven calendar days after that attempt before advancing. Show overdue work in Today.
+Never advance solely because an unworked task became overdue. If a completed stage was delayed, retain its next full stage-specific wait: 3 days after initial contact, 7 days after the first follow-up, and 5 days after the second follow-up. Show overdue work in Today.
 
 A meaningful reply or logged conversation pauses the generic no-response sequence and creates a specific next action. An out-of-office reply can suggest a later date; a bounce creates contact-repair work. Neither counts as expressed interest.
 
@@ -137,7 +137,7 @@ Unavailable or stale calendar/equipment evidence produces needs review. Preserve
 
 New functionality starts behind a feature flag. Review current configuration and a sample of real openings before enabling commitment enforcement. No bulk outreach or reassignment is part of this change.
 
-The Early Bird promo deadline and reminder remain independent of no-response sequencing. Preserve the existing expressed-interest/deposit conditions; a 21-day advancement must not rewrite a promised promo date.
+The Early Bird promo deadline and reminder remain independent of no-response sequencing. Preserve the existing expressed-interest/deposit conditions; day-15 advancement must not rewrite a promised promo date.
 
 ## Required verification
 
@@ -160,4 +160,3 @@ The Early Bird promo deadline and reminder remain independent of no-response seq
 ## Review summary
 
 The proposed daily workflow is: protect real commitments, work convention opportunities first where capacity fits, follow a visible contact cadence, advance deliberately to strong prospects and fillers, and research the remaining gaps. No outgoing messages are sent by accepting or storing this design.
-
