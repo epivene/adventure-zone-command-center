@@ -9,3 +9,39 @@
     min-height: 44px;
   }
 }
+
+/* Use the same compact layout throughout the mobile navigation breakpoint,
+   including wider/foldable phones. Keep text readable; trim spacing instead. */
+@media screen and (max-width: 767px) {
+  html:root {
+    --spacing: 0.22rem;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  button {
+    min-height: 44px;
+  }
+
+  /* Avoid iOS zooming the whole page when a small text field receives focus. */
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='hidden']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
+  /* The dense CRM cards use these padding classes on their outer surfaces. */
+  main :is(section, article, .border):is(.p-4, .p-5, .p-6, .p-8) {
+    padding: 0.75rem;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+    line-height: 1.15;
+  }
+
+  h2 {
+    font-size: 1.15rem;
+    line-height: 1.2;
+  }
+}

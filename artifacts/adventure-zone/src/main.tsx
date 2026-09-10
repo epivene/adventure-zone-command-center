@@ -7,6 +7,7 @@ import './index.css';
 import './selection-control-fixes.css';
 import './call-workspace-flow.css';
 import './mobile-compact.css';
+import './anchored-selects.css';
 
 initializeAppearance();
 
