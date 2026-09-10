@@ -13,6 +13,7 @@ describe("runRequiredSchemaStartup", () => {
     const timeouts = new Map<string, number | undefined>();
     const timeoutHooks = new Map<string, ((error: Error) => void) | undefined>();
     let googleReady = false;
+    const ensureCommunicationTemplateReviewSets = vi.fn(async () => true);
     const run = vi.fn(async (
       name: string,
       step: () => Promise<unknown>,
@@ -43,6 +44,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureComputerCalling: async () => false,
       ensureOfficeCoordinator: async () => false,
       ensureBoss: async () => false,
+      ensureCommunicationTemplateReviewSets,
       ensureWebsiteInquiries: async () => true,
       ensureProfileFiller: async () => false,
       ensureProfileTouch: async () => false,
@@ -67,6 +69,7 @@ describe("runRequiredSchemaStartup", () => {
       "required computer calling schema",
       "required office coordinator schema",
       "required Boss schema",
+      "required communication template review-set schema",
       "required website inquiry schema",
       "required profile filler schema",
       "required profile touch schema",
@@ -74,6 +77,7 @@ describe("runRequiredSchemaStartup", () => {
       "required business document schema",
       "required Google Drive backup schema",
     ]);
+    expect(ensureCommunicationTemplateReviewSets).toHaveBeenCalledOnce();
   });
 
   it("retries a required schema once when the database drops the connection", async () => {
@@ -96,6 +100,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureComputerCalling: unchanged,
       ensureOfficeCoordinator: unchanged,
       ensureBoss: unchanged,
+      ensureCommunicationTemplateReviewSets: unchanged,
       ensureWebsiteInquiries: unchanged,
       ensureProfileFiller: unchanged,
       ensureProfileTouch: unchanged,
@@ -134,6 +139,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureComputerCalling: unchanged,
       ensureOfficeCoordinator: unchanged,
       ensureBoss: unchanged,
+      ensureCommunicationTemplateReviewSets: unchanged,
       ensureWebsiteInquiries: unchanged,
       ensureProfileFiller: unchanged,
       ensureProfileTouch: unchanged,
