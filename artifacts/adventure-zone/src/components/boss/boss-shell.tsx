@@ -6,7 +6,6 @@ import {
   Check,
   ClipboardCheck,
   ClipboardList,
-  ContactRound,
   House,
   Moon,
   Palette,
@@ -32,7 +31,6 @@ type NavItem = { href: string; label: string; icon: typeof House };
 const navItems: NavItem[] = [
   { href: "/boss", label: "Needs Attention", icon: House },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
-  { href: "/boss/contacts", label: "Contacts", icon: ContactRound },
   { href: "/boss/profiles", label: "Profiles", icon: Building2 },
   { href: "/boss/receipts", label: "Receipts", icon: Receipt },
   { href: "/boss/reviews", label: "Reviews", icon: Star },
