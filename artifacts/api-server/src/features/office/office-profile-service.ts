@@ -198,11 +198,18 @@ export class OfficeProfileService {
       hasLocations: false,
       showMembers: false,
       includeRetired: false,
-      page: normalizedSearch ? 1 : input.page,
-      pageSize: normalizedSearch ? MAX_PROFILE_SEARCH_CANDIDATES : 12,
+      page: input.page,
+      pageSize: 12,
     };
-    let page = await new DrizzleOrganizationRepository(this.database).listOrganizations({ ...query, search: "" });
-    if (normalizedSearch) {
+    const repository = new DrizzleOrganizationRepository(this.database);
+    let page = await repository.listOrganizations(query);
+    if (normalizedSearch && page.total === 0) {
+      page = await repository.listOrganizations({
+        ...query,
+        search: "",
+        page: 1,
+        pageSize: MAX_PROFILE_SEARCH_CANDIDATES,
+      });
       const terms = buildProfileSearchTerms(normalizedSearch);
       const searchRows = await this.database.execute<{ id: string; searchText: string | null }>(sql`
         select

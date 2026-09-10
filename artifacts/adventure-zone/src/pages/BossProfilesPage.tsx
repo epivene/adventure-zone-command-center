@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Link, useLocation, useSearch } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useSearch } from "wouter";
 import { MapPin, Search, UserRound } from "lucide-react";
 import { bossGet } from "@/lib/boss-auth-context";
 import { BossProfileDirectoryNav } from "@/components/boss/boss-profile-directory-nav";
@@ -26,37 +26,25 @@ function ProfileAvatar({ profile }: { profile: ProfileRecord }) {
 
 export default function BossProfilesPage() {
   const search = useSearch();
-  const [, setLocation] = useLocation();
   const params = new URLSearchParams(search);
-  const q = params.get("q") ?? "";
-  const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
-  const [query, setQuery] = useState(q);
+  const [query, setQuery] = useState(() => params.get("q") ?? "");
+  const [page, setPage] = useState(() => Math.max(1, Number(params.get("page") ?? 1) || 1));
   const [data, setData] = useState<Page | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const qs = new URLSearchParams();
-    if (q) qs.set("q", q);
-    if (page > 1) qs.set("page", String(page));
     let active = true;
-    bossGet<Page>(`/boss/profiles?${qs}`)
-      .then((next) => { if (active) { setData(next); setError(""); } })
-      .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); });
-    return () => { active = false; };
-  }, [q, page]);
-
-  function submit(event: FormEvent) {
-    event.preventDefault();
-    const value = query.trim();
-    setLocation(value ? `/boss/profiles?q=${encodeURIComponent(value)}` : "/boss/profiles");
-  }
-
-  function href(next: number) {
-    const nextParams = new URLSearchParams();
-    if (q) nextParams.set("q", q);
-    if (next > 1) nextParams.set("page", String(next));
-    return `/boss/profiles${nextParams.size ? `?${nextParams}` : ""}`;
-  }
+    const timeout = window.setTimeout(() => {
+      const qs = new URLSearchParams();
+      const term = query.trim();
+      if (term) qs.set("q", term);
+      if (page > 1) qs.set("page", String(page));
+      bossGet<Page>(`/boss/profiles?${qs}`)
+        .then((next) => { if (active) { setData(next); setError(""); } })
+        .catch((cause) => { if (active) setError(cause instanceof Error ? cause.message : "Could not load profiles."); });
+    }, query.trim() ? 150 : 0);
+    return () => { active = false; window.clearTimeout(timeout); };
+  }, [query, page]);
 
   return (
     <div className="grid gap-5" data-testid="boss-profiles-page">
@@ -66,14 +54,13 @@ export default function BossProfilesPage() {
         <p className="mt-1 text-sm text-muted-foreground">Event organizations, contacts, locations, bookings, and history.</p>
       </header>
       <BossProfileDirectoryNav active="profiles" />
-      <form className="flex gap-2" onSubmit={submit}>
+      <div className="relative">
         <label className="relative min-w-0 flex-1">
           <span className="sr-only">Search profiles</span>
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pl-9 pr-3" onChange={(event) => setQuery(event.target.value)} placeholder="Search profiles, contacts, or cities" value={query} />
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input aria-label="Search profiles" className="w-full rounded-lg border border-input bg-background py-2 pr-3" onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search profiles, contacts, or cities" style={{ paddingLeft: "3rem" }} value={query} />
         </label>
-        <button className="button-secondary shrink-0" type="submit">Search</button>
-      </form>
+      </div>
       {error ? <p className="rounded-xl bg-destructive/10 p-4 text-destructive" role="alert">{error}</p> : null}
       {data ? (
         <>
@@ -110,9 +97,9 @@ export default function BossProfilesPage() {
           </div>
           {data.pageCount > 1 ? (
             <nav aria-label="Profile pages" className="flex items-center justify-between">
-              {data.page > 1 ? <Link className="button-secondary" href={href(data.page - 1)}>Previous</Link> : <span />}
+              {data.page > 1 ? <button className="button-secondary" onClick={() => setPage(data.page - 1)} type="button">Previous</button> : <span />}
               <span className="text-sm text-muted-foreground">Page {data.page} of {data.pageCount}</span>
-              {data.page < data.pageCount ? <Link className="button-secondary" href={href(data.page + 1)}>Next</Link> : <span />}
+              {data.page < data.pageCount ? <button className="button-secondary" onClick={() => setPage(data.page + 1)} type="button">Next</button> : <span />}
             </nav>
           ) : null}
         </>
