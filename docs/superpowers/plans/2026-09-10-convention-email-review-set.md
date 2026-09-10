@@ -793,7 +793,55 @@ git add artifacts/adventure-zone/src/components/boss-work-requests/EmailTemplate
 git commit -m "feat: add Dave convention email review workspace"
 ```
 
-### Task 9: Verify compatibility and release readiness
+### Task 9: Show all item decisions in the owner workspace
+
+**Files:**
+- Modify: `artifacts/adventure-zone/src/pages/DaveRequestsPage.tsx`
+- Create: `artifacts/adventure-zone/src/pages/DaveRequestsPage.email-review-set.test.tsx`
+
+**Interfaces:**
+- Produces: owner summary of pending, approved, and changes-requested items
+- Consumes: `selected.templateReviews` from Task 6
+
+- [ ] **Step 1: Write the failing owner review-set test**
+
+Render one request with seven reviews, including six approved items and one changes-requested item. Assert the page shows **6 approved · 1 needs changes**, the changed template name, and Dave's exact note. Assert an approved item can still be expanded and previewed.
+
+- [ ] **Step 2: Run and verify RED**
+
+Run:
+
+```bash
+pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/DaveRequestsPage.email-review-set.test.tsx
+```
+
+Expected: FAIL because the owner page reads only `selected.templateReview`.
+
+- [ ] **Step 3: Implement the ordered owner summary**
+
+For email-template requests, read `selected.templateReviews`. Render one compact status row per item using `templateNameSnapshot`, `position`, `decision`, and `note`. Open the first changes-requested item by default; otherwise open the first pending item, then the first item. Preview the immutable snapshot in the same sandboxed desktop/mobile shell used for Dave, but do not render Boss decision controls.
+
+Keep the existing `selected.templateReview` branch only as a compatibility fallback when `templateReviews` is absent.
+
+- [ ] **Step 4: Run test and typecheck**
+
+Run:
+
+```bash
+pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts src/pages/DaveRequestsPage.email-review-set.test.tsx
+pnpm --filter @workspace/adventure-zone typecheck
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add artifacts/adventure-zone/src/pages/DaveRequestsPage.tsx artifacts/adventure-zone/src/pages/DaveRequestsPage.email-review-set.test.tsx
+git commit -m "feat: show convention email decisions to owner"
+```
+
+### Task 10: Verify compatibility and release readiness
 
 **Files:**
 - Modify only files required by failures found in this verification task.
@@ -813,7 +861,8 @@ Expected: PASS with zero failures.
 - [ ] **Step 2: Run the complete focused frontend suite**
 
 ```bash
-pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts   src/lib/communication-template-preview.test.ts   src/pages/SettingsCommunicationTemplatesPage.test.tsx   src/components/boss-work-requests/EmailTemplateReview.test.tsx
+pnpm --filter @workspace/adventure-zone exec vitest run --config vitest.config.ts   src/lib/communication-template-preview.test.ts   src/pages/SettingsCommunicationTemplatesPage.test.tsx   src/components/boss-work-requests/EmailTemplateReview.test.tsx \
+  src/pages/DaveRequestsPage.email-review-set.test.tsx
 ```
 
 Expected: PASS with zero failures.
