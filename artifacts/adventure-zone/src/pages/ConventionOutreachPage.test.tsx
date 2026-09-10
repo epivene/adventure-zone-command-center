@@ -157,23 +157,18 @@ describe("convention workspace", () => {
 
     await waitFor(() =>
       expect(fetcher).toHaveBeenCalledWith(
-        "/boss/conventions/edition-1/members/one",
+        "/boss/conventions/edition-1/members/one/convention-response",
         expect.objectContaining({
           method: "PATCH",
           body: JSON.stringify({
             revision: 1,
-            data: {
-              ...data,
-              conventionResponse: {
-                met: true,
-                interested: true,
-                followUp: true,
-                contact: "Taylor, fair manager",
-                notes: "Wants the five-attraction package.",
-              },
+            conventionResponse: {
+              met: true,
+              interested: true,
+              followUp: true,
+              contact: "Taylor, fair manager",
+              notes: "Wants the five-attraction package.",
             },
-            organizationId: "profile-1",
-            contactId: null,
           }),
         }),
       ),

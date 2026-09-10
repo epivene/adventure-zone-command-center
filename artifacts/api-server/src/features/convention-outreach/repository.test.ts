@@ -80,11 +80,27 @@ describe("convention persistence", () => {
       const detail = await repo.detail(edition.id, "boss");
       assert.equal(detail.members.length, 2);
       const member = detail.members.find((m) => m.source_key === "S1");
-      await repo.review(edition.id, 2, "Looks good", "boss");
-      await repo.updateMember(
+      const responseUpdate = await repo.updateConventionResponse(
         edition.id,
         member.id,
         1,
+        {
+          met: true,
+          interested: true,
+          followUp: true,
+          contact: "Taylor",
+          notes: "Asked about Weekend Warriors.",
+        },
+        "boss:one",
+      );
+      assert.equal(responseUpdate.organization_id, org);
+      assert.equal(responseUpdate.data.conventionResponse.met, true);
+      assert.equal(responseUpdate.data.notes, "");
+      await repo.review(edition.id, 3, "Looks good", "boss");
+      await repo.updateMember(
+        edition.id,
+        member.id,
+        2,
         { ...member.data, notes: "New notes" },
         { organizationId: org, contactId: contact },
         "owner",
@@ -93,7 +109,7 @@ describe("convention persistence", () => {
         repo.updateMember(
           edition.id,
           member.id,
-          1,
+          2,
           member.data,
           { organizationId: org, contactId: contact },
           "owner",
@@ -101,11 +117,11 @@ describe("convention persistence", () => {
         /changed/,
       );
       const updated = await repo.detail(edition.id, "boss");
-      assert.equal(updated.review.reviewed_revision, 2);
-      assert.equal(updated.edition.revision, 3);
-      const next = await repo.rollover(edition.id, 3, "owner");
+      assert.equal(updated.review.reviewed_revision, 3);
+      assert.equal(updated.edition.revision, 4);
+      const next = await repo.rollover(edition.id, 4, "owner");
       assert.equal(next.year, 2027);
-      assert.equal((await repo.rollover(edition.id, 3, "owner")).id, next.id);
+      assert.equal((await repo.rollover(edition.id, 4, "owner")).id, next.id);
       const nextDetail = await repo.detail(next.id, "boss");
       assert.equal(nextDetail.members.length, 2);
       assert.equal(
@@ -142,7 +158,7 @@ describe("convention persistence", () => {
       );
       const archived = await repo.updateEdition(
         edition.id,
-        3,
+        4,
         {
           summary: "My final notes",
           recommendation: "Contact next year",
@@ -151,13 +167,13 @@ describe("convention persistence", () => {
         },
         "owner",
       );
-      assert.equal(archived.revision, 4);
+      assert.equal(archived.revision, 5);
       await assert.rejects(repo.preview(edition.id, rows), /archived/);
       await assert.rejects(
         repo.updateMember(
           edition.id,
           member.id,
-          2,
+          3,
           member.data,
           { organizationId: org, contactId: contact },
           "owner",
@@ -167,7 +183,7 @@ describe("convention persistence", () => {
       await assert.rejects(
         repo.updateEdition(
           edition.id,
-          3,
+          4,
           {
             summary: "stale",
             recommendation: "",

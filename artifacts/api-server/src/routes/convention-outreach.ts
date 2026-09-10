@@ -101,6 +101,33 @@ export function createConventionRouter(
     }),
   );
   router.patch(
+    `${prefix}/:id/members/:memberId/convention-response`,
+    route(async (req, res) => {
+      const input = z
+        .object({
+          revision,
+          conventionResponse: z.object({
+            met: z.boolean(),
+            interested: z.boolean(),
+            followUp: z.boolean(),
+            contact: text,
+            notes: text,
+          }),
+        })
+        .parse(req.body);
+      res.json({
+        member: await repo.updateConventionResponse(
+          uuid.parse(req.params.id),
+          uuid.parse(req.params.memberId),
+          input.revision,
+          input.conventionResponse,
+          actor(req),
+        ),
+      });
+    }),
+  );
+  if (boss) return router;
+  router.patch(
     `${prefix}/:id/members/:memberId`,
     route(async (req, res) => {
       const input = z
@@ -123,7 +150,6 @@ export function createConventionRouter(
       });
     }),
   );
-  if (boss) return router;
   router.patch(
     `${prefix}/:id`,
     route(async (req, res) => {

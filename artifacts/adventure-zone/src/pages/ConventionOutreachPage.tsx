@@ -732,12 +732,14 @@ export default function ConventionOutreachPage({
           cancel={() => setGameEditing(null)}
           save={(m) =>
             void act(async () => {
-              await request(`/${m.edition_id}/members/${m.id}`, "PATCH", {
-                revision: m.revision,
-                data: m.data,
-                organizationId: m.organization_id,
-                contactId: m.contact_id,
-              });
+              await request(
+                `/${m.edition_id}/members/${m.id}/convention-response`,
+                "PATCH",
+                {
+                  revision: m.revision,
+                  conventionResponse: m.data.conventionResponse,
+                },
+              );
               setSavedCard(m.id);
               setGameEditing(null);
               await reload();
