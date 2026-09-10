@@ -31,7 +31,8 @@ const conventionWebsiteUrl = `${normalWebsiteUrl}?welcome=convention`;
 const originalTrailerImageUrl = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-mini-trailer.gif";
 const seeMoreTrailerImageUrl = "https://static.wixstatic.com/media/0e6e2c_87ad0198e4da4141ac40d29751d007d3~mv2.gif";
 const learnMoreTrailerImageUrl = "https://static.wixstatic.com/media/0e6e2c_5f0944f0c0cc45a590bac43c77ec5411~mv2.gif";
-const pinkCarnivalLine = '<tr><td align="center" style="background:#0f1729;padding:0 24px 21px;color:#ff0a8a;font-size:13px;line-height:18px;font-weight:900;letter-spacing:1.2px">AMERICA’S BEST BOUNCE HOUSE CARNIVAL</td></tr>\r\n';
+const originalLogoImageUrl = "https://adventure-zone-command-center-1.onrender.com/assets/adventure-zone-logo-navy.png";
+const combinedLogoImageUrl = "https://static.wixstatic.com/media/0e6e2c_ea3602c9e8e644d8ae11b919f2e48fae~mv2.png";
 
 function updateConventionEmailPresentation(
   html: string,
@@ -45,15 +46,16 @@ function updateConventionEmailPresentation(
     .replace(
       /<tr><td align="center" style="background:#0f1729;padding:2px 24px 23px"><table[\s\S]*?AMERICA’S GREATEST BOUNCE HOUSE CARNIVAL[\s\S]*?<\/table><\/td><\/tr>\r?\n?/g,
       "",
+    )
+    .replace(
+      /<tr><td align="center" style="background:#0f1729;padding:0 24px 21px;color:#ff0a8a;font-size:13px;line-height:18px;font-weight:900;letter-spacing:1\.2px">AMERICA’S BEST BOUNCE HOUSE CARNIVAL<\/td><\/tr>\r?\n?/g,
+      "",
     );
-  const withCarnivalLine = withoutExistingBanner.replace(
-    /(<tr>\s*<td align="center"[^>]*><img src="https:\/\/adventure-zone-command-center-1\.onrender\.com\/assets\/adventure-zone-logo-navy\.png"[^>]*>\r?\n?\s*<\/td>\s*<\/tr>)/,
-    `$1${pinkCarnivalLine}`,
-  );
+  const withCombinedLogo = withoutExistingBanner.replace(originalLogoImageUrl, combinedLogoImageUrl);
   const destination = stage === "after" ? conventionWebsiteUrl : normalWebsiteUrl;
   const trailerLabel = stage === "after" ? "tap to learn more!" : "tap to see more!";
   const trailerImageUrl = stage === "after" ? learnMoreTrailerImageUrl : seeMoreTrailerImageUrl;
-  const withTrailerDestination = withCarnivalLine.replace(
+  const withTrailerDestination = withCombinedLogo.replace(
     new RegExp(
       `<a href="https:\\/\\/youtu\\.be\\/MWD0SdAWZpc\\?is=TwYW3RxUGQxsdfbk" target="_blank" title="Watch The Adventure Zone in action" style="display:block;text-decoration:none;border:0;"><img src="${originalTrailerImageUrl.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}" width="612" alt="The Adventure Zone mini trailer — tap to watch the video"`,
     ),
@@ -132,7 +134,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_general_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-1697086144767202972",
-    gmailMessageId: "1a089d39ffb4ac0e",
+    gmailMessageId: "1a08b34342ec736b",
     name: "TEMPLATE 1 — BEFORE Convention — General (New or Past Event)",
     subjectTemplate: "Let’s connect at {{conventionName}}",
     bodyTemplate: [
@@ -149,7 +151,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-5407934870856350671",
-    gmailMessageId: "1a089d410a9c6c47",
+    gmailMessageId: "1a08b345758b9e5c",
     name: "TEMPLATE 2 — BEFORE Convention — New Event",
     subjectTemplate: "Meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -166,7 +168,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_before_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r8082858796036362003",
-    gmailMessageId: "1a089d42b974325e",
+    gmailMessageId: "1a08b347344784f6",
     name: "TEMPLATE 3 — BEFORE Convention — Past Event",
     subjectTemplate: "Let’s reconnect at {{conventionName}}",
     bodyTemplate: [
@@ -183,7 +185,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_during_new_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r-8856964011374508299",
-    gmailMessageId: "1a089d4484514e6c",
+    gmailMessageId: "1a08b34c8b3bf6d2",
     name: "TEMPLATE 4 — DURING Convention — New Event",
     subjectTemplate: "Come meet The Adventure Zone at {{conventionName}}",
     bodyTemplate: [
@@ -200,7 +202,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_during_past_event_v2",
     templateVersion: "2026-09-gmail-final-v2",
     gmailDraftId: "r4015326584847664626",
-    gmailMessageId: "1a089d4bb691e927",
+    gmailMessageId: "1a08b34ea768ec8f",
     name: "TEMPLATE 5 — DURING Convention — Past Event",
     subjectTemplate: "We’re at {{conventionName}} — come catch up",
     bodyTemplate: [
@@ -217,7 +219,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_after_new_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r7096158685165323453",
-    gmailMessageId: "1a089d4f26182f80",
+    gmailMessageId: "1a08b350a6c9f2cb",
     name: "TEMPLATE 6 — AFTER Convention — New Event",
     subjectTemplate: "Great connecting at {{conventionName}}",
     bodyTemplate: [
@@ -234,7 +236,7 @@ const conventionCampaignTemplateSources = [
     code: "convention_after_past_event_v2",
     templateVersion: "2026-09-after-convention-close-v4",
     gmailDraftId: "r-1391915929973957682",
-    gmailMessageId: "1a089d55760281da",
+    gmailMessageId: "1a08b356539ed66e",
     name: "TEMPLATE 7 — AFTER Convention — Past Event",
     subjectTemplate: "Great seeing you at {{conventionName}}",
     bodyTemplate: [
@@ -251,7 +253,7 @@ const conventionCampaignTemplateSources = [
 
 export const conventionCampaignTemplates = conventionCampaignTemplateSources.map((template) => ({
   ...template,
-  templateVersion: "2026-09-convention-header-gifs-v6",
+  templateVersion: "2026-09-combined-logo-v7",
   bodyTemplate: updateConventionEmailPresentation(
     template.bodyTemplate,
     template.code.startsWith("convention_after_") ? "after" : "before_or_during",
