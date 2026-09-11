@@ -1,22 +1,36 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  GOOGLE_PROFILE_LABEL_HIERARCHY,
   GOOGLE_PROFILE_LABEL_ROOT,
   canonicalProfileLabelName,
+  isCurrentProfileLabelPath,
   isProfileLabelPath,
   normalizedProfileLabelPath,
+  profileLabelIdentity,
   readGoogleProfileLabelConfig,
 } from "./google-profile-label-config";
 
 describe("Google profile label config", () => {
-  it("uses the established Gmail profile hierarchy", () => {
-    expect(GOOGLE_PROFILE_LABEL_ROOT).toBe("Z - AdventureZone/Profiles");
+  it("creates and organizes new profile labels only under Profiles", () => {
+    expect(GOOGLE_PROFILE_LABEL_ROOT).toBe("Profiles");
     expect(canonicalProfileLabelName("  Elko  County Fair ")).toBe(
-      "Z - AdventureZone/Profiles/Elko County Fair",
+      "Profiles/Elko County Fair",
     );
+    expect(GOOGLE_PROFILE_LABEL_HIERARCHY).toEqual(["Profiles"]);
+    expect(isCurrentProfileLabelPath("Profiles/Elko County Fair")).toBe(true);
+    expect(isCurrentProfileLabelPath(
+      "Z - AdventureZone/Profiles/Elko County Fair",
+    )).toBe(false);
+  });
+
+  it("recognizes legacy labels only as historical profile-label evidence", () => {
     expect(isProfileLabelPath(
       "Z - AdventureZone/Profiles/Elko County Fair",
     )).toBe(true);
+    expect(profileLabelIdentity(
+      "Z - AdventureZone/Profiles/Elko County Fair",
+    )).toBe("elko county fair");
     expect(isProfileLabelPath("Profiles/Elko County Fair")).toBe(true);
     expect(isProfileLabelPath("Profiles")).toBe(false);
     expect(isProfileLabelPath("Profiles Personal/Elko County Fair")).toBe(false);
