@@ -1079,6 +1079,12 @@ export function createGoogleWorkspaceReadClient(input: {
       const url = new URL(`${gmailBaseEndpoint}/messages`);
       url.searchParams.set("maxResults", String(input.maxResults));
       url.searchParams.set("includeSpamTrash", "false");
+      const labelIds = [...new Set((input.labelIds ?? []).map((id) => id.trim()))]
+        .filter(Boolean);
+      if (labelIds.some((id) => !/^[A-Za-z0-9_-]+$/.test(id))) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_LABEL_ID_INVALID");
+      }
+      for (const labelId of labelIds) url.searchParams.append("labelIds", labelId);
       if (input.query !== undefined && input.query !== null) {
         const query = input.query.trim();
         if (!query || query.length > 2_000) {

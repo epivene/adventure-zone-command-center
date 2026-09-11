@@ -191,6 +191,7 @@ export interface GoogleWorkspaceReadClient {
     maxResults: number;
     pageToken?: string | null;
     query?: string | null;
+    labelIds?: string[];
   }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
@@ -206,4 +207,3 @@ export type GoogleWorkspaceFetch = (
   input: RequestInfo | URL,
   init?: RequestInit,
 ) => Promise<Response>;
-
