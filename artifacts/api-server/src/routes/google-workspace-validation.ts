@@ -17,6 +17,7 @@ import { GoogleValidationMappingReconciler } from "@/features/google-workspace/g
 import {
   PostgresGoogleValidationRepository,
   type GoogleValidationMappingInput,
+  type GoogleValidationReviewInput,
   type GoogleValidationReviewItem,
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
@@ -91,6 +92,8 @@ type ValidationRepository = {
   }): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
   listReviewItems(): Promise<GoogleValidationReviewItem[]>;
+  upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
+  markProcessedMessageIds(messageIds: string[]): Promise<void>;
   ignoreReviewItem(input: {
     messageId: string;
     actorId: string;
@@ -249,6 +252,22 @@ function reviewReconciliationInput(result: GoogleRecentValidationResult): {
   };
 }
 
+function finalReviewItems(
+  result: GoogleRecentValidationResult,
+): GoogleValidationReviewInput[] {
+  return result.needsReview.map((row) => ({
+    messageId: row.id,
+    threadId: row.threadId,
+    subject: row.subject,
+    from: row.from,
+    to: row.to,
+    internalDateMs: row.internalDateMs,
+    evidenceCodes: row.evidenceCodes,
+    candidates: row.candidates,
+    hasAttachments: row.hasAttachments,
+  }));
+}
+
 export function createGoogleWorkspaceValidationRouter(options?: {
   service?: ValidationService;
   mappingReconciler?: MappingReconciler;
@@ -301,8 +320,11 @@ export function createGoogleWorkspaceValidationRouter(options?: {
           skipProcessed: true,
         });
         if (isValidationResult(result)) {
-          await mappingReconciler.reconcile(reconciliationInput(result));
+          const mappingInput = reconciliationInput(result);
+          await mappingReconciler.reconcile(mappingInput);
+          await validationRepository.upsertReviewItems(finalReviewItems(result));
           await reviewReconciler.reconcile(reviewReconciliationInput(result));
+          await validationRepository.markProcessedMessageIds(mappingInput.messageIds);
         }
         res.json(result);
       } catch (error) {
