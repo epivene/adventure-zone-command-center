@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { ExternalLink, Search } from "lucide-react";
 
 import {
   createGoogleReviewNewProfile,
@@ -541,11 +541,23 @@ export function GoogleValidationReview({
                       {item.from || "Unknown sender"}
                     </p>
                   </div>
-                  {item.hasAttachments ? (
-                    <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      Has attachment
-                    </span>
-                  ) : null}
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    {item.hasAttachments ? (
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        Has attachment
+                      </span>
+                    ) : null}
+                    <a
+                      aria-label={`Open email: ${item.subject || "(No subject)"}`}
+                      className="button-secondary inline-flex min-h-10 items-center gap-1.5 px-3 py-2 text-sm"
+                      href={`https://mail.google.com/mail/u/0/#all/${encodeURIComponent(item.threadId)}`}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      Open email
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
+                  </div>
                 </div>
 
                 {item.candidates.length > 0 ? (
