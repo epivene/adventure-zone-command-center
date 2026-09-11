@@ -17,11 +17,13 @@ function validationRepository(
   upsertRows = vi.fn(async () => undefined),
   upsertReviewItems = vi.fn(async () => undefined),
   processedMessageIds = vi.fn(async () => new Set<string>()),
+  markProcessedMessageIds = vi.fn(async (_messageIds: string[]) => undefined),
 ) {
   return {
     upsertRows,
     upsertReviewItems,
     processedMessageIds,
+    markProcessedMessageIds,
     getStatus: vi.fn(async () => "ready_for_review" as const),
   };
 }
@@ -123,6 +125,51 @@ describe("GoogleRecentValidationService", () => {
     expect(processedMessageIds).toHaveBeenCalledWith(["processed", "new"]);
     expect(client.getMessageMetadata).toHaveBeenCalledTimes(1);
     expect(result.counts).toEqual({ discovered: 2, matched: 1, needsReview: 0, ignored: 0 });
+  });
+
+  it("does not reload automatically ignored messages on the next incremental run", async () => {
+    const processed = new Set<string>();
+    const getMessageMetadata = vi.fn(async (id: string) =>
+      message(id, "newsletter@store.example", "Weekly sale", ["INBOX"]),
+    );
+    const client = {
+      accountIdentity: async () => ({ email: "zone@example.com" }),
+      listLabels: async () => [],
+      listRecentMessageRefs: async () => [
+        { id: "ignored", threadId: "thread-ignored" },
+      ],
+      getMessageMetadata,
+    } as unknown as GoogleWorkspaceReadClient;
+    const repository = validationRepository(
+      vi.fn(async () => undefined),
+      vi.fn(async () => undefined),
+      vi.fn(async (ids: string[]) =>
+        new Set(ids.filter((id) => processed.has(id))),
+      ),
+      vi.fn(async (ids: string[]) => {
+        ids.forEach((id) => processed.add(id));
+      }),
+    );
+    const service = new GoogleRecentValidationService({
+      connection: { createReadClient: async () => client },
+      scope: { getSaved: async () => ({ labels: [], calendars: [] }) },
+      evidence: {
+        load: async () => ({
+          contacts: [],
+          organizations: [],
+          profiles: [],
+        }),
+      },
+      validationRepository: repository,
+    });
+
+    const first = await service.run(100, { skipProcessed: true });
+    const second = await service.run(100, { skipProcessed: true });
+
+    expect(first.ignored).toHaveLength(1);
+    expect(second.ignored).toHaveLength(0);
+    expect(getMessageMetadata).toHaveBeenCalledTimes(1);
+    expect(repository.markProcessedMessageIds).toHaveBeenCalledWith(["ignored"]);
   });
 
   it("resolves an exact contact match onward to its one active organization profile and persists the mapping", async () => {
