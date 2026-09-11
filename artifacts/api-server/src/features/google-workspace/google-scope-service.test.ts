@@ -47,6 +47,20 @@ function workspaceClient(options?: {
 }
 
 describe("buildGoogleScopePreview", () => {
+  it("includes renamed Profiles labels while excluding similarly named personal trees", () => {
+    const preview = buildGoogleScopePreview([
+      { id: "root", name: "Profiles", type: "user" },
+      { id: "mandan", name: "Profiles/4th of July - Mandan ND", type: "user" },
+      { id: "private", name: "Profiles Personal/Family", type: "user" },
+      { id: "personal", name: "PERSONAL/Profiles/Fair", type: "user" },
+    ], calendars);
+    expect(preview.labels).toEqual([
+      { id: "root", name: "Profiles", rootId: "root", rootName: "Profiles" },
+      { id: "mandan", name: "Profiles/4th of July - Mandan ND", rootId: "root", rootName: "Profiles" },
+    ]);
+    expect(preview.missingLabelRoots).toEqual([]);
+    expect(preview.excludedLabelCount).toBe(2);
+  });
   it("selects the current profile and archived event label trees used by the live mailbox", () => {
     const mailboxLabels = [
       { id: "profiles", name: "Z - AdventureZone/Profiles", type: "user" as const },

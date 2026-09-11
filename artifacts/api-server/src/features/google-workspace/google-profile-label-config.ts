@@ -1,4 +1,9 @@
 export const GOOGLE_PROFILE_LABEL_ROOT = "Z - AdventureZone/Profiles";
+export const GOOGLE_CURRENT_PROFILE_LABEL_ROOT = "Profiles";
+export const GOOGLE_PROFILE_LABEL_ROOTS = [
+  GOOGLE_CURRENT_PROFILE_LABEL_ROOT,
+  GOOGLE_PROFILE_LABEL_ROOT,
+] as const;
 export const GOOGLE_PROFILE_LABEL_HIERARCHY = [
   "Z - AdventureZone",
   GOOGLE_PROFILE_LABEL_ROOT,
@@ -19,7 +24,10 @@ export function readGoogleProfileLabelConfig(
   };
 }
 
-export function canonicalProfileLabelName(profileName: string): string {
+export function canonicalProfileLabelName(
+  profileName: string,
+  root: typeof GOOGLE_PROFILE_LABEL_ROOTS[number] = GOOGLE_PROFILE_LABEL_ROOT,
+): string {
   if (/[\/\r\n\0]/.test(profileName)) {
     throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID");
   }
@@ -27,7 +35,7 @@ export function canonicalProfileLabelName(profileName: string): string {
   if (!name || name.length > 180) {
     throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID");
   }
-  return `${GOOGLE_PROFILE_LABEL_ROOT}/${name}`;
+  return `${root}/${name}`;
 }
 
 export function normalizedProfileLabelPath(value: string): string {
@@ -41,8 +49,18 @@ export function normalizedProfileLabelPath(value: string): string {
 }
 
 export function isProfileLabelPath(value: string): boolean {
-  const normalizedRoot = normalizedProfileLabelPath(GOOGLE_PROFILE_LABEL_ROOT);
+  return profileLabelIdentity(value) !== null;
+}
+
+// Compare the leaf only inside the two explicitly supported profile roots.
+// Gmail IDs remain the durable identity after a mapping has been saved.
+export function profileLabelIdentity(value: string): string | null {
   const normalized = normalizedProfileLabelPath(value);
-  return normalized.startsWith(`${normalizedRoot}/`) &&
-    normalized.length > normalizedRoot.length + 1;
+  for (const root of GOOGLE_PROFILE_LABEL_ROOTS) {
+    const prefix = `${normalizedProfileLabelPath(root)}/`;
+    if (normalized.startsWith(prefix) && normalized.length > prefix.length) {
+      return normalized.slice(prefix.length);
+    }
+  }
+  return null;
 }

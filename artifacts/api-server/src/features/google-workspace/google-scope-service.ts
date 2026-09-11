@@ -14,6 +14,7 @@ import type {
 } from "./google-scope-types";
 
 export const APPROVED_GMAIL_ROOTS = [
+  "Profiles",
   "Z - AdventureZone/Profiles",
   "ZZ - Amy Archive/SHOWS",
   "ZZ - Amy Archive/Potential shows",
@@ -24,6 +25,7 @@ export const APPROVED_GMAIL_ROOTS = [
 ] as const;
 
 const PROFILE_EVENT_GMAIL_ROOTS = new Set([
+  "profiles",
   "z - adventurezone/profiles",
   "zz - amy archive/shows",
   "zz - amy archive/potential shows",

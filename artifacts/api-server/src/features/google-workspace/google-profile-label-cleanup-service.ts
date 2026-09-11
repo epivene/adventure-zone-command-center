@@ -8,7 +8,7 @@ import {
 import {
   canonicalProfileLabelName,
   isProfileLabelPath,
-  normalizedProfileLabelPath,
+  profileLabelIdentity,
 } from "./google-profile-label-config";
 
 export type GoogleProfileLabelCleanupCandidate = {
@@ -52,7 +52,7 @@ function candidates(
   // policy, cleanup must not offer any labels for deletion.
   const current = new Set(
     currentProfileNames.map((name) =>
-      normalizedProfileLabelPath(canonicalProfileLabelName(name)),
+      profileLabelIdentity(canonicalProfileLabelName(name)),
     ),
   );
   return labels
@@ -60,7 +60,7 @@ function candidates(
       (label) =>
         label.type === "user" &&
         isProfileLabelPath(label.name) &&
-        !current.has(normalizedProfileLabelPath(label.name)),
+        !current.has(profileLabelIdentity(label.name)),
     )
     .map(({ id, name }) => ({ id, name }))
     .sort((left, right) => left.name.localeCompare(right.name));

@@ -5,8 +5,11 @@ import type {
 import {
   canonicalProfileLabelName,
   GOOGLE_PROFILE_LABEL_HIERARCHY,
+  GOOGLE_CURRENT_PROFILE_LABEL_ROOT,
+  GOOGLE_PROFILE_LABEL_ROOT,
   isProfileLabelPath,
   normalizedProfileLabelPath,
+  profileLabelIdentity,
 } from "./google-profile-label-config";
 import type {
   GoogleProfileLabelMapping,
@@ -42,7 +45,15 @@ export class GoogleProfileLabelResolver {
   ): Promise<GoogleLabelSummary[]> {
     let labels = knownLabels ? [...knownLabels] : await this.gmail.listLabels();
 
-    for (const name of GOOGLE_PROFILE_LABEL_HIERARCHY) {
+    const currentRoot = normalizedProfileLabelPath(GOOGLE_CURRENT_PROFILE_LABEL_ROOT);
+    const hasCurrentHierarchy = labels.some((label) => label.type === "user" && (
+      normalizedProfileLabelPath(label.name) === currentRoot ||
+      normalizedProfileLabelPath(label.name).startsWith(`${currentRoot}/`)
+    ));
+    const hierarchy = hasCurrentHierarchy
+      ? [GOOGLE_CURRENT_PROFILE_LABEL_ROOT]
+      : GOOGLE_PROFILE_LABEL_HIERARCHY;
+    for (const name of hierarchy) {
       const normalizedName = normalizedProfileLabelPath(name);
       const existing = labels.find(
         (label) =>
@@ -112,12 +123,13 @@ export class GoogleProfileLabelResolver {
         }
         return {
           status: "resolved",
-          mapping: {
-            ...saved,
-            gmailLabelName: existing.name,
-            state: "active",
-            lastErrorCode: null,
-          },
+          mapping: saved.gmailLabelName !== existing.name || saved.state !== "active" || saved.lastErrorCode
+            ? await this.repository.adopt({
+              ...input,
+              gmailLabelId: existing.id,
+              gmailLabelName: existing.name,
+            })
+            : saved,
         };
       }
       await this.repository.markState({
@@ -127,13 +139,16 @@ export class GoogleProfileLabelResolver {
       });
     }
 
-    const canonicalName = canonicalProfileLabelName(organization.name);
-    const normalizedName = normalizedProfileLabelPath(canonicalName);
+    const root = labels.some((label) => label.type === "user" &&
+      normalizedProfileLabelPath(label.name) === normalizedProfileLabelPath(GOOGLE_CURRENT_PROFILE_LABEL_ROOT))
+      ? GOOGLE_CURRENT_PROFILE_LABEL_ROOT : GOOGLE_PROFILE_LABEL_ROOT;
+    const canonicalName = canonicalProfileLabelName(organization.name, root);
+    const normalizedName = profileLabelIdentity(canonicalName);
     const candidates = labels.filter(
       (label) =>
         label.type === "user" &&
         isProfileLabelPath(label.name) &&
-        normalizedProfileLabelPath(label.name) === normalizedName,
+        profileLabelIdentity(label.name) === normalizedName,
     );
     if (candidates.length > 1) return this.conflict(input, candidates);
 
@@ -174,7 +189,7 @@ export class GoogleProfileLabelResolver {
         (label) =>
           label.type === "user" &&
           isProfileLabelPath(label.name) &&
-          normalizedProfileLabelPath(label.name) === normalizedName,
+          profileLabelIdentity(label.name) === normalizedName,
       );
       if (refreshed.length > 1) return this.conflict(input, refreshed);
       const winner = refreshed[0];
@@ -237,14 +252,16 @@ export class GoogleProfileLabelResolver {
     if (!organization || organization.consolidatedIntoId) {
       throw new Error("GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND");
     }
-    const canonicalName = canonicalProfileLabelName(organization.name);
+    const root = normalizedProfileLabelPath(resolved.mapping.gmailLabelName)
+      .startsWith(`${normalizedProfileLabelPath(GOOGLE_CURRENT_PROFILE_LABEL_ROOT)}/`)
+      ? GOOGLE_CURRENT_PROFILE_LABEL_ROOT : GOOGLE_PROFILE_LABEL_ROOT;
+    const canonicalName = canonicalProfileLabelName(organization.name, root);
     if (resolved.mapping.gmailLabelName === canonicalName) return resolved;
     const labels = await this.gmail.listLabels();
     const collision = labels.filter(
       (label) =>
         label.id !== resolved.mapping.gmailLabelId &&
-        normalizedProfileLabelPath(label.name) ===
-          normalizedProfileLabelPath(canonicalName),
+        profileLabelIdentity(label.name) === profileLabelIdentity(canonicalName),
     );
     if (collision.length) return this.conflict(input, collision);
     const renamed = await this.gmail.renameLabel({
