@@ -5,6 +5,7 @@ import type { GoogleWorkspaceReadClient } from "@/features/google-workspace/goog
 import { GoogleProfileEmailArchiveService } from "@/features/google-workspace/google-profile-email-archive-service";
 import type { ArchivedProfileEmailThread } from "@/features/google-workspace/google-profile-email-archive-types";
 import { GoogleProfileEmailReplyService } from "@/features/google-workspace/google-profile-email-reply-service";
+import { GoogleProfileLabelValidationImportService } from "@/features/google-workspace/google-profile-label-validation-import";
 import {
   GoogleProfileFileService,
   type GoogleProfileFile,
@@ -26,6 +27,10 @@ type ValidationAccess = {
     organizationId: string;
     threadId: string;
   }): Promise<boolean>;
+};
+
+type LabelImportAccess = {
+  reconcileOrganization(organizationId: string): Promise<GoogleApprovedValidationMapping[]>;
 };
 
 type ArchiveAccess = {
@@ -152,6 +157,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   fileService?: FileAccess;
   archiveService?: ArchiveAccess;
   replyService?: ReplyAccess;
+  labelImportService?: LabelImportAccess;
 }): IRouter {
   const router: IRouter = Router();
   const profilePath = options?.profilePath ?? "/google-workspace/profiles";
@@ -161,14 +167,26 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
   const archiveService =
     options?.archiveService ?? new GoogleProfileEmailArchiveService();
   const replyService = options?.replyService ?? new GoogleProfileEmailReplyService();
+  const labelImportService =
+    options?.labelImportService ?? new GoogleProfileLabelValidationImportService();
 
   router.get(
     `${profilePath}/:organizationId/emails`,
     async (req, res): Promise<void> => {
       try {
-        const mappings = await validationRepository.listApprovedForOrganization(
+        let mappings = await validationRepository.listApprovedForOrganization(
           req.params.organizationId,
         );
+        if (!mappings.length) {
+          try {
+            mappings = await labelImportService.reconcileOrganization(
+              req.params.organizationId,
+            );
+          } catch {
+            // Lazy label recovery is best effort. A Gmail rate limit or stale
+            // label must not make an otherwise healthy profile fail to load.
+          }
+        }
         const grouped = mappingsByThread(mappings);
 
         // Profiles with no matched Gmail should render an empty live mailbox area
