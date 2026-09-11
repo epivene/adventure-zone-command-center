@@ -110,28 +110,57 @@ export class GoogleProfileLabelValidationImportService {
       });
     }
 
+    const selectedLabels = [selected];
+    if (existing.length && client.getMessageMetadata) {
+      try {
+        const metadata = await client.getMessageMetadata(existing[0]!.messageId);
+        const supportedLabels = gmailLabels.filter(
+          (label) =>
+            label.type === "user" &&
+            metadata.labelIds.includes(label.id) &&
+            profileLabelIdentity(label.name) !== null,
+        );
+        if (
+          supportedLabels.length === 1 &&
+          supportedLabels[0]!.id !== selected.id
+        ) {
+          const owner = await this.labels.findByLabelId({
+            connectionId: current.id,
+            gmailLabelId: supportedLabels[0]!.id,
+          });
+          if (!owner || owner.organizationId === organizationId) {
+            selectedLabels.push(supportedLabels[0]!);
+          }
+        }
+      } catch {
+        // A deleted historical message must not block the saved label import.
+      }
+    }
+
     const refs: GoogleMessageRef[] = [];
     const seenMessages = new Set<string>();
-    let pageToken: string | null = null;
-    let pageCount = 0;
-    do {
-      const page = await client.listMessagePage({
-        maxResults: 250,
-        pageToken,
-        labelIds: [selected.id],
-      });
-      for (const ref of page.messages) {
-        if (!seenMessages.has(ref.id)) {
-          refs.push(ref);
-          seenMessages.add(ref.id);
+    for (const label of selectedLabels) {
+      let pageToken: string | null = null;
+      let pageCount = 0;
+      do {
+        const page = await client.listMessagePage({
+          maxResults: 250,
+          pageToken,
+          labelIds: [label.id],
+        });
+        for (const ref of page.messages) {
+          if (!seenMessages.has(ref.id)) {
+            refs.push(ref);
+            seenMessages.add(ref.id);
+          }
         }
-      }
-      pageToken = page.nextPageToken;
-      pageCount += 1;
-      if (pageCount > 10_000) {
-        throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_IMPORT_PAGE_LIMIT");
-      }
-    } while (pageToken);
+        pageToken = page.nextPageToken;
+        pageCount += 1;
+        if (pageCount > 10_000) {
+          throw new Error("GOOGLE_WORKSPACE_PROFILE_LABEL_IMPORT_PAGE_LIMIT");
+        }
+      } while (pageToken);
+    }
 
     if (refs.length) {
       await this.validation.upsertRows(
