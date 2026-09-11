@@ -83,6 +83,15 @@ export const initialBusinessKnowledgeSeed: readonly BusinessKnowledgeSeedEntry[]
     sourceLabel: websiteFaqLabel,
   },
   {
+    seedKey: "global-insurance-contact",
+    target: { kind: "global" },
+    title: "Insurance and COI contacts",
+    body:
+      "Amanda Morton (amanda@protectiveins.net) is the primary insurance contact and receives new certificate-of-insurance (COI) requests. Sara Toone (sara@protectiveins.net) is the backup contact and should be used only when Amanda is unavailable.",
+    sourceUrl: null,
+    sourceLabel: "Approved Command Center business rule",
+  },
+  {
     seedKey: "package-adventure-zone-range",
     target: { kind: "package", code: "adventure_zone" },
     title: "Adventure Zone package guideline",

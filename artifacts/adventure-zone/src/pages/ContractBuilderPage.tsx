@@ -94,7 +94,7 @@ export default function ContractBuilderPage({ draftId, autosaveDelayMs = 600 }: 
 
       <section className="grid gap-3 rounded-xl border bg-white p-4">
         <h2 className="text-lg font-bold">Certificate of insurance</h2>
-        <p className="text-sm text-slate-600">After the signed agreement is confirmed, an editable Gmail draft will be prepared for Sara Toone at sara@protectiveins.net.</p>
+        <p className="text-sm text-slate-600">After the signed agreement is confirmed, an editable Gmail draft will be prepared for {draft.storedValues.insuranceRecipient.name} at {draft.storedValues.insuranceRecipient.email}.</p>
         <label className="grid gap-1 text-sm font-semibold">Certificate holder
           <input value={values.coi.certificateHolderName} onChange={(event) => change({ ...values, coi: { ...values.coi, certificateHolderName: event.target.value } })} />
         </label>

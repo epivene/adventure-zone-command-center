@@ -31,7 +31,7 @@ const values: ContractValues = {
 function draft(ready = false): ContractDraft {
   return {
     id: "draft-1", bookingId: "booking-1", organizationId: "org-1", revision: 1,
-    storedValues: { contract: values, insuranceRecipient: { name: "Sara Toone", email: "sara@protectiveins.net" } },
+    storedValues: { contract: values, insuranceRecipient: { name: "Amanda Morton", email: "amanda@protectiveins.net" } },
     validationState: { ready, errors: ready ? [] : [{ path: "operationalTerms", message: "Confirm the operating responsibilities." }], warnings: [] },
   };
 }
@@ -81,6 +81,7 @@ describe("ContractBuilderPage", () => {
     expect(screen.getByLabelText("Operational terms confirmed")).toBeInTheDocument();
     expect(screen.getByText(/1\. Pat Organizer/)).toBeInTheDocument();
     expect(screen.getByText(/2\. Dave Gordon/)).toBeInTheDocument();
+    expect(screen.getByText(/prepared for Amanda Morton at amanda@protectiveins\.net/i)).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Contract arrangement"), { target: { value: "pay_for_play" } });
     expect(screen.getByLabelText("Event percentage")).toBeInTheDocument();
