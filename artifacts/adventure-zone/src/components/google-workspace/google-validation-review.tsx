@@ -11,6 +11,7 @@ import {
   getGoogleProfileLabelCleanupPreview,
   getGoogleWorkspaceValidationReview,
   getGoogleWorkspaceValidationReviewThread,
+  getGoogleWorkspaceValidationReviewAttachment,
   ignoreGoogleWorkspaceValidationReview,
   resolveGoogleWorkspaceValidationReview,
   retryGoogleWorkspaceGmailMutation,
@@ -95,7 +96,10 @@ export function GoogleValidationReview({
   const [createByMessage, setCreateByMessage] = useState<Record<string, CreateState>>({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [threadByMessage, setThreadByMessage] = useState<Record<string, GoogleThreadDetail>>({});
-  const [openingMessageId, setOpeningMessageId] = useState<string | null>(null);
+  const [openingMessageIds, setOpeningMessageIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [openingAttachmentKey, setOpeningAttachmentKey] = useState<string | null>(null);
   const [threadErrorByMessage, setThreadErrorByMessage] = useState<Record<string, string>>({});
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
@@ -351,6 +355,34 @@ export function GoogleValidationReview({
     }
   }
 
+  async function openAttachment(
+    item: GoogleValidationReviewItem,
+    gmailMessageId: string,
+    attachmentId: string,
+  ) {
+    const key = `${gmailMessageId}:${attachmentId}`;
+    setOpeningAttachmentKey(key);
+    setThreadErrorByMessage((current) => ({ ...current, [item.messageId]: "" }));
+    try {
+      const blob = await getGoogleWorkspaceValidationReviewAttachment(
+        item.messageId,
+        gmailMessageId,
+        attachmentId,
+      );
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (caught) {
+      setThreadErrorByMessage((current) => ({
+        ...current,
+        [item.messageId]:
+          caught instanceof Error ? caught.message : "Could not open this attachment.",
+      }));
+    } finally {
+      setOpeningAttachmentKey(null);
+    }
+  }
+
   async function toggleThread(item: GoogleValidationReviewItem) {
     if (threadByMessage[item.messageId]) {
       setThreadByMessage((current) => {
@@ -361,7 +393,11 @@ export function GoogleValidationReview({
       return;
     }
 
-    setOpeningMessageId(item.messageId);
+    setOpeningMessageIds((current) => {
+      const next = new Set(current);
+      next.add(item.messageId);
+      return next;
+    });
     setThreadErrorByMessage((current) => ({ ...current, [item.messageId]: "" }));
     try {
       const thread = await getGoogleWorkspaceValidationReviewThread(item.messageId);
@@ -373,7 +409,11 @@ export function GoogleValidationReview({
           caught instanceof Error ? caught.message : "Could not open this email.",
       }));
     } finally {
-      setOpeningMessageId(null);
+      setOpeningMessageIds((current) => {
+        const next = new Set(current);
+        next.delete(item.messageId);
+        return next;
+      });
     }
   }
 
@@ -562,7 +602,7 @@ export function GoogleValidationReview({
             const createState = createByMessage[item.messageId];
             const busy = busyMessageId === item.messageId;
             const thread = threadByMessage[item.messageId];
-            const opening = openingMessageId === item.messageId;
+            const opening = openingMessageIds.has(item.messageId);
             const threadError = threadErrorByMessage[item.messageId];
             return (
               <article className="rounded-xl border border-amber-200 bg-white p-4 shadow-sm dark:border-amber-900 dark:bg-slate-950/40" key={item.messageId}>
@@ -621,25 +661,44 @@ export function GoogleValidationReview({
                         className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40"
                         key={message.id}
                       >
-                        <div className="flex flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                          <div>
-                            <p className="font-semibold text-slate-700 dark:text-slate-200">
+                        <div className="flex min-w-0 flex-wrap justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-all font-semibold text-slate-700 dark:text-slate-200">
                               {message.from || "Unknown sender"}
                             </p>
-                            <p>To: {message.to || "Unknown recipient"}</p>
+                            <p className="break-all">To: {message.to || "Unknown recipient"}</p>
                           </div>
-                          <span>{message.date}</span>
+                          <span className="max-w-full break-words">{message.date}</span>
                         </div>
                         <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-800 dark:text-slate-100">
                           {message.bodyText || "(No readable text body)"}
                         </p>
                         {message.attachments.length ? (
                           <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-600 dark:border-slate-800 dark:text-slate-300">
-                            {message.attachments.map((attachment) => (
-                              <p className="break-words" key={`${message.id}:${attachment.attachmentId}`}>
-                                Attachment: {attachment.filename}
-                              </p>
-                            ))}
+                            {message.attachments.map((attachment) => {
+                              const attachmentKey = `${message.id}:${attachment.attachmentId}`;
+                              return (
+                                <button
+                                  aria-label={`Open attachment: ${attachment.filename}`}
+                                  className="button-secondary flex min-h-10 w-full items-center justify-between gap-2 px-3 py-2 text-left"
+                                  disabled={openingAttachmentKey === attachmentKey}
+                                  key={attachmentKey}
+                                  onClick={() => void openAttachment(
+                                    item,
+                                    message.id,
+                                    attachment.attachmentId,
+                                  )}
+                                  type="button"
+                                >
+                                  <span className="min-w-0 break-all">
+                                    Attachment: {attachment.filename}
+                                  </span>
+                                  <span className="shrink-0">
+                                    {openingAttachmentKey === attachmentKey ? "Opening…" : "Open"}
+                                  </span>
+                                </button>
+                              );
+                            })}
                           </div>
                         ) : null}
                       </article>
