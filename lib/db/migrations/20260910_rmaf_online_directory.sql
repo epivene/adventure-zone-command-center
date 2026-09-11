@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 50998)
-Total output lines: 231
-
 -- Public directory import, retrieved 2026-09-10. Never sends messages or creates bookings.
 -- Source facts and every registration sub-listing are retained in the import audit.
 BEGIN;
