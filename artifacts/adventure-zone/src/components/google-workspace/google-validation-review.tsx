@@ -78,10 +78,12 @@ function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
 
 export function GoogleValidationReview({
   checkGmailOnMount = false,
+  showGmailActions = checkGmailOnMount,
   onPendingCountChange,
   showHistory = false,
 }: {
   checkGmailOnMount?: boolean;
+  showGmailActions?: boolean;
   onPendingCountChange?(count: number): void;
   showHistory?: boolean;
 } = {}) {
@@ -504,7 +506,7 @@ export function GoogleValidationReview({
             </p>
           ) : null}
         </div>
-        {checkGmailOnMount ? (
+        {showGmailActions ? (
           <div className="flex shrink-0 flex-wrap gap-2">
             <button
               className="button-secondary px-3 py-2 text-sm"

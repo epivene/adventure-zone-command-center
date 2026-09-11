@@ -18,6 +18,8 @@ function appWith(options: {
     now: Date;
   }) => Promise<void>;
   listReviewItems?: () => Promise<any[]>;
+  upsertReviewItems?: (items: any[]) => Promise<void>;
+  markProcessedMessageIds?: (messageIds: string[]) => Promise<void>;
   getReviewThread?: (threadId: string) => Promise<any>;
   getReviewAttachment?: (input: { messageId: string; attachmentId: string }) => Promise<Uint8Array>;
   resolveReviewItem?: (input: {
@@ -61,7 +63,10 @@ function appWith(options: {
         getStatus: async () => "ready_for_review",
         listReviewItems: options.listReviewItems ?? (async () => []),
         ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
-      },
+        upsertReviewItems: options.upsertReviewItems ?? (async () => undefined),
+        markProcessedMessageIds:
+          options.markProcessedMessageIds ?? (async () => undefined),
+      } as any,
       connection: {
         createReadClient: async () => options.getReviewThread
           ? ({ getThreadDetail: options.getReviewThread, getAttachment: options.getReviewAttachment } as any)
@@ -97,10 +102,58 @@ describe("Google Workspace recent validation route", () => {
       .send({ limit: 100 });
 
     expect(response.status).toBe(200);
-    expect(run).toHaveBeenCalledWith(100);
+    expect(run).toHaveBeenCalledWith(100, { skipProcessed: true });
     expect(response.body.aiEnabled).toBe(false);
     expect(response.body.historicalImportStarted).toBe(false);
     expect(response.body.validationStatus).toBe("ready_for_review");
+  });
+
+  it("persists final AI review outcomes before marking messages processed", async () => {
+    const calls: string[] = [];
+    const upsertReviewItems = vi.fn(async () => { calls.push("review"); });
+    const markProcessedMessageIds = vi.fn(async () => { calls.push("processed"); });
+    const reviewRow = {
+      id: "ai-review",
+      threadId: "thread-ai-review",
+      subject: "Possible event",
+      from: "organizer@example.org",
+      to: "zone@example.com",
+      internalDateMs: 1,
+      evidenceCodes: ["ai_review"],
+      candidates: [
+        { id: "contact-1", name: "Contact Person", kind: "contact" },
+        { id: "profile-1", name: "Fair Profile", kind: "profile" },
+      ],
+      organizationCandidates: [
+        { id: "org-1", name: "Fair Organization" },
+      ],
+      hasAttachments: false,
+      resolvedOrganization: null,
+    };
+
+    const response = await request(appWith({
+      run: async () => ({
+        matched: [],
+        needsReview: [reviewRow],
+        ignored: [],
+      }),
+      upsertReviewItems,
+      markProcessedMessageIds,
+    })).post("/google-workspace/validation/recent").send({ limit: 100 });
+
+    expect(response.status).toBe(200);
+    expect(upsertReviewItems).toHaveBeenCalledWith([
+      expect.objectContaining({
+        messageId: "ai-review",
+        threadId: "thread-ai-review",
+        candidates: [
+          { id: "org-1", name: "Fair Organization" },
+          { id: "profile-1", name: "Fair Profile" },
+        ],
+      }),
+    ]);
+    expect(markProcessedMessageIds).toHaveBeenCalledWith(["ai-review"]);
+    expect(calls).toEqual(["review", "processed"]);
   });
 
   it("reconciles stale stored mappings from the current sample", async () => {

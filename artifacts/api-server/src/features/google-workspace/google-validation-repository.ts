@@ -129,12 +129,37 @@ export class PostgresGoogleValidationRepository {
        SELECT message_id
          FROM google_workspace_validation_review_items
         WHERE connection_id = $1
+          AND message_id = ANY($2::text[])
+       UNION
+       SELECT message_id
+         FROM google_workspace_validation_processed_messages
+        WHERE connection_id = $1
           AND message_id = ANY($2::text[])`,
       [connectionId, ids],
     );
     return new Set(result.rows.flatMap((row) =>
       typeof row.message_id === "string" ? [row.message_id] : []
     ));
+  }
+
+  async markProcessedMessageIds(messageIds: string[]): Promise<void> {
+    const ids = [
+      ...new Set(messageIds.map((id) => id.trim()).filter(Boolean)),
+    ];
+    if (!ids.length) return;
+    const connectionId = await this.currentConnectionId();
+    await this.pool.query(
+      `INSERT INTO google_workspace_validation_processed_messages (
+         connection_id,
+         message_id,
+         processed_at
+       )
+       SELECT $1, message_id, now()
+         FROM unnest($2::text[]) AS message_id
+       ON CONFLICT (connection_id, message_id) DO UPDATE SET
+         processed_at = EXCLUDED.processed_at`,
+      [connectionId, ids],
+    );
   }
 
   async upsertRows(rows: GoogleValidationMappingInput[]): Promise<void> {

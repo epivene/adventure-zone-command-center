@@ -17,6 +17,7 @@ import { GoogleValidationMappingReconciler } from "@/features/google-workspace/g
 import {
   PostgresGoogleValidationRepository,
   type GoogleValidationMappingInput,
+  type GoogleValidationReviewInput,
   type GoogleValidationReviewItem,
   type GoogleValidationStatus,
 } from "@/features/google-workspace/google-validation-repository";
@@ -54,7 +55,10 @@ type ConnectionAccess = {
 };
 
 type ValidationService = {
-  run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
+  run(
+    limit: number,
+    options?: { skipProcessed?: boolean },
+  ): Promise<GoogleRecentValidationResult | unknown>;
 };
 
 type MappingReconciler = {
@@ -88,6 +92,8 @@ type ValidationRepository = {
   }): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
   listReviewItems(): Promise<GoogleValidationReviewItem[]>;
+  upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
+  markProcessedMessageIds(messageIds: string[]): Promise<void>;
   ignoreReviewItem(input: {
     messageId: string;
     actorId: string;
@@ -246,6 +252,33 @@ function reviewReconciliationInput(result: GoogleRecentValidationResult): {
   };
 }
 
+function finalReviewItems(
+  result: GoogleRecentValidationResult,
+): GoogleValidationReviewInput[] {
+  return result.needsReview.map((row) => {
+    const candidates = new Map<string, { id: string; name: string }>();
+    for (const candidate of row.organizationCandidates ?? []) {
+      candidates.set(candidate.id, candidate);
+    }
+    for (const candidate of row.candidates ?? []) {
+      if (candidate.kind === "organization" || candidate.kind === "profile") {
+        candidates.set(candidate.id, { id: candidate.id, name: candidate.name });
+      }
+    }
+    return {
+      messageId: row.id,
+      threadId: row.threadId,
+      subject: row.subject,
+      from: row.from,
+      to: row.to,
+      internalDateMs: row.internalDateMs,
+      evidenceCodes: row.evidenceCodes,
+      candidates: [...candidates.values()],
+      hasAttachments: row.hasAttachments,
+    };
+  });
+}
+
 export function createGoogleWorkspaceValidationRouter(options?: {
   service?: ValidationService;
   mappingReconciler?: MappingReconciler;
@@ -294,10 +327,15 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        const result = await service.run(parsed.data.limit);
+        const result = await service.run(parsed.data.limit, {
+          skipProcessed: true,
+        });
         if (isValidationResult(result)) {
-          await mappingReconciler.reconcile(reconciliationInput(result));
+          const mappingInput = reconciliationInput(result);
+          await mappingReconciler.reconcile(mappingInput);
+          await validationRepository.upsertReviewItems(finalReviewItems(result));
           await reviewReconciler.reconcile(reviewReconciliationInput(result));
+          await validationRepository.markProcessedMessageIds(mappingInput.messageIds);
         }
         res.json(result);
       } catch (error) {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GoogleAiRecentValidationService } from "./google-ai-recent-validation-service";
 
@@ -73,6 +73,53 @@ function googleClient() {
 }
 
 describe("GoogleAiRecentValidationService", () => {
+  it("forwards incremental validation options to the base Gmail scan", async () => {
+    const run = vi.fn(async () => baseResult);
+    const service = new GoogleAiRecentValidationService({
+      baseValidation: { run },
+      aiEnabled: false,
+    });
+
+    await service.run(100, { skipProcessed: true });
+
+    expect(run).toHaveBeenCalledWith(100, {
+      skipProcessed: true,
+      deferProcessedMarking: true,
+    });
+  });
+
+  it("can promote a deterministic ignored row to final AI review", async () => {
+    const ignored = row({ id: "ignored", subject: "Unclear event inquiry" });
+    const service = new GoogleAiRecentValidationService({
+      baseValidation: {
+        run: async () => ({
+          ...baseResult,
+          counts: { discovered: 1, matched: 0, needsReview: 0, ignored: 1 },
+          needsReview: [],
+          ignored: [ignored],
+        }),
+      },
+      connection: { createReadClient: async () => googleClient() },
+      aiFactory: async () => ({
+        providerName: "Test AI",
+        complete: async () => JSON.stringify({
+          decision: "REVIEW",
+          profileId: null,
+          confidence: "high",
+          reason: "The message may describe an event but has no safe profile match.",
+        }),
+      }),
+      aiEnabled: true,
+    });
+
+    const result = await service.run(100, { skipProcessed: true });
+
+    expect(result.needsReview).toEqual([
+      expect.objectContaining({ id: "ignored" }),
+    ]);
+    expect(result.ignored).toEqual([]);
+  });
+
   it("never lets AI ignore or resolve conflicting profile labels", async () => {
     const conflict = {...row({id:"conflict",subject:"Membership"}),evidenceCodes:["profile_label_conflict"]};
     const service = new GoogleAiRecentValidationService({

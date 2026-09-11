@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmailReviewPage } from "./EmailReviewPage";
 
@@ -36,6 +36,8 @@ function reviewItem(input: {
 }
 
 describe("EmailReviewPage", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     runRecentValidation.mockReset();
     runRecentValidation.mockResolvedValue({});
@@ -49,12 +51,12 @@ describe("EmailReviewPage", () => {
     });
   });
 
-  it("checks recent Gmail before opening the durable review queue", async () => {
+  it("opens the durable review queue without scanning Gmail automatically", async () => {
     render(<EmailReviewPage />);
 
     expect(screen.getByRole("heading", { name: "Email Review" })).toBeInTheDocument();
     expect(await screen.findByText("County Fair application")).toBeInTheDocument();
-    expect(runRecentValidation).toHaveBeenCalledWith(100);
+    expect(runRecentValidation).not.toHaveBeenCalled();
     expect(screen.getByText("1 waiting for you")).toBeInTheDocument();
     expect(screen.queryByText("Resolved festival")).not.toBeInTheDocument();
   });
@@ -71,15 +73,19 @@ describe("EmailReviewPage", () => {
     await waitFor(() => expect(getReview).toHaveBeenCalledTimes(1));
   });
 
-  it("shows the saved queue when checking Gmail fails", async () => {
-    runRecentValidation.mockRejectedValueOnce(new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"));
-
+  it("keeps showing the saved queue when a manual Gmail check fails", async () => {
     render(<EmailReviewPage />);
-
     expect(await screen.findByText("County Fair application")).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    runRecentValidation.mockRejectedValueOnce(
+      new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Check emails" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
       "Could not check Gmail. Showing saved email review items.",
     );
+    expect(screen.getByText("County Fair application")).toBeInTheDocument();
   });
 
   it("keeps resolved and ignored email available in a collapsible history", async () => {
