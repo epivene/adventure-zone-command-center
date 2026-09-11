@@ -257,10 +257,10 @@ function finalReviewItems(
 ): GoogleValidationReviewInput[] {
   return result.needsReview.map((row) => {
     const candidates = new Map<string, { id: string; name: string }>();
-    for (const candidate of row.organizationCandidates) {
+    for (const candidate of row.organizationCandidates ?? []) {
       candidates.set(candidate.id, candidate);
     }
-    for (const candidate of row.candidates) {
+    for (const candidate of row.candidates ?? []) {
       if (candidate.kind === "organization" || candidate.kind === "profile") {
         candidates.set(candidate.id, { id: candidate.id, name: candidate.name });
       }
