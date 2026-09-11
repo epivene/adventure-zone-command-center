@@ -104,6 +104,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("GoogleValidationReview", () => {
@@ -140,6 +141,30 @@ describe("GoogleValidationReview", () => {
       "blob:https://app.example/fair-info",
     ));
     expect(createObjectURL).toHaveBeenCalled();
+  });
+
+  it("downloads active attachment types with their original filename", async () => {
+    client.getGoogleWorkspaceValidationReviewAttachment.mockResolvedValue(
+      new Blob(["html"], { type: "application/octet-stream" }),
+    );
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:https://app.example/download");
+    const popup = { close: vi.fn(), location: { href: "" }, opener: window };
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    let downloadedFilename = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+      downloadedFilename = this.download;
+    });
+    render(<GoogleValidationReview />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Open attachment: fair-info.pdf",
+    }));
+
+    await waitFor(() => expect(downloadedFilename).toBe("fair-info.pdf"));
+    expect(popup.close).toHaveBeenCalled();
   });
 
   it("opens the full pending email inside Email Review", async () => {
