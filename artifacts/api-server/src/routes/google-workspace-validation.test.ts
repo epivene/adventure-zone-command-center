@@ -120,7 +120,13 @@ describe("Google Workspace recent validation route", () => {
       to: "zone@example.com",
       internalDateMs: 1,
       evidenceCodes: ["ai_review"],
-      candidates: [],
+      candidates: [
+        { id: "contact-1", name: "Contact Person", kind: "contact" },
+        { id: "profile-1", name: "Fair Profile", kind: "profile" },
+      ],
+      organizationCandidates: [
+        { id: "org-1", name: "Fair Organization" },
+      ],
       hasAttachments: false,
       resolvedOrganization: null,
     };
@@ -137,7 +143,14 @@ describe("Google Workspace recent validation route", () => {
 
     expect(response.status).toBe(200);
     expect(upsertReviewItems).toHaveBeenCalledWith([
-      expect.objectContaining({ messageId: "ai-review", threadId: "thread-ai-review" }),
+      expect.objectContaining({
+        messageId: "ai-review",
+        threadId: "thread-ai-review",
+        candidates: [
+          { id: "org-1", name: "Fair Organization" },
+          { id: "profile-1", name: "Fair Profile" },
+        ],
+      }),
     ]);
     expect(markProcessedMessageIds).toHaveBeenCalledWith(["ai-review"]);
     expect(calls).toEqual(["review", "processed"]);
