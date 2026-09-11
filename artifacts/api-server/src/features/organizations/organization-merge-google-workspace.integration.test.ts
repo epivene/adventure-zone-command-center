@@ -23,6 +23,8 @@ postgresOnly("organization merge Google Workspace references", () => {
     const mappingId = randomUUID();
     const reviewItemId = randomUUID();
     const profileFileId = randomUUID();
+    const editionId = randomUUID();
+    const memberId = randomUUID();
     const accountEmail = `merge-google-${connectionId}@example.com`;
     const messageId = `merge-google-message-${mappingId}`;
     const reviewMessageId = `merge-google-review-${reviewItemId}`;
@@ -66,6 +68,18 @@ postgresOnly("organization merge Google Workspace references", () => {
            ${fileMessageId}, ${`attachment-${profileFileId}`}, 'merge-test.txt', 'text/plain', 1)
       `);
 
+      await db.execute(sql`
+        INSERT INTO convention_editions (id, convention, year)
+        VALUES (${editionId}, ${`Merge Test ${editionId}`}, 2099)
+      `);
+
+      await db.execute(sql`
+        INSERT INTO convention_members
+          (id, edition_id, source_key, organization_id, data)
+        VALUES
+          (${memberId}, ${editionId}, ${`merge-test-${memberId}`}, ${duplicateId}, '{}'::jsonb)
+      `);
+
       const repository = new DrizzleOrganizationRepository(db);
       await repository.mergeOrganizations(primaryId, [duplicateId]);
 
@@ -94,7 +108,16 @@ postgresOnly("organization merge Google Workspace references", () => {
         WHERE id = ${profileFileId}
       `) as unknown as { rows: Array<{ organizationId: string }> };
       expect(fileRows.rows).toEqual([{ organizationId: primaryId }]);
+
+      const memberRows = await db.execute(sql`
+        SELECT organization_id AS "organizationId"
+        FROM convention_members
+        WHERE id = ${memberId}
+      `) as unknown as { rows: Array<{ organizationId: string }> };
+      expect(memberRows.rows).toEqual([{ organizationId: primaryId }]);
     } finally {
+      await db.execute(sql`DELETE FROM convention_members WHERE id = ${memberId}`).catch(() => undefined);
+      await db.execute(sql`DELETE FROM convention_editions WHERE id = ${editionId}`).catch(() => undefined);
       await db.execute(sql`DELETE FROM google_workspace_profile_files WHERE id = ${profileFileId}`).catch(() => undefined);
       await db.execute(sql`DELETE FROM google_workspace_validation_review_items WHERE id = ${reviewItemId}`).catch(() => undefined);
       await db.execute(sql`DELETE FROM google_workspace_validation_mappings WHERE id = ${mappingId}`).catch(() => undefined);
