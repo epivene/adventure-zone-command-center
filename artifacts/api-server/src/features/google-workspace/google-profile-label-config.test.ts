@@ -17,7 +17,9 @@ describe("Google profile label config", () => {
     expect(isProfileLabelPath(
       "Z - AdventureZone/Profiles/Elko County Fair",
     )).toBe(true);
-    expect(isProfileLabelPath("Profiles/Elko County Fair")).toBe(false);
+    expect(isProfileLabelPath("Profiles/Elko County Fair")).toBe(true);
+    expect(isProfileLabelPath("Profiles")).toBe(false);
+    expect(isProfileLabelPath("Profiles Personal/Elko County Fair")).toBe(false);
   });
 
   it("enables mutations only for the literal value true", () => {
