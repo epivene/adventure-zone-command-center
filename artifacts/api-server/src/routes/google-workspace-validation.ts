@@ -54,7 +54,10 @@ type ConnectionAccess = {
 };
 
 type ValidationService = {
-  run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
+  run(
+    limit: number,
+    options?: { skipProcessed?: boolean },
+  ): Promise<GoogleRecentValidationResult | unknown>;
 };
 
 type MappingReconciler = {
@@ -294,7 +297,9 @@ export function createGoogleWorkspaceValidationRouter(options?: {
         return;
       }
       try {
-        const result = await service.run(parsed.data.limit);
+        const result = await service.run(parsed.data.limit, {
+          skipProcessed: true,
+        });
         if (isValidationResult(result)) {
           await mappingReconciler.reconcile(reconciliationInput(result));
           await reviewReconciler.reconcile(reviewReconciliationInput(result));
