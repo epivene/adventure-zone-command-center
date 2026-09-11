@@ -188,7 +188,14 @@ select
   organizations.normalized_phone,
   'unknown'::contact_phone_type,
   'active'::phone_status,
-  true,
+  not exists (
+    select 1
+    from organization_phones existing_primary
+    where existing_primary.organization_id = organizations.id
+      and existing_primary.organization_location_id is null
+      and existing_primary."primary"
+      and existing_primary.status = 'active'
+  ),
   'legacy_backfill'
 from organizations
 where nullif(btrim(organizations.phone), '') is not null
