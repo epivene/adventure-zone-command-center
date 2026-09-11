@@ -107,6 +107,11 @@ async function processUncertainRow(input: {
   client: GoogleWorkspaceReadClient;
   ai: AiCompletionClient;
 }): Promise<ProcessedRow> {
+  // Conflicting explicit profile labels require an owner decision. Neither
+  // body similarity nor AI may choose a winner or silently ignore the conflict.
+  if (input.row.evidenceCodes.includes("profile_label_conflict")) {
+    return { bucket: "review", row: input.row, attempted: false };
+  }
   const profiles = candidateProfiles(input.row);
   const bodyText = await readableThreadText(input.client, input.row.threadId);
   const triage = await triageGoogleEmailWithAi({
@@ -267,7 +272,7 @@ export class GoogleAiRecentValidationService {
         if (item.row.aiTriage?.outcome === "ignore") aiIgnored += 1;
       } else {
         needsReview.push(item.row);
-        aiReview += 1;
+        if (item.attempted) aiReview += 1;
       }
     }
 
@@ -277,7 +282,7 @@ export class GoogleAiRecentValidationService {
       aiStatus: "enabled",
       aiProvider: ai.providerName,
       aiCounts: {
-        attempted: processed.length,
+        attempted: processed.filter((item) => item.attempted).length,
         matched: aiMatched,
         ignored: aiIgnored,
         review: aiReview,

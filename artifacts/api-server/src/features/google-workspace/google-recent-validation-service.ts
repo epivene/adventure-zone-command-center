@@ -30,6 +30,7 @@ import {
   type GoogleValidationLearningSnapshot,
 } from "./google-validation-learning-repository";
 import { GoogleInboundProfileLabeler } from "./google-inbound-profile-labeler";
+import { classifyProfileLabelEvidence, profileLabelEvidenceIndex } from "./google-profile-label-evidence";
 import {
   classifyGoogleMessageRelevance,
   type GoogleRelevanceCandidate,
@@ -308,6 +309,7 @@ async function withTransientBodyEvidence(input: {
     input.result.status === "matched" &&
     input.result.evidenceCodes.includes("learned_external_email");
   if (
+    input.result.evidenceCodes.includes("profile_label_conflict") ||
     (input.result.status === "matched" && !learnedAddressMatch) ||
     !input.client.getThreadDetail
   ) {
@@ -427,6 +429,11 @@ export class GoogleRecentValidationService {
     );
     for (const id of businessHintLabelIds(labels)) relevanceLabelIds.add(id);
     const labelsById = new Map(labels.map((label) => [label.id, label]));
+    const profileLabels = profileLabelEvidenceIndex({
+      labels,
+      approvedLabelIds: relevanceLabelIds,
+      profiles: evidenceSnapshot.profiles,
+    });
     const mailboxEmails = new Set([
       ...learned.mailboxEmails,
       accountIdentity.email.trim().toLowerCase(),
@@ -447,7 +454,11 @@ export class GoogleRecentValidationService {
       if (processed.has(ref.id)) continue;
       const message = await client.getMessageMetadata(ref.id);
       const learnedThread = learned.threadTargets.get(message.threadId);
-      const metadataResult = classifyGoogleMessageRelevance({
+      const metadataResult = classifyProfileLabelEvidence({
+        labelIds: message.labelIds,
+        index: profileLabels,
+        existingThreadTarget: learnedThread,
+      }) ?? classifyGoogleMessageRelevance({
         message,
         evidence: {
           approvedLabelIds: relevanceLabelIds,
@@ -536,6 +547,9 @@ export class GoogleRecentValidationService {
         result.evidenceCodes,
         result.candidates,
       );
+      if (result.evidenceCodes.includes("profile_label_conflict")) {
+        row.resolvedOrganization = null;
+      }
       if (result.status === "matched") matched.push(row);
       else if (result.status === "review") needsReview.push(row);
       else ignored.push(row);
