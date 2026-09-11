@@ -19,7 +19,10 @@ const AI_CONCURRENCY = 6;
 const MAX_THREAD_TEXT = 18_000;
 
 type BaseValidationAccess = {
-  run(limit: number): Promise<GoogleRecentValidationResult>;
+  run(
+    limit: number,
+    options?: { skipProcessed?: boolean },
+  ): Promise<GoogleRecentValidationResult>;
 };
 
 type ConnectionAccess = {
@@ -208,8 +211,11 @@ export class GoogleAiRecentValidationService {
     this.aiEnabled = options?.aiEnabled ?? googleAiEnabledFromEnv();
   }
 
-  async run(limit = 100): Promise<GoogleAiRecentValidationResult> {
-    const base = await this.baseValidation.run(limit);
+  async run(
+    limit = 100,
+    options?: { skipProcessed?: boolean },
+  ): Promise<GoogleAiRecentValidationResult> {
+    const base = await this.baseValidation.run(limit, options);
     const emptyCounts = { attempted: 0, matched: 0, ignored: 0, review: 0 };
 
     if (!this.aiEnabled) {
