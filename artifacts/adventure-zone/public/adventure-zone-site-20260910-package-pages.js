@@ -834,10 +834,6 @@
     return `<div class="package-video"><iframe src="https://www.youtube.com/embed/${packageVideoIds[item.key]}?rel=0&playsinline=1" title="${item.title} video" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
   }
 
-  function packageVideosMarkup() {
-    return `<section class="section video-section" id="videos"><div class="container"><h2 class="display">See The Fun In Action</h2><div class="video-grid">${packageDefinitions().map(item => `<article><h3 class="display">${item.title}</h3>${packageVideoMarkup(item)}<a class="video-package-link" href="${packagePath(item.key)}">Explore ${item.title} ${icon("arrow")}</a></article>`).join("")}</div></div></section>`;
-  }
-
   function packageDetailMarkup(item, standalone = false) {
     const heading = standalone ? "h1" : "h2";
     const lineup = item.lineup.replace('<details class="attraction-lineup"><summary>View Attraction Lineup</summary>', '<section class="package-lineup">').replace('</details>', '</section>');
@@ -932,13 +928,13 @@
         <div class="container header-row">
           <a class="logo-link" href="#hero" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a>
           <nav class="desktop-nav" aria-label="Primary navigation">
-            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#videos">Videos</a><a href="#faq">FAQ</a>
+            <a href="#about">About</a><a href="#packages">Packages</a><a href="#experience">The Experience</a><a href="#safety">Safety</a><a href="#partnerships">Booking Structures</a><a href="#faq">FAQ</a>
           </nav>
           <div class="desktop-book"><a class="button" href="#contact">Contact ${icon("arrow")}</a></div>
           <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="az-mobile-nav" aria-label="Open menu">${icon("menu")}</button>
         </div>
         <nav class="mobile-nav" id="az-mobile-nav" aria-label="Mobile navigation">
-          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#videos">Videos ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
+          <a href="#about">About ${icon("chevron")}</a><a href="#packages">Packages ${icon("chevron")}</a><a href="#experience">The Experience ${icon("chevron")}</a><a href="#safety">Safety &amp; Trust ${icon("chevron")}</a><a href="#partnerships">Booking Structures ${icon("chevron")}</a><a href="#gallery">Gallery ${icon("chevron")}</a><a href="#faq">FAQ ${icon("chevron")}</a><a href="#contact">Contact ${icon("chevron")}</a>
         </nav>
       </header>
 
@@ -966,7 +962,6 @@
         <span class="marquee-item">${icon("star")}25+ Years of Fun</span>
       </div></section>
 
-      ${packageVideosMarkup()}
 
       <section class="section about" id="about"><div class="container">
         <div class="about-layout">
