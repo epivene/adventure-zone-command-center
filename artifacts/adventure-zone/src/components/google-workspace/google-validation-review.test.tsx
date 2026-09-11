@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
+  getGoogleWorkspaceValidationReviewThread: vi.fn(),
   runGoogleWorkspaceRecentValidation: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
@@ -39,6 +40,23 @@ const item = {
 beforeEach(() => {
   client.runGoogleWorkspaceRecentValidation.mockResolvedValue({});
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
+  client.getGoogleWorkspaceValidationReviewThread.mockResolvedValue({
+    id: "t1",
+    subject: "County Fair application",
+    originalGmailUrl: "https://mail.google.com/mail/u/0/#all/t1",
+    messages: [{
+      id: "gm1",
+      internalDateMs: 1,
+      from: "events@example.org",
+      to: "zone@example.com",
+      cc: "",
+      subject: "County Fair application",
+      date: "Mon, 24 Aug 2026 10:00:00 -0600",
+      direction: "incoming",
+      bodyText: "We would like information about bringing Adventure Zone to our fair.",
+      attachments: [],
+    }],
+  });
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
     ok: true,
     gmailSync: {
@@ -79,17 +97,24 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
-  it("opens a pending review item in its Gmail thread", async () => {
+  it("opens the full pending email inside Email Review", async () => {
     render(<GoogleValidationReview />);
 
-    const link = await screen.findByRole("link", {
-      name: "Open email: County Fair application",
-    });
-    expect(link).toHaveAttribute(
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+
+    expect(await screen.findByText(
+      "We would like information about bringing Adventure Zone to our fair.",
+    )).toBeInTheDocument();
+    expect(client.getGoogleWorkspaceValidationReviewThread).toHaveBeenCalledWith("m1");
+    expect(screen.getByRole("button", {
+      name: "Hide email: County Fair application",
+    })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute(
       "href",
       "https://mail.google.com/mail/u/0/#all/t1",
     );
-    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("checks recent Gmail before loading the review queue when opted in", async () => {
