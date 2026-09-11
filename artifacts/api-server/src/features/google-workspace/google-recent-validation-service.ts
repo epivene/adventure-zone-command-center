@@ -120,7 +120,6 @@ type ContactProfileResolverAccess = {
 
 type ValidationRepositoryAccess = {
   processedMessageIds?(messageIds: string[]): Promise<Set<string>>;
-  markProcessedMessageIds?(messageIds: string[]): Promise<void>;
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
@@ -588,9 +587,6 @@ export class GoogleRecentValidationService {
     }
     await this.validationRepository.upsertReviewItems(
       persistableReviewItems(needsReview),
-    );
-    await this.validationRepository.markProcessedMessageIds?.(
-      refs.map((ref) => ref.id),
     );
     const validationStatus = await this.validationRepository.getStatus();
 
