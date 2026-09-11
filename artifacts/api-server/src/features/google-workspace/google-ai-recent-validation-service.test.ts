@@ -82,7 +82,10 @@ describe("GoogleAiRecentValidationService", () => {
 
     await service.run(100, { skipProcessed: true });
 
-    expect(run).toHaveBeenCalledWith(100, { skipProcessed: true });
+    expect(run).toHaveBeenCalledWith(100, {
+      skipProcessed: true,
+      deferProcessedMarking: true,
+    });
   });
 
   it("can promote a deterministic ignored row to final AI review", async () => {
