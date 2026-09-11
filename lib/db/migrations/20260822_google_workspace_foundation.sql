@@ -23,9 +23,19 @@ CREATE TABLE IF NOT EXISTS google_workspace_connections (
     CHECK (jsonb_typeof(granted_scopes) = 'array')
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS google_workspace_connections_single_active_unique
-  ON google_workspace_connections ((1))
-  WHERE status IN ('connected', 'reauthorization_required');
+DO $ BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = current_schema()
+      AND table_name = 'google_workspace_connections'
+      AND column_name = 'role'
+  ) THEN
+    CREATE UNIQUE INDEX IF NOT EXISTS google_workspace_connections_single_active_unique
+      ON google_workspace_connections ((1))
+      WHERE status IN ('connected', 'reauthorization_required');
+  END IF;
+END $;
 CREATE INDEX IF NOT EXISTS google_workspace_connections_status_idx
   ON google_workspace_connections (status, updated_at DESC);
 
