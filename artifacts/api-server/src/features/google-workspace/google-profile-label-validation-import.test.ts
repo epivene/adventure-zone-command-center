@@ -118,4 +118,92 @@ describe("GoogleProfileLabelValidationImportService", () => {
     await expect(service.reconcileOrganization("org-1")).resolves.toEqual([]);
     expect(upsertRows).not.toHaveBeenCalled();
   });
+
+  it("imports a supported profile label found on an already-mapped message", async () => {
+    const rows = [
+      {
+        messageId: "contract-message",
+        threadId: "contract-thread",
+        organizationId: "org-1",
+        contactId: null,
+        evidenceCodes: ["manual_profile_assignment"],
+      },
+    ];
+    const gmail = client();
+    gmail.listLabels = async () => [
+      { id: "Label_show", name: "SHOWS/4th of July - Pagosa Springs CO", type: "user" },
+      { id: "Label_profile", name: "Profiles/4th of July History Celebration - Pagosa Springs CO", type: "user" },
+    ];
+    gmail.getMessageMetadata = async () => ({
+      id: "contract-message",
+      threadId: "contract-thread",
+      labelIds: ["Label_show", "Label_profile"],
+      internalDateMs: 1,
+      snippet: "",
+      headers: { from: "", to: "", cc: "", subject: "", date: "" },
+      hasAttachments: true,
+    });
+    gmail.listMessagePage = async ({ labelIds }) => ({
+      messages: labelIds?.includes("Label_profile")
+        ? [
+            { id: "contract-message", threadId: "contract-thread" },
+            { id: "history-message", threadId: "history-thread" },
+          ]
+        : [{ id: "contract-message", threadId: "contract-thread" }],
+      nextPageToken: null,
+    });
+
+    const service = new GoogleProfileLabelValidationImportService({
+      connections: {
+        getCurrent: async () => ({ id: "connection-1" }),
+        createReadClient: async () => gmail,
+      },
+      labels: {
+        getOrganization: async () => ({
+          id: "org-1",
+          name: "4th of July (Pagosa Springs) CO",
+          consolidatedIntoId: null,
+        }),
+        findByOrganization: async () => ({
+          connectionId: "connection-1",
+          organizationId: "org-1",
+          gmailLabelId: "Label_show",
+          gmailLabelName: "SHOWS/4th of July - Pagosa Springs CO",
+          state: "active",
+          lastErrorCode: null,
+        }),
+        findByLabelId: async ({ gmailLabelId }) =>
+          gmailLabelId === "Label_profile"
+            ? null
+            : {
+                connectionId: "connection-1",
+                organizationId: "org-1",
+                gmailLabelId: "Label_show",
+                gmailLabelName: "SHOWS/4th of July - Pagosa Springs CO",
+                state: "active" as const,
+                lastErrorCode: null,
+              },
+        adopt: vi.fn(),
+        markState: vi.fn(),
+        listManagedLabelIds: async () => [],
+      },
+      validation: {
+        listApprovedForOrganization: async () => rows,
+        upsertRows: async (incoming) => {
+          for (const row of incoming) {
+            const index = rows.findIndex((existing) => existing.messageId === row.messageId);
+            if (index >= 0) rows[index] = row;
+            else rows.push(row);
+          }
+        },
+      },
+    });
+
+    const result = await service.reconcileOrganization("org-1");
+
+    expect(result.map((row) => row.threadId).sort()).toEqual([
+      "contract-thread",
+      "history-thread",
+    ]);
+  });
 });
