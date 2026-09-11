@@ -332,6 +332,16 @@ export async function getGoogleWorkspaceValidationReview(): Promise<{
   );
 }
 
+export async function getGoogleWorkspaceValidationReviewThread(
+  messageId: string,
+): Promise<GoogleThreadDetail> {
+  return responseJson<GoogleThreadDetail>(
+    await apiFetch(
+      `/google-workspace/validation/review/${encodeURIComponent(messageId)}/thread`,
+    ),
+  );
+}
+
 export async function resolveGoogleWorkspaceValidationReview(
   messageId: string,
   organizationId: string,
