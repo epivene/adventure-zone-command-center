@@ -19,6 +19,7 @@ function appWith(options: {
   }) => Promise<void>;
   listReviewItems?: () => Promise<any[]>;
   getReviewThread?: (threadId: string) => Promise<any>;
+  getReviewAttachment?: (input: { messageId: string; attachmentId: string }) => Promise<Uint8Array>;
   resolveReviewItem?: (input: {
     messageId: string;
     organizationId: string;
@@ -63,7 +64,7 @@ function appWith(options: {
       },
       connection: {
         createReadClient: async () => options.getReviewThread
-          ? ({ getThreadDetail: options.getReviewThread } as any)
+          ? ({ getThreadDetail: options.getReviewThread, getAttachment: options.getReviewAttachment } as any)
           : null,
       },
       labelCleanupService: {
@@ -240,6 +241,70 @@ describe("Google Workspace recent validation route", () => {
     expect(response.status).toBe(200);
     expect(response.body.messages[0].bodyText).toBe("Full message body");
     expect(getReviewThread).toHaveBeenCalledWith("t1");
+  });
+
+  it("opens only an attachment that belongs to the saved review thread", async () => {
+    const getReviewAttachment = vi.fn(async () => new Uint8Array([1, 2, 3]));
+    const getReviewThread = vi.fn(async () => ({
+      id: "t1",
+      subject: "County Fair application",
+      originalGmailUrl: "https://mail.google.com/mail/u/0/#all/t1",
+      messages: [{
+        id: "gm1",
+        from: "events@example.org",
+        to: "zone@example.com",
+        cc: "",
+        subject: "County Fair application",
+        date: "",
+        internalDateMs: 1,
+        direction: "incoming",
+        bodyText: "Full message body",
+        attachments: [{
+          attachmentId: "a1",
+          filename: "fair-info.pdf",
+          mimeType: "application/pdf",
+          sizeBytes: 3,
+          messageId: "gm1",
+        }],
+      }],
+    }));
+    const listReviewItems = vi.fn(async () => [{
+      messageId: "m1",
+      threadId: "t1",
+      state: "pending",
+    }]);
+
+    const response = await request(appWith({
+      listReviewItems,
+      getReviewThread,
+      getReviewAttachment,
+    })).get("/google-workspace/validation/review/m1/attachments/gm1/a1");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/pdf");
+    expect(response.headers["content-disposition"]).toContain("fair-info.pdf");
+    expect(response.body).toEqual(Buffer.from([1, 2, 3]));
+    expect(getReviewAttachment).toHaveBeenCalledWith({
+      messageId: "gm1",
+      attachmentId: "a1",
+    });
+  });
+
+  it("does not fetch an attachment outside the saved review thread", async () => {
+    const getReviewAttachment = vi.fn();
+    const response = await request(appWith({
+      listReviewItems: async () => [{ messageId: "m1", threadId: "t1" }],
+      getReviewThread: async () => ({
+        id: "t1",
+        subject: "",
+        originalGmailUrl: "",
+        messages: [],
+      }),
+      getReviewAttachment,
+    })).get("/google-workspace/validation/review/m1/attachments/gm1/not-there");
+
+    expect(response.status).toBe(404);
+    expect(getReviewAttachment).not.toHaveBeenCalled();
   });
 
   it("does not open an arbitrary Gmail thread outside the review queue", async () => {
