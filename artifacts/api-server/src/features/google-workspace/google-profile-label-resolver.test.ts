@@ -109,6 +109,60 @@ function harness(input?: {
 }
 
 describe("GoogleProfileLabelResolver", () => {
+  const currentRoot = { id: "new-root", name: "Profiles", type: "user" as const };
+  const currentLabel = { id: "renamed", name: "Profiles/Elko County Fair", type: "user" as const };
+
+  it("adopts the renamed hierarchy without recreating the old root", async () => {
+    const h = harness({ missingParents: true, labels: [currentRoot, currentLabel] });
+    await expect(h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" }))
+      .resolves.toMatchObject({ status: "resolved", mapping: { gmailLabelId: "renamed" } });
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
+
+  it("persists a Gmail rename using the same saved label ID", async () => {
+    const h = harness({ missingParents: true, labels: [currentRoot, currentLabel], mapping: {
+      connectionId: "conn-1", organizationId: "org-1", gmailLabelId: "renamed",
+      gmailLabelName: "Z - AdventureZone/Profiles/Elko County Fair", state: "unavailable",
+      lastErrorCode: "GOOGLE_WORKSPACE_GMAIL_LABEL_NOT_FOUND",
+    } });
+    await h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" });
+    expect(await h.repository.findByOrganization({ connectionId: "conn-1", organizationId: "org-1" }))
+      .toMatchObject({ gmailLabelId: "renamed", gmailLabelName: "Profiles/Elko County Fair", state: "active", lastErrorCode: null });
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
+
+  it("creates new labels under the current root even when the old root remains", async () => {
+    const h = harness({ labels: [currentRoot] });
+    await h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" });
+    expect(h.gmail.createLabel).toHaveBeenCalledExactlyOnceWith("Profiles/Elko County Fair");
+  });
+
+  it("treats matching leaves across current and legacy roots as a conflict", async () => {
+    const h = harness({ labels: [currentRoot, currentLabel, {
+      id: "legacy", name: "Z - AdventureZone/Profiles/Elko County Fair", type: "user",
+    }] });
+    await expect(h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" }))
+      .resolves.toMatchObject({ status: "conflict" });
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+    expect(h.repository.adopt).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a renamed label already owned by another profile", async () => {
+    const h = harness({ missingParents: true, labels: [currentRoot, currentLabel], otherOwnerLabelId: "renamed" });
+    await expect(h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" }))
+      .resolves.toMatchObject({ status: "conflict" });
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current hierarchy during a profile rename", async () => {
+    const h = harness({ missingParents: true, labels: [currentRoot, currentLabel], organizationName: "New Fair", mapping: {
+      connectionId: "conn-1", organizationId: "org-1", gmailLabelId: "renamed",
+      gmailLabelName: currentLabel.name, state: "active", lastErrorCode: null,
+    } });
+    await expect(h.resolver.reconcileDisplayName({ connectionId: "conn-1", organizationId: "org-1" }))
+      .resolves.toMatchObject({ status: "resolved", mapping: { gmailLabelId: "renamed", gmailLabelName: "Profiles/New Fair" } });
+    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+  });
   it("reuses a saved Gmail label id after a CRM rename", async () => {
     const saved: GoogleProfileLabelMapping = {
       connectionId: "conn-1",
