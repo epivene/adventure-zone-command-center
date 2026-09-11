@@ -99,7 +99,9 @@ export function GoogleValidationReview({
   const [openingMessageIds, setOpeningMessageIds] = useState<Set<string>>(
     () => new Set(),
   );
-  const [openingAttachmentKey, setOpeningAttachmentKey] = useState<string | null>(null);
+  const [openingAttachmentKeys, setOpeningAttachmentKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
   const [threadErrorByMessage, setThreadErrorByMessage] = useState<Record<string, string>>({});
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupLoading, setCleanupLoading] = useState(false);
@@ -361,7 +363,16 @@ export function GoogleValidationReview({
     attachmentId: string,
   ) {
     const key = `${gmailMessageId}:${attachmentId}`;
-    setOpeningAttachmentKey(key);
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      setThreadErrorByMessage((current) => ({
+        ...current,
+        [item.messageId]: "Allow pop-ups to open this attachment.",
+      }));
+      return;
+    }
+    popup.opener = null;
+    setOpeningAttachmentKeys((current) => new Set(current).add(key));
     setThreadErrorByMessage((current) => ({ ...current, [item.messageId]: "" }));
     try {
       const blob = await getGoogleWorkspaceValidationReviewAttachment(
@@ -370,16 +381,21 @@ export function GoogleValidationReview({
         attachmentId,
       );
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank", "noopener,noreferrer");
+      popup.location.href = url;
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (caught) {
+      popup.close();
       setThreadErrorByMessage((current) => ({
         ...current,
         [item.messageId]:
           caught instanceof Error ? caught.message : "Could not open this attachment.",
       }));
     } finally {
-      setOpeningAttachmentKey(null);
+      setOpeningAttachmentKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
     }
   }
 
@@ -681,7 +697,7 @@ export function GoogleValidationReview({
                                 <button
                                   aria-label={`Open attachment: ${attachment.filename}`}
                                   className="button-secondary flex min-h-10 w-full items-center justify-between gap-2 px-3 py-2 text-left"
-                                  disabled={openingAttachmentKey === attachmentKey}
+                                  disabled={openingAttachmentKeys.has(attachmentKey)}
                                   key={attachmentKey}
                                   onClick={() => void openAttachment(
                                     item,
@@ -694,7 +710,7 @@ export function GoogleValidationReview({
                                     Attachment: {attachment.filename}
                                   </span>
                                   <span className="shrink-0">
-                                    {openingAttachmentKey === attachmentKey ? "Opening…" : "Open"}
+                                    {openingAttachmentKeys.has(attachmentKey) ? "Opening…" : "Open"}
                                   </span>
                                 </button>
                               );
@@ -882,46 +898,3 @@ export function GoogleValidationReview({
               {history.map((item) => (
                 <article className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40" key={item.messageId}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="font-semibold text-slate-900 dark:text-slate-100">{item.subject || "(No subject)"}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.from || "Unknown sender"}</p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                        {item.state === "ignored"
-                          ? "Ignored · Gmail unchanged"
-                          : item.gmailSyncState === "completed"
-                            ? "Assigned · archived in Gmail"
-                            : item.gmailSyncErrorCode ===
-                                "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
-                              ? "Assigned · reconnect Gmail"
-                              : item.gmailSyncState === "retryable_error"
-                                ? "Assigned · Gmail retry needed"
-                              : item.gmailSyncState === "conflict"
-                                ? "Assigned · label conflict"
-                                : "Assigned"}
-                      </span>
-                      {item.gmailSyncState === "retryable_error" &&
-                      item.gmailSyncMutationId ? (
-                        <button
-                          className="button-secondary px-2 py-1 text-xs"
-                          disabled={retryingMutationId === item.gmailSyncMutationId}
-                          onClick={() => void retryGmail(item.gmailSyncMutationId!)}
-                          type="button"
-                        >
-                          {retryingMutationId === item.gmailSyncMutationId
-                            ? "Retrying…"
-                            : "Retry Gmail"}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
-  );
-}
