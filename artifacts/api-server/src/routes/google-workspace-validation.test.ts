@@ -97,7 +97,7 @@ describe("Google Workspace recent validation route", () => {
       .send({ limit: 100 });
 
     expect(response.status).toBe(200);
-    expect(run).toHaveBeenCalledWith(100);
+    expect(run).toHaveBeenCalledWith(100, { skipProcessed: true });
     expect(response.body.aiEnabled).toBe(false);
     expect(response.body.historicalImportStarted).toBe(false);
     expect(response.body.validationStatus).toBe("ready_for_review");
