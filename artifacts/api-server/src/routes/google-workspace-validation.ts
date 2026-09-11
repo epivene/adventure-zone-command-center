@@ -170,16 +170,37 @@ function errorStatus(code: string): number {
 }
 
 function safeAttachmentFilename(filename: string): string {
-  return filename.replace(/[\r\n"\\/]/g, "_") || "attachment";
+  return filename.replace(/[^\x20-\x7e]|["\\/]/g, "_") || "attachment";
 }
 
-function safeAttachmentMimeType(mimeType: string): string {
-  const parts = mimeType.split("/");
-  const isSafeToken = (value: string | undefined) =>
-    Boolean(value) && !/[\s\r\n"\\]/.test(value ?? "");
-  return parts.length === 2 && parts.every(isSafeToken)
-    ? mimeType
-    : "application/octet-stream";
+function encodedAttachmentFilename(filename: string): string {
+  return encodeURIComponent(filename).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function attachmentResponseHeaders(filename: string, mimeType: string): {
+  contentType: string;
+  contentDisposition: string;
+} {
+  const passiveMimeTypes = new Set([
+    "application/pdf",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "text/csv",
+    "text/plain",
+  ]);
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const inline = passiveMimeTypes.has(normalizedMimeType);
+  const disposition = inline ? "inline" : "attachment";
+  return {
+    contentType: inline ? normalizedMimeType : "application/octet-stream",
+    contentDisposition:
+      `${disposition}; filename="${safeAttachmentFilename(filename)}"; ` +
+      `filename*=UTF-8''${encodedAttachmentFilename(filename)}`,
+  };
 }
 
 function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
@@ -366,11 +387,12 @@ export function createGoogleWorkspaceValidationRouter(options?: {
           messageId: message.id,
           attachmentId: attachment.attachmentId,
         });
-        res.setHeader("Content-Type", safeAttachmentMimeType(attachment.mimeType));
-        res.setHeader(
-          "Content-Disposition",
-          `inline; filename="${safeAttachmentFilename(attachment.filename)}"`,
+        const headers = attachmentResponseHeaders(
+          attachment.filename,
+          attachment.mimeType,
         );
+        res.setHeader("Content-Type", headers.contentType);
+        res.setHeader("Content-Disposition", headers.contentDisposition);
         res.send(Buffer.from(bytes));
       } catch (error) {
         const code = safeError(error);
