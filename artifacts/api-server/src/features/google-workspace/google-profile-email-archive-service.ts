@@ -107,6 +107,21 @@ export class GoogleProfileEmailArchiveService {
     this.now = options?.now ?? (() => new Date());
   }
 
+  async listSavedForOrganization(
+    organizationId: string,
+  ): Promise<ArchivedProfileEmailThread[]> {
+    if (!organizationId.trim()) return [];
+    return this.archive.listForOrganization(organizationId);
+  }
+
+  async getSavedByProviderThread(input: {
+    organizationId: string;
+    gmailThreadId: string;
+  }): Promise<ArchivedProfileEmailThread | null> {
+    if (!input.organizationId.trim() || !input.gmailThreadId.trim()) return null;
+    return this.archive.findByProviderThread(input);
+  }
+
   async archiveApprovedThread(input: {
     organizationId: string;
     contactId: string | null;

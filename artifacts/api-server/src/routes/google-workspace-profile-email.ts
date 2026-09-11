@@ -34,6 +34,13 @@ type ArchiveAccess = {
     contactId: string | null;
     gmailThreadId: string;
   }): Promise<ArchivedProfileEmailThread>;
+  listSavedForOrganization?(
+    organizationId: string,
+  ): Promise<ArchivedProfileEmailThread[]>;
+  getSavedByProviderThread?(input: {
+    organizationId: string;
+    gmailThreadId: string;
+  }): Promise<ArchivedProfileEmailThread | null>;
 };
 
 type ReplyAccess = {
@@ -166,14 +173,15 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
     `${profilePath}/:organizationId/emails`,
     async (req, res): Promise<void> => {
       try {
-        const mappings = await validationRepository.listApprovedForOrganization(
-          req.params.organizationId,
-        );
+        const organizationId = req.params.organizationId;
+        const [mappings, savedThreads] = await Promise.all([
+          validationRepository.listApprovedForOrganization(organizationId),
+          archiveService.listSavedForOrganization?.(organizationId) ??
+            Promise.resolve([]),
+        ]);
         const grouped = mappingsByThread(mappings);
 
-        // Profiles with no matched Gmail should render an empty live mailbox area
-        // without requiring a Google round-trip.
-        if (!grouped.size) {
+        if (!grouped.size && !savedThreads.length) {
           res.json({
             validationSampleOnly: false,
             historicalBackfillIncluded: true,
@@ -190,7 +198,7 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
             threadId,
             threadMappings,
             thread: await archiveService.archiveApprovedThread({
-              organizationId: req.params.organizationId,
+              organizationId,
               contactId:
                 threadMappings.find((mapping) => mapping.contactId)?.contactId ??
                 null,
@@ -206,16 +214,31 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
           result.status === "rejected" ? [result.reason] : [],
         );
 
-        // A stale/deleted Gmail thread should not break every other matched
-        // conversation on the profile. If Gmail itself is unavailable, however,
-        // surface the real Google error instead of pretending the mailbox is empty.
-        if (!successes.length && failures.length) {
+        if (!successes.length && failures.length && !savedThreads.length) {
           throw failures[0];
         }
 
-        const allConversations = successes
-          .map(({ threadId, threadMappings, thread }) => {
+        const shownConversationIds = new Set(
+          successes.map(({ thread }) => thread.id),
+        );
+        const shownProviderThreadIds = new Set(
+          successes.flatMap(({ threadId, thread }) => [
+            threadId,
+            ...thread.providerThreadIds,
+          ]),
+        );
+        const savedFallbacks = savedThreads.filter(
+          (thread) =>
+            !shownConversationIds.has(thread.id) &&
+            !thread.providerThreadIds.some((threadId) =>
+              shownProviderThreadIds.has(threadId),
+            ),
+        );
+
+        const allConversations = [
+          ...successes.map(({ threadId, threadMappings, thread }) => {
             const latest = thread.messages.at(-1) ?? null;
+            const state = sourceState(thread);
             return {
               threadId,
               subject: thread.subject || latest?.subject || "",
@@ -233,16 +256,40 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
               ],
               originalGmailUrl: thread.originalGmailUrl || gmailUrl(threadId),
               conversationId: thread.id,
+              savedCopy: state !== "synced",
+              archiveState: thread.archiveState,
+              sourceState: state,
+            };
+          }),
+          ...savedFallbacks.flatMap((thread) => {
+            const latest = thread.messages.at(-1) ?? null;
+            const threadId =
+              thread.providerThreadIds.at(-1) ?? latest?.gmailThreadId ?? "";
+            if (!threadId) return [];
+            return [{
+              threadId,
+              subject: thread.subject || latest?.subject || "",
+              from: latest?.from ?? "",
+              to: latest?.to ?? "",
+              date: latest?.date ?? "",
+              internalDateMs: latest?.internalDateMs ?? null,
+              hasAttachments: thread.messages.some(
+                (message) => message.attachments.length > 0,
+              ),
+              contactId: thread.contactId,
+              evidenceCodes: [],
+              originalGmailUrl: thread.originalGmailUrl || gmailUrl(threadId),
+              conversationId: thread.id,
               savedCopy: true,
               archiveState: thread.archiveState,
-              sourceState: sourceState(thread),
-            };
-          })
-          .sort(
-            (left, right) =>
-              (right.internalDateMs ?? 0) - (left.internalDateMs ?? 0) ||
-              left.threadId.localeCompare(right.threadId),
-          );
+              sourceState: "saved_copy_not_synced" as const,
+            }];
+          }),
+        ].sort(
+          (left, right) =>
+            (right.internalDateMs ?? 0) - (left.internalDateMs ?? 0) ||
+            left.threadId.localeCompare(right.threadId),
+        );
 
         const currentYear = new Date().getUTCFullYear();
         const conversations = allConversations.filter(
@@ -274,32 +321,43 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
     `${profilePath}/:organizationId/emails/:threadId`,
     async (req, res): Promise<void> => {
       try {
+        const organizationId = req.params.organizationId;
+        const threadId = req.params.threadId;
         const ownsThread =
           await validationRepository.organizationOwnsApprovedThread({
-            organizationId: req.params.organizationId,
-            threadId: req.params.threadId,
+            organizationId,
+            threadId,
           });
-        if (!ownsThread) {
+        const archived = ownsThread
+          ? await archiveService.archiveApprovedThread({
+              organizationId,
+              contactId: null,
+              gmailThreadId: threadId,
+            })
+          : archiveService.getSavedByProviderThread
+            ? await archiveService.getSavedByProviderThread({
+                organizationId,
+                gmailThreadId: threadId,
+              })
+            : null;
+        if (!archived) {
           res.status(404).json({ error: "GOOGLE_WORKSPACE_PROFILE_EMAIL_NOT_FOUND" });
           return;
         }
-
-        const archived = await archiveService.archiveApprovedThread({
-          organizationId: req.params.organizationId,
-          contactId: null,
-          gmailThreadId: req.params.threadId,
-        });
+        const state = ownsThread
+          ? sourceState(archived)
+          : "saved_copy_not_synced" as const;
         res.json({
-          id: req.params.threadId,
+          id: threadId,
           conversationId: archived.id,
           subject: archived.subject,
           originalGmailUrl:
-            archived.originalGmailUrl || gmailUrl(req.params.threadId),
-          savedCopy: true,
+            archived.originalGmailUrl || gmailUrl(threadId),
+          savedCopy: state !== "synced",
           archiveState: archived.archiveState,
           lastSyncedAt: archived.lastSyncedAt,
           lastGmailErrorCode: archived.lastGmailErrorCode,
-          sourceState: sourceState(archived),
+          sourceState: state,
           messages: archived.messages.map((message) => ({
             id: message.gmailMessageId,
             internalDateMs: message.internalDateMs,

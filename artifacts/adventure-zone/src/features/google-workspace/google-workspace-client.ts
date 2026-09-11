@@ -179,7 +179,8 @@ export type ProfileEmailArchiveState = "pending" | "complete" | "partial" | "fai
 export type ProfileEmailSourceState =
   | "synced"
   | "saved_copy_gmail_missing"
-  | "saved_copy_gmail_unavailable";
+  | "saved_copy_gmail_unavailable"
+  | "saved_copy_not_synced";
 
 export type GoogleProfileEmailConversation = {
   conversationId?: string;
