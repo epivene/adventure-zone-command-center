@@ -178,6 +178,7 @@ export async function reparentAdditionalOrganizationReferences(
         'google_workspace_validation_review_items',
         'google_workspace_profile_files',
         'google_workspace_profile_email_threads',
+        'directory_import_records',
         'google_workspace_profile_labels',
         'google_workspace_gmail_mutations',
         'google_workspace_gmail_thread_intents'
@@ -247,6 +248,13 @@ export async function reparentAdditionalOrganizationReferences(
     await transaction.execute(sql`
       UPDATE google_workspace_profile_email_threads
       SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("directory_import_records")) {
+    await transaction.execute(sql`
+      UPDATE directory_import_records
+      SET organization_id = ${primaryId}
       WHERE organization_id = ${duplicateId}
     `);
   }

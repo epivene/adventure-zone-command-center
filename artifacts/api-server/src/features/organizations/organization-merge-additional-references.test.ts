@@ -36,4 +36,11 @@ describe("organization merge additional references", () => {
     expect(source).toContain("scout_alert_watches");
     expect(source).toContain("scout_alerts");
   });
+
+  it("preserves directory import audit records", () => {
+    expect(source).toContain("'directory_import_records'");
+    expect(source).toContain("UPDATE directory_import_records");
+    expect(source).toContain("SET organization_id = ${primaryId}");
+    expect(source).toContain("WHERE organization_id = ${duplicateId}");
+  });
 });
