@@ -26,7 +26,11 @@ export function EmailReviewPage() {
         </p>
       </header>
 
-      <GoogleValidationReview onPendingCountChange={setPendingCount} showHistory />
+      <GoogleValidationReview
+        onPendingCountChange={setPendingCount}
+        showGmailActions
+        showHistory
+      />
     </div>
   );
 }
