@@ -290,6 +290,35 @@ describe("Google Workspace recent validation route", () => {
     });
   });
 
+  it("forces active attachment types to download and safely encodes Unicode filenames", async () => {
+    const response = await request(appWith({
+      listReviewItems: async () => [{ messageId: "m1", threadId: "t1" }],
+      getReviewThread: async () => ({
+        id: "t1",
+        subject: "",
+        originalGmailUrl: "",
+        messages: [{
+          id: "gm1",
+          attachments: [{
+            attachmentId: "a1",
+            filename: "报价.html",
+            mimeType: "text/html",
+            sizeBytes: 3,
+            messageId: "gm1",
+          }],
+        }],
+      }),
+      getReviewAttachment: async () => new Uint8Array([1, 2, 3]),
+    })).get("/google-workspace/validation/review/m1/attachments/gm1/a1");
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/octet-stream");
+    expect(response.headers["content-disposition"]).toContain("attachment;");
+    expect(response.headers["content-disposition"]).toContain(
+      "filename*=UTF-8''%E6%8A%A5%E4%BB%B7.html",
+    );
+  });
+
   it("does not fetch an attachment outside the saved review thread", async () => {
     const getReviewAttachment = vi.fn();
     const response = await request(appWith({
