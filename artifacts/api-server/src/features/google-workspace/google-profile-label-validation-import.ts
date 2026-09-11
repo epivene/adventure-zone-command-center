@@ -56,10 +56,9 @@ export class GoogleProfileLabelValidationImportService {
   ): Promise<GoogleApprovedValidationMapping[]> {
     const existing =
       await this.validation.listApprovedForOrganization(organizationId);
-    if (existing.length) return existing;
 
     const current = await this.connections.getCurrent();
-    if (!current) return [];
+    if (!current) return existing;
 
     const organization = await this.labels.getOrganization({
       connectionId: current.id,
@@ -70,11 +69,11 @@ export class GoogleProfileLabelValidationImportService {
       organization.consolidatedIntoId ||
       profileLabelImportIsExcluded(organization.name)
     ) {
-      return [];
+      return existing;
     }
 
     const client = await this.connections.createReadClient();
-    if (!client?.listMessagePage) return [];
+    if (!client?.listMessagePage) return existing;
 
     const gmailLabels = await client.listLabels();
     const saved = await this.labels.findByOrganization({
@@ -93,7 +92,7 @@ export class GoogleProfileLabelValidationImportService {
           label.type === "user" &&
           profileLabelIdentity(label.name) === identity,
       );
-      if (candidates.length !== 1) return [];
+      if (candidates.length !== 1) return existing;
       selected = candidates[0]!;
       if (saved) {
         await this.labels.markState({
