@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { GoogleAiRecentValidationService } from "./google-ai-recent-validation-service";
 
@@ -73,6 +73,18 @@ function googleClient() {
 }
 
 describe("GoogleAiRecentValidationService", () => {
+  it("forwards incremental validation options to the base Gmail scan", async () => {
+    const run = vi.fn(async () => baseResult);
+    const service = new GoogleAiRecentValidationService({
+      baseValidation: { run },
+      aiEnabled: false,
+    });
+
+    await service.run(100, { skipProcessed: true });
+
+    expect(run).toHaveBeenCalledWith(100, { skipProcessed: true });
+  });
+
   it("never lets AI ignore or resolve conflicting profile labels", async () => {
     const conflict = {...row({id:"conflict",subject:"Membership"}),evidenceCodes:["profile_label_conflict"]};
     const service = new GoogleAiRecentValidationService({
