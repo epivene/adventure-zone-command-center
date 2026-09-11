@@ -177,7 +177,10 @@ export async function reparentAdditionalOrganizationReferences(
         'google_workspace_validation_mappings',
         'google_workspace_validation_review_items',
         'google_workspace_profile_files',
-        'google_workspace_profile_email_threads'
+        'google_workspace_profile_email_threads',
+        'google_workspace_profile_labels',
+        'google_workspace_gmail_mutations',
+        'google_workspace_gmail_thread_intents'
       )
   `);
   const optionalTables = new Set(
@@ -243,6 +246,34 @@ export async function reparentAdditionalOrganizationReferences(
   if (optionalTables.has("google_workspace_profile_email_threads")) {
     await transaction.execute(sql`
       UPDATE google_workspace_profile_email_threads
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_profile_labels")) {
+    await transaction.execute(sql`
+      DELETE FROM google_workspace_profile_labels duplicate_label
+      USING google_workspace_profile_labels surviving_label
+      WHERE duplicate_label.organization_id = ${duplicateId}
+        AND surviving_label.organization_id = ${primaryId}
+        AND surviving_label.connection_id = duplicate_label.connection_id
+    `);
+    await transaction.execute(sql`
+      UPDATE google_workspace_profile_labels
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_gmail_mutations")) {
+    await transaction.execute(sql`
+      UPDATE google_workspace_gmail_mutations
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (optionalTables.has("google_workspace_gmail_thread_intents")) {
+    await transaction.execute(sql`
+      UPDATE google_workspace_gmail_thread_intents
       SET organization_id = ${primaryId}, updated_at = now()
       WHERE organization_id = ${duplicateId}
     `);
