@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
   getGoogleWorkspaceValidationReviewThread: vi.fn(),
+  getGoogleWorkspaceValidationReviewAttachment: vi.fn(),
   runGoogleWorkspaceRecentValidation: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
@@ -54,9 +55,18 @@ beforeEach(() => {
       date: "Mon, 24 Aug 2026 10:00:00 -0600",
       direction: "incoming",
       bodyText: "We would like information about bringing Adventure Zone to our fair.",
-      attachments: [],
+      attachments: [{
+        attachmentId: "a1",
+        filename: "fair-info.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 42,
+        messageId: "gm1",
+      }],
     }],
   });
+  client.getGoogleWorkspaceValidationReviewAttachment.mockResolvedValue(
+    new Blob(["pdf"], { type: "application/pdf" }),
+  );
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
     ok: true,
     gmailSync: {
@@ -114,6 +124,35 @@ describe("GoogleValidationReview", () => {
     expect(screen.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute(
       "href",
       "https://mail.google.com/mail/u/0/#all/t1",
+    );
+  });
+
+  it("opens a reviewed email attachment from inside the app", async () => {
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue(
+      "blob:https://app.example/fair-info",
+    );
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<GoogleValidationReview />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Open attachment: fair-info.pdf",
+    }));
+
+    await waitFor(() =>
+      expect(client.getGoogleWorkspaceValidationReviewAttachment).toHaveBeenCalledWith(
+        "m1",
+        "gm1",
+        "a1",
+      ),
+    );
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(open).toHaveBeenCalledWith(
+      "blob:https://app.example/fair-info",
+      "_blank",
+      "noopener,noreferrer",
     );
   });
 
