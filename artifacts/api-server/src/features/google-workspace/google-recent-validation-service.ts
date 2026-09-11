@@ -120,6 +120,7 @@ type ContactProfileResolverAccess = {
 
 type ValidationRepositoryAccess = {
   processedMessageIds?(messageIds: string[]): Promise<Set<string>>;
+  markProcessedMessageIds?(messageIds: string[]): Promise<void>;
   upsertRows(rows: GoogleValidationMappingInput[]): Promise<void>;
   upsertReviewItems(items: GoogleValidationReviewInput[]): Promise<void>;
   getStatus(): Promise<GoogleValidationStatus>;
@@ -407,7 +408,10 @@ export class GoogleRecentValidationService {
 
   async run(
     limit = 100,
-    options?: { skipProcessed?: boolean },
+    options?: {
+      skipProcessed?: boolean;
+      deferProcessedMarking?: boolean;
+    },
   ): Promise<GoogleRecentValidationResult> {
     const checkedLimit = Math.min(100, Math.max(1, Math.trunc(limit)));
     const client = await this.connection.createReadClient();
@@ -588,6 +592,11 @@ export class GoogleRecentValidationService {
     await this.validationRepository.upsertReviewItems(
       persistableReviewItems(needsReview),
     );
+    if (!options?.deferProcessedMarking) {
+      await this.validationRepository.markProcessedMessageIds?.(
+        refs.map((ref) => ref.id),
+      );
+    }
     const validationStatus = await this.validationRepository.getStatus();
 
     return {
