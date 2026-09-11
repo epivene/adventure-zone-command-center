@@ -79,6 +79,19 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
+  it("opens a pending review item in its Gmail thread", async () => {
+    render(<GoogleValidationReview />);
+
+    const link = await screen.findByRole("link", {
+      name: "Open email: County Fair application",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://mail.google.com/mail/u/0/#all/t1",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("checks recent Gmail before loading the review queue when opted in", async () => {
     render(<GoogleValidationReview checkGmailOnMount />);
 
