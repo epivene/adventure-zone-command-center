@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { EmailReviewPage } from "./EmailReviewPage";
 
@@ -36,6 +36,8 @@ function reviewItem(input: {
 }
 
 describe("EmailReviewPage", () => {
+  afterEach(cleanup);
+
   beforeEach(() => {
     runRecentValidation.mockReset();
     runRecentValidation.mockResolvedValue({});
