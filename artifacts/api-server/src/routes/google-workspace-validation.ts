@@ -255,17 +255,28 @@ function reviewReconciliationInput(result: GoogleRecentValidationResult): {
 function finalReviewItems(
   result: GoogleRecentValidationResult,
 ): GoogleValidationReviewInput[] {
-  return result.needsReview.map((row) => ({
-    messageId: row.id,
-    threadId: row.threadId,
-    subject: row.subject,
-    from: row.from,
-    to: row.to,
-    internalDateMs: row.internalDateMs,
-    evidenceCodes: row.evidenceCodes,
-    candidates: row.candidates,
-    hasAttachments: row.hasAttachments,
-  }));
+  return result.needsReview.map((row) => {
+    const candidates = new Map<string, { id: string; name: string }>();
+    for (const candidate of row.organizationCandidates) {
+      candidates.set(candidate.id, candidate);
+    }
+    for (const candidate of row.candidates) {
+      if (candidate.kind === "organization" || candidate.kind === "profile") {
+        candidates.set(candidate.id, { id: candidate.id, name: candidate.name });
+      }
+    }
+    return {
+      messageId: row.id,
+      threadId: row.threadId,
+      subject: row.subject,
+      from: row.from,
+      to: row.to,
+      internalDateMs: row.internalDateMs,
+      evidenceCodes: row.evidenceCodes,
+      candidates: [...candidates.values()],
+      hasAttachments: row.hasAttachments,
+    };
+  });
 }
 
 export function createGoogleWorkspaceValidationRouter(options?: {
