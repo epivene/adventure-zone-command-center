@@ -342,6 +342,18 @@ export async function getGoogleWorkspaceValidationReviewThread(
   );
 }
 
+export async function getGoogleWorkspaceValidationReviewAttachment(
+  messageId: string,
+  gmailMessageId: string,
+  attachmentId: string,
+): Promise<Blob> {
+  const response = await apiFetch(
+    `/google-workspace/validation/review/${encodeURIComponent(messageId)}/attachments/${encodeURIComponent(gmailMessageId)}/${encodeURIComponent(attachmentId)}`,
+  );
+  if (!response.ok) await responseJson<never>(response);
+  return response.blob();
+}
+
 export async function resolveGoogleWorkspaceValidationReview(
   messageId: string,
   organizationId: string,
