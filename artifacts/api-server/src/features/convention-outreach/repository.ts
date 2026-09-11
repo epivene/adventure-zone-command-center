@@ -72,14 +72,57 @@ export class ConventionRepository {
     ).rows;
   }
   async searchProfiles(query: string) {
+    const exactId =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        query,
+      );
+    if (exactId) {
+      return (
+        await this.pool.query(
+          `SELECT o.id AS "organizationId",o.name, c.id AS "contactId",c.email,
+          concat_ws(' ',c.first_name,c.last_name) AS contact
+          FROM organizations o
+          LEFT JOIN LATERAL (
+            SELECT pc.id,pc.email,pc.first_name,pc.last_name
+            FROM contacts pc
+            WHERE pc.organization_id=o.id OR EXISTS (
+              SELECT 1 FROM organization_contacts oc
+              WHERE oc.organization_id=o.id AND oc.contact_id=pc.id AND oc.active=true
+            )
+            ORDER BY pc.id
+          ) c ON true
+          WHERE o.id=$1::uuid
+          ORDER BY o.name,c.id LIMIT 30`,
+          [query],
+        )
+      ).rows;
+    }
     return (
       await this.pool.query(
-        `SELECT o.id AS "organizationId",o.name, c.id AS "contactId",c.email,
-      concat_ws(' ',c.first_name,c.last_name) AS contact
-      FROM organizations o LEFT JOIN contacts c ON c.organization_id=o.id OR EXISTS
-        (SELECT 1 FROM organization_contacts oc WHERE oc.organization_id=o.id AND oc.contact_id=c.id AND oc.active=true)
-      WHERE o.id::text=$1 OR position(lower($1) in lower(o.name))>0 OR position(lower($1) in lower(coalesce(c.email,'')))>0
-      ORDER BY o.name,c.id LIMIT 30`,
+        `WITH profile_contacts AS (
+          SELECT c.organization_id,c.id,c.email,c.first_name,c.last_name
+          FROM contacts c
+          WHERE c.organization_id IS NOT NULL
+          UNION
+          SELECT oc.organization_id,c.id,c.email,c.first_name,c.last_name
+          FROM organization_contacts oc
+          JOIN contacts c ON c.id=oc.contact_id
+          WHERE oc.active=true
+        ),
+        matched_profiles AS (
+          SELECT DISTINCT o.id,o.name
+          FROM organizations o
+          LEFT JOIN profile_contacts c ON c.organization_id=o.id
+          WHERE position(lower($1) in lower(o.name))>0
+             OR position(lower($1) in lower(coalesce(c.email,'')))>0
+          ORDER BY o.name,o.id
+          LIMIT 30
+        )
+        SELECT o.id AS "organizationId",o.name,c.id AS "contactId",c.email,
+          concat_ws(' ',c.first_name,c.last_name) AS contact
+        FROM matched_profiles o
+        LEFT JOIN profile_contacts c ON c.organization_id=o.id
+        ORDER BY o.name,c.id LIMIT 30`,
         [query],
       )
     ).rows;
