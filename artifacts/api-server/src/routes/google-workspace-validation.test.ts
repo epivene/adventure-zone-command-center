@@ -18,6 +18,7 @@ function appWith(options: {
     now: Date;
   }) => Promise<void>;
   listReviewItems?: () => Promise<any[]>;
+  getReviewThread?: (threadId: string) => Promise<any>;
   resolveReviewItem?: (input: {
     messageId: string;
     organizationId: string;
@@ -59,6 +60,11 @@ function appWith(options: {
         getStatus: async () => "ready_for_review",
         listReviewItems: options.listReviewItems ?? (async () => []),
         ignoreReviewItem: options.ignoreReviewItem ?? (async () => undefined),
+      },
+      connection: {
+        createReadClient: async () => options.getReviewThread
+          ? ({ getThreadDetail: options.getReviewThread } as any)
+          : null,
       },
       labelCleanupService: {
         preview: options.previewLabelCleanup ?? (async () => ({ labels: [] })),
@@ -191,6 +197,60 @@ describe("Google Workspace recent validation route", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.items).toHaveLength(1);
+  });
+
+  it("opens only a saved review item's full Gmail thread", async () => {
+    const getReviewThread = vi.fn(async (threadId: string) => ({
+      id: threadId,
+      subject: "County Fair application",
+      originalGmailUrl: `https://mail.google.com/mail/u/0/#all/${threadId}`,
+      messages: [{
+        id: "gm1",
+        from: "events@example.org",
+        to: "zone@example.com",
+        cc: "",
+        subject: "County Fair application",
+        date: "Mon, 24 Aug 2026 10:00:00 -0600",
+        internalDateMs: 1,
+        direction: "incoming",
+        bodyText: "Full message body",
+        attachments: [],
+      }],
+    }));
+    const listReviewItems = vi.fn(async () => [{
+      messageId: "m1",
+      threadId: "t1",
+      subject: "County Fair application",
+      from: "events@example.org",
+      to: "zone@example.com",
+      internalDateMs: 1,
+      evidenceCodes: [],
+      candidates: [],
+      hasAttachments: false,
+      state: "pending",
+      resolvedOrganizationId: null,
+      gmailSyncState: "not_requested",
+      gmailSyncErrorCode: null,
+      gmailSyncMutationId: null,
+    }]);
+
+    const response = await request(appWith({ listReviewItems, getReviewThread }))
+      .get("/google-workspace/validation/review/m1/thread");
+
+    expect(response.status).toBe(200);
+    expect(response.body.messages[0].bodyText).toBe("Full message body");
+    expect(getReviewThread).toHaveBeenCalledWith("t1");
+  });
+
+  it("does not open an arbitrary Gmail thread outside the review queue", async () => {
+    const getReviewThread = vi.fn();
+    const response = await request(appWith({
+      listReviewItems: async () => [],
+      getReviewThread,
+    })).get("/google-workspace/validation/review/not-saved/thread");
+
+    expect(response.status).toBe(404);
+    expect(getReviewThread).not.toHaveBeenCalled();
   });
 
   it("previews old Gmail profile labels without deleting them", async () => {
