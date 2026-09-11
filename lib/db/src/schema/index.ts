@@ -3090,8 +3090,8 @@ export const contractSettings = pgTable("contract_settings", {
   internalSignerName: text("internal_signer_name").default("Dave Gordon").notNull(),
   internalSignerEmail: text("internal_signer_email"),
   internalSignerOrder: integer("internal_signer_order").default(2).notNull(),
-  insuranceRecipientName: text("insurance_recipient_name").default("Sara Toone").notNull(),
-  insuranceRecipientEmail: text("insurance_recipient_email").default("sara@protectiveins.net").notNull(),
+  insuranceRecipientName: text("insurance_recipient_name").default("Amanda Morton").notNull(),
+  insuranceRecipientEmail: text("insurance_recipient_email").default("amanda@protectiveins.net").notNull(),
   updatedBy: text("updated_by").default("migration").notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [

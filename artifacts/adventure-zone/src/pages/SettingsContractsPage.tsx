@@ -22,8 +22,8 @@ export default function SettingsContractsPage() {
       setForm({
         internalSignerName: settings.internalSignerName ?? "Dave Gordon",
         internalSignerEmail: settings.internalSignerEmail ?? "",
-        insuranceRecipientName: settings.insuranceRecipientName ?? "Sara Toone",
-        insuranceRecipientEmail: settings.insuranceRecipientEmail ?? "sara@protectiveins.net",
+        insuranceRecipientName: settings.insuranceRecipientName ?? "Amanda Morton",
+        insuranceRecipientEmail: settings.insuranceRecipientEmail ?? "amanda@protectiveins.net",
       });
     }).catch((reason: Error) => setError(reason.message));
   }, []);
@@ -32,7 +32,7 @@ export default function SettingsContractsPage() {
     event.preventDefault();
     if (!form) return;
     if (!emailPattern.test(form.internalSignerEmail) || !emailPattern.test(form.insuranceRecipientEmail)) {
-      setError("Enter a valid email address for Dave and Sara.");
+      setError("Enter a valid email address for Dave and the insurance recipient.");
       return;
     }
     setState("saving");
@@ -75,6 +75,7 @@ export default function SettingsContractsPage() {
         <label className="grid gap-1 text-sm font-semibold">Recipient email
           <input inputMode="email" value={form.insuranceRecipientEmail} onChange={field("insuranceRecipientEmail")} />
         </label>
+        <p className="text-sm text-slate-600">Backup: Sara Toone at sara@protectiveins.net. Use Sara only when Amanda is unavailable.</p>
         {error ? <p className="text-sm font-semibold text-rose-700" role="alert">{error}</p> : null}
         {state === "saved" ? <p className="text-sm font-semibold text-emerald-700">Settings saved</p> : null}
         <button className="button-primary min-h-11" disabled={state === "saving"} type="submit">{state === "saving" ? "Saving…" : "Save settings"}</button>

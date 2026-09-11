@@ -104,4 +104,15 @@ describe("business knowledge", () => {
     expect(byKey.get("package-pirates-rebellion-site-requirements")?.body).toMatch(/2 days/i);
     expect(byKey.get("package-warriors-playground-site-requirements")?.body).toMatch(/25 KW/i);
   });
+
+  it("identifies Amanda as the primary insurance contact and Sara as backup", () => {
+    const insurance = initialBusinessKnowledgeSeed.find(
+      (entry) => entry.seedKey === "global-insurance-contact",
+    );
+    expect(insurance?.body).toContain("Amanda Morton");
+    expect(insurance?.body).toContain("amanda@protectiveins.net");
+    expect(insurance?.body).toContain("Sara Toone");
+    expect(insurance?.body).toContain("backup");
+  });
+
 });

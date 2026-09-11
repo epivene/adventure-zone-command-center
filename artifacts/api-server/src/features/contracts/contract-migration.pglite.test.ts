@@ -41,8 +41,8 @@ describe("contract builder migration", () => {
     expect(settings.rows).toEqual([{
       internal_signer_name: "Dave Gordon",
       internal_signer_order: 2,
-      insurance_recipient_name: "Sara Toone",
-      insurance_recipient_email: "sara@protectiveins.net",
+      insurance_recipient_name: "Amanda Morton",
+      insurance_recipient_email: "amanda@protectiveins.net",
     }]);
 
     await database.exec(`
@@ -120,6 +120,48 @@ describe("contract builder migration", () => {
       version: 1,
       state: "active",
     }]);
+  });
+
+
+  it("promotes Amanda to primary while preserving owner-edited insurance recipients", async () => {
+    const database = new PGlite();
+    databases.push(database);
+    await database.exec(`
+      create table organizations (id uuid primary key);
+      create table bookings (id uuid primary key, organization_id uuid references organizations(id));
+    `);
+    const original = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/20260908_contract_builder.sql", import.meta.url)),
+      "utf8",
+    );
+    const update = await readFile(
+      fileURLToPath(new URL("../../../../../lib/db/migrations/20260911_insurance_amanda_primary.sql", import.meta.url)),
+      "utf8",
+    );
+
+    await database.exec(original);
+    await database.exec(`
+      alter table contract_settings alter column insurance_recipient_name set default 'Sara Toone';
+      alter table contract_settings alter column insurance_recipient_email set default 'sara@protectiveins.net';
+      update contract_settings
+      set insurance_recipient_name = 'Sara Toone', insurance_recipient_email = 'sara@protectiveins.net';
+    `);
+    await database.exec(update);
+
+    const promoted = await database.query<{ name: string; email: string }>(
+      `select insurance_recipient_name as name, insurance_recipient_email as email from contract_settings`,
+    );
+    expect(promoted.rows).toEqual([{ name: "Amanda Morton", email: "amanda@protectiveins.net" }]);
+
+    await database.exec(`
+      update contract_settings
+      set insurance_recipient_name = 'Owner Choice', insurance_recipient_email = 'owner@example.com';
+    `);
+    await database.exec(update);
+    const preserved = await database.query<{ name: string; email: string }>(
+      `select insurance_recipient_name as name, insurance_recipient_email as email from contract_settings`,
+    );
+    expect(preserved.rows).toEqual([{ name: "Owner Choice", email: "owner@example.com" }]);
   });
 
 });
