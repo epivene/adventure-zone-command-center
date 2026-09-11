@@ -188,6 +188,35 @@ describe("066_paper_notes_importer migration", () => {
     ]);
   });
 
+  it("keeps an existing active primary when backfilling a different legacy number", async () => {
+    const client = await createLegacyDatabase();
+    clients.push(client);
+    await runMigration(client);
+
+    const organizationId = "10000000-0000-4000-8000-000000000003";
+    await client.query(`
+      insert into organizations (id, name, phone, normalized_phone)
+      values ($1, 'Existing Primary Fair', '(701) 555-0200', '7015550200')
+    `, [organizationId]);
+    await client.query(`
+      insert into organization_phones (
+        organization_id, number, normalized_number, type, status, "primary", source
+      ) values ($1, '(701) 555-0100', '7015550100', 'office', 'active', true, 'local')
+    `, [organizationId]);
+
+    await runMigration(client);
+
+    expect((await client.query(`
+      select normalized_number, "primary" as is_primary
+      from organization_phones
+      where organization_id = $1
+      order by normalized_number
+    `, [organizationId])).rows).toEqual([
+      { normalized_number: "7015550100", is_primary: true },
+      { normalized_number: "7015550200", is_primary: false },
+    ]);
+  });
+
   it("allows an unknown historical date only for a paper-note-backed activity", async () => {
     const client = await createLegacyDatabase();
     clients.push(client);
