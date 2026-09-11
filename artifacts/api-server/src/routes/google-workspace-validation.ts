@@ -160,11 +160,25 @@ function errorStatus(code: string): number {
   }
   if (
     code === "GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND" ||
-    code === "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND"
+    code === "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_REVIEW_ATTACHMENT_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND"
   ) {
     return 404;
   }
   return 500;
+}
+
+function safeAttachmentFilename(filename: string): string {
+  return filename.replace(/[\r\n"\\/]/g, "_") || "attachment";
+}
+
+function safeAttachmentMimeType(mimeType: string): string {
+  return /^[a-z0-9!#function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
+^_.+-]+\/[a-z0-9!#function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
+^_.+-]+$/i.test(mimeType)
+    ? mimeType
+    : "application/octet-stream";
 }
 
 function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
@@ -308,6 +322,55 @@ export function createGoogleWorkspaceValidationRouter(options?: {
 
         const detail: GoogleThreadDetail = await client.getThreadDetail(item.threadId);
         res.json(detail);
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/validation/review/:messageId/attachments/:gmailMessageId/:attachmentId",
+    async (req, res): Promise<void> => {
+      try {
+        const item = (await validationRepository.listReviewItems()).find(
+          (review) => review.messageId === req.params.messageId,
+        );
+        if (!item) {
+          res.status(404).json({ error: "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" });
+          return;
+        }
+
+        const client = await connection.createReadClient();
+        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
+        if (!client.getThreadDetail || !client.getAttachment) {
+          throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
+        }
+
+        const detail = await client.getThreadDetail(item.threadId);
+        const message = detail.messages.find(
+          (candidate) => candidate.id === req.params.gmailMessageId,
+        );
+        const attachment = message?.attachments.find(
+          (candidate) => candidate.attachmentId === req.params.attachmentId,
+        );
+        if (!message || !attachment) {
+          res.status(404).json({
+            error: "GOOGLE_WORKSPACE_REVIEW_ATTACHMENT_NOT_FOUND",
+          });
+          return;
+        }
+
+        const bytes = await client.getAttachment({
+          messageId: message.id,
+          attachmentId: attachment.attachmentId,
+        });
+        res.setHeader("Content-Type", safeAttachmentMimeType(attachment.mimeType));
+        res.setHeader(
+          "Content-Disposition",
+          `inline; filename="${safeAttachmentFilename(attachment.filename)}"`,
+        );
+        res.send(Buffer.from(bytes));
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });
