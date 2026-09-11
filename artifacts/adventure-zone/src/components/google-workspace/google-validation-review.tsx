@@ -361,6 +361,7 @@ export function GoogleValidationReview({
     item: GoogleValidationReviewItem,
     gmailMessageId: string,
     attachmentId: string,
+    filename: string,
   ) {
     const key = `${gmailMessageId}:${attachmentId}`;
     const popup = window.open("", "_blank");
@@ -381,7 +382,15 @@ export function GoogleValidationReview({
         attachmentId,
       );
       const url = URL.createObjectURL(blob);
-      popup.location.href = url;
+      if (blob.type === "application/octet-stream") {
+        popup.close();
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.click();
+      } else {
+        popup.location.href = url;
+      }
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (caught) {
       popup.close();
@@ -703,6 +712,7 @@ export function GoogleValidationReview({
                                     item,
                                     message.id,
                                     attachment.attachmentId,
+                                    attachment.filename,
                                   )}
                                   type="button"
                                 >
