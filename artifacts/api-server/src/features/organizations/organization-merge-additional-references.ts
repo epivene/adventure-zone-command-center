@@ -96,7 +96,7 @@ export async function reparentAdditionalOrganizationReferences(
     WHERE organization_id = ${duplicateId}
   `);
   await transaction.execute(sql`
-    UPDATE convention_members SET organization_id = ${primaryId}, updated_at = now()
+    UPDATE convention_members SET organization_id = ${primaryId}
     WHERE organization_id = ${duplicateId}
   `);
 
