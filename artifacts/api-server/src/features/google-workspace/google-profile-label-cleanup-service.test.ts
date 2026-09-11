@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from "vitest";
 import { GoogleProfileLabelCleanupService } from "./google-profile-label-cleanup-service";
 
 describe("GoogleProfileLabelCleanupService", () => {
+  it("protects existing profiles in both current and legacy label hierarchies", async () => {
+    const service = new GoogleProfileLabelCleanupService(
+      { listCurrentProfileNames: async () => ["Elko County Fair"] },
+      { listLabels: async () => [
+        { id: "new", name: "Profiles/Elko County Fair", type: "user" },
+        { id: "legacy", name: "Z - AdventureZone/Profiles/Elko County Fair", type: "user" },
+        { id: "stale", name: "Profiles/Retired Fair", type: "user" },
+      ], deleteLabel: vi.fn() },
+    );
+    await expect(service.preview()).resolves.toEqual({ labels: [{ id: "stale", name: "Profiles/Retired Fair" }] });
+  });
   it("previews only managed profile labels that do not match a current CRM profile", async () => {
     const service = new GoogleProfileLabelCleanupService(
       {
