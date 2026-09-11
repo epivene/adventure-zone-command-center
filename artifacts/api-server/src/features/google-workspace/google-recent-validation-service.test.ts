@@ -27,6 +27,55 @@ function validationRepository(
 }
 
 describe("GoogleRecentValidationService", () => {
+  it.each(["Profiles", "Z - AdventureZone/Profiles"])("matches membership mail using its approved %s label", async (root) => {
+    const target = { id: "wfa", name: "ASSOC - WFA Western Fairs Association" };
+    const label = { id: "Label_wfa", name: `${root}/${target.name}`, type: "user" as const };
+    const repository = validationRepository();
+    const client = {
+      accountIdentity: async () => ({ email: "zone@example.com" }),
+      listLabels: async () => [label],
+      listRecentMessageRefs: async () => [{ id: "membership", threadId: "thread-membership" }],
+      getMessageMetadata: async () => message("membership", "zone@example.com", "The Adventure Zone Membership", ["SENT", label.id]),
+    } as unknown as GoogleWorkspaceReadClient;
+    const service = new GoogleRecentValidationService({
+      connection: { createReadClient: async () => client },
+      scope: { getSaved: async () => ({ labels: [{...label,rootId:"root",rootName:root}], calendars: [] }) },
+      evidence: { load: async () => ({ contacts: [], organizations: [], profiles: [target, {id:"internal",name:"Adventure Zone"}] }) },
+      validationRepository: repository,
+    });
+    const result = await service.run();
+    expect(result.matched).toHaveLength(1);
+    expect(result.matched[0].resolvedOrganization).toEqual(target);
+    expect(result.matched[0].evidenceCodes).toContain("exact_profile_label");
+    expect(repository.upsertRows).toHaveBeenCalledWith([expect.objectContaining({organizationId:"wfa"})]);
+  });
+
+  it("keeps a label/thread disagreement for review even when the body names a single profile", async () => {
+    const target = {id:"correct",name:"Clearfield Celebration"};
+    const other = {id:"wrong",name:"Mandan Celebration"};
+    const label = {id:"label",name:`Profiles/${target.name}`,type:"user" as const};
+    const repository = validationRepository();
+    const client = {
+      accountIdentity: async () => ({email:"zone@example.com"}),
+      listLabels: async () => [label],
+      listRecentMessageRefs: async () => [{id:"m1",threadId:"thread-m1"}],
+      getMessageMetadata: async () => message("m1","x@example.org",other.name,[label.id]),
+      getThreadDetail: async () => ({messages:[{bodyText:other.name}]}),
+    } as unknown as GoogleWorkspaceReadClient;
+    const service = new GoogleRecentValidationService({
+      connection:{createReadClient:async()=>client},
+      scope:{getSaved:async()=>({labels:[{...label,rootId:"root",rootName:"Profiles"}],calendars:[]})},
+      evidence:{load:async()=>({contacts:[],organizations:[],profiles:[target,other]})},
+      learning:{load:async()=>({mailboxEmails:new Set<string>(),addressTargets:new Map(),threadTargets:new Map([["thread-m1",other]])})},
+      validationRepository:repository,
+    });
+    const result = await service.run();
+    expect(result.matched).toHaveLength(0);
+    expect(result.needsReview).toHaveLength(1);
+    expect(result.needsReview[0].evidenceCodes).toContain("profile_label_conflict");
+    expect(result.needsReview[0].resolvedOrganization).toBeNull();
+    expect(repository.upsertRows).toHaveBeenCalledWith([]);
+  });
   it("does not reload metadata for messages already mapped or reviewed", async () => {
     const client: GoogleWorkspaceReadClient = {
       authorizationUrl: () => "",
