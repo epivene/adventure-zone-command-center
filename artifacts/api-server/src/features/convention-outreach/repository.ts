@@ -73,7 +73,7 @@ export class ConventionRepository {
   }
   async searchProfiles(query: string) {
     const exactId =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
         query,
       );
     if (exactId) {
@@ -85,11 +85,12 @@ export class ConventionRepository {
           LEFT JOIN LATERAL (
             SELECT pc.id,pc.email,pc.first_name,pc.last_name
             FROM contacts pc
-            WHERE pc.organization_id=o.id OR EXISTS (
-              SELECT 1 FROM organization_contacts oc
-              WHERE oc.organization_id=o.id AND oc.contact_id=pc.id AND oc.active=true
-            )
-            ORDER BY pc.id
+            WHERE pc.organization_id=o.id
+            UNION
+            SELECT pc.id,pc.email,pc.first_name,pc.last_name
+            FROM organization_contacts oc
+            JOIN contacts pc ON pc.id=oc.contact_id
+            WHERE oc.organization_id=o.id AND oc.active=true
           ) c ON true
           WHERE o.id=$1::uuid
           ORDER BY o.name,c.id LIMIT 30`,
