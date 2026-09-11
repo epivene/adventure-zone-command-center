@@ -21,7 +21,10 @@ const MAX_THREAD_TEXT = 18_000;
 type BaseValidationAccess = {
   run(
     limit: number,
-    options?: { skipProcessed?: boolean },
+    options?: {
+      skipProcessed?: boolean;
+      deferProcessedMarking?: boolean;
+    },
   ): Promise<GoogleRecentValidationResult>;
 };
 
@@ -215,7 +218,10 @@ export class GoogleAiRecentValidationService {
     limit = 100,
     options?: { skipProcessed?: boolean },
   ): Promise<GoogleAiRecentValidationResult> {
-    const base = await this.baseValidation.run(limit, options);
+    const base = await this.baseValidation.run(limit, {
+      ...options,
+      deferProcessedMarking: true,
+    });
     const emptyCounts = { attempted: 0, matched: 0, ignored: 0, review: 0 };
 
     if (!this.aiEnabled) {
