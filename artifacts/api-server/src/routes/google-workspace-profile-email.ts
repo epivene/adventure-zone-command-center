@@ -180,15 +180,14 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
         let mappings = await validationRepository.listApprovedForOrganization(
           req.params.organizationId,
         );
-        if (!mappings.length) {
-          try {
-            mappings = await labelImportService.reconcileOrganization(
-              req.params.organizationId,
-            );
-          } catch {
-            // Lazy label recovery is best effort. A Gmail rate limit or stale
-            // label must not make an otherwise healthy profile fail to load.
-          }
+        try {
+          const reconciled = await labelImportService.reconcileOrganization(
+            req.params.organizationId,
+          );
+          if (reconciled.length || !mappings.length) mappings = reconciled;
+        } catch {
+          // Label recovery is best effort. A Gmail rate limit or stale label
+          // must not make an otherwise healthy profile fail to load.
         }
         const grouped = mappingsByThread(mappings);
 
