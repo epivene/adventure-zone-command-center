@@ -107,6 +107,41 @@ afterEach(() => {
 });
 
 describe("GoogleValidationReview", () => {
+  it("opens a reviewed email attachment from inside the app", async () => {
+    let resolveAttachment!: (blob: Blob) => void;
+    client.getGoogleWorkspaceValidationReviewAttachment.mockReturnValue(
+      new Promise<Blob>((resolve) => { resolveAttachment = resolve; }),
+    );
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue(
+      "blob:https://app.example/fair-info",
+    );
+    const popup = { close: vi.fn(), location: { href: "" }, opener: window };
+    const open = vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    render(<GoogleValidationReview />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Open attachment: fair-info.pdf",
+    }));
+
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(popup.opener).toBeNull();
+    await waitFor(() =>
+      expect(client.getGoogleWorkspaceValidationReviewAttachment).toHaveBeenCalledWith(
+        "m1",
+        "gm1",
+        "a1",
+      ),
+    );
+    resolveAttachment(new Blob(["pdf"], { type: "application/pdf" }));
+    await waitFor(() => expect(popup.location.href).toBe(
+      "blob:https://app.example/fair-info",
+    ));
+    expect(createObjectURL).toHaveBeenCalled();
+  });
+
   it("opens the full pending email inside Email Review", async () => {
     render(<GoogleValidationReview />);
 
@@ -124,35 +159,6 @@ describe("GoogleValidationReview", () => {
     expect(screen.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute(
       "href",
       "https://mail.google.com/mail/u/0/#all/t1",
-    );
-  });
-
-  it("opens a reviewed email attachment from inside the app", async () => {
-    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue(
-      "blob:https://app.example/fair-info",
-    );
-    const open = vi.spyOn(window, "open").mockImplementation(() => null);
-    render(<GoogleValidationReview />);
-
-    fireEvent.click(await screen.findByRole("button", {
-      name: "View email: County Fair application",
-    }));
-    fireEvent.click(await screen.findByRole("button", {
-      name: "Open attachment: fair-info.pdf",
-    }));
-
-    await waitFor(() =>
-      expect(client.getGoogleWorkspaceValidationReviewAttachment).toHaveBeenCalledWith(
-        "m1",
-        "gm1",
-        "a1",
-      ),
-    );
-    expect(createObjectURL).toHaveBeenCalled();
-    expect(open).toHaveBeenCalledWith(
-      "blob:https://app.example/fair-info",
-      "_blank",
-      "noopener,noreferrer",
     );
   });
 
