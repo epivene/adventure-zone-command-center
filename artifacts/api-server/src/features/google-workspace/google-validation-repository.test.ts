@@ -27,6 +27,26 @@ describe("PostgresGoogleValidationRepository", () => {
     ).resolves.toEqual(new Set(["mapped", "reviewed"]));
     const lookup = query.mock.calls.find(([sql]) => String(sql).includes("UNION"));
     expect(lookup?.[1]).toEqual(["connection-1", ["mapped", "reviewed", "new"]]);
+    expect(String(lookup?.[0])).toContain(
+      "google_workspace_validation_processed_messages",
+    );
+  });
+
+  it("records scanned messages as processed even when they were auto-ignored", async () => {
+    const { pool, query } = poolWith((sql) =>
+      sql.includes("SELECT id FROM google_workspace_connections")
+        ? [{ id: "connection-1" }]
+        : [],
+    );
+    const repository = new PostgresGoogleValidationRepository(pool);
+
+    await repository.markProcessedMessageIds(["ignored", " ignored ", ""]);
+
+    const insert = query.mock.calls.find(([sql]) =>
+      String(sql).includes("google_workspace_validation_processed_messages"),
+    );
+    expect(insert?.[1]).toEqual(["connection-1", ["ignored"]]);
+    expect(String(insert?.[0])).toContain("ON CONFLICT");
   });
 
   it("upserts resolved validation rows idempotently for the active connection", async () => {
