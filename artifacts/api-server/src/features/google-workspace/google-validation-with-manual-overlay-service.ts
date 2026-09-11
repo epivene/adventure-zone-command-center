@@ -9,7 +9,12 @@ import {
 } from "./google-validation-manual-decision-overlay";
 
 type ValidationOutput = GoogleRecentValidationResult | GoogleAiRecentValidationResult;
-type ValidationAccess = { run(limit: number): Promise<ValidationOutput> };
+type ValidationAccess = {
+  run(
+    limit: number,
+    options?: { skipProcessed?: boolean },
+  ): Promise<ValidationOutput>;
+};
 type OverlayAccess = {
   apply<T extends GoogleValidationResultLike>(result: T): Promise<T>;
 };
@@ -20,8 +25,11 @@ export class GoogleValidationWithManualOverlayService {
     private readonly overlay: OverlayAccess = new GoogleValidationManualDecisionOverlay(),
   ) {}
 
-  async run(limit: number): Promise<ValidationOutput> {
-    const result = await this.base.run(limit);
+  async run(
+    limit: number,
+    options?: { skipProcessed?: boolean },
+  ): Promise<ValidationOutput> {
+    const result = await this.base.run(limit, options);
     return this.overlay.apply(result);
   }
 }
