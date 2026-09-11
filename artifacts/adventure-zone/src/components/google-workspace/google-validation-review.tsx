@@ -898,3 +898,46 @@ export function GoogleValidationReview({
               {history.map((item) => (
                 <article className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950/40" key={item.messageId}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">{item.subject || "(No subject)"}</p>
+                      <p className="mt-1 text-xs text-slate-500">{item.from || "Unknown sender"}</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                        {item.state === "ignored"
+                          ? "Ignored · Gmail unchanged"
+                          : item.gmailSyncState === "completed"
+                            ? "Assigned · archived in Gmail"
+                            : item.gmailSyncErrorCode ===
+                                "GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED"
+                              ? "Assigned · reconnect Gmail"
+                              : item.gmailSyncState === "retryable_error"
+                                ? "Assigned · Gmail retry needed"
+                              : item.gmailSyncState === "conflict"
+                                ? "Assigned · label conflict"
+                                : "Assigned"}
+                      </span>
+                      {item.gmailSyncState === "retryable_error" &&
+                      item.gmailSyncMutationId ? (
+                        <button
+                          className="button-secondary px-2 py-1 text-xs"
+                          disabled={retryingMutationId === item.gmailSyncMutationId}
+                          onClick={() => void retryGmail(item.gmailSyncMutationId!)}
+                          type="button"
+                        >
+                          {retryingMutationId === item.gmailSyncMutationId
+                            ? "Retrying…"
+                            : "Retry Gmail"}
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
+  );
+}
