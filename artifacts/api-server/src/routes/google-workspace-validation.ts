@@ -1,6 +1,11 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
+import type {
+  GoogleThreadDetail,
+  GoogleWorkspaceReadClient,
+} from "@/features/google-workspace/google-api-types";
+import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
 import {
   PostgresGoogleProfileLabelCleanupService,
@@ -43,6 +48,10 @@ const cleanupLabelsSchema = z
     confirm: z.literal(true),
   })
   .strict();
+
+type ConnectionAccess = {
+  createReadClient(): Promise<GoogleWorkspaceReadClient | null>;
+};
 
 type ValidationService = {
   run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
@@ -151,11 +160,47 @@ function errorStatus(code: string): number {
   }
   if (
     code === "GOOGLE_WORKSPACE_REVIEW_TARGET_NOT_FOUND" ||
-    code === "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND"
+    code === "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_REVIEW_ATTACHMENT_NOT_FOUND" ||
+    code === "GOOGLE_WORKSPACE_GMAIL_SOURCE_NOT_FOUND"
   ) {
     return 404;
   }
   return 500;
+}
+
+function safeAttachmentFilename(filename: string): string {
+  return filename.replace(/[^\x20-\x7e]|["\\/]/g, "_") || "attachment";
+}
+
+function encodedAttachmentFilename(filename: string): string {
+  return encodeURIComponent(filename).replace(/[!'()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
+function attachmentResponseHeaders(filename: string, mimeType: string): {
+  contentType: string;
+  contentDisposition: string;
+} {
+  const passiveMimeTypes = new Set([
+    "application/pdf",
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "text/csv",
+    "text/plain",
+  ]);
+  const normalizedMimeType = mimeType.trim().toLowerCase();
+  const inline = passiveMimeTypes.has(normalizedMimeType);
+  const disposition = inline ? "inline" : "attachment";
+  return {
+    contentType: inline ? normalizedMimeType : "application/octet-stream",
+    contentDisposition:
+      `${disposition}; filename="${safeAttachmentFilename(filename)}"; ` +
+      `filename*=UTF-8''${encodedAttachmentFilename(filename)}`,
+  };
 }
 
 function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
@@ -209,6 +254,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   validationRepository?: ValidationRepository;
   ignoreService?: IgnoreService;
   labelCleanupService?: LabelCleanupService;
+  connection?: ConnectionAccess;
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
@@ -235,6 +281,8 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   const labelCleanupService =
     options?.labelCleanupService ??
     new PostgresGoogleProfileLabelCleanupService();
+  const connection =
+    options?.connection ?? new PostgresGoogleConnectionRepository();
   const now = options?.now ?? (() => new Date());
 
   router.post(
@@ -264,6 +312,88 @@ export function createGoogleWorkspaceValidationRouter(options?: {
     async (_req, res): Promise<void> => {
       try {
         res.json({ items: await validationRepository.listReviewItems() });
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/validation/review/:messageId/thread",
+    async (req, res): Promise<void> => {
+      const messageId = req.params.messageId?.trim();
+      if (!messageId) {
+        res.status(400).json({ error: "GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID" });
+        return;
+      }
+      try {
+        const item = (await validationRepository.listReviewItems()).find(
+          (review) => review.messageId === messageId,
+        );
+        if (!item) {
+          res.status(404).json({ error: "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" });
+          return;
+        }
+
+        const client = await connection.createReadClient();
+        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
+        if (!client.getThreadDetail) {
+          throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
+        }
+
+        const detail: GoogleThreadDetail = await client.getThreadDetail(item.threadId);
+        res.json(detail);
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/validation/review/:messageId/attachments/:gmailMessageId/:attachmentId",
+    async (req, res): Promise<void> => {
+      try {
+        const item = (await validationRepository.listReviewItems()).find(
+          (review) => review.messageId === req.params.messageId,
+        );
+        if (!item) {
+          res.status(404).json({ error: "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" });
+          return;
+        }
+
+        const client = await connection.createReadClient();
+        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
+        if (!client.getThreadDetail || !client.getAttachment) {
+          throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
+        }
+
+        const detail = await client.getThreadDetail(item.threadId);
+        const message = detail.messages.find(
+          (candidate) => candidate.id === req.params.gmailMessageId,
+        );
+        const attachment = message?.attachments.find(
+          (candidate) => candidate.attachmentId === req.params.attachmentId,
+        );
+        if (!message || !attachment) {
+          res.status(404).json({
+            error: "GOOGLE_WORKSPACE_REVIEW_ATTACHMENT_NOT_FOUND",
+          });
+          return;
+        }
+
+        const bytes = await client.getAttachment({
+          messageId: message.id,
+          attachmentId: attachment.attachmentId,
+        });
+        const headers = attachmentResponseHeaders(
+          attachment.filename,
+          attachment.mimeType,
+        );
+        res.setHeader("Content-Type", headers.contentType);
+        res.setHeader("Content-Disposition", headers.contentDisposition);
+        res.send(Buffer.from(bytes));
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });

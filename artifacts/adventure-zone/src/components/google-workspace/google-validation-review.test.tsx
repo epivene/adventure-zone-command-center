@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const client = vi.hoisted(() => ({
   getGoogleWorkspaceValidationReview: vi.fn(),
+  getGoogleWorkspaceValidationReviewThread: vi.fn(),
+  getGoogleWorkspaceValidationReviewAttachment: vi.fn(),
   runGoogleWorkspaceRecentValidation: vi.fn(),
   resolveGoogleWorkspaceValidationReview: vi.fn(),
   ignoreGoogleWorkspaceValidationReview: vi.fn(),
@@ -39,6 +41,32 @@ const item = {
 beforeEach(() => {
   client.runGoogleWorkspaceRecentValidation.mockResolvedValue({});
   client.getGoogleWorkspaceValidationReview.mockResolvedValue({ items: [item] });
+  client.getGoogleWorkspaceValidationReviewThread.mockResolvedValue({
+    id: "t1",
+    subject: "County Fair application",
+    originalGmailUrl: "https://mail.google.com/mail/u/0/#all/t1",
+    messages: [{
+      id: "gm1",
+      internalDateMs: 1,
+      from: "events@example.org",
+      to: "zone@example.com",
+      cc: "",
+      subject: "County Fair application",
+      date: "Mon, 24 Aug 2026 10:00:00 -0600",
+      direction: "incoming",
+      bodyText: "We would like information about bringing Adventure Zone to our fair.",
+      attachments: [{
+        attachmentId: "a1",
+        filename: "fair-info.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: 42,
+        messageId: "gm1",
+      }],
+    }],
+  });
+  client.getGoogleWorkspaceValidationReviewAttachment.mockResolvedValue(
+    new Blob(["pdf"], { type: "application/pdf" }),
+  );
   client.resolveGoogleWorkspaceValidationReview.mockResolvedValue({
     ok: true,
     gmailSync: {
@@ -76,20 +104,87 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
 
 describe("GoogleValidationReview", () => {
-  it("opens a pending review item in its Gmail thread", async () => {
+  it("opens a reviewed email attachment from inside the app", async () => {
+    let resolveAttachment!: (blob: Blob) => void;
+    client.getGoogleWorkspaceValidationReviewAttachment.mockReturnValue(
+      new Promise<Blob>((resolve) => { resolveAttachment = resolve; }),
+    );
+    const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue(
+      "blob:https://app.example/fair-info",
+    );
+    const popup = { close: vi.fn(), location: { href: "" }, opener: window };
+    const open = vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
     render(<GoogleValidationReview />);
 
-    const link = await screen.findByRole("link", {
-      name: "Open email: County Fair application",
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Open attachment: fair-info.pdf",
+    }));
+
+    expect(open).toHaveBeenCalledWith("", "_blank");
+    expect(popup.opener).toBeNull();
+    await waitFor(() =>
+      expect(client.getGoogleWorkspaceValidationReviewAttachment).toHaveBeenCalledWith(
+        "m1",
+        "gm1",
+        "a1",
+      ),
+    );
+    resolveAttachment(new Blob(["pdf"], { type: "application/pdf" }));
+    await waitFor(() => expect(popup.location.href).toBe(
+      "blob:https://app.example/fair-info",
+    ));
+    expect(createObjectURL).toHaveBeenCalled();
+  });
+
+  it("downloads active attachment types with their original filename", async () => {
+    client.getGoogleWorkspaceValidationReviewAttachment.mockResolvedValue(
+      new Blob(["html"], { type: "application/octet-stream" }),
+    );
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:https://app.example/download");
+    const popup = { close: vi.fn(), location: { href: "" }, opener: window };
+    vi.spyOn(window, "open").mockReturnValue(popup as unknown as Window);
+    let downloadedFilename = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function () {
+      downloadedFilename = this.download;
     });
-    expect(link).toHaveAttribute(
+    render(<GoogleValidationReview />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+    fireEvent.click(await screen.findByRole("button", {
+      name: "Open attachment: fair-info.pdf",
+    }));
+
+    await waitFor(() => expect(downloadedFilename).toBe("fair-info.pdf"));
+    expect(popup.close).toHaveBeenCalled();
+  });
+
+  it("opens the full pending email inside Email Review", async () => {
+    render(<GoogleValidationReview />);
+
+    fireEvent.click(await screen.findByRole("button", {
+      name: "View email: County Fair application",
+    }));
+
+    expect(await screen.findByText(
+      "We would like information about bringing Adventure Zone to our fair.",
+    )).toBeInTheDocument();
+    expect(client.getGoogleWorkspaceValidationReviewThread).toHaveBeenCalledWith("m1");
+    expect(screen.getByRole("button", {
+      name: "Hide email: County Fair application",
+    })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute(
       "href",
       "https://mail.google.com/mail/u/0/#all/t1",
     );
-    expect(link).toHaveAttribute("target", "_blank");
   });
 
   it("checks recent Gmail before loading the review queue when opted in", async () => {
