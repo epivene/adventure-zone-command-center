@@ -78,7 +78,7 @@ function gmailNotice(result?: GoogleProfileLabelSyncResult): GmailNotice {
 
 export function GoogleValidationReview({
   checkGmailOnMount = false,
-  showGmailActions = false,
+  showGmailActions = checkGmailOnMount,
   onPendingCountChange,
   showHistory = false,
 }: {
