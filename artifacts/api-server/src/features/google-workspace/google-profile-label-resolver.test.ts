@@ -23,10 +23,9 @@ function harness(input?: {
     ...(input?.missingParents
       ? []
       : [
-          { id: "Label_root", name: "Z - AdventureZone", type: "user" as const },
           {
             id: "Label_profiles",
-            name: "Z - AdventureZone/Profiles",
+            name: "Profiles",
             type: "user" as const,
           },
         ]),
@@ -73,7 +72,7 @@ function harness(input?: {
     }),
     createLabel: vi.fn(async (name) => {
       const profileName =
-        `Z - AdventureZone/Profiles/${input?.organizationName ?? "Elko County Fair"}`;
+        `Profiles/${input?.organizationName ?? "Elko County Fair"}`;
       if (input?.labelsAfterCreateConflict && name === profileName) {
         throw Object.assign(
           new Error("GOOGLE_WORKSPACE_GMAIL_LABEL_CONFLICT"),
@@ -82,11 +81,7 @@ function harness(input?: {
       }
       const created: GoogleLabelSummary = {
         id:
-          name === "Z - AdventureZone"
-            ? "Label_root"
-            : name === "Z - AdventureZone/Profiles"
-              ? "Label_profiles"
-              : "Label_created",
+          name === "Profiles" ? "Label_profiles" : "Label_created",
         name,
         type: "user",
       };
@@ -137,14 +132,19 @@ describe("GoogleProfileLabelResolver", () => {
     expect(h.gmail.createLabel).toHaveBeenCalledExactlyOnceWith("Profiles/Elko County Fair");
   });
 
-  it("treats matching leaves across current and legacy roots as a conflict", async () => {
+  it("prefers the current label when a matching legacy label remains", async () => {
     const h = harness({ labels: [currentRoot, currentLabel, {
       id: "legacy", name: "Z - AdventureZone/Profiles/Elko County Fair", type: "user",
     }] });
     await expect(h.resolver.resolve({ connectionId: "conn-1", organizationId: "org-1" }))
-      .resolves.toMatchObject({ status: "conflict" });
+      .resolves.toMatchObject({
+        status: "resolved",
+        mapping: { gmailLabelId: "renamed", gmailLabelName: "Profiles/Elko County Fair" },
+      });
     expect(h.gmail.createLabel).not.toHaveBeenCalled();
-    expect(h.repository.adopt).not.toHaveBeenCalled();
+    expect(h.repository.adopt).toHaveBeenCalledWith(expect.objectContaining({
+      gmailLabelId: "renamed",
+    }));
   });
 
   it("does not adopt a renamed label already owned by another profile", async () => {
@@ -163,7 +163,7 @@ describe("GoogleProfileLabelResolver", () => {
       .resolves.toMatchObject({ status: "resolved", mapping: { gmailLabelId: "renamed", gmailLabelName: "Profiles/New Fair" } });
     expect(h.gmail.createLabel).not.toHaveBeenCalled();
   });
-  it("reuses a saved Gmail label id after a CRM rename", async () => {
+  it("does not reuse a saved legacy label as an active sync destination", async () => {
     const saved: GoogleProfileLabelMapping = {
       connectionId: "conn-1",
       organizationId: "org-1",
@@ -183,15 +183,39 @@ describe("GoogleProfileLabelResolver", () => {
       organizationId: "org-1",
     })).resolves.toMatchObject({
       status: "resolved",
-      mapping: { gmailLabelId: "Label_10" },
+      mapping: { gmailLabelId: "Label_created", gmailLabelName: "Profiles/New Name" },
     });
-    expect(h.gmail.createLabel).not.toHaveBeenCalled();
+    expect(h.gmail.createLabel).toHaveBeenCalledExactlyOnceWith("Profiles/New Name");
+  });
+
+  it("does not adopt an unmapped legacy label as an active sync destination", async () => {
+    const h = harness({
+      labels: [{
+        id: "Label_legacy",
+        name: "Z - AdventureZone/Profiles/Elko County Fair",
+        type: "user",
+      }],
+    });
+
+    await expect(h.resolver.resolve({
+      connectionId: "conn-1",
+      organizationId: "org-1",
+    })).resolves.toMatchObject({
+      status: "resolved",
+      mapping: {
+        gmailLabelId: "Label_created",
+        gmailLabelName: "Profiles/Elko County Fair",
+      },
+    });
+    expect(h.gmail.createLabel).toHaveBeenCalledExactlyOnceWith(
+      "Profiles/Elko County Fair",
+    );
   });
 
   it("adopts one existing canonical label instead of creating another", async () => {
     const label = {
       id: "Label_existing",
-      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      name: "Profiles/Elko County Fair",
       type: "user" as const,
     };
     const h = harness({ labels: [label] });
@@ -210,7 +234,7 @@ describe("GoogleProfileLabelResolver", () => {
     const h = harness({
       labels: [{
         id: "Label_existing",
-        name: " Z - AdventureZone / Profiles / ELKO   County Fair ",
+        name: " Profiles / ELKO   County Fair ",
         type: "user",
       }],
     });
@@ -227,12 +251,12 @@ describe("GoogleProfileLabelResolver", () => {
       labels: [
         {
           id: "Label_1",
-          name: "Z - AdventureZone/Profiles/ELKO County Fair",
+          name: "Profiles/ELKO County Fair",
           type: "user",
         },
         {
           id: "Label_2",
-          name: "Z - AdventureZone/Profiles/Elko  County Fair",
+          name: "Profiles/Elko  County Fair",
           type: "user",
         },
       ],
@@ -254,12 +278,12 @@ describe("GoogleProfileLabelResolver", () => {
       labels: [
         {
           id: "Label_exact",
-          name: "Z - AdventureZone/Profiles/Elko County Fair",
+          name: "Profiles/Elko County Fair",
           type: "user",
         },
         {
           id: "Label_duplicate",
-          name: "Z - AdventureZone/Profiles/ELKO  County Fair",
+          name: "Profiles/ELKO  County Fair",
           type: "user",
         },
       ],
@@ -279,7 +303,7 @@ describe("GoogleProfileLabelResolver", () => {
   it("adopts the winning label after a concurrent Gmail create conflict", async () => {
     const winner = {
       id: "Label_winner",
-      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      name: "Profiles/Elko County Fair",
       type: "user" as const,
     };
     const h = harness({
@@ -309,14 +333,14 @@ describe("GoogleProfileLabelResolver", () => {
       mapping: { gmailLabelId: "Label_created" },
     });
     expect(h.gmail.createLabel).toHaveBeenCalledWith(
-      "Z - AdventureZone/Profiles/Elko County Fair",
+      "Profiles/Elko County Fair",
     );
   });
 
   it("does not adopt a label already owned by another profile", async () => {
     const label = {
       id: "Label_owned",
-      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      name: "Profiles/Elko County Fair",
       type: "user" as const,
     };
     const h = harness({ labels: [label], otherOwnerLabelId: label.id });
@@ -361,21 +385,20 @@ describe("GoogleProfileLabelResolver", () => {
       organizationId: "org-1",
     });
 
-    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(1, "Z - AdventureZone");
     expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
-      2,
-      "Z - AdventureZone/Profiles",
+      1,
+      "Profiles",
     );
     expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
-      3,
-      "Z - AdventureZone/Profiles/Elko County Fair",
+      2,
+      "Profiles/Elko County Fair",
     );
   });
 
   it("creates only missing parents when the flat profile label already exists", async () => {
     const existing = {
       id: "Label_existing",
-      name: "Z - AdventureZone/Profiles/Elko County Fair",
+      name: "Profiles/Elko County Fair",
       type: "user" as const,
     };
     const h = harness({ labels: [existing], missingParents: true });
@@ -387,12 +410,8 @@ describe("GoogleProfileLabelResolver", () => {
       status: "resolved",
       mapping: { gmailLabelId: "Label_existing" },
     });
-    expect(h.gmail.createLabel).toHaveBeenCalledTimes(2);
-    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(1, "Z - AdventureZone");
-    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(
-      2,
-      "Z - AdventureZone/Profiles",
-    );
+    expect(h.gmail.createLabel).toHaveBeenCalledTimes(1);
+    expect(h.gmail.createLabel).toHaveBeenNthCalledWith(1, "Profiles");
     expect(h.gmail.createLabel).not.toHaveBeenCalledWith(existing.name);
   });
 
