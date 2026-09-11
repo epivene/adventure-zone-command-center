@@ -1,6 +1,11 @@
 import { Router, type IRouter, type Request } from "express";
 import { z } from "zod";
 
+import type {
+  GoogleThreadDetail,
+  GoogleWorkspaceReadClient,
+} from "@/features/google-workspace/google-api-types";
+import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
 import type { GoogleRecentValidationResult } from "@/features/google-workspace/google-recent-validation-service";
 import {
   PostgresGoogleProfileLabelCleanupService,
@@ -43,6 +48,10 @@ const cleanupLabelsSchema = z
     confirm: z.literal(true),
   })
   .strict();
+
+type ConnectionAccess = {
+  createReadClient(): Promise<GoogleWorkspaceReadClient | null>;
+};
 
 type ValidationService = {
   run(limit: number): Promise<GoogleRecentValidationResult | unknown>;
@@ -209,6 +218,7 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   validationRepository?: ValidationRepository;
   ignoreService?: IgnoreService;
   labelCleanupService?: LabelCleanupService;
+  connection?: ConnectionAccess;
   now?: () => Date;
 }): IRouter {
   const router: IRouter = Router();
@@ -235,6 +245,8 @@ export function createGoogleWorkspaceValidationRouter(options?: {
   const labelCleanupService =
     options?.labelCleanupService ??
     new PostgresGoogleProfileLabelCleanupService();
+  const connection =
+    options?.connection ?? new PostgresGoogleConnectionRepository();
   const now = options?.now ?? (() => new Date());
 
   router.post(
@@ -264,6 +276,38 @@ export function createGoogleWorkspaceValidationRouter(options?: {
     async (_req, res): Promise<void> => {
       try {
         res.json({ items: await validationRepository.listReviewItems() });
+      } catch (error) {
+        const code = safeError(error);
+        res.status(errorStatus(code)).json({ error: code });
+      }
+    },
+  );
+
+  router.get(
+    "/google-workspace/validation/review/:messageId/thread",
+    async (req, res): Promise<void> => {
+      const messageId = req.params.messageId?.trim();
+      if (!messageId) {
+        res.status(400).json({ error: "GOOGLE_WORKSPACE_REVIEW_DECISION_INVALID" });
+        return;
+      }
+      try {
+        const item = (await validationRepository.listReviewItems()).find(
+          (review) => review.messageId === messageId,
+        );
+        if (!item) {
+          res.status(404).json({ error: "GOOGLE_WORKSPACE_REVIEW_ITEM_NOT_FOUND" });
+          return;
+        }
+
+        const client = await connection.createReadClient();
+        if (!client) throw new Error("GOOGLE_WORKSPACE_NOT_CONNECTED");
+        if (!client.getThreadDetail) {
+          throw new Error("GOOGLE_WORKSPACE_VALIDATION_UNAVAILABLE");
+        }
+
+        const detail: GoogleThreadDetail = await client.getThreadDetail(item.threadId);
+        res.json(detail);
       } catch (error) {
         const code = safeError(error);
         res.status(errorStatus(code)).json({ error: code });
