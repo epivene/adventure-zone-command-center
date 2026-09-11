@@ -1,13 +1,11 @@
-export const GOOGLE_PROFILE_LABEL_ROOT = "Z - AdventureZone/Profiles";
-export const GOOGLE_CURRENT_PROFILE_LABEL_ROOT = "Profiles";
+export const GOOGLE_PROFILE_LABEL_ROOT = "Profiles";
+export const GOOGLE_CURRENT_PROFILE_LABEL_ROOT = GOOGLE_PROFILE_LABEL_ROOT;
+export const GOOGLE_LEGACY_PROFILE_LABEL_ROOT = "Z - AdventureZone/Profiles";
 export const GOOGLE_PROFILE_LABEL_ROOTS = [
   GOOGLE_CURRENT_PROFILE_LABEL_ROOT,
-  GOOGLE_PROFILE_LABEL_ROOT,
+  GOOGLE_LEGACY_PROFILE_LABEL_ROOT,
 ] as const;
-export const GOOGLE_PROFILE_LABEL_HIERARCHY = [
-  "Z - AdventureZone",
-  GOOGLE_PROFILE_LABEL_ROOT,
-] as const;
+export const GOOGLE_PROFILE_LABEL_HIERARCHY = [GOOGLE_PROFILE_LABEL_ROOT] as const;
 
 export type GoogleProfileLabelConfig = {
   enabled: boolean;
@@ -52,8 +50,14 @@ export function isProfileLabelPath(value: string): boolean {
   return profileLabelIdentity(value) !== null;
 }
 
-// Compare the leaf only inside the two explicitly supported profile roots.
-// Gmail IDs remain the durable identity after a mapping has been saved.
+export function isCurrentProfileLabelPath(value: string): boolean {
+  const normalized = normalizedProfileLabelPath(value);
+  const prefix = `${normalizedProfileLabelPath(GOOGLE_CURRENT_PROFILE_LABEL_ROOT)}/`;
+  return normalized.startsWith(prefix) && normalized.length > prefix.length;
+}
+
+// Legacy labels remain readable as historical evidence, but every new label is
+// created under the current Profiles root.
 export function profileLabelIdentity(value: string): string | null {
   const normalized = normalizedProfileLabelPath(value);
   for (const root of GOOGLE_PROFILE_LABEL_ROOTS) {
