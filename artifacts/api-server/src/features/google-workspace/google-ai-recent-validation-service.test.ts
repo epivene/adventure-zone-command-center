@@ -73,6 +73,19 @@ function googleClient() {
 }
 
 describe("GoogleAiRecentValidationService", () => {
+  it("never lets AI ignore or resolve conflicting profile labels", async () => {
+    const conflict = {...row({id:"conflict",subject:"Membership"}),evidenceCodes:["profile_label_conflict"]};
+    const service = new GoogleAiRecentValidationService({
+      baseValidation:{run:async()=>({...baseResult,counts:{discovered:1,matched:0,needsReview:1,ignored:0},needsReview:[conflict]})},
+      connection:{createReadClient:async()=>googleClient()},
+      aiFactory:async()=>({providerName:"Test AI",complete:async()=>JSON.stringify({decision:"IGNORE",confidence:"high",profileId:null,reason:"No event context"})}),
+      aiEnabled:true,
+    });
+    const result = await service.run();
+    expect(result.needsReview).toEqual([conflict]);
+    expect(result.ignored).toEqual([]);
+    expect(result.aiCounts.attempted).toBe(0);
+  });
   it("moves high-confidence AI event matches and irrelevant mail out of Needs Review without returning body text", async () => {
     const ai = {
       providerName: "Test AI",
