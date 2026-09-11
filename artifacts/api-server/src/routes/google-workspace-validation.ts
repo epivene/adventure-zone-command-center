@@ -174,9 +174,10 @@ function safeAttachmentFilename(filename: string): string {
 }
 
 function safeAttachmentMimeType(mimeType: string): string {
-  return /^[a-z0-9!#function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
-^_.+-]+\/[a-z0-9!#function isValidationResult(value: unknown): value is GoogleRecentValidationResult {
-^_.+-]+$/i.test(mimeType)
+  const parts = mimeType.split("/");
+  const isSafeToken = (value: string | undefined) =>
+    Boolean(value) && !/[\s\r\n"\\]/.test(value ?? "");
+  return parts.length === 2 && parts.every(isSafeToken)
     ? mimeType
     : "application/octet-stream";
 }
