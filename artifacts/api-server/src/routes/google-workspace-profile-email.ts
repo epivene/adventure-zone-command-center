@@ -168,7 +168,10 @@ export function createGoogleWorkspaceProfileEmailRouter(options?: {
     options?.archiveService ?? new GoogleProfileEmailArchiveService();
   const replyService = options?.replyService ?? new GoogleProfileEmailReplyService();
   const labelImportService =
-    options?.labelImportService ?? new GoogleProfileLabelValidationImportService();
+    options?.labelImportService ??
+    (options?.validationRepository
+      ? { reconcileOrganization: async () => [] }
+      : new GoogleProfileLabelValidationImportService());
 
   router.get(
     `${profilePath}/:organizationId/emails`,
