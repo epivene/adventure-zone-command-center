@@ -7,6 +7,7 @@ import { ConventionPlanningAnswers } from "@/components/boss-work-requests/Conve
 import { OwnerConventionReview } from "@/components/boss-work-requests/OwnerConventionReview";
 import type { BossWorkRequest, BossWorkRequestDetail } from "@/features/boss-work-requests/boss-work-request-types";
 import {
+  cancelWorkRequest,
   createOwnerWorkRequest,
   getBossAccounts,
   getOwnerWorkQueue,
@@ -31,6 +32,7 @@ export default function DaveRequestsPage() {
   const [bosses, setBosses] = useState<{ id: string; displayName: string; enabled: boolean }[]>([]);
   const [templates, setTemplates] = useState<{ id: string; name: string; state: string }[]>([]);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -49,6 +51,23 @@ export default function DaveRequestsPage() {
 
   async function open(request: BossWorkRequest) {
     try { setSelected(await getOwnerWorkRequest(request.id)); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not open request."); }
+  }
+
+  async function cancelSelected() {
+    if (!selected || cancelling) return;
+    const request = selected.request;
+    if (!window.confirm(`Remove "${request.title}" from Dave’s queue?`)) return;
+    setCancelling(true);
+    setError("");
+    try {
+      await cancelWorkRequest(request.id, "Removed from Dave’s queue by the owner.");
+      setSelected(null);
+      setQueue(await getOwnerWorkQueue());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not remove request.");
+    } finally {
+      setCancelling(false);
+    }
   }
 
   return (
@@ -79,6 +98,12 @@ export default function DaveRequestsPage() {
           {!selected ? <p className="text-center text-muted-foreground">Choose a request to review it.</p> : (
             <div className="grid gap-4">
               <div><h2 className="text-xl font-bold">{selected.request.title}</h2><p className="text-sm text-muted-foreground">{selected.request.instructions}</p></div>
+              {!["applied", "cancelled"].includes(selected.request.state) && (
+                <button onClick={() => void cancelSelected()} disabled={cancelling} className="min-h-11 justify-self-start rounded-lg border border-destructive/30 px-4 font-semibold text-destructive disabled:opacity-50">
+                  {cancelling ? "Removing…" : "Remove from Dave’s queue"}
+                </button>
+              )}
+              {selected.request.state === "cancelled" && <p className="text-sm text-muted-foreground">Removed from Dave’s queue.</p>}
               {selected.request.type === "convention_planning_questionnaire" ? (
                 <div className="grid gap-4">
                   {selected.submissions.length === 0 && <p>Dave has not submitted answers yet.</p>}
