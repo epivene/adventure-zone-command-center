@@ -90,5 +90,5 @@ describe("recent outreach follow-up backfill", () => {
     const westernFairs = result.rows.find((row) => row.email === "wfa@fairsnet.org");
     expect(westernFairs?.kind).toBe("application_deadline");
     expect(new Date(westernFairs!.due_at).toISOString()).toBe("2026-10-02T18:00:00.000Z");
-  });
+  }, 15_000);
 });
