@@ -1,7 +1,7 @@
 import { and, eq, type SQL, type SQLWrapper, sql } from "drizzle-orm";
 
 import { organizationContacts } from "@/db/schema";
-import type { ProfileSort } from "@/features/organizations/last-resort-input";
+import type { ProfileQuickFilter, ProfileSort } from "@/features/organizations/last-resort-input";
 
 export type ProfileParentContext =
   | { kind: "event_family"; id: string; name: string }
@@ -34,6 +34,16 @@ export type OrganizationListRecord = {
   profileImageDataUrl?: string | null;
   ratingAverage?: number | null;
   ratingCount?: number;
+  nextEventDate?: Date | string | null;
+  applicationDeadline?: string | null;
+  pipelineStatus?: string | null;
+  priority?: string | null;
+  decisionStatus?: "deadline_soon" | "needs_follow_up" | "contacted" | "waiting" | "booked" | "not_a_fit";
+  recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
+  nextActionKind?: string | null;
+  nextActionDueAt?: Date | string | null;
+  primaryContactEmail?: string | null;
+  primaryContactPhone?: string | null;
 };
 
 export type OrganizationListPage = {
@@ -58,6 +68,7 @@ export type OrganizationListQuery = {
   hasBooking: boolean;
   hasLocations: boolean;
   showMembers: boolean;
+  quickFilter?: ProfileQuickFilter | null;
   sort: ProfileSort;
   includeRetired?: boolean;
   page: number;

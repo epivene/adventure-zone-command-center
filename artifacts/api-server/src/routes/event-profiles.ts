@@ -15,6 +15,7 @@ import {
   eventManagerReviews,
   eventFamilies,
   eventFamilyMembers,
+  bookingOpportunities,
 } from "@/db/schema";
 import { DrizzleEventProfileRepository } from "@/features/event-profiles/event-profile-repository";
 import { getOrganizationMembershipContext } from "@/features/organizations/organization-membership-query";
@@ -86,6 +87,11 @@ const editProfileSchema = z.object({
   region: nullableProfileText,
   postalCode: nullableProfileText,
   website: nullableProfileText,
+  applicationDeadline: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid deadline."),
+    z.null(),
+  ]).transform((value) => value || null).optional(),
+  recommendedDealModel: z.enum(["flat_fee", "pay_per_play", "either"]).nullable().optional(),
 }).strict();
 
 function normalizedPhone(value: string | null) {
@@ -118,6 +124,17 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
       .from(organizations)
       .where(eq(organizations.id, id))
       .limit(1);
+    const [latestOpportunity] = await db
+      .select({
+        priority: bookingOpportunities.priority,
+        status: bookingOpportunities.status,
+        nextActionKind: bookingOpportunities.nextActionKind,
+        nextActionDueAt: bookingOpportunities.nextActionDueAt,
+      })
+      .from(bookingOpportunities)
+      .where(eq(bookingOpportunities.organizationId, id))
+      .orderBy(desc(bookingOpportunities.eventYear), desc(bookingOpportunities.updatedAt))
+      .limit(1);
     let familyContext: { kind: "event_family" | "organization_group"; id: string; name: string } | null = membership
       ? { kind: "event_family", id: membership.familyId, name: membership.familyName }
       : null;
@@ -134,7 +151,23 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
           .orderBy(desc(eventManagerReviews.createdAt))
       : [];
     const managerReviewAverage = managerReviews.length ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length : null;
-    res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    const nextOpenFollowUp = profile.followUps.find((followUp) => !followUp.completedAt) ?? null;
+    const currentBooking = [...profile.bookings]
+      .sort((left, right) => Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0))[0] ?? null;
+    res.json({
+      ...profile,
+      familyContext,
+      organizationContext: manualOrganizationContext,
+      managerReviews,
+      managerReviewAverage,
+      decisionSummary: {
+        priority: latestOpportunity?.priority ?? null,
+        pipelineStatus: latestOpportunity?.status ?? currentBooking?.status ?? null,
+        nextActionKind: nextOpenFollowUp?.kind ?? latestOpportunity?.nextActionKind ?? null,
+        nextActionDueAt: nextOpenFollowUp?.dueAt ?? latestOpportunity?.nextActionDueAt ?? null,
+      },
+      assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true",
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });

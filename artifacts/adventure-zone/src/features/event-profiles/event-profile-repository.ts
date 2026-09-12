@@ -30,6 +30,8 @@ export type EventProfilePlace = {
   region: string | null;
   postalCode: string | null;
   website: string | null;
+  applicationDeadline: string | null;
+  recommendedDealModel: "flat_fee" | "pay_per_play" | "either" | null;
   lastResort: boolean;
   lastResortReason: string | null;
   actRecordId: string | null;

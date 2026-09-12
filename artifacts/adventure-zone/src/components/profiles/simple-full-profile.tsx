@@ -29,6 +29,7 @@ import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-g
 import { ProfileEmailComposer, ProfileEmailDrafts, type ProfileEmailDraft } from "@/components/profiles/profile-email-composer";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
+import { ProfileAtAGlance } from "@/components/profiles/profile-at-a-glance";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import { mergeOptimisticActivities } from "@/components/profiles/profile-note-display";
 import {
@@ -678,6 +679,8 @@ export function SimpleFullProfile({
           </span>
         </div>
       </section>
+
+      <ProfileAtAGlance profile={profile} />
 
       <section className="grid gap-3 sm:grid-cols-3">
         <StatCard

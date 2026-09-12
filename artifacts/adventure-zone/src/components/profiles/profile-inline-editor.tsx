@@ -23,6 +23,8 @@ type InlineProfile = {
     city?: string | null;
     region?: string | null;
     postalCode?: string | null;
+    applicationDeadline?: string | null;
+    recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
   };
   contacts?: ContactSummary[];
 };
@@ -37,6 +39,8 @@ type ProfileDraft = {
   city: string;
   region: string;
   postalCode: string;
+  applicationDeadline: string;
+  recommendedDealModel: "" | "flat_fee" | "pay_per_play" | "either";
 };
 
 type ContactDraft = {
@@ -67,6 +71,8 @@ function profileDraft(profile: InlineProfile): ProfileDraft {
     city: profile.place.city ?? "",
     region: profile.place.region ?? "",
     postalCode: profile.place.postalCode ?? "",
+    applicationDeadline: profile.place.applicationDeadline ?? "",
+    recommendedDealModel: profile.place.recommendedDealModel ?? "",
   };
 }
 
@@ -183,7 +189,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       .finally(() => setLoadingContact(false));
   }, [selectedContact?.id, creatingContact]);
 
-  function setProfileField(name: keyof ProfileDraft, value: string) {
+  function setProfileField<Name extends keyof ProfileDraft>(name: Name, value: ProfileDraft[Name]) {
     setProfileValues((current) => ({ ...current, [name]: value }));
   }
 
@@ -210,8 +216,12 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     setSaving(true);
     setError("");
     try {
-      const { description, ...legacyProfileValues } = profileValues;
-      await apiPatch(`/event-profiles/${profile.id}`, legacyProfileValues);
+      const { description, applicationDeadline, recommendedDealModel, ...legacyProfileValues } = profileValues;
+      await apiPatch(`/event-profiles/${profile.id}`, {
+        ...legacyProfileValues,
+        applicationDeadline: applicationDeadline || null,
+        recommendedDealModel: recommendedDealModel || null,
+      });
       await apiPatch(`/event-profiles/${profile.id}/description`, { description });
 
       const linkedContact = {
@@ -242,7 +252,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     }
   }
 
-  const profileFields: Array<[Exclude<keyof ProfileDraft, "description">, string, string]> = [
+  const profileFields: Array<[Exclude<keyof ProfileDraft, "description" | "applicationDeadline" | "recommendedDealModel">, string, string]> = [
     ["name", "Profile name", "text"],
     ["phone", "Office phone", "tel"],
     ["website", "Website", "url"],
@@ -276,6 +286,19 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
               <input aria-label={label} type={type} value={profileValues[name]} onChange={(event) => setProfileField(name, event.target.value)} />
             </label>
           ))}
+          <label className="grid gap-1.5 text-sm font-medium">
+            Application / outreach deadline
+            <input aria-label="Application / outreach deadline" type="date" value={profileValues.applicationDeadline} onChange={(event) => setProfileField("applicationDeadline", event.target.value)} />
+          </label>
+          <label className="grid gap-1.5 text-sm font-medium">
+            Recommended deal model
+            <select aria-label="Recommended deal model" value={profileValues.recommendedDealModel} onChange={(event) => setProfileField("recommendedDealModel", event.target.value as ProfileDraft["recommendedDealModel"])}>
+              <option value="">No recommendation recorded</option>
+              <option value="flat_fee">Flat fee</option>
+              <option value="pay_per_play">Pay-per-play</option>
+              <option value="either">Either</option>
+            </select>
+          </label>
         </div>
       </section>
 

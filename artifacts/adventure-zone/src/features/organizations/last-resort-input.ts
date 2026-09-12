@@ -36,6 +36,9 @@ export const profileSortValues = [
 ] as const;
 export type ProfileSort = (typeof profileSortValues)[number];
 
+export const profileQuickFilterValues = ["deadline_soon", "pay_per_play", "needs_follow_up", "booked"] as const;
+export type ProfileQuickFilter = (typeof profileQuickFilterValues)[number];
+
 function strategyInputSchema(label: string) {
   return z.object({
     organizationId: organizationIdSchema,
@@ -68,11 +71,12 @@ export const organizationListQuerySchema = z.object({
   showMembers: z.enum(["", "yes"]).catch("").default(""),
   contact: z.enum(["", "phone", "email"]).catch("").default(""),
   activity: z.enum(["", "followup", "booking", "filler"]).catch("").default(""),
+  quick: z.enum(["", ...profileQuickFilterValues]).catch("").default(""),
   sort: z.enum(profileSortValues).catch("recently_updated").default("recently_updated"),
   includeRetired: z.union([z.literal("true"), z.literal("1")]).transform(() => true).catch(false).default(false),
   page: z.coerce.number().int().min(1).max(10_000).catch(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).catch(50).default(50),
-}).transform(({ q, lastResort, filler, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, sort, includeRetired, page, pageSize }) => ({
+}).transform(({ q, lastResort, filler, leg, type, region, hasPhone, hasEmail, hasFollowUp, hasBooking, hasLocations, showMembers, contact, activity, quick, sort, includeRetired, page, pageSize }) => ({
   search: q.trim().replace(/\s+/g, " "),
   lastResort,
   filler: filler === "only" || activity === "filler" ? "only" as const : "all" as const,
@@ -85,6 +89,7 @@ export const organizationListQuerySchema = z.object({
   hasBooking: hasBooking === "yes" || activity === "booking",
   hasLocations: hasLocations === "yes",
   showMembers: showMembers === "yes",
+  quickFilter: quick || null,
   sort,
   includeRetired: includeRetired as boolean,
   page,

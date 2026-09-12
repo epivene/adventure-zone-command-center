@@ -1,8 +1,10 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 
 import { OrganizationList } from "./organization-list";
+
+vi.mock("@/components/profiles/profile-detail-sheet", () => ({ ProfileDetailSheet: () => null }));
 
 const query = {
   search: "",
@@ -16,6 +18,10 @@ const query = {
   hasBooking: false,
   hasLocations: false,
   showMembers: false,
+  quickFilter: null,
+  filler: "all" as const,
+  sort: "recently_updated" as const,
+  includeRetired: false,
   page: 1,
   pageSize: 50,
 };
@@ -23,7 +29,7 @@ const query = {
 afterEach(cleanup);
 
 describe("OrganizationList profile summary cards", () => {
-  it("shows the profile identity, contact details, website, and rating summary without a generic type pill", () => {
+  it("shows booking decision data instead of the occurrence rating", () => {
     render(
       <Router>
         <OrganizationList
@@ -49,6 +55,13 @@ describe("OrganizationList profile summary cards", () => {
               profileImageDataUrl: "data:image/png;base64,aA==",
               ratingAverage: 4.5,
               ratingCount: 2,
+              nextEventDate: "2027-07-16T12:00:00.000Z",
+              applicationDeadline: "2026-10-01",
+              pipelineStatus: "contacted",
+              decisionStatus: "contacted",
+              recommendedDealModel: "flat_fee",
+              nextActionKind: "email",
+              nextActionDueAt: "2026-09-18T15:00:00.000Z",
             }],
             total: 1,
             page: 1,
@@ -61,14 +74,14 @@ describe("OrganizationList profile summary cards", () => {
       </Router>,
     );
 
-    expect(screen.getByRole("link", { name: "10 Mile Pride (Breckenridge) CO" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "Open 10 Mile Pride (Breckenridge) CO profile" })).toBeVisible();
     expect(screen.getByText("Breckenridge, CO")).toBeVisible();
     expect(screen.queryByText("other")).not.toBeInTheDocument();
-    expect(screen.getByText("(970) 547-3100")).toBeVisible();
-    expect(screen.getByText("info@breckcreate.org")).toBeVisible();
-    expect(screen.getByRole("link", { name: "https://gobreck.com/event/breck-pride/" })).toHaveAttribute("href", "https://gobreck.com/event/breck-pride/");
-    expect(screen.getByText("4.5 / 5")).toBeVisible();
-    expect(screen.getByText("2 rated occurrences")).toBeVisible();
+    expect(screen.getByText("Jul 16, 2027")).toBeVisible();
+    expect(screen.getByText("Contacted")).toBeVisible();
+    expect(screen.getByText("Flat fee")).toBeVisible();
+    expect(screen.getByText(/Email.*Due Sep 18/)).toBeVisible();
+    expect(screen.queryByTestId("profile-rating-summary")).not.toBeInTheDocument();
     expect(screen.getByRole("img", { name: "10 Mile Pride (Breckenridge) CO profile" })).toHaveAttribute("src", "data:image/png;base64,aA==");
   });
 
@@ -110,9 +123,9 @@ describe("OrganizationList profile summary cards", () => {
       </Router>,
     );
 
-    expect(screen.getByTestId("profile-summary-card")).toHaveClass("p-3");
-    expect(screen.getByTestId("profile-avatar-link")).toHaveClass("size-20");
-    expect(screen.getByTestId("profile-rating-summary")).toHaveClass("min-w-[7rem]");
+    expect(screen.getByTestId("profile-summary-card")).toHaveClass("p-4");
+    expect(screen.getByTestId("profile-avatar-link")).toHaveClass("size-16");
+    expect(screen.getByTestId("profile-decision-summary")).toBeVisible();
   });
 
   it("makes the profile summary box keyboard and pointer addressable", () => {
@@ -153,11 +166,11 @@ describe("OrganizationList profile summary cards", () => {
       </Router>,
     );
 
-    const card = screen.getByTestId("profile-summary-card");
+    const card = screen.getByRole("link", { name: "Open 10 Mile Pride (Breckenridge) CO profile" });
     expect(card).toHaveAttribute("aria-label", "Open 10 Mile Pride (Breckenridge) CO profile");
-    expect(card).toHaveAttribute("tabindex", "0");
+    expect(card).toHaveAttribute("href", expect.stringContaining("/profiles/10000000-0000-4000-8000-000000000001"));
 
-    fireEvent.click(screen.getByText("Breckenridge, CO"));
-    expect(window.location.pathname).toBe("/profiles/10000000-0000-4000-8000-000000000001");
+    fireEvent.click(card);
+    expect(card).toHaveAttribute("aria-current", "true");
   });
 });
