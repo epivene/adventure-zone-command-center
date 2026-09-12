@@ -14,7 +14,6 @@ describe("recent outreach follow-up backfill", () => {
   it("fills missing reminders, relabels generic email reminders, and preserves intentional schedules", async () => {
     client = new PGlite();
     await client.exec(`
-      create extension if not exists pgcrypto;
       create table organizations (
         id uuid primary key,
         name text not null
