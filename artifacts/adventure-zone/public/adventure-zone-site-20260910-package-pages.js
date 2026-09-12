@@ -752,7 +752,7 @@
     .package-dialog::backdrop { background: rgba(15,23,41,.82); }
     .package-dialog-close { position: sticky; display: flex; align-items: center; justify-content: center; top: 12px; margin: 12px 12px -60px auto; width: 48px; height: 48px; z-index: 2; background: var(--az-cream); color: var(--az-navy); border: 3px solid var(--az-navy); cursor: pointer; }
     .package-video { width: 100%; aspect-ratio: 16 / 9; background: var(--az-navy); }
-    .package-video iframe { display: block; width: 100%; height: 100%; border: 0; }
+    .package-video iframe, .package-video video { display: block; width: 100%; height: 100%; border: 0; object-fit: contain; }
     .video-section { background: var(--az-navy); color: var(--az-cream); scroll-margin-top: 100px; }
     .video-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
     .video-grid h3 { font-size: 24px; margin: 0 0 16px; }
@@ -824,14 +824,14 @@
       { key: "weekend-warriors", image: IMAGE.warrior, alt: "Warrior's Playground", iconName: "target", title: "Warrior's Playground", copy: "High-adrenaline action pursuit and competitive games for older kids and teens.", features: ["Action Pursuit Gaming Arena <small>(Paintball, AirSoft, or Orbeez)*</small>", "4 additional attractions &amp; carnival games"], price: "$8,000", ammo: "*Ammo sold separately", lineup: attractionLineupMarkup(warriorAttractionCategories) }];
   }
 
-  const packageVideoIds = Object.freeze({
-    "adventure-zone": "MWD0SdAWZpc",
-    "pirates-rebellion": "tgjwa1LvghI",
-    "weekend-warriors": "-xTjCJz9RmI",
+  const packageVideoUrls = Object.freeze({
+    "adventure-zone": "https://video.wixstatic.com/video/0e6e2c_8eb68aa5801e4951b245c3eec2114486/360p/mp4/file.mp4",
+    "pirates-rebellion": "https://video.wixstatic.com/video/0e6e2c_789acb80831b4aff8bf1168f85e89f1d/360p/mp4/file.mp4",
+    "weekend-warriors": "https://video.wixstatic.com/video/0e6e2c_edd7f72329224a6cb20b9b7c7b18a9cb/360p/mp4/file.mp4",
   });
 
   function packageVideoMarkup(item) {
-    return `<div class="package-video"><iframe src="https://www.youtube.com/embed/${packageVideoIds[item.key]}?rel=0&playsinline=1" title="${item.title} video" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+    return `<div class="package-video"><video src="${packageVideoUrls[item.key]}" title="${item.title} video" aria-label="${item.title} video" poster="${item.image}" controls playsinline preload="metadata"></video></div>`;
   }
 
   function packageDetailMarkup(item, standalone = false) {
