@@ -20,6 +20,7 @@ import { OrganizationConflictError } from "@/features/organizations/organization
 import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
 import { filterGroupsContainingResolvedProfiles } from "@/features/organizations/duplicate-review-resolution-filter";
 import { prepareSelectedProfileSubsetMerge } from "@/features/organizations/profile-subset-merge-guard";
+import { organizationMergeFailureMessage } from "@/features/organizations/organization-merge-error";
 import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-repository";
 import { ActivityService } from "@/features/activities/activity-service";
 import { DrizzleActivityRepository } from "@/features/activities/activity-repository";
@@ -402,7 +403,7 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
   } catch (err) {
     if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
     req.log.error({ err }, "Failed to merge profiles");
-    res.status(500).json({ ok: false, error: "Failed to merge profiles" });
+    res.status(500).json({ ok: false, error: organizationMergeFailureMessage(err) });
   }
 });
 
