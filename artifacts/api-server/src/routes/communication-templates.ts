@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
+import { emailBuilderDocumentSchema, type EmailBuilderDocument } from "@workspace/api-zod";
 
 import { db } from "@workspace/db";
 import { communicationTemplates, officeAccounts } from "@/db/schema";
@@ -16,6 +17,7 @@ import {
   renderCommunicationTemplateText,
 } from "@/features/communication-templates/communication-template-renderer";
 import type { TemplatePlaceholder } from "@/features/communication-templates/communication-template-types";
+import { prepareCommunicationTemplateWrite, shouldClearEditorDocument } from "@/features/communication-templates/communication-template-write";
 
 const router: IRouter = Router();
 const placeholderSchema = z.enum(allowedTemplatePlaceholders);
@@ -31,6 +33,7 @@ export const communicationTemplateWriteSchema = z.object({
   bodyFormat: z.enum(["plain_text", "html"]).default("plain_text"),
   requiredPlaceholders: z.array(placeholderSchema),
   accessScope: z.enum(["owner", "office"]),
+  editorDocument: emailBuilderDocumentSchema.optional(),
 }).strict();
 
 const communicationTemplatePatchSchema = communicationTemplateWriteSchema
@@ -79,9 +82,14 @@ router.post("/communication-templates", async (req, res): Promise<void> => {
   const parsed = communicationTemplateWriteSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review this template." }); return; }
   try {
-    const allowedPlaceholders = validateCopy(parsed.data.subjectTemplate, parsed.data.bodyTemplate);
+    const prepared = prepareCommunicationTemplateWrite({
+      bodyTemplate: parsed.data.bodyTemplate,
+      bodyFormat: parsed.data.bodyFormat,
+      editorDocument: parsed.data.editorDocument as EmailBuilderDocument | undefined,
+    });
+    const allowedPlaceholders = validateCopy(parsed.data.subjectTemplate, prepared.bodyTemplate);
     const rows = await db.insert(communicationTemplates).values({
-      ...parsed.data, allowedPlaceholders, state: "draft", ownerKind: "company",
+      ...parsed.data, ...prepared, allowedPlaceholders, state: "draft", ownerKind: "company",
       ownerOfficeAccountId: null, createdByKind: "owner", createdById: null,
       sourceTemplateId: null, reviewedBy: String((req as any).userId ?? "owner"),
     }).returning();
@@ -103,10 +111,15 @@ router.patch("/communication-templates/:templateId", async (req, res): Promise<v
     const existing = await db.select().from(communicationTemplates).where(eq(communicationTemplates.id, id)).limit(1);
     if (!existing[0]) { res.status(404).json({ error: "Template not found" }); return; }
     const subjectTemplate = parsed.data.subjectTemplate === undefined ? existing[0].subjectTemplate : parsed.data.subjectTemplate;
-    const bodyTemplate = parsed.data.bodyTemplate ?? existing[0].bodyTemplate;
-    const allowedPlaceholders = validateCopy(subjectTemplate, bodyTemplate);
+    const prepared = prepareCommunicationTemplateWrite({
+      bodyTemplate: parsed.data.bodyTemplate ?? existing[0].bodyTemplate,
+      bodyFormat: parsed.data.bodyFormat ?? existing[0].bodyFormat,
+      editorDocument: parsed.data.editorDocument as EmailBuilderDocument | undefined,
+      clearEditorDocument: shouldClearEditorDocument(parsed.data),
+    });
+    const allowedPlaceholders = validateCopy(subjectTemplate, prepared.bodyTemplate);
     const rows = await db.update(communicationTemplates).set({
-      ...parsed.data, allowedPlaceholders,
+      ...parsed.data, ...prepared, allowedPlaceholders,
       state: existing[0].state === "active" ? "reviewed" : existing[0].state,
       reviewedBy: String((req as any).userId ?? "owner"), reviewedAt: new Date(), updatedAt: new Date(),
     }).where(eq(communicationTemplates.id, id)).returning();
