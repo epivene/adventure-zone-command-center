@@ -9,10 +9,14 @@ describe("profile quick filter input", () => {
     "needs_follow_up",
     "booked",
   ] as const)("keeps %s in the existing organization query", (quick) => {
-    expect(organizationListQuerySchema.parse({ quick }).quickFilter).toBe(quick);
+    expect(organizationListQuerySchema.parse({ quick }).quickFilter).toBe(
+      quick,
+    );
   });
 
   it("treats an unknown quick filter as no quick filter", () => {
-    expect(organizationListQuerySchema.parse({ quick: "invented" }).quickFilter).toBeNull();
+    expect(
+      organizationListQuerySchema.parse({ quick: "invented" }).quickFilter,
+    ).toBeNull();
   });
 });
