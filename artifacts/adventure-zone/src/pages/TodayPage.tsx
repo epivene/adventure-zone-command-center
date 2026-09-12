@@ -11,6 +11,7 @@ import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date
 import { classifyTodayEventTiming } from "@/features/today/today-summary-labels";
 import { deriveTodayFocus } from "@/features/today/today-focus";
 import { OutreachPlanner } from "@/components/today/outreach-planner";
+import { getLaterFollowUpCount } from "@/features/today/follow-up-counts";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: BUSINESS_TIME_ZONE }).format(value);
@@ -168,7 +169,11 @@ export default function TodayPage() {
   const actionableFollowUps = [...overdueFollowUps, ...dueTodayFollowUps];
   const overdueCount = overdueFollowUps.length;
   const dueTodayCount = dueTodayFollowUps.length;
-  const laterCount = laterFollowUps.length;
+  const laterCount = getLaterFollowUpCount({
+    followUpTotal: dashboard.followUpTotal,
+    actionableTotal: dashboard.followUpCount,
+    loadedLaterCount: laterFollowUps.length,
+  });
   const contractCount = dashboard.contractCount ?? 0;
   const visibleRouteWarningCount = dashboard.visibleRouteWarningCount ?? 0;
   const urgentScoutAlertCount = scoutAlerts.filter((alert) => alert.severity === "urgent").length;
@@ -201,7 +206,7 @@ export default function TodayPage() {
           <FocusPrimaryAction href={focus.primaryHref} label={focus.primaryLabel} />
         </div>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-sm font-semibold">
-          {actionableFollowUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : laterFollowUps.length ? <a className="text-orange-700 hover:underline" href="#later-work">Calls & follow-ups</a> : null}
+          {actionableFollowUps.length ? <a className="text-orange-700 hover:underline" href="#my-work-calls">Calls & follow-ups</a> : laterCount ? <a className="text-orange-700 hover:underline" href="#later-work">Calls & follow-ups</a> : null}
           <Link className="text-orange-700 hover:underline" href="/profiles">Booking work</Link>
           <Link className="text-orange-700 hover:underline" href="/research-sources">Find opportunities</Link>
           <Link className="text-orange-700 hover:underline" href="/schedule">View schedule</Link>
@@ -315,7 +320,7 @@ export default function TodayPage() {
         <summary className="cursor-pointer text-lg font-bold">Later{laterCount ? <span className="ml-2 text-sm font-semibold text-slate-500">{laterCount} scheduled follow-up{laterCount === 1 ? "" : "s"}</span> : null}</summary>
         <p className="mt-1 text-sm text-slate-600">Future follow-ups, schedule detail, trips, and renewals are here when you want them.</p>
         <div className="mt-4 grid gap-3">
-          {laterFollowUps.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Scheduled follow-ups <span className="ml-1 text-slate-500">({laterFollowUps.length})</span></summary><div className="mt-3"><FollowUpList followUps={laterFollowUps} now={now} /></div></details> : null}
+          {laterFollowUps.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Scheduled follow-ups <span className="ml-1 text-slate-500">({laterCount})</span></summary><div className="mt-3"><FollowUpList followUps={laterFollowUps} now={now} />{laterCount > laterFollowUps.length ? <p className="mt-3 text-xs font-semibold text-slate-500">Showing the next {laterFollowUps.length} scheduled follow-ups.</p> : null}</div></details> : null}
 
           {upcomingEvents.length ? <details className="rounded-lg border border-slate-200 p-3"><summary className="cursor-pointer font-bold">Current & upcoming events <span className="ml-1 text-slate-500">({upcomingEvents.length})</span></summary><ul className="mt-2 divide-y divide-slate-100">{upcomingEvents.map((event: any) => {
             const timing = classifyTodayEventTiming(event, now);
