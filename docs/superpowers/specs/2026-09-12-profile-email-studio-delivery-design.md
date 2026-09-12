@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-12
 **Repository:** `epivene/adventure-zone-command-center`
-**Status:** Approved in chat; awaiting written-spec review
+**Status:** Approved 2026-09-12
 
 ## Purpose
 
