@@ -1,4 +1,15 @@
-import { and, asc, desc, eq, exists, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNotNull,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import {
@@ -31,6 +42,8 @@ export type EventProfilePlace = {
   region: string | null;
   postalCode: string | null;
   website: string | null;
+  applicationDeadline?: string | null;
+  recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
   lastResort: boolean;
   lastResortReason: string | null;
   actRecordId: string | null;
@@ -146,7 +159,10 @@ export type EventProfileRecordSet = {
   externalLinks: EventProfileSourceReference[];
 };
 
-export type EventProfileContact = Omit<EventProfileContactRecord, "firstName" | "lastName"> & {
+export type EventProfileContact = Omit<
+  EventProfileContactRecord,
+  "firstName" | "lastName"
+> & {
   name: string;
 };
 
@@ -178,14 +194,18 @@ export interface EventProfileRepository {
   ): Promise<EventProfile | null>;
 }
 
-function contactOrder(left: EventProfileContactRecord, right: EventProfileContactRecord) {
-  return Number(right.isPrimary) - Number(left.isPrimary)
-    || (left.role ?? "").localeCompare(right.role ?? "")
-    || left.lastName.localeCompare(right.lastName)
-    || left.firstName.localeCompare(right.firstName)
-    || left.id.localeCompare(right.id);
+function contactOrder(
+  left: EventProfileContactRecord,
+  right: EventProfileContactRecord,
+) {
+  return (
+    Number(right.isPrimary) - Number(left.isPrimary) ||
+    (left.role ?? "").localeCompare(right.role ?? "") ||
+    left.lastName.localeCompare(right.lastName) ||
+    left.firstName.localeCompare(right.firstName) ||
+    left.id.localeCompare(right.id)
+  );
 }
-
 
 type CanonicalProfileContact = EventProfileContact & {
   sourceContactIds: string[];
@@ -197,7 +217,12 @@ type CanonicalProfileBookingSelection = {
 };
 
 function normalizedIdentityPart(value: string | null | undefined) {
-  return value?.trim().toLocaleLowerCase("en-US").replace(/[^a-z0-9]+/g, "") ?? "";
+  return (
+    value
+      ?.trim()
+      .toLocaleLowerCase("en-US")
+      .replace(/[^a-z0-9]+/g, "") ?? ""
+  );
 }
 
 function normalizedContactEmail(value: string | null | undefined) {
@@ -206,10 +231,15 @@ function normalizedContactEmail(value: string | null | undefined) {
 
 function normalizedContactPhone(value: string | null | undefined) {
   const digits = value?.replace(/\D/g, "") ?? "";
-  return digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  return digits.length === 11 && digits.startsWith("1")
+    ? digits.slice(1)
+    : digits;
 }
 
-function contactsShareIdentity(left: EventProfileContact, right: EventProfileContact) {
+function contactsShareIdentity(
+  left: EventProfileContact,
+  right: EventProfileContact,
+) {
   const leftName = normalizedIdentityPart(left.name);
   const rightName = normalizedIdentityPart(right.name);
   if (!leftName || leftName !== rightName) return false;
@@ -229,7 +259,8 @@ function mergeCanonicalContact(
   sourceContactIds: readonly string[] = [contact.id],
 ) {
   for (const sourceContactId of sourceContactIds) {
-    if (!canonical.sourceContactIds.includes(sourceContactId)) canonical.sourceContactIds.push(sourceContactId);
+    if (!canonical.sourceContactIds.includes(sourceContactId))
+      canonical.sourceContactIds.push(sourceContactId);
   }
   canonical.isPrimary ||= contact.isPrimary;
   canonical.role ||= contact.role;
@@ -260,7 +291,9 @@ function canonicalProfileContacts(records: EventProfileContactRecord[]) {
     };
 
     const matchingIndexes = groups
-      .map((group, index) => contactsShareIdentity(group, contact) ? index : -1)
+      .map((group, index) =>
+        contactsShareIdentity(group, contact) ? index : -1,
+      )
       .filter((index) => index >= 0);
 
     if (matchingIndexes.length === 0) {
@@ -270,7 +303,9 @@ function canonicalProfileContacts(records: EventProfileContactRecord[]) {
 
     const canonical = groups[matchingIndexes[0]!]!;
     mergeCanonicalContact(canonical, contact);
-    for (const index of matchingIndexes.slice(1).toSorted((left, right) => right - left)) {
+    for (const index of matchingIndexes
+      .slice(1)
+      .toSorted((left, right) => right - left)) {
       const merged = groups[index]!;
       mergeCanonicalContact(canonical, merged, merged.sourceContactIds);
       groups.splice(index, 1);
@@ -280,7 +315,8 @@ function canonicalProfileContacts(records: EventProfileContactRecord[]) {
   return groups;
 }
 
-const mergedBookingNotePattern = /\[Merged duplicate\]\s*Canonical booking:\s*([0-9a-f-]{36})/i;
+const mergedBookingNotePattern =
+  /\[Merged duplicate\]\s*Canonical booking:\s*([0-9a-f-]{36})/i;
 
 function exactBookingKey(booking: EventProfileBookingRecord) {
   if (!booking.startsAt) return `booking:${booking.id}`;
@@ -293,14 +329,21 @@ function exactBookingKey(booking: EventProfileBookingRecord) {
   ].join("\u0000");
 }
 
-function appearanceScore(booking: EventProfileBookingRecord, namedCanonicalIds: Set<string>) {
-  return (namedCanonicalIds.has(booking.id.toLowerCase()) ? 1_000 : 0)
-    + (booking.startsAt ? 100 : 0)
-    + (booking.endsAt ? 20 : 0)
-    + (booking.actRecordId ? 5 : 0);
+function appearanceScore(
+  booking: EventProfileBookingRecord,
+  namedCanonicalIds: Set<string>,
+) {
+  return (
+    (namedCanonicalIds.has(booking.id.toLowerCase()) ? 1_000 : 0) +
+    (booking.startsAt ? 100 : 0) +
+    (booking.endsAt ? 20 : 0) +
+    (booking.actRecordId ? 5 : 0)
+  );
 }
 
-function canonicalProfileBookings(records: EventProfileBookingRecord[]): CanonicalProfileBookingSelection {
+function canonicalProfileBookings(
+  records: EventProfileBookingRecord[],
+): CanonicalProfileBookingSelection {
   const namedCanonicalIds = new Set<string>();
   const canonicalBookingIds = new Map<string, string>();
   for (const booking of records) {
@@ -322,7 +365,10 @@ function canonicalProfileBookings(records: EventProfileBookingRecord[]): Canonic
 
     const candidateScore = appearanceScore(booking, namedCanonicalIds);
     const existingScore = appearanceScore(existing, namedCanonicalIds);
-    if (candidateScore > existingScore || (candidateScore === existingScore && booking.id < existing.id)) {
+    if (
+      candidateScore > existingScore ||
+      (candidateScore === existingScore && booking.id < existing.id)
+    ) {
       canonicalBookingIds.set(existing.id, booking.id);
       selected.set(key, booking);
     } else {
@@ -331,16 +377,20 @@ function canonicalProfileBookings(records: EventProfileBookingRecord[]): Canonic
   }
 
   return {
-    bookings: [...selected.values()].toSorted((left, right) =>
-      Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0)
-      || left.name.localeCompare(right.name)
-      || left.id.localeCompare(right.id),
+    bookings: [...selected.values()].toSorted(
+      (left, right) =>
+        Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0) ||
+        left.name.localeCompare(right.name) ||
+        left.id.localeCompare(right.id),
     ),
     canonicalBookingIds,
   };
 }
 
-function canonicalRecordId(mapping: ReadonlyMap<string, string>, id: string | null) {
+function canonicalRecordId(
+  mapping: ReadonlyMap<string, string>,
+  id: string | null,
+) {
   if (!id) return null;
   let current = id;
   const seen = new Set<string>();
@@ -357,22 +407,42 @@ function sourceReference(
   sourceEntityType: string,
   actRecordId: string | null,
 ): EventProfileSourceReference[] {
-  return actRecordId ? [{
-    entityType,
-    entityId,
-    sourceEntityType,
-    actRecordId,
-    isPrimary: true,
-    syncMode: "pull_only",
-  }] : [];
+  return actRecordId
+    ? [
+        {
+          entityType,
+          entityId,
+          sourceEntityType,
+          actRecordId,
+          isPrimary: true,
+          syncMode: "pull_only",
+        },
+      ]
+    : [];
 }
 
 function stableSourceProvenance(records: EventProfileRecordSet) {
   const legacyReferences = [
-    ...sourceReference("organization", records.place.id, "company", records.place.actRecordId),
-    ...records.contacts.flatMap((contact) => sourceReference("contact", contact.id, "contact", contact.actRecordId)),
-    ...records.bookings.flatMap((booking) => sourceReference("booking", booking.id, "opportunity", booking.actRecordId)),
-    ...records.groups.flatMap((group) => sourceReference("calling_list", group.id, "group", group.actRecordId)),
+    ...sourceReference(
+      "organization",
+      records.place.id,
+      "company",
+      records.place.actRecordId,
+    ),
+    ...records.contacts.flatMap((contact) =>
+      sourceReference("contact", contact.id, "contact", contact.actRecordId),
+    ),
+    ...records.bookings.flatMap((booking) =>
+      sourceReference(
+        "booking",
+        booking.id,
+        "opportunity",
+        booking.actRecordId,
+      ),
+    ),
+    ...records.groups.flatMap((group) =>
+      sourceReference("calling_list", group.id, "group", group.actRecordId),
+    ),
   ];
   const unique = new Map<string, EventProfileSourceReference>();
   for (const reference of [...legacyReferences, ...records.externalLinks]) {
@@ -381,11 +451,12 @@ function stableSourceProvenance(records: EventProfileRecordSet) {
       reference,
     );
   }
-  return [...unique.values()].toSorted((left, right) =>
-    left.entityType.localeCompare(right.entityType)
-    || left.entityId.localeCompare(right.entityId)
-    || left.sourceEntityType.localeCompare(right.sourceEntityType)
-    || left.actRecordId.localeCompare(right.actRecordId),
+  return [...unique.values()].toSorted(
+    (left, right) =>
+      left.entityType.localeCompare(right.entityType) ||
+      left.entityId.localeCompare(right.entityId) ||
+      left.sourceEntityType.localeCompare(right.sourceEntityType) ||
+      left.actRecordId.localeCompare(right.actRecordId),
   );
 }
 
@@ -396,8 +467,10 @@ function visibleActivityText(value: string) {
 function dedupeImportedActActivities(records: EventProfileActivityRecord[]) {
   const seen = new Set<string>();
   return records
-    .toSorted((left, right) =>
-      Number(right.occurredAt) - Number(left.occurredAt) || left.id.localeCompare(right.id),
+    .toSorted(
+      (left, right) =>
+        Number(right.occurredAt) - Number(left.occurredAt) ||
+        left.id.localeCompare(right.id),
     )
     .filter((activity) => {
       if (!activity.importedFromAct) return true;
@@ -416,7 +489,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringList(value: unknown) {
   return Array.isArray(value)
-    ? value.filter((item): item is string => typeof item === "string").map((item) => item.trim()).filter(Boolean)
+    ? value
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter(Boolean)
     : [];
 }
 
@@ -424,7 +500,9 @@ function safePublicUrl(value: unknown) {
   if (typeof value !== "string") return null;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === "https:" || parsed.protocol === "http:" ? value : null;
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? value
+      : null;
   } catch {
     return null;
   }
@@ -443,23 +521,34 @@ function parseScoutSource(value: unknown): EventProfileScoutNoteSource | null {
   };
 }
 
-function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScoutNote | null {
-  if (activity.kind !== "approved_suggestion" || activity.subject !== "Scout Notes") return null;
+function parseScoutNote(
+  activity: EventProfileActivityRecord,
+): EventProfileScoutNote | null {
+  if (
+    activity.kind !== "approved_suggestion" ||
+    activity.subject !== "Scout Notes"
+  )
+    return null;
   try {
     const value: unknown = JSON.parse(activity.body);
-    if (!isRecord(value) || value.type !== "scout_note" || value.version !== 1) return null;
+    if (!isRecord(value) || value.type !== "scout_note" || value.version !== 1)
+      return null;
     if (
-      typeof value.runId !== "string"
-      || typeof value.candidateId !== "string"
-      || typeof value.createdAt !== "string"
-      || typeof value.originalQuestion !== "string"
-      || typeof value.summary !== "string"
-      || !isRecord(value.suggestedNextAction)
-      || !["call", "email", "prepare_quote"].includes(String(value.suggestedNextAction.kind))
-      || typeof value.suggestedNextAction.dueAt !== "string"
-    ) return null;
+      typeof value.runId !== "string" ||
+      typeof value.candidateId !== "string" ||
+      typeof value.createdAt !== "string" ||
+      typeof value.originalQuestion !== "string" ||
+      typeof value.summary !== "string" ||
+      !isRecord(value.suggestedNextAction) ||
+      !["call", "email", "prepare_quote"].includes(
+        String(value.suggestedNextAction.kind),
+      ) ||
+      typeof value.suggestedNextAction.dueAt !== "string"
+    )
+      return null;
 
-    const actionKind = value.suggestedNextAction.kind as EventProfileScoutNote["suggestedNextAction"]["kind"];
+    const actionKind = value.suggestedNextAction
+      .kind as EventProfileScoutNote["suggestedNextAction"]["kind"];
     return {
       id: activity.id,
       occurredAt: activity.occurredAt,
@@ -467,8 +556,14 @@ function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScout
       candidateId: value.candidateId,
       createdAt: value.createdAt,
       originalQuestion: value.originalQuestion,
-      criteriaSummary: typeof value.criteriaSummary === "string" ? value.criteriaSummary : null,
-      fitScore: typeof value.fitScore === "number" && Number.isFinite(value.fitScore) ? value.fitScore : null,
+      criteriaSummary:
+        typeof value.criteriaSummary === "string"
+          ? value.criteriaSummary
+          : null,
+      fitScore:
+        typeof value.fitScore === "number" && Number.isFinite(value.fitScore)
+          ? value.fitScore
+          : null,
       summary: value.summary,
       positives: stringList(value.positives),
       cautions: stringList(value.cautions),
@@ -478,7 +573,11 @@ function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScout
         dueAt: value.suggestedNextAction.dueAt,
       },
       sources: Array.isArray(value.sources)
-        ? value.sources.map(parseScoutSource).filter((source): source is EventProfileScoutNoteSource => Boolean(source))
+        ? value.sources
+            .map(parseScoutSource)
+            .filter((source): source is EventProfileScoutNoteSource =>
+              Boolean(source),
+            )
         : [],
     };
   } catch {
@@ -489,25 +588,29 @@ function parseScoutNote(activity: EventProfileActivityRecord): EventProfileScout
 const PROFILE_ACTIVITY_LIMIT = 100;
 
 function splitProfileActivities(records: EventProfileActivityRecord[]) {
-  const activities = dedupeImportedActActivities(records).slice(0, PROFILE_ACTIVITY_LIMIT);
+  const activities = dedupeImportedActActivities(records).slice(
+    0,
+    PROFILE_ACTIVITY_LIMIT,
+  );
   const scoutNotes = activities
     .map(parseScoutNote)
     .filter((note): note is EventProfileScoutNote => Boolean(note));
   const scoutActivityIds = new Set(scoutNotes.map((note) => note.id));
   return {
-    notes: activities.filter((activity) =>
-      !scoutActivityIds.has(activity.id)
-      && (
-        !activity.importedFromAct
-        || activity.actSourceType === "note"
-        || activity.actSourceType === "paper_note"
-        || activity.actSourceType == null
-      ),
+    notes: activities.filter(
+      (activity) =>
+        !scoutActivityIds.has(activity.id) &&
+        (!activity.importedFromAct ||
+          activity.actSourceType === "note" ||
+          activity.actSourceType === "paper_note" ||
+          activity.actSourceType == null),
     ),
     scoutNotes,
-    history: activities.filter((activity) =>
-      activity.importedFromAct
-      && (activity.actSourceType === "history" || activity.actSourceType === "activity"),
+    history: activities.filter(
+      (activity) =>
+        activity.importedFromAct &&
+        (activity.actSourceType === "history" ||
+          activity.actSourceType === "activity"),
     ),
   };
 }
@@ -516,26 +619,41 @@ export function buildEventProfile(
   records: EventProfileRecordSet,
   requestedContactId?: string,
   migrationHistory: EventProfile["migrationHistory"] = {
-    contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
+    contactSourceIds: [],
+    phones: [],
+    notes: [],
+    bookingSourceIds: [],
+    groupSourceIds: [],
   },
 ): EventProfile {
   const contactGroups = canonicalProfileContacts(records.contacts);
   const contactIdMap = new Map<string, string>();
   for (const contact of contactGroups) {
-    for (const sourceContactId of contact.sourceContactIds) contactIdMap.set(sourceContactId, contact.id);
+    for (const sourceContactId of contact.sourceContactIds)
+      contactIdMap.set(sourceContactId, contact.id);
   }
   const requestedContactGroup = contactGroups.find((contact) =>
-    requestedContactId ? contact.sourceContactIds.includes(requestedContactId) : false,
+    requestedContactId
+      ? contact.sourceContactIds.includes(requestedContactId)
+      : false,
   );
-  const contacts = contactGroups.map(({ sourceContactIds: _sourceContactIds, ...contact }) => contact);
-  const selectedContactId = requestedContactGroup?.id ?? contacts[0]?.id ?? null;
+  const contacts = contactGroups.map(
+    ({ sourceContactIds: _sourceContactIds, ...contact }) => contact,
+  );
+  const selectedContactId =
+    requestedContactGroup?.id ?? contacts[0]?.id ?? null;
 
   const bookingSelection = canonicalProfileBookings(records.bookings);
-  const timeline = splitProfileActivities(records.activities.map((activity) => ({
-    ...activity,
-    contactId: canonicalRecordId(contactIdMap, activity.contactId),
-    bookingId: canonicalRecordId(bookingSelection.canonicalBookingIds, activity.bookingId),
-  })));
+  const timeline = splitProfileActivities(
+    records.activities.map((activity) => ({
+      ...activity,
+      contactId: canonicalRecordId(contactIdMap, activity.contactId),
+      bookingId: canonicalRecordId(
+        bookingSelection.canonicalBookingIds,
+        activity.bookingId,
+      ),
+    })),
+  );
 
   return {
     id: records.place.id,
@@ -544,7 +662,10 @@ export function buildEventProfile(
     selectedContactId,
     bookings: bookingSelection.bookings.map((booking) => ({
       ...booking,
-      primaryContactId: canonicalRecordId(contactIdMap, booking.primaryContactId),
+      primaryContactId: canonicalRecordId(
+        contactIdMap,
+        booking.primaryContactId,
+      ),
     })),
     notes: timeline.notes,
     scoutNotes: timeline.scoutNotes,
@@ -553,14 +674,22 @@ export function buildEventProfile(
       .map((followUp) => ({
         ...followUp,
         contactId: canonicalRecordId(contactIdMap, followUp.contactId),
-        bookingId: canonicalRecordId(bookingSelection.canonicalBookingIds, followUp.bookingId),
+        bookingId: canonicalRecordId(
+          bookingSelection.canonicalBookingIds,
+          followUp.bookingId,
+        ),
       }))
-      .toSorted((left, right) =>
-        Number(left.completedAt !== null) - Number(right.completedAt !== null)
-        || Number(left.dueAt) - Number(right.dueAt)
-        || left.id.localeCompare(right.id),
+      .toSorted(
+        (left, right) =>
+          Number(left.completedAt !== null) -
+            Number(right.completedAt !== null) ||
+          Number(left.dueAt) - Number(right.dueAt) ||
+          left.id.localeCompare(right.id),
       ),
-    groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
+    groups: records.groups.toSorted(
+      (left, right) =>
+        left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
+    ),
     sourceProvenance: stableSourceProvenance(records),
     migrationHistory,
   };
@@ -571,56 +700,79 @@ type DrizzleDatabase = typeof database;
 export class DrizzleEventProfileRepository implements EventProfileRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  async getEventProfile(profileId: string, selectedContactId?: string): Promise<EventProfile | null> {
-    const [place] = await this.database.select({
-      id: organizations.id,
-      name: organizations.name,
-      placeType: organizations.placeType,
-      phone: organizations.phone,
-      address1: organizations.address1,
-      address2: organizations.address2,
-      city: organizations.city,
-      region: organizations.region,
-      postalCode: organizations.postalCode,
-      website: organizations.website,
-      lastResort: organizations.lastResort,
-      lastResortReason: organizations.lastResortReason,
-      actRecordId: organizations.actRecordId,
-    }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
+  async getEventProfile(
+    profileId: string,
+    selectedContactId?: string,
+  ): Promise<EventProfile | null> {
+    const [place] = await this.database
+      .select({
+        id: organizations.id,
+        name: organizations.name,
+        placeType: organizations.placeType,
+        phone: organizations.phone,
+        address1: organizations.address1,
+        address2: organizations.address2,
+        city: organizations.city,
+        region: organizations.region,
+        postalCode: organizations.postalCode,
+        website: organizations.website,
+        applicationDeadline: organizations.applicationDeadline,
+        recommendedDealModel: organizations.recommendedDealModel,
+        lastResort: organizations.lastResort,
+        lastResortReason: organizations.lastResortReason,
+        actRecordId: organizations.actRecordId,
+      })
+      .from(organizations)
+      .where(eq(organizations.id, profileId))
+      .limit(1);
     if (!place) return null;
 
     const [profileContacts, profileBookings] = await Promise.all([
-      this.database.select({
-        id: contacts.id,
-        firstName: contacts.firstName,
-        lastName: contacts.lastName,
-        role: organizationContacts.role,
-        isPrimary: organizationContacts.isPrimary,
-        phone: contacts.phone,
-        email: contacts.email,
-        source: organizationContacts.source,
-        actRecordId: contacts.actRecordId,
-        locationName: organizationLocations.label,
-        locationCity: organizationLocations.city,
-        locationRegion: organizationLocations.region,
-      }).from(organizationContacts)
+      this.database
+        .select({
+          id: contacts.id,
+          firstName: contacts.firstName,
+          lastName: contacts.lastName,
+          role: organizationContacts.role,
+          isPrimary: organizationContacts.isPrimary,
+          phone: contacts.phone,
+          email: contacts.email,
+          source: organizationContacts.source,
+          actRecordId: contacts.actRecordId,
+          locationName: organizationLocations.label,
+          locationCity: organizationLocations.city,
+          locationRegion: organizationLocations.region,
+        })
+        .from(organizationContacts)
         .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
-        .leftJoin(organizationLocations, eq(organizationLocations.id, contacts.organizationLocationId))
+        .leftJoin(
+          organizationLocations,
+          eq(organizationLocations.id, contacts.organizationLocationId),
+        )
         .where(activeOrganizationContactCondition(profileId))
-        .orderBy(desc(organizationContacts.isPrimary), asc(organizationContacts.role), asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id)),
-      this.database.select({
-        id: bookings.id,
-        name: bookings.name,
-        primaryContactId: bookings.primaryContactId,
-        city: bookings.city,
-        region: bookings.region,
-        startsAt: bookings.startsAt,
-        endsAt: bookings.endsAt,
-        status: bookings.status,
-        probability: bookings.probability,
-        notes: bookings.notes,
-        actRecordId: bookings.actRecordId,
-      }).from(bookings).where(eq(bookings.organizationId, profileId))
+        .orderBy(
+          desc(organizationContacts.isPrimary),
+          asc(organizationContacts.role),
+          asc(contacts.lastName),
+          asc(contacts.firstName),
+          asc(contacts.id),
+        ),
+      this.database
+        .select({
+          id: bookings.id,
+          name: bookings.name,
+          primaryContactId: bookings.primaryContactId,
+          city: bookings.city,
+          region: bookings.region,
+          startsAt: bookings.startsAt,
+          endsAt: bookings.endsAt,
+          status: bookings.status,
+          probability: bookings.probability,
+          notes: bookings.notes,
+          actRecordId: bookings.actRecordId,
+        })
+        .from(bookings)
+        .where(eq(bookings.organizationId, profileId))
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
@@ -646,18 +798,20 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       this.database
         .select({ id: activityAssociations.id })
         .from(activityAssociations)
-        .where(and(
-          eq(activityAssociations.activityId, activities.id),
-          or(
-            eq(activityAssociations.organizationId, profileId),
-            contactIds.length
-              ? inArray(activityAssociations.contactId, contactIds)
-              : sql`false`,
-            bookingIds.length
-              ? inArray(activityAssociations.bookingId, bookingIds)
-              : sql`false`,
+        .where(
+          and(
+            eq(activityAssociations.activityId, activities.id),
+            or(
+              eq(activityAssociations.organizationId, profileId),
+              contactIds.length
+                ? inArray(activityAssociations.contactId, contactIds)
+                : sql`false`,
+              bookingIds.length
+                ? inArray(activityAssociations.bookingId, bookingIds)
+                : sql`false`,
+            ),
           ),
-        )),
+        ),
     );
     const profileCondition = or(directActivityCondition, associationCondition);
     const followUpCondition = organizationOwnedRecordCondition(
@@ -667,115 +821,191 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         contactId: followUps.contactId,
       },
       eq(followUps.organizationId, profileId),
-      bookingIds.length
-        ? inArray(followUps.bookingId, bookingIds)
-        : sql`false`,
-      contactIds.length
-        ? inArray(followUps.contactId, contactIds)
-        : sql`false`,
+      bookingIds.length ? inArray(followUps.bookingId, bookingIds) : sql`false`,
+      contactIds.length ? inArray(followUps.contactId, contactIds) : sql`false`,
     );
-    const [profileActivities, profileFollowUps, groupMemberships, migrationAudits] = await Promise.all([
-      this.database.select({
-        id: activities.id,
-        contactId: activities.contactId,
-        bookingId: activities.bookingId,
-        kind: activities.kind,
-        subject: activities.subject,
-        body: activities.body,
-        occurredAt: activities.timelineSortAt,
-        sourceOccurredAt: activities.occurredAt,
-        dateIsImportFallback: activities.dateIsImportFallback,
-        createdAt: activities.createdAt,
-        updatedAt: activities.updatedAt,
-        importedFromAct: isNotNull(activities.sourceRecordId),
-        actSourceType: activities.sourceType,
-      }).from(activities).where(and(profileCondition, isNull(activities.deletedAt)))
+    const [
+      profileActivities,
+      profileFollowUps,
+      groupMemberships,
+      migrationAudits,
+    ] = await Promise.all([
+      this.database
+        .select({
+          id: activities.id,
+          contactId: activities.contactId,
+          bookingId: activities.bookingId,
+          kind: activities.kind,
+          subject: activities.subject,
+          body: activities.body,
+          occurredAt: activities.timelineSortAt,
+          sourceOccurredAt: activities.occurredAt,
+          dateIsImportFallback: activities.dateIsImportFallback,
+          createdAt: activities.createdAt,
+          updatedAt: activities.updatedAt,
+          importedFromAct: isNotNull(activities.sourceRecordId),
+          actSourceType: activities.sourceType,
+        })
+        .from(activities)
+        .where(and(profileCondition, isNull(activities.deletedAt)))
         .orderBy(desc(activities.timelineSortAt), desc(activities.id))
         .limit(PROFILE_ACTIVITY_LIMIT),
-      this.database.select({
-        id: followUps.id,
-        contactId: followUps.contactId,
-        bookingId: followUps.bookingId,
-        kind: followUps.kind,
-        dueAt: followUps.dueAt,
-        completedAt: followUps.completedAt,
-      }).from(followUps).where(followUpCondition)
-        .orderBy(asc(followUps.completedAt), asc(followUps.dueAt), asc(followUps.id)),
-      this.database.select({
-        id: callingLists.id,
-        name: callingLists.name,
-        kind: callingLists.kind,
-        source: callingListMemberships.source,
-        sourceStatus: callingLists.sourceStatus,
-        actRecordId: actExternalLinks.actRecordId,
-      }).from(callingListMemberships)
-        .innerJoin(organizationContacts, eq(organizationContacts.contactId, callingListMemberships.contactId))
-        .innerJoin(callingLists, eq(callingLists.id, callingListMemberships.callingListId))
-        .leftJoin(actExternalLinks, and(
-          eq(actExternalLinks.entityType, "calling_list"),
-          eq(actExternalLinks.entityId, callingLists.id),
-          eq(actExternalLinks.sourceEntityType, "group"),
-        ))
-        .where(and(activeOrganizationContactCondition(profileId), eq(callingListMemberships.active, true)))
+      this.database
+        .select({
+          id: followUps.id,
+          contactId: followUps.contactId,
+          bookingId: followUps.bookingId,
+          kind: followUps.kind,
+          dueAt: followUps.dueAt,
+          completedAt: followUps.completedAt,
+        })
+        .from(followUps)
+        .where(followUpCondition)
+        .orderBy(
+          asc(followUps.completedAt),
+          asc(followUps.dueAt),
+          asc(followUps.id),
+        ),
+      this.database
+        .select({
+          id: callingLists.id,
+          name: callingLists.name,
+          kind: callingLists.kind,
+          source: callingListMemberships.source,
+          sourceStatus: callingLists.sourceStatus,
+          actRecordId: actExternalLinks.actRecordId,
+        })
+        .from(callingListMemberships)
+        .innerJoin(
+          organizationContacts,
+          eq(organizationContacts.contactId, callingListMemberships.contactId),
+        )
+        .innerJoin(
+          callingLists,
+          eq(callingLists.id, callingListMemberships.callingListId),
+        )
+        .leftJoin(
+          actExternalLinks,
+          and(
+            eq(actExternalLinks.entityType, "calling_list"),
+            eq(actExternalLinks.entityId, callingLists.id),
+            eq(actExternalLinks.sourceEntityType, "group"),
+          ),
+        )
+        .where(
+          and(
+            activeOrganizationContactCondition(profileId),
+            eq(callingListMemberships.active, true),
+          ),
+        )
         .orderBy(asc(callingLists.name), asc(callingLists.id)),
-      this.database.select({ after: auditEntries.after }).from(auditEntries)
-        .where(and(eq(auditEntries.entityType, "organization"), eq(auditEntries.entityId, profileId), eq(auditEntries.action, "act_migration_applied")))
+      this.database
+        .select({ after: auditEntries.after })
+        .from(auditEntries)
+        .where(
+          and(
+            eq(auditEntries.entityType, "organization"),
+            eq(auditEntries.entityId, profileId),
+            eq(auditEntries.action, "act_migration_applied"),
+          ),
+        )
         .orderBy(desc(auditEntries.createdAt)),
     ]);
-    const decoratedProfileActivities: EventProfileActivityRecord[] = profileActivities.map((activity) => ({
-      id: activity.id,
-      contactId: activity.contactId,
-      bookingId: activity.bookingId,
-      kind: activity.kind,
-      subject: activity.subject,
-      body: activity.body,
-      occurredAt: activity.occurredAt,
-      createdAt: activity.createdAt,
-      updatedAt: activity.updatedAt,
-      importedFromAct: Boolean(activity.importedFromAct),
-      actSourceType: activity.actSourceType,
-      historicalDateUnknown: activity.actSourceType === "paper_note"
-        && activity.sourceOccurredAt === null
-        && activity.dateIsImportFallback,
-      paperNoteSource: activity.actSourceType === "paper_note"
-        ? { activityId: activity.id }
-        : null,
-    }));
-    const groups = [...new Map(groupMemberships.map((group) => [group.id, group])).values()];
+    const decoratedProfileActivities: EventProfileActivityRecord[] =
+      profileActivities.map((activity) => ({
+        id: activity.id,
+        contactId: activity.contactId,
+        bookingId: activity.bookingId,
+        kind: activity.kind,
+        subject: activity.subject,
+        body: activity.body,
+        occurredAt: activity.occurredAt,
+        createdAt: activity.createdAt,
+        updatedAt: activity.updatedAt,
+        importedFromAct: Boolean(activity.importedFromAct),
+        actSourceType: activity.actSourceType,
+        historicalDateUnknown:
+          activity.actSourceType === "paper_note" &&
+          activity.sourceOccurredAt === null &&
+          activity.dateIsImportFallback,
+        paperNoteSource:
+          activity.actSourceType === "paper_note"
+            ? { activityId: activity.id }
+            : null,
+      }));
+    const groups = [
+      ...new Map(groupMemberships.map((group) => [group.id, group])).values(),
+    ];
     const entityIds = [
       place.id,
       ...profileContacts.map((contact) => contact.id),
       ...profileBookings.map((booking) => booking.id),
       ...groups.map((group) => group.id),
     ];
-    const externalLinks = entityIds.length === 0 ? [] : await this.database.select({
-      entityType: actExternalLinks.entityType,
-      entityId: actExternalLinks.entityId,
-      sourceEntityType: actExternalLinks.sourceEntityType,
-      actRecordId: actExternalLinks.actRecordId,
-      isPrimary: actExternalLinks.isPrimary,
-      syncMode: actExternalLinks.syncMode,
-    }).from(actExternalLinks).where(inArray(actExternalLinks.entityId, entityIds))
-      .orderBy(asc(actExternalLinks.entityType), asc(actExternalLinks.entityId), asc(actExternalLinks.sourceEntityType), asc(actExternalLinks.actRecordId));
+    const externalLinks =
+      entityIds.length === 0
+        ? []
+        : await this.database
+            .select({
+              entityType: actExternalLinks.entityType,
+              entityId: actExternalLinks.entityId,
+              sourceEntityType: actExternalLinks.sourceEntityType,
+              actRecordId: actExternalLinks.actRecordId,
+              isPrimary: actExternalLinks.isPrimary,
+              syncMode: actExternalLinks.syncMode,
+            })
+            .from(actExternalLinks)
+            .where(inArray(actExternalLinks.entityId, entityIds))
+            .orderBy(
+              asc(actExternalLinks.entityType),
+              asc(actExternalLinks.entityId),
+              asc(actExternalLinks.sourceEntityType),
+              asc(actExternalLinks.actRecordId),
+            );
 
     const merged = migrationAudits.flatMap(({ after }) => {
-      const value = after && typeof after === "object" && !Array.isArray(after)
-        ? (after as Record<string, unknown>).mergedProfileHistory
-        : null;
-      return value && typeof value === "object" && !Array.isArray(value) ? [value as Record<string, unknown>] : [];
+      const value =
+        after && typeof after === "object" && !Array.isArray(after)
+          ? (after as Record<string, unknown>).mergedProfileHistory
+          : null;
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? [value as Record<string, unknown>]
+        : [];
     });
-    const history = Object.fromEntries(["contactSourceIds", "phones", "notes", "bookingSourceIds", "groupSourceIds"].map((key) => [
-      key,
-      [...new Set(merged.flatMap((entry) => Array.isArray(entry[key]) ? entry[key].filter((item): item is string => typeof item === "string") : []))].toSorted(),
-    ])) as EventProfile["migrationHistory"];
-    return buildEventProfile({
-      place,
-      contacts: profileContacts,
-      bookings: profileBookings,
-      activities: decoratedProfileActivities,
-      followUps: profileFollowUps,
-      groups,
-      externalLinks: externalLinks as EventProfileSourceReference[],
-    }, selectedContactId, history);
+    const history = Object.fromEntries(
+      [
+        "contactSourceIds",
+        "phones",
+        "notes",
+        "bookingSourceIds",
+        "groupSourceIds",
+      ].map((key) => [
+        key,
+        [
+          ...new Set(
+            merged.flatMap((entry) =>
+              Array.isArray(entry[key])
+                ? entry[key].filter(
+                    (item): item is string => typeof item === "string",
+                  )
+                : [],
+            ),
+          ),
+        ].toSorted(),
+      ]),
+    ) as EventProfile["migrationHistory"];
+    return buildEventProfile(
+      {
+        place,
+        contacts: profileContacts,
+        bookings: profileBookings,
+        activities: decoratedProfileActivities,
+        followUps: profileFollowUps,
+        groups,
+        externalLinks: externalLinks as EventProfileSourceReference[],
+      },
+      selectedContactId,
+      history,
+    );
   }
 }

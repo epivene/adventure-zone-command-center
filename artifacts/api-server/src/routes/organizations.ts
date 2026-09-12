@@ -6,14 +6,13 @@ import {
   DrizzleOrganizationRepository,
   reviewOrganizationFamily,
 } from "@/features/organizations/organization-repository";
-import {
-  prepareOrganizationMergeReferences,
-} from "@/features/organizations/organization-merge-reference-preparation";
+import { prepareOrganizationMergeReferences } from "@/features/organizations/organization-merge-reference-preparation";
 import {
   organizationListQuerySchema,
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
 import { listOrganizationDirectoryPage } from "@/features/organizations/organization-directory-page";
+import { createProfileCsv } from "@/features/organizations/profile-csv";
 import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
@@ -34,7 +33,9 @@ import {
 } from "@/features/organizations/organization-consolidation";
 
 const router: IRouter = Router();
-function orgRepo() { return new DrizzleOrganizationRepository(db); }
+function orgRepo() {
+  return new DrizzleOrganizationRepository(db);
+}
 
 const mergeInputSchema = z.object({
   primaryId: z.string().uuid(),
@@ -47,7 +48,9 @@ const familyCandidateIdsSchema = z
   .refine((ids) => new Set(ids).size === ids.length, {
     message: "candidateIds must be unique",
   })
-  .transform((ids) => [...ids].sort((left, right) => left.localeCompare(right, "en-US")));
+  .transform((ids) =>
+    [...ids].sort((left, right) => left.localeCompare(right, "en-US")),
+  );
 
 const familyReviewInputSchema = z.discriminatedUnion("action", [
   z.object({
@@ -88,7 +91,10 @@ export async function loadProfileCardDetailsWith(
 
   // Keep every UUID as its own bound parameter. Passing the whole JS array as a
   // single ANY($1::uuid[]) value proved fragile with the production driver.
-  const idList = sql.join(ids.map((id) => sql`${id}::uuid`), sql.raw(", "));
+  const idList = sql.join(
+    ids.map((id) => sql`${id}::uuid`),
+    sql.raw(", "),
+  );
 
   let photoRows: any[] = [];
   try {
@@ -147,27 +153,43 @@ export async function loadProfileCardDetailsWith(
     ratingRows = [];
   }
 
-  const photosById = new Map(photoRows.map((row) => [row.id, row.profileImageDataUrl ?? null]));
+  const photosById = new Map(
+    photoRows.map((row) => [row.id, row.profileImageDataUrl ?? null]),
+  );
   const coreById = new Map(coreRows.map((row) => [row.id, row]));
-  const ratingsById = new Map(ratingRows.map((row) => [row.id, {
-    ratingAverage: row.ratingAverage == null ? null : Number(row.ratingAverage),
-    ratingCount: Number(row.ratingCount ?? 0),
-  }]));
+  const ratingsById = new Map(
+    ratingRows.map((row) => [
+      row.id,
+      {
+        ratingAverage:
+          row.ratingAverage == null ? null : Number(row.ratingAverage),
+        ratingCount: Number(row.ratingCount ?? 0),
+      },
+    ]),
+  );
 
-  return new Map(ids.map((id) => {
-    const core = coreById.get(id) ?? {};
-    const rating = ratingsById.get(id) ?? { ratingAverage: null, ratingCount: 0 };
-    return [id, {
-      id,
-      phone: core.phone ?? null,
-      email: core.email ?? null,
-      website: core.website ?? null,
-      description: core.description ?? null,
-      placeType: core.placeType ?? null,
-      profileImageDataUrl: photosById.get(id) ?? null,
-      ...rating,
-    }];
-  }));
+  return new Map(
+    ids.map((id) => {
+      const core = coreById.get(id) ?? {};
+      const rating = ratingsById.get(id) ?? {
+        ratingAverage: null,
+        ratingCount: 0,
+      };
+      return [
+        id,
+        {
+          id,
+          phone: core.phone ?? null,
+          email: core.email ?? null,
+          website: core.website ?? null,
+          description: core.description ?? null,
+          placeType: core.placeType ?? null,
+          profileImageDataUrl: photosById.get(id) ?? null,
+          ...rating,
+        },
+      ];
+    }),
+  );
 }
 
 async function loadProfileCardDetails(
@@ -185,6 +207,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
     q: req.query.q ?? undefined,
     lastResort: req.query.lastResort ?? undefined,
+    filler: req.query.filler ?? undefined,
     leg: req.query.leg ?? undefined,
     type: req.query.type ?? undefined,
     region: req.query.region ?? undefined,
@@ -196,6 +219,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
     showMembers: req.query.showMembers ?? undefined,
     contact: req.query.contact ?? undefined,
     activity: req.query.activity ?? undefined,
+    quick: req.query.quick ?? undefined,
     sort: req.query.sort ?? undefined,
     includeRetired: req.query.includeRetired ?? undefined,
     page: req.query.page ?? undefined,
@@ -205,7 +229,8 @@ router.get("/organizations", async (req, res): Promise<void> => {
     const organizationPage = await listOrganizationDirectoryPage(db, query);
     const cardDetails = await loadProfileCardDetails(
       organizationPage.records.map((record) => record.id),
-      (scope, err) => req.log.warn({ err, scope }, "Profile card enrichment query failed"),
+      (scope, err) =>
+        req.log.warn({ err, scope }, "Profile card enrichment query failed"),
     );
     const enrichedPage = {
       ...organizationPage,
@@ -234,16 +259,115 @@ router.get("/organizations", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/organizations/export", async (req, res): Promise<void> => {
+  const query = organizationListQuerySchema.parse({
+    q: req.query.q ?? undefined,
+    lastResort: req.query.lastResort ?? undefined,
+    filler: req.query.filler ?? undefined,
+    leg: req.query.leg ?? undefined,
+    type: req.query.type ?? undefined,
+    region: req.query.region ?? undefined,
+    hasPhone: req.query.hasPhone ?? undefined,
+    hasEmail: req.query.hasEmail ?? undefined,
+    hasFollowUp: req.query.hasFollowUp ?? undefined,
+    hasBooking: req.query.hasBooking ?? undefined,
+    hasLocations: req.query.hasLocations ?? undefined,
+    showMembers: req.query.showMembers ?? undefined,
+    contact: req.query.contact ?? undefined,
+    activity: req.query.activity ?? undefined,
+    quick: req.query.quick ?? undefined,
+    sort: req.query.sort ?? undefined,
+    includeRetired: req.query.includeRetired ?? undefined,
+    page: 1,
+    pageSize: 50,
+  });
+  try {
+    const firstPage = await listOrganizationDirectoryPage(db, {
+      ...query,
+      page: 1,
+      pageSize: 1_000,
+    });
+    const records = [...firstPage.records];
+    for (let page = 2; page <= firstPage.pageCount; page += 1) {
+      const nextPage = await listOrganizationDirectoryPage(db, {
+        ...query,
+        page,
+        pageSize: 1_000,
+      });
+      records.push(...nextPage.records);
+    }
+    const statusLabels = {
+      deadline_soon: "Deadline soon",
+      needs_follow_up: "Needs follow-up",
+      contacted: "Contacted",
+      waiting: "Waiting",
+      booked: "Booked",
+      not_a_fit: "Not a fit",
+    } as const;
+    const dealLabels = {
+      flat_fee: "Flat fee",
+      pay_per_play: "Pay-per-play",
+      either: "Either",
+    } as const;
+    const dateOnly = (value: unknown) => {
+      if (!value) return "";
+      const date = new Date(String(value));
+      return Number.isNaN(date.getTime())
+        ? ""
+        : date.toISOString().slice(0, 10);
+    };
+    const csv = createProfileCsv(
+      records.map((record) => {
+        const action = record.nextActionKind
+          ? `${record.nextActionKind}${record.nextActionDueAt ? ` (due ${dateOnly(record.nextActionDueAt)})` : ""}`
+          : "";
+        return {
+          name: record.name,
+          location: [record.city, record.region].filter(Boolean).join(", "),
+          nextDate: dateOnly(record.nextEventDate),
+          deadline: dateOnly(record.applicationDeadline),
+          status: statusLabels[record.decisionStatus],
+          recommendedDealModel: record.recommendedDealModel
+            ? dealLabels[record.recommendedDealModel]
+            : "",
+          nextAction: action,
+          contactName: record.primaryContactName ?? "",
+          contactEmail: record.primaryContactEmail ?? "",
+          contactPhone: record.primaryContactPhone ?? "",
+        };
+      }),
+    );
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      'attachment; filename="event-profiles.csv"',
+    );
+    res.send(`\uFEFF${csv}`);
+  } catch (err) {
+    req.log.error({ err }, "Failed to export organizations");
+    res.status(500).json({ error: "Failed to export organizations" });
+  }
+});
+
 router.get("/organizations/duplicates", async (req, res): Promise<void> => {
   try {
     const groups = await orgRepo().findDuplicates();
-    const candidateIds = [...new Set(groups.flatMap((group) => group.organizations.map((profile) => profile.id)))];
+    const candidateIds = [
+      ...new Set(
+        groups.flatMap((group) =>
+          group.organizations.map((profile) => profile.id),
+        ),
+      ),
+    ];
     if (!candidateIds.length) {
       res.json({ groups: [] });
       return;
     }
 
-    const idList = sql.join(candidateIds.map((id) => sql`${id}::uuid`), sql.raw(", "));
+    const idList = sql.join(
+      candidateIds.map((id) => sql`${id}::uuid`),
+      sql.raw(", "),
+    );
     const resolvedResult = await db.execute<{ id: string }>(sql`
       select o.id
       from organizations o
@@ -258,17 +382,27 @@ router.get("/organizations/duplicates", async (req, res): Promise<void> => {
           )
         )
     `);
-    const resolvedIds = new Set((resolvedResult.rows ?? []).map((row) => row.id));
-    res.json({ groups: filterGroupsContainingResolvedProfiles(groups, resolvedIds) });
+    const resolvedIds = new Set(
+      (resolvedResult.rows ?? []).map((row) => row.id),
+    );
+    res.json({
+      groups: filterGroupsContainingResolvedProfiles(groups, resolvedIds),
+    });
   } catch (err) {
     req.log.error({ err }, "Failed to find duplicate profiles");
     res.status(500).json({ error: "Failed to find duplicate profiles" });
   }
 });
 
-function organizationReviewError(req: Request, res: Response, err: unknown): void {
+function organizationReviewError(
+  req: Request,
+  res: Response,
+  err: unknown,
+): void {
   if (err instanceof z.ZodError) {
-    res.status(400).json({ ok: false, error: err.issues[0]?.message ?? "Invalid input" });
+    res
+      .status(400)
+      .json({ ok: false, error: err.issues[0]?.message ?? "Invalid input" });
     return;
   }
   if (err instanceof OrganizationConflictError) {
@@ -276,7 +410,9 @@ function organizationReviewError(req: Request, res: Response, err: unknown): voi
     return;
   }
   req.log.error({ err }, "Failed to update profile relationship review");
-  res.status(500).json({ ok: false, error: "Could not update profile relationship review" });
+  res
+    .status(500)
+    .json({ ok: false, error: "Could not update profile relationship review" });
 }
 
 router.post("/organizations/family-review", async (req, res): Promise<void> => {
@@ -291,60 +427,121 @@ router.post("/organizations/family-review", async (req, res): Promise<void> => {
 
 router.use("/organizations/:id/locations", locationRoutes);
 
-router.post("/organizations/:id/add-profile", async (req, res): Promise<void> => {
-  const canonicalOrgId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-  const parsed = addProfileInputSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" });
-    return;
-  }
-  try {
-    const result = await addProfileAsLocation(db, { canonicalOrgId, sourceOrgId: parsed.data.sourceOrgId, label: parsed.data.label }, new Date());
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    if (err instanceof OrganizationConflictError) {
-      res.status(409).json({ ok: false, error: err.message });
+router.post(
+  "/organizations/:id/add-profile",
+  async (req, res): Promise<void> => {
+    const canonicalOrgId = Array.isArray(req.params.id)
+      ? req.params.id[0]
+      : req.params.id;
+    const parsed = addProfileInputSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({
+          ok: false,
+          error: parsed.error.issues[0]?.message ?? "Invalid input",
+        });
       return;
     }
-    req.log.error({ err }, "Failed to add existing profile as profile location");
-    res.status(500).json({ ok: false, error: "Could not add profile as a location" });
-  }
-});
+    try {
+      const result = await addProfileAsLocation(
+        db,
+        {
+          canonicalOrgId,
+          sourceOrgId: parsed.data.sourceOrgId,
+          label: parsed.data.label,
+        },
+        new Date(),
+      );
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      if (err instanceof OrganizationConflictError) {
+        res.status(409).json({ ok: false, error: err.message });
+        return;
+      }
+      req.log.error(
+        { err },
+        "Failed to add existing profile as profile location",
+      );
+      res
+        .status(500)
+        .json({ ok: false, error: "Could not add profile as a location" });
+    }
+  },
+);
 
 router.get("/organizations/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
     const redirect = await getConsolidationRedirect(db, id);
-    if (redirect) { res.json({ consolidatedInto: redirect }); return; }
+    if (redirect) {
+      res.json({ consolidatedInto: redirect });
+      return;
+    }
     const locRepo = new DrizzleLocationRepository(db);
-    const [organization, timelinePage, orgLocations, orgLocationRollup] = await Promise.all([
-      orgRepo().getOrganizationSummary(id),
-      new ActivityService(new DrizzleActivityRepository(db)).listTimeline({ organizationId: id }),
-      locRepo.findByOrganization(id),
-      locRepo.rollupForOrganization(id),
-    ]);
-    if (!organization) { res.status(404).json({ error: "Not found" }); return; }
-    res.json({ organization, timeline: timelinePage.items, timelineNextPage: timelinePage.nextPage, orgLocations, orgLocationRollup });
+    const [organization, timelinePage, orgLocations, orgLocationRollup] =
+      await Promise.all([
+        orgRepo().getOrganizationSummary(id),
+        new ActivityService(new DrizzleActivityRepository(db)).listTimeline({
+          organizationId: id,
+        }),
+        locRepo.findByOrganization(id),
+        locRepo.rollupForOrganization(id),
+      ]);
+    if (!organization) {
+      res.status(404).json({ error: "Not found" });
+      return;
+    }
+    res.json({
+      organization,
+      timeline: timelinePage.items,
+      timelineNextPage: timelinePage.nextPage,
+      orgLocations,
+      orgLocationRollup,
+    });
   } catch (err) {
-    req.log.error({ err }, "Failed to get profile" );
+    req.log.error({ err }, "Failed to get profile");
     res.status(500).json({ error: "Failed to get profile" });
   }
 });
 
 router.post("/organizations/merge", async (req, res): Promise<void> => {
   const parsed = mergeInputSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input",
+      });
+    return;
+  }
   const { primaryId, duplicateIds } = parsed.data;
-  if (duplicateIds.includes(primaryId)) { res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" }); return; }
+  if (duplicateIds.includes(primaryId)) {
+    res
+      .status(400)
+      .json({ ok: false, error: "primaryId must not appear in duplicateIds" });
+    return;
+  }
   try {
     await db.transaction(async (transaction) => {
-      await prepareSelectedProfileSubsetMerge(transaction, [primaryId, ...duplicateIds]);
-      await prepareOrganizationMergeReferences(transaction, primaryId, duplicateIds);
+      await prepareSelectedProfileSubsetMerge(transaction, [
+        primaryId,
+        ...duplicateIds,
+      ]);
+      await prepareOrganizationMergeReferences(
+        transaction,
+        primaryId,
+        duplicateIds,
+      );
       await orgRepo().mergeOrganizations(primaryId, duplicateIds, transaction);
     });
     res.json({ ok: true });
   } catch (err) {
-    if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
+    if (err instanceof OrganizationConflictError) {
+      res.status(409).json({ ok: false, error: err.message });
+      return;
+    }
     req.log.error({ err }, "Failed to merge profiles");
     res.status(500).json({ ok: false, error: "Failed to merge profiles" });
   }
@@ -352,13 +549,23 @@ router.post("/organizations/merge", async (req, res): Promise<void> => {
 
 router.post("/organizations/last-resort", async (req, res): Promise<void> => {
   const parsed = setLastResortInputSchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
+  if (!parsed.success) {
+    res
+      .status(400)
+      .json({
+        ok: false,
+        error: parsed.error.issues[0]?.message ?? "Invalid input",
+      });
+    return;
+  }
   try {
     await setOrganizationLastResort(db, parsed.data, new Date());
     res.json({ ok: true });
   } catch (err) {
     req.log.error({ err }, "Failed to update last resort");
-    res.status(500).json({ ok: false, error: "Could not update last resort status" });
+    res
+      .status(500)
+      .json({ ok: false, error: "Could not update last resort status" });
   }
 });
 
@@ -368,45 +575,93 @@ const consolidationPreviewBodySchema = z.object({
   sourceOrgIds: z.array(z.string().uuid()).min(2).max(20),
 });
 
-router.post("/organizations/consolidation-preview", async (req, res): Promise<void> => {
-  const parsed = consolidationPreviewBodySchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
-  const input: ConsolidationPreviewInput = parsed.data;
-  try {
-    const preview = await buildConsolidationPreview(db, input);
-    res.json({ ok: true, preview });
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith("Canonical organization not found")) { res.status(404).json({ ok: false, error: err.message }); return; }
-    req.log.error({ err }, "Failed to build consolidation preview");
-    res.status(500).json({ ok: false, error: "Could not build profile-location preview" });
-  }
-});
+router.post(
+  "/organizations/consolidation-preview",
+  async (req, res): Promise<void> => {
+    const parsed = consolidationPreviewBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({
+          ok: false,
+          error: parsed.error.issues[0]?.message ?? "Invalid input",
+        });
+      return;
+    }
+    const input: ConsolidationPreviewInput = parsed.data;
+    try {
+      const preview = await buildConsolidationPreview(db, input);
+      res.json({ ok: true, preview });
+    } catch (err) {
+      if (
+        err instanceof Error &&
+        err.message.startsWith("Canonical organization not found")
+      ) {
+        res.status(404).json({ ok: false, error: err.message });
+        return;
+      }
+      req.log.error({ err }, "Failed to build consolidation preview");
+      res
+        .status(500)
+        .json({ ok: false, error: "Could not build profile-location preview" });
+    }
+  },
+);
 
 const consolidationApplyBodySchema = z.object({
   canonicalOrgId: z.string().uuid().nullable().default(null),
-  proposedCanonical: z.object({
-    name: z.string().trim().min(1).max(240),
-    website: z.string().trim().max(2048).nullable().optional(),
-    phone: z.string().trim().max(80).nullable().optional(),
-  }).optional(),
-  locationAssignments: z.array(z.object({ sourceOrgId: z.string().uuid(), label: z.string().trim().min(1).max(240) })).min(2).max(20).refine(
-    (assignments) => new Set(assignments.map((a) => a.sourceOrgId)).size === assignments.length,
-    { message: "locationAssignments.sourceOrgId values must be unique" },
-  ),
+  proposedCanonical: z
+    .object({
+      name: z.string().trim().min(1).max(240),
+      website: z.string().trim().max(2048).nullable().optional(),
+      phone: z.string().trim().max(80).nullable().optional(),
+    })
+    .optional(),
+  locationAssignments: z
+    .array(
+      z.object({
+        sourceOrgId: z.string().uuid(),
+        label: z.string().trim().min(1).max(240),
+      }),
+    )
+    .min(2)
+    .max(20)
+    .refine(
+      (assignments) =>
+        new Set(assignments.map((a) => a.sourceOrgId)).size ===
+        assignments.length,
+      { message: "locationAssignments.sourceOrgId values must be unique" },
+    ),
 });
 
-router.post("/organizations/consolidation-apply", async (req, res): Promise<void> => {
-  const parsed = consolidationApplyBodySchema.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
-  const input: ConsolidationApplyInput = parsed.data;
-  try {
-    const result = await applyConsolidation(db, input, new Date());
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    if (err instanceof OrganizationConflictError) { res.status(409).json({ ok: false, error: err.message }); return; }
-    req.log.error({ err }, "Failed to apply profile-location consolidation");
-    res.status(500).json({ ok: false, error: "Could not combine profiles as locations" });
-  }
-});
+router.post(
+  "/organizations/consolidation-apply",
+  async (req, res): Promise<void> => {
+    const parsed = consolidationApplyBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res
+        .status(400)
+        .json({
+          ok: false,
+          error: parsed.error.issues[0]?.message ?? "Invalid input",
+        });
+      return;
+    }
+    const input: ConsolidationApplyInput = parsed.data;
+    try {
+      const result = await applyConsolidation(db, input, new Date());
+      res.json({ ok: true, ...result });
+    } catch (err) {
+      if (err instanceof OrganizationConflictError) {
+        res.status(409).json({ ok: false, error: err.message });
+        return;
+      }
+      req.log.error({ err }, "Failed to apply profile-location consolidation");
+      res
+        .status(500)
+        .json({ ok: false, error: "Could not combine profiles as locations" });
+    }
+  },
+);
 
 export default router;

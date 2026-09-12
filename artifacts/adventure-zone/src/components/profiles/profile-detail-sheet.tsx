@@ -7,6 +7,7 @@ import { apiGet } from "@/lib/auth-token";
 import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail-sheet";
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInlineEditor } from "./profile-inline-editor";
+import { ProfileAtAGlance } from "./profile-at-a-glance";
 import { historyCategory, simplifyHistoryText } from "./history-summary";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -28,7 +29,12 @@ function formatDateTime(value: unknown) {
   if (!value) return null;
   const date = new Date(String(value));
   if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function ProfileDetailSheet({
@@ -41,7 +47,9 @@ export function ProfileDetailSheet({
   onOpenChange(open: boolean): void;
 }) {
   const [data, setData] = useState<any>(null);
-  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
+  const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(
+    null,
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -53,40 +61,51 @@ export function ProfileDetailSheet({
   const [optimisticRecentNote, setOptimisticRecentNote] = useState<any>(null);
   const profileId = target?.profileId;
 
-  const loadProfile = useCallback(async (reset = false) => {
-    if (!open || !profileId) return;
-    setLoading(true);
-    setError(null);
-    if (reset) {
-      setEditing(false);
-      setRecentNoteExpanded(false);
-      setNoteComposerOpen(false);
-      setNoteBody("");
-      setNoteError("");
-      setOptimisticRecentNote(null);
-    }
-    const qs = new URLSearchParams();
-    if (target?.contactId) qs.set("contactId", target.contactId);
-    try {
-      const [next, photo] = await Promise.all([
-        apiGet<any>(`/event-profiles/${profileId}${qs.toString() ? `?${qs.toString()}` : ""}`),
-        apiGet<{ dataUrl: string | null }>(`/event-profiles/${profileId}/photo`).catch(() => ({ dataUrl: null })),
-      ]);
-      setData(next);
-      setProfileImageDataUrl(photo.dataUrl ?? null);
-      setOptimisticRecentNote((current: any) => {
-        if (!current) return current;
-        const refreshedNotes = Array.isArray(next?.notes) ? next.notes : [];
-        return refreshedNotes.some((note: any) => note.id === current.id) ? null : current;
-      });
-    } catch (cause: any) {
-      setError(cause?.message ?? "Could not load profile");
-    } finally {
-      setLoading(false);
-    }
-  }, [open, profileId, target?.contactId]);
+  const loadProfile = useCallback(
+    async (reset = false) => {
+      if (!open || !profileId) return;
+      setLoading(true);
+      setError(null);
+      if (reset) {
+        setEditing(false);
+        setRecentNoteExpanded(false);
+        setNoteComposerOpen(false);
+        setNoteBody("");
+        setNoteError("");
+        setOptimisticRecentNote(null);
+      }
+      const qs = new URLSearchParams();
+      if (target?.contactId) qs.set("contactId", target.contactId);
+      try {
+        const [next, photo] = await Promise.all([
+          apiGet<any>(
+            `/event-profiles/${profileId}${qs.toString() ? `?${qs.toString()}` : ""}`,
+          ),
+          apiGet<{ dataUrl: string | null }>(
+            `/event-profiles/${profileId}/photo`,
+          ).catch(() => ({ dataUrl: null })),
+        ]);
+        setData(next);
+        setProfileImageDataUrl(photo.dataUrl ?? null);
+        setOptimisticRecentNote((current: any) => {
+          if (!current) return current;
+          const refreshedNotes = Array.isArray(next?.notes) ? next.notes : [];
+          return refreshedNotes.some((note: any) => note.id === current.id)
+            ? null
+            : current;
+        });
+      } catch (cause: any) {
+        setError(cause?.message ?? "Could not load profile");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [open, profileId, target?.contactId],
+  );
 
-  useEffect(() => { void loadProfile(true); }, [loadProfile]);
+  useEffect(() => {
+    void loadProfile(true);
+  }, [loadProfile]);
 
   async function handleInlineSaved() {
     await loadProfile(false);
@@ -94,7 +113,8 @@ export function ProfileDetailSheet({
   }
 
   const title = useMemo(
-    () => data?.place?.name ?? data?.organization?.name ?? data?.name ?? "Profile",
+    () =>
+      data?.place?.name ?? data?.organization?.name ?? data?.name ?? "Profile",
     [data],
   );
   if (!target || !profileId) return null;
@@ -104,29 +124,44 @@ export function ProfileDetailSheet({
   const notes = Array.isArray(data?.notes) ? data.notes : [];
   const bookings = Array.isArray(data?.bookings) ? data.bookings : [];
   const followUps = Array.isArray(data?.followUps) ? data.followUps : [];
-  const selectedContactId = target.contactId
-    ?? data?.selectedContactId
-    ?? contacts.find((contact: any) => contact.isPrimary)?.id
-    ?? contacts[0]?.id
-    ?? null;
-  const selectedContact = contacts.find((contact: any) => contact.id === selectedContactId) ?? contacts[0] ?? null;
+  const selectedContactId =
+    target.contactId ??
+    data?.selectedContactId ??
+    contacts.find((contact: any) => contact.isPrimary)?.id ??
+    contacts[0]?.id ??
+    null;
+  const selectedContact =
+    contacts.find((contact: any) => contact.id === selectedContactId) ??
+    contacts[0] ??
+    null;
   const location = [place.city, place.region].filter(Boolean).join(", ");
   const fullAddress = [
     [place.address1, place.address2].filter(Boolean).join(", "),
     [place.city, place.region, place.postalCode].filter(Boolean).join(" "),
-  ].filter(Boolean).join(" · ");
-  const meaningfulNotes = notes.filter((note: any) => historyCategory(note) !== "system");
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const meaningfulNotes = notes.filter(
+    (note: any) => historyCategory(note) !== "system",
+  );
   const recentNote = optimisticRecentNote ?? meaningfulNotes[0] ?? null;
   const openFollowUps = [...followUps]
     .filter((item: any) => !item.completedAt)
-    .sort((a: any, b: any) => new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime());
+    .sort(
+      (a: any, b: any) =>
+        new Date(a.dueAt ?? 0).getTime() - new Date(b.dueAt ?? 0).getTime(),
+    );
   const nextFollowUp = openFollowUps[0] ?? null;
-  const followUpOverdue = Boolean(nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now());
+  const followUpOverdue = Boolean(
+    nextFollowUp && new Date(nextFollowUp.dueAt).getTime() < Date.now(),
+  );
   const visiblePhone = selectedContact?.phone ?? place.phone ?? null;
   const phoneText = formatPhoneDisplay(visiblePhone);
   const callQuery = new URLSearchParams({ organizationId: profileId });
   if (selectedContactId) callQuery.set("contactId", selectedContactId);
-  const callHref = visiblePhone ? `/calls/workspace?${callQuery.toString()}` : null;
+  const callHref = visiblePhone
+    ? `/calls/workspace?${callQuery.toString()}`
+    : null;
   const email = selectedContact?.email ?? null;
   const websiteHref = normalizeExternalWebsite(place.website);
 
@@ -158,7 +193,9 @@ export function ProfileDetailSheet({
       setNoteComposerOpen(false);
       await loadProfile(false);
     } catch (cause) {
-      setNoteError(cause instanceof Error ? cause.message : "Could not save note.");
+      setNoteError(
+        cause instanceof Error ? cause.message : "Could not save note.",
+      );
     } finally {
       setNoteSaving(false);
     }
@@ -174,7 +211,9 @@ export function ProfileDetailSheet({
       {loading && !data ? (
         <p className="text-sm text-slate-500">Loading profile…</p>
       ) : error && !data ? (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>
+        <p className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          {error}
+        </p>
       ) : data ? (
         <div className="grid gap-3 pb-2">
           {editing ? (
@@ -186,23 +225,36 @@ export function ProfileDetailSheet({
             />
           ) : (
             <>
+              <ProfileAtAGlance profile={data} />
               {!nextFollowUp ? (
                 <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="font-bold text-emerald-900">✓ No open follow-ups</p>
-                  <p className="mt-1 text-sm text-emerald-800">You’re all caught up!</p>
+                  <p className="font-bold text-emerald-900">
+                    ✓ No open follow-ups
+                  </p>
+                  <p className="mt-1 text-sm text-emerald-800">
+                    You’re all caught up!
+                  </p>
                 </section>
               ) : followUpOverdue ? (
                 <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">
                   <p className="font-bold text-rose-900">Follow-up overdue</p>
                   <p className="mt-1 text-sm capitalize text-rose-800">
-                    {String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}
+                    {String(nextFollowUp.kind ?? "follow-up").replaceAll(
+                      "_",
+                      " ",
+                    )}{" "}
+                    · {formatDateTime(nextFollowUp.dueAt)}
                   </p>
                 </section>
               ) : (
                 <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
                   <p className="font-bold text-amber-900">Follow-up needed</p>
                   <p className="mt-1 text-sm capitalize text-amber-800">
-                    {String(nextFollowUp.kind ?? "follow-up").replaceAll("_", " ")} · {formatDateTime(nextFollowUp.dueAt)}
+                    {String(nextFollowUp.kind ?? "follow-up").replaceAll(
+                      "_",
+                      " ",
+                    )}{" "}
+                    · {formatDateTime(nextFollowUp.dueAt)}
                   </p>
                 </section>
               )}
@@ -227,7 +279,11 @@ export function ProfileDetailSheet({
                           <MapPin className="h-4 w-4 shrink-0 text-emerald-700" />
                           {location || "Location not set"}
                         </p>
-                        {fullAddress ? <p className="mt-1 text-sm text-slate-600">{fullAddress}</p> : null}
+                        {fullAddress ? (
+                          <p className="mt-1 text-sm text-slate-600">
+                            {fullAddress}
+                          </p>
+                        ) : null}
                         <div className="mt-2 flex flex-wrap gap-2">
                           {place.placeType ? (
                             <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold capitalize text-emerald-800">
@@ -235,11 +291,19 @@ export function ProfileDetailSheet({
                             </span>
                           ) : null}
                           {place.lastResort ? (
-                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">Last Resort</span>
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-semibold text-rose-800">
+                              Last Resort
+                            </span>
                           ) : null}
                         </div>
                       </div>
-                      <button className="button-secondary shrink-0" onClick={() => setEditing(true)} type="button">Edit</button>
+                      <button
+                        className="button-secondary shrink-0"
+                        onClick={() => setEditing(true)}
+                        type="button"
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -247,8 +311,12 @@ export function ProfileDetailSheet({
                 <div className="flex items-center gap-2 px-4 py-4">
                   {callHref ? (
                     <Link
-                      aria-label={phoneText ? `Open call workspace for ${phoneText}` : "Open call workspace"}
-                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
+                      aria-label={
+                        phoneText
+                          ? `Open call workspace for ${phoneText}`
+                          : "Open call workspace"
+                      }
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={callHref}
                     >
                       <Phone className="h-5 w-5" />
@@ -257,7 +325,7 @@ export function ProfileDetailSheet({
                   {email ? (
                     <a
                       aria-label={`Email ${email}`}
-                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={`mailto:${email}`}
                     >
                       <Mail className="h-5 w-5" />
@@ -266,7 +334,7 @@ export function ProfileDetailSheet({
                   {websiteHref ? (
                     <a
                       aria-label="Open website"
-                       className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
+                      className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-emerald-300 hover:text-emerald-700"
                       href={websiteHref}
                       rel="noreferrer noopener"
                       target="_blank"
@@ -276,9 +344,13 @@ export function ProfileDetailSheet({
                   ) : null}
                 </div>
 
-                 <div className="mx-4 mb-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
-                  <p className="text-sm font-bold text-slate-900">{contacts.length} contact{contacts.length === 1 ? "" : "s"}</p>
-                  <p className="text-sm font-bold text-slate-900">{bookings.length} booking{bookings.length === 1 ? "" : "s"}</p>
+                <div className="mx-4 mb-4 grid grid-cols-2 divide-x divide-slate-200 rounded-xl bg-slate-50 py-3 text-center">
+                  <p className="text-sm font-bold text-slate-900">
+                    {contacts.length} contact{contacts.length === 1 ? "" : "s"}
+                  </p>
+                  <p className="text-sm font-bold text-slate-900">
+                    {bookings.length} booking{bookings.length === 1 ? "" : "s"}
+                  </p>
                 </div>
               </section>
 
@@ -286,17 +358,27 @@ export function ProfileDetailSheet({
                 <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex items-center justify-between gap-2">
                     <h3 className="font-bold">Recent note</h3>
-                    {formatDate(recentNote.occurredAt ?? recentNote.createdAt) ? (
-                      <span className="text-xs text-slate-500">{formatDate(recentNote.occurredAt ?? recentNote.createdAt)}</span>
+                    {formatDate(
+                      recentNote.occurredAt ?? recentNote.createdAt,
+                    ) ? (
+                      <span className="text-xs text-slate-500">
+                        {formatDate(
+                          recentNote.occurredAt ?? recentNote.createdAt,
+                        )}
+                      </span>
                     ) : null}
                   </div>
-                  <p className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${recentNoteExpanded ? "" : "line-clamp-4"}`}>
+                  <p
+                    className={`mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700 ${recentNoteExpanded ? "" : "line-clamp-4"}`}
+                  >
                     {simplifyHistoryText(recentNote.body ?? "")}
                   </p>
                   {simplifyHistoryText(recentNote.body ?? "").length > 220 ? (
                     <button
-                       className="mt-2 text-sm font-semibold text-emerald-700"
-                      onClick={() => setRecentNoteExpanded((current) => !current)}
+                      className="mt-2 text-sm font-semibold text-emerald-700"
+                      onClick={() =>
+                        setRecentNoteExpanded((current) => !current)
+                      }
                       type="button"
                     >
                       {recentNoteExpanded ? "Show less" : "More"}
@@ -316,15 +398,31 @@ export function ProfileDetailSheet({
                       onChange={(event) => setNoteBody(event.target.value)}
                     />
                   </label>
-                  {noteError ? <p className="text-sm font-semibold text-rose-700" role="alert">{noteError}</p> : null}
+                  {noteError ? (
+                    <p
+                      className="text-sm font-semibold text-rose-700"
+                      role="alert"
+                    >
+                      {noteError}
+                    </p>
+                  ) : null}
                   <div className="flex gap-2">
-                    <button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
+                    <button
+                      className="button-primary"
+                      disabled={noteSaving || !noteBody.trim()}
+                      onClick={() => void saveNote()}
+                      type="button"
+                    >
                       {noteSaving ? "Saving…" : "Save note"}
                     </button>
                     <button
                       className="button-secondary"
                       disabled={noteSaving}
-                      onClick={() => { setNoteComposerOpen(false); setNoteBody(""); setNoteError(""); }}
+                      onClick={() => {
+                        setNoteComposerOpen(false);
+                        setNoteBody("");
+                        setNoteError("");
+                      }}
                       type="button"
                     >
                       Cancel
@@ -334,8 +432,18 @@ export function ProfileDetailSheet({
               ) : null}
 
               <div className="sticky bottom-0 grid grid-cols-2 gap-2 border-t border-slate-200 bg-white/95 pt-3 backdrop-blur">
-                <button className="button-primary" onClick={openNoteComposer} type="button">Add note</button>
-                <ProfileActionsMenu profileId={profileId} contactId={selectedContactId} showAddNote={false} />
+                <button
+                  className="button-primary"
+                  onClick={openNoteComposer}
+                  type="button"
+                >
+                  Add note
+                </button>
+                <ProfileActionsMenu
+                  profileId={profileId}
+                  contactId={selectedContactId}
+                  showAddNote={false}
+                />
               </div>
             </>
           )}
