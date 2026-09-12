@@ -1,8 +1,12 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 
 import { OrganizationList } from "./organization-list";
+
+vi.mock("@/components/profiles/profile-detail-sheet", () => ({
+  ProfileDetailSheet: () => null,
+}));
 
 const query = {
   search: "",
@@ -27,7 +31,7 @@ const query = {
 afterEach(cleanup);
 
 describe("OrganizationList profile summary cards", () => {
-  it("shows booking decision data instead of the occurrence rating", () => {
+  it("shows booking decision data with the review rating as secondary context", () => {
     render(
       <Router>
         <OrganizationList
@@ -90,14 +94,12 @@ describe("OrganizationList profile summary cards", () => {
     expect(screen.getByText("Contacted")).toBeVisible();
     expect(screen.getByText("Flat fee")).toBeVisible();
     expect(screen.getByText(/Email.*Due Sep 18/)).toBeVisible();
-    expect(
-      screen.queryByTestId("profile-rating-summary"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("img", {
-        name: "10 Mile Pride (Breckenridge) CO profile",
-      }),
-    ).toHaveAttribute("src", "data:image/png;base64,aA==");
+    expect(screen.getByTestId("profile-rating-summary")).toHaveTextContent(
+      "4.5 (2)",
+    );
+    expect(screen.getByTestId("profile-money-line")).toHaveTextContent(
+      "Flat fee",
+    );
   });
 
   it("uses the compact card density for long profile lists", () => {
@@ -143,9 +145,17 @@ describe("OrganizationList profile summary cards", () => {
       </Router>,
     );
 
-    expect(screen.getByTestId("profile-summary-card")).toHaveClass("p-4");
-    expect(screen.getByTestId("profile-avatar-link")).toHaveClass("size-16");
+    expect(screen.getByTestId("profile-summary-card")).toHaveClass(
+      "rounded-md",
+    );
+    expect(screen.getByTestId("profile-workspace")).toHaveClass(
+      "lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]",
+    );
+    expect(screen.queryByTestId("profile-avatar-link")).not.toBeInTheDocument();
     expect(screen.getByTestId("profile-decision-summary")).toBeVisible();
+    expect(screen.getByTestId("profile-rating-summary")).toHaveTextContent(
+      "No reviews",
+    );
   });
 
   it("writes quick filters into the same profile list query and exposes filtered CSV export", () => {

@@ -36,10 +36,12 @@ export function ProfileDetailSheet({
   target,
   open,
   onOpenChange,
+  variant = "sheet",
 }: {
   target: ProfileSheetTarget | null;
   open: boolean;
   onOpenChange(open: boolean): void;
+  variant?: "sheet" | "inline";
 }) {
   const [data, setData] = useState<any>(null);
   const [profileImageDataUrl, setProfileImageDataUrl] = useState<string | null>(null);
@@ -171,6 +173,7 @@ export function ProfileDetailSheet({
       onOpenChange={onOpenChange}
       open={open}
       title={title}
+      variant={variant}
     >
       {loading && !data ? (
         <p className="text-sm text-slate-500">Loading profile…</p>
