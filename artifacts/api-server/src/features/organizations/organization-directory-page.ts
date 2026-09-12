@@ -25,6 +25,13 @@ type FillerProfileRow = {
   fillerReason: string | null;
   fillerChangedAt: Date | null;
 };
+type DecisionProfileRow = {
+  id: string; nextEventDate: Date | null; applicationDeadline: string | null;
+  recommendedDealModel: "flat_fee" | "pay_per_play" | "either" | null;
+  pipelineStatus: string | null; priority: string | null;
+  nextActionKind: string | null; nextActionDueAt: Date | null;
+  deadlineSoon: boolean; booked: boolean;
+};
 
 type OrganizationListPage = {
   records: Array<{
@@ -41,6 +48,16 @@ type OrganizationListPage = {
     contactCount: number;
     bookingCount: number;
     primaryContactName: string | null;
+    primaryContactEmail: string | null;
+    primaryContactPhone: string | null;
+    nextEventDate: Date | null;
+    applicationDeadline: string | null;
+    pipelineStatus: string | null;
+    priority: string | null;
+    decisionStatus: "deadline_soon" | "needs_follow_up" | "contacted" | "waiting" | "booked" | "not_a_fit" | "unrecorded";
+    recommendedDealModel: "flat_fee" | "pay_per_play" | "either" | null;
+    nextActionKind: string | null;
+    nextActionDueAt: Date | null;
     locationCount: number;
     matchedLocation: MatchedOrganizationLocation | null;
     parentContext:
@@ -140,6 +157,45 @@ function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined 
   const familyMemberCondition = query.showMembers || Boolean(query.search)
     ? undefined
     : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;
+  const quickCondition = (() => {
+    switch (query.quickFilter) {
+      case "deadline_soon": return sql`${organizations.applicationDeadline} between current_date and current_date + 30`;
+      case "pay_per_play": return eq(organizations.recommendedDealModel, "pay_per_play");
+      case "needs_follow_up": return sql`(
+        exists (select 1 from follow_ups f where f.completed_at is null and (
+          f.organization_id = ${organizations.id}
+          or (f.organization_id is null and f.booking_id in (select b.id from bookings b where b.organization_id = ${organizations.id}))
+          or (f.organization_id is null and f.booking_id is null and f.contact_id in (select oc.contact_id from organization_contacts oc where oc.organization_id = ${organizations.id} and oc.active))
+        ))
+        or exists (
+          select 1 from booking_opportunities bo
+          where bo.organization_id = ${organizations.id}
+            and bo.next_action_due_at is not null
+            and bo.status not in ('booked','not_pursuing','declined','cancelled')
+            and not exists (
+              select 1 from booking_opportunities newer
+              where newer.organization_id = bo.organization_id
+                and (newer.event_year, newer.updated_at, newer.id) > (bo.event_year, bo.updated_at, bo.id)
+            )
+        )
+      )`;
+      case "booked": return sql`(
+        exists (select 1 from bookings b where b.organization_id = ${organizations.id} and b.status = 'confirmed'
+          and coalesce(b.ends_at, b.starts_at) >= now()
+          and coalesce(b.notes, '') not like '[Merged duplicate] Canonical booking:%')
+        or exists (
+          select 1 from booking_opportunities bo
+          where bo.organization_id = ${organizations.id} and bo.status = 'booked'
+            and not exists (
+              select 1 from booking_opportunities newer
+              where newer.organization_id = bo.organization_id
+                and (newer.event_year, newer.updated_at, newer.id) > (bo.event_year, bo.updated_at, bo.id)
+            )
+        )
+      )`;
+      default: return undefined;
+    }
+  })();
 
   return and(
     searchCondition,
@@ -155,6 +211,7 @@ function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined 
     bookingCondition,
     locationCondition,
     familyMemberCondition,
+    quickCondition,
   ) ?? undefined;
 }
 
@@ -258,7 +315,7 @@ export async function listOrganizationDirectoryPage(
       ))
       .groupBy(bookings.organizationId),
     db
-      .select({ organizationId: organizationContacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName })
+      .select({ organizationId: organizationContacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone })
       .from(organizationContacts)
       .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
       .where(and(
@@ -319,13 +376,54 @@ export async function listOrganizationDirectoryPage(
         }[]),
   ]);
 
+  const decisionResult = await db.execute<DecisionProfileRow>(sql`
+    select o.id,
+      (select min(b.starts_at) from bookings b
+       where b.organization_id = o.id and b.starts_at >= now()
+         and b.status not in ('declined','cancelled')
+         and coalesce(b.notes, '') not like '[Merged duplicate] Canonical booking:%') as "nextEventDate",
+      o.application_deadline as "applicationDeadline",
+      o.recommended_deal_model as "recommendedDealModel",
+      opportunity.status as "pipelineStatus", opportunity.priority,
+      case when opportunity.next_action_due_at is null then followup.due_at
+           when followup.due_at is null then opportunity.next_action_due_at
+           when opportunity.next_action_due_at <= followup.due_at then opportunity.next_action_due_at
+           else followup.due_at end as "nextActionDueAt",
+      case when opportunity.next_action_due_at is null then followup.kind
+           when followup.due_at is null then opportunity.next_action_kind
+           when opportunity.next_action_due_at <= followup.due_at then opportunity.next_action_kind
+           else followup.kind end as "nextActionKind",
+      (o.application_deadline between current_date and current_date + 30) as "deadlineSoon",
+      (coalesce(opportunity.status = 'booked', false) or exists (
+        select 1 from bookings booked where booked.organization_id = o.id and booked.status = 'confirmed'
+          and coalesce(booked.ends_at, booked.starts_at) >= now()
+          and coalesce(booked.notes, '') not like '[Merged duplicate] Canonical booking:%'
+      )) as booked
+    from organizations o
+    left join lateral (
+      select bo.status, bo.priority, bo.next_action_kind, bo.next_action_due_at
+      from booking_opportunities bo where bo.organization_id = o.id
+      order by bo.event_year desc, bo.updated_at desc, bo.id desc limit 1
+    ) opportunity on true
+    left join lateral (
+      select f.kind, f.due_at from follow_ups f
+      where f.completed_at is null and (
+        f.organization_id = o.id
+        or (f.organization_id is null and f.booking_id in (select b.id from bookings b where b.organization_id = o.id))
+        or (f.organization_id is null and f.booking_id is null and f.contact_id in (select oc.contact_id from organization_contacts oc where oc.organization_id = o.id and oc.active))
+      ) order by f.due_at asc limit 1
+    ) followup on true
+    where o.id in (${idList})
+  `);
+
   const contactCountByOrganization = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
   const bookingCountByOrganization = new Map(
     bookingCounts.filter((record) => record.organizationId !== null).map((record) => [record.organizationId!, record.value]),
   );
   const primaryContactByOrganization = new Map(
-    primaryContacts.map((record) => [record.organizationId, `${record.firstName} ${record.lastName}`.trim()]),
+    primaryContacts.map((record) => [record.organizationId, { name: `${record.firstName} ${record.lastName}`.trim(), email: record.email, phone: record.phone }]),
   );
+  const decisionsByOrganization = new Map((decisionResult.rows ?? []).map((row) => [row.id, row]));
   const locationCountByOrganization = new Map(locationCounts.map((record) => [record.organizationId, record.value]));
   const matchedLocationByOrganization = new Map<string, MatchedOrganizationLocation>();
   for (const row of matchedLocationRows) {
@@ -342,6 +440,15 @@ export async function listOrganizationDirectoryPage(
   return {
     records: organizationRecords.map((organization) => {
       const filler = fillerByOrganization.get(organization.id);
+      const contact = primaryContactByOrganization.get(organization.id);
+      const decision = decisionsByOrganization.get(organization.id);
+      const pipeline = decision?.pipelineStatus ?? null;
+      const decisionStatus = (["not_pursuing", "declined", "cancelled"].includes(pipeline ?? "")
+        ? "not_a_fit" : decision?.booked ? "booked" : decision?.deadlineSoon ? "deadline_soon"
+        : decision?.nextActionDueAt ? "needs_follow_up"
+        : ["contacted", "follow_up", "interested", "booking_in_progress"].includes(pipeline ?? "") ? "contacted"
+        : ["new_lead", "researching", "ready_to_contact", "no_response", "territory_hold", "needs_review"].includes(pipeline ?? "") ? "waiting"
+        : "unrecorded") as OrganizationListPage["records"][number]["decisionStatus"];
       return {
         id: organization.id,
         name: organization.name,
@@ -355,7 +462,17 @@ export async function listOrganizationDirectoryPage(
         fillerChangedAt: filler?.fillerChangedAt ?? null,
         contactCount: contactCountByOrganization.get(organization.id) ?? 0,
         bookingCount: bookingCountByOrganization.get(organization.id) ?? 0,
-        primaryContactName: primaryContactByOrganization.get(organization.id) ?? null,
+        primaryContactName: contact?.name ?? null,
+        primaryContactEmail: contact?.email ?? null,
+        primaryContactPhone: contact?.phone ?? null,
+        nextEventDate: decision?.nextEventDate ?? null,
+        applicationDeadline: decision?.applicationDeadline ?? null,
+        pipelineStatus: pipeline,
+        priority: decision?.priority ?? null,
+        decisionStatus,
+        recommendedDealModel: decision?.recommendedDealModel ?? null,
+        nextActionKind: decision?.nextActionKind ?? null,
+        nextActionDueAt: decision?.nextActionDueAt ?? null,
         locationCount: locationCountByOrganization.get(organization.id) ?? 0,
         matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,
         parentContext: organization.consolidatedIntoId

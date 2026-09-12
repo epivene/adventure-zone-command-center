@@ -1,6 +1,7 @@
 import {
   boolean,
   check,
+  date,
   doublePrecision,
   foreignKey,
   integer,
@@ -35,6 +36,9 @@ const placeTypeValues = [
   "association","company","other",
 ] as const;
 export type PlaceType = (typeof placeTypeValues)[number];
+
+export const recommendedDealModelValues = ["flat_fee", "pay_per_play", "either"] as const;
+export type RecommendedDealModel = (typeof recommendedDealModelValues)[number];
 
 const specialRequestTreatmentValues = ["add_to_count","replace_included","note_only"] as const;
 export type SpecialRequestTreatment = (typeof specialRequestTreatmentValues)[number];
@@ -204,6 +208,8 @@ export const organizations = pgTable("organizations", {
   region: text("region"),
   postalCode: text("postal_code"),
   website: text("website"),
+  applicationDeadline: date("application_deadline"),
+  recommendedDealModel: text("recommended_deal_model").$type<RecommendedDealModel>(),
   /** Optional non-destructive parent organization for manual event/location membership. */
   parentOrganizationId: uuid("parent_organization_id").references(
     (): AnyPgColumn => organizations.id,
@@ -231,6 +237,10 @@ export const organizations = pgTable("organizations", {
   check(
     "organizations_last_resort_reason_required",
     sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
+  ),
+  check(
+    "organizations_recommended_deal_model_valid",
+    sql`${table.recommendedDealModel} is null or ${table.recommendedDealModel} in (${sqlTextValues(recommendedDealModelValues)})`,
   ),
   index("organizations_normalized_phone_idx").on(table.normalizedPhone),
   index("organizations_parent_organization_id_idx").on(table.parentOrganizationId),

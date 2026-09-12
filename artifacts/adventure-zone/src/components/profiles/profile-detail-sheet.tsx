@@ -7,6 +7,7 @@ import { apiGet } from "@/lib/auth-token";
 import { ResponsiveDetailSheet } from "@/components/navigation/responsive-detail-sheet";
 import { ProfileActionsMenu } from "./profile-actions-menu";
 import { ProfileInlineEditor } from "./profile-inline-editor";
+import { ProfileAtAGlance } from "./profile-at-a-glance";
 import { historyCategory, simplifyHistoryText } from "./history-summary";
 import { formatPhoneDisplay } from "@/features/contacts/phone-display";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
@@ -186,10 +187,11 @@ export function ProfileDetailSheet({
             />
           ) : (
             <>
+              <ProfileAtAGlance profile={data} />
               {!nextFollowUp ? (
                 <section className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="font-bold text-emerald-900">✓ No open follow-ups</p>
-                  <p className="mt-1 text-sm text-emerald-800">You’re all caught up!</p>
+                  <p className="font-bold text-emerald-900">✓ No open follow-up records</p>
+                  <p className="mt-1 text-sm text-emerald-800">Check the next action above for opportunity work.</p>
                 </section>
               ) : followUpOverdue ? (
                 <section className="rounded-xl border border-rose-200 bg-rose-50 p-4">

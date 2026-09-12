@@ -35,6 +35,7 @@ export default function OrganizationsPage() {
     showMembers: params.get("showMembers") ?? undefined,
     contact: params.get("contact") ?? undefined,
     activity: params.get("activity") ?? undefined,
+    quick: params.get("quick") ?? undefined,
     sort: params.get("sort") ?? undefined,
     includeRetired: params.get("includeRetired") ?? undefined,
     page: params.get("page") ?? undefined,
@@ -68,6 +69,7 @@ export default function OrganizationsPage() {
     if (query.hasEmail) qs.set("hasEmail", "yes");
     if (query.hasFollowUp) qs.set("hasFollowUp", "yes");
     if (query.hasBooking) qs.set("hasBooking", "yes");
+    if (query.quickFilter) qs.set("quick", query.quickFilter);
     if (query.hasLocations) qs.set("hasLocations", "yes");
     if (query.showMembers) qs.set("showMembers", "yes");
     if (query.sort !== "recently_updated") qs.set("sort", query.sort);
@@ -84,7 +86,7 @@ export default function OrganizationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [view, query.search, query.lastResort, query.filler, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.sort, query.includeRetired, query.page, query.pageSize]);
+  }, [view, query.search, query.lastResort, query.filler, query.travelLegId, query.placeType, query.region, query.hasPhone, query.hasEmail, query.hasFollowUp, query.hasBooking, query.hasLocations, query.showMembers, query.quickFilter, query.sort, query.includeRetired, query.page, query.pageSize]);
 
   useEffect(() => { void loadProfiles(); }, [loadProfiles]);
 

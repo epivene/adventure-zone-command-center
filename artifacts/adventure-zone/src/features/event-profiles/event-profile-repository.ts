@@ -30,6 +30,8 @@ export type EventProfilePlace = {
   region: string | null;
   postalCode: string | null;
   website: string | null;
+  applicationDeadline?: string | null;
+  recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
   lastResort: boolean;
   lastResortReason: string | null;
   actRecordId: string | null;
@@ -129,6 +131,10 @@ export type EventProfile = {
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
   familyContext?: { kind: "event_family" | "organization_group"; id: string; name: string } | null;
+  decisionSummary?: {
+    priority?: string | null; pipelineStatus?: string | null;
+    nextActionKind?: string | null; nextActionDueAt?: Date | string | null;
+  };
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];
