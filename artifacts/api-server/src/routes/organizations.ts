@@ -14,6 +14,7 @@ import {
   setLastResortInputSchema,
 } from "@/features/organizations/last-resort-input";
 import { listOrganizationDirectoryPage } from "@/features/organizations/organization-directory-page";
+import { createProfileCsv } from "@/features/organizations/profile-csv";
 import { setOrganizationLastResort } from "@/features/organizations/last-resort-service";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
 import { addProfileAsLocation } from "@/features/organizations/add-profile-as-location";
@@ -185,6 +186,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
   const query = organizationListQuerySchema.parse({
     q: req.query.q ?? undefined,
     lastResort: req.query.lastResort ?? undefined,
+    filler: req.query.filler ?? undefined,
     leg: req.query.leg ?? undefined,
     type: req.query.type ?? undefined,
     region: req.query.region ?? undefined,
@@ -196,6 +198,7 @@ router.get("/organizations", async (req, res): Promise<void> => {
     showMembers: req.query.showMembers ?? undefined,
     contact: req.query.contact ?? undefined,
     activity: req.query.activity ?? undefined,
+    quick: req.query.quick ?? undefined,
     sort: req.query.sort ?? undefined,
     includeRetired: req.query.includeRetired ?? undefined,
     page: req.query.page ?? undefined,
@@ -231,6 +234,59 @@ router.get("/organizations", async (req, res): Promise<void> => {
   } catch (err) {
     req.log.error({ err }, "Failed to list organizations");
     res.status(500).json({ error: "Failed to list organizations" });
+  }
+});
+
+router.get("/organizations/export", async (req, res): Promise<void> => {
+  const baseQuery = organizationListQuerySchema.parse({
+    q: req.query.q ?? undefined, lastResort: req.query.lastResort ?? undefined,
+    filler: req.query.filler ?? undefined, leg: req.query.leg ?? undefined,
+    type: req.query.type ?? undefined, region: req.query.region ?? undefined,
+    hasPhone: req.query.hasPhone ?? undefined, hasEmail: req.query.hasEmail ?? undefined,
+    hasFollowUp: req.query.hasFollowUp ?? undefined, hasBooking: req.query.hasBooking ?? undefined,
+    hasLocations: req.query.hasLocations ?? undefined, showMembers: req.query.showMembers ?? undefined,
+    contact: req.query.contact ?? undefined, activity: req.query.activity ?? undefined,
+    quick: req.query.quick ?? undefined, sort: req.query.sort ?? undefined,
+    includeRetired: req.query.includeRetired ?? undefined, page: 1, pageSize: 50,
+  });
+  try {
+    const records = [];
+    let page = 1;
+    let pageCount = 1;
+    do {
+      const result = await listOrganizationDirectoryPage(db, { ...baseQuery, page });
+      records.push(...result.records);
+      pageCount = result.pageCount;
+      page += 1;
+    } while (page <= pageCount);
+    const labels: Record<string, string> = {
+      deadline_soon: "Deadline soon", needs_follow_up: "Needs follow-up", contacted: "Contacted",
+      waiting: "Waiting", booked: "Booked", not_a_fit: "Not a fit", unrecorded: "",
+      flat_fee: "Flat fee", pay_per_play: "Pay-per-play", either: "Either",
+    };
+    const dateValue = (value: Date | string | null) => {
+      if (!value) return "";
+      const date = value instanceof Date ? value : new Date(value);
+      return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+    };
+    const csv = createProfileCsv(records.map((record) => ({
+      eventName: record.name,
+      location: [record.city, record.region].filter(Boolean).join(", "),
+      nextDate: dateValue(record.nextEventDate),
+      deadline: dateValue(record.applicationDeadline),
+      status: labels[record.decisionStatus] ?? record.decisionStatus,
+      recommendedDealModel: record.recommendedDealModel ? labels[record.recommendedDealModel] : "",
+      nextAction: [record.nextActionKind, dateValue(record.nextActionDueAt)].filter(Boolean).join(" — "),
+      contactName: record.primaryContactName ?? "",
+      contactEmail: record.primaryContactEmail ?? "",
+      contactPhone: record.primaryContactPhone ?? "",
+    })));
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="event-profiles.csv"');
+    res.send(`\uFEFF${csv}`);
+  } catch (err) {
+    req.log.error({ err }, "Failed to export profiles");
+    res.status(500).json({ error: "Failed to export profiles" });
   }
 });
 

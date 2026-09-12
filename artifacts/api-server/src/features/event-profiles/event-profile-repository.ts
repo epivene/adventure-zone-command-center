@@ -31,6 +31,8 @@ export type EventProfilePlace = {
   region: string | null;
   postalCode: string | null;
   website: string | null;
+  applicationDeadline?: string | null;
+  recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
   lastResort: boolean;
   lastResortReason: string | null;
   actRecordId: string | null;
@@ -583,6 +585,8 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       region: organizations.region,
       postalCode: organizations.postalCode,
       website: organizations.website,
+      applicationDeadline: organizations.applicationDeadline,
+      recommendedDealModel: organizations.recommendedDealModel,
       lastResort: organizations.lastResort,
       lastResortReason: organizations.lastResortReason,
       actRecordId: organizations.actRecordId,

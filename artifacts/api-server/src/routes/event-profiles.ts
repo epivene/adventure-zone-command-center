@@ -86,6 +86,11 @@ const editProfileSchema = z.object({
   region: nullableProfileText,
   postalCode: nullableProfileText,
   website: nullableProfileText,
+  applicationDeadline: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => Boolean(parseBusinessDateInput(value)), "Enter a valid deadline."),
+    z.null(),
+  ]).optional(),
+  recommendedDealModel: z.enum(["flat_fee", "pay_per_play", "either"]).nullable().optional(),
 }).strict();
 
 function normalizedPhone(value: string | null) {
@@ -134,7 +139,43 @@ router.get("/event-profiles/:id", async (req, res): Promise<void> => {
           .orderBy(desc(eventManagerReviews.createdAt))
       : [];
     const managerReviewAverage = managerReviews.length ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length : null;
-    res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
+    const decisionResult = await db.execute<{
+      priority: string | null; pipelineStatus: string | null;
+      opportunityActionKind: string | null; opportunityActionDueAt: Date | null;
+      followUpKind: string | null; followUpDueAt: Date | null;
+    }>(sql`
+      select opportunity.priority, opportunity.status as "pipelineStatus",
+        opportunity.next_action_kind as "opportunityActionKind", opportunity.next_action_due_at as "opportunityActionDueAt",
+        followup.kind as "followUpKind", followup.due_at as "followUpDueAt"
+      from organizations o
+      left join lateral (
+        select bo.status, bo.priority, bo.next_action_kind, bo.next_action_due_at
+        from booking_opportunities bo where bo.organization_id = o.id
+        order by bo.event_year desc, bo.updated_at desc, bo.id desc limit 1
+      ) opportunity on true
+      left join lateral (
+        select f.kind, f.due_at from follow_ups f
+        where f.completed_at is null and (
+          f.organization_id = o.id
+          or (f.organization_id is null and f.booking_id in (select b.id from bookings b where b.organization_id = o.id))
+          or (f.organization_id is null and f.booking_id is null and f.contact_id in (select oc.contact_id from organization_contacts oc where oc.organization_id = o.id and oc.active))
+        ) order by f.due_at asc limit 1
+      ) followup on true
+      where o.id = ${id}::uuid
+    `);
+    const decision = decisionResult.rows?.[0];
+    const now = Date.now();
+    const nextBooking = profile.bookings
+      .filter((booking) => booking.startsAt && booking.startsAt.getTime() >= now && !["declined", "cancelled"].includes(booking.status))
+      .sort((left, right) => Number(left.startsAt) - Number(right.startsAt))[0];
+    const useFollowUp = Boolean(decision?.followUpDueAt && (!decision.opportunityActionDueAt || decision.followUpDueAt.getTime() <= decision.opportunityActionDueAt.getTime()));
+    const decisionSummary = {
+      priority: decision?.priority ?? nextBooking?.probability ?? null,
+      pipelineStatus: decision?.pipelineStatus ?? nextBooking?.status ?? null,
+      nextActionKind: useFollowUp ? decision?.followUpKind : decision?.opportunityActionKind,
+      nextActionDueAt: useFollowUp ? decision?.followUpDueAt : decision?.opportunityActionDueAt,
+    };
+    res.json({ ...profile, familyContext, organizationContext: manualOrganizationContext, managerReviews, managerReviewAverage, decisionSummary, assistedCallingEnabled: process.env.ASSISTED_CALLING_ENABLED === "true" });
   } catch (err) {
     req.log.error({ err }, "Failed to get event profile");
     res.status(500).json({ error: "Failed to get event profile" });
