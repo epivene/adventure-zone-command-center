@@ -47,4 +47,11 @@ describe("DesignStudioPage starter creation", () => {
     expect((await screen.findAllByText("$8,000"))).toHaveLength(2);
     expect(screen.queryByText("$7,500")).not.toBeInTheDocument();
   });
+
+  it("opens the reusable HTML email builder from Design Studio", async () => {
+    render(<DesignStudioPage />);
+
+    const link = await screen.findByRole("link", { name: "Open Email Templates" });
+    expect(link).toHaveAttribute("href", "/design-studio/email-templates");
+  });
 });
