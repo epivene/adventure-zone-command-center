@@ -259,6 +259,7 @@ export function OpportunityDraftComposer({
         <FollowUpAfterSend
           opportunityId={currentDraft.opportunityId}
           referenceAt={followUpReferenceAt}
+          eventYear={currentDraft.eventYear}
           onDone={() => setFollowUpReferenceAt(null)}
         />
       ) : null}

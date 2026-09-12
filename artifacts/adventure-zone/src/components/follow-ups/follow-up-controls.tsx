@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
+import { FOLLOW_UP_KINDS } from "@/features/follow-ups/follow-up-kinds";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,12 +10,6 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/avz-crm/components/ui/dropdown-menu";
 
-const FOLLOW_UP_KINDS = [
-  { value: "call", label: "Call" },
-  { value: "send_information", label: "Send information" },
-  { value: "prepare_quote", label: "Prepare quote" },
-  { value: "check_contract", label: "Check on contract" },
-] as const;
 
 function toDateInputValue(date: Date): string {
   const d = new Date(date);
