@@ -1,14 +1,7 @@
 import { Link } from "wouter";
 import { useLocation } from "wouter";
 import { useEffect, useState, type ReactNode } from "react";
-import {
-  ArrowRight,
-  CalendarDays,
-  Download,
-  LoaderCircle,
-  Search,
-  UserRound,
-} from "lucide-react";
+import { Download, LoaderCircle, Search } from "lucide-react";
 
 import { profileTypeOptions } from "@/features/organizations/last-resort-input";
 import type {
@@ -50,51 +43,6 @@ function detailHref(organizationId: string, query: OrganizationListQuery) {
 }
 
 type ActiveFilter = { label: string; href: string };
-
-function ProfileAvatar({
-  name,
-  image,
-}: {
-  name: string;
-  image?: string | null;
-}) {
-  if (image)
-    return (
-      <img
-        alt={`${name} profile`}
-        className="h-full w-full object-cover"
-        src={image}
-      />
-    );
-  return (
-    <div
-      aria-label={`${name} profile placeholder`}
-      className="flex h-full w-full items-center justify-center text-orange-700"
-      role="img"
-    >
-      <svg
-        aria-hidden="true"
-        className="h-11 w-11"
-        fill="none"
-        viewBox="0 0 64 64"
-      >
-        <circle
-          cx="32"
-          cy="22"
-          r="11"
-          stroke="currentColor"
-          strokeWidth="3.5"
-        />
-        <path
-          d="M14 52c0-10 8-18 18-18s18 8 18 18"
-          stroke="currentColor"
-          strokeLinecap="round"
-          strokeWidth="3.5"
-        />
-      </svg>
-    </div>
-  );
-}
 
 function formatDate(value: Date | string | null | undefined, empty: string) {
   if (!value) return empty;
@@ -155,6 +103,7 @@ export function OrganizationList({
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(
     null,
   );
+  const [desktopSplit, setDesktopSplit] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const profileTypeLabel = profileTypeOptions.find(
@@ -270,6 +219,25 @@ export function OrganizationList({
   useEffect(() => {
     if (!loading && searchValue === query.search) setPendingSearch(false);
   }, [loading, query.search, searchValue]);
+  useEffect(() => {
+    const media = window.matchMedia?.("(min-width: 1024px)");
+    if (!media) return;
+    const sync = () => setDesktopSplit(media.matches);
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
+  useEffect(() => {
+    if (!desktopSplit) {
+      setSelectedProfileId(null);
+      return;
+    }
+    setSelectedProfileId((current) =>
+      current && organizations.records.some((record) => record.id === current)
+        ? current
+        : (organizations.records[0]?.id ?? null),
+    );
+  }, [desktopSplit, organizations.records]);
   const searching = pendingSearch || loading;
 
   async function exportCsv() {
@@ -529,170 +497,194 @@ export function OrganizationList({
 
       {afterSearch}
 
-      <p aria-live="polite" className="text-sm text-slate-600">
-        Showing {organizations.records.length} of {organizations.total} profiles
-      </p>
-
-      {organizations.records.length ? (
-        <ul className="grid gap-2">
-          {organizations.records.map((organization) => {
-            const location = [organization.city, organization.region]
-              .filter(Boolean)
-              .join(", ");
-            const profileHref = detailHref(organization.id, query);
-            const status =
-              statusStyles[organization.decisionStatus ?? "unrecorded"];
-            return (
-              <li key={organization.id}>
-                <Link
-                  aria-label={`Open ${organization.name} profile`}
-                  aria-current={
-                    selectedProfileId === organization.id ? "true" : undefined
-                  }
-                  className={`group grid overflow-hidden rounded-2xl border bg-white p-4 shadow-sm outline-none transition sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center sm:gap-4 ${selectedProfileId === organization.id ? "border-orange-600 ring-2 ring-orange-200" : "border-slate-200 hover:border-orange-400 hover:shadow-md"} focus-visible:ring-2 focus-visible:ring-orange-600 focus-visible:ring-offset-2`}
-                  data-testid="profile-summary-card"
-                  href={profileHref}
-                  onClick={(event) => {
-                    if (
-                      !event.metaKey &&
-                      !event.ctrlKey &&
-                      !event.shiftKey &&
-                      event.button === 0
-                    ) {
-                      event.preventDefault();
-                      setSelectedProfileId(organization.id);
-                    }
-                  }}
-                >
-                  <span
-                    className="hidden size-16 overflow-hidden rounded-xl bg-orange-50 sm:block"
-                    data-testid="profile-avatar-link"
-                  >
-                    <ProfileAvatar
-                      image={organization.profileImageDataUrl}
-                      name={organization.name}
-                    />
-                  </span>
-                  <span
-                    className="min-w-0"
-                    data-testid="profile-decision-summary"
-                  >
-                    <span className="block text-lg font-bold tracking-tight text-slate-950 group-hover:text-orange-800">
-                      {organization.name}
-                    </span>
-                    <span className="mt-0.5 block text-sm font-medium text-slate-600">
-                      {location || "Location not recorded"}
-                    </span>
-                    <span className="mt-3 flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-800">
-                        <CalendarDays
-                          aria-hidden
-                          className="h-4 w-4 text-orange-700"
-                        />
-                        {formatDate(
-                          organization.nextEventDate,
-                          "Date not published",
-                        )}
-                      </span>
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${status[1]}`}
-                      >
-                        {status[0]}
-                      </span>
-                    </span>
-                    <span className="mt-2 block text-sm text-slate-700">
-                      <strong>Deal:</strong>{" "}
-                      {organization.recommendedDealModel
-                        ? dealModelLabels[organization.recommendedDealModel]
-                        : "No recommendation recorded"}
-                    </span>
-                    <span className="mt-1 block text-sm text-slate-600">
-                      <strong>Next:</strong>{" "}
-                      {organization.nextActionKind
-                        ? readableAction(String(organization.nextActionKind))
-                        : "No next action recorded"}
-                      {organization.nextActionDueAt
-                        ? ` · Due ${formatDate(organization.nextActionDueAt, "")}`
-                        : ""}
-                    </span>
-                    <span className="mt-2 flex min-w-0 items-center gap-1.5 text-sm text-slate-600">
-                      <UserRound
-                        aria-hidden
-                        className="h-4 w-4 shrink-0 text-teal-700"
-                      />
-                      {organization.primaryContactName ? (
-                        <span className="min-w-0 truncate">
-                          <strong>{organization.primaryContactName}</strong>
-                          {organization.primaryContactEmail
-                            ? ` · ${organization.primaryContactEmail}`
-                            : ""}
-                          {organization.primaryContactPhone
-                            ? ` · ${organization.primaryContactPhone}`
-                            : ""}
-                        </span>
-                      ) : (
-                        "No primary contact"
-                      )}
-                    </span>
-                  </span>
-                  <ArrowRight
-                    aria-hidden
-                    className="mt-3 h-5 w-5 text-slate-400 transition group-hover:translate-x-0.5 group-hover:text-orange-700 sm:mt-0"
-                  />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-          <p className="font-semibold">No profiles match these filters.</p>
-          <Link
-            className="button-secondary mt-3 inline-flex"
-            href={directoryReset}
-          >
-            Clear filters
-          </Link>
-        </div>
-      )}
-
-      {organizations.pageCount > 1 ? (
-        <nav
-          aria-label="Profiles pages"
-          className="flex items-center justify-between gap-3"
-        >
-          {organizations.page > 1 ? (
-            <Link
-              className="button-secondary"
-              href={listHref({ ...query, page: organizations.page - 1 })}
-            >
-              Previous
-            </Link>
-          ) : (
-            <span />
-          )}
-          <p className="text-sm font-semibold text-slate-600">
-            Page {organizations.page} of {organizations.pageCount}
+      <section
+        className="overflow-hidden rounded-lg border border-[#c7c0b4] bg-[#e9e4da] lg:grid lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]"
+        data-testid="profile-workspace"
+      >
+        <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-[#b8b0a3] lg:p-4">
+          <p aria-live="polite" className="text-sm text-[#536064]">
+            Showing {organizations.records.length} of {organizations.total}{" "}
+            profiles
           </p>
-          {organizations.page < organizations.pageCount ? (
-            <Link
-              className="button-secondary"
-              href={listHref({ ...query, page: organizations.page + 1 })}
-            >
-              Next
-            </Link>
+
+          {organizations.records.length ? (
+            <ul className="grid gap-2">
+              {organizations.records.map((organization) => {
+                const location = [organization.city, organization.region]
+                  .filter(Boolean)
+                  .join(", ");
+                const profileHref = detailHref(organization.id, query);
+                const status =
+                  statusStyles[organization.decisionStatus ?? "unrecorded"];
+                const ratingCount = organization.ratingCount ?? 0;
+                const rating = organization.ratingAverage ?? null;
+                const roundedRating = rating === null ? 0 : Math.round(rating);
+                return (
+                  <li key={organization.id}>
+                    <Link
+                      aria-label={`Open ${organization.name} profile`}
+                      aria-current={
+                        selectedProfileId === organization.id
+                          ? "true"
+                          : undefined
+                      }
+                      className={`group block rounded-md border bg-[#fffefa] p-4 text-left shadow-sm outline-none transition ${selectedProfileId === organization.id ? "border-orange-600 shadow-[inset_4px_0_0_#ea580c,0_7px_20px_rgba(29,35,37,0.09)]" : "border-[#cbc5b9] hover:border-[#9a9387] hover:shadow-md"} focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2`}
+                      data-testid="profile-summary-card"
+                      href={profileHref}
+                      onClick={(event) => {
+                        if (
+                          !event.metaKey &&
+                          !event.ctrlKey &&
+                          !event.shiftKey &&
+                          event.button === 0
+                        ) {
+                          event.preventDefault();
+                          setSelectedProfileId(organization.id);
+                        }
+                      }}
+                    >
+                      <span
+                        className="block min-w-0"
+                        data-testid="profile-decision-summary"
+                      >
+                        <span className="flex items-start justify-between gap-3">
+                          <span className="min-w-0">
+                            <span className="block text-xl font-extrabold leading-tight tracking-tight text-[#182225] group-hover:text-orange-800">
+                              {organization.name}
+                            </span>
+                            <span className="mt-1 block text-xs font-medium text-[#536064]">
+                              {location || "Location not recorded"}
+                            </span>
+                            <span
+                              aria-label={
+                                rating === null
+                                  ? "No reviews"
+                                  : `${rating.toFixed(1)} out of 5 stars from ${ratingCount} reviews`
+                              }
+                              className="mt-1.5 block text-xs font-semibold text-[#8a6520]"
+                              data-testid="profile-rating-summary"
+                            >
+                              {rating === null ? (
+                                "No reviews"
+                              ) : (
+                                <>
+                                  <span
+                                    aria-hidden
+                                    className="tracking-[0.08em] text-[#c98a1c]"
+                                  >
+                                    {"★".repeat(roundedRating)}
+                                    {"☆".repeat(5 - roundedRating)}
+                                  </span>{" "}
+                                  {rating.toFixed(1)} ({ratingCount})
+                                </>
+                              )}
+                            </span>
+                          </span>
+                          <span
+                            className={`shrink-0 rounded-sm px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.06em] ${status[1]}`}
+                          >
+                            {status[0]}
+                          </span>
+                        </span>
+                        <span
+                          className="mt-3 flex items-center justify-between gap-3 border-t border-[#e5dfd4] pt-3 text-xs"
+                          data-testid="profile-money-line"
+                        >
+                          <strong className="text-[#182225]">
+                            {organization.recommendedDealModel
+                              ? dealModelLabels[
+                                  organization.recommendedDealModel
+                                ]
+                              : "No deal recommendation"}
+                          </strong>
+                          <span className="text-right text-[#536064]">
+                            {formatDate(
+                              organization.nextEventDate,
+                              "Date not published",
+                            )}
+                          </span>
+                        </span>
+                        <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">
+                          <span
+                            aria-hidden
+                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-orange-600 ring-4 ring-orange-100"
+                          />
+                          <span>
+                            {organization.nextActionKind
+                              ? readableAction(
+                                  String(organization.nextActionKind),
+                                )
+                              : "No next action recorded"}
+                            {organization.nextActionDueAt
+                              ? ` · Due ${formatDate(organization.nextActionDueAt, "")}`
+                              : ""}
+                          </span>
+                        </span>
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           ) : (
-            <span />
+            <div className="rounded-md border border-dashed border-[#b8b0a3] bg-[#fffefa] p-8 text-center">
+              <p className="font-semibold">No profiles match these filters.</p>
+              <Link
+                className="button-secondary mt-3 inline-flex"
+                href={directoryReset}
+              >
+                Clear filters
+              </Link>
+            </div>
           )}
-        </nav>
-      ) : null}
-      <ProfileDetailSheet
-        target={selectedProfileId ? { profileId: selectedProfileId } : null}
-        open={Boolean(selectedProfileId)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedProfileId(null);
-        }}
-      />
+
+          {organizations.pageCount > 1 ? (
+            <nav
+              aria-label="Profiles pages"
+              className="flex items-center justify-between gap-3"
+            >
+              {organizations.page > 1 ? (
+                <Link
+                  className="button-secondary"
+                  href={listHref({ ...query, page: organizations.page - 1 })}
+                >
+                  Previous
+                </Link>
+              ) : (
+                <span />
+              )}
+              <p className="text-sm font-semibold text-slate-600">
+                Page {organizations.page} of {organizations.pageCount}
+              </p>
+              {organizations.page < organizations.pageCount ? (
+                <Link
+                  className="button-secondary"
+                  href={listHref({ ...query, page: organizations.page + 1 })}
+                >
+                  Next
+                </Link>
+              ) : (
+                <span />
+              )}
+            </nav>
+          ) : null}
+        </div>
+        <ProfileDetailSheet
+          target={selectedProfileId ? { profileId: selectedProfileId } : null}
+          open={Boolean(selectedProfileId)}
+          onOpenChange={(open) => {
+            if (!open) setSelectedProfileId(null);
+          }}
+          variant={desktopSplit ? "inline" : "sheet"}
+        />
+        {desktopSplit &&
+        organizations.records.length > 0 &&
+        !selectedProfileId ? (
+          <div className="hidden min-h-[30rem] place-items-center bg-[#fffefa] p-8 text-center text-sm text-[#536064] lg:grid">
+            Select a profile to see booking details.
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }

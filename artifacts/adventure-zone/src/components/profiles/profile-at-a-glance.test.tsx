@@ -75,5 +75,10 @@ describe("ProfileAtAGlance", () => {
       screen.getByRole("link", { name: "jamie@example.com" }),
     ).toHaveAttribute("href", "mailto:jamie@example.com");
     expect(screen.getByText(/Apr 12, 2027/)).toBeVisible();
+    expect(screen.getByTestId("glance-metrics")).toHaveClass("lg:grid-cols-4");
+    expect(screen.getByTestId("deal-model-band")).toHaveClass("bg-[#182225]");
+    expect(screen.getByTestId("action-contact-columns")).toHaveClass(
+      "lg:grid-cols-2",
+    );
   });
 });

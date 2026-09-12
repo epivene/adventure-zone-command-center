@@ -97,7 +97,7 @@ export function ProfileAtAGlance({
         (booking) => !["cancelled", "declined"].includes(booking.status ?? ""),
       )
       .map((booking) => dateValue(booking.startsAt))
-      .filter((date): date is Date => Boolean(date) && date.getTime() >= today)
+      .filter((date): date is Date => date !== null && date.getTime() >= today)
       .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
   const primaryContact =
     profile.contacts.find((contact) => contact.isPrimary) ?? null;
@@ -110,7 +110,7 @@ export function ProfileAtAGlance({
   return (
     <section
       aria-labelledby="at-a-glance-heading"
-      className="border-y border-[#d8e2dd] bg-[#f7f9f5] px-4 py-5 sm:px-7"
+      className="bg-[#fffefa] px-4 py-5 sm:px-7"
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
@@ -127,99 +127,116 @@ export function ProfileAtAGlance({
         <p className="text-xs text-[#71848a]">Only recorded facts are shown.</p>
       </div>
 
-      <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
+      <dl
+        className="mt-4 grid overflow-hidden rounded-md border border-[#ccc5b8] sm:grid-cols-2 lg:grid-cols-4"
+        data-testid="glance-metrics"
+      >
+        <div className="border-b border-[#ddd6ca] p-4 sm:border-r">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
             Next event date
           </dt>
-          <dd className="mt-1 flex items-center gap-2 font-bold text-[#315b66]">
+          <dd className="mt-1 flex items-center gap-2 text-sm font-bold text-[#182225]">
             <CalendarDays className="h-4 w-4 text-[#397064]" />
             {formatDate(nextEvent) ?? "Date not published"}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
-            Application / outreach deadline
+        <div className="border-b border-[#ddd6ca] p-4 lg:border-r">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+            Deadline
           </dt>
-          <dd className="mt-1 font-bold text-[#315b66]">
+          <dd className="mt-1 text-sm font-bold text-[#182225]">
             {formatDate(profile.place.applicationDeadline) ??
               "No deadline recorded"}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
+        <div className="border-b border-[#ddd6ca] p-4 sm:border-b-0 sm:border-r">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
             Fit / priority
           </dt>
-          <dd className="mt-1 font-bold text-[#315b66]">
+          <dd className="mt-1 text-sm font-bold text-[#182225]">
             {readable(profile.decisionSummary?.priority) ?? "Not recorded"}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
+        <div className="p-4">
+          <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
             Pipeline status
           </dt>
-          <dd className="mt-1 font-bold text-[#315b66]">
+          <dd className="mt-1 text-sm font-bold text-[#182225]">
             {readable(profile.decisionSummary?.pipelineStatus) ??
               "Not recorded"}
           </dd>
         </div>
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
+      </dl>
+
+      <div
+        className="mt-5 flex items-center gap-4 rounded-md bg-[#182225] px-4 py-4 text-white"
+        data-testid="deal-model-band"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#efb33f] text-lg font-extrabold text-[#3b3019]">
+          $
+        </span>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-[#bfc8ca]">
             Recommended deal model
-          </dt>
-          <dd className="mt-1 font-bold text-[#315b66]">
+          </p>
+          <p className="text-xl font-extrabold">
             {dealModel?.label ?? "No recommendation recorded"}
-          </dd>
+          </p>
           {dealModel ? (
-            <p className="mt-1 text-xs leading-5 text-[#71848a]">
+            <p className="mt-1 text-xs leading-5 text-[#d8dfe0]">
               {dealModel.detail}
             </p>
           ) : null}
         </div>
-        <div>
-          <dt className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
+      </div>
+
+      <div
+        className="mt-5 grid gap-5 lg:grid-cols-2"
+        data-testid="action-contact-columns"
+      >
+        <div className="rounded-md border-t-4 border-orange-600 bg-[#f2ede3] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
             Next action
-          </dt>
-          <dd className="mt-1 font-bold text-[#315b66]">
+          </p>
+          <p className="mt-1 text-sm font-bold text-[#182225]">
             {actionKind
               ? `${actionKind}${actionDue ? ` · Due ${actionDue}` : ""}`
               : "No next action recorded"}
-          </dd>
+          </p>
         </div>
-      </dl>
-
-      <div className="mt-5 border-t border-[#d8e2dd] pt-4">
-        <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#75908b]">
-          Primary contact
-        </p>
-        {primaryContact ? (
-          <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[#315b66]">
-            <span className="inline-flex items-center gap-2 font-bold">
-              <UserRound className="h-4 w-4 text-[#397064]" />
-              {primaryContact.name}
-            </span>
-            {primaryContact.email ? (
-              <a
-                className="inline-flex items-center gap-2 font-semibold hover:text-[#244f47]"
-                href={`mailto:${primaryContact.email}`}
-              >
-                <Mail className="h-4 w-4" />
-                {primaryContact.email}
-              </a>
-            ) : null}
-            {primaryContact.phone ? (
-              <a
-                className="inline-flex items-center gap-2 font-semibold hover:text-[#244f47]"
-                href={`tel:${primaryContact.phone}`}
-              >
-                <Phone className="h-4 w-4" />
-                {primaryContact.phone}
-              </a>
-            ) : null}
-          </div>
-        ) : (
-          <p className="mt-1 font-bold text-[#71848a]">No primary contact</p>
-        )}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
+            Primary contact
+          </p>
+          {primaryContact ? (
+            <div className="mt-2 grid gap-2 text-sm text-[#315b66]">
+              <span className="inline-flex items-center gap-2 font-bold">
+                <UserRound className="h-4 w-4 text-[#397064]" />
+                {primaryContact.name}
+              </span>
+              {primaryContact.email ? (
+                <a
+                  className="inline-flex items-center gap-2 font-semibold hover:text-[#244f47]"
+                  href={`mailto:${primaryContact.email}`}
+                >
+                  <Mail className="h-4 w-4" />
+                  {primaryContact.email}
+                </a>
+              ) : null}
+              {primaryContact.phone ? (
+                <a
+                  className="inline-flex items-center gap-2 font-semibold hover:text-[#244f47]"
+                  href={`tel:${primaryContact.phone}`}
+                >
+                  <Phone className="h-4 w-4" />
+                  {primaryContact.phone}
+                </a>
+              ) : null}
+            </div>
+          ) : (
+            <p className="mt-2 font-bold text-[#71848a]">No primary contact</p>
+          )}
+        </div>
       </div>
     </section>
   );

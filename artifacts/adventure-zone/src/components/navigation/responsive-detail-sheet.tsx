@@ -8,6 +8,7 @@ export type ResponsiveDetailSheetProps = {
   title: string;
   children: ReactNode;
   fullPageHref?: string;
+  variant?: "sheet" | "inline";
 };
 
 export function ResponsiveDetailSheet({
@@ -16,6 +17,7 @@ export function ResponsiveDetailSheet({
   title,
   children,
   fullPageHref,
+  variant = "sheet",
 }: ResponsiveDetailSheetProps) {
   function navigateFullProfile(href: string) {
     onOpenChange(false);
@@ -37,13 +39,46 @@ export function ResponsiveDetailSheet({
     if (fullPageHref) navigateFullProfile(fullPageHref);
   }
 
+  const fullPageLink = fullPageHref ? (
+    <a
+      className="inline-flex min-h-10 items-center gap-1 rounded px-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+      data-open-full-profile="true"
+      href={fullPageHref}
+      onClick={(event) => event.preventDefault()}
+      onKeyDown={handleFullKeyDown}
+      onPointerDown={handleFullPointerDown}
+    >
+      <ExternalLink className="h-4 w-4" />
+      <span>Open full</span>
+    </a>
+  ) : null;
+
+  if (variant === "inline") {
+    if (!open) return null;
+    return (
+      <aside
+        aria-label={`${title} selected profile`}
+        className="flex min-h-[42rem] min-w-0 flex-col overflow-hidden bg-[#fffefa]"
+        data-testid="inline-profile-detail"
+      >
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#d8d1c4] bg-[#11191c] px-4 py-3 text-white">
+          <h2 className="min-w-0 flex-1 truncate text-lg font-extrabold uppercase tracking-wide">
+            {title}
+          </h2>
+          {fullPageLink}
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-5">
+          {children}
+        </div>
+      </aside>
+    );
+  }
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-slate-950/25 backdrop-blur-[1px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=open]:fade-in" />
-        <Dialog.Content
-          className="fixed inset-0 z-50 flex min-h-0 flex-col overflow-hidden bg-white shadow-2xl outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right md:inset-y-0 md:left-auto md:right-0 md:w-[min(45vw,44rem)] md:min-w-[28rem] md:border-l md:border-slate-200"
-        >
+        <Dialog.Content className="fixed inset-0 z-50 flex min-h-0 flex-col overflow-hidden bg-white shadow-2xl outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right md:inset-y-0 md:left-auto md:right-0 md:w-[min(45vw,44rem)] md:min-w-[28rem] md:border-l md:border-slate-200">
           <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-3 sm:px-4">
             <Dialog.Close asChild>
               <button
@@ -57,19 +92,7 @@ export function ResponsiveDetailSheet({
             <Dialog.Title className="min-w-0 flex-1 truncate text-lg font-bold text-slate-950">
               {title}
             </Dialog.Title>
-            {fullPageHref ? (
-              <a
-                className="inline-flex min-h-10 items-center gap-1 rounded-lg px-2 text-sm font-semibold text-orange-700 hover:bg-orange-50"
-                data-open-full-profile="true"
-                href={fullPageHref}
-                onClick={(event) => event.preventDefault()}
-                onKeyDown={handleFullKeyDown}
-                onPointerDown={handleFullPointerDown}
-              >
-                <ExternalLink className="h-4 w-4" />
-                <span>Open full</span>
-              </a>
-            ) : null}
+            {fullPageLink}
             <Dialog.Close asChild>
               <button
                 aria-label="Close"
