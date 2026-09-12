@@ -162,4 +162,28 @@ describe("SettingsCommunicationTemplatesPage", () => {
     });
     await waitFor(() => expect(screen.getByText('Created "Proposal follow-up" as a draft. Review it before activating.')).toBeInTheDocument());
   });
+
+  it("does not offer the retired Send to Dave approval action", async () => {
+    apiFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({ templates: [{
+        id: "00000000-0000-4000-8000-000000000006",
+        code: "past_customer",
+        name: "Past customer",
+        channel: "email",
+        category: "outreach",
+        subjectTemplate: "Adventure Zone",
+        bodyTemplate: "Hello {{contactName}}",
+        requiredPlaceholders: ["contactName"],
+        accessScope: "owner",
+        state: "draft",
+        ownerKind: "company",
+        creatorDisplayName: null,
+      }] }), { status: 200, headers: { "Content-Type": "application/json" } }),
+    );
+
+    render(<SettingsCommunicationTemplatesPage />);
+    await screen.findByRole("heading", { name: "Past customer" });
+    expect(screen.queryByRole("button", { name: /send to dave/i })).not.toBeInTheDocument();
+  });
+
 });

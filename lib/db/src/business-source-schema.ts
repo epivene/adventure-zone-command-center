@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -370,6 +371,8 @@ export const communicationTemplates = pgTable(
       .$type<CommunicationTemplateBodyFormat>()
       .default("plain_text")
       .notNull(),
+    editorDocument: jsonb("editor_document"),
+    editorDocumentVersion: integer("editor_document_version"),
     allowedPlaceholders: text("allowed_placeholders")
       .array()
       .default(sql`ARRAY[]::text[]`)
@@ -436,6 +439,14 @@ export const communicationTemplates = pgTable(
     check(
       "communication_templates_body_format_valid",
       sql`${table.bodyFormat} in ('plain_text','html')`,
+    ),
+    check(
+      "communication_templates_editor_document_shape",
+      sql`(
+        (${table.editorDocument} is null and ${table.editorDocumentVersion} is null)
+        or
+        (${table.editorDocument} is not null and ${table.editorDocumentVersion} = 1)
+      )`,
     ),
     check(
       "communication_templates_access_valid",
