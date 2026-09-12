@@ -11,7 +11,7 @@ afterEach(async () => {
 });
 
 describe("recent outreach Gmail-label follow-up backfill", () => {
-  it("creates organization reminders from exact active label mappings without duplicating open work", async () => {
+  it("creates organization reminders from exact known label mappings without duplicating open work", async () => {
     client = new PGlite();
     await client.exec(`
       create table organizations (id uuid primary key, name text not null);
@@ -42,7 +42,7 @@ describe("recent outreach Gmail-label follow-up backfill", () => {
       insert into google_workspace_profile_labels
         (connection_id, organization_id, gmail_label_id, gmail_label_name, state)
       values
-        ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'Label_227', 'Logger Days', 'active'),
+        ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', 'Label_227', 'Logger Days', 'conflict'),
         ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000002', 'Label_219', 'Big Horn County Fair', 'active'),
         ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000003', 'Label_685', 'Wellness Festival', 'active');
       insert into follow_ups (organization_id, kind, due_at)
@@ -52,7 +52,7 @@ describe("recent outreach Gmail-label follow-up backfill", () => {
     `);
 
     const migration = await readFile(
-      new URL("../../../../lib/db/migrations/20260912d_recent_outreach_future_followups.sql", import.meta.url),
+      new URL("../../../../lib/db/migrations/20260912e_recent_outreach_known_label_followups.sql", import.meta.url),
       "utf8",
     );
     await client.exec(migration);
