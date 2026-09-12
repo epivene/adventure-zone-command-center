@@ -127,6 +127,25 @@ export async function reparentAdditionalOrganizationReferences(
     UPDATE business_source_document_links SET organization_id = ${primaryId}
     WHERE organization_id = ${duplicateId}
   `);
+  // A document link must always point to exactly one target. Its organization
+  // FK uses ON DELETE SET NULL, but the table check rejects a targetless row,
+  // so move profile links before deleting the duplicate organization. Remove
+  // an equivalent survivor link first to satisfy the per-document unique index.
+  await transaction.execute(sql`
+    DELETE FROM business_document_links duplicate_link
+    USING business_document_links surviving_link
+    WHERE duplicate_link.organization_id = ${duplicateId}
+      AND duplicate_link.target_kind = 'profile'
+      AND surviving_link.organization_id = ${primaryId}
+      AND surviving_link.target_kind = 'profile'
+      AND surviving_link.document_id = duplicate_link.document_id
+  `);
+  await transaction.execute(sql`
+    UPDATE business_document_links
+    SET organization_id = ${primaryId}
+    WHERE organization_id = ${duplicateId}
+      AND target_kind = 'profile'
+  `);
   await transaction.execute(sql`
     UPDATE convention_members SET organization_id = ${primaryId}
     WHERE organization_id = ${duplicateId}
