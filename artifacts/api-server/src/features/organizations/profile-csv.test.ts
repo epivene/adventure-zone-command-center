@@ -26,11 +26,20 @@ describe("createProfileCsv", () => {
   });
 
   it("neutralizes spreadsheet formulas in user-controlled values", () => {
-    const csv = createProfileCsv([{
-      eventName: "=HYPERLINK(\"https://example.test\")", location: "+Denver", nextDate: "",
-      deadline: "", status: "Waiting", recommendedDealModel: "Either", nextAction: "@call",
-      contactName: "-Jamie", contactEmail: "jamie@example.com", contactPhone: "  =1+1",
-    }]);
+    const csv = createProfileCsv([
+      {
+        eventName: '=HYPERLINK("https://example.test")',
+        location: "+Denver",
+        nextDate: "",
+        deadline: "",
+        status: "Waiting",
+        recommendedDealModel: "Either",
+        nextAction: "@call",
+        contactName: "-Jamie",
+        contactEmail: "jamie@example.com",
+        contactPhone: "  =1+1",
+      },
+    ]);
     expect(csv).toContain("'=HYPERLINK");
     expect(csv).toContain("'+Denver");
     expect(csv).toContain("'@call");

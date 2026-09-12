@@ -616,14 +616,23 @@ export function OrganizationList({
                         : ""}
                     </span>
                     <span className="mt-2 flex min-w-0 items-center gap-1.5 text-sm text-slate-600">
-                      <UserRound aria-hidden className="h-4 w-4 shrink-0 text-teal-700" />
+                      <UserRound
+                        aria-hidden
+                        className="h-4 w-4 shrink-0 text-teal-700"
+                      />
                       {organization.primaryContactName ? (
                         <span className="min-w-0 truncate">
                           <strong>{organization.primaryContactName}</strong>
-                          {organization.primaryContactEmail ? ` · ${organization.primaryContactEmail}` : ""}
-                          {organization.primaryContactPhone ? ` · ${organization.primaryContactPhone}` : ""}
+                          {organization.primaryContactEmail
+                            ? ` · ${organization.primaryContactEmail}`
+                            : ""}
+                          {organization.primaryContactPhone
+                            ? ` · ${organization.primaryContactPhone}`
+                            : ""}
                         </span>
-                      ) : "No primary contact"}
+                      ) : (
+                        "No primary contact"
+                      )}
                     </span>
                   </span>
                   <ArrowRight
