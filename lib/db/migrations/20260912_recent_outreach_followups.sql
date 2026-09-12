@@ -64,10 +64,18 @@ matched_contacts AS (
     t.kind,
     t.due_at,
     c.id AS contact_id,
-    c.organization_id
+    coalesce(c.organization_id, membership.organization_id) AS organization_id
   FROM targets t
   JOIN contacts c ON lower(trim(c.email)) = lower(t.email)
-  WHERE c.organization_id IS NOT NULL
+  LEFT JOIN LATERAL (
+    SELECT association.organization_id
+    FROM organization_contacts association
+    WHERE association.contact_id = c.id
+      AND association.active
+    ORDER BY association.is_primary DESC, association.updated_at DESC, association.id DESC
+    LIMIT 1
+  ) membership ON true
+  WHERE coalesce(c.organization_id, membership.organization_id) IS NOT NULL
   ORDER BY lower(t.email), c.created_at DESC, c.id DESC
 )
 UPDATE follow_ups f
@@ -142,10 +150,18 @@ matched_contacts AS (
     t.kind,
     t.due_at,
     c.id AS contact_id,
-    c.organization_id
+    coalesce(c.organization_id, membership.organization_id) AS organization_id
   FROM targets t
   JOIN contacts c ON lower(trim(c.email)) = lower(t.email)
-  WHERE c.organization_id IS NOT NULL
+  LEFT JOIN LATERAL (
+    SELECT association.organization_id
+    FROM organization_contacts association
+    WHERE association.contact_id = c.id
+      AND association.active
+    ORDER BY association.is_primary DESC, association.updated_at DESC, association.id DESC
+    LIMIT 1
+  ) membership ON true
+  WHERE coalesce(c.organization_id, membership.organization_id) IS NOT NULL
   ORDER BY lower(t.email), c.created_at DESC, c.id DESC
 )
 INSERT INTO follow_ups (
