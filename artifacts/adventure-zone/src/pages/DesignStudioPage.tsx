@@ -4,6 +4,7 @@ import {
   FileText,
   FolderOpen,
   Image,
+  Mail,
   MessageSquare,
   RefreshCw,
   Search,
@@ -298,6 +299,24 @@ export default function DesignStudioPage() {
       </header>
 
       {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert"><span className="text-destructive">{error}</span><Button onClick={() => void loadProjects()} size="sm" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></div> : null}
+
+      <section aria-labelledby="email-template-heading">
+        <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-sm">
+          <div className="grid gap-5 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center md:p-6">
+            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[3px_3px_0_hsl(var(--foreground))]">
+              <Mail className="h-7 w-7" />
+            </div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Email Studio</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight" id="email-template-heading">Reusable HTML email templates</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Drag, drop, and edit the same branded emails used for Adventure Zone drafts.</p>
+            </div>
+            <Button asChild className="w-full gap-2 sm:w-auto">
+              <Link href="/design-studio/email-templates"><Mail className="h-4 w-4" />Open Email Templates</Link>
+            </Button>
+          </div>
+        </div>
+      </section>
 
       <section id="starter-templates" aria-labelledby="starter-heading"><div className="mb-4"><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Built for Adventure Zone</p><h2 className="mt-1 text-2xl font-black tracking-tight" id="starter-heading">Fun, photo-heavy starter templates</h2><p className="mt-1 text-sm text-muted-foreground">Choose a visual starting point and make it yours.</p></div><div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{CANVA_STARTERS.map((starter) => <StarterCard key={starter.id} starter={starter} creating={creatingId === starter.id} onUse={() => void useStarter(starter)} />)}</div></section>
 
