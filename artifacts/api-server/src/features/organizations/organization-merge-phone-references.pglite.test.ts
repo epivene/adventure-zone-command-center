@@ -55,6 +55,24 @@ async function createReferenceTables(database: PGlite): Promise<void> {
       source_document_id uuid,
       organization_id uuid
     );
+    create table business_document_links (
+      id uuid primary key default gen_random_uuid(),
+      document_id uuid not null,
+      target_kind text not null,
+      organization_id uuid,
+      booking_id uuid,
+      event_family_id uuid,
+      confirmation_mode text not null,
+      confidence numeric(4,3),
+      evidence jsonb not null default '[]'::jsonb,
+      created_by text not null,
+      created_at timestamptz not null default now(),
+      check (((organization_id is not null)::int + (booking_id is not null)::int + (event_family_id is not null)::int) = 1),
+      check ((target_kind = 'profile' and organization_id is not null) or (target_kind = 'booking' and booking_id is not null) or (target_kind = 'event_family' and event_family_id is not null))
+    );
+    create unique index business_document_links_profile_unique
+      on business_document_links(document_id, organization_id)
+      where organization_id is not null;
     create table convention_members (
       id uuid primary key default gen_random_uuid(),
       organization_id uuid
@@ -124,6 +142,45 @@ describe("organization phone merge references", () => {
         organization_id: PRIMARY_ID,
         normalized_number: "4066793582",
         primary: false,
+      },
+    ]);
+  });
+
+  it("moves profile document links and removes destination duplicates", async () => {
+    client = new PGlite();
+    await createReferenceTables(client);
+    await client.exec(`
+      insert into business_document_links
+        (document_id, target_kind, organization_id, confirmation_mode, created_by)
+      values
+        ('20000000-0000-4000-8000-000000000001', 'profile', '${PRIMARY_ID}', 'manual', 'test'),
+        ('20000000-0000-4000-8000-000000000001', 'profile', '${DUPLICATE_ID}', 'migrated', 'test'),
+        ('20000000-0000-4000-8000-000000000002', 'profile', '${DUPLICATE_ID}', 'manual', 'test');
+    `);
+
+    await reparentAdditionalOrganizationReferences(
+      drizzle(client) as any,
+      PRIMARY_ID,
+      DUPLICATE_ID,
+    );
+
+    const links = await client.query<{
+      document_id: string;
+      organization_id: string;
+    }>(`
+      select document_id, organization_id
+      from business_document_links
+      order by document_id
+    `);
+
+    expect(links.rows).toEqual([
+      {
+        document_id: "20000000-0000-4000-8000-000000000001",
+        organization_id: PRIMARY_ID,
+      },
+      {
+        document_id: "20000000-0000-4000-8000-000000000002",
+        organization_id: PRIMARY_ID,
       },
     ]);
   });
