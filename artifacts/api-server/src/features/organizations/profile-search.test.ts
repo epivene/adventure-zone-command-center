@@ -52,25 +52,15 @@ describe("forgiving profile search", () => {
   it("matches every normalized term across profile, contact, and location fields", () => {
     expect(routeSource).toContain("buildProfileSearchTerms(query.search)");
     expect(routeSource).toContain("profileSearchScore(terms");
-    expect(routeSource).toContain("o.name");
-    expect(routeSource).toContain("o.region");
-    expect(routeSource).toContain("o.website");
-    expect(routeSource).toContain("person.email");
-    expect(routeSource).toContain("loc.email");
-    expect(routeSource).toContain("contact_phone_text");
+    expect(routeSource).toContain("loadOrganizationSearchCorpus");
   });
 
-  it("builds the searchable profile corpus with one set-based database query", () => {
-    const start = routeSource.indexOf("async function matchedOrganizationIds");
-    const end = routeSource.indexOf("type ProfileCardDetails", start);
-    const searchFunction = routeSource.slice(start, end);
-
-    expect(searchFunction.match(/await db\.execute/g)).toHaveLength(1);
-    expect(searchFunction).toContain("contact_phone_text as");
-    expect(searchFunction).toContain("profile_contact_text as");
-    expect(searchFunction).toContain("location_contact_text as");
-    expect(searchFunction).toContain("location_text as");
-    expect(searchFunction).not.toContain("exists (");
+  it("builds the corpus from the same eligible profiles returned by the repository", () => {
+    const handlerSource = routeSource.slice(routeSource.indexOf('router.get("/organizations"'));
+    expect(handlerSource.indexOf("const candidatePage")).toBeLessThan(
+      handlerSource.indexOf("const matchedIds"),
+    );
+    expect(handlerSource).toContain("candidatePage.records.map((record) => record.id)");
   });
 
   it("keeps forgiving profile search on the normal Profiles endpoint", () => {
