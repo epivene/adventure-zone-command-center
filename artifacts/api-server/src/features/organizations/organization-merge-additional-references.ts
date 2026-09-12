@@ -76,6 +76,38 @@ export async function reparentAdditionalOrganizationReferences(
     SET imported_organization_id = ${primaryId}, updated_at = now()
     WHERE imported_organization_id = ${duplicateId}
   `);
+  // Remove destination-equivalent phone rows before re-parenting. The phone
+  // table enforces uniqueness per organization/number/extension, so a plain
+  // UPDATE aborts the entire merge when both profiles already carry the same
+  // normalized phone number.
+  await transaction.execute(sql`
+    DELETE FROM organization_phones duplicate_phone
+    USING organization_phones surviving_phone
+    WHERE duplicate_phone.organization_id = ${duplicateId}
+      AND surviving_phone.organization_id = ${primaryId}
+      AND duplicate_phone.organization_location_id IS NOT DISTINCT FROM surviving_phone.organization_location_id
+      AND duplicate_phone.normalized_number = surviving_phone.normalized_number
+      AND COALESCE(duplicate_phone.normalized_extension, '') = COALESCE(surviving_phone.normalized_extension, '')
+      AND duplicate_phone.normalized_number IS NOT NULL
+  `);
+  // A profile may have only one active primary general phone. Preserve the
+  // survivor's designation and retain any distinct incoming phone as secondary.
+  await transaction.execute(sql`
+    UPDATE organization_phones incoming_phone
+    SET "primary" = false, updated_at = now()
+    WHERE incoming_phone.organization_id = ${duplicateId}
+      AND incoming_phone.organization_location_id IS NULL
+      AND incoming_phone."primary"
+      AND incoming_phone.status = 'active'
+      AND EXISTS (
+        SELECT 1
+        FROM organization_phones surviving_phone
+        WHERE surviving_phone.organization_id = ${primaryId}
+          AND surviving_phone.organization_location_id IS NULL
+          AND surviving_phone."primary"
+          AND surviving_phone.status = 'active'
+      )
+  `);
   await transaction.execute(sql`
     UPDATE organization_phones SET organization_id = ${primaryId}, updated_at = now()
     WHERE organization_id = ${duplicateId}
