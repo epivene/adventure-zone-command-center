@@ -17,6 +17,7 @@ import {
 import { createFollowUpAction, deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
 import { normalizeExternalWebsite } from "@/features/organizations/website-url";
+import { FOLLOW_UP_KINDS } from "@/features/follow-ups/follow-up-kinds";
 import { groupEventProfileContacts } from "@/features/event-profiles/group-event-profile-contacts";
 import { ScopedNotes } from "@/components/notes/scoped-notes";
 import type { ScopedNoteView } from "@/features/notes/scoped-note-types";
@@ -321,9 +322,9 @@ export function EventProfileWorkspace({
                   <label className="grid gap-1 text-sm font-semibold text-slate-800">
                     Follow-up type
                     <select aria-label="Follow-up type" value={newFollowUpKind} onChange={(event) => setNewFollowUpKind(event.target.value)}>
-                      <option value="email">Email</option>
-                      <option value="call">Call</option>
-                      <option value="application">Application check</option>
+                      {FOLLOW_UP_KINDS.map((kind) => (
+                        <option key={kind.value} value={kind.value}>{kind.label}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="grid gap-1 text-sm font-semibold text-slate-800">
