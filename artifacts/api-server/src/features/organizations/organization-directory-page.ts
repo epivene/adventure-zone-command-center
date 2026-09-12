@@ -1,14 +1,4 @@
-import {
-  and,
-  asc,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  sql,
-  type SQL,
-} from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, isNull, sql, type SQL } from "drizzle-orm";
 
 import type { db as database } from "../../db/client";
 import {
@@ -58,23 +48,15 @@ type OrganizationListPage = {
     applicationDeadline: string | null;
     pipelineStatus: string | null;
     priority: string | null;
-    decisionStatus:
-      | "deadline_soon"
-      | "needs_follow_up"
-      | "contacted"
-      | "waiting"
-      | "booked"
-      | "not_a_fit";
+    decisionStatus: "deadline_soon" | "needs_follow_up" | "contacted" | "waiting" | "booked" | "not_a_fit";
     recommendedDealModel: "flat_fee" | "pay_per_play" | "either" | null;
     nextActionKind: string | null;
     nextActionDueAt: Date | null;
     locationCount: number;
     matchedLocation: MatchedOrganizationLocation | null;
-    parentContext: {
-      kind: "organization_group";
-      id: string;
-      name: string;
-    } | null;
+    parentContext:
+      | { kind: "organization_group"; id: string; name: string }
+      | null;
   }>;
   total: number;
   page: number;
@@ -82,9 +64,7 @@ type OrganizationListPage = {
   pageCount: number;
 };
 
-function buildDirectoryCondition(
-  query: OrganizationListQuery,
-): SQL | undefined {
+function buildDirectoryCondition(query: OrganizationListQuery): SQL | undefined {
   const pattern = `%${query.search}%`;
   const notRetiredCondition =
     query.includeRetired || query.showMembers || Boolean(query.search)
@@ -142,21 +122,13 @@ function buildDirectoryCondition(
       )`
     : undefined;
 
-  const lastResortCondition =
-    query.lastResort === "only"
-      ? eq(organizations.lastResort, true)
-      : undefined;
-  const fillerCondition =
-    query.filler === "only" ? sql.raw("filler = true") : undefined;
+  const lastResortCondition = query.lastResort === "only" ? eq(organizations.lastResort, true) : undefined;
+  const fillerCondition = query.filler === "only" ? sql.raw("filler = true") : undefined;
   const travelLegCondition = query.travelLegId
     ? sql`exists (select 1 from ${bookings} where ${bookings.organizationId} = ${organizations.id} and ${bookings.travelLegId} = ${query.travelLegId})`
     : undefined;
-  const typeCondition = query.placeType
-    ? sql`${organizations.placeType} = ${query.placeType}`
-    : undefined;
-  const regionCondition = query.region
-    ? sql`lower(${organizations.region}) = lower(${query.region})`
-    : undefined;
+  const typeCondition = query.placeType ? sql`${organizations.placeType} = ${query.placeType}` : undefined;
+  const regionCondition = query.region ? sql`lower(${organizations.region}) = lower(${query.region})` : undefined;
   const phoneCondition = query.hasPhone
     ? sql`exists (select 1 from ${organizationContacts} oc inner join ${contacts} c on c.id = oc.contact_id where oc.organization_id = ${organizations.id} and oc.active and c.phone is not null and btrim(c.phone) <> '')`
     : undefined;
@@ -176,10 +148,9 @@ function buildDirectoryCondition(
   const locationCondition = query.hasLocations
     ? sql`exists (select 1 from ${organizationLocations} l where l.organization_id = ${organizations.id})`
     : undefined;
-  const familyMemberCondition =
-    query.showMembers || Boolean(query.search)
-      ? undefined
-      : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;
+  const familyMemberCondition = query.showMembers || Boolean(query.search)
+    ? undefined
+    : sql`not exists (select 1 from ${eventFamilyMembers} efm where efm.organization_id = ${organizations.id})`;
   const quickFilterCondition = (() => {
     switch (query.quickFilter) {
       case "deadline_soon":
@@ -207,40 +178,34 @@ function buildDirectoryCondition(
     }
   })();
 
-  return (
-    and(
-      searchCondition,
-      notRetiredCondition,
-      lastResortCondition,
-      fillerCondition,
-      travelLegCondition,
-      typeCondition,
-      regionCondition,
-      phoneCondition,
-      emailCondition,
-      followUpCondition,
-      bookingCondition,
-      locationCondition,
-      familyMemberCondition,
-      quickFilterCondition,
-    ) ?? undefined
-  );
+  return and(
+    searchCondition,
+    notRetiredCondition,
+    lastResortCondition,
+    fillerCondition,
+    travelLegCondition,
+    typeCondition,
+    regionCondition,
+    phoneCondition,
+    emailCondition,
+    followUpCondition,
+    bookingCondition,
+    locationCondition,
+    familyMemberCondition,
+    quickFilterCondition,
+  ) ?? undefined;
 }
 
 export function profileLastChangedAtSql(): SQL {
   return sql`coalesce(${sql.raw('"organizations"."last_worked_at"')}, ${organizations.createdAt})`;
 }
 
-export function buildOrganizationDirectoryOrderBy(
-  query: OrganizationListQuery,
-): SQL[] {
+export function buildOrganizationDirectoryOrderBy(query: OrganizationListQuery): SQL[] {
   const exactMatch = query.search
     ? sql`case when lower(${organizations.name}) = lower(${query.search}) then 0 else 1 end`
     : null;
   const recency = profileLastChangedAtSql();
-  const fillerPriority = sql.raw(
-    'case when coalesce("organizations"."filler", false) then 1 else 0 end',
-  );
+  const fillerPriority = sql.raw('case when coalesce("organizations"."filler", false) then 1 else 0 end');
 
   const sortOrder: SQL[] = (() => {
     switch (query.sort) {
@@ -251,25 +216,12 @@ export function buildOrganizationDirectoryOrderBy(
       case "name_desc":
         return [desc(organizations.name), asc(organizations.id)];
       case "created_desc":
-        return [
-          desc(organizations.createdAt),
-          asc(organizations.name),
-          asc(organizations.id),
-        ];
+        return [desc(organizations.createdAt), asc(organizations.name), asc(organizations.id)];
       case "created_asc":
-        return [
-          asc(organizations.createdAt),
-          asc(organizations.name),
-          asc(organizations.id),
-        ];
+        return [asc(organizations.createdAt), asc(organizations.name), asc(organizations.id)];
       case "recently_updated":
       default:
-        return [
-          asc(fillerPriority),
-          desc(recency),
-          asc(organizations.name),
-          asc(organizations.id),
-        ];
+        return [asc(fillerPriority), desc(recency), asc(organizations.name), asc(organizations.id)];
     }
   })();
 
@@ -281,10 +233,7 @@ export async function listOrganizationDirectoryPage(
   query: OrganizationListQuery,
 ): Promise<OrganizationListPage> {
   const condition = buildDirectoryCondition(query);
-  const [totals] = await db
-    .select({ value: count() })
-    .from(organizations)
-    .where(condition);
+  const [totals] = await db.select({ value: count() }).from(organizations).where(condition);
   const total = totals?.value ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / query.pageSize));
   const page = Math.min(query.page, pageCount);
@@ -301,13 +250,8 @@ export async function listOrganizationDirectoryPage(
     return { records: [], total, page, pageSize: query.pageSize, pageCount };
   }
 
-  const organizationIds = organizationRecords.map(
-    (organization) => organization.id,
-  );
-  const idList = sql.join(
-    organizationIds.map((id) => sql`${id}::uuid`),
-    sql.raw(", "),
-  );
+  const organizationIds = organizationRecords.map((organization) => organization.id);
+  const idList = sql.join(organizationIds.map((id) => sql`${id}::uuid`), sql.raw(", "));
   const fillerResult = await db.execute<FillerProfileRow>(sql`
     select
       id,
@@ -317,87 +261,55 @@ export async function listOrganizationDirectoryPage(
     from organizations
     where id in (${idList})
   `);
-  const fillerByOrganization = new Map(
-    (fillerResult.rows ?? []).map((row) => [row.id, row]),
-  );
+  const fillerByOrganization = new Map((fillerResult.rows ?? []).map((row) => [row.id, row]));
 
-  const parentIds = [
-    ...new Set(
-      organizationRecords
-        .map((organization) => organization.consolidatedIntoId)
-        .filter((id): id is string => Boolean(id)),
-    ),
-  ];
+  const parentIds = [...new Set(
+    organizationRecords
+      .map((organization) => organization.consolidatedIntoId)
+      .filter((id): id is string => Boolean(id)),
+  )];
   const parentRows = parentIds.length
-    ? await db
-        .select({ id: organizations.id, name: organizations.name })
-        .from(organizations)
-        .where(inArray(organizations.id, parentIds))
+    ? await db.select({ id: organizations.id, name: organizations.name }).from(organizations).where(inArray(organizations.id, parentIds))
     : [];
   const parentNameById = new Map(parentRows.map((row) => [row.id, row.name]));
   const locationSearchPattern = query.search ? `%${query.search}%` : null;
 
-  const [
-    contactCounts,
-    bookingCounts,
-    primaryContacts,
-    locationCounts,
-    matchedLocationRows,
-    decisionRows,
-  ] = await Promise.all([
+  const [contactCounts, bookingCounts, primaryContacts, locationCounts, matchedLocationRows, decisionRows] = await Promise.all([
     db
-      .select({
-        organizationId: organizationContacts.organizationId,
-        value: count(),
-      })
+      .select({ organizationId: organizationContacts.organizationId, value: count() })
       .from(organizationContacts)
-      .where(
-        and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-          sql`not exists (
+      .where(and(
+        inArray(organizationContacts.organizationId, organizationIds),
+        eq(organizationContacts.active, true),
+        sql`not exists (
           select 1 from contact_consolidations cc
           where cc.source_contact_id = ${organizationContacts.contactId}
         )`,
-        ),
-      )
+      ))
       .groupBy(organizationContacts.organizationId),
     db
       .select({ organizationId: bookings.organizationId, value: count() })
       .from(bookings)
-      .where(
-        and(
-          inArray(bookings.organizationId, organizationIds),
-          sql`coalesce(${bookings.notes}, '') not like '[Merged duplicate] Canonical booking:%'`,
-        ),
-      )
+      .where(and(
+        inArray(bookings.organizationId, organizationIds),
+        sql`coalesce(${bookings.notes}, '') not like '[Merged duplicate] Canonical booking:%'`,
+      ))
       .groupBy(bookings.organizationId),
     db
-      .select({
-        organizationId: organizationContacts.organizationId,
-        firstName: contacts.firstName,
-        lastName: contacts.lastName,
-        email: contacts.email,
-        phone: contacts.phone,
-      })
+      .select({ organizationId: organizationContacts.organizationId, firstName: contacts.firstName, lastName: contacts.lastName, email: contacts.email, phone: contacts.phone })
       .from(organizationContacts)
       .innerJoin(contacts, eq(organizationContacts.contactId, contacts.id))
-      .where(
-        and(
-          inArray(organizationContacts.organizationId, organizationIds),
-          eq(organizationContacts.active, true),
-          eq(organizationContacts.isPrimary, true),
-          sql`not exists (
+      .where(and(
+        inArray(organizationContacts.organizationId, organizationIds),
+        eq(organizationContacts.active, true),
+        eq(organizationContacts.isPrimary, true),
+        sql`not exists (
           select 1 from contact_consolidations cc
           where cc.source_contact_id = ${organizationContacts.contactId}
         )`,
-        ),
-      ),
+      )),
     db
-      .select({
-        organizationId: organizationLocations.organizationId,
-        value: count(),
-      })
+      .select({ organizationId: organizationLocations.organizationId, value: count() })
       .from(organizationLocations)
       .where(inArray(organizationLocations.organizationId, organizationIds))
       .groupBy(organizationLocations.organizationId),
@@ -411,10 +323,9 @@ export async function listOrganizationDirectoryPage(
             region: organizationLocations.region,
           })
           .from(organizationLocations)
-          .where(
-            and(
-              inArray(organizationLocations.organizationId, organizationIds),
-              sql`(
+          .where(and(
+            inArray(organizationLocations.organizationId, organizationIds),
+            sql`(
               ${organizationLocations.label} ilike ${locationSearchPattern}
               or ${organizationLocations.venueName} ilike ${locationSearchPattern}
               or ${organizationLocations.city} ilike ${locationSearchPattern}
@@ -436,17 +347,14 @@ export async function listOrganizationDirectoryPage(
                   )
               )
             )`,
-            ),
-          )
-      : Promise.resolve(
-          [] as {
-            organizationId: string;
-            id: string;
-            label: string;
-            city: string | null;
-            region: string | null;
-          }[],
-        ),
+          ))
+      : Promise.resolve([] as {
+          organizationId: string;
+          id: string;
+          label: string;
+          city: string | null;
+          region: string | null;
+        }[]),
     db.execute<{
       id: string;
       nextEventDate: Date | null;
@@ -465,18 +373,8 @@ export async function listOrganizationDirectoryPage(
         latest_opportunity.status as "pipelineStatus",
         latest_opportunity.priority,
         o.recommended_deal_model as "recommendedDealModel",
-        case
-          when latest_opportunity.next_action_due_at is not null
-            and (next_follow_up.due_at is null or latest_opportunity.next_action_due_at <= next_follow_up.due_at)
-          then latest_opportunity.next_action_kind
-          else next_follow_up.kind
-        end as "nextActionKind",
-        case
-          when latest_opportunity.next_action_due_at is not null
-            and (next_follow_up.due_at is null or latest_opportunity.next_action_due_at <= next_follow_up.due_at)
-          then latest_opportunity.next_action_due_at
-          else next_follow_up.due_at
-        end as "nextActionDueAt",
+        coalesce(next_follow_up.kind, latest_opportunity.next_action_kind) as "nextActionKind",
+        coalesce(next_follow_up.due_at, latest_opportunity.next_action_due_at) as "nextActionDueAt",
         exists (select 1 from bookings b where b.organization_id = o.id and b.status = 'confirmed') as "confirmedBooking"
       from organizations o
       left join lateral (
@@ -501,34 +399,16 @@ export async function listOrganizationDirectoryPage(
     `),
   ]);
 
-  const contactCountByOrganization = new Map(
-    contactCounts.map((record) => [record.organizationId, record.value]),
-  );
+  const contactCountByOrganization = new Map(contactCounts.map((record) => [record.organizationId, record.value]));
   const bookingCountByOrganization = new Map(
-    bookingCounts
-      .filter((record) => record.organizationId !== null)
-      .map((record) => [record.organizationId!, record.value]),
+    bookingCounts.filter((record) => record.organizationId !== null).map((record) => [record.organizationId!, record.value]),
   );
-  const primaryContactByOrganization = new Map(
-    primaryContacts.map((record) => [
-      record.organizationId,
-      {
-        name: `${record.firstName} ${record.lastName}`.trim(),
-        email: record.email,
-        phone: record.phone,
-      },
-    ]),
-  );
-  const decisionByOrganization = new Map(
-    (decisionRows.rows ?? []).map((record) => [record.id, record]),
-  );
-  const locationCountByOrganization = new Map(
-    locationCounts.map((record) => [record.organizationId, record.value]),
-  );
-  const matchedLocationByOrganization = new Map<
-    string,
-    MatchedOrganizationLocation
-  >();
+  const primaryContactByOrganization = new Map(primaryContacts.map((record) => [record.organizationId, {
+    name: `${record.firstName} ${record.lastName}`.trim(), email: record.email, phone: record.phone,
+  }]));
+  const decisionByOrganization = new Map((decisionRows.rows ?? []).map((record) => [record.id, record]));
+  const locationCountByOrganization = new Map(locationCounts.map((record) => [record.organizationId, record.value]));
+  const matchedLocationByOrganization = new Map<string, MatchedOrganizationLocation>();
   for (const row of matchedLocationRows) {
     if (!matchedLocationByOrganization.has(row.organizationId)) {
       matchedLocationByOrganization.set(row.organizationId, {
@@ -546,34 +426,15 @@ export async function listOrganizationDirectoryPage(
       const primaryContact = primaryContactByOrganization.get(organization.id);
       const decision = decisionByOrganization.get(organization.id);
       const decisionStatus = (() => {
-        const deadline = decision?.applicationDeadline
-          ? new Date(`${decision.applicationDeadline}T00:00:00Z`)
-          : null;
+        const deadline = decision?.applicationDeadline ? new Date(`${decision.applicationDeadline}T00:00:00Z`) : null;
         const now = new Date();
-        const deadlineSoon =
-          deadline &&
-          deadline.getTime() >=
-            new Date(now.toISOString().slice(0, 10)).getTime() &&
-          deadline.getTime() <= now.getTime() + 30 * 86_400_000;
-        if (
-          ["not_pursuing", "declined", "cancelled"].includes(
-            decision?.pipelineStatus ?? "",
-          )
-        )
-          return "not_a_fit" as const;
-        if (decision?.pipelineStatus === "booked" || decision?.confirmedBooking)
-          return "booked" as const;
+        const deadlineSoon = deadline && deadline.getTime() >= new Date(now.toISOString().slice(0, 10)).getTime()
+          && deadline.getTime() <= now.getTime() + 30 * 86_400_000;
+        if (["not_pursuing", "declined", "cancelled"].includes(decision?.pipelineStatus ?? "")) return "not_a_fit" as const;
+        if (decision?.pipelineStatus === "booked" || decision?.confirmedBooking) return "booked" as const;
         if (deadlineSoon) return "deadline_soon" as const;
         if (decision?.nextActionDueAt) return "needs_follow_up" as const;
-        if (
-          [
-            "contacted",
-            "follow_up",
-            "interested",
-            "booking_in_progress",
-          ].includes(decision?.pipelineStatus ?? "")
-        )
-          return "contacted" as const;
+        if (["contacted", "follow_up", "interested", "booking_in_progress"].includes(decision?.pipelineStatus ?? "")) return "contacted" as const;
         return "waiting" as const;
       })();
       return {
@@ -601,15 +462,12 @@ export async function listOrganizationDirectoryPage(
         nextActionKind: decision?.nextActionKind ?? null,
         nextActionDueAt: decision?.nextActionDueAt ?? null,
         locationCount: locationCountByOrganization.get(organization.id) ?? 0,
-        matchedLocation:
-          matchedLocationByOrganization.get(organization.id) ?? null,
+        matchedLocation: matchedLocationByOrganization.get(organization.id) ?? null,
         parentContext: organization.consolidatedIntoId
           ? {
               kind: "organization_group" as const,
               id: organization.consolidatedIntoId,
-              name:
-                parentNameById.get(organization.consolidatedIntoId) ??
-                "Parent profile",
+              name: parentNameById.get(organization.consolidatedIntoId) ?? "Parent profile",
             }
           : null,
       };

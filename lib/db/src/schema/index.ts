@@ -22,102 +22,36 @@ import { sql } from "drizzle-orm";
 
 // Inlined type constants (originally from features/)
 const bookingStatusValues = [
-  "new_lead",
-  "researching",
-  "contact_due",
-  "contacted",
-  "interested",
-  "possible",
-  "unlikely",
-  "quote_sent",
-  "pending_decision",
-  "pending_contract",
-  "contract_received",
-  "confirmed",
-  "declined",
-  "cancelled",
-  "completed",
-  "renewal_due",
+  "new_lead","researching","contact_due","contacted","interested","possible",
+  "unlikely","quote_sent","pending_decision","pending_contract","contract_received",
+  "confirmed","declined","cancelled","completed","renewal_due",
 ] as const;
 export type BookingStatus = (typeof bookingStatusValues)[number];
 
-const probabilityValues = [
-  "definite",
-  "likely",
-  "possible",
-  "unlikely",
-] as const;
+const probabilityValues = ["definite","likely","possible","unlikely"] as const;
 export type Probability = (typeof probabilityValues)[number];
 
 const placeTypeValues = [
-  "fair",
-  "city_government",
-  "festival_event",
-  "venue",
-  "school",
-  "tribe",
-  "association",
-  "company",
-  "other",
+  "fair","city_government","festival_event","venue","school","tribe",
+  "association","company","other",
 ] as const;
 export type PlaceType = (typeof placeTypeValues)[number];
 
-export const recommendedDealModelValues = [
-  "flat_fee",
-  "pay_per_play",
-  "either",
-] as const;
+export const recommendedDealModelValues = ["flat_fee", "pay_per_play", "either"] as const;
 export type RecommendedDealModel = (typeof recommendedDealModelValues)[number];
 
-const specialRequestTreatmentValues = [
-  "add_to_count",
-  "replace_included",
-  "note_only",
-] as const;
-export type SpecialRequestTreatment =
-  (typeof specialRequestTreatmentValues)[number];
+const specialRequestTreatmentValues = ["add_to_count","replace_included","note_only"] as const;
+export type SpecialRequestTreatment = (typeof specialRequestTreatmentValues)[number];
 
-const requestApprovalStatusValues = [
-  "needs_approval",
-  "approved",
-  "declined",
-] as const;
-export type RequestApprovalStatus =
-  (typeof requestApprovalStatusValues)[number];
+const requestApprovalStatusValues = ["needs_approval","approved","declined"] as const;
+export type RequestApprovalStatus = (typeof requestApprovalStatusValues)[number];
 
-const actSourceEntityTypeValues = [
-  "company",
-  "contact",
-  "opportunity",
-  "group",
-] as const;
-const actRelationshipTypeValues = [
-  "company_contact",
-  "opportunity_company",
-  "opportunity_contact",
-  "group_contact",
-] as const;
-const actMigrationStreamTypeValues = [
-  ...actSourceEntityTypeValues,
-  ...actRelationshipTypeValues,
-] as const;
-const actMigrationRunStatusValues = [
-  "snapshotting",
-  "snapshot_complete",
-  "matching",
-  "previewed",
-  "applying",
-  "partially_applied",
-  "applied",
-  "failed",
-] as const;
-const actMigrationCheckpointStatusValues = [
-  "pending",
-  "fetching",
-  "complete",
-  "failed",
-] as const;
-const actQueryModeValues = ["projected", "plain"] as const;
+const actSourceEntityTypeValues = ["company","contact","opportunity","group"] as const;
+const actRelationshipTypeValues = ["company_contact","opportunity_company","opportunity_contact","group_contact"] as const;
+const actMigrationStreamTypeValues = [...actSourceEntityTypeValues, ...actRelationshipTypeValues] as const;
+const actMigrationRunStatusValues = ["snapshotting","snapshot_complete","matching","previewed","applying","partially_applied","applied","failed"] as const;
+const actMigrationCheckpointStatusValues = ["pending","fetching","complete","failed"] as const;
+const actQueryModeValues = ["projected","plain"] as const;
 export const actReplacementStreamTypeValues = [
   "company",
   "contact",
@@ -200,53 +134,12 @@ export const actSafeErrorCodeValues = [
   "pagination_stalled",
 ] as const;
 export type ActSafeErrorCode = (typeof actSafeErrorCodeValues)[number];
-const migrationPreviewStateValues = [
-  "new",
-  "matched_unchanged",
-  "change",
-  "new_relationship",
-  "possible_duplicate",
-  "needs_review",
-  "ignored",
-  "error",
-] as const;
-const migrationDecisionValues = [
-  "approve_proposed",
-  "link_existing",
-  "keep_separate",
-  "confirm_static_group",
-  "ignore",
-] as const;
-const migrationApplyBatchStatusValues = [
-  "pending",
-  "applying",
-  "partially_applied",
-  "applied",
-  "failed",
-] as const;
-const migrationApplyOperationStatusValues = [
-  "pending",
-  "leased",
-  "blocked",
-  "applied",
-  "ignored",
-  "failed",
-] as const;
-const migrationReviewStateValues = [
-  "not_required",
-  "pending",
-  "decided",
-  "ignored",
-] as const;
-const migrationTargetEntityTypeValues = [
-  "organization",
-  "contact",
-  "organization_contact",
-  "booking",
-  "booking_contact",
-  "calling_list",
-  "calling_list_member",
-] as const;
+const migrationPreviewStateValues = ["new","matched_unchanged","change","new_relationship","possible_duplicate","needs_review","ignored","error"] as const;
+const migrationDecisionValues = ["approve_proposed","link_existing","keep_separate","confirm_static_group","ignore"] as const;
+const migrationApplyBatchStatusValues = ["pending","applying","partially_applied","applied","failed"] as const;
+const migrationApplyOperationStatusValues = ["pending","leased","blocked","applied","ignored","failed"] as const;
+const migrationReviewStateValues = ["not_required","pending","decided","ignored"] as const;
+const migrationTargetEntityTypeValues = ["organization","contact","organization_contact","booking","booking_contact","calling_list","calling_list_member"] as const;
 
 export const resourceStatusValues = [
   "available",
@@ -256,7 +149,10 @@ export const resourceStatusValues = [
 ] as const;
 export type ResourceStatus = (typeof resourceStatusValues)[number];
 
-export const packageAttributionSourceValues = ["inferred", "manual"] as const;
+export const packageAttributionSourceValues = [
+  "inferred",
+  "manual",
+] as const;
 export type PackageAttributionSource =
   (typeof packageAttributionSourceValues)[number];
 
@@ -298,69 +194,57 @@ export const callDispositionEnum = pgEnum(
   "call_disposition",
   callDispositionValues,
 );
-export const organizations = pgTable(
-  "organizations",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    name: text("name").notNull(),
-    actRecordId: text("act_record_id").unique(),
-    placeType: text("place_type").$type<PlaceType>().default("other").notNull(),
-    actIndustry: text("act_industry"),
-    phone: text("phone"),
-    normalizedPhone: text("normalized_phone"),
-    address1: text("address_1"),
-    address2: text("address_2"),
-    city: text("city"),
-    region: text("region"),
-    postalCode: text("postal_code"),
-    website: text("website"),
-    applicationDeadline: date("application_deadline"),
-    recommendedDealModel: text(
-      "recommended_deal_model",
-    ).$type<RecommendedDealModel>(),
-    /** Optional non-destructive parent organization for manual event/location membership. */
-    parentOrganizationId: uuid("parent_organization_id").references(
-      (): AnyPgColumn => organizations.id,
-      { onDelete: "restrict" },
-    ),
-    /** Set when this profile has been retired via the consolidation workflow. */
-    consolidatedIntoId: uuid("consolidated_into_id").references(
-      (): AnyPgColumn => organizations.id,
-      { onDelete: "restrict" },
-    ),
-    /** Timestamp when the consolidation was applied. */
-    consolidatedAt: timestamp("consolidated_at", { withTimezone: true }),
-    lastResort: boolean("last_resort").default(false).notNull(),
-    lastResortReason: text("last_resort_reason"),
-    lastResortChangedAt: timestamp("last_resort_changed_at", {
-      withTimezone: true,
-    }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check(
-      "organizations_place_type_valid",
-      sql`${table.placeType} in (${sqlTextValues(placeTypeValues)})`,
-    ),
-    check(
-      "organizations_last_resort_reason_required",
-      sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
-    ),
-    check(
-      "organizations_recommended_deal_model_valid",
-      sql`${table.recommendedDealModel} is null or ${table.recommendedDealModel} in (${sqlTextValues(recommendedDealModelValues)})`,
-    ),
-    index("organizations_normalized_phone_idx").on(table.normalizedPhone),
-    index("organizations_parent_organization_id_idx").on(
-      table.parentOrganizationId,
-    ),
-  ],
-);
+export const organizations = pgTable("organizations", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  actRecordId: text("act_record_id").unique(),
+  placeType: text("place_type").$type<PlaceType>().default("other").notNull(),
+  actIndustry: text("act_industry"),
+  phone: text("phone"),
+  normalizedPhone: text("normalized_phone"),
+  address1: text("address_1"),
+  address2: text("address_2"),
+  city: text("city"),
+  region: text("region"),
+  postalCode: text("postal_code"),
+  website: text("website"),
+  applicationDeadline: date("application_deadline"),
+  recommendedDealModel: text("recommended_deal_model").$type<RecommendedDealModel>(),
+  /** Optional non-destructive parent organization for manual event/location membership. */
+  parentOrganizationId: uuid("parent_organization_id").references(
+    (): AnyPgColumn => organizations.id,
+    { onDelete: "restrict" },
+  ),
+  /** Set when this profile has been retired via the consolidation workflow. */
+  consolidatedIntoId: uuid("consolidated_into_id").references(
+    (): AnyPgColumn => organizations.id,
+    { onDelete: "restrict" },
+  ),
+  /** Timestamp when the consolidation was applied. */
+  consolidatedAt: timestamp("consolidated_at", { withTimezone: true }),
+  lastResort: boolean("last_resort").default(false).notNull(),
+  lastResortReason: text("last_resort_reason"),
+  lastResortChangedAt: timestamp("last_resort_changed_at", {
+    withTimezone: true,
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check(
+    "organizations_place_type_valid",
+    sql`${table.placeType} in (${sqlTextValues(placeTypeValues)})`,
+  ),
+  check(
+    "organizations_last_resort_reason_required",
+    sql`not ${table.lastResort} or nullif(trim(${table.lastResortReason}), '') is not null`,
+  ),
+  check(
+    "organizations_recommended_deal_model_valid",
+    sql`${table.recommendedDealModel} is null or ${table.recommendedDealModel} in (${sqlTextValues(recommendedDealModelValues)})`,
+  ),
+  index("organizations_normalized_phone_idx").on(table.normalizedPhone),
+  index("organizations_parent_organization_id_idx").on(table.parentOrganizationId),
+]);
 
 export const organizationFamilyReviews = pgTable(
   "organization_family_reviews",
@@ -369,16 +253,9 @@ export const organizationFamilyReviews = pgTable(
     groupKey: text("group_key").notNull(),
     candidateIds: jsonb("candidate_ids").$type<string[]>().notNull(),
     status: text("status").$type<"proposed" | "not_related">().notNull(),
-    evidence: jsonb("evidence")
-      .$type<unknown[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    evidence: jsonb("evidence").$type<unknown[]>().default(sql`'[]'::jsonb`).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     unique("organization_family_reviews_group_key_unique").on(table.groupKey),
@@ -429,20 +306,12 @@ export const organizationLocations = pgTable(
       (): AnyPgColumn => organizations.id,
       { onDelete: "restrict" },
     ),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("organization_locations_organization_id_idx").on(
-      table.organizationId,
-    ),
-    index("organization_locations_normalized_phone_idx").on(
-      table.normalizedPhone,
-    ),
+    index("organization_locations_organization_id_idx").on(table.organizationId),
+    index("organization_locations_normalized_phone_idx").on(table.normalizedPhone),
     index("organization_locations_travel_leg_id_idx").on(table.travelLegId),
     uniqueIndex("organization_locations_consolidation_source_org_unique")
       .on(table.organizationId, table.consolidationSourceOrgId)
@@ -450,96 +319,67 @@ export const organizationLocations = pgTable(
   ],
 );
 
-export const contacts = pgTable(
-  "contacts",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: uuid("organization_id").references(() => organizations.id),
-    firstName: text("first_name").notNull(),
-    lastName: text("last_name").notNull(),
-    email: text("email"),
-    phone: text("phone"),
-    normalizedPhone: text("normalized_phone"),
-    quickAddRequestKey: uuid("quick_add_request_key"),
-    jobTitle: text("job_title"),
-    address1: text("address_1"),
-    address2: text("address_2"),
-    city: text("city"),
-    region: text("region"),
-    postalCode: text("postal_code"),
-    actRecordId: text("act_record_id").unique(),
-    organizationLocationId: uuid("organization_location_id").references(
-      () => organizationLocations.id,
-      { onDelete: "set null" },
-    ),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.organizationId, table.id],
-      foreignColumns: [
-        organizationContacts.organizationId,
-        organizationContacts.contactId,
-      ],
-      name: "contacts_primary_organization_contact_fk",
-    }),
-    index("contacts_normalized_phone_idx").on(table.normalizedPhone),
-    uniqueIndex("contacts_quick_add_request_key_unique")
-      .on(table.quickAddRequestKey)
-      .where(sql`${table.quickAddRequestKey} is not null`),
-  ],
-);
+export const contacts = pgTable("contacts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name").notNull(),
+  email: text("email"),
+  phone: text("phone"),
+  normalizedPhone: text("normalized_phone"),
+  quickAddRequestKey: uuid("quick_add_request_key"),
+  jobTitle: text("job_title"),
+  address1: text("address_1"),
+  address2: text("address_2"),
+  city: text("city"),
+  region: text("region"),
+  postalCode: text("postal_code"),
+  actRecordId: text("act_record_id").unique(),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  foreignKey({
+    columns: [table.organizationId, table.id],
+    foreignColumns: [
+      organizationContacts.organizationId,
+      organizationContacts.contactId,
+    ],
+    name: "contacts_primary_organization_contact_fk",
+  }),
+  index("contacts_normalized_phone_idx").on(table.normalizedPhone),
+  uniqueIndex("contacts_quick_add_request_key_unique")
+    .on(table.quickAddRequestKey)
+    .where(sql`${table.quickAddRequestKey} is not null`),
+]);
 
-export const contactPhoneTypeValues = [
-  "mobile",
-  "office",
-  "alternate",
-  "unknown",
-] as const;
-export const contactPhoneTypeEnum = pgEnum(
-  "contact_phone_type",
-  contactPhoneTypeValues,
-);
 
-export const contactPhones = pgTable(
-  "contact_phones",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    contactId: uuid("contact_id")
-      .notNull()
-      .references(() => contacts.id, { onDelete: "cascade" }),
-    number: text("number").notNull(),
-    normalizedNumber: text("normalized_number"),
-    type: contactPhoneTypeEnum("type").default("unknown").notNull(),
-    extension: text("extension"),
-    label: text("label"),
-    primary: boolean("primary").default(false).notNull(),
-    source: text("source").default("local").notNull(),
-    doNotCallAt: timestamp("do_not_call_at", { withTimezone: true }),
-    doNotCallReason: text("do_not_call_reason"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("contact_phones_one_primary_per_contact")
-      .on(table.contactId)
-      .where(sql`${table.primary}`),
-    uniqueIndex("contact_phones_contact_normalized_number_unique")
-      .on(table.contactId, table.normalizedNumber)
-      .where(sql`${table.normalizedNumber} is not null`),
-    index("contact_phones_normalized_number_idx").on(table.normalizedNumber),
-    check("contact_phones_number_nonblank", sql`btrim(${table.number}) <> ''`),
-  ],
-);
+export const contactPhoneTypeValues = ["mobile", "office", "alternate", "unknown"] as const;
+export const contactPhoneTypeEnum = pgEnum("contact_phone_type", contactPhoneTypeValues);
+
+export const contactPhones = pgTable("contact_phones", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contactId: uuid("contact_id").notNull().references(() => contacts.id, { onDelete: "cascade" }),
+  number: text("number").notNull(),
+  normalizedNumber: text("normalized_number"),
+  type: contactPhoneTypeEnum("type").default("unknown").notNull(),
+  extension: text("extension"),
+  label: text("label"),
+  primary: boolean("primary").default(false).notNull(),
+  source: text("source").default("local").notNull(),
+  doNotCallAt: timestamp("do_not_call_at", { withTimezone: true }),
+  doNotCallReason: text("do_not_call_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("contact_phones_one_primary_per_contact").on(table.contactId).where(sql`${table.primary}`),
+  uniqueIndex("contact_phones_contact_normalized_number_unique").on(table.contactId, table.normalizedNumber).where(sql`${table.normalizedNumber} is not null`),
+  index("contact_phones_normalized_number_idx").on(table.normalizedNumber),
+  check("contact_phones_number_nonblank", sql`btrim(${table.number}) <> ''`),
+]);
 
 export const travelLegs = pgTable(
   "travel_legs",
@@ -573,74 +413,60 @@ export const travelLegs = pgTable(
   ],
 );
 
-export const legManagerAccess = pgTable(
-  "leg_manager_access",
-  {
-    legId: uuid("leg_id")
-      .primaryKey()
-      .references(() => travelLegs.id, { onDelete: "cascade" }),
-    passwordHash: text("password_hash").notNull(),
-    passwordSalt: text("password_salt").notNull(),
-    sessionVersion: integer("session_version").default(1).notNull(),
-    managerName: text("manager_name"),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check(
-      "leg_manager_access_session_version_positive",
-      sql`${table.sessionVersion} >= 1`,
-    ),
-  ],
-);
+export const legManagerAccess = pgTable("leg_manager_access", {
+  legId: uuid("leg_id")
+    .primaryKey()
+    .references(() => travelLegs.id, { onDelete: "cascade" }),
+  passwordHash: text("password_hash").notNull(),
+  passwordSalt: text("password_salt").notNull(),
+  sessionVersion: integer("session_version").default(1).notNull(),
+  managerName: text("manager_name"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("leg_manager_access_session_version_positive", sql`${table.sessionVersion} >= 1`),
+]);
 
-export const bookings = pgTable(
-  "bookings",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: uuid("organization_id").references(() => organizations.id),
-    primaryContactId: uuid("primary_contact_id").references(() => contacts.id),
-    name: text("name").notNull(),
-    venueName: text("venue_name"),
-    address1: text("address_1"),
-    city: text("city").notNull(),
-    region: text("region").notNull(),
-    postalCode: text("postal_code"),
-    latitude: doublePrecision("latitude"),
-    longitude: doublePrecision("longitude"),
-    startsAt: timestamp("starts_at", { withTimezone: true }),
-    endsAt: timestamp("ends_at", { withTimezone: true }),
-    status: bookingStatusEnum("status").default("new_lead").notNull(),
-    probability: probabilityEnum("probability").default("possible").notNull(),
-    travelLegId: uuid("travel_leg_id").references(() => travelLegs.id),
-    actRecordId: text("act_record_id").unique(),
-    organizationLocationId: uuid("organization_location_id").references(
-      () => organizationLocations.id,
-      { onDelete: "set null" },
-    ),
-    notes: text("notes"),
-    physicalAttractionTotal: integer("physical_attraction_total"),
-    attractionTotalApprovalReason: text("attraction_total_approval_reason"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    foreignKey({
-      columns: [table.id, table.primaryContactId],
-      foreignColumns: [bookingContacts.bookingId, bookingContacts.contactId],
-      name: "bookings_primary_booking_contact_fk",
-    }),
-    check(
-      "bookings_physical_attraction_total_nonnegative",
-      sql`${table.physicalAttractionTotal} is null or ${table.physicalAttractionTotal} >= 0`,
-    ),
-  ],
-);
+export const bookings = pgTable("bookings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  primaryContactId: uuid("primary_contact_id").references(() => contacts.id),
+  name: text("name").notNull(),
+  venueName: text("venue_name"),
+  address1: text("address_1"),
+  city: text("city").notNull(),
+  region: text("region").notNull(),
+  postalCode: text("postal_code"),
+  latitude: doublePrecision("latitude"),
+  longitude: doublePrecision("longitude"),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  status: bookingStatusEnum("status").default("new_lead").notNull(),
+  probability: probabilityEnum("probability").default("possible").notNull(),
+  travelLegId: uuid("travel_leg_id").references(() => travelLegs.id),
+  actRecordId: text("act_record_id").unique(),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
+  notes: text("notes"),
+  physicalAttractionTotal: integer("physical_attraction_total"),
+  attractionTotalApprovalReason: text("attraction_total_approval_reason"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  foreignKey({
+    columns: [table.id, table.primaryContactId],
+    foreignColumns: [
+      bookingContacts.bookingId,
+      bookingContacts.contactId,
+    ],
+    name: "bookings_primary_booking_contact_fk",
+  }),
+  check(
+    "bookings_physical_attraction_total_nonnegative",
+    sql`${table.physicalAttractionTotal} is null or ${table.physicalAttractionTotal} >= 0`,
+  ),
+]);
 
 export const organizationContacts = pgTable(
   "organization_contacts",
@@ -719,9 +545,7 @@ export const packageTemplates = pgTable(
     name: text("name").notNull(),
     baseAttractionCount: integer("base_attraction_count").notNull(),
     normalCapacity: integer("normal_capacity").notNull(),
-    temporaryUnavailableQuantity: integer(
-      "temporary_unavailable_quantity",
-    ).notNull(),
+    temporaryUnavailableQuantity: integer("temporary_unavailable_quantity").notNull(),
     active: boolean("active").default(true).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -827,9 +651,7 @@ export const resources = pgTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     category: text("category").notNull(),
-    countsAsAttraction: boolean("counts_as_attraction")
-      .default(false)
-      .notNull(),
+    countsAsAttraction: boolean("counts_as_attraction").default(false).notNull(),
     movable: boolean("movable").default(false).notNull(),
     normalTravelLegId: uuid("normal_travel_leg_id").references(
       () => travelLegs.id,
@@ -839,10 +661,7 @@ export const resources = pgTable(
     minimumTransferMinutes: integer("minimum_transfer_minutes")
       .default(0)
       .notNull(),
-    status: text("status")
-      .$type<ResourceStatus>()
-      .default("available")
-      .notNull(),
+    status: text("status").$type<ResourceStatus>().default("available").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -958,7 +777,10 @@ export const bookingResourcePackageAttributions = pgTable(
   (table) => [
     uniqueIndex(
       "booking_resource_package_attributions_assignment_package_unique",
-    ).on(table.bookingResourceAssignmentId, table.packageTemplateId),
+    ).on(
+      table.bookingResourceAssignmentId,
+      table.packageTemplateId,
+    ),
   ],
 );
 
@@ -997,134 +819,98 @@ export const resourceConflictOverrides = pgTable(
   ],
 );
 
-export const followUps = pgTable(
-  "follow_ups",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    bookingId: uuid("booking_id").references(() => bookings.id),
-    organizationId: uuid("organization_id").references(() => organizations.id),
-    contactId: uuid("contact_id").references(() => contacts.id),
-    kind: text("kind").notNull(),
-    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    outcome: text("outcome"),
-    nextFollowUpId: uuid("next_follow_up_id").references(
-      (): AnyPgColumn => followUps.id,
-    ),
-    organizationLocationId: uuid("organization_location_id").references(
-      () => organizationLocations.id,
-      { onDelete: "set null" },
-    ),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check(
-      "follow_ups_parent_required",
-      sql`${table.bookingId} is not null or ${table.organizationId} is not null or ${table.contactId} is not null`,
-    ),
-    index("follow_ups_open_due_at_idx")
-      .on(table.dueAt)
-      .where(sql`${table.completedAt} is null`),
-  ],
-);
+export const followUps = pgTable("follow_ups", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  kind: text("kind").notNull(),
+  dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  outcome: text("outcome"),
+  nextFollowUpId: uuid("next_follow_up_id").references(
+    (): AnyPgColumn => followUps.id,
+  ),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check(
+    "follow_ups_parent_required",
+    sql`${table.bookingId} is not null or ${table.organizationId} is not null or ${table.contactId} is not null`,
+  ),
+  index("follow_ups_open_due_at_idx")
+    .on(table.dueAt)
+    .where(sql`${table.completedAt} is null`),
+]);
 
-export const activities = pgTable(
-  "activities",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    organizationId: uuid("organization_id").references(() => organizations.id),
-    contactId: uuid("contact_id").references(() => contacts.id),
-    bookingId: uuid("booking_id").references(() => bookings.id),
-    kind: activityKindEnum("kind").notNull(),
-    subject: text("subject"),
-    status: text("status"),
-    body: text("body").notNull(),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }),
-    timelineSortAt: timestamp("timeline_sort_at", {
-      withTimezone: true,
-    }).notNull(),
-    dateIsImportFallback: boolean("date_is_import_fallback")
-      .default(false)
-      .notNull(),
-    endsAt: timestamp("ends_at", { withTimezone: true }),
-    /** Act! source record key (e.g. "act_note:{id}") -- set only on imported items; used for idempotent re-import. */
-    actRecordId: text("act_record_id"),
-    sourceRecordId: uuid("source_record_id").references(
-      () => actSourceRecords.id,
-      { onDelete: "restrict" },
-    ),
-    sourceVersionId: uuid("source_version_id").references(
-      () => actSourceRecordVersions.id,
-      { onDelete: "restrict" },
-    ),
-    sourceType: text("source_type"),
-    organizationLocationId: uuid("organization_location_id").references(
-      () => organizationLocations.id,
-      { onDelete: "set null" },
-    ),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  },
-  (table) => [
-    check(
-      "activities_parent_required",
-      sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null or ${table.sourceRecordId} is not null`,
-    ),
-    check(
-      "activities_occurred_at_required_for_local",
-      sql`${table.occurredAt} is not null or ${table.sourceRecordId} is not null`,
-    ),
-    check(
-      "activities_source_type_valid",
-      sql`${table.sourceType} is null or ${table.sourceType} in ('note', 'history', 'activity')`,
-    ),
-    uniqueIndex("activities_act_record_id_unique")
-      .on(table.actRecordId)
-      .where(sql`${table.actRecordId} is not null`),
-    index("activities_organization_occurred_at_idx").on(
-      table.organizationId,
-      table.occurredAt.desc(),
-    ),
-    index("activities_contact_occurred_at_idx").on(
-      table.contactId,
-      table.occurredAt.desc(),
-    ),
-    index("activities_booking_occurred_at_idx").on(
-      table.bookingId,
-      table.occurredAt.desc(),
-    ),
-    // Partial composite index for the calendar query   covers both
-    // kind = 'calendar' and kind = 'act_history' predicates so PostgreSQL
-    // jumps straight to the date window instead of scanning every row.
-    index("activities_kind_timeline_sort_at_idx")
-      .on(table.kind, table.timelineSortAt)
-      .where(sql`${table.kind} in ('calendar', 'act_history')`),
-  ],
-);
+export const activities = pgTable("activities", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  contactId: uuid("contact_id").references(() => contacts.id),
+  bookingId: uuid("booking_id").references(() => bookings.id),
+  kind: activityKindEnum("kind").notNull(),
+  subject: text("subject"),
+  status: text("status"),
+  body: text("body").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }),
+  timelineSortAt: timestamp("timeline_sort_at", { withTimezone: true }).notNull(),
+  dateIsImportFallback: boolean("date_is_import_fallback").default(false).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  /** Act! source record key (e.g. "act_note:{id}") -- set only on imported items; used for idempotent re-import. */
+  actRecordId: text("act_record_id"),
+  sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
+  sourceType: text("source_type"),
+  organizationLocationId: uuid("organization_location_id").references(
+    () => organizationLocations.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+}, (table) => [
+  check(
+    "activities_parent_required",
+    sql`${table.organizationId} is not null or ${table.contactId} is not null or ${table.bookingId} is not null or ${table.sourceRecordId} is not null`,
+  ),
+  check("activities_occurred_at_required_for_local", sql`${table.occurredAt} is not null or ${table.sourceRecordId} is not null`),
+  check("activities_source_type_valid", sql`${table.sourceType} is null or ${table.sourceType} in ('note', 'history', 'activity')`),
+  uniqueIndex("activities_act_record_id_unique")
+    .on(table.actRecordId)
+    .where(sql`${table.actRecordId} is not null`),
+  index("activities_organization_occurred_at_idx").on(
+    table.organizationId,
+    table.occurredAt.desc(),
+  ),
+  index("activities_contact_occurred_at_idx").on(
+    table.contactId,
+    table.occurredAt.desc(),
+  ),
+  index("activities_booking_occurred_at_idx").on(
+    table.bookingId,
+    table.occurredAt.desc(),
+  ),
+  // Partial composite index for the calendar query   covers both
+  // kind = 'calendar' and kind = 'act_history' predicates so PostgreSQL
+  // jumps straight to the date window instead of scanning every row.
+  index("activities_kind_timeline_sort_at_idx")
+    .on(table.kind, table.timelineSortAt)
+    .where(sql`${table.kind} in ('calendar', 'act_history')`),
+]);
 
 export const activityRevisions = pgTable(
   "activity_revisions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    activityId: uuid("activity_id")
-      .notNull()
-      .references(() => activities.id),
+    activityId: uuid("activity_id").notNull().references(() => activities.id),
     priorBody: text("prior_body").notNull(),
     replacementBody: text("replacement_body").notNull(),
     reason: text("reason"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("activity_revisions_activity_created_at_idx").on(
@@ -1141,9 +927,7 @@ export const callSessions = pgTable(
     requestKey: uuid("request_key"),
     organizationId: uuid("organization_id").references(() => organizations.id),
     contactId: uuid("contact_id").references(() => contacts.id),
-    phoneId: uuid("phone_id").references(() => contactPhones.id, {
-      onDelete: "set null",
-    }),
+    phoneId: uuid("phone_id").references(() => contactPhones.id, { onDelete: "set null" }),
     direction: text("direction").default("outgoing").notNull(),
     method: text("method").default("standard_call").notNull(),
     phoneNumberSnapshot: text("phone_number_snapshot"),
@@ -1161,9 +945,7 @@ export const callSessions = pgTable(
     ),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     uniqueIndex("call_sessions_request_key_unique")
@@ -1197,71 +979,42 @@ export const computerCallSessions = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     ownerId: text("owner_id").notNull(),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id),
-    contactId: uuid("contact_id")
-      .notNull()
-      .references(() => contacts.id),
-    phoneId: uuid("phone_id")
-      .notNull()
-      .references(() => contactPhones.id),
+    organizationId: uuid("organization_id").notNull().references(() => organizations.id),
+    contactId: uuid("contact_id").notNull().references(() => contacts.id),
+    phoneId: uuid("phone_id").notNull().references(() => contactPhones.id),
     provider: text("provider").$type<"twilio">().notNull(),
     providerCallSid: text("provider_call_sid").unique(),
-    direction: text("direction")
-      .$type<"outbound">()
-      .default("outbound")
-      .notNull(),
-    method: text("method")
-      .$type<"browser_voip">()
-      .default("browser_voip")
-      .notNull(),
-    status: text("status")
-      .$type<
-        | "created"
-        | "queued"
-        | "ringing"
-        | "in-progress"
-        | "completed"
-        | "busy"
-        | "no-answer"
-        | "canceled"
-        | "failed"
-        | "unknown"
-      >()
-      .notNull(),
+    direction: text("direction").$type<"outbound">().default("outbound").notNull(),
+    method: text("method").$type<"browser_voip">().default("browser_voip").notNull(),
+    status: text("status").$type<
+      | "created"
+      | "queued"
+      | "ringing"
+      | "in-progress"
+      | "completed"
+      | "busy"
+      | "no-answer"
+      | "canceled"
+      | "failed"
+      | "unknown"
+    >().notNull(),
     callerIdSnapshot: text("caller_id_snapshot").notNull(),
     destinationNumberSnapshot: text("destination_number_snapshot").notNull(),
-    intentExpiresAt: timestamp("intent_expires_at", {
-      withTimezone: true,
-    }).notNull(),
+    intentExpiresAt: timestamp("intent_expires_at", { withTimezone: true }).notNull(),
     intentConsumedAt: timestamp("intent_consumed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     answeredAt: timestamp("answered_at", { withTimezone: true }),
     endedAt: timestamp("ended_at", { withTimezone: true }),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     durationSeconds: integer("duration_seconds"),
     errorCode: text("error_code"),
     errorSummary: text("error_summary"),
   },
   (table) => [
-    check(
-      "computer_call_sessions_provider_valid",
-      sql`${table.provider} = 'twilio'`,
-    ),
-    check(
-      "computer_call_sessions_direction_valid",
-      sql`${table.direction} = 'outbound'`,
-    ),
-    check(
-      "computer_call_sessions_method_valid",
-      sql`${table.method} = 'browser_voip'`,
-    ),
+    check("computer_call_sessions_provider_valid", sql`${table.provider} = 'twilio'`),
+    check("computer_call_sessions_direction_valid", sql`${table.direction} = 'outbound'`),
+    check("computer_call_sessions_method_valid", sql`${table.method} = 'browser_voip'`),
     check(
       "computer_call_sessions_status_valid",
       sql`${table.status} in ('created', 'queued', 'ringing', 'in-progress', 'completed', 'busy', 'no-answer', 'canceled', 'failed', 'unknown')`,
@@ -1275,94 +1028,28 @@ export const computerCallSessions = pgTable(
       table.createdAt.desc(),
     ),
     index("computer_call_sessions_phone_id_idx").on(table.phoneId),
-    index("computer_call_sessions_provider_call_sid_idx").on(
-      table.providerCallSid,
-    ),
+    index("computer_call_sessions_provider_call_sid_idx").on(table.providerCallSid),
   ],
 );
 
-export const incomingCallAvailabilityLeases = pgTable(
-  "incoming_call_availability_leases",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    ownerId: text("owner_id").notNull().unique(),
-    clientIdentity: text("client_identity").notNull().unique(),
-    leaseTokenHash: text("lease_token_hash").notNull(),
-    browserSessionId: text("browser_session_id").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
-    activeInboundSessionId: uuid("active_inbound_session_id"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-);
+export const incomingCallAvailabilityLeases = pgTable("incoming_call_availability_leases", {
+  id: uuid("id").defaultRandom().primaryKey(), ownerId: text("owner_id").notNull().unique(),
+  clientIdentity: text("client_identity").notNull().unique(), leaseTokenHash: text("lease_token_hash").notNull(),
+  browserSessionId: text("browser_session_id").notNull(), expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  heartbeatAt: timestamp("heartbeat_at", { withTimezone: true }).notNull(),
+  activeInboundSessionId: uuid("active_inbound_session_id"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+});
 export const inboundCallSessions = pgTable("inbound_call_sessions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  ownerId: text("owner_id").notNull(),
-  providerParentCallSid: text("provider_parent_call_sid").notNull().unique(),
-  providerBrowserCallSid: text("provider_browser_call_sid").unique(),
-  provider: text("provider").$type<"twilio">().notNull(),
-  direction: text("direction").$type<"inbound">().notNull(),
-  method: text("method").$type<"browser_voip">().notNull(),
-  ingressNumberSnapshot: text("ingress_number_snapshot").notNull(),
-  callerNumberSnapshot: text("caller_number_snapshot"),
-  organizationId: uuid("organization_id").references(() => organizations.id),
-  contactId: uuid("contact_id").references(() => contacts.id),
-  phoneId: uuid("phone_id").references(() => contactPhones.id),
-  status: text("status").notNull(),
-  browserResult: text("browser_result"),
-  voicemailRequestedAt: timestamp("voicemail_requested_at", {
-    withTimezone: true,
-  }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  ringingAt: timestamp("ringing_at", { withTimezone: true }),
-  answeredAt: timestamp("answered_at", { withTimezone: true }),
-  endedAt: timestamp("ended_at", { withTimezone: true }),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  errorCode: text("error_code"),
-  errorSummary: text("error_summary"),
+  id: uuid("id").defaultRandom().primaryKey(), ownerId: text("owner_id").notNull(),
+  providerParentCallSid: text("provider_parent_call_sid").notNull().unique(), providerBrowserCallSid: text("provider_browser_call_sid").unique(),
+  provider: text("provider").$type<"twilio">().notNull(), direction: text("direction").$type<"inbound">().notNull(), method: text("method").$type<"browser_voip">().notNull(),
+  ingressNumberSnapshot: text("ingress_number_snapshot").notNull(), callerNumberSnapshot: text("caller_number_snapshot"),
+  organizationId: uuid("organization_id").references(() => organizations.id), contactId: uuid("contact_id").references(() => contacts.id), phoneId: uuid("phone_id").references(() => contactPhones.id),
+  status: text("status").notNull(), browserResult: text("browser_result"), voicemailRequestedAt: timestamp("voicemail_requested_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), ringingAt: timestamp("ringing_at", { withTimezone: true }), answeredAt: timestamp("answered_at", { withTimezone: true }), endedAt: timestamp("ended_at", { withTimezone: true }), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(), errorCode: text("error_code"), errorSummary: text("error_summary"),
 });
 export const inboundVoicemails = pgTable("inbound_voicemails", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  inboundSessionId: uuid("inbound_session_id")
-    .notNull()
-    .unique()
-    .references(() => inboundCallSessions.id),
-  recordingSid: text("recording_sid").unique(),
-  status: text("status").notNull(),
-  durationSeconds: integer("duration_seconds"),
-  contentType: text("content_type"),
-  retentionDeadline: timestamp("retention_deadline", { withTimezone: true }),
-  handledAt: timestamp("handled_at", { withTimezone: true }),
-  handledBy: text("handled_by"),
-  organizationId: uuid("organization_id").references(() => organizations.id),
-  contactId: uuid("contact_id").references(() => contacts.id),
-  phoneId: uuid("phone_id").references(() => contactPhones.id),
-  deletionAttemptedAt: timestamp("deletion_attempted_at", {
-    withTimezone: true,
-  }),
-  deletionLeaseExpiresAt: timestamp("deletion_lease_expires_at", {
-    withTimezone: true,
-  }),
-  deletionAttempts: integer("deletion_attempts").notNull(),
-  deletionError: text("deletion_error"),
-  callSessionId: uuid("call_session_id")
-    .unique()
-    .references(() => callSessions.id),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+ id: uuid("id").defaultRandom().primaryKey(), inboundSessionId: uuid("inbound_session_id").notNull().unique().references(() => inboundCallSessions.id), recordingSid: text("recording_sid").unique(), status: text("status").notNull(), durationSeconds: integer("duration_seconds"), contentType: text("content_type"), retentionDeadline: timestamp("retention_deadline",{withTimezone:true}), handledAt: timestamp("handled_at",{withTimezone:true}), handledBy:text("handled_by"), organizationId:uuid("organization_id").references(()=>organizations.id), contactId:uuid("contact_id").references(()=>contacts.id), phoneId:uuid("phone_id").references(()=>contactPhones.id), deletionAttemptedAt:timestamp("deletion_attempted_at",{withTimezone:true}), deletionLeaseExpiresAt:timestamp("deletion_lease_expires_at",{withTimezone:true}), deletionAttempts:integer("deletion_attempts").notNull(), deletionError:text("deletion_error"), callSessionId:uuid("call_session_id").unique().references(()=>callSessions.id), createdAt:timestamp("created_at",{withTimezone:true}).defaultNow().notNull(), updatedAt:timestamp("updated_at",{withTimezone:true}).defaultNow().notNull(),
 });
 
 export const auditEntries = pgTable("audit_entries", {
@@ -1375,23 +1062,17 @@ export const auditEntries = pgTable("audit_entries", {
   reversesEntryId: uuid("reverses_entry_id")
     .unique()
     .references((): AnyPgColumn => auditEntries.id),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const actImportRuns = pgTable("act_import_runs", {
   id: uuid("id").defaultRandom().primaryKey(),
   sourceFileName: text("source_file_name").notNull(),
   status: text("status").notNull(),
-  startedAt: timestamp("started_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   summary: jsonb("summary").$type<Record<string, unknown>>(),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const actMigrationRuns = pgTable(
@@ -1423,7 +1104,9 @@ export const actMigrationRuns = pgTable(
       .notNull(),
   },
   (table) => [
-    uniqueIndex("act_migration_runs_request_key_unique").on(table.requestKey),
+    uniqueIndex("act_migration_runs_request_key_unique").on(
+      table.requestKey,
+    ),
     check(
       "act_migration_runs_status_valid",
       sql`${table.status} in (${sqlTextValues(actMigrationRunStatusValues)})`,
@@ -1572,14 +1255,8 @@ export const actReplacementRuns = pgTable(
       "act_replacement_runs_page_size_valid",
       sql`${table.pageSize} in (25, 50, 100, 200)`,
     ),
-    check(
-      "act_replacement_runs_manifest_digest_version_valid",
-      sql`${table.manifestDigestVersion} is null or ${table.manifestDigestVersion} = 'canonical-json-v1'`,
-    ),
-    check(
-      "act_replacement_runs_organizer_lease_consistency",
-      sql`(${table.organizerToken} is null) = (${table.organizerLeaseExpiresAt} is null)`,
-    ),
+    check("act_replacement_runs_manifest_digest_version_valid", sql`${table.manifestDigestVersion} is null or ${table.manifestDigestVersion} = 'canonical-json-v1'`),
+    check("act_replacement_runs_organizer_lease_consistency", sql`(${table.organizerToken} is null) = (${table.organizerLeaseExpiresAt} is null)`),
     check(
       "act_replacement_runs_phase_valid",
       sql`${table.phase} in (${sqlTextValues(actReplacementRunPhaseValues)})`,
@@ -1663,18 +1340,12 @@ export const actSourceRecords = pgTable(
     ),
     foreignKey({
       columns: [table.firstSeenRunId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_source_records_first_seen_run_database_fk",
     }),
     foreignKey({
       columns: [table.lastSeenRunId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_source_records_last_seen_run_database_fk",
     }),
     foreignKey({
@@ -1767,10 +1438,7 @@ export const actSourceRecordVersions = pgTable(
     }),
     foreignKey({
       columns: [table.observedRunId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_source_record_versions_observed_run_database_fk",
     }),
     index("act_source_record_versions_observed_run_idx").on(
@@ -1808,13 +1476,9 @@ export const actArchiveProfileImportJobs = pgTable(
     createdCount: integer("created_count").default(0).notNull(),
     linkedCount: integer("linked_count").default(0).notNull(),
     updatedCount: integer("updated_count").default(0).notNull(),
-    alreadyImportedCount: integer("already_imported_count")
-      .default(0)
-      .notNull(),
+    alreadyImportedCount: integer("already_imported_count").default(0).notNull(),
     preservedCount: integer("preserved_count").default(0).notNull(),
-    retryableFailureCount: integer("retryable_failure_count")
-      .default(0)
-      .notNull(),
+    retryableFailureCount: integer("retryable_failure_count").default(0).notNull(),
     membershipSnapshotVersion: integer("membership_snapshot_version"),
     failureAttemptCount: integer("failure_attempt_count").default(0).notNull(),
     retryAfter: timestamp("retry_after", { withTimezone: true }),
@@ -1842,10 +1506,7 @@ export const actArchiveProfileImportJobs = pgTable(
     ),
     foreignKey({
       columns: [table.runId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_archive_profile_import_jobs_run_database_fk",
     }),
     index("act_archive_profile_import_jobs_claim_idx")
@@ -1894,9 +1555,7 @@ export const actArchiveProfileImportSources = pgTable(
     sourceRecordId: uuid("source_record_id").notNull(),
     sourceVersionId: uuid("source_version_id").notNull(),
     phase: text("phase").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     primaryKey({
@@ -1920,10 +1579,7 @@ export const actArchiveProfileImportSources = pgTable(
     }).onDelete("cascade"),
     foreignKey({
       columns: [table.jobId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actArchiveProfileImportJobs.id,
-        actArchiveProfileImportJobs.sourceDatabaseKey,
-      ],
+      foreignColumns: [actArchiveProfileImportJobs.id, actArchiveProfileImportJobs.sourceDatabaseKey],
       name: "act_archive_profile_import_sources_job_database_fk",
     }),
     foreignKey({
@@ -1933,10 +1589,7 @@ export const actArchiveProfileImportSources = pgTable(
     }),
     foreignKey({
       columns: [table.sourceVersionId, table.sourceRecordId],
-      foreignColumns: [
-        actSourceRecordVersions.id,
-        actSourceRecordVersions.sourceRecordId,
-      ],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
       name: "act_archive_profile_import_sources_version_owner_fk",
     }),
     index("act_archive_profile_import_sources_job_phase_source_idx").on(
@@ -1957,9 +1610,7 @@ export const actArchiveProfileImportResults = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     jobId: uuid("job_id")
       .notNull()
-      .references(() => actArchiveProfileImportJobs.id, {
-        onDelete: "cascade",
-      }),
+      .references(() => actArchiveProfileImportJobs.id, { onDelete: "cascade" }),
     sourceRecordId: uuid("source_record_id")
       .notNull()
       .references(() => actSourceRecords.id, { onDelete: "restrict" }),
@@ -2025,34 +1676,15 @@ export const actArchiveRecoveryRuns = pgTable(
     candidateCount: integer("candidate_count").default(0).notNull(),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     lastErrorCode: text("last_error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique("act_archive_recovery_runs_database_request_unique").on(
-      table.sourceDatabaseKey,
-      table.requestKey,
-    ),
-    check(
-      "act_archive_recovery_runs_state_valid",
-      sql`${table.state} in ('running','complete','failed')`,
-    ),
-    check(
-      "act_archive_recovery_runs_database_nonblank",
-      sql`btrim(${table.sourceDatabaseKey}) <> ''`,
-    ),
-    check(
-      "act_archive_recovery_runs_actor_nonblank",
-      sql`btrim(${table.requestedBy}) <> '' and btrim(${table.requestKey}) <> ''`,
-    ),
-    check(
-      "act_archive_recovery_runs_candidate_count_nonnegative",
-      sql`${table.candidateCount} >= 0`,
-    ),
+    unique("act_archive_recovery_runs_database_request_unique").on(table.sourceDatabaseKey, table.requestKey),
+    check("act_archive_recovery_runs_state_valid", sql`${table.state} in ('running','complete','failed')`),
+    check("act_archive_recovery_runs_database_nonblank", sql`btrim(${table.sourceDatabaseKey}) <> ''`),
+    check("act_archive_recovery_runs_actor_nonblank", sql`btrim(${table.requestedBy}) <> '' and btrim(${table.requestKey}) <> ''`),
+    check("act_archive_recovery_runs_candidate_count_nonnegative", sql`${table.candidateCount} >= 0`),
   ],
 );
 
@@ -2060,22 +1692,13 @@ export const actArchiveRecoveryItems = pgTable(
   "act_archive_recovery_items",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actArchiveRecoveryRuns.id, { onDelete: "cascade" }),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id, { onDelete: "cascade" }),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id),
+    runId: uuid("run_id").notNull().references(() => actArchiveRecoveryRuns.id, { onDelete: "cascade" }),
+    sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "cascade" }),
+    sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
     streamType: text("stream_type").notNull(),
     priority: integer("priority").notNull(),
     state: text("state").default("pending").notNull(),
-    targetSummary: jsonb("target_summary")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
+    targetSummary: jsonb("target_summary").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
     attemptCount: integer("attempt_count").default(0).notNull(),
     lastErrorCode: text("last_error_code"),
     retryAfter: timestamp("retry_after", { withTimezone: true }),
@@ -2083,48 +1706,21 @@ export const actArchiveRecoveryItems = pgTable(
     leaseToken: uuid("lease_token"),
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
     completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    unique("act_archive_recovery_items_run_source_unique").on(
-      table.runId,
-      table.sourceRecordId,
-    ),
+    unique("act_archive_recovery_items_run_source_unique").on(table.runId, table.sourceRecordId),
     foreignKey({
       columns: [table.sourceVersionId, table.sourceRecordId],
-      foreignColumns: [
-        actSourceRecordVersions.id,
-        actSourceRecordVersions.sourceRecordId,
-      ],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
       name: "act_archive_recovery_items_version_owner_fk",
     }),
-    index("act_archive_recovery_items_claim_idx").on(
-      table.state,
-      table.retryAfter,
-      table.priority,
-      table.sourceRecordId,
-    ),
-    check(
-      "act_archive_recovery_items_state_valid",
-      sql`${table.state} in ('pending','leased','already_present','recovered','needs_review','dropped_unusable','retryable_failed')`,
-    ),
-    check(
-      "act_archive_recovery_items_target_summary_object",
-      sql`jsonb_typeof(${table.targetSummary}) = 'object'`,
-    ),
-    check(
-      "act_archive_recovery_items_attempt_count_nonnegative",
-      sql`${table.attemptCount} >= 0`,
-    ),
-    check(
-      "act_archive_recovery_items_lease_consistency",
-      sql`(${table.leaseToken} is null and ${table.leaseOwner} is null and ${table.leaseExpiresAt} is null) or (${table.leaseToken} is not null and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null)`,
-    ),
+    index("act_archive_recovery_items_claim_idx").on(table.state, table.retryAfter, table.priority, table.sourceRecordId),
+    check("act_archive_recovery_items_state_valid", sql`${table.state} in ('pending','leased','already_present','recovered','needs_review','dropped_unusable','retryable_failed')`),
+    check("act_archive_recovery_items_target_summary_object", sql`jsonb_typeof(${table.targetSummary}) = 'object'`),
+    check("act_archive_recovery_items_attempt_count_nonnegative", sql`${table.attemptCount} >= 0`),
+    check("act_archive_recovery_items_lease_consistency", sql`(${table.leaseToken} is null and ${table.leaseOwner} is null and ${table.leaseExpiresAt} is null) or (${table.leaseToken} is not null and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null)`),
   ],
 );
 
@@ -2132,55 +1728,29 @@ export const actArchiveRecoveryDecisions = pgTable(
   "act_archive_recovery_decisions",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actArchiveRecoveryRuns.id, { onDelete: "cascade" }),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id),
+    runId: uuid("run_id").notNull().references(() => actArchiveRecoveryRuns.id, { onDelete: "cascade" }),
+    sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id),
+    sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
     decision: text("decision").notNull(),
     targetEntityType: text("target_entity_type"),
     targetEntityId: uuid("target_entity_id"),
     decidedBy: text("decided_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     foreignKey({
       columns: [table.sourceVersionId, table.sourceRecordId],
-      foreignColumns: [
-        actSourceRecordVersions.id,
-        actSourceRecordVersions.sourceRecordId,
-      ],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
       name: "act_archive_recovery_decisions_version_owner_fk",
     }),
-    index("act_archive_recovery_decisions_source_idx").on(
-      table.runId,
-      table.sourceRecordId,
-      table.createdAt,
-    ),
-    check(
-      "act_archive_recovery_decisions_decision_valid",
-      sql`${table.decision} in ('assign_parent','drop_unusable','retry')`,
-    ),
-    check(
-      "act_archive_recovery_decisions_target_type_valid",
-      sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`,
-    ),
-    check(
-      "act_archive_recovery_decisions_target_pair_valid",
-      sql`(${table.targetEntityType} is null) = (${table.targetEntityId} is null)`,
-    ),
-    check(
-      "act_archive_recovery_decisions_actor_nonblank",
-      sql`btrim(${table.decidedBy}) <> ''`,
-    ),
+    index("act_archive_recovery_decisions_source_idx").on(table.runId, table.sourceRecordId, table.createdAt),
+    check("act_archive_recovery_decisions_decision_valid", sql`${table.decision} in ('assign_parent','drop_unusable','retry')`),
+    check("act_archive_recovery_decisions_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`),
+    check("act_archive_recovery_decisions_target_pair_valid", sql`(${table.targetEntityType} is null) = (${table.targetEntityId} is null)`),
+    check("act_archive_recovery_decisions_actor_nonblank", sql`btrim(${table.decidedBy}) <> ''`),
   ],
 );
+
 
 export const actReplacementCheckpoints = pgTable(
   "act_replacement_checkpoints",
@@ -2249,10 +1819,7 @@ export const actReplacementCheckpoints = pgTable(
     ),
     foreignKey({
       columns: [table.runId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_replacement_checkpoints_run_database_fk",
     }),
     foreignKey({
@@ -2261,11 +1828,7 @@ export const actReplacementCheckpoints = pgTable(
       name: "act_replacement_checkpoints_parent_source_database_fk",
     }),
     foreignKey({
-      columns: [
-        table.sourceRecordId,
-        table.sourceDatabaseKey,
-        table.streamType,
-      ],
+      columns: [table.sourceRecordId, table.sourceDatabaseKey, table.streamType],
       foreignColumns: [
         actSourceRecords.id,
         actSourceRecords.sourceDatabaseKey,
@@ -2404,10 +1967,7 @@ export const actReplacementObservations = pgTable(
     ),
     foreignKey({
       columns: [table.runId, table.sourceDatabaseKey],
-      foreignColumns: [
-        actReplacementRuns.id,
-        actReplacementRuns.sourceDatabaseKey,
-      ],
+      foreignColumns: [actReplacementRuns.id, actReplacementRuns.sourceDatabaseKey],
       name: "act_replacement_observations_run_database_fk",
     }),
     foreignKey({
@@ -2417,10 +1977,7 @@ export const actReplacementObservations = pgTable(
     }),
     foreignKey({
       columns: [table.versionId, table.sourceRecordId],
-      foreignColumns: [
-        actSourceRecordVersions.id,
-        actSourceRecordVersions.sourceRecordId,
-      ],
+      foreignColumns: [actSourceRecordVersions.id, actSourceRecordVersions.sourceRecordId],
       name: "act_replacement_observations_version_source_fk",
     }),
     check(
@@ -2681,8 +2238,7 @@ export const callingLists = pgTable(
     name: text("name").notNull(),
     kind: text("kind").notNull(),
     filterVersion: integer("filter_version"),
-    filterDefinition:
-      jsonb("filter_definition").$type<Record<string, unknown>>(),
+    filterDefinition: jsonb("filter_definition").$type<Record<string, unknown>>(),
     sourceStatus: text("source_status").default("active").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -2807,9 +2363,7 @@ export const actMigrationApplyOperations = pgTable(
       .default(sql`'[]'::jsonb`)
       .notNull(),
     resolvedDependencies: jsonb("resolved_dependencies")
-      .$type<
-        { proposalKey: string; targetEntityType: string; entityId: string }[]
-      >()
+      .$type<{ proposalKey: string; targetEntityType: string; entityId: string }[]>()
       .default(sql`'[]'::jsonb`)
       .notNull(),
     status: text("status").default("pending").notNull(),
@@ -2863,9 +2417,7 @@ export const actMigrationApplyOperations = pgTable(
     ),
     index("act_migration_apply_operations_runnable_claim_idx")
       .on(table.batchId, table.status, table.leaseExpiresAt)
-      .where(
-        sql`${table.status} in ('pending', 'leased') and ${table.retryable}`,
-      ),
+      .where(sql`${table.status} in ('pending', 'leased') and ${table.retryable}`),
   ],
 );
 
@@ -2878,10 +2430,7 @@ export const actExternalLinks = pgTable(
     entityId: uuid("entity_id").notNull(),
     actRecordId: text("act_record_id").notNull(),
     sourceDatabaseKey: text("source_database_key"),
-    sourceRecordId: uuid("source_record_id").references(
-      () => actSourceRecords.id,
-      { onDelete: "restrict" },
-    ),
+    sourceRecordId: uuid("source_record_id").references(() => actSourceRecords.id, { onDelete: "restrict" }),
     isPrimary: boolean("is_primary").default(false).notNull(),
     syncMode: text("sync_mode").default("pull_only").notNull(),
     importRunId: uuid("import_run_id").references(() => actImportRuns.id),
@@ -2909,11 +2458,7 @@ export const actExternalLinks = pgTable(
       .on(table.entityType, table.entityId, table.sourceEntityType)
       .where(sql`${table.isPrimary} = true`),
     foreignKey({
-      columns: [
-        table.sourceRecordId,
-        table.sourceDatabaseKey,
-        table.sourceEntityType,
-      ],
+      columns: [table.sourceRecordId, table.sourceDatabaseKey, table.sourceEntityType],
       foreignColumns: [
         actSourceRecords.id,
         actSourceRecords.sourceDatabaseKey,
@@ -2933,531 +2478,117 @@ export const actExternalLinks = pgTable(
       "act_external_links_contact_primary_sync_valid",
       sql`(${table.entityType} = 'contact' and ${table.sourceEntityType} = 'contact' and ((${table.isPrimary} = true and ${table.syncMode} = 'two_way') or (${table.isPrimary} = false and ${table.syncMode} = 'pull_only') or (${table.isPrimary} = true and ${table.syncMode} = 'pull_only' and ${table.sourceDatabaseKey} is not null and ${table.sourceRecordId} is not null))) or (${table.entityType} <> 'contact' and ${table.syncMode} = 'pull_only')`,
     ),
-    check(
-      "act_external_links_source_database_key_nonblank",
-      sql`${table.sourceDatabaseKey} is null or btrim(${table.sourceDatabaseKey}) <> ''`,
-    ),
+    check("act_external_links_source_database_key_nonblank", sql`${table.sourceDatabaseKey} is null or btrim(${table.sourceDatabaseKey}) <> ''`),
   ],
 );
 
-export const actReplacementOutcomes = pgTable(
-  "act_replacement_outcomes",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id),
-    state: text("state").notNull().default("pending"),
-    normalized: jsonb("normalized").$type<Record<string, unknown>>(),
-    mappingWarnings: jsonb("mapping_warnings")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    unsupportedFieldPaths: jsonb("unsupported_field_paths")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    candidates: jsonb("candidates").$type<Record<string, unknown>[]>(),
-    issues: jsonb("issues").$type<Record<string, unknown>[]>(),
-    match: jsonb("match").$type<Record<string, unknown>>(),
-    targetEntityType: text("target_entity_type"),
-    targetEntityId: uuid("target_entity_id"),
-    leaseOwner: text("lease_owner"),
-    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
-    retryAfter: timestamp("retry_after", { withTimezone: true }),
-    retryable: boolean("retryable").default(true).notNull(),
-    organizedAt: timestamp("organized_at", { withTimezone: true }),
-    attemptCount: integer("attempt_count").default(0).notNull(),
-    lastErrorCode: text("last_error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_replacement_outcomes_run_source_unique").on(
-      table.runId,
-      table.sourceRecordId,
-    ),
-    check(
-      "act_replacement_outcomes_target_type_valid",
-      sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`,
-    ),
-    check(
-      "act_replacement_outcomes_state_valid",
-      sql`${table.state} in ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','ignored','applied','failed')`,
-    ),
-  ],
-);
+export const actReplacementOutcomes = pgTable("act_replacement_outcomes", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }),
+  sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id),
+  sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
+  state: text("state").notNull().default("pending"),
+  normalized: jsonb("normalized").$type<Record<string, unknown>>(),
+  mappingWarnings: jsonb("mapping_warnings").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  unsupportedFieldPaths: jsonb("unsupported_field_paths").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  candidates: jsonb("candidates").$type<Record<string, unknown>[]>(),
+  issues: jsonb("issues").$type<Record<string, unknown>[]>(),
+  match: jsonb("match").$type<Record<string, unknown>>(),
+  targetEntityType: text("target_entity_type"),
+  targetEntityId: uuid("target_entity_id"),
+  leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  retryAfter: timestamp("retry_after", { withTimezone: true }), retryable: boolean("retryable").default(true).notNull(), organizedAt: timestamp("organized_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(),
+  lastErrorCode: text("last_error_code"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_outcomes_run_source_unique").on(table.runId, table.sourceRecordId), check("act_replacement_outcomes_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`),
+  check("act_replacement_outcomes_state_valid", sql`${table.state} in ('pending','leased','ready','already_present','awaiting_review','unassigned','unsupported','ignored','applied','failed')`),
+]);
 
-export const actSourceAssignments = pgTable(
-  "act_source_assignments",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id, { onDelete: "restrict" }),
-    targetEntityType: text("target_entity_type").notNull(),
-    targetEntityId: uuid("target_entity_id").notNull(),
-    role: text("role").notNull().default("primary"),
-    isPrimary: boolean("is_primary").default(false).notNull(),
-    manualAuthority: boolean("manual_authority").notNull(),
-    assignedBy: text("assigned_by").notNull(),
-    supersededAt: timestamp("superseded_at", { withTimezone: true }),
-    supersededBy: text("superseded_by"),
-    sourceVersionId: uuid("source_version_id").references(
-      () => actSourceRecordVersions.id,
-      { onDelete: "restrict" },
-    ),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_source_assignments_source_target_unique").on(
-      table.sourceRecordId,
-      table.targetEntityType,
-      table.targetEntityId,
-    ),
-    check(
-      "act_source_assignments_target_type_valid",
-      sql`${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`,
-    ),
-    check(
-      "act_source_assignments_manual_actor_valid",
-      sql`${table.manualAuthority} = true and ${table.assignedBy} is not null and btrim(${table.assignedBy}) <> ''`,
-    ),
-    check(
-      "act_source_assignments_supersession_actor_valid",
-      sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`,
-    ),
-  ],
-);
+export const actSourceAssignments = pgTable("act_source_assignments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  targetEntityType: text("target_entity_type").notNull(), targetEntityId: uuid("target_entity_id").notNull(),
+  role: text("role").notNull().default("primary"), isPrimary: boolean("is_primary").default(false).notNull(),
+  manualAuthority: boolean("manual_authority").notNull(), assignedBy: text("assigned_by").notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: text("superseded_by"),
+  sourceVersionId: uuid("source_version_id").references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique("act_source_assignments_source_target_unique").on(table.sourceRecordId, table.targetEntityType, table.targetEntityId), check("act_source_assignments_target_type_valid", sql`${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_source_assignments_manual_actor_valid", sql`${table.manualAuthority} = true and ${table.assignedBy} is not null and btrim(${table.assignedBy}) <> ''`), check("act_source_assignments_supersession_actor_valid", sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`)]);
 
-export const actReplacementReviewDecisions = pgTable(
-  "act_replacement_review_decisions",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id, { onDelete: "restrict" }),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id, { onDelete: "restrict" }),
-    scope: text("scope").notNull(),
-    decision: text("decision").notNull(),
-    requestKey: text("request_key").notNull(),
-    requestFingerprint: text("request_fingerprint").notNull(),
-    fieldName: text("field_name"),
-    relationshipSlot: text("relationship_slot"),
-    targetEntityType: text("target_entity_type"),
-    targetEntityId: uuid("target_entity_id"),
-    reviewedSourceValue: jsonb("reviewed_source_value").$type<unknown>(),
-    reviewedSourceValueFingerprint: text("reviewed_source_value_fingerprint"),
-    reviewedLocalValue: jsonb("reviewed_local_value").$type<unknown>(),
-    reviewedLocalValueFingerprint: text("reviewed_local_value_fingerprint"),
-    active: boolean("active").default(true).notNull(),
-    supersededAt: timestamp("superseded_at", { withTimezone: true }),
-    supersededBy: text("superseded_by"),
-    decidedBy: text("decided_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("act_replacement_review_decisions_active_unique")
-      .on(
-        table.sourceRecordId,
-        table.scope,
-        sql`coalesce(${table.relationshipSlot}, ${table.fieldName}, '')`,
-      )
-      .where(sql`${table.active} = true`),
-    check(
-      "act_replacement_review_decisions_scope_valid",
-      sql`${table.scope} in ('duplicate_identity','field_conflict','relationship','unsupported_record')`,
-    ),
-    check(
-      "act_replacement_review_decisions_field_scope_requires_name",
-      sql`${table.scope} = 'field_conflict' and ${table.fieldName} is not null and btrim(${table.fieldName}) <> '' or ${table.scope} <> 'field_conflict' and ${table.fieldName} is null`,
-    ),
-    check(
-      "act_replacement_review_decisions_target_type_valid",
-      sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`,
-    ),
-    check(
-      "act_replacement_review_decisions_supersession_requires_actor",
-      sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`,
-    ),
-    check(
-      "act_replacement_review_decisions_actor_valid",
-      sql`btrim(${table.decidedBy}) <> ''`,
-    ),
-    check(
-      "act_replacement_review_decisions_request_fingerprint_valid",
-      sql`btrim(${table.requestFingerprint}) <> ''`,
-    ),
-    check(
-      "act_replacement_review_decisions_decision_valid",
-      sql`${table.decision} in ('link_existing','keep_separate','keep_local','use_source','assign_parent','keep_unlinked','ignore_source')`,
-    ),
-    check(
-      "act_replacement_review_decisions_scope_decision_valid",
-      sql`(${table.scope} = 'duplicate_identity' and ${table.decision} in ('link_existing','keep_separate')) or (${table.scope} = 'field_conflict' and ${table.decision} in ('keep_local','use_source')) or (${table.scope} = 'relationship' and ${table.decision} in ('assign_parent','keep_unlinked','ignore_source')) or (${table.scope} = 'unsupported_record' and ${table.decision} = 'ignore_source') or (${table.active} = false and ${table.supersededAt} is not null and ${table.supersededBy} = 'migration:018_invalid_scope_decision')`,
-    ),
-    check(
-      "act_replacement_review_decisions_relationship_parent_valid",
-      sql`${table.decision} <> 'assign_parent' or (${table.scope} = 'relationship' and ${table.relationshipSlot} is not null and btrim(${table.relationshipSlot}) <> '' and ${table.targetEntityType} is not null and ${table.targetEntityId} is not null)`,
-    ),
-  ],
-);
+export const actReplacementReviewDecisions = pgTable("act_replacement_review_decisions", {
+  id: uuid("id").defaultRandom().primaryKey(), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id, { onDelete: "restrict" }),
+  sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id, { onDelete: "restrict" }), scope: text("scope").notNull(), decision: text("decision").notNull(),
+  requestKey: text("request_key").notNull(), requestFingerprint: text("request_fingerprint").notNull(), fieldName: text("field_name"), relationshipSlot: text("relationship_slot"), targetEntityType: text("target_entity_type"), targetEntityId: uuid("target_entity_id"),
+  reviewedSourceValue: jsonb("reviewed_source_value").$type<unknown>(), reviewedSourceValueFingerprint: text("reviewed_source_value_fingerprint"),
+  reviewedLocalValue: jsonb("reviewed_local_value").$type<unknown>(), reviewedLocalValueFingerprint: text("reviewed_local_value_fingerprint"),
+  active: boolean("active").default(true).notNull(), supersededAt: timestamp("superseded_at", { withTimezone: true }), supersededBy: text("superseded_by"), decidedBy: text("decided_by").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("act_replacement_review_decisions_active_unique").on(table.sourceRecordId, table.scope, sql`coalesce(${table.relationshipSlot}, ${table.fieldName}, '')`).where(sql`${table.active} = true`), check("act_replacement_review_decisions_scope_valid", sql`${table.scope} in ('duplicate_identity','field_conflict','relationship','unsupported_record')`), check("act_replacement_review_decisions_field_scope_requires_name", sql`${table.scope} = 'field_conflict' and ${table.fieldName} is not null and btrim(${table.fieldName}) <> '' or ${table.scope} <> 'field_conflict' and ${table.fieldName} is null`), check("act_replacement_review_decisions_target_type_valid", sql`${table.targetEntityType} is null or ${table.targetEntityType} in ('organization','contact','booking','calling_list','activity')`), check("act_replacement_review_decisions_supersession_requires_actor", sql`${table.supersededAt} is null or (${table.supersededBy} is not null and btrim(${table.supersededBy}) <> '')`), check("act_replacement_review_decisions_actor_valid", sql`btrim(${table.decidedBy}) <> ''`), check("act_replacement_review_decisions_request_fingerprint_valid", sql`btrim(${table.requestFingerprint}) <> ''`), check("act_replacement_review_decisions_decision_valid", sql`${table.decision} in ('link_existing','keep_separate','keep_local','use_source','assign_parent','keep_unlinked','ignore_source')`), check("act_replacement_review_decisions_scope_decision_valid", sql`(${table.scope} = 'duplicate_identity' and ${table.decision} in ('link_existing','keep_separate')) or (${table.scope} = 'field_conflict' and ${table.decision} in ('keep_local','use_source')) or (${table.scope} = 'relationship' and ${table.decision} in ('assign_parent','keep_unlinked','ignore_source')) or (${table.scope} = 'unsupported_record' and ${table.decision} = 'ignore_source') or (${table.active} = false and ${table.supersededAt} is not null and ${table.supersededBy} = 'migration:018_invalid_scope_decision')`), check("act_replacement_review_decisions_relationship_parent_valid", sql`${table.decision} <> 'assign_parent' or (${table.scope} = 'relationship' and ${table.relationshipSlot} is not null and btrim(${table.relationshipSlot}) <> '' and ${table.targetEntityType} is not null and ${table.targetEntityId} is not null)`)]);
 
-export const actReplacementBulkReviewRequests = pgTable(
-  "act_replacement_bulk_review_requests",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
-    requestKey: text("request_key").notNull(),
-    requestFingerprint: text("request_fingerprint").notNull(),
-    requestedBy: text("requested_by").notNull(),
-    manifestDigest: text("manifest_digest").notNull(),
-    expectedManifestDigest: text("expected_manifest_digest"),
-    automaticSummary:
-      jsonb("automatic_summary").$type<Record<string, number>>(),
-    rebuildState: text("rebuild_state").default("complete").notNull(),
-    rebuildToken: uuid("rebuild_token"),
-    rebuildLeaseExpiresAt: timestamp("rebuild_lease_expires_at", {
-      withTimezone: true,
-    }),
-    decisionIds: jsonb("decision_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    reviewedOperationIds: jsonb("reviewed_operation_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_replacement_bulk_review_requests_run_key_unique").on(
-      table.runId,
-      table.requestKey,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_key_nonblank",
-      sql`btrim(${table.requestKey}) <> ''`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_fingerprint_nonblank",
-      sql`btrim(${table.requestFingerprint}) <> ''`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_actor_nonblank",
-      sql`btrim(${table.requestedBy}) <> ''`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_digest_nonblank",
-      sql`btrim(${table.manifestDigest}) <> ''`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_expected_digest_nonblank",
-      sql`${table.expectedManifestDigest} is null or btrim(${table.expectedManifestDigest}) <> ''`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_rebuild_state_valid",
-      sql`${table.rebuildState} in ('pending','rebuilding','complete')`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_rebuild_lease_valid",
-      sql`(${table.rebuildState} = 'rebuilding' and ${table.rebuildToken} is not null and ${table.rebuildLeaseExpiresAt} is not null) or (${table.rebuildState} <> 'rebuilding' and ${table.rebuildToken} is null and ${table.rebuildLeaseExpiresAt} is null)`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_decision_ids_array",
-      sql`jsonb_typeof(${table.decisionIds}) = 'array'`,
-    ),
-    check(
-      "act_replacement_bulk_review_requests_operation_ids_array",
-      sql`jsonb_typeof(${table.reviewedOperationIds}) = 'array'`,
-    ),
-  ],
-);
+export const actReplacementBulkReviewRequests = pgTable("act_replacement_bulk_review_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }),
+  requestKey: text("request_key").notNull(),
+  requestFingerprint: text("request_fingerprint").notNull(),
+  requestedBy: text("requested_by").notNull(),
+  manifestDigest: text("manifest_digest").notNull(),
+  expectedManifestDigest: text("expected_manifest_digest"),
+  automaticSummary: jsonb("automatic_summary").$type<Record<string, number>>(),
+  rebuildState: text("rebuild_state").default("complete").notNull(),
+  rebuildToken: uuid("rebuild_token"),
+  rebuildLeaseExpiresAt: timestamp("rebuild_lease_expires_at", { withTimezone: true }),
+  decisionIds: jsonb("decision_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  reviewedOperationIds: jsonb("reviewed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_bulk_review_requests_run_key_unique").on(table.runId, table.requestKey),
+  check("act_replacement_bulk_review_requests_key_nonblank", sql`btrim(${table.requestKey}) <> ''`),
+  check("act_replacement_bulk_review_requests_fingerprint_nonblank", sql`btrim(${table.requestFingerprint}) <> ''`),
+  check("act_replacement_bulk_review_requests_actor_nonblank", sql`btrim(${table.requestedBy}) <> ''`),
+  check("act_replacement_bulk_review_requests_digest_nonblank", sql`btrim(${table.manifestDigest}) <> ''`),
+  check("act_replacement_bulk_review_requests_expected_digest_nonblank", sql`${table.expectedManifestDigest} is null or btrim(${table.expectedManifestDigest}) <> ''`),
+  check("act_replacement_bulk_review_requests_rebuild_state_valid", sql`${table.rebuildState} in ('pending','rebuilding','complete')`),
+  check("act_replacement_bulk_review_requests_rebuild_lease_valid", sql`(${table.rebuildState} = 'rebuilding' and ${table.rebuildToken} is not null and ${table.rebuildLeaseExpiresAt} is not null) or (${table.rebuildState} <> 'rebuilding' and ${table.rebuildToken} is null and ${table.rebuildLeaseExpiresAt} is null)`),
+  check("act_replacement_bulk_review_requests_decision_ids_array", sql`jsonb_typeof(${table.decisionIds}) = 'array'`),
+  check("act_replacement_bulk_review_requests_operation_ids_array", sql`jsonb_typeof(${table.reviewedOperationIds}) = 'array'`),
+]);
 
-export const actReplacementApplyOperations = pgTable(
-  "act_replacement_apply_operations",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id),
-    manifestGeneration: uuid("manifest_generation"),
-    operationKey: text("operation_key").notNull(),
-    targetType: text("target_type").notNull(),
-    action: text("action").notNull(),
-    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
-    dependencyOperationKeys: jsonb("dependency_operation_keys")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    requiredForSourceOutcome: boolean("required_for_source_outcome")
-      .default(false)
-      .notNull(),
-    safeByDefault: boolean("safe_by_default").default(false).notNull(),
-    batchId: uuid("batch_id"),
-    status: text("status").default("pending").notNull(),
-    approvedBy: text("approved_by"),
-    approvedAt: timestamp("approved_at", { withTimezone: true }),
-    leaseOwner: text("lease_owner"),
-    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
-    retryable: boolean("retryable").default(true).notNull(),
-    retryAfter: timestamp("retry_after", { withTimezone: true }),
-    executedAt: timestamp("executed_at", { withTimezone: true }),
-    attemptCount: integer("attempt_count").default(0).notNull(),
-    lastErrorCode: text("last_error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_replacement_apply_operations_run_key_unique").on(
-      table.runId,
-      table.operationKey,
-    ),
-    index("act_replacement_apply_operations_current_manifest_idx").on(
-      table.runId,
-      table.manifestGeneration,
-    ),
-    check(
-      "act_replacement_apply_operations_status_valid",
-      sql`${table.status} in ('pending','leased','applied','already_present','blocked','failed')`,
-    ),
-    check(
-      "act_replacement_apply_operations_approval_requires_actor",
-      sql`${table.approvedAt} is null or ${table.approvedBy} is not null`,
-    ),
-    check(
-      "act_replacement_apply_operations_lease_consistency",
-      sql`${table.status} = 'leased' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null or ${table.status} <> 'leased'`,
-    ),
-    check(
-      "act_replacement_apply_operations_action_valid",
-      sql`${table.action} in ('create','link_existing','fill_missing','overwrite_reviewed','create_relationship','record_provenance')`,
-    ),
-    check(
-      "act_replacement_apply_operations_target_valid",
-      sql`${table.targetType} in ('organization','contact','booking','calling_list','activity','organization_contact','booking_contact','calling_list_member','activity_association')`,
-    ),
-  ],
-);
+export const actReplacementApplyOperations = pgTable("act_replacement_apply_operations", {
+  id: uuid("id").defaultRandom().primaryKey(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id),
+  manifestGeneration: uuid("manifest_generation"),
+  operationKey: text("operation_key").notNull(), targetType: text("target_type").notNull(), action: text("action").notNull(), payload: jsonb("payload").$type<Record<string, unknown>>().notNull(), dependencyOperationKeys: jsonb("dependency_operation_keys").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), requiredForSourceOutcome: boolean("required_for_source_outcome").default(false).notNull(), safeByDefault: boolean("safe_by_default").default(false).notNull(),
+  batchId: uuid("batch_id"), status: text("status").default("pending").notNull(), approvedBy: text("approved_by"), approvedAt: timestamp("approved_at", { withTimezone: true }), leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), retryable: boolean("retryable").default(true).notNull(), retryAfter: timestamp("retry_after", { withTimezone: true }), executedAt: timestamp("executed_at", { withTimezone: true }), attemptCount: integer("attempt_count").default(0).notNull(), lastErrorCode: text("last_error_code"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_apply_operations_run_key_unique").on(table.runId, table.operationKey),
+  index("act_replacement_apply_operations_current_manifest_idx").on(table.runId, table.manifestGeneration),
+  check("act_replacement_apply_operations_status_valid", sql`${table.status} in ('pending','leased','applied','already_present','blocked','failed')`),
+  check("act_replacement_apply_operations_approval_requires_actor", sql`${table.approvedAt} is null or ${table.approvedBy} is not null`),
+  check("act_replacement_apply_operations_lease_consistency", sql`${table.status} = 'leased' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null or ${table.status} <> 'leased'`),
+  check("act_replacement_apply_operations_action_valid", sql`${table.action} in ('create','link_existing','fill_missing','overwrite_reviewed','create_relationship','record_provenance')`),
+  check("act_replacement_apply_operations_target_valid", sql`${table.targetType} in ('organization','contact','booking','calling_list','activity','organization_contact','booking_contact','calling_list_member','activity_association')`),
+]);
 
-export const actReplacementApprovalRequests = pgTable(
-  "act_replacement_approval_requests",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestKey: text("request_key").notNull(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
-    manifestDigest: text("manifest_digest").notNull(),
-    approvalMode: text("approval_mode"),
-    approvalModeVersion: integer("approval_mode_version"),
-    selectedOperationIds: jsonb("selected_operation_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    selectedCount: integer("selected_count").default(0).notNull(),
-    dependencyCount: integer("dependency_count").default(0).notNull(),
-    rejectedCount: integer("rejected_count").default(0).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_replacement_approval_requests_run_key_unique").on(
-      table.runId,
-      table.requestKey,
-    ),
-    check(
-      "act_replacement_approval_requests_digest_nonblank",
-      sql`btrim(${table.manifestDigest}) <> ''`,
-    ),
-    check(
-      "act_replacement_approval_requests_mode_valid",
-      sql`${table.approvalMode} is null or ${table.approvalMode} in ('automatic_safe','explicit_manual')`,
-    ),
-    check(
-      "act_replacement_approval_requests_mode_version_valid",
-      sql`${table.approvalModeVersion} is null or ${table.approvalModeVersion} = 1`,
-    ),
-    check(
-      "act_replacement_approval_requests_mode_pair_valid",
-      sql`(${table.approvalMode} is null and ${table.approvalModeVersion} is null) or (${table.approvalMode} is not null and ${table.approvalModeVersion} is not null)`,
-    ),
-  ],
-);
+export const actReplacementApprovalRequests = pgTable("act_replacement_approval_requests", {
+  id: uuid("id").defaultRandom().primaryKey(), requestKey: text("request_key").notNull(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), manifestDigest: text("manifest_digest").notNull(), approvalMode: text("approval_mode"), approvalModeVersion: integer("approval_mode_version"), selectedOperationIds: jsonb("selected_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), selectedCount: integer("selected_count").default(0).notNull(), dependencyCount: integer("dependency_count").default(0).notNull(), rejectedCount: integer("rejected_count").default(0).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("act_replacement_approval_requests_run_key_unique").on(table.runId, table.requestKey),
+  check("act_replacement_approval_requests_digest_nonblank", sql`btrim(${table.manifestDigest}) <> ''`),
+  check("act_replacement_approval_requests_mode_valid", sql`${table.approvalMode} is null or ${table.approvalMode} in ('automatic_safe','explicit_manual')`),
+  check("act_replacement_approval_requests_mode_version_valid", sql`${table.approvalModeVersion} is null or ${table.approvalModeVersion} = 1`),
+  check("act_replacement_approval_requests_mode_pair_valid", sql`(${table.approvalMode} is null and ${table.approvalModeVersion} is null) or (${table.approvalMode} is not null and ${table.approvalModeVersion} is not null)`),
+]);
 
-export const actReplacementApplyBatches = pgTable(
-  "act_replacement_apply_batches",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    requestKey: text("request_key").notNull(),
-    runId: uuid("run_id")
-      .notNull()
-      .references(() => actReplacementRuns.id, { onDelete: "cascade" }),
-    approvalRequestKey: text("approval_request_key"),
-    startCursor: integer("start_cursor"),
-    manifestDigest: text("manifest_digest").notNull(),
-    selectedOperationIds: jsonb("selected_operation_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids")
-      .$type<string[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    selectedCount: integer("selected_count").default(0).notNull(),
-    dependencyCount: integer("dependency_count").default(0).notNull(),
-    rejectedCount: integer("rejected_count").default(0).notNull(),
-    state: text("state").default("queued").notNull(),
-    startedAt: timestamp("started_at", { withTimezone: true }),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    replayFingerprint: text("replay_fingerprint"),
-    leaseOwner: text("lease_owner"),
-    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
-    attemptToken: uuid("attempt_token"),
-    attemptCount: integer("attempt_count").default(0).notNull(),
-    lastErrorCode: text("last_error_code"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("act_replacement_apply_batches_one_active_per_run")
-      .on(table.runId)
-      .where(sql`${table.state} in ('queued','applying')`),
-    unique("act_replacement_apply_batches_run_request_key_unique").on(
-      table.runId,
-      table.requestKey,
-    ),
-    check(
-      "act_replacement_apply_batches_state_valid",
-      sql`${table.state} in ('queued','applying','complete','complete_with_issues')`,
-    ),
-    check(
-      "act_replacement_apply_batches_lease_consistency",
-      sql`(${table.state} = 'applying' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null and ${table.attemptToken} is not null) or (${table.state} <> 'applying' and ${table.attemptToken} is null)`,
-    ),
-    check(
-      "act_replacement_apply_batches_cursor_nonnegative",
-      sql`${table.startCursor} is null or ${table.startCursor} >= 0`,
-    ),
-  ],
-);
+export const actReplacementApplyBatches = pgTable("act_replacement_apply_batches", {
+  id: uuid("id").defaultRandom().primaryKey(), requestKey: text("request_key").notNull(), runId: uuid("run_id").notNull().references(() => actReplacementRuns.id, { onDelete: "cascade" }), approvalRequestKey: text("approval_request_key"), startCursor: integer("start_cursor"), manifestDigest: text("manifest_digest").notNull(), selectedOperationIds: jsonb("selected_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), dependencyClosedOperationIds: jsonb("dependency_closed_operation_ids").$type<string[]>().default(sql`'[]'::jsonb`).notNull(), selectedCount: integer("selected_count").default(0).notNull(), dependencyCount: integer("dependency_count").default(0).notNull(), rejectedCount: integer("rejected_count").default(0).notNull(), state: text("state").default("queued").notNull(), startedAt: timestamp("started_at", { withTimezone: true }), completedAt: timestamp("completed_at", { withTimezone: true }), replayFingerprint: text("replay_fingerprint"), leaseOwner: text("lease_owner"), leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }), attemptToken: uuid("attempt_token"), attemptCount: integer("attempt_count").default(0).notNull(), lastErrorCode: text("last_error_code"), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("act_replacement_apply_batches_one_active_per_run").on(table.runId).where(sql`${table.state} in ('queued','applying')`), unique("act_replacement_apply_batches_run_request_key_unique").on(table.runId, table.requestKey), check("act_replacement_apply_batches_state_valid", sql`${table.state} in ('queued','applying','complete','complete_with_issues')`), check("act_replacement_apply_batches_lease_consistency", sql`(${table.state} = 'applying' and ${table.leaseOwner} is not null and ${table.leaseExpiresAt} is not null and ${table.attemptToken} is not null) or (${table.state} <> 'applying' and ${table.attemptToken} is null)`), check("act_replacement_apply_batches_cursor_nonnegative", sql`${table.startCursor} is null or ${table.startCursor} >= 0`)]);
 
-export const actImportedFieldOrigins = pgTable(
-  "act_imported_field_origins",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    entityType: text("entity_type").notNull(),
-    entityId: uuid("entity_id").notNull(),
-    fieldName: text("field_name").notNull(),
-    sourceRecordId: uuid("source_record_id")
-      .notNull()
-      .references(() => actSourceRecords.id),
-    sourceVersionId: uuid("source_version_id")
-      .notNull()
-      .references(() => actSourceRecordVersions.id),
-    operationId: uuid("operation_id")
-      .notNull()
-      .references(() => actReplacementApplyOperations.id),
-    sourceValueFingerprint: text("source_value_fingerprint").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("act_imported_field_origins_entity_field_unique").on(
-      table.entityType,
-      table.entityId,
-      table.fieldName,
-    ),
-    check(
-      "act_imported_field_origins_entity_type_valid",
-      sql`${table.entityType} in ('organization','contact','booking','calling_list','activity')`,
-    ),
-    check(
-      "act_imported_field_origins_field_name_nonblank",
-      sql`btrim(${table.fieldName}) <> ''`,
-    ),
-  ],
-);
+export const actImportedFieldOrigins = pgTable("act_imported_field_origins", {
+  id: uuid("id").defaultRandom().primaryKey(), entityType: text("entity_type").notNull(), entityId: uuid("entity_id").notNull(), fieldName: text("field_name").notNull(), sourceRecordId: uuid("source_record_id").notNull().references(() => actSourceRecords.id), sourceVersionId: uuid("source_version_id").notNull().references(() => actSourceRecordVersions.id), operationId: uuid("operation_id").notNull().references(() => actReplacementApplyOperations.id), sourceValueFingerprint: text("source_value_fingerprint").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [unique("act_imported_field_origins_entity_field_unique").on(table.entityType, table.entityId, table.fieldName), check("act_imported_field_origins_entity_type_valid", sql`${table.entityType} in ('organization','contact','booking','calling_list','activity')`), check("act_imported_field_origins_field_name_nonblank", sql`btrim(${table.fieldName}) <> ''`)]);
 
-export const activityAssociations = pgTable(
-  "activity_associations",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    activityId: uuid("activity_id")
-      .notNull()
-      .references(() => activities.id, { onDelete: "cascade" }),
-    organizationId: uuid("organization_id").references(() => organizations.id),
-    contactId: uuid("contact_id").references(() => contacts.id),
-    bookingId: uuid("booking_id").references(() => bookings.id),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check(
-      "activity_associations_exactly_one_target",
-      sql`num_nonnulls(${table.organizationId}, ${table.contactId}, ${table.bookingId}) = 1`,
-    ),
-    uniqueIndex("activity_associations_activity_organization_unique")
-      .on(table.activityId, table.organizationId)
-      .where(sql`${table.organizationId} is not null`),
-    uniqueIndex("activity_associations_activity_contact_unique")
-      .on(table.activityId, table.contactId)
-      .where(sql`${table.contactId} is not null`),
-    uniqueIndex("activity_associations_activity_booking_unique")
-      .on(table.activityId, table.bookingId)
-      .where(sql`${table.bookingId} is not null`),
-  ],
-);
+export const activityAssociations = pgTable("activity_associations", {
+  id: uuid("id").defaultRandom().primaryKey(), activityId: uuid("activity_id").notNull().references(() => activities.id, { onDelete: "cascade" }), organizationId: uuid("organization_id").references(() => organizations.id), contactId: uuid("contact_id").references(() => contacts.id), bookingId: uuid("booking_id").references(() => bookings.id), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [check("activity_associations_exactly_one_target", sql`num_nonnulls(${table.organizationId}, ${table.contactId}, ${table.bookingId}) = 1`), uniqueIndex("activity_associations_activity_organization_unique").on(table.activityId, table.organizationId).where(sql`${table.organizationId} is not null`), uniqueIndex("activity_associations_activity_contact_unique").on(table.activityId, table.contactId).where(sql`${table.contactId} is not null`), uniqueIndex("activity_associations_activity_booking_unique").on(table.activityId, table.bookingId).where(sql`${table.bookingId} is not null`)]);
 
 export const actContactSyncStates = pgTable(
   "act_contact_sync_states",
@@ -3522,8 +2653,7 @@ export const actSyncOperations = pgTable(
     decision: text("decision"),
     status: text("status").default("pending").notNull(),
     baseSnapshot: jsonb("base_snapshot").$type<Record<string, string | null>>(),
-    localSnapshot:
-      jsonb("local_snapshot").$type<Record<string, string | null>>(),
+    localSnapshot: jsonb("local_snapshot").$type<Record<string, string | null>>(),
     actSnapshot: jsonb("act_snapshot").$type<Record<string, string | null>>(),
     error: text("error"),
     retryable: boolean("retryable").default(true).notNull(),
@@ -3582,14 +2712,8 @@ export const trips = pgTable(
       .notNull(),
   },
   (table) => [
-    check(
-      "trips_name_nonblank",
-      sql`nullif(trim(${table.name}), '') is not null`,
-    ),
-    check(
-      "trips_date_range_valid",
-      sql`${table.endDate} >= ${table.startDate}`,
-    ),
+    check("trips_name_nonblank", sql`nullif(trim(${table.name}), '') is not null`),
+    check("trips_date_range_valid", sql`${table.endDate} >= ${table.startDate}`),
     check("trips_mpg_positive", sql`${table.mpg} is null or ${table.mpg} > 0`),
     check(
       "trips_fuel_price_nonnegative",
@@ -3648,10 +2772,7 @@ export const tripSegments = pgTable(
       .notNull(),
   },
   (table) => [
-    unique("trip_segments_trip_sequence_unique").on(
-      table.tripId,
-      table.sequence,
-    ),
+    unique("trip_segments_trip_sequence_unique").on(table.tripId, table.sequence),
     index("trip_segments_trip_idx").on(table.tripId),
     check(
       "trip_segments_source_valid",
@@ -3680,42 +2801,23 @@ export const legScheduleIssues = pgTable(
   "leg_schedule_issues",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
     kind: text("kind").notNull(),
     notes: text("notes").notNull(),
     status: text("status").default("open").notNull(),
     clientMutationId: uuid("client_mutation_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
     resolutionNote: text("resolution_note"),
   },
   (table) => [
-    unique("leg_schedule_issues_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
+    unique("leg_schedule_issues_leg_mutation_unique").on(table.legId, table.clientMutationId),
     index("leg_schedule_issues_leg_status_idx").on(table.legId, table.status),
-    check(
-      "leg_schedule_issues_kind_valid",
-      sql`${table.kind} in ('wrong_datetime','wrong_location','wrong_leg','route_problem','event_details_changed','other')`,
-    ),
-    check(
-      "leg_schedule_issues_status_valid",
-      sql`${table.status} in ('open','resolved')`,
-    ),
+    check("leg_schedule_issues_kind_valid", sql`${table.kind} in ('wrong_datetime','wrong_location','wrong_leg','route_problem','event_details_changed','other')`),
+    check("leg_schedule_issues_status_valid", sql`${table.status} in ('open','resolved')`),
   ],
 );
 
@@ -3762,6 +2864,7 @@ export const routingCacheEntries = pgTable(
     ),
   ],
 );
+
 
 //  AI booking suggestions
 // Persisted so suggestions survive server restarts/redeploys (Render spins the
@@ -3825,234 +2928,40 @@ export const aiBookingSuggestions = pgTable(
   ],
 );
 
-export const legEventIncome = pgTable(
-  "leg_event_income",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
-    tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, {
-      onDelete: "set null",
-    }),
-    cashCents: integer("cash_cents").default(0).notNull(),
-    squareCents: integer("square_cents").default(0).notNull(),
-    otherCents: integer("other_cents").default(0).notNull(),
-    otherLabel: text("other_label"),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    notes: text("notes"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_event_income_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_event_income_leg_trip_idx").on(table.legId, table.tripId),
-    check("leg_event_income_cash_nonnegative", sql`${table.cashCents} >= 0`),
-    check(
-      "leg_event_income_square_nonnegative",
-      sql`${table.squareCents} >= 0`,
-    ),
-    check("leg_event_income_other_nonnegative", sql`${table.otherCents} >= 0`),
-    check("leg_event_income_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legEventIncome = pgTable("leg_event_income", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  cashCents: integer("cash_cents").default(0).notNull(),
+  squareCents: integer("square_cents").default(0).notNull(),
+  otherCents: integer("other_cents").default(0).notNull(),
+  otherLabel: text("other_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"),
+  clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_event_income_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_event_income_leg_trip_idx").on(table.legId, table.tripId), check("leg_event_income_cash_nonnegative", sql`${table.cashCents} >= 0`), check("leg_event_income_square_nonnegative", sql`${table.squareCents} >= 0`), check("leg_event_income_other_nonnegative", sql`${table.otherCents} >= 0`), check("leg_event_income_revision_positive", sql`${table.revision} >= 1`)]);
 
-export const legExpenses = pgTable(
-  "leg_expenses",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
-    tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, {
-      onDelete: "set null",
-    }),
-    category: text("category").notNull(),
-    merchant: text("merchant"),
-    amountCents: integer("amount_cents").notNull(),
-    taxCents: integer("tax_cents").default(0).notNull(),
-    paymentSource: text("payment_source").notNull(),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    notes: text("notes"),
-    employeeNote: text("employee_note"),
-    detailJson: jsonb("detail_json"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_expenses_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_expenses_leg_trip_idx").on(table.legId, table.tripId),
-    check("leg_expenses_amount_nonnegative", sql`${table.amountCents} >= 0`),
-    check("leg_expenses_tax_nonnegative", sql`${table.taxCents} >= 0`),
-    check(
-      "leg_expenses_category_valid",
-      sql`${table.category} in ('fuel','food','rv_park','vehicle_maintenance','trailer_maintenance','supplies','employee_related','other')`,
-    ),
-    check(
-      "leg_expenses_payment_source_valid",
-      sql`${table.paymentSource} in ('adventure_zone_cash','adventure_zone_debit','personal')`,
-    ),
-    check("leg_expenses_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legExpenses = pgTable("leg_expenses", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  category: text("category").notNull(), merchant: text("merchant"), amountCents: integer("amount_cents").notNull(), taxCents: integer("tax_cents").default(0).notNull(), paymentSource: text("payment_source").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), employeeNote: text("employee_note"), detailJson: jsonb("detail_json"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_expenses_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_expenses_leg_trip_idx").on(table.legId, table.tripId), check("leg_expenses_amount_nonnegative", sql`${table.amountCents} >= 0`), check("leg_expenses_tax_nonnegative", sql`${table.taxCents} >= 0`), check("leg_expenses_category_valid", sql`${table.category} in ('fuel','food','rv_park','vehicle_maintenance','trailer_maintenance','supplies','employee_related','other')`), check("leg_expenses_payment_source_valid", sql`${table.paymentSource} in ('adventure_zone_cash','adventure_zone_debit','personal')`), check("leg_expenses_revision_positive", sql`${table.revision} >= 1`)]);
 
-export const legCashEntries = pgTable(
-  "leg_cash_entries",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
-    tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, {
-      onDelete: "set null",
-    }),
-    kind: text("kind").notNull(),
-    amountCents: integer("amount_cents").notNull(),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    notes: text("notes"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_cash_entries_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_cash_entries_leg_trip_idx").on(table.legId, table.tripId),
-    check(
-      "leg_cash_entries_kind_valid",
-      sql`${table.kind} in ('event_cash_collected','expense_paid_cash','advance_received','cash_turned_in','cash_returned','manager_reimbursed','adjustment')`,
-    ),
-    check(
-      "leg_cash_entries_amount_valid",
-      sql`${table.kind} = 'adjustment' or ${table.amountCents} >= 0`,
-    ),
-    check("leg_cash_entries_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legCashEntries = pgTable("leg_cash_entries", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(), amountCents: integer("amount_cents").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_cash_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_cash_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_cash_entries_kind_valid", sql`${table.kind} in ('event_cash_collected','expense_paid_cash','advance_received','cash_turned_in','cash_returned','manager_reimbursed','adjustment')`), check("leg_cash_entries_amount_valid", sql`${table.kind} = 'adjustment' or ${table.amountCents} >= 0`), check("leg_cash_entries_revision_positive", sql`${table.revision} >= 1`)]);
 
-export const legMileageEntries = pgTable(
-  "leg_mileage_entries",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
-    tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, {
-      onDelete: "set null",
-    }),
-    miles: doublePrecision("miles"),
-    odometerStart: doublePrecision("odometer_start"),
-    odometerEnd: doublePrecision("odometer_end"),
-    vehicleLabel: text("vehicle_label"),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    notes: text("notes"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_mileage_entries_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_mileage_entries_leg_trip_idx").on(table.legId, table.tripId),
-    check(
-      "leg_mileage_entries_distance_valid",
-      sql`(${table.miles} is not null and ${table.miles} >= 0) or (${table.odometerStart} is not null and ${table.odometerEnd} is not null and ${table.odometerEnd} >= ${table.odometerStart})`,
-    ),
-    check("leg_mileage_entries_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legMileageEntries = pgTable("leg_mileage_entries", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }), tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }), tripSegmentId: uuid("trip_segment_id").references(() => tripSegments.id, { onDelete: "set null" }), miles: doublePrecision("miles"), odometerStart: doublePrecision("odometer_start"), odometerEnd: doublePrecision("odometer_end"), vehicleLabel: text("vehicle_label"), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(), notes: text("notes"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_mileage_entries_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_mileage_entries_leg_trip_idx").on(table.legId, table.tripId), check("leg_mileage_entries_distance_valid", sql`(${table.miles} is not null and ${table.miles} >= 0) or (${table.odometerStart} is not null and ${table.odometerEnd} is not null and ${table.odometerEnd} >= ${table.odometerStart})`), check("leg_mileage_entries_revision_positive", sql`${table.revision} >= 1`)]);
 
-export const legReceipts = pgTable(
-  "leg_receipts",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    expenseId: uuid("expense_id")
-      .notNull()
-      .references(() => legExpenses.id, { onDelete: "cascade" }),
-    objectKey: text("object_key"),
-    imageStatus: text("image_status").default("image_pending").notNull(),
-    mimeType: text("mime_type"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_receipts_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId),
-    check(
-      "leg_receipts_image_status_valid",
-      sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`,
-    ),
-    check("leg_receipts_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legReceipts = pgTable("leg_receipts", {
+  id: uuid("id").defaultRandom().primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), expenseId: uuid("expense_id").notNull().references(() => legExpenses.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_receipts_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_receipts_leg_expense_idx").on(table.legId, table.expenseId), check("leg_receipts_image_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`), check("leg_receipts_revision_positive", sql`${table.revision} >= 1`)]);
 
 export const crewWorkers = pgTable(
   "crew_workers",
@@ -4066,26 +2975,14 @@ export const crewWorkers = pgTable(
     region: text("region"),
     locationText: text("location_text"),
     rehireStatus: text("rehire_status").default("undecided").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
     index("crew_workers_location_idx").on(table.region, table.city),
-    index("crew_workers_normalized_phone_idx")
-      .on(table.normalizedPhone)
-      .where(sql`${table.normalizedPhone} is not null`),
-    check(
-      "crew_workers_name_nonblank",
-      sql`nullif(trim(${table.name}), '') is not null`,
-    ),
-    check(
-      "crew_workers_rehire_status_valid",
-      sql`${table.rehireStatus} in ('rehirable','undecided','do_not_rehire')`,
-    ),
+    index("crew_workers_normalized_phone_idx").on(table.normalizedPhone).where(sql`${table.normalizedPhone} is not null`),
+    check("crew_workers_name_nonblank", sql`nullif(trim(${table.name}), '') is not null`),
+    check("crew_workers_rehire_status_valid", sql`${table.rehireStatus} in ('rehirable','undecided','do_not_rehire')`),
   ],
 );
 
@@ -4093,51 +2990,24 @@ export const crewWorkHistory = pgTable(
   "crew_work_history",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    workerId: uuid("worker_id")
-      .notNull()
-      .references(() => crewWorkers.id, { onDelete: "restrict" }),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+    tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
     role: text("role").notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     endedAt: timestamp("ended_at", { withTimezone: true }),
     rating: integer("rating"),
     note: text("note"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("crew_work_history_worker_started_idx").on(
-      table.workerId,
-      table.startedAt.desc(),
-    ),
-    index("crew_work_history_leg_started_idx").on(
-      table.legId,
-      table.startedAt.desc(),
-    ),
-    check(
-      "crew_work_history_role_nonblank",
-      sql`nullif(trim(${table.role}), '') is not null`,
-    ),
-    check(
-      "crew_work_history_dates_valid",
-      sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`,
-    ),
-    check(
-      "crew_work_history_rating_valid",
-      sql`${table.rating} is null or ${table.rating} between 0 and 5`,
-    ),
+    index("crew_work_history_worker_started_idx").on(table.workerId, table.startedAt.desc()),
+    index("crew_work_history_leg_started_idx").on(table.legId, table.startedAt.desc()),
+    check("crew_work_history_role_nonblank", sql`nullif(trim(${table.role}), '') is not null`),
+    check("crew_work_history_dates_valid", sql`${table.endedAt} is null or ${table.endedAt} >= ${table.startedAt}`),
+    check("crew_work_history_rating_valid", sql`${table.rating} is null or ${table.rating} between 0 and 5`),
   ],
 );
 
@@ -4145,36 +3015,17 @@ export const crewManagerNotes = pgTable(
   "crew_manager_notes",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    workerId: uuid("worker_id")
-      .notNull()
-      .references(() => crewWorkers.id, { onDelete: "restrict" }),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
+    workerId: uuid("worker_id").notNull().references(() => crewWorkers.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
     note: text("note").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("crew_manager_notes_worker_created_idx").on(
-      table.workerId,
-      table.createdAt.desc(),
-    ),
-    index("crew_manager_notes_leg_created_idx").on(
-      table.legId,
-      table.createdAt.desc(),
-    ),
-    check(
-      "crew_manager_notes_note_nonblank",
-      sql`nullif(trim(${table.note}), '') is not null`,
-    ),
+    index("crew_manager_notes_worker_created_idx").on(table.workerId, table.createdAt.desc()),
+    index("crew_manager_notes_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    check("crew_manager_notes_note_nonblank", sql`nullif(trim(${table.note}), '') is not null`),
   ],
 );
 
@@ -4182,519 +3033,193 @@ export const eventManagerReviews = pgTable(
   "event_manager_reviews",
   {
     id: uuid("id").defaultRandom().primaryKey(),
-    bookingId: uuid("booking_id")
-      .notNull()
-      .references(() => bookings.id, { onDelete: "restrict" }),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
     rating: integer("rating").notNull(),
     feedback: text("feedback"),
     organizerSiteNotes: text("organizer_site_notes"),
     crewNotes: text("crew_notes"),
     recommendReturn: text("recommend_return"),
     clientMutationId: uuid("client_mutation_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [
-    index("event_manager_reviews_booking_created_idx").on(
-      table.bookingId,
-      table.createdAt.desc(),
-    ),
-    index("event_manager_reviews_leg_created_idx").on(
-      table.legId,
-      table.createdAt.desc(),
-    ),
-    uniqueIndex("event_manager_reviews_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    check(
-      "event_manager_reviews_rating_valid",
-      sql`${table.rating} between 0 and 5`,
-    ),
-    check(
-      "event_manager_reviews_recommend_return_valid",
-      sql`${table.recommendReturn} is null or ${table.recommendReturn} in ('yes','no','unsure')`,
-    ),
+    index("event_manager_reviews_booking_created_idx").on(table.bookingId, table.createdAt.desc()),
+    index("event_manager_reviews_leg_created_idx").on(table.legId, table.createdAt.desc()),
+    uniqueIndex("event_manager_reviews_leg_mutation_unique").on(table.legId, table.clientMutationId),
+    check("event_manager_reviews_rating_valid", sql`${table.rating} between 0 and 5`),
+    check("event_manager_reviews_recommend_return_valid", sql`${table.recommendReturn} is null or ${table.recommendReturn} in ('yes','no','unsure')`),
   ],
 );
 
-export const legIncidents = pgTable(
-  "leg_incidents",
-  {
-    id: uuid("id").primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    bookingId: uuid("booking_id").references(() => bookings.id, {
-      onDelete: "set null",
-    }),
-    tripId: uuid("trip_id").references(() => trips.id, {
-      onDelete: "set null",
-    }),
-    type: text("type").notNull(),
-    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    locationText: text("location_text"),
-    peopleInvolved: text("people_involved"),
-    description: text("description").notNull(),
-    actionTaken: text("action_taken"),
-    followUpNeeded: boolean("follow_up_needed").default(false).notNull(),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    revision: integer("revision").default(1).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_incidents_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_incidents_leg_occurred_idx").on(
-      table.legId,
-      table.occurredAt.desc(),
-    ),
-    check(
-      "leg_incidents_type_nonblank",
-      sql`nullif(trim(${table.type}), '') is not null`,
-    ),
-    check(
-      "leg_incidents_description_nonblank",
-      sql`nullif(trim(${table.description}), '') is not null`,
-    ),
-    check("leg_incidents_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const legIncidents = pgTable("leg_incidents", {
+  id: uuid("id").primaryKey(),
+  legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }),
+  bookingId: uuid("booking_id").references(() => bookings.id, { onDelete: "set null" }),
+  tripId: uuid("trip_id").references(() => trips.id, { onDelete: "set null" }),
+  type: text("type").notNull(), occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  locationText: text("location_text"), peopleInvolved: text("people_involved"), description: text("description").notNull(), actionTaken: text("action_taken"), followUpNeeded: boolean("follow_up_needed").default(false).notNull(),
+  clientMutationId: uuid("client_mutation_id").notNull(), revision: integer("revision").default(1).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incidents_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incidents_leg_occurred_idx").on(table.legId, table.occurredAt.desc()), check("leg_incidents_type_nonblank", sql`nullif(trim(${table.type}), '') is not null`), check("leg_incidents_description_nonblank", sql`nullif(trim(${table.description}), '') is not null`), check("leg_incidents_revision_positive", sql`${table.revision} >= 1`)]);
 
-export const legIncidentAttachments = pgTable(
-  "leg_incident_attachments",
-  {
-    id: uuid("id").primaryKey(),
-    legId: uuid("leg_id")
-      .notNull()
-      .references(() => travelLegs.id, { onDelete: "restrict" }),
-    incidentId: uuid("incident_id")
-      .notNull()
-      .references(() => legIncidents.id, { onDelete: "cascade" }),
-    objectKey: text("object_key"),
-    imageStatus: text("image_status").default("image_pending").notNull(),
-    mimeType: text("mime_type"),
-    clientMutationId: uuid("client_mutation_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("leg_incident_attachments_leg_mutation_unique").on(
-      table.legId,
-      table.clientMutationId,
-    ),
-    index("leg_incident_attachments_incident_idx").on(table.incidentId),
-    check(
-      "leg_incident_attachments_status_valid",
-      sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`,
-    ),
-  ],
-);
+export const legIncidentAttachments = pgTable("leg_incident_attachments", {
+  id: uuid("id").primaryKey(), legId: uuid("leg_id").notNull().references(() => travelLegs.id, { onDelete: "restrict" }), incidentId: uuid("incident_id").notNull().references(() => legIncidents.id, { onDelete: "cascade" }), objectKey: text("object_key"), imageStatus: text("image_status").default("image_pending").notNull(), mimeType: text("mime_type"), clientMutationId: uuid("client_mutation_id").notNull(), createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(), updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [uniqueIndex("leg_incident_attachments_leg_mutation_unique").on(table.legId, table.clientMutationId), index("leg_incident_attachments_incident_idx").on(table.incidentId), check("leg_incident_attachments_status_valid", sql`${table.imageStatus} in ('image_pending','image_uploaded','image_failed')`)]);
 
-export const contractTemplateStateValues = [
-  "draft",
-  "reviewed",
-  "active",
-  "retired",
-] as const;
-export const contractArrangementValues = [
-  "guaranteed_fee",
-  "pay_for_play",
-  "guarantee_plus_percentage",
-] as const;
-export const contractStatusValues = [
-  "draft",
-  "ready_for_adobe",
-  "sent_for_signature",
-  "partially_signed",
-  "completed",
-  "declined",
-  "cancelled",
-  "superseded",
-] as const;
-export const contractFileKindValues = [
-  "unsigned_generated",
-  "signed_completed",
-] as const;
-export const contractCoiDraftStateValues = [
-  "details_needed",
-  "prepared",
-  "created",
-  "retryable_error",
-  "manual_review",
-] as const;
+export const contractTemplateStateValues = ["draft", "reviewed", "active", "retired"] as const;
+export const contractArrangementValues = ["guaranteed_fee", "pay_for_play", "guarantee_plus_percentage"] as const;
+export const contractStatusValues = ["draft", "ready_for_adobe", "sent_for_signature", "partially_signed", "completed", "declined", "cancelled", "superseded"] as const;
+export const contractFileKindValues = ["unsigned_generated", "signed_completed"] as const;
+export const contractCoiDraftStateValues = ["details_needed", "prepared", "created", "retryable_error", "manual_review"] as const;
 
-export const contractTemplates = pgTable(
-  "contract_templates",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    stableKey: text("stable_key").notNull(),
-    version: integer("version").notNull(),
-    state: text("state")
-      .$type<(typeof contractTemplateStateValues)[number]>()
-      .default("draft")
-      .notNull(),
-    fixedClauses: jsonb("fixed_clauses")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    arrangementClauses: jsonb("arrangement_clauses")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    operationalDefaults: jsonb("operational_defaults")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    renderMetadata: jsonb("render_metadata")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    sourceProvenance: jsonb("source_provenance")
-      .$type<Record<string, unknown>[]>()
-      .default(sql`'[]'::jsonb`)
-      .notNull(),
-    effectiveAt: timestamp("effective_at", { withTimezone: true }),
-    createdBy: text("created_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("contract_templates_stable_key_version_unique").on(
-      table.stableKey,
-      table.version,
-    ),
-    uniqueIndex("contract_templates_one_active_key_unique")
-      .on(table.stableKey)
-      .where(sql`${table.state} = 'active'`),
-    check(
-      "contract_templates_stable_key_nonblank",
-      sql`nullif(trim(${table.stableKey}), '') is not null`,
-    ),
-    check("contract_templates_version_positive", sql`${table.version} >= 1`),
-    check(
-      "contract_templates_state_valid",
-      sql`${table.state} in (${sqlTextValues(contractTemplateStateValues)})`,
-    ),
-  ],
-);
+export const contractTemplates = pgTable("contract_templates", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  stableKey: text("stable_key").notNull(),
+  version: integer("version").notNull(),
+  state: text("state").$type<(typeof contractTemplateStateValues)[number]>().default("draft").notNull(),
+  fixedClauses: jsonb("fixed_clauses").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  arrangementClauses: jsonb("arrangement_clauses").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  operationalDefaults: jsonb("operational_defaults").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  renderMetadata: jsonb("render_metadata").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  sourceProvenance: jsonb("source_provenance").$type<Record<string, unknown>[]>().default(sql`'[]'::jsonb`).notNull(),
+  effectiveAt: timestamp("effective_at", { withTimezone: true }),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("contract_templates_stable_key_version_unique").on(table.stableKey, table.version),
+  uniqueIndex("contract_templates_one_active_key_unique").on(table.stableKey).where(sql`${table.state} = 'active'`),
+  check("contract_templates_stable_key_nonblank", sql`nullif(trim(${table.stableKey}), '') is not null`),
+  check("contract_templates_version_positive", sql`${table.version} >= 1`),
+  check("contract_templates_state_valid", sql`${table.state} in (${sqlTextValues(contractTemplateStateValues)})`),
+]);
 
-export const contractSettings = pgTable(
-  "contract_settings",
-  {
-    key: text("key").primaryKey().default("default"),
-    internalSignerName: text("internal_signer_name")
-      .default("Dave Gordon")
-      .notNull(),
-    internalSignerEmail: text("internal_signer_email"),
-    internalSignerOrder: integer("internal_signer_order").default(2).notNull(),
-    insuranceRecipientName: text("insurance_recipient_name")
-      .default("Amanda Morton")
-      .notNull(),
-    insuranceRecipientEmail: text("insurance_recipient_email")
-      .default("amanda@protectiveins.net")
-      .notNull(),
-    updatedBy: text("updated_by").default("migration").notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check("contract_settings_singleton_key", sql`${table.key} = 'default'`),
-    check(
-      "contract_settings_internal_signer_name_nonblank",
-      sql`nullif(trim(${table.internalSignerName}), '') is not null`,
-    ),
-    check(
-      "contract_settings_internal_signer_order_second",
-      sql`${table.internalSignerOrder} = 2`,
-    ),
-    check(
-      "contract_settings_insurance_name_nonblank",
-      sql`nullif(trim(${table.insuranceRecipientName}), '') is not null`,
-    ),
-    check(
-      "contract_settings_insurance_email_nonblank",
-      sql`nullif(trim(${table.insuranceRecipientEmail}), '') is not null`,
-    ),
-  ],
-);
+export const contractSettings = pgTable("contract_settings", {
+  key: text("key").primaryKey().default("default"),
+  internalSignerName: text("internal_signer_name").default("Dave Gordon").notNull(),
+  internalSignerEmail: text("internal_signer_email"),
+  internalSignerOrder: integer("internal_signer_order").default(2).notNull(),
+  insuranceRecipientName: text("insurance_recipient_name").default("Amanda Morton").notNull(),
+  insuranceRecipientEmail: text("insurance_recipient_email").default("amanda@protectiveins.net").notNull(),
+  updatedBy: text("updated_by").default("migration").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("contract_settings_singleton_key", sql`${table.key} = 'default'`),
+  check("contract_settings_internal_signer_name_nonblank", sql`nullif(trim(${table.internalSignerName}), '') is not null`),
+  check("contract_settings_internal_signer_order_second", sql`${table.internalSignerOrder} = 2`),
+  check("contract_settings_insurance_name_nonblank", sql`nullif(trim(${table.insuranceRecipientName}), '') is not null`),
+  check("contract_settings_insurance_email_nonblank", sql`nullif(trim(${table.insuranceRecipientEmail}), '') is not null`),
+]);
 
-export const contractDrafts = pgTable(
-  "contract_drafts",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    bookingId: uuid("booking_id")
-      .notNull()
-      .references(() => bookings.id, { onDelete: "restrict" }),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "restrict" }),
-    templateId: uuid("template_id")
-      .notNull()
-      .references(() => contractTemplates.id, { onDelete: "restrict" }),
-    arrangement:
-      text("arrangement").$type<(typeof contractArrangementValues)[number]>(),
-    values: jsonb("values")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    validationState: jsonb("validation_state")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    revision: integer("revision").default(1).notNull(),
-    predecessorVersionId: uuid("predecessor_version_id"),
-    finalizedAt: timestamp("finalized_at", { withTimezone: true }),
-    lastEditedBy: text("last_edited_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    uniqueIndex("contract_drafts_one_open_booking_unique")
-      .on(table.bookingId)
-      .where(sql`${table.finalizedAt} is null`),
-    index("contract_drafts_organization_idx").on(
-      table.organizationId,
-      table.updatedAt.desc(),
-    ),
-    check(
-      "contract_drafts_arrangement_valid",
-      sql`${table.arrangement} is null or ${table.arrangement} in (${sqlTextValues(contractArrangementValues)})`,
-    ),
-    check("contract_drafts_revision_positive", sql`${table.revision} >= 1`),
-  ],
-);
+export const contractDrafts = pgTable("contract_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  templateId: uuid("template_id").notNull().references(() => contractTemplates.id, { onDelete: "restrict" }),
+  arrangement: text("arrangement").$type<(typeof contractArrangementValues)[number]>(),
+  values: jsonb("values").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  validationState: jsonb("validation_state").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  revision: integer("revision").default(1).notNull(),
+  predecessorVersionId: uuid("predecessor_version_id"),
+  finalizedAt: timestamp("finalized_at", { withTimezone: true }),
+  lastEditedBy: text("last_edited_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("contract_drafts_one_open_booking_unique").on(table.bookingId).where(sql`${table.finalizedAt} is null`),
+  index("contract_drafts_organization_idx").on(table.organizationId, table.updatedAt.desc()),
+  check("contract_drafts_arrangement_valid", sql`${table.arrangement} is null or ${table.arrangement} in (${sqlTextValues(contractArrangementValues)})`),
+  check("contract_drafts_revision_positive", sql`${table.revision} >= 1`),
+]);
 
-export const contractVersions = pgTable(
-  "contract_versions",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    bookingId: uuid("booking_id")
-      .notNull()
-      .references(() => bookings.id, { onDelete: "restrict" }),
-    organizationId: uuid("organization_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "restrict" }),
-    templateId: uuid("template_id")
-      .notNull()
-      .references(() => contractTemplates.id, { onDelete: "restrict" }),
-    draftId: uuid("draft_id")
-      .notNull()
-      .references(() => contractDrafts.id, { onDelete: "restrict" }),
-    versionNumber: integer("version_number").notNull(),
-    status: text("status")
-      .$type<(typeof contractStatusValues)[number]>()
-      .default("draft")
-      .notNull(),
-    snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
-    renderedLegalText: text("rendered_legal_text").notNull(),
-    signerSnapshot: jsonb("signer_snapshot")
-      .$type<Record<string, unknown>[]>()
-      .notNull(),
-    predecessorVersionId: uuid("predecessor_version_id").references(
-      (): AnyPgColumn => contractVersions.id,
-      { onDelete: "restrict" },
-    ),
-    supersedingVersionId: uuid("superseding_version_id").references(
-      (): AnyPgColumn => contractVersions.id,
-      { onDelete: "restrict" },
-    ),
-    createdBy: text("created_by").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    unique("contract_versions_booking_number_unique").on(
-      table.bookingId,
-      table.versionNumber,
-    ),
-    unique("contract_versions_draft_unique").on(table.draftId),
-    index("contract_versions_organization_created_idx").on(
-      table.organizationId,
-      table.createdAt.desc(),
-    ),
-    check(
-      "contract_versions_number_positive",
-      sql`${table.versionNumber} >= 1`,
-    ),
-    check(
-      "contract_versions_status_valid",
-      sql`${table.status} in (${sqlTextValues(contractStatusValues)})`,
-    ),
-  ],
-);
+export const contractVersions = pgTable("contract_versions", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+  organizationId: uuid("organization_id").notNull().references(() => organizations.id, { onDelete: "restrict" }),
+  templateId: uuid("template_id").notNull().references(() => contractTemplates.id, { onDelete: "restrict" }),
+  draftId: uuid("draft_id").notNull().references(() => contractDrafts.id, { onDelete: "restrict" }),
+  versionNumber: integer("version_number").notNull(),
+  status: text("status").$type<(typeof contractStatusValues)[number]>().default("draft").notNull(),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown>>().notNull(),
+  renderedLegalText: text("rendered_legal_text").notNull(),
+  signerSnapshot: jsonb("signer_snapshot").$type<Record<string, unknown>[]>().notNull(),
+  predecessorVersionId: uuid("predecessor_version_id").references((): AnyPgColumn => contractVersions.id, { onDelete: "restrict" }),
+  supersedingVersionId: uuid("superseding_version_id").references((): AnyPgColumn => contractVersions.id, { onDelete: "restrict" }),
+  createdBy: text("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  unique("contract_versions_booking_number_unique").on(table.bookingId, table.versionNumber),
+  unique("contract_versions_draft_unique").on(table.draftId),
+  index("contract_versions_organization_created_idx").on(table.organizationId, table.createdAt.desc()),
+  check("contract_versions_number_positive", sql`${table.versionNumber} >= 1`),
+  check("contract_versions_status_valid", sql`${table.status} in (${sqlTextValues(contractStatusValues)})`),
+]);
 
-export const contractFiles = pgTable(
-  "contract_files",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    contractVersionId: uuid("contract_version_id")
-      .notNull()
-      .references(() => contractVersions.id, { onDelete: "restrict" }),
-    kind: text("kind")
-      .$type<(typeof contractFileKindValues)[number]>()
-      .notNull(),
-    revision: integer("revision").notNull(),
-    storageKey: text("storage_key").notNull(),
-    mimeType: text("mime_type").default("application/pdf").notNull(),
-    originalFilename: text("original_filename").notNull(),
-    originalSizeBytes: integer("original_size_bytes").notNull(),
-    sha256Hex: text("sha256_hex").notNull(),
-    uploadedBy: text("uploaded_by").notNull(),
-    uploadedAt: timestamp("uploaded_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
-  },
-  (table) => [
-    unique("contract_files_kind_revision_unique").on(
-      table.contractVersionId,
-      table.kind,
-      table.revision,
-    ),
-    unique("contract_files_version_checksum_unique").on(
-      table.contractVersionId,
-      table.sha256Hex,
-    ),
-    check(
-      "contract_files_kind_valid",
-      sql`${table.kind} in (${sqlTextValues(contractFileKindValues)})`,
-    ),
-    check("contract_files_revision_positive", sql`${table.revision} >= 1`),
-    check(
-      "contract_files_mime_pdf",
-      sql`${table.mimeType} = 'application/pdf'`,
-    ),
-    check("contract_files_size_positive", sql`${table.originalSizeBytes} > 0`),
-    check(
-      "contract_files_sha256_valid",
-      sql`${table.sha256Hex} ~ '^[0-9a-f]{64}$'`,
-    ),
-  ],
-);
+export const contractFiles = pgTable("contract_files", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }),
+  kind: text("kind").$type<(typeof contractFileKindValues)[number]>().notNull(),
+  revision: integer("revision").notNull(),
+  storageKey: text("storage_key").notNull(),
+  mimeType: text("mime_type").default("application/pdf").notNull(),
+  originalFilename: text("original_filename").notNull(),
+  originalSizeBytes: integer("original_size_bytes").notNull(),
+  sha256Hex: text("sha256_hex").notNull(),
+  uploadedBy: text("uploaded_by").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).defaultNow().notNull(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+}, (table) => [
+  unique("contract_files_kind_revision_unique").on(table.contractVersionId, table.kind, table.revision),
+  unique("contract_files_version_checksum_unique").on(table.contractVersionId, table.sha256Hex),
+  check("contract_files_kind_valid", sql`${table.kind} in (${sqlTextValues(contractFileKindValues)})`),
+  check("contract_files_revision_positive", sql`${table.revision} >= 1`),
+  check("contract_files_mime_pdf", sql`${table.mimeType} = 'application/pdf'`),
+  check("contract_files_size_positive", sql`${table.originalSizeBytes} > 0`),
+  check("contract_files_sha256_valid", sql`${table.sha256Hex} ~ '^[0-9a-f]{64}$'`),
+]);
 
-export const contractStatusEvents = pgTable(
-  "contract_status_events",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    contractVersionId: uuid("contract_version_id")
-      .notNull()
-      .references(() => contractVersions.id, { onDelete: "restrict" }),
-    fromStatus:
-      text("from_status").$type<(typeof contractStatusValues)[number]>(),
-    toStatus: text("to_status")
-      .$type<(typeof contractStatusValues)[number]>()
-      .notNull(),
-    actorId: text("actor_id").notNull(),
-    idempotencyKey: text("idempotency_key").notNull().unique(),
-    context: jsonb("context")
-      .$type<Record<string, unknown>>()
-      .default(sql`'{}'::jsonb`)
-      .notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    index("contract_status_events_version_created_idx").on(
-      table.contractVersionId,
-      table.createdAt,
-    ),
-    check(
-      "contract_status_events_from_valid",
-      sql`${table.fromStatus} is null or ${table.fromStatus} in (${sqlTextValues(contractStatusValues)})`,
-    ),
-    check(
-      "contract_status_events_to_valid",
-      sql`${table.toStatus} in (${sqlTextValues(contractStatusValues)})`,
-    ),
-    check(
-      "contract_status_events_key_nonblank",
-      sql`nullif(trim(${table.idempotencyKey}), '') is not null`,
-    ),
-  ],
-);
+export const contractStatusEvents = pgTable("contract_status_events", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }),
+  fromStatus: text("from_status").$type<(typeof contractStatusValues)[number]>(),
+  toStatus: text("to_status").$type<(typeof contractStatusValues)[number]>().notNull(),
+  actorId: text("actor_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  context: jsonb("context").$type<Record<string, unknown>>().default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index("contract_status_events_version_created_idx").on(table.contractVersionId, table.createdAt),
+  check("contract_status_events_from_valid", sql`${table.fromStatus} is null or ${table.fromStatus} in (${sqlTextValues(contractStatusValues)})`),
+  check("contract_status_events_to_valid", sql`${table.toStatus} in (${sqlTextValues(contractStatusValues)})`),
+  check("contract_status_events_key_nonblank", sql`nullif(trim(${table.idempotencyKey}), '') is not null`),
+]);
 
-export const contractCoiDrafts = pgTable(
-  "contract_coi_drafts",
-  {
-    id: uuid("id").defaultRandom().primaryKey(),
-    contractVersionId: uuid("contract_version_id")
-      .notNull()
-      .references(() => contractVersions.id, { onDelete: "restrict" })
-      .unique(),
-    recipientName: text("recipient_name").notNull(),
-    recipientEmail: text("recipient_email").notNull(),
-    subject: text("subject").notNull(),
-    body: text("body").notNull(),
-    state: text("state")
-      .$type<(typeof contractCoiDraftStateValues)[number]>()
-      .notNull(),
-    googleConnectionId: uuid("google_connection_id"),
-    gmailDraftId: text("gmail_draft_id"),
-    gmailMessageId: text("gmail_message_id"),
-    lastErrorCode: text("last_error_code"),
-    idempotencyKey: text("idempotency_key").notNull().unique(),
-    attemptCount: integer("attempt_count").default(0).notNull(),
-    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
-    completedAt: timestamp("completed_at", { withTimezone: true }),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .defaultNow()
-      .notNull(),
-  },
-  (table) => [
-    check(
-      "contract_coi_drafts_state_valid",
-      sql`${table.state} in (${sqlTextValues(contractCoiDraftStateValues)})`,
-    ),
-    check(
-      "contract_coi_drafts_recipient_name_nonblank",
-      sql`nullif(trim(${table.recipientName}), '') is not null`,
-    ),
-    check(
-      "contract_coi_drafts_recipient_email_nonblank",
-      sql`nullif(trim(${table.recipientEmail}), '') is not null`,
-    ),
-    check(
-      "contract_coi_drafts_attempt_nonnegative",
-      sql`${table.attemptCount} >= 0`,
-    ),
-    check(
-      "contract_coi_drafts_created_ids_valid",
-      sql`${table.state} <> 'created' or (${table.gmailDraftId} is not null and ${table.gmailMessageId} is not null and ${table.completedAt} is not null)`,
-    ),
-  ],
-);
+export const contractCoiDrafts = pgTable("contract_coi_drafts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  contractVersionId: uuid("contract_version_id").notNull().references(() => contractVersions.id, { onDelete: "restrict" }).unique(),
+  recipientName: text("recipient_name").notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  state: text("state").$type<(typeof contractCoiDraftStateValues)[number]>().notNull(),
+  googleConnectionId: uuid("google_connection_id"),
+  gmailDraftId: text("gmail_draft_id"),
+  gmailMessageId: text("gmail_message_id"),
+  lastErrorCode: text("last_error_code"),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  attemptCount: integer("attempt_count").default(0).notNull(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("contract_coi_drafts_state_valid", sql`${table.state} in (${sqlTextValues(contractCoiDraftStateValues)})`),
+  check("contract_coi_drafts_recipient_name_nonblank", sql`nullif(trim(${table.recipientName}), '') is not null`),
+  check("contract_coi_drafts_recipient_email_nonblank", sql`nullif(trim(${table.recipientEmail}), '') is not null`),
+  check("contract_coi_drafts_attempt_nonnegative", sql`${table.attemptCount} >= 0`),
+  check("contract_coi_drafts_created_ids_valid", sql`${table.state} <> 'created' or (${table.gmailDraftId} is not null and ${table.gmailMessageId} is not null and ${table.completedAt} is not null)`),
+]);
 
 export * from "../boss-work-request-schema";

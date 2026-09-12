@@ -26,18 +26,11 @@ import {
 
 import { ActivityTimeline } from "@/components/activities/activity-timeline";
 import { ProfileGoogleEmailPanel } from "@/components/google-workspace/profile-google-email-panel";
-import {
-  ProfileEmailComposer,
-  ProfileEmailDrafts,
-  type ProfileEmailDraft,
-} from "@/components/profiles/profile-email-composer";
+import { ProfileEmailComposer, ProfileEmailDrafts, type ProfileEmailDraft } from "@/components/profiles/profile-email-composer";
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { ProfileAtAGlance } from "@/components/profiles/profile-at-a-glance";
-import {
-  historyCategory,
-  simplifyHistoryText,
-} from "@/components/profiles/history-summary";
+import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import { mergeOptimisticActivities } from "@/components/profiles/profile-note-display";
 import {
   createActivityAction,
@@ -78,15 +71,13 @@ function formatShortDate(value: Date | string | null | undefined) {
 }
 
 function initials(name: string) {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0])
-      .join("")
-      .toUpperCase() || "AZ"
-  );
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join("")
+    .toUpperCase() || "AZ";
 }
 
 function StatCard({
@@ -117,9 +108,7 @@ function StatCard({
       <span className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-primary">
         {icon}
       </span>
-      <span className="block text-2xl font-bold tracking-tight text-[#173b48]">
-        {value}
-      </span>
+      <span className="block text-2xl font-bold tracking-tight text-[#173b48]">{value}</span>
       <span className="mt-1 flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#72858a]">
         {label}
         <ArrowUpRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
@@ -162,26 +151,14 @@ export function SimpleFullProfile({
   const [emailDraft, setEmailDraft] = useState<ProfileEmailDraft | null>(null);
   const [draftRevision, setDraftRevision] = useState(0);
   const [emailSaved, setEmailSaved] = useState(false);
-  function createEmail() {
-    setEmailDraft(null);
-    setEmailSaved(false);
-    setEmailComposerOpen(true);
-  }
-  useEffect(() => {
-    setEmailComposerOpen(false);
-    setEmailDraft(null);
-    setEmailSaved(false);
-  }, [profile.id]);
+  function createEmail() { setEmailDraft(null); setEmailSaved(false); setEmailComposerOpen(true); }
+  useEffect(() => { setEmailComposerOpen(false); setEmailDraft(null); setEmailSaved(false); }, [profile.id]);
   const [noteComposerOpen, setNoteComposerOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
-  const [optimisticActivities, setOptimisticActivities] = useState<
-    ActivityTimelineItem[]
-  >([]);
-  const [emailConversations, setEmailConversations] = useState<
-    GoogleProfileEmailConversation[]
-  >([]);
+  const [optimisticActivities, setOptimisticActivities] = useState<ActivityTimelineItem[]>([]);
+  const [emailConversations, setEmailConversations] = useState<GoogleProfileEmailConversation[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [primaryContactOpen, setPrimaryContactOpen] = useState(false);
   const isEditing = editing ?? internalEditing;
@@ -210,13 +187,9 @@ export function SimpleFullProfile({
   }, [profile.id]);
 
   const primaryContact =
-    profile.contacts.find((contact) => contact.isPrimary) ??
-    profile.contacts[0] ??
-    null;
+    profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
   const websiteHref = normalizeExternalWebsite(profile.place.website);
-  const location = [profile.place.city, profile.place.region]
-    .filter(Boolean)
-    .join(", ");
+  const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
   const meaningfulNotes = useMemo(
     () => profile.notes.filter((note) => historyCategory(note) !== "system"),
     [profile.notes],
@@ -229,60 +202,39 @@ export function SimpleFullProfile({
     [profile.followUps],
   );
   const nextFollowUp = openFollowUps[0] ?? null;
-  const followUpOverdue = Boolean(
-    nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now(),
-  );
-  const managerReviews =
-    (profile as EventProfile & { managerReviews?: ProfileManagerReview[] })
-      .managerReviews ?? [];
+  const followUpOverdue = Boolean(nextFollowUp && nextFollowUp.dueAt.getTime() < Date.now());
+  const managerReviews = ((profile as EventProfile & { managerReviews?: ProfileManagerReview[] }).managerReviews ?? []);
   const managerReviewAverage = managerReviews.length
-    ? managerReviews.reduce((sum, review) => sum + review.rating, 0) /
-      managerReviews.length
+    ? managerReviews.reduce((sum, review) => sum + review.rating, 0) / managerReviews.length
     : null;
   const ratingCount = managerReviews.length || ratingSummary?.count || 0;
   const average = managerReviewAverage ?? ratingSummary?.average ?? 0;
-  const filledStars = ratingCount
-    ? Math.max(0, Math.min(5, Math.round(average)))
-    : 0;
+  const filledStars = ratingCount ? Math.max(0, Math.min(5, Math.round(average))) : 0;
   const stars = `${"★".repeat(filledStars)}${"☆".repeat(5 - filledStars)}`;
-  const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map(
-    (note) => ({
-      id: note.id,
-      organizationId: profile.id,
-      contactId: note.contactId,
-      bookingId: note.bookingId,
-      kind: note.kind as any,
-      body: simplifyHistoryText(note.body),
-      occurredAt:
-        note.occurredAt instanceof Date
-          ? note.occurredAt
-          : new Date(note.occurredAt),
-      createdAt:
-        note.createdAt instanceof Date
-          ? note.createdAt
-          : new Date(note.createdAt),
-      updatedAt:
-        note.updatedAt instanceof Date
-          ? note.updatedAt
-          : new Date(note.updatedAt),
-      revisionCount: 0,
-      callOutcome: null,
-      hasLinkedCallSession: false,
-      importedFromAct: Boolean(note.importedFromAct),
-      actSourceType:
-        note.actSourceType === "note" ||
-        note.actSourceType === "history" ||
-        note.actSourceType === "activity"
-          ? note.actSourceType
-          : null,
-      historicalDateUnknown: Boolean((note as any).historicalDateUnknown),
-      paperNoteSource: (note as any).paperNoteSource ?? null,
-    }),
-  );
-  const activities = mergeOptimisticActivities(
-    persistedActivities,
-    optimisticActivities,
-  );
+  const persistedActivities: ActivityTimelineItem[] = meaningfulNotes.map((note) => ({
+    id: note.id,
+    organizationId: profile.id,
+    contactId: note.contactId,
+    bookingId: note.bookingId,
+    kind: note.kind as any,
+    body: simplifyHistoryText(note.body),
+    occurredAt: note.occurredAt instanceof Date ? note.occurredAt : new Date(note.occurredAt),
+    createdAt: note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt),
+    updatedAt: note.updatedAt instanceof Date ? note.updatedAt : new Date(note.updatedAt),
+    revisionCount: 0,
+    callOutcome: null,
+    hasLinkedCallSession: false,
+    importedFromAct: Boolean(note.importedFromAct),
+    actSourceType:
+      note.actSourceType === "note" ||
+      note.actSourceType === "history" ||
+      note.actSourceType === "activity"
+        ? note.actSourceType
+        : null,
+    historicalDateUnknown: Boolean((note as any).historicalDateUnknown),
+    paperNoteSource: (note as any).paperNoteSource ?? null,
+  }));
+  const activities = mergeOptimisticActivities(persistedActivities, optimisticActivities);
   const emailCount = emailConversations.length;
   const recentHistory = [
     ...activities.map((activity) => ({
@@ -301,14 +253,12 @@ export function SimpleFullProfile({
     })),
   ].sort(
     (left, right) =>
-      new Date(right.occurredAt).getTime() -
-        new Date(left.occurredAt).getTime() || left.id.localeCompare(right.id),
+      new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime() ||
+      left.id.localeCompare(right.id),
   );
   const normalizedSearch = noteSearch.trim().toLowerCase();
   const filteredActivities = normalizedSearch
-    ? activities.filter((item) =>
-        `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch),
-      )
+    ? activities.filter((item) => `${item.kind} ${item.body}`.toLowerCase().includes(normalizedSearch))
     : activities;
 
   function setEditing(next: boolean) {
@@ -321,10 +271,7 @@ export function SimpleFullProfile({
   }
 
   async function loadSimpleNotesPage(page: number) {
-    const result = await loadTimelinePageAction(
-      { organizationId: profile.id },
-      page,
-    );
+    const result = await loadTimelinePageAction({ organizationId: profile.id }, page);
     if (!result.ok) return result;
     return {
       ...result,
@@ -336,8 +283,7 @@ export function SimpleFullProfile({
 
   async function openOriginalPaperNote(activityId: string) {
     const source = await getPaperNoteActivitySource(activityId);
-    if (!source.url)
-      throw new Error("The original paper note image is not available.");
+    if (!source.url) throw new Error("The original paper note image is not available.");
     window.open(source.url, "_blank", "noopener,noreferrer");
   }
 
@@ -381,11 +327,7 @@ export function SimpleFullProfile({
       );
       await onProfileImageChange(canvas.toDataURL("image/jpeg", 0.82));
     } catch (error) {
-      setPhotoError(
-        error instanceof Error
-          ? error.message
-          : "Could not save profile photo.",
-      );
+      setPhotoError(error instanceof Error ? error.message : "Could not save profile photo.");
     } finally {
       setPhotoBusy(false);
     }
@@ -398,11 +340,7 @@ export function SimpleFullProfile({
     try {
       await onProfileImageChange(null);
     } catch (error) {
-      setPhotoError(
-        error instanceof Error
-          ? error.message
-          : "Could not remove profile photo.",
-      );
+      setPhotoError(error instanceof Error ? error.message : "Could not remove profile photo.");
     } finally {
       setPhotoBusy(false);
     }
@@ -439,9 +377,7 @@ export function SimpleFullProfile({
       setNoteComposerOpen(false);
       await onProfileSaved?.();
     } catch (error) {
-      setNoteError(
-        error instanceof Error ? error.message : "Could not save note.",
-      );
+      setNoteError(error instanceof Error ? error.message : "Could not save note.");
     } finally {
       setNoteSaving(false);
     }
@@ -463,9 +399,7 @@ export function SimpleFullProfile({
 
   const address = [
     [profile.place.address1, profile.place.address2].filter(Boolean).join(", "),
-    [profile.place.city, profile.place.region, profile.place.postalCode]
-      .filter(Boolean)
-      .join(" "),
+    [profile.place.city, profile.place.region, profile.place.postalCode].filter(Boolean).join(" "),
   ]
     .filter(Boolean)
     .join(", ");
@@ -482,12 +416,8 @@ export function SimpleFullProfile({
             AZ
           </div>
           <div>
-            <p className="font-bold tracking-tight text-[#173b48]">
-              Adventure Zone
-            </p>
-            <p className="text-xs text-[#71848a]">
-              Relationships / {originLabel}
-            </p>
+            <p className="font-bold tracking-tight text-[#173b48]">Adventure Zone</p>
+            <p className="text-xs text-[#71848a]">Relationships / {originLabel}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -503,66 +433,29 @@ export function SimpleFullProfile({
               type="button"
             >
               <Bell className="h-4 w-4" />
-              {nextFollowUp ? (
-                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d47e4d]" />
-              ) : null}
+              {nextFollowUp ? <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-[#d47e4d]" /> : null}
             </button>
             {notificationsOpen ? (
-              <div
-                className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]"
-                role="dialog"
-                aria-label="Notifications"
-              >
+              <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" role="dialog" aria-label="Notifications">
                 <div className="flex items-start justify-between gap-4 border-b border-[#e4ebe5] px-4 py-3">
                   <div>
-                    <p className="text-sm font-bold text-[#173b48]">
-                      Notifications
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#839596]">
-                      {nextFollowUp
-                        ? "One item needs your attention"
-                        : "You are all caught up"}
-                    </p>
+                    <p className="text-sm font-bold text-[#173b48]">Notifications</p>
+                    <p className="mt-0.5 text-xs text-[#839596]">{nextFollowUp ? "One item needs your attention" : "You are all caught up"}</p>
                   </div>
-                  <button
-                    aria-label="Close notifications"
-                    className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-primary"
-                    onClick={() => setNotificationsOpen(false)}
-                    type="button"
-                  >
+                  <button aria-label="Close notifications" className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-primary" onClick={() => setNotificationsOpen(false)} type="button">
                     <X className="h-4 w-4" />
                   </button>
                 </div>
                 {nextFollowUp ? (
                   <div className="flex items-start gap-3 px-4 py-4">
-                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#faecd9] text-[#a66845]">
-                      <Bell className="h-4 w-4" />
-                    </span>
+                    <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#faecd9] text-[#a66845]"><Bell className="h-4 w-4" /></span>
                     <div>
-                      <p className="text-sm font-bold text-[#315b66]">
-                        Follow-up due {followUpOverdue ? "now" : "soon"}
-                      </p>
-                      <p className="mt-1 text-sm leading-5 text-[#71848a]">
-                        Review the next action for {profile.place.name}.
-                      </p>
-                      <button
-                        className="mt-3 text-xs font-bold text-primary hover:text-primary/80"
-                        onClick={() => {
-                          setNotificationsOpen(false);
-                          setOpenSection(null);
-                        }}
-                        type="button"
-                      >
-                        Review follow-up{" "}
-                        <ArrowUpRight className="inline h-3.5 w-3.5" />
-                      </button>
+                      <p className="text-sm font-bold text-[#315b66]">Follow-up due {followUpOverdue ? "now" : "soon"}</p>
+                      <p className="mt-1 text-sm leading-5 text-[#71848a]">Review the next action for {profile.place.name}.</p>
+                      <button className="mt-3 text-xs font-bold text-primary hover:text-primary/80" onClick={() => { setNotificationsOpen(false); setOpenSection(null); }} type="button">Review follow-up <ArrowUpRight className="inline h-3.5 w-3.5" /></button>
                     </div>
                   </div>
-                ) : (
-                  <p className="px-4 py-4 text-sm text-[#71848a]">
-                    No open follow-ups.
-                  </p>
-                )}
+                ) : <p className="px-4 py-4 text-sm text-[#71848a]">No open follow-ups.</p>}
               </div>
             ) : null}
           </div>
@@ -578,63 +471,26 @@ export function SimpleFullProfile({
                 }}
                 type="button"
               >
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-[10px] font-bold text-[#397064]">
-                  {initials(primaryContact.name)}
-                </span>
-                <span className="hidden font-semibold text-[#526970] sm:inline">
-                  {primaryContact.name}
-                </span>
-                <ChevronDown
-                  className={`h-3.5 w-3.5 text-[#8ca0a2] transition-transform ${primaryContactOpen ? "rotate-180" : ""}`}
-                />
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-[10px] font-bold text-[#397064]">{initials(primaryContact.name)}</span>
+                <span className="hidden font-semibold text-[#526970] sm:inline">{primaryContact.name}</span>
+                <ChevronDown className={`h-3.5 w-3.5 text-[#8ca0a2] transition-transform ${primaryContactOpen ? "rotate-180" : ""}`} />
               </button>
               {primaryContactOpen ? (
-                <div
-                  className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]"
-                  role="dialog"
-                  aria-label={`Primary contact ${primaryContact.name}`}
-                >
+                <div className="absolute right-0 top-12 z-30 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-[#d8e2dd] bg-[#fbfcf8] shadow-[0_18px_40px_rgba(23,59,72,0.16)]" role="dialog" aria-label={`Primary contact ${primaryContact.name}`}>
                   <div className="flex items-start gap-3 border-b border-[#e4ebe5] px-4 py-4">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">
-                      {initials(primaryContact.name)}
-                    </span>
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">{initials(primaryContact.name)}</span>
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#75908b]">
-                        Primary contact
-                      </p>
-                      <p className="mt-1 font-bold text-[#173b48]">
-                        {primaryContact.name}
-                      </p>
-                      <p className="mt-0.5 text-sm text-[#71848a]">
-                        {primaryContact.role || "Contact"}
-                      </p>
+                      <p className="text-xs font-bold uppercase tracking-[0.12em] text-[#75908b]">Primary contact</p>
+                      <p className="mt-1 font-bold text-[#173b48]">{primaryContact.name}</p>
+                      <p className="mt-0.5 text-sm text-[#71848a]">{primaryContact.role || "Contact"}</p>
                     </div>
                   </div>
                   <div className="grid gap-2 px-4 py-3">
-                    {primaryContact.phone ? (
-                      <a
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]"
-                        href={`tel:${primaryContact.phone}`}
-                      >
-                        <Phone className="h-4 w-4 text-[#397064]" />
-                        {formatPhoneDisplay(primaryContact.phone)}
-                      </a>
-                    ) : null}
-                    {primaryContact.email ? (
-                      <a
-                        className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]"
-                        href={`mailto:${primaryContact.email}`}
-                      >
-                        <Mail className="h-4 w-4 text-[#397064]" />
-                        {primaryContact.email}
-                      </a>
-                    ) : null}
+                    {primaryContact.phone ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`tel:${primaryContact.phone}`}><Phone className="h-4 w-4 text-[#397064]" />{formatPhoneDisplay(primaryContact.phone)}</a> : null}
+                    {primaryContact.email ? <a className="inline-flex items-center gap-2 rounded-lg bg-[#f1f6f2] px-3 py-2.5 text-sm font-semibold text-[#315b66]" href={`mailto:${primaryContact.email}`}><Mail className="h-4 w-4 text-[#397064]" />{primaryContact.email}</a> : null}
                   </div>
                   <div className="border-t border-[#e4ebe5] px-4 py-3">
-                    <Link
-                      className="button-primary inline-flex w-full items-center justify-center gap-2"
-                      href={`/contacts/${primaryContact.id}`}
-                    >
+                    <Link className="button-primary inline-flex w-full items-center justify-center gap-2" href={`/contacts/${primaryContact.id}`}>
                       Open contact profile <ArrowUpRight className="h-4 w-4" />
                     </Link>
                   </div>
@@ -648,18 +504,10 @@ export function SimpleFullProfile({
       <div className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2 text-xs font-semibold text-[#789096]">
           {onBack ? (
-            <button
-              className="inline-flex items-center gap-1.5 text-[#60747a] hover:text-[#173b48]"
-              onClick={onBack}
-              type="button"
-            >
+            <button className="inline-flex items-center gap-1.5 text-[#60747a] hover:text-[#173b48]" onClick={onBack} type="button">
               <ArrowLeft className="h-3.5 w-3.5" /> {originLabel}
             </button>
-          ) : (
-            <Link href="/profiles" className="hover:text-[#315b66]">
-              {originLabel}
-            </Link>
-          )}
+          ) : <Link href="/profiles" className="hover:text-[#315b66]">{originLabel}</Link>}
           <span className="text-[#a8b5b4]">/</span>
           <span className="text-[#315b66]">{profile.place.name}</span>
         </div>
@@ -685,18 +533,13 @@ export function SimpleFullProfile({
         <div className="flex flex-col gap-6 p-5 sm:p-7 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex min-w-0 items-start gap-4">
             <div className="shrink-0">
-              <label
-                className="group relative block w-fit cursor-pointer"
-                title="Change profile photo"
-              >
+              <label className="group relative block w-fit cursor-pointer" title="Change profile photo">
                 <input
                   className="sr-only"
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   disabled={photoBusy}
-                  onChange={(event) =>
-                    void changePhoto(event.target.files?.[0])
-                  }
+                  onChange={(event) => void changePhoto(event.target.files?.[0])}
                 />
                 {profileImageDataUrl ? (
                   <img
@@ -743,8 +586,7 @@ export function SimpleFullProfile({
                 ) : null}
                 <span className="inline-flex items-center gap-1.5 capitalize">
                   <Building2 className="h-4 w-4 text-[#4b8575]" />
-                  {profile.place.placeType?.replaceAll("_", " ") ||
-                    "Organization"}
+                  {profile.place.placeType?.replaceAll("_", " ") || "Organization"}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
                   <Check className="h-4 w-4 text-[#4b8575]" />
@@ -756,15 +598,10 @@ export function SimpleFullProfile({
                   className="inline-flex items-center gap-2"
                   aria-label={`${average.toFixed(1)} out of 5 stars from ${ratingCount} reviews`}
                 >
-                  <span
-                    className="tracking-[0.1em] text-[#d4874f]"
-                    aria-hidden="true"
-                  >
+                  <span className="tracking-[0.1em] text-[#d4874f]" aria-hidden="true">
                     {stars}
                   </span>
-                  <span className="font-bold text-[#45616a]">
-                    {average.toFixed(1)}
-                  </span>
+                  <span className="font-bold text-[#45616a]">{average.toFixed(1)}</span>
                   <span>({ratingCount} reviews)</span>
                 </span>
                 {websiteHref ? (
@@ -780,10 +617,7 @@ export function SimpleFullProfile({
                 ) : null}
               </div>
               {photoError ? (
-                <p
-                  className="mt-2 text-sm font-semibold text-[#b8544f]"
-                  role="alert"
-                >
+                <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">
                   {photoError}
                 </p>
               ) : null}
@@ -792,30 +626,13 @@ export function SimpleFullProfile({
 
           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
             {callHref ? (
-              <Link
-                className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]"
-                href={callHref}
-              >
+              <Link className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" href={callHref}>
                 <Phone className="h-4 w-4" />
                 Call
               </Link>
             ) : null}
-            <button
-              className="button-primary inline-flex items-center gap-2"
-              type="button"
-              onClick={createEmail}
-            >
-              <Mail className="h-4 w-4" />
-              Create Email
-            </button>
-            <button
-              aria-label="Edit profile"
-              className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]"
-              onClick={() => setEditing(true)}
-              type="button"
-            >
-              Edit
-            </button>
+            <button className="button-primary inline-flex items-center gap-2" type="button" onClick={createEmail}><Mail className="h-4 w-4" />Create Email</button>
+            <button aria-label="Edit profile" className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" onClick={() => setEditing(true)} type="button">Edit</button>
             <button
               className="button-primary inline-flex items-center gap-2"
               onClick={openNoteComposer}
@@ -829,9 +646,7 @@ export function SimpleFullProfile({
 
         {profile.place.description?.trim() ? (
           <div className="border-t border-[#e1e8e3] px-4 py-4 sm:px-7">
-            <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-              About
-            </h2>
+            <h2 className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#75908b]">About</h2>
             <p className="mt-2 whitespace-pre-line text-sm leading-6 text-[#4d666d]">
               {profile.place.description.trim()}
             </p>
@@ -846,22 +661,14 @@ export function SimpleFullProfile({
             <dl className="mt-2 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-3">
               <div>
                 <dt className="font-semibold text-[#829696]">Address</dt>
-                <dd className="mt-0.5 leading-5 text-[#4d666d]">
-                  {address || "Not recorded"}
-                </dd>
+                <dd className="mt-0.5 leading-5 text-[#4d666d]">{address || "Not recorded"}</dd>
               </div>
               <div>
-                <dt className="font-semibold text-[#829696]">
-                  Organization group
-                </dt>
-                <dd className="mt-0.5 text-[#4d666d]">
-                  {profile.familyContext?.name || "Not grouped"}
-                </dd>
+                <dt className="font-semibold text-[#829696]">Organization group</dt>
+                <dd className="mt-0.5 text-[#4d666d]">{profile.familyContext?.name || "Not grouped"}</dd>
               </div>
               <div>
-                <dt className="font-semibold text-[#829696]">
-                  Relationship started
-                </dt>
+                <dt className="font-semibold text-[#829696]">Relationship started</dt>
                 <dd className="mt-0.5 text-[#4d666d]">Not recorded</dd>
               </div>
             </dl>
@@ -905,13 +712,9 @@ export function SimpleFullProfile({
             <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-                    Next action
-                  </p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Next action</p>
                   <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]">
-                    {nextFollowUp
-                      ? "Follow up with this organization"
-                      : "All caught up"}
+                    {nextFollowUp ? "Follow up with this organization" : "All caught up"}
                   </h2>
                   <p className="mt-1 text-sm text-[#71848a]">
                     {nextFollowUp
@@ -920,12 +723,8 @@ export function SimpleFullProfile({
                   </p>
                 </div>
                 {nextFollowUp ? (
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-bold ${followUpOverdue ? "bg-[#f5dfdc] text-[#9b4e48]" : "bg-[#faecd9] text-[#9b633e]"}`}
-                  >
-                    {followUpOverdue
-                      ? "Overdue"
-                      : `Due ${formatShortDate(nextFollowUp.dueAt) ?? "soon"}`}
+                  <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${followUpOverdue ? "bg-[#f5dfdc] text-[#9b4e48]" : "bg-[#faecd9] text-[#9b633e]"}`}>
+                    {followUpOverdue ? "Overdue" : `Due ${formatShortDate(nextFollowUp.dueAt) ?? "soon"}`}
                   </span>
                 ) : (
                   <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e2efe9] text-[#397064]">
@@ -940,19 +739,11 @@ export function SimpleFullProfile({
                       {initials(primaryContact.name)}
                     </span>
                     <span>
-                      <span className="block text-xs text-[#87989a]">
-                        Primary contact
-                      </span>
-                      <span className="font-semibold">
-                        {primaryContact.name}
-                      </span>
+                      <span className="block text-xs text-[#87989a]">Primary contact</span>
+                      <span className="font-semibold">{primaryContact.name}</span>
                     </span>
                   </div>
-                  <ProfileActionsMenu
-                    profileId={profile.id}
-                    contactId={primaryContact.id}
-                    showAddNote={false}
-                  />
+                  <ProfileActionsMenu profileId={profile.id} contactId={primaryContact.id} showAddNote={false} />
                 </div>
               ) : null}
             </section>
@@ -960,12 +751,8 @@ export function SimpleFullProfile({
             <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-                    Relationship activity
-                  </p>
-                  <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]">
-                    Recent history
-                  </h2>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship activity</p>
+                  <h2 className="mt-1 text-xl font-bold tracking-tight text-[#173b48]">Recent history</h2>
                 </div>
                 <button
                   className="inline-flex items-center gap-1.5 text-sm font-bold text-[#397064] hover:text-[#244f47]"
@@ -980,36 +767,20 @@ export function SimpleFullProfile({
                 {recentHistory.slice(0, 3).length ? (
                   recentHistory.slice(0, 3).map((activity) => (
                     <article className="flex gap-3" key={activity.id}>
-                      <div
-                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activity.kind === "call" ? "bg-[#f5e6dc] text-[#a66845]" : "bg-[#e3eee8] text-[#397064]"}`}
-                      >
-                        {activity.kind === "call" ? (
-                          <Phone className="h-4 w-4" />
-                        ) : activity.kind === "email" ? (
-                          <Mail className="h-4 w-4" />
-                        ) : (
-                          <StickyNote className="h-4 w-4" />
-                        )}
+                      <div className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${activity.kind === "call" ? "bg-[#f5e6dc] text-[#a66845]" : "bg-[#e3eee8] text-[#397064]"}`}>
+                        {activity.kind === "call" ? <Phone className="h-4 w-4" /> : activity.kind === "email" ? <Mail className="h-4 w-4" /> : <StickyNote className="h-4 w-4" />}
                       </div>
                       <div className="min-w-0 flex-1 border-b border-[#edf0eb] pb-4 last:border-0 last:pb-0">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#668078]">
-                            {activity.kind}
-                          </p>
-                          <time className="text-xs text-[#8b9a9b]">
-                            {formatShortDate(activity.occurredAt)}
-                          </time>
+                          <p className="text-xs font-bold uppercase tracking-[0.1em] text-[#668078]">{activity.kind}</p>
+                          <time className="text-xs text-[#8b9a9b]">{formatShortDate(activity.occurredAt)}</time>
                         </div>
-                        <p className="mt-1 text-sm leading-6 text-[#4d666d]">
-                          {activity.body}
-                        </p>
+                        <p className="mt-1 text-sm leading-6 text-[#4d666d]">{activity.body}</p>
                       </div>
                     </article>
                   ))
                 ) : (
-                  <p className="text-sm text-[#71848a]">
-                    No relationship activity has been recorded yet.
-                  </p>
+                  <p className="text-sm text-[#71848a]">No relationship activity has been recorded yet.</p>
                 )}
               </div>
             </section>
@@ -1018,35 +789,20 @@ export function SimpleFullProfile({
           <aside className="grid content-start gap-5">
             <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)]">
               <div className="flex items-center justify-between">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-                  Relationship health
-                </p>
-                <span className="text-xs font-bold text-[#397064]">
-                  {ratingCount ? "Good standing" : "Not rated"}
-                </span>
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship health</p>
+                <span className="text-xs font-bold text-[#397064]">{ratingCount ? "Good standing" : "Not rated"}</span>
               </div>
               <div className="mt-4 flex items-end justify-between">
                 <span className="text-3xl font-bold tracking-tight text-[#173b48]">
-                  {average.toFixed(1)}{" "}
-                  <span className="text-sm font-semibold text-[#849597]">
-                    / 5
-                  </span>
+                  {average.toFixed(1)} <span className="text-sm font-semibold text-[#849597]">/ 5</span>
                 </span>
-                <span className="text-xs text-[#849597]">
-                  {ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}
-                </span>
+                <span className="text-xs text-[#849597]">{ratingCount} rated occurrence{ratingCount === 1 ? "" : "s"}</span>
               </div>
               <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#e1e9e4]">
-                <div
-                  className="h-full rounded-full bg-[#5d9583]"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, average * 20))}%`,
-                  }}
-                />
+                <div className="h-full rounded-full bg-[#5d9583]" style={{ width: `${Math.min(100, Math.max(0, average * 20))}%` }} />
               </div>
               <p className="mt-3 text-sm leading-5 text-[#71848a]">
-                Use recent history and follow-ups to keep this relationship
-                moving with a steady cadence.
+                Use recent history and follow-ups to keep this relationship moving with a steady cadence.
               </p>
             </section>
           </aside>
@@ -1057,17 +813,10 @@ export function SimpleFullProfile({
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-                People at this organization
-              </p>
-              <h2 className="mt-1 text-xl font-bold text-[#173b48]">
-                Contacts
-              </h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">People at this organization</p>
+              <h2 className="mt-1 text-xl font-bold text-[#173b48]">Contacts</h2>
             </div>
-            <Link
-              className="button-primary inline-flex items-center gap-2"
-              href="/contacts/new"
-            >
+            <Link className="button-primary inline-flex items-center gap-2" href="/contacts/new">
               <Plus className="h-4 w-4" />
               Add contact
             </Link>
@@ -1075,25 +824,15 @@ export function SimpleFullProfile({
           {profile.contacts.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.contacts.map((contact) => (
-                <article
-                  className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4"
-                  key={contact.id}
-                >
+                <article className="rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4" key={contact.id}>
                   <div className="flex items-start justify-between gap-3">
-                    <Link
-                      className="flex min-w-0 items-center gap-3"
-                      href={`/contacts/${contact.id}`}
-                    >
+                    <Link className="flex min-w-0 items-center gap-3" href={`/contacts/${contact.id}`}>
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#dbe9e4] text-xs font-bold text-[#397064]">
                         {initials(contact.name)}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate font-bold text-[#173b48]">
-                          {contact.name}
-                        </span>
-                        <span className="block truncate text-sm text-[#71848a]">
-                          {contact.role || "Contact"}
-                        </span>
+                        <span className="block truncate font-bold text-[#173b48]">{contact.name}</span>
+                        <span className="block truncate text-sm text-[#71848a]">{contact.role || "Contact"}</span>
                       </span>
                     </Link>
                     {contact.isPrimary ? (
@@ -1103,33 +842,22 @@ export function SimpleFullProfile({
                     ) : null}
                   </div>
                   <p className="mt-4 text-xs font-semibold text-[#839596]">
-                    {contact.phone ||
-                      contact.email ||
-                      "Contact details not recorded"}
+                    {contact.phone || contact.email || "Contact details not recorded"}
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {contact.phone ? (
-                      <a
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]"
-                        href={`tel:${contact.phone}`}
-                      >
+                      <a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]" href={`tel:${contact.phone}`}>
                         <Phone className="h-3.5 w-3.5" />
                         Call
                       </a>
                     ) : null}
                     {contact.email ? (
-                      <a
-                        className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]"
-                        href={`mailto:${contact.email}`}
-                      >
+                      <a className="inline-flex items-center gap-1.5 rounded-md border border-[#d8e2dd] px-2.5 py-2 text-xs font-bold text-[#4f6a70] hover:border-[#9ab6a9]" href={`mailto:${contact.email}`}>
                         <Mail className="h-3.5 w-3.5" />
                         Email
                       </a>
                     ) : null}
-                    <Link
-                      className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80"
-                      href={`/contacts/${contact.id}`}
-                    >
+                    <Link className="ml-auto inline-flex items-center gap-1 text-xs font-bold text-primary hover:text-primary/80" href={`/contacts/${contact.id}`}>
                       Details
                       <ArrowUpRight className="h-3.5 w-3.5" />
                     </Link>
@@ -1138,77 +866,44 @@ export function SimpleFullProfile({
               ))}
             </div>
           ) : (
-            <p className="mt-4 text-sm text-[#71848a]">
-              No contacts have been added yet.
-            </p>
+            <p className="mt-4 text-sm text-[#71848a]">No contacts have been added yet.</p>
           )}
         </section>
       ) : null}
 
       {openSection === "events" ? (
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-            Yearly booking records
-          </p>
-          <h2 className="mt-1 text-xl font-bold text-[#173b48]">
-            Bookings & opportunities
-          </h2>
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Yearly booking records</p>
+          <h2 className="mt-1 text-xl font-bold text-[#173b48]">Bookings & opportunities</h2>
           {managerReviews.length ? (
             <div className="mt-5 rounded-xl border border-[#dce6e0] bg-[#f3f8f3] p-4">
               <div className="flex items-center gap-2">
                 <Star className="h-4 w-4 fill-[#d4874f] text-[#d4874f]" />
                 <h3 className="font-bold text-[#173b48]">Event reviews</h3>
-                <span className="text-xs text-[#71848a]">
-                  ({managerReviews.length})
-                </span>
+                <span className="text-xs text-[#71848a]">({managerReviews.length})</span>
               </div>
               <div className="mt-3 grid gap-3">
                 {managerReviews.map((review) => {
-                  const booking = profile.bookings.find(
-                    (item) => item.id === review.bookingId,
-                  );
+                  const booking = profile.bookings.find((item) => item.id === review.bookingId);
                   const notes = [
                     review.feedback,
                     review.organizerSiteNotes,
                     review.crewNotes,
                   ].filter((value): value is string => Boolean(value?.trim()));
                   return (
-                    <article
-                      className="rounded-lg border border-[#dce6e0] bg-[#fbfcf8] p-3"
-                      key={review.id}
-                    >
+                    <article className="rounded-lg border border-[#dce6e0] bg-[#fbfcf8] p-3" key={review.id}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <Link
-                          className="font-bold text-[#315b66] hover:text-[#244f47]"
-                          href={`/bookings/${review.bookingId}`}
-                        >
+                        <Link className="font-bold text-[#315b66] hover:text-[#244f47]" href={`/bookings/${review.bookingId}`}>
                           Review for {booking?.name ?? "event"}
                         </Link>
-                        <span
-                          aria-label={`${review.rating} out of 5 stars`}
-                          className="font-bold tracking-[0.08em] text-[#d4874f]"
-                        >
-                          {"★".repeat(Math.max(0, Math.min(5, review.rating)))}
-                          {"☆".repeat(
-                            5 - Math.max(0, Math.min(5, review.rating)),
-                          )}
+                        <span aria-label={`${review.rating} out of 5 stars`} className="font-bold tracking-[0.08em] text-[#d4874f]">
+                          {"★".repeat(Math.max(0, Math.min(5, review.rating)))}{"☆".repeat(5 - Math.max(0, Math.min(5, review.rating)))}
                         </span>
                       </div>
-                      {notes.length ? (
-                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#4d666d]">
-                          {notes.join("\n\n")}
-                        </p>
-                      ) : null}
+                      {notes.length ? <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[#4d666d]">{notes.join("\n\n")}</p> : null}
                       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#829696]">
-                        <time>
-                          {formatShortDate(review.createdAt) ??
-                            "Date not recorded"}
-                        </time>
-                        {review.recommendReturn ? (
-                          <span>
-                            Recommend return: {review.recommendReturn}
-                          </span>
-                        ) : null}
+                        <time>{formatShortDate(review.createdAt) ?? "Date not recorded"}</time>
+                        {review.recommendReturn ? <span>Recommend return: {review.recommendReturn}</span> : null}
                       </div>
                     </article>
                   );
@@ -1219,19 +914,11 @@ export function SimpleFullProfile({
           {profile.bookings.length ? (
             <div className="mt-5 grid gap-3 md:grid-cols-2">
               {profile.bookings.map((booking) => (
-                <Link
-                  className="group rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4 transition hover:border-[#9ab6a9] hover:bg-[#f3f8f3]"
-                  href={`/bookings/${booking.id}`}
-                  key={booking.id}
-                >
+                <Link className="group rounded-xl border border-[#dce6e0] bg-[#f8faf6] p-4 transition hover:border-[#9ab6a9] hover:bg-[#f3f8f3]" href={`/bookings/${booking.id}`} key={booking.id}>
                   <div className="flex items-start justify-between gap-3">
                     <span>
-                      <span className="block font-bold text-[#173b48]">
-                        {booking.name}
-                      </span>
-                      <span className="mt-1 block text-sm text-[#71848a]">
-                        {booking.notes || "Booking context"}
-                      </span>
+                      <span className="block font-bold text-[#173b48]">{booking.name}</span>
+                      <span className="mt-1 block text-sm text-[#71848a]">{booking.notes || "Booking context"}</span>
                     </span>
                     <span className="rounded-full bg-[#e2efe9] px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-[#397064]">
                       {booking.status.replaceAll("_", " ")}
@@ -1248,9 +935,7 @@ export function SimpleFullProfile({
               ))}
             </div>
           ) : (
-            <p className="mt-4 text-sm text-[#71848a]">
-              No bookings have been added yet.
-            </p>
+            <p className="mt-4 text-sm text-[#71848a]">No bookings have been added yet.</p>
           )}
         </section>
       ) : null}
@@ -1259,18 +944,10 @@ export function SimpleFullProfile({
         <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">
-                Relationship history
-              </p>
-              <h2 className="mt-1 text-xl font-bold text-[#173b48]">
-                Activity history
-              </h2>
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#75908b]">Relationship history</p>
+              <h2 className="mt-1 text-xl font-bold text-[#173b48]">Activity history</h2>
             </div>
-            <button
-              className="button-primary inline-flex items-center gap-2"
-              onClick={openNoteComposer}
-              type="button"
-            >
+            <button className="button-primary inline-flex items-center gap-2" onClick={openNoteComposer} type="button">
               <Plus className="h-4 w-4" />
               Add note
             </button>
@@ -1296,32 +973,12 @@ export function SimpleFullProfile({
                   onChange={(event) => setNoteBody(event.target.value)}
                 />
               </label>
-              {noteError ? (
-                <p
-                  className="mt-2 text-sm font-semibold text-[#b8544f]"
-                  role="alert"
-                >
-                  {noteError}
-                </p>
-              ) : null}
+              {noteError ? <p className="mt-2 text-sm font-semibold text-[#b8544f]" role="alert">{noteError}</p> : null}
               <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  className="button-primary"
-                  disabled={noteSaving || !noteBody.trim()}
-                  onClick={() => void saveNote()}
-                  type="button"
-                >
+                <button className="button-primary" disabled={noteSaving || !noteBody.trim()} onClick={() => void saveNote()} type="button">
                   {noteSaving ? "Saving…" : "Save note"}
                 </button>
-                <button
-                  className="button-secondary !bg-transparent"
-                  disabled={noteSaving}
-                  onClick={() => {
-                    setNoteComposerOpen(false);
-                    setNoteBody("");
-                  }}
-                  type="button"
-                >
+                <button className="button-secondary !bg-transparent" disabled={noteSaving} onClick={() => { setNoteComposerOpen(false); setNoteBody(""); }} type="button">
                   Cancel
                 </button>
               </div>
@@ -1329,9 +986,7 @@ export function SimpleFullProfile({
           ) : null}
           <div className="mt-6">
             {normalizedSearch && filteredActivities.length === 0 ? (
-              <p className="rounded-xl bg-[#f4f8f4] p-4 text-sm text-[#71848a]">
-                No notes or history match “{noteSearch.trim()}”.
-              </p>
+              <p className="rounded-xl bg-[#f4f8f4] p-4 text-sm text-[#71848a]">No notes or history match “{noteSearch.trim()}”.</p>
             ) : (
               <ActivityTimeline
                 activities={filteredActivities}
@@ -1347,71 +1002,30 @@ export function SimpleFullProfile({
         </section>
       ) : null}
 
-      {emailComposerOpen ? (
-        <ProfileEmailComposer
-          key={`${profile.id}:${emailDraft?.id ?? "new"}`}
-          organizationId={profile.id}
-          profileName={profile.place.name}
-          contacts={profile.contacts}
-          draft={emailDraft}
-          onClose={() => setEmailComposerOpen(false)}
-          onSaved={() => {
-            setEmailComposerOpen(false);
-            setOpenSection("emails");
-            setDraftRevision((value) => value + 1);
-            setEmailSaved(true);
-          }}
-        />
-      ) : null}
-      {emailSaved ? (
-        <p
-          role="status"
-          className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"
-        >
-          Email draft saved. Nothing was sent. Find it in Emails below.
-        </p>
-      ) : null}
-      {openSection === "emails" ? (
-        <div className="grid gap-4">
-          <ProfileEmailDrafts
-            organizationId={profile.id}
-            revision={draftRevision}
-            onCreate={createEmail}
-            onEdit={(draft) => {
-              setEmailDraft(draft);
-              setEmailSaved(false);
-              setEmailComposerOpen(true);
-            }}
-          />
-          <ProfileGoogleEmailPanel organizationId={profile.id} />
-        </div>
-      ) : null}
+      {emailComposerOpen ? <ProfileEmailComposer key={`${profile.id}:${emailDraft?.id ?? "new"}`} organizationId={profile.id} profileName={profile.place.name} contacts={profile.contacts} draft={emailDraft} onClose={() => setEmailComposerOpen(false)} onSaved={() => { setEmailComposerOpen(false); setOpenSection("emails"); setDraftRevision((value) => value + 1); setEmailSaved(true); }} /> : null}
+      {emailSaved ? <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">Email draft saved. Nothing was sent. Find it in Emails below.</p> : null}
+      {openSection === "emails" ? <div className="grid gap-4">
+        <ProfileEmailDrafts organizationId={profile.id} revision={draftRevision} onCreate={createEmail} onEdit={(draft) => { setEmailDraft(draft); setEmailSaved(false); setEmailComposerOpen(true); }} />
+        <ProfileGoogleEmailPanel organizationId={profile.id} />
+      </div> : null}
 
       <section className="rounded-2xl border border-[#d8e2dd] bg-[#fbfcf8] p-5 shadow-[0_12px_32px_rgba(32,71,77,0.04)] sm:p-6">
         <div className="flex items-center gap-2">
           <Globe2 className="h-4 w-4 text-[#4b8575]" />
-          <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-[#75908b]">
-            About this organization
-          </h2>
+          <h2 className="text-xs font-bold uppercase tracking-[0.16em] text-[#75908b]">About this organization</h2>
         </div>
         <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="font-semibold text-[#829696]">Description</dt>
-            <dd className="mt-1 whitespace-pre-wrap leading-6 text-[#4d666d]">
-              {(profile.place as any).description || "No description recorded."}
-            </dd>
+            <dd className="mt-1 whitespace-pre-wrap leading-6 text-[#4d666d]">{(profile.place as any).description || "No description recorded."}</dd>
           </div>
           <div>
             <dt className="font-semibold text-[#829696]">Office phone</dt>
-            <dd className="mt-1 text-[#4d666d]">
-              {formatPhoneDisplay(profile.place.phone) || "Not recorded"}
-            </dd>
+            <dd className="mt-1 text-[#4d666d]">{formatPhoneDisplay(profile.place.phone) || "Not recorded"}</dd>
           </div>
           <div>
             <dt className="font-semibold text-[#829696]">Website</dt>
-            <dd className="mt-1 break-all text-[#4d666d]">
-              {profile.place.website || "Not recorded"}
-            </dd>
+            <dd className="mt-1 break-all text-[#4d666d]">{profile.place.website || "Not recorded"}</dd>
           </div>
         </dl>
       </section>

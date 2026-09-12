@@ -30,8 +30,8 @@ export type EventProfilePlace = {
   region: string | null;
   postalCode: string | null;
   website: string | null;
-  applicationDeadline?: string | null;
-  recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
+  applicationDeadline: string | null;
+  recommendedDealModel: "flat_fee" | "pay_per_play" | "either" | null;
   lastResort: boolean;
   lastResortReason: string | null;
   actRecordId: string | null;
@@ -116,10 +116,7 @@ export type EventProfileRecordSet = {
   externalLinks: EventProfileSourceReference[];
 };
 
-export type EventProfileContact = Omit<
-  EventProfileContactRecord,
-  "firstName" | "lastName"
-> & {
+export type EventProfileContact = Omit<EventProfileContactRecord, "firstName" | "lastName"> & {
   name: string;
 };
 
@@ -133,17 +130,7 @@ export type EventProfile = {
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
   sourceProvenance: EventProfileSourceReference[];
-  decisionSummary?: {
-    priority: string | null;
-    pipelineStatus: string | null;
-    nextActionKind: string | null;
-    nextActionDueAt: Date | string | null;
-  };
-  familyContext?: {
-    kind: "event_family" | "organization_group";
-    id: string;
-    name: string;
-  } | null;
+  familyContext?: { kind: "event_family" | "organization_group"; id: string; name: string } | null;
   migrationHistory?: {
     contactSourceIds: string[];
     phones: string[];
@@ -160,17 +147,12 @@ export interface EventProfileRepository {
   ): Promise<EventProfile | null>;
 }
 
-function contactOrder(
-  left: EventProfileContactRecord,
-  right: EventProfileContactRecord,
-) {
-  return (
-    Number(right.isPrimary) - Number(left.isPrimary) ||
-    (left.role ?? "").localeCompare(right.role ?? "") ||
-    left.lastName.localeCompare(right.lastName) ||
-    left.firstName.localeCompare(right.firstName) ||
-    left.id.localeCompare(right.id)
-  );
+function contactOrder(left: EventProfileContactRecord, right: EventProfileContactRecord) {
+  return Number(right.isPrimary) - Number(left.isPrimary)
+    || (left.role ?? "").localeCompare(right.role ?? "")
+    || left.lastName.localeCompare(right.lastName)
+    || left.firstName.localeCompare(right.firstName)
+    || left.id.localeCompare(right.id);
 }
 
 function sourceReference(
@@ -179,42 +161,22 @@ function sourceReference(
   sourceEntityType: string,
   actRecordId: string | null,
 ): EventProfileSourceReference[] {
-  return actRecordId
-    ? [
-        {
-          entityType,
-          entityId,
-          sourceEntityType,
-          actRecordId,
-          isPrimary: true,
-          syncMode: "pull_only",
-        },
-      ]
-    : [];
+  return actRecordId ? [{
+    entityType,
+    entityId,
+    sourceEntityType,
+    actRecordId,
+    isPrimary: true,
+    syncMode: "pull_only",
+  }] : [];
 }
 
 function stableSourceProvenance(records: EventProfileRecordSet) {
   const legacyReferences = [
-    ...sourceReference(
-      "organization",
-      records.place.id,
-      "company",
-      records.place.actRecordId,
-    ),
-    ...records.contacts.flatMap((contact) =>
-      sourceReference("contact", contact.id, "contact", contact.actRecordId),
-    ),
-    ...records.bookings.flatMap((booking) =>
-      sourceReference(
-        "booking",
-        booking.id,
-        "opportunity",
-        booking.actRecordId,
-      ),
-    ),
-    ...records.groups.flatMap((group) =>
-      sourceReference("calling_list", group.id, "group", group.actRecordId),
-    ),
+    ...sourceReference("organization", records.place.id, "company", records.place.actRecordId),
+    ...records.contacts.flatMap((contact) => sourceReference("contact", contact.id, "contact", contact.actRecordId)),
+    ...records.bookings.flatMap((booking) => sourceReference("booking", booking.id, "opportunity", booking.actRecordId)),
+    ...records.groups.flatMap((group) => sourceReference("calling_list", group.id, "group", group.actRecordId)),
   ];
   const unique = new Map<string, EventProfileSourceReference>();
   for (const reference of [...legacyReferences, ...records.externalLinks]) {
@@ -223,12 +185,11 @@ function stableSourceProvenance(records: EventProfileRecordSet) {
       reference,
     );
   }
-  return [...unique.values()].toSorted(
-    (left, right) =>
-      left.entityType.localeCompare(right.entityType) ||
-      left.entityId.localeCompare(right.entityId) ||
-      left.sourceEntityType.localeCompare(right.sourceEntityType) ||
-      left.actRecordId.localeCompare(right.actRecordId),
+  return [...unique.values()].toSorted((left, right) =>
+    left.entityType.localeCompare(right.entityType)
+    || left.entityId.localeCompare(right.entityId)
+    || left.sourceEntityType.localeCompare(right.sourceEntityType)
+    || left.actRecordId.localeCompare(right.actRecordId),
   );
 }
 
@@ -236,11 +197,7 @@ export function buildEventProfile(
   records: EventProfileRecordSet,
   requestedContactId?: string,
   migrationHistory: EventProfile["migrationHistory"] = {
-    contactSourceIds: [],
-    phones: [],
-    notes: [],
-    bookingSourceIds: [],
-    groupSourceIds: [],
+    contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
 ): EventProfile {
   const contacts = records.contacts.toSorted(contactOrder).map((contact) => ({
@@ -258,35 +215,27 @@ export function buildEventProfile(
   }));
   const selectedContactId = contacts.some(({ id }) => id === requestedContactId)
     ? requestedContactId!
-    : (contacts[0]?.id ?? null);
+    : contacts[0]?.id ?? null;
 
   return {
     id: records.place.id,
     place: records.place,
     contacts,
     selectedContactId,
-    bookings: records.bookings.toSorted(
-      (left, right) =>
-        Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0) ||
-        left.name.localeCompare(right.name) ||
-        left.id.localeCompare(right.id),
+    bookings: records.bookings.toSorted((left, right) =>
+      Number(right.startsAt ?? 0) - Number(left.startsAt ?? 0)
+      || left.name.localeCompare(right.name)
+      || left.id.localeCompare(right.id),
     ),
-    notes: records.activities.toSorted(
-      (left, right) =>
-        Number(right.occurredAt) - Number(left.occurredAt) ||
-        left.id.localeCompare(right.id),
+    notes: records.activities.toSorted((left, right) =>
+      Number(right.occurredAt) - Number(left.occurredAt) || left.id.localeCompare(right.id),
     ),
-    followUps: records.followUps.toSorted(
-      (left, right) =>
-        Number(left.completedAt !== null) -
-          Number(right.completedAt !== null) ||
-        Number(left.dueAt) - Number(right.dueAt) ||
-        left.id.localeCompare(right.id),
+    followUps: records.followUps.toSorted((left, right) =>
+      Number(left.completedAt !== null) - Number(right.completedAt !== null)
+      || Number(left.dueAt) - Number(right.dueAt)
+      || left.id.localeCompare(right.id),
     ),
-    groups: records.groups.toSorted(
-      (left, right) =>
-        left.name.localeCompare(right.name) || left.id.localeCompare(right.id),
-    ),
+    groups: records.groups.toSorted((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)),
     sourceProvenance: stableSourceProvenance(records),
     migrationHistory,
   };
@@ -297,79 +246,56 @@ type DrizzleDatabase = typeof database;
 export class DrizzleEventProfileRepository implements EventProfileRepository {
   constructor(private readonly database: DrizzleDatabase) {}
 
-  async getEventProfile(
-    profileId: string,
-    selectedContactId?: string,
-  ): Promise<EventProfile | null> {
-    const [place] = await this.database
-      .select({
-        id: organizations.id,
-        name: organizations.name,
-        placeType: organizations.placeType,
-        phone: organizations.phone,
-        address1: organizations.address1,
-        address2: organizations.address2,
-        city: organizations.city,
-        region: organizations.region,
-        postalCode: organizations.postalCode,
-        website: organizations.website,
-        applicationDeadline: organizations.applicationDeadline,
-        recommendedDealModel: organizations.recommendedDealModel,
-        lastResort: organizations.lastResort,
-        lastResortReason: organizations.lastResortReason,
-        actRecordId: organizations.actRecordId,
-      })
-      .from(organizations)
-      .where(eq(organizations.id, profileId))
-      .limit(1);
+  async getEventProfile(profileId: string, selectedContactId?: string): Promise<EventProfile | null> {
+    const [place] = await this.database.select({
+      id: organizations.id,
+      name: organizations.name,
+      placeType: organizations.placeType,
+      phone: organizations.phone,
+      address1: organizations.address1,
+      address2: organizations.address2,
+      city: organizations.city,
+      region: organizations.region,
+      postalCode: organizations.postalCode,
+      website: organizations.website,
+      lastResort: organizations.lastResort,
+      lastResortReason: organizations.lastResortReason,
+      actRecordId: organizations.actRecordId,
+    }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
     if (!place) return null;
 
     const [profileContacts, profileBookings] = await Promise.all([
-      this.database
-        .select({
-          id: contacts.id,
-          firstName: contacts.firstName,
-          lastName: contacts.lastName,
-          role: organizationContacts.role,
-          isPrimary: organizationContacts.isPrimary,
-          phone: contacts.phone,
-          email: contacts.email,
-          source: organizationContacts.source,
-          actRecordId: contacts.actRecordId,
-          locationName: organizationLocations.label,
-          locationCity: organizationLocations.city,
-          locationRegion: organizationLocations.region,
-        })
-        .from(organizationContacts)
+      this.database.select({
+        id: contacts.id,
+        firstName: contacts.firstName,
+        lastName: contacts.lastName,
+        role: organizationContacts.role,
+        isPrimary: organizationContacts.isPrimary,
+        phone: contacts.phone,
+        email: contacts.email,
+        source: organizationContacts.source,
+        actRecordId: contacts.actRecordId,
+        locationName: organizationLocations.label,
+        locationCity: organizationLocations.city,
+        locationRegion: organizationLocations.region,
+      }).from(organizationContacts)
         .innerJoin(contacts, eq(contacts.id, organizationContacts.contactId))
-        .leftJoin(
-          organizationLocations,
-          eq(organizationLocations.id, contacts.organizationLocationId),
-        )
+        .leftJoin(organizationLocations, eq(organizationLocations.id, contacts.organizationLocationId))
         .where(activeOrganizationContactCondition(profileId))
-        .orderBy(
-          desc(organizationContacts.isPrimary),
-          asc(organizationContacts.role),
-          asc(contacts.lastName),
-          asc(contacts.firstName),
-          asc(contacts.id),
-        ),
-      this.database
-        .select({
-          id: bookings.id,
-          name: bookings.name,
-          primaryContactId: bookings.primaryContactId,
-          city: bookings.city,
-          region: bookings.region,
-          startsAt: bookings.startsAt,
-          endsAt: bookings.endsAt,
-          status: bookings.status,
-          probability: bookings.probability,
-          notes: bookings.notes,
-          actRecordId: bookings.actRecordId,
-        })
-        .from(bookings)
-        .where(eq(bookings.organizationId, profileId))
+        .orderBy(desc(organizationContacts.isPrimary), asc(organizationContacts.role), asc(contacts.lastName), asc(contacts.firstName), asc(contacts.id)),
+      this.database.select({
+        id: bookings.id,
+        name: bookings.name,
+        primaryContactId: bookings.primaryContactId,
+        city: bookings.city,
+        region: bookings.region,
+        startsAt: bookings.startsAt,
+        endsAt: bookings.endsAt,
+        status: bookings.status,
+        probability: bookings.probability,
+        notes: bookings.notes,
+        actRecordId: bookings.actRecordId,
+      }).from(bookings).where(eq(bookings.organizationId, profileId))
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
@@ -395,163 +321,90 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         contactId: followUps.contactId,
       },
       eq(followUps.organizationId, profileId),
-      bookingIds.length ? inArray(followUps.bookingId, bookingIds) : sql`false`,
-      contactIds.length ? inArray(followUps.contactId, contactIds) : sql`false`,
+      bookingIds.length
+        ? inArray(followUps.bookingId, bookingIds)
+        : sql`false`,
+      contactIds.length
+        ? inArray(followUps.contactId, contactIds)
+        : sql`false`,
     );
-    const [
-      profileActivities,
-      profileFollowUps,
-      groupMemberships,
-      migrationAudits,
-    ] = await Promise.all([
-      this.database
-        .select({
-          id: activities.id,
-          contactId: activities.contactId,
-          bookingId: activities.bookingId,
-          kind: activities.kind,
-          body: activities.body,
-          occurredAt: activities.timelineSortAt,
-          createdAt: activities.createdAt,
-          updatedAt: activities.updatedAt,
-        })
-        .from(activities)
-        .where(profileCondition)
+    const [profileActivities, profileFollowUps, groupMemberships, migrationAudits] = await Promise.all([
+      this.database.select({
+        id: activities.id,
+        contactId: activities.contactId,
+        bookingId: activities.bookingId,
+        kind: activities.kind,
+        body: activities.body,
+        occurredAt: activities.timelineSortAt,
+        createdAt: activities.createdAt,
+        updatedAt: activities.updatedAt,
+      }).from(activities).where(profileCondition)
         .orderBy(desc(activities.timelineSortAt), desc(activities.id)),
-      this.database
-        .select({
-          id: followUps.id,
-          contactId: followUps.contactId,
-          bookingId: followUps.bookingId,
-          kind: followUps.kind,
-          dueAt: followUps.dueAt,
-          completedAt: followUps.completedAt,
-        })
-        .from(followUps)
-        .where(followUpCondition)
-        .orderBy(
-          asc(followUps.completedAt),
-          asc(followUps.dueAt),
-          asc(followUps.id),
-        ),
-      this.database
-        .select({
-          id: callingLists.id,
-          name: callingLists.name,
-          kind: callingLists.kind,
-          source: callingListMemberships.source,
-          sourceStatus: callingLists.sourceStatus,
-          actRecordId: actExternalLinks.actRecordId,
-        })
-        .from(callingListMemberships)
-        .innerJoin(
-          organizationContacts,
-          eq(organizationContacts.contactId, callingListMemberships.contactId),
-        )
-        .innerJoin(
-          callingLists,
-          eq(callingLists.id, callingListMemberships.callingListId),
-        )
-        .leftJoin(
-          actExternalLinks,
-          and(
-            eq(actExternalLinks.entityType, "calling_list"),
-            eq(actExternalLinks.entityId, callingLists.id),
-            eq(actExternalLinks.sourceEntityType, "group"),
-          ),
-        )
-        .where(
-          and(
-            activeOrganizationContactCondition(profileId),
-            eq(callingListMemberships.active, true),
-          ),
-        )
+      this.database.select({
+        id: followUps.id,
+        contactId: followUps.contactId,
+        bookingId: followUps.bookingId,
+        kind: followUps.kind,
+        dueAt: followUps.dueAt,
+        completedAt: followUps.completedAt,
+      }).from(followUps).where(followUpCondition)
+        .orderBy(asc(followUps.completedAt), asc(followUps.dueAt), asc(followUps.id)),
+      this.database.select({
+        id: callingLists.id,
+        name: callingLists.name,
+        kind: callingLists.kind,
+        source: callingListMemberships.source,
+        sourceStatus: callingLists.sourceStatus,
+        actRecordId: actExternalLinks.actRecordId,
+      }).from(callingListMemberships)
+        .innerJoin(organizationContacts, eq(organizationContacts.contactId, callingListMemberships.contactId))
+        .innerJoin(callingLists, eq(callingLists.id, callingListMemberships.callingListId))
+        .leftJoin(actExternalLinks, and(
+          eq(actExternalLinks.entityType, "calling_list"),
+          eq(actExternalLinks.entityId, callingLists.id),
+          eq(actExternalLinks.sourceEntityType, "group"),
+        ))
+        .where(and(activeOrganizationContactCondition(profileId), eq(callingListMemberships.active, true)))
         .orderBy(asc(callingLists.name), asc(callingLists.id)),
-      this.database
-        .select({ after: auditEntries.after })
-        .from(auditEntries)
-        .where(
-          and(
-            eq(auditEntries.entityType, "organization"),
-            eq(auditEntries.entityId, profileId),
-            eq(auditEntries.action, "act_migration_applied"),
-          ),
-        )
+      this.database.select({ after: auditEntries.after }).from(auditEntries)
+        .where(and(eq(auditEntries.entityType, "organization"), eq(auditEntries.entityId, profileId), eq(auditEntries.action, "act_migration_applied")))
         .orderBy(desc(auditEntries.createdAt)),
     ]);
-    const groups = [
-      ...new Map(groupMemberships.map((group) => [group.id, group])).values(),
-    ];
+    const groups = [...new Map(groupMemberships.map((group) => [group.id, group])).values()];
     const entityIds = [
       place.id,
       ...profileContacts.map((contact) => contact.id),
       ...profileBookings.map((booking) => booking.id),
       ...groups.map((group) => group.id),
     ];
-    const externalLinks =
-      entityIds.length === 0
-        ? []
-        : await this.database
-            .select({
-              entityType: actExternalLinks.entityType,
-              entityId: actExternalLinks.entityId,
-              sourceEntityType: actExternalLinks.sourceEntityType,
-              actRecordId: actExternalLinks.actRecordId,
-              isPrimary: actExternalLinks.isPrimary,
-              syncMode: actExternalLinks.syncMode,
-            })
-            .from(actExternalLinks)
-            .where(inArray(actExternalLinks.entityId, entityIds))
-            .orderBy(
-              asc(actExternalLinks.entityType),
-              asc(actExternalLinks.entityId),
-              asc(actExternalLinks.sourceEntityType),
-              asc(actExternalLinks.actRecordId),
-            );
+    const externalLinks = entityIds.length === 0 ? [] : await this.database.select({
+      entityType: actExternalLinks.entityType,
+      entityId: actExternalLinks.entityId,
+      sourceEntityType: actExternalLinks.sourceEntityType,
+      actRecordId: actExternalLinks.actRecordId,
+      isPrimary: actExternalLinks.isPrimary,
+      syncMode: actExternalLinks.syncMode,
+    }).from(actExternalLinks).where(inArray(actExternalLinks.entityId, entityIds))
+      .orderBy(asc(actExternalLinks.entityType), asc(actExternalLinks.entityId), asc(actExternalLinks.sourceEntityType), asc(actExternalLinks.actRecordId));
 
     const merged = migrationAudits.flatMap(({ after }) => {
-      const value =
-        after && typeof after === "object" && !Array.isArray(after)
-          ? (after as Record<string, unknown>).mergedProfileHistory
-          : null;
-      return value && typeof value === "object" && !Array.isArray(value)
-        ? [value as Record<string, unknown>]
-        : [];
+      const value = after && typeof after === "object" && !Array.isArray(after)
+        ? (after as Record<string, unknown>).mergedProfileHistory
+        : null;
+      return value && typeof value === "object" && !Array.isArray(value) ? [value as Record<string, unknown>] : [];
     });
-    const history = Object.fromEntries(
-      [
-        "contactSourceIds",
-        "phones",
-        "notes",
-        "bookingSourceIds",
-        "groupSourceIds",
-      ].map((key) => [
-        key,
-        [
-          ...new Set(
-            merged.flatMap((entry) =>
-              Array.isArray(entry[key])
-                ? entry[key].filter(
-                    (item): item is string => typeof item === "string",
-                  )
-                : [],
-            ),
-          ),
-        ].toSorted(),
-      ]),
-    ) as EventProfile["migrationHistory"];
-    return buildEventProfile(
-      {
-        place,
-        contacts: profileContacts,
-        bookings: profileBookings,
-        activities: profileActivities,
-        followUps: profileFollowUps,
-        groups,
-        externalLinks: externalLinks as EventProfileSourceReference[],
-      },
-      selectedContactId,
-      history,
-    );
+    const history = Object.fromEntries(["contactSourceIds", "phones", "notes", "bookingSourceIds", "groupSourceIds"].map((key) => [
+      key,
+      [...new Set(merged.flatMap((entry) => Array.isArray(entry[key]) ? entry[key].filter((item): item is string => typeof item === "string") : []))].toSorted(),
+    ])) as EventProfile["migrationHistory"];
+    return buildEventProfile({
+      place,
+      contacts: profileContacts,
+      bookings: profileBookings,
+      activities: profileActivities,
+      followUps: profileFollowUps,
+      groups,
+      externalLinks: externalLinks as EventProfileSourceReference[],
+    }, selectedContactId, history);
   }
 }
