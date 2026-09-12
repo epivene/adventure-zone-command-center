@@ -40,6 +40,40 @@ describe("FollowUpAfterSend", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
+  it("offers common reasons and defaults 2027 outreach for a 2027 draft", async () => {
+    render(
+      <FollowUpAfterSend
+        opportunityId={opportunityId}
+        referenceAt={referenceAt}
+        eventYear={2027}
+      />,
+    );
+
+    const reason = screen.getByLabelText("Follow-up reason");
+    expect(reason).toHaveValue("2027_outreach");
+    for (const label of [
+      "2027 outreach",
+      "Post-event feedback",
+      "Convention reply check",
+      "Proposal / contract",
+      "Application deadline",
+      "Deposit / payment",
+      "Awaiting decision",
+      "Contact repair",
+    ]) {
+      expect(screen.getByRole("option", { name: label })).toBeVisible();
+    }
+
+    fireEvent.click(screen.getByRole("button", { name: "7 days" }));
+    const dueAt = new Date(referenceAt);
+    dueAt.setUTCDate(dueAt.getUTCDate() + 7);
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith("/follow-ups", {
+      opportunityId,
+      kind: "2027_outreach",
+      dueAt: dueAt.toISOString(),
+    }));
+  });
+
   it("creates a custom future follow-up", async () => {
     render(<FollowUpAfterSend opportunityId={opportunityId} referenceAt={referenceAt} />);
     const customValue = "2026-09-05T10:30";
