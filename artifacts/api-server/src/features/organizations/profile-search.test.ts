@@ -51,15 +51,16 @@ describe("forgiving profile search", () => {
 
   it("matches every normalized term across profile, contact, and location fields", () => {
     expect(routeSource).toContain("buildProfileSearchTerms(query.search)");
-    expect(routeSource).toContain("regexp_replace(lower(coalesce");
-    expect(routeSource).toContain("o.name");
-    expect(routeSource).toContain("o.region");
-    expect(routeSource).toContain("o.website");
-    expect(routeSource).toContain("person.email");
-    expect(routeSource).toContain("loc.email");
-    expect(routeSource).toContain("loc_contact.email");
-    expect(routeSource).toContain("termConditions");
-    expect(routeSource).toContain("sql.join(termConditions, sql.raw(\" and \"))");
+    expect(routeSource).toContain("profileSearchScore(terms");
+    expect(routeSource).toContain("loadOrganizationSearchCorpus");
+  });
+
+  it("builds the corpus from the same eligible profiles returned by the repository", () => {
+    const handlerSource = routeSource.slice(routeSource.indexOf('router.get("/organizations"'));
+    expect(handlerSource.indexOf("const candidatePage")).toBeLessThan(
+      handlerSource.indexOf("const matchedIds"),
+    );
+    expect(handlerSource).toContain("candidatePage.records.map((record) => record.id)");
   });
 
   it("keeps forgiving profile search on the normal Profiles endpoint", () => {
