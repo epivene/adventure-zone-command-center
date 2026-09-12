@@ -60,7 +60,8 @@ function formatDate(value: Date | string | null | undefined, empty: string) {
 }
 
 function readableAction(value: string) {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  const readable = value.replaceAll("_", " ");
+  return readable.charAt(0).toUpperCase() + readable.slice(1);
 }
 
 const statusStyles = {
