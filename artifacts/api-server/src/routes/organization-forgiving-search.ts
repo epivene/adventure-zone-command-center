@@ -14,88 +14,53 @@ import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-reposit
 const router: IRouter = Router();
 const MAX_SEARCH_CANDIDATES = 5_000;
 
-function normalizedSearchField(expression: ReturnType<typeof sql.raw>) {
-  return sql`regexp_replace(lower(coalesce(${expression}::text, '')), '[^a-z0-9]+', '', 'g')`;
-}
-
-function termCondition(term: string) {
-  const pattern = `%${term}%`;
-  return sql`(
-    ${normalizedSearchField(sql.raw("o.name"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.city"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.region"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.postal_code"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.address_1"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.website"))} like ${pattern}
-    or ${normalizedSearchField(sql.raw("o.phone"))} like ${pattern}
-    or exists (
-      select 1
+async function matchedOrganizationIds(terms: string[]): Promise<Map<string, number>> {
+  if (!terms.length) return new Map();
+  const corpusResult = await db.execute<{ id: string; searchText: string | null }>(sql`
+    with contact_phone_text as (
+      select contact_id, string_agg(number, ' ') as search_text
+      from contact_phones
+      group by contact_id
+    ),
+    profile_contact_text as (
+      select
+        association.organization_id,
+        string_agg(
+          concat_ws(' ', person.first_name, person.last_name, person.phone, person.email, phones.search_text),
+          ' '
+        ) as search_text
       from organization_contacts association
       inner join contacts person on person.id = association.contact_id
-      where association.organization_id = o.id
-        and association.active
-        and (
-          ${normalizedSearchField(sql.raw("person.first_name"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("person.last_name"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("concat_ws(' ', person.first_name, person.last_name)"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("person.phone"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("person.email"))} like ${pattern}
-          or exists (
-            select 1
-            from contact_phones person_phone
-            where person_phone.contact_id = person.id
-              and ${normalizedSearchField(sql.raw("person_phone.number"))} like ${pattern}
-          )
-        )
-    )
-    or exists (
-      select 1
+      left join contact_phone_text phones on phones.contact_id = person.id
+      where association.active
+      group by association.organization_id
+    ),
+    location_contact_text as (
+      select
+        person.organization_location_id,
+        string_agg(
+          concat_ws(' ', person.first_name, person.last_name, person.phone, person.email, phones.search_text),
+          ' '
+        ) as search_text
+      from contacts person
+      left join contact_phone_text phones on phones.contact_id = person.id
+      where person.organization_location_id is not null
+      group by person.organization_location_id
+    ),
+    location_text as (
+      select
+        loc.organization_id,
+        string_agg(
+          concat_ws(
+            ' ', loc.label, loc.venue_name, loc.city, loc.region, loc.postal_code,
+            loc.address_1, loc.website, loc.phone, loc.email, people.search_text
+          ),
+          ' '
+        ) as search_text
       from organization_locations loc
-      where loc.organization_id = o.id
-        and (
-          ${normalizedSearchField(sql.raw("loc.label"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.venue_name"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.city"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.region"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.postal_code"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.address_1"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.website"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.phone"))} like ${pattern}
-          or ${normalizedSearchField(sql.raw("loc.email"))} like ${pattern}
-          or exists (
-            select 1
-            from contacts loc_contact
-            where loc_contact.organization_location_id = loc.id
-              and (
-                ${normalizedSearchField(sql.raw("loc_contact.first_name"))} like ${pattern}
-                or ${normalizedSearchField(sql.raw("loc_contact.last_name"))} like ${pattern}
-                or ${normalizedSearchField(sql.raw("concat_ws(' ', loc_contact.first_name, loc_contact.last_name)"))} like ${pattern}
-                or ${normalizedSearchField(sql.raw("loc_contact.phone"))} like ${pattern}
-                or ${normalizedSearchField(sql.raw("loc_contact.email"))} like ${pattern}
-                or exists (
-                  select 1
-                  from contact_phones location_phone
-                  where location_phone.contact_id = loc_contact.id
-                    and ${normalizedSearchField(sql.raw("location_phone.number"))} like ${pattern}
-                )
-              )
-          )
-        )
+      left join location_contact_text people on people.organization_location_id = loc.id
+      group by loc.organization_id
     )
-  )`;
-}
-
-async function matchedOrganizationIds(terms: string[]): Promise<Map<string, number>> {
-  const termConditions = terms.map((term) => termCondition(term));
-  if (!termConditions.length) return new Map();
-  const exactResult = await db.execute<{ id: string }>(sql`
-    select distinct o.id
-    from organizations o
-    where ${sql.join(termConditions, sql.raw(" and "))}
-    order by o.id
-    limit ${MAX_SEARCH_CANDIDATES}
-  `);
-  const fuzzyResult = await db.execute<{ id: string; searchText: string | null }>(sql`
     select
       o.id,
       concat_ws(
@@ -107,57 +72,17 @@ async function matchedOrganizationIds(terms: string[]): Promise<Map<string, numb
         o.address_1,
         o.website,
         o.phone,
-        (
-          select string_agg(
-            concat_ws(
-              ' ', person.first_name, person.last_name, person.phone, person.email,
-              (select string_agg(person_phone.number, ' ') from contact_phones person_phone where person_phone.contact_id = person.id)
-            ),
-            ' '
-          )
-          from organization_contacts association
-          inner join contacts person on person.id = association.contact_id
-          where association.organization_id = o.id
-            and association.active
-        ),
-        (
-          select string_agg(
-            concat_ws(
-              ' ',
-              loc.label,
-              loc.venue_name,
-              loc.city,
-              loc.region,
-              loc.postal_code,
-              loc.address_1,
-              loc.website,
-              loc.phone,
-              loc.email,
-              (
-                select string_agg(
-                  concat_ws(
-                    ' ', loc_contact.first_name, loc_contact.last_name, loc_contact.phone, loc_contact.email,
-                    (select string_agg(location_phone.number, ' ') from contact_phones location_phone where location_phone.contact_id = loc_contact.id)
-                  ),
-                  ' '
-                )
-                from contacts loc_contact
-                where loc_contact.organization_location_id = loc.id
-              )
-            ),
-            ' '
-          )
-          from organization_locations loc
-          where loc.organization_id = o.id
-        )
+        profile_contacts.search_text,
+        locations.search_text
       ) as "searchText"
     from organizations o
+    left join profile_contact_text profile_contacts on profile_contacts.organization_id = o.id
+    left join location_text locations on locations.organization_id = o.id
     order by o.id
     limit ${MAX_SEARCH_CANDIDATES}
   `);
-  const matchedIds = new Map<string, number>(exactResult.rows.map((row) => [row.id, 0]));
-  for (const row of fuzzyResult.rows) {
-    if (matchedIds.has(row.id)) continue;
+  const matchedIds = new Map<string, number>();
+  for (const row of corpusResult.rows) {
     const score = profileSearchScore(terms, [row.searchText ?? ""]);
     if (score !== null) matchedIds.set(row.id, score);
   }
