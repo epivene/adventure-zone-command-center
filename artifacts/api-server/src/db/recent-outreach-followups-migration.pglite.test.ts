@@ -69,17 +69,16 @@ describe("recent outreach follow-up backfill", () => {
     `);
 
     expect(result.rows).toHaveLength(3);
-    expect(result.rows.find((row) => row.email === "mckenzie@libbyproperties.com")).toMatchObject({
-      kind: "2027_outreach",
-      due_at: "2026-10-01 18:00:00+00",
-    });
-    expect(result.rows.find((row) => row.email === "bob.bushta@gmail.com")).toMatchObject({
-      kind: "2027_outreach",
-      due_at: "2026-09-18 18:00:00+00",
-    });
-    expect(result.rows.find((row) => row.email === "wfa@fairsnet.org")).toMatchObject({
-      kind: "application_deadline",
-      due_at: "2026-10-02 18:00:00+00",
-    });
+    const loggerDays = result.rows.find((row) => row.email === "mckenzie@libbyproperties.com");
+    expect(loggerDays?.kind).toBe("2027_outreach");
+    expect(new Date(loggerDays!.due_at).toISOString()).toBe("2026-10-01T18:00:00.000Z");
+
+    const cherryDays = result.rows.find((row) => row.email === "bob.bushta@gmail.com");
+    expect(cherryDays?.kind).toBe("2027_outreach");
+    expect(new Date(cherryDays!.due_at).toISOString()).toBe("2026-09-18T18:00:00.000Z");
+
+    const westernFairs = result.rows.find((row) => row.email === "wfa@fairsnet.org");
+    expect(westernFairs?.kind).toBe("application_deadline");
+    expect(new Date(westernFairs!.due_at).toISOString()).toBe("2026-10-02T18:00:00.000Z");
   });
 });
