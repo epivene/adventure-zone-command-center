@@ -5,6 +5,7 @@ import { db } from "@workspace/db";
 import { attachEventFamiliesToOrganizationPage } from "@/features/event-families/event-family-list";
 import { DrizzleOrganizationRepository, type OrganizationListPage } from "@/features/organizations/organization-repository";
 import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
+import { loadOrganizationSearchCorpus } from "@/features/organizations/organization-search-corpus";
 import {
   buildProfileSearchTerms,
   profileSearchScore,
@@ -14,75 +15,10 @@ import { DrizzleTravelLegRepository } from "@/features/routes/travel-leg-reposit
 const router: IRouter = Router();
 const MAX_SEARCH_CANDIDATES = 5_000;
 
-async function matchedOrganizationIds(terms: string[]): Promise<Map<string, number>> {
-  if (!terms.length) return new Map();
-  const corpusResult = await db.execute<{ id: string; searchText: string | null }>(sql`
-    with contact_phone_text as (
-      select contact_id, string_agg(number, ' ') as search_text
-      from contact_phones
-      group by contact_id
-    ),
-    profile_contact_text as (
-      select
-        association.organization_id,
-        string_agg(
-          concat_ws(' ', person.first_name, person.last_name, person.phone, person.email, phones.search_text),
-          ' '
-        ) as search_text
-      from organization_contacts association
-      inner join contacts person on person.id = association.contact_id
-      left join contact_phone_text phones on phones.contact_id = person.id
-      where association.active
-      group by association.organization_id
-    ),
-    location_contact_text as (
-      select
-        person.organization_location_id,
-        string_agg(
-          concat_ws(' ', person.first_name, person.last_name, person.phone, person.email, phones.search_text),
-          ' '
-        ) as search_text
-      from contacts person
-      left join contact_phone_text phones on phones.contact_id = person.id
-      where person.organization_location_id is not null
-      group by person.organization_location_id
-    ),
-    location_text as (
-      select
-        loc.organization_id,
-        string_agg(
-          concat_ws(
-            ' ', loc.label, loc.venue_name, loc.city, loc.region, loc.postal_code,
-            loc.address_1, loc.website, loc.phone, loc.email, people.search_text
-          ),
-          ' '
-        ) as search_text
-      from organization_locations loc
-      left join location_contact_text people on people.organization_location_id = loc.id
-      group by loc.organization_id
-    )
-    select
-      o.id,
-      concat_ws(
-        ' ',
-        o.name,
-        o.city,
-        o.region,
-        o.postal_code,
-        o.address_1,
-        o.website,
-        o.phone,
-        profile_contacts.search_text,
-        locations.search_text
-      ) as "searchText"
-    from organizations o
-    left join profile_contact_text profile_contacts on profile_contacts.organization_id = o.id
-    left join location_text locations on locations.organization_id = o.id
-    order by o.id
-    limit ${MAX_SEARCH_CANDIDATES}
-  `);
+async function matchedOrganizationIds(terms: string[], candidateIds: string[]): Promise<Map<string, number>> {
+  const corpus = await loadOrganizationSearchCorpus(db, candidateIds);
   const matchedIds = new Map<string, number>();
-  for (const row of corpusResult.rows) {
+  for (const row of corpus) {
     const score = profileSearchScore(terms, [row.searchText ?? ""]);
     if (score !== null) matchedIds.set(row.id, score);
   }
@@ -180,7 +116,6 @@ router.get("/organizations", async (req: Request, res: Response, next: NextFunct
   try {
     const terms = buildProfileSearchTerms(query.search);
     if (!terms.length) return next();
-    const matchedIds = await matchedOrganizationIds(terms);
     const candidatePage = await new DrizzleOrganizationRepository(db).listOrganizations({
       ...query,
       search: "",
@@ -189,6 +124,10 @@ router.get("/organizations", async (req: Request, res: Response, next: NextFunct
       page: 1,
       pageSize: MAX_SEARCH_CANDIDATES,
     });
+    const matchedIds = await matchedOrganizationIds(
+      terms,
+      candidatePage.records.map((record) => record.id),
+    );
     const matchedRecords = candidatePage.records
       .filter((record) => matchedIds.has(record.id))
       .sort((left, right) => (matchedIds.get(left.id) ?? 0) - (matchedIds.get(right.id) ?? 0));
