@@ -1,10 +1,12 @@
 import { useState } from "react";
 
 import { apiPost } from "@/lib/auth-token";
+import { defaultFollowUpKind, FOLLOW_UP_KINDS } from "@/features/follow-ups/follow-up-kinds";
 
 type Props = {
   opportunityId: string;
   referenceAt: string;
+  eventYear?: number;
   onDone?: () => void;
 };
 
@@ -19,7 +21,8 @@ function addDays(referenceAt: string, days: number): Date {
   return dueAt;
 }
 
-export function FollowUpAfterSend({ opportunityId, referenceAt, onDone }: Props) {
+export function FollowUpAfterSend({ opportunityId, referenceAt, eventYear, onDone }: Props) {
+  const [kind, setKind] = useState(() => defaultFollowUpKind(eventYear));
   const [customDueAt, setCustomDueAt] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +38,7 @@ export function FollowUpAfterSend({ opportunityId, referenceAt, onDone }: Props)
     try {
       await apiPost<CreateFollowUpResponse>("/follow-ups", {
         opportunityId,
-        kind: "email",
+        kind,
         dueAt: dueAt.toISOString(),
       });
       onDone?.();
@@ -52,6 +55,21 @@ export function FollowUpAfterSend({ opportunityId, referenceAt, onDone }: Props)
         <h4 className="font-bold" id="follow-up-after-send-title">Follow up if no reply?</h4>
         <p className="text-sm text-slate-600">Add the next email follow-up to this Opportunity.</p>
       </div>
+
+      <label className="grid gap-1 text-sm font-semibold">
+        Follow-up reason
+        <select
+          aria-label="Follow-up reason"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-normal"
+          disabled={busy}
+          value={kind}
+          onChange={(event) => setKind(event.target.value)}
+        >
+          {FOLLOW_UP_KINDS.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
 
       {error ? <p className="rounded-lg bg-rose-50 p-2 text-sm text-rose-800" role="alert">{error}</p> : null}
 
