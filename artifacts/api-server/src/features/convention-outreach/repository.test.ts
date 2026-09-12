@@ -276,4 +276,36 @@ describe("convention persistence", () => {
       await db.close();
     }
   });
+
+  it("keeps exact organization ID lookups off the fuzzy contact scan", async () => {
+    const organizationId = "00000000-0000-4000-8000-000000000010";
+    const client = {
+      query: async (sql: string) => {
+        if (sql.includes("position(lower($1)")) {
+          throw new Error("statement timeout");
+        }
+        return {
+          rows: [
+            {
+              organizationId,
+              name: "Park County Fair (Fairplay) CO",
+              contactId: null,
+              email: null,
+              contact: "",
+            },
+          ],
+        };
+      },
+    };
+    const repo = new ConventionRepository({
+      ...client,
+      connect: async () => client,
+    });
+
+    const matches = await repo.searchProfiles(organizationId);
+
+    assert.equal(matches.length, 1);
+    assert.equal(matches[0].organizationId, organizationId);
+  });
+
 });
