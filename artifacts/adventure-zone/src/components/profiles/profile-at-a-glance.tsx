@@ -3,6 +3,7 @@ import { CalendarDays, Mail, Phone, UserRound } from "lucide-react";
 type AtAGlanceProfile = {
   place: {
     name?: string;
+    lastResort?: boolean;
     applicationDeadline?: string | null;
     recommendedDealModel?: "flat_fee" | "pay_per_play" | "either" | null;
   };
@@ -50,6 +51,16 @@ const dealModelCopy = {
       "Both structures are reasonable; attendance and organizer budget decide the final choice.",
   },
 } as const;
+
+const pipelineLabels: Record<string, string> = {
+  follow_up: "Needs follow-up",
+  confirmed: "Booked",
+  booked: "Booked",
+  no_response: "Waiting",
+  pending_decision: "Waiting",
+  territory_hold: "Waiting",
+  not_pursuing: "Not a fit",
+};
 
 function readable(value: string | null | undefined) {
   if (!value) return null;
@@ -106,6 +117,7 @@ export function ProfileAtAGlance({
     : null;
   const actionKind = readable(profile.decisionSummary?.nextActionKind);
   const actionDue = formatDate(profile.decisionSummary?.nextActionDueAt);
+  const pipelineStatus = profile.decisionSummary?.pipelineStatus;
 
   return (
     <section
@@ -151,7 +163,8 @@ export function ProfileAtAGlance({
             Fit / priority
           </dt>
           <dd className="mt-1 font-bold text-[#315b66]">
-            {readable(profile.decisionSummary?.priority) ?? "Not recorded"}
+            {readable(profile.decisionSummary?.priority) ??
+              (profile.place.lastResort ? "Not a fit" : "Not recorded")}
           </dd>
         </div>
         <div>
@@ -159,7 +172,8 @@ export function ProfileAtAGlance({
             Pipeline status
           </dt>
           <dd className="mt-1 font-bold text-[#315b66]">
-            {readable(profile.decisionSummary?.pipelineStatus) ??
+            {(pipelineStatus && pipelineLabels[pipelineStatus]) ??
+              readable(pipelineStatus) ??
               "Not recorded"}
           </dd>
         </div>

@@ -430,7 +430,7 @@ export async function listOrganizationDirectoryPage(
         const now = new Date();
         const deadlineSoon = deadline && deadline.getTime() >= new Date(now.toISOString().slice(0, 10)).getTime()
           && deadline.getTime() <= now.getTime() + 30 * 86_400_000;
-        if (["not_pursuing", "declined", "cancelled"].includes(decision?.pipelineStatus ?? "")) return "not_a_fit" as const;
+        if (organization.lastResort || ["not_pursuing", "declined", "cancelled"].includes(decision?.pipelineStatus ?? "")) return "not_a_fit" as const;
         if (decision?.pipelineStatus === "booked" || decision?.confirmedBooking) return "booked" as const;
         if (deadlineSoon) return "deadline_soon" as const;
         if (decision?.nextActionDueAt) return "needs_follow_up" as const;
