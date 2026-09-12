@@ -4,6 +4,7 @@ import {
   type TemplatePlaceholder,
   type TemplateRenderValues,
 } from "./communication-template-types";
+import { sanitizeCustomEmailHtml } from "./email-template-compiler";
 
 export { allowedTemplatePlaceholders } from "./communication-template-types";
 
@@ -34,13 +35,16 @@ function renderText(
   text: string,
   values: TemplateRenderValues,
   required: ReadonlySet<TemplatePlaceholder>,
+  escapeValues = false,
 ): string {
   validateTemplatePlaceholders(text);
   return text.replace(tokenPattern, (whole, rawToken: string) => {
     if (!allowed.has(rawToken)) return whole;
     const token = rawToken as TemplatePlaceholder;
     const value = values[token]?.trim();
-    if (value) return value;
+    if (value) return escapeValues
+      ? value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;")
+      : value;
     return required.has(token) ? whole : "";
   });
 }
@@ -69,13 +73,14 @@ export function renderCommunicationTemplateText(input: {
     (placeholder) => !input.values[placeholder]?.trim(),
   );
 
+  const renderedBody = renderText(input.bodyTemplate, input.values, required, input.bodyFormat === "html");
   return {
     templateId: input.templateId,
     subject: cleanOptionalWhitespace(
       renderText(input.subjectTemplate ?? "", input.values, required),
     ),
     body: cleanOptionalWhitespace(
-      renderText(input.bodyTemplate, input.values, required),
+      input.bodyFormat === "html" ? sanitizeCustomEmailHtml(renderedBody) : renderedBody,
     ),
     bodyFormat: input.bodyFormat ?? "plain_text",
     missingRequiredFields,
