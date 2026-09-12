@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 
 import { OrganizationList } from "./organization-list";
+
+vi.mock("@/components/profiles/profile-detail-sheet", () => ({
+  ProfileDetailSheet: () => null,
+}));
 
 const query = {
   search: "",
