@@ -5,7 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import DesignStudioPage from "./DesignStudioPage";
 import { designStudioApi } from "@/lib/design-studio-api";
 
-const { setLocation } = vi.hoisted(() => ({ setLocation: vi.fn() }));
+const { apiFetch, setLocation } = vi.hoisted(() => ({ apiFetch: vi.fn(), setLocation: vi.fn() }));
+
+vi.mock("@/lib/auth-token", () => ({ apiFetch }));
 
 vi.mock("wouter", () => ({
   Link: ({ href, children, ...props }: React.ComponentProps<"a"> & { href: string }) => (
@@ -18,6 +20,17 @@ describe("DesignStudioPage starter creation", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     setLocation.mockReset();
+    apiFetch.mockReset();
+    apiFetch.mockResolvedValue(new Response(JSON.stringify({
+      templates: [{
+        id: "template-1",
+        code: "returning_event",
+        name: "Returning Event",
+        category: "Outreach",
+        state: "active",
+        bodyFormat: "html",
+      }],
+    }), { status: 200 }));
     vi.spyOn(designStudioApi, "list").mockResolvedValue([]);
   });
 
@@ -48,10 +61,17 @@ describe("DesignStudioPage starter creation", () => {
     expect(screen.queryByText("$7,500")).not.toBeInTheDocument();
   });
 
-  it("opens the reusable HTML email builder from Design Studio", async () => {
+  it("shows saved email templates in Design Studio and opens the selected template", async () => {
     render(<DesignStudioPage />);
 
-    const link = await screen.findByRole("link", { name: "Open Email Templates" });
-    expect(link).toHaveAttribute("href", "/design-studio/email-templates");
+    const link = await screen.findByRole("link", { name: /Returning Event/i });
+    expect(link).toHaveAttribute("href", "/design-studio/email-templates?template=template-1");
+  });
+
+  it("starts a new reusable email from Design Studio", async () => {
+    render(<DesignStudioPage />);
+
+    const link = await screen.findByRole("link", { name: /New email template/i });
+    expect(link).toHaveAttribute("href", "/design-studio/email-templates?new=1");
   });
 });

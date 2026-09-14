@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { compileEmailBuilderDocument, type EmailBuilderDocument } from "@workspace/api-zod";
+import { Link } from "wouter";
 
 import { EmailBuilder } from "@/components/email-template-builder/EmailBuilder";
 import { createBlankEmailDocument, createBrandedStarterDocument } from "@/features/email-template-builder/email-builder-types";
@@ -49,6 +50,10 @@ function groupTitle(template: Template) {
 }
 
 export default function SettingsCommunicationTemplatesPage() {
+  const [initialRequest] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return { templateId: params.get("template"), startNew: params.get("new") === "1" };
+  });
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [subject, setSubject] = useState("");
@@ -63,16 +68,20 @@ export default function SettingsCommunicationTemplatesPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
+  const [showCreate, setShowCreate] = useState(initialRequest.startNew);
   const [newTemplate, setNewTemplate] = useState<NewTemplate>(() => createEmptyTemplate());
-  const [newTemplateBaseline, setNewTemplateBaseline] = useState("");
+  const [newTemplateBaseline, setNewTemplateBaseline] = useState(() => initialRequest.startNew ? JSON.stringify(createEmptyTemplate()) : "");
 
   async function load() {
     const response = await apiFetch("/communication-templates");
     if (!response.ok) throw new Error("Could not load communication templates.");
     const data = (await response.json()) as { templates: Template[] };
     setTemplates(data.templates);
-    setSelectedId((current) => current && data.templates.some((item) => item.id === current) ? current : data.templates[0]?.id ?? null);
+    setSelectedId((current) => {
+      if (current && data.templates.some((item) => item.id === current)) return current;
+      if (initialRequest.templateId && data.templates.some((item) => item.id === initialRequest.templateId)) return initialRequest.templateId;
+      return data.templates[0]?.id ?? null;
+    });
     return data.templates;
   }
   useEffect(() => { load().catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load templates.")); }, []);
@@ -166,7 +175,7 @@ export default function SettingsCommunicationTemplatesPage() {
   }
 
   return <div className="mx-auto grid max-w-7xl gap-5 py-6">
-    <header><h1 className="text-3xl font-bold">Communication templates</h1><p className="mt-1 text-slate-600">Build branded HTML emails visually, then reuse them across Adventure Zone workflows.</p></header>
+    <header className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Adventure Zone Design Studio</p><h1 className="mt-1 text-3xl font-bold">Email Template Studio</h1><p className="mt-1 text-slate-600">Drag, drop, and edit reusable HTML emails for Adventure Zone drafts.</p></div><Link className="button-secondary" href="/design-studio">← Back to Design Studio</Link></header>
     {error ? <p role="alert" className="rounded-xl bg-rose-50 p-3 font-semibold text-rose-700">{error}</p> : null}
     <div className="grid gap-4 lg:grid-cols-[20rem_minmax(0,1fr)]">
       <aside className="grid content-start gap-4 rounded-xl border bg-white p-3">

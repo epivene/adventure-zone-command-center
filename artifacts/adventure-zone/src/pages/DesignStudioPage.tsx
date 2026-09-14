@@ -29,6 +29,15 @@ import {
 } from "@workspace/avz-crm/components/ui/alert-dialog";
 import { designStudioApi, type DesignProject, type DesignType } from "@/lib/design-studio-api";
 import { CANVA_STARTERS, type CanvaStarter } from "@/lib/design-studio/canva-starters";
+import { apiFetch } from "@/lib/auth-token";
+
+type EmailTemplateSummary = {
+  id: string;
+  name: string;
+  category: string;
+  state: "draft" | "reviewed" | "active" | "archived";
+  bodyFormat: "plain_text" | "html";
+};
 
 const LOGO_SRC = `${import.meta.env.BASE_URL}adventure-zone-logo.png`;
 
@@ -232,6 +241,7 @@ function ProjectCard({ project, deleting, onDelete }: { project: DesignProject; 
 export default function DesignStudioPage() {
   const [, setLocation] = useLocation();
   const [projects, setProjects] = useState<DesignProject[]>([]);
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplateSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -242,8 +252,14 @@ export default function DesignStudioPage() {
     setLoading(true);
     setError(null);
     try {
-      const loaded = await designStudioApi.list();
+      const [loaded, templateResponse] = await Promise.all([
+        designStudioApi.list(),
+        apiFetch("/communication-templates"),
+      ]);
+      if (!templateResponse.ok) throw new Error("Email templates could not be loaded.");
+      const templateData = await templateResponse.json() as { templates?: EmailTemplateSummary[] };
       setProjects(loaded.filter((project) => project.status !== "archived"));
+      setEmailTemplates((templateData.templates ?? []).filter((template) => template.state !== "archived"));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Design Studio could not be loaded.");
     } finally {
@@ -301,21 +317,22 @@ export default function DesignStudioPage() {
       {error ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert"><span className="text-destructive">{error}</span><Button onClick={() => void loadProjects()} size="sm" variant="outline"><RefreshCw className="mr-2 h-4 w-4" />Try again</Button></div> : null}
 
       <section aria-labelledby="email-template-heading">
-        <div className="overflow-hidden rounded-2xl border border-primary/30 bg-card shadow-sm">
-          <div className="grid gap-5 p-5 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center md:p-6">
-            <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-[3px_3px_0_hsl(var(--foreground))]">
-              <Mail className="h-7 w-7" />
-            </div>
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Email Studio</p>
-              <h2 className="mt-1 text-2xl font-black tracking-tight" id="email-template-heading">Reusable HTML email templates</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Drag, drop, and edit the same branded emails used for Adventure Zone drafts.</p>
-            </div>
-            <Button asChild className="w-full gap-2 sm:w-auto">
-              <Link href="/design-studio/email-templates"><Mail className="h-4 w-4" />Open Email Templates</Link>
-            </Button>
+        <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Email Studio</p>
+            <h2 className="mt-1 text-2xl font-black tracking-tight" id="email-template-heading">Email templates</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Open any saved email in the drag-and-drop editor.</p>
           </div>
+          <Button asChild className="gap-2"><Link href="/design-studio/email-templates?new=1"><Mail className="h-4 w-4" />New email template</Link></Button>
         </div>
+        {loading ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-36 rounded-xl" />)}</div>
+          : emailTemplates.length ? <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{emailTemplates.map((template) => (
+            <Link className="group rounded-xl border border-border bg-card p-4 transition hover:border-primary/50 hover:shadow-md" href={`/design-studio/email-templates?template=${encodeURIComponent(template.id)}`} key={template.id}>
+              <div className="flex items-start gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Mail className="h-5 w-5" /></div><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><h3 className="font-black text-foreground group-hover:text-primary">{template.name}</h3><Badge className="shrink-0 capitalize" variant="outline">{template.state}</Badge></div><p className="mt-1 text-xs text-muted-foreground">{template.category} · {template.bodyFormat === "html" ? "Drag-and-drop email" : "Plain text"}</p></div></div>
+              <div className="mt-4 flex items-center justify-between border-t border-border pt-3 text-sm font-bold text-primary"><span>Edit template</span><ArrowRight className="h-4 w-4 transition group-hover:translate-x-1" /></div>
+            </Link>
+          ))}</div>
+          : <div className="rounded-2xl border border-dashed border-border bg-card p-7 text-center"><Mail className="mx-auto h-7 w-7 text-muted-foreground" /><p className="mt-3 font-bold">No email templates yet.</p><p className="mt-1 text-sm text-muted-foreground">Create one here and it will stay with your other Design Studio work.</p></div>}
       </section>
 
       <section id="starter-templates" aria-labelledby="starter-heading"><div className="mb-4"><p className="text-xs font-black uppercase tracking-[0.16em] text-primary">Built for Adventure Zone</p><h2 className="mt-1 text-2xl font-black tracking-tight" id="starter-heading">Fun, photo-heavy starter templates</h2><p className="mt-1 text-sm text-muted-foreground">Choose a visual starting point and make it yours.</p></div><div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{CANVA_STARTERS.map((starter) => <StarterCard key={starter.id} starter={starter} creating={creatingId === starter.id} onUse={() => void useStarter(starter)} />)}</div></section>
