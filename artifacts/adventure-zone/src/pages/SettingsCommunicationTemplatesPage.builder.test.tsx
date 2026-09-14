@@ -24,6 +24,7 @@ const legacyTemplate = {
 
 describe("SettingsCommunicationTemplatesPage visual builder", () => {
   beforeEach(() => {
+    window.history.replaceState({}, "", "/design-studio/email-templates");
     apiFetch.mockReset();
     apiFetch.mockResolvedValue(new Response(JSON.stringify({ templates: [legacyTemplate] }), { status: 200 }));
   });
@@ -109,5 +110,18 @@ describe("SettingsCommunicationTemplatesPage visual builder", () => {
     const body = JSON.parse(apiFetch.mock.calls.find((call) => call[1]?.method === "PATCH")?.[1]?.body as string);
     expect(body).toMatchObject({ bodyFormat: "plain_text", bodyTemplate: "Hi {{contactName}}" });
     expect(body).not.toHaveProperty("editorDocument");
+  });
+
+  it("opens the requested template inside Design Studio", async () => {
+    const requested = { ...legacyTemplate, id: "3b89f5c3-d374-4502-81b0-09d57c6e9784", name: "Convention Follow-up" };
+    window.history.replaceState({}, "", `/design-studio/email-templates?template=${requested.id}`);
+    apiFetch.mockResolvedValue(new Response(JSON.stringify({ templates: [legacyTemplate, requested] }), { status: 200 }));
+    const Page = (await import("./SettingsCommunicationTemplatesPage")).default;
+
+    render(<Page />);
+
+    expect(await screen.findByRole("heading", { name: "Convention Follow-up" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Back to Design Studio/i })).toHaveAttribute("href", "/design-studio");
+    expect(await screen.findByRole("region", { name: "Visual email builder" })).toBeInTheDocument();
   });
 });
