@@ -27,16 +27,52 @@ import { officeAccounts } from "@workspace/db/office-coordinator-schema";
 const router: IRouter = Router();
 const officeRepository = new DrizzleOfficeAccountRepository(db);
 const bossRepository = new DrizzleBossAccountRepository(db);
+const OWNER_STUDIO_ACCOUNT_ID = "0f17d4fb-b04f-4dda-907c-494b1aeb8881";
 const studioAssetStorage = new GoogleCloudPrivateObjectStorage(process.env, [
   "GOOGLE_CLOUD_STORAGE_BUCKET",
   "LEG_MANAGER_RECEIPT_BUCKET",
 ]);
 
+async function resolveOwnerStudioAccount() {
+  const accountFields = {
+    id: officeAccounts.id,
+    displayName: officeAccounts.displayName,
+  };
+  const [existing] = await db
+    .select(accountFields)
+    .from(officeAccounts)
+    .where(eq(officeAccounts.id, OWNER_STUDIO_ACCOUNT_ID))
+    .limit(1);
+  if (existing) return existing;
+
+  const [created] = await db
+    .insert(officeAccounts)
+    .values({
+      id: OWNER_STUDIO_ACCOUNT_ID,
+      loginName: "__owner_design_studio__",
+      displayName: "Adventure Zone Owner",
+      role: "office_coordinator",
+      passwordHash: "owner-studio-login-disabled",
+      passwordSalt: "owner-studio-login-disabled",
+      enabled: false,
+      sessionVersion: 1,
+    })
+    .onConflictDoNothing()
+    .returning(accountFields);
+  if (created) return created;
+
+  const [concurrent] = await db
+    .select(accountFields)
+    .from(officeAccounts)
+    .where(eq(officeAccounts.id, OWNER_STUDIO_ACCOUNT_ID))
+    .limit(1);
+  return concurrent ?? null;
+}
+
 /**
  * Marketing is owner-authenticated while the Office workspace uses an Office
- * token. Both are valid Studio actors; owner access is mapped to the enabled
- * Office account used for Studio ownership so records remain scoped and
- * auditable instead of using a magic user id.
+ * token. Both are valid Studio actors; owner access uses a disabled, private
+ * Studio identity so it never depends on an Office Coordinator login existing.
  */
 export async function requireStudio(req: any, res: any, next: () => void): Promise<void> {
   const header = req.headers.authorization;
@@ -61,18 +97,7 @@ export async function requireStudio(req: any, res: any, next: () => void): Promi
     if (account) { req.officeAccount = { accountId: account.id, displayName: boss.displayName, role: "office_coordinator" }; req.studioActorKind = "boss"; next(); return; }
   }
   if (verifyToken(token)) {
-    const [account] = await db
-      .select({
-        id: officeAccounts.id,
-        displayName: officeAccounts.displayName,
-        role: officeAccounts.role,
-        enabled: officeAccounts.enabled,
-        sessionVersion: officeAccounts.sessionVersion,
-      })
-      .from(officeAccounts)
-      .where(eq(officeAccounts.enabled, true))
-      .orderBy(asc(officeAccounts.createdAt))
-      .limit(1);
+    const account = await resolveOwnerStudioAccount();
     if (account) {
       req.officeAccount = {
         accountId: account.id,
