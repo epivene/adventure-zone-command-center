@@ -5,11 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { ensureLeadIntakeSchemaBeforeListen } from "./lead-intake-required-startup";
 
 describe("lead email startup readiness", () => {
-  it("adds the shared template column before seeding even when lead intake is already current", async () => {
+  it("adds shared template and visual-builder columns before seeding even when lead intake is already current", async () => {
     let bodyFormatExists = false;
+    let editorDocumentExists = false;
+    let editorDocumentVersionExists = false;
     const client = {
       query: vi.fn(async (sql: string) => {
         if (sql.includes("ADD COLUMN IF NOT EXISTS body_format")) bodyFormatExists = true;
+        if (sql.includes("ADD COLUMN IF NOT EXISTS editor_document jsonb")) editorDocumentExists = true;
+        if (sql.includes("ADD COLUMN IF NOT EXISTS editor_document_version integer")) editorDocumentVersionExists = true;
         return { rows: [] };
       }),
       release: vi.fn(),
@@ -18,12 +22,20 @@ describe("lead email startup readiness", () => {
       pool: { connect: async () => client },
       ensureSchema: async () => false,
       ensureTemplateSeed: async () => {
-        if (!bodyFormatExists) throw new Error('column "body_format" does not exist');
+        if (!bodyFormatExists || !editorDocumentExists || !editorDocumentVersionExists) {
+          throw new Error("visual template columns do not exist");
+        }
       },
       isTemplateReady: async () => true,
     })).resolves.toBe(false);
     expect(client.query).toHaveBeenCalledWith(
       "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS body_format text NOT NULL DEFAULT 'plain_text'",
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS editor_document jsonb",
+    );
+    expect(client.query).toHaveBeenCalledWith(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS editor_document_version integer",
     );
   });
 
@@ -67,7 +79,7 @@ describe("lead email startup readiness", () => {
     });
 
     expect(result).toBe(true);
-    expect(order).toEqual(["lock", "schema", "query", "seed", "ready", "unlock", "release"]);
+    expect(order).toEqual(["lock", "schema", "query", "query", "query", "seed", "ready", "unlock", "release"]);
   });
 
   it("fails startup when the exact approved template is not ready", async () => {

@@ -13,6 +13,7 @@ import type {
   CommunicationTemplateSeed,
   TemplatePlaceholder,
 } from "./communication-template-types";
+import type { EmailBuilderDocument } from "@workspace/api-zod";
 import { extractTemplateTokens } from "./communication-template-renderer";
 import { validateAuthoredTemplateText } from "./communication-template-authoring";
 import { canOfficeUseTemplate } from "./communication-template-permissions";
@@ -49,6 +50,8 @@ function mapTemplate(
     subjectTemplate: row.subjectTemplate,
     bodyTemplate: row.bodyTemplate,
     bodyFormat: row.bodyFormat,
+    editorDocument: (row.editorDocument ?? null) as EmailBuilderDocument | null,
+    editorDocumentVersion: row.editorDocumentVersion,
     allowedPlaceholders: row.allowedPlaceholders as TemplatePlaceholder[],
     requiredPlaceholders: row.requiredPlaceholders as TemplatePlaceholder[],
     ownerKind: row.ownerKind,

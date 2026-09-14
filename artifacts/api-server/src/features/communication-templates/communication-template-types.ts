@@ -6,6 +6,7 @@ import type {
   CommunicationTemplateOwnerKind,
   CommunicationTemplateState,
 } from "@workspace/db/business-source-schema";
+import type { EmailBuilderDocument } from "@workspace/api-zod";
 
 export const allowedTemplatePlaceholders = [
   "contactName",
@@ -62,6 +63,8 @@ export type CommunicationTemplateRecord = {
   subjectTemplate: string | null;
   bodyTemplate: string;
   bodyFormat: CommunicationTemplateBodyFormat;
+  editorDocument: EmailBuilderDocument | null;
+  editorDocumentVersion: number | null;
   allowedPlaceholders: TemplatePlaceholder[];
   requiredPlaceholders: TemplatePlaceholder[];
   ownerKind: CommunicationTemplateOwnerKind;

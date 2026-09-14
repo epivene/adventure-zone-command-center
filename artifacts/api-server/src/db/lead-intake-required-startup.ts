@@ -67,6 +67,14 @@ export async function ensureLeadIntakeSchemaBeforeListen(options?: {
       "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS body_format text NOT NULL DEFAULT 'plain_text'",
     );
     throwIfConnectionFailed();
+    await client.query(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS editor_document jsonb",
+    );
+    throwIfConnectionFailed();
+    await client.query(
+      "ALTER TABLE communication_templates ADD COLUMN IF NOT EXISTS editor_document_version integer",
+    );
+    throwIfConnectionFailed();
     await (options?.ensureTemplateSeed ?? (() => ensureCommunicationTemplateSeed(defaultDatabase as never)))();
     throwIfConnectionFailed();
     const templateReady = await (options?.isTemplateReady ?? (() => isApprovedCommunicationTemplateSeedReady(defaultDatabase as never)))();

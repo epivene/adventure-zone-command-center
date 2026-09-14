@@ -356,6 +356,7 @@ function AdminProtectedApp() {
         <Switch>
           <Route path="/command" component={AdminCommandPanelPage} />
           <Route path="/marketing" component={MarketingHomePage} />
+          <Route path="/design-studio/email-templates" component={SettingsCommunicationTemplatesPage} />
           <Route path="/design-studio/:id" component={DesignStudioEditorPage} />
           <Route path="/design-studio" component={DesignStudioPage} />
           <Route path="/today" component={TodayPage} />
@@ -459,5 +460,4 @@ export default function App() {
     </QueryClientProvider>
   );
 }
-
 
