@@ -163,42 +163,27 @@ describe("SettingsCommunicationTemplatesPage", () => {
     await waitFor(() => expect(screen.getByText('Created "Proposal follow-up" as a draft. Review it before activating.')).toBeInTheDocument());
   });
 
-  it("shows a live rendered preview for designed HTML while keeping source editing available", async () => {
+  it("does not offer the retired Send to Dave approval action", async () => {
     apiFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ templates: [{
         id: "00000000-0000-4000-8000-000000000006",
-        code: "convention_preview",
-        name: "Convention preview",
+        code: "past_customer",
+        name: "Past customer",
         channel: "email",
         category: "outreach",
-        subjectTemplate: "Let’s connect at {{conventionName}}",
-        bodyTemplate: '<table><tbody><tr><td>Hello <strong>{{contactName}}</strong><a href="https://example.com">Explore</a></td></tr></tbody></table>',
-        bodyFormat: "html",
-        requiredPlaceholders: ["contactName", "conventionName"],
-        accessScope: "office",
-        state: "active",
+        subjectTemplate: "Adventure Zone",
+        bodyTemplate: "Hello {{contactName}}",
+        requiredPlaceholders: ["contactName"],
+        accessScope: "owner",
+        state: "draft",
         ownerKind: "company",
         creatorDisplayName: null,
       }] }), { status: 200, headers: { "Content-Type": "application/json" } }),
     );
 
     render(<SettingsCommunicationTemplatesPage />);
-
-    const preview = await screen.findByTitle("Email body preview");
-    await waitFor(() => expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>"));
-    expect(preview).toHaveAttribute("sandbox", "allow-popups allow-popups-to-escape-sandbox");
-    const document = new DOMParser().parseFromString(preview.getAttribute("srcdoc")!, "text/html");
-    expect(document.querySelector("a")?.getAttribute("target")).toBe("_blank");
-    expect(preview.getAttribute("srcdoc")).toContain("Hello <strong>Jamie</strong>");
-    expect(screen.getByText("Let’s connect at Example Convention")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Email HTML source")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Edit HTML" }));
-    fireEvent.change(screen.getByLabelText("Email HTML source"), {
-      target: { value: "<p>Updated for {{contactName}}</p>" },
-    });
-
-    expect(preview.getAttribute("srcdoc")).toContain("Updated for Jamie");
+    await screen.findByRole("heading", { name: "Past customer" });
+    expect(screen.queryByRole("button", { name: /send to dave/i })).not.toBeInTheDocument();
   });
 
 });
