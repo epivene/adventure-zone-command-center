@@ -7,6 +7,7 @@ import { createBusinessDocumentsRouter } from "./business-documents";
 const router: IRouter = Router();
 const requireOffice = createRequireOfficeMiddleware(new DrizzleOfficeAccountRepository(db));
 
-router.use("/office", requireOffice, createBusinessDocumentsRouter());
+router.use("/office/business-documents", requireOffice);
+router.use("/office", createBusinessDocumentsRouter());
 
 export default router;
