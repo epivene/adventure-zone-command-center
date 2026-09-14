@@ -174,17 +174,6 @@ describe("ProfileInlineEditor", () => {
     })));
   });
 
-  it("keeps phone fields editable in browsers that intercept tel inputs", async () => {
-    render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} />);
-    await waitFor(() => expect(screen.getByLabelText("Phone")).toBeEnabled());
-
-    for (const label of ["Office phone", "Phone"]) {
-      const input = screen.getByLabelText(label);
-      expect(input).toHaveAttribute("type", "text");
-      expect(input).toHaveAttribute("inputmode", "tel");
-    }
-  });
-
   it("cancels without saving", () => {
     const onCancel = vi.fn();
     render(<ProfileInlineEditor profile={profile as any} onSaved={vi.fn()} onCancel={onCancel} />);

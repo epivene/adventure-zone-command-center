@@ -254,7 +254,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
 
   const profileFields: Array<[Exclude<keyof ProfileDraft, "description">, string, string]> = [
     ["name", "Profile name", "text"],
-    ["phone", "Office phone", "text"],
+    ["phone", "Office phone", "tel"],
     ["website", "Website", "url"],
     ["address1", "Address line 1", "text"],
     ["address2", "Address line 2", "text"],
@@ -296,7 +296,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
           {profileFields.map(([name, label, type]) => (
             <label className={`grid gap-1.5 text-sm font-medium ${name === "address1" || name === "address2" ? "sm:col-span-2" : ""}`} key={name}>
               {label}
-              <input aria-label={label} inputMode={name === "phone" ? "tel" : undefined} type={type} value={profileValues[name]} onChange={(event) => setProfileField(name, event.target.value)} />
+              <input aria-label={label} type={type} value={profileValues[name]} onChange={(event) => setProfileField(name, event.target.value)} />
             </label>
           ))}
         </div>
@@ -330,7 +330,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
           <label className="grid gap-1.5 text-sm font-medium">Last name<input aria-label="Last name" disabled={!contactLoaded} value={contactValues.lastName} onChange={(event) => setContactField("lastName", event.target.value)} /></label>
           <label className="grid gap-1.5 text-sm font-medium">Role<input aria-label="Role" disabled={!contactLoaded} value={contactValues.jobTitle} onChange={(event) => setContactField("jobTitle", event.target.value)} /></label>
           <div className="grid gap-1.5 text-sm font-medium"><span>Profile</span><div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 font-normal text-slate-700">{profileValues.name}</div></div>
-          <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" disabled={!contactLoaded} inputMode="tel" type="text" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
+          <label className="grid gap-1.5 text-sm font-medium">Phone<input aria-label="Phone" disabled={!contactLoaded} type="tel" value={contactValues.phone} onChange={(event) => setContactField("phone", event.target.value)} /></label>
           <label className="grid gap-1.5 text-sm font-medium">Email<input aria-label="Email" disabled={!contactLoaded} type="email" value={contactValues.email} onChange={(event) => setContactField("email", event.target.value)} /></label>
           <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 1<input aria-label="Contact address line 1" disabled={!contactLoaded} value={contactValues.address1} onChange={(event) => setContactField("address1", event.target.value)} /></label>
           <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">Address line 2<input aria-label="Contact address line 2" disabled={!contactLoaded} value={contactValues.address2} onChange={(event) => setContactField("address2", event.target.value)} /></label>
