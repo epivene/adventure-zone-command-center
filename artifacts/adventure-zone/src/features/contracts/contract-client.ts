@@ -39,6 +39,14 @@ export class ContractClient {
   listOrganization(organizationId: string) {
     return json<{ organizationId: string; contracts: ContractVersion[]; eligibleBookings: Array<{ id: string; name: string; openDraftId: string | null }> }>(`/organizations/${organizationId}/contracts`);
   }
+  listWorkspace(filters: { status?: string; organizationId?: string; bookingId?: string } = {}) {
+    const query = new URLSearchParams();
+    if (filters.status) query.set("status", filters.status);
+    if (filters.organizationId) query.set("organizationId", filters.organizationId);
+    if (filters.bookingId) query.set("bookingId", filters.bookingId);
+    const suffix = query.size ? `?${query.toString()}` : "";
+    return json<{ contracts: Array<ContractVersion & { organizationName: string; bookingName: string }> }>(`/contracts/workspace${suffix}`);
+  }
   getVersion(versionId: string) {
     return json<{ version: ContractVersion }>(`/contracts/${versionId}`);
   }

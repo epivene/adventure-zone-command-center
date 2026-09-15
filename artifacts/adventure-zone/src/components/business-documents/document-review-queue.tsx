@@ -11,6 +11,7 @@ import {
 
 const categoryOptions: Array<{ value: BusinessDocumentCategory; label: string }> = [
   { value: "contract", label: "Contract" },
+  { value: "invoice", label: "Invoice" },
   { value: "proposal", label: "Proposal" },
   { value: "coi", label: "COI / certificate of insurance" },
   { value: "insurance_policy", label: "Insurance policy" },

@@ -24,6 +24,8 @@ import { ContractHistoryCard } from "@/components/contracts/contract-history-car
 import { contractClient } from "@/features/contracts/contract-client";
 import type { ContractVersion } from "@/features/contracts/contract-types";
 import { OutreachProfileSummary } from "@/components/today/outreach-planner";
+import { InvoiceContractSummaryCard } from "@/components/invoices/invoice-contract-summary-card";
+import { contractsWorkspaceApi, invoicesApi } from "@/lib/invoices-api";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -201,6 +203,8 @@ export default function EventProfilePage() {
             {contractVersions.map((contract) => <ContractHistoryCard key={contract.id} version={contract} />)}
           </div> : null}
         </section> : null}
+
+        {profileId ? <InvoiceContractSummaryCard contractApi={contractsWorkspaceApi} invoiceApi={invoicesApi} organizationId={profileId} /> : null}
 
         <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
           <SimpleFullProfile

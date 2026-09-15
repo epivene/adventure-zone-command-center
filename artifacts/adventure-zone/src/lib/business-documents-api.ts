@@ -1,7 +1,8 @@
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
+import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
 export type BusinessDocumentCategory =
   | "contract"
+  | "invoice"
   | "proposal"
   | "coi"
   | "insurance_policy"
@@ -74,6 +75,23 @@ function queryString(filters: Record<string, string | number | undefined>) {
 }
 
 export const businessDocumentsApi = {
+  async upload(file: File, metadata: { displayName: string; category: BusinessDocumentCategory }) {
+    const response = await apiFetch("/business-documents/upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+        "X-File-Name": encodeURIComponent(file.name),
+        "X-Document-Name": encodeURIComponent(metadata.displayName),
+        "X-Document-Category": metadata.category,
+      },
+      body: file,
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { error?: string };
+      throw new Error(payload.error ?? "Could not upload the invoice.");
+    }
+    return response.json() as Promise<{ outcome: string; documentId?: string }>;
+  },
   list(filters: {
     profileId?: string;
     category?: BusinessDocumentCategory;

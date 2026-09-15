@@ -12,7 +12,7 @@ import { DocumentReviewQueue } from "@/components/business-documents/document-re
 import { DocumentProfileLinker, type ProfileLinkSuggestion } from "@/components/business-documents/document-profile-linker";
 import { groupBusinessDocuments, isMediaDocument } from "./business-document-organization";
 
-type View = "all" | "media" | "contracts" | "vendor_applications" | "templates" | "insurance" | "review";
+type View = "all" | "media" | "contracts" | "invoices" | "vendor_applications" | "templates" | "insurance" | "review";
 type SortOrder = "newest" | "oldest" | "name_asc" | "name_desc";
 
 export type BusinessDocumentsClient = Pick<typeof businessDocumentsApi,
@@ -31,6 +31,7 @@ const views: Array<{ id: View; label: string }> = [
   { id: "all", label: "All Documents" },
   { id: "media", label: "Media" },
   { id: "contracts", label: "Contracts" },
+  { id: "invoices", label: "Invoices" },
   { id: "vendor_applications", label: "Vendor Applications" },
   { id: "templates", label: "Templates" },
   { id: "insurance", label: "COIs & Insurance" },
@@ -45,6 +46,7 @@ function visibleInView(document: BusinessDocumentRecord, view: View) {
   if (view === "review") return document.reviewState === "needs_review";
   if (isMediaDocument(document)) return false;
   if (view === "contracts") return document.category === "contract";
+  if (view === "invoices") return document.category === "invoice";
   if (view === "vendor_applications") return document.category === "vendor_application";
   if (view === "templates") return document.category === "operational_template";
   if (view === "insurance") return document.category === "coi" || document.category === "insurance_policy";
@@ -52,7 +54,7 @@ function visibleInView(document: BusinessDocumentRecord, view: View) {
 }
 
 const categories: BusinessDocumentRecord["category"][] = [
-  "contract", "proposal", "coi", "insurance_policy", "w9_tax", "permit",
+  "contract", "invoice", "proposal", "coi", "insurance_policy", "w9_tax", "permit",
   "vendor_application", "inspection", "deposit_receipt", "operational_template", "marketing", "other",
 ];
 

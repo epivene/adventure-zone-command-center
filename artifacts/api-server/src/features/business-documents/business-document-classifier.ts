@@ -21,6 +21,7 @@ const rules: Array<{
   pattern: RegExp;
   reason: string;
 }> = [
+  { category: "invoice", pattern: /\binvoice\b/i, reason: "invoice_phrase" },
   { category: "coi", pattern: /\bcoi\b|certificate of insurance/i, reason: "coi_phrase" },
   { category: "w9_tax", pattern: /\bw[- ]?9\b|tax form/i, reason: "w9_phrase" },
   { category: "insurance_policy", pattern: /insurance renewal|insurance policy/i, reason: "insurance_policy_phrase" },

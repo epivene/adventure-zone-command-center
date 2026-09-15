@@ -9,6 +9,7 @@ import {
   contractStatusEvents,
   contractTemplates,
   contractVersions,
+  organizations,
 } from "@/db/schema";
 import type { StoredContractDraftValues } from "./contract-draft-service";
 import type { ContractReadiness } from "./contract-types";
@@ -22,6 +23,34 @@ function safeFile(row: typeof contractFiles.$inferSelect) {
 
 export class DrizzleContractQueryRepository {
   constructor(private readonly database: Database) {}
+
+  async listWorkspaceContracts(filters: {
+    status?: typeof contractVersions.$inferSelect.status;
+    organizationId?: string;
+    bookingId?: string;
+  } = {}) {
+    const conditions = [];
+    if (filters.status) conditions.push(eq(contractVersions.status, filters.status));
+    if (filters.organizationId) conditions.push(eq(contractVersions.organizationId, filters.organizationId));
+    if (filters.bookingId) conditions.push(eq(contractVersions.bookingId, filters.bookingId));
+    const rows = await this.database.select({
+      version: contractVersions,
+      organizationName: organizations.name,
+      bookingName: bookings.name,
+    }).from(contractVersions)
+      .innerJoin(organizations, eq(organizations.id, contractVersions.organizationId))
+      .innerJoin(bookings, eq(bookings.id, contractVersions.bookingId))
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(contractVersions.updatedAt));
+    const files = await this.database.select().from(contractFiles)
+      .orderBy(desc(contractFiles.revision));
+    return rows.map(({ version, organizationName, bookingName }) => ({
+      ...version,
+      organizationName,
+      bookingName,
+      files: files.filter((file) => file.contractVersionId === version.id).map(safeFile),
+    }));
+  }
 
   async listOrganization(organizationId: string) {
     const [versions, eligibleBookings, files] = await Promise.all([

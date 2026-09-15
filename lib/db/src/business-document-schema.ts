@@ -21,6 +21,7 @@ import { bookings, organizations } from "./schema";
 
 export const businessDocumentCategoryValues = [
   "contract",
+  "invoice",
   "proposal",
   "coi",
   "insurance_policy",
@@ -114,7 +115,7 @@ export const businessDocuments = pgTable(
   (table) => [
     index("business_documents_category_review_idx").on(table.category, table.reviewState),
     index("business_documents_lifecycle_updated_idx").on(table.lifecycle, table.updatedAt),
-    check("business_documents_category_valid", sql`${table.category} in ('contract','proposal','coi','insurance_policy','w9_tax','permit','vendor_application','inspection','deposit_receipt','operational_template','marketing','other')`),
+    check("business_documents_category_valid", sql`${table.category} in ('contract','invoice','proposal','coi','insurance_policy','w9_tax','permit','vendor_application','inspection','deposit_receipt','operational_template','marketing','other')`),
     check("business_documents_lifecycle_valid", sql`${table.lifecycle} in ('active','archived','deleted')`),
     check("business_documents_review_valid", sql`${table.reviewState} in ('accepted','needs_review','rejected')`),
     check("business_documents_visibility_valid", sql`${table.visibility} in ('owner','document_access')`),
