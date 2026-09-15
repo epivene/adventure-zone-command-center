@@ -10,6 +10,7 @@ import {
 import { apiGet, apiPost } from "@/lib/auth-token";
 import { useToast } from "@workspace/avz-crm/hooks/use-toast";
 import { ConsolidationDialog } from "./consolidation-dialog";
+import { buildDuplicateMergeRequest } from "./duplicate-merge-request";
 
 type FamilyEvidence = {
   family: "name" | "website" | "location" | "address" | "act_relationship";
@@ -316,7 +317,11 @@ function DuplicateGroupCard({
     setPending(true);
     const duplicateIds = selectedOrganizations.filter((item) => item.id !== primaryId).map((item) => item.id);
     try {
-      await apiPost("/organizations/merge", { primaryId, duplicateIds });
+      await apiPost("/organizations/merge", buildDuplicateMergeRequest({
+        classification: group.classification,
+        primaryId,
+        duplicateIds,
+      }));
       toast({ title: `Merged ${duplicateIds.length} duplicate${duplicateIds.length !== 1 ? "s" : ""}` });
       onResolved(subsetApplied);
     } catch (error: any) {
