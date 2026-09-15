@@ -20,3 +20,11 @@ export function selectedProfilesHaveConflictingCompleteLocations(
 
   return new Set(completeLocations).size > 1;
 }
+
+export function shouldBlockSelectedProfileMergeForLocation(
+  profiles: readonly ProfileLocationIdentity[],
+  reviewedLocationConflict: boolean,
+): boolean {
+  return !reviewedLocationConflict
+    && selectedProfilesHaveConflictingCompleteLocations(profiles);
+}
