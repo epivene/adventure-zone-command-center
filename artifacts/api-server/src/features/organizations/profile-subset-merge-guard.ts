@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 
 import type { db as database } from "@/db/client";
 import { OrganizationConflictError } from "@/features/organizations/organization-conflict";
-import { selectedProfilesHaveConflictingCompleteLocations } from "./organization-merge-subset-safety";
+import { shouldBlockSelectedProfileMergeForLocation } from "./organization-merge-subset-safety";
 
 type OrganizationMergeTransaction = Parameters<
   Parameters<typeof database["transaction"]>[0]
@@ -25,6 +25,7 @@ function isMergeCandidateRow(row: Record<string, unknown>): row is MergeCandidat
 export async function assertSelectedProfileSubsetMergeable(
   transaction: OrganizationMergeTransaction,
   ids: string[],
+  options: { reviewedLocationConflict?: boolean } = {},
 ): Promise<void> {
   const selectedIds = [...new Set(ids)].sort((left, right) =>
     left.localeCompare(right, "en-US"),
@@ -59,7 +60,10 @@ export async function assertSelectedProfileSubsetMergeable(
     );
   }
 
-  if (selectedProfilesHaveConflictingCompleteLocations(rows)) {
+  if (shouldBlockSelectedProfileMergeForLocation(
+    rows,
+    options.reviewedLocationConflict === true,
+  )) {
     throw new OrganizationConflictError(
       "These selected profiles have different recorded locations. Keep them separate and group them as an Event Family instead of merging them.",
     );
@@ -76,11 +80,12 @@ export async function assertSelectedProfileSubsetMergeable(
 export async function prepareSelectedProfileSubsetMerge(
   transaction: OrganizationMergeTransaction,
   ids: string[],
+  options: { reviewedLocationConflict?: boolean } = {},
 ): Promise<void> {
   const selectedIds = [...new Set(ids)].sort((left, right) =>
     left.localeCompare(right, "en-US"),
   );
-  await assertSelectedProfileSubsetMergeable(transaction, selectedIds);
+  await assertSelectedProfileSubsetMergeable(transaction, selectedIds, options);
 
   const textIds = sql.join(
     selectedIds.map((id) => sql`${id}`),
