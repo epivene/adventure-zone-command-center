@@ -45,6 +45,8 @@ export function InspectionPhotoEditorContent({
   const [syncState, setSyncState] = useState<"saved_offline" | "syncing" | "synced" | "needs_attention" | null>(null);
   const [error, setError] = useState("");
   const imageRef = useRef<HTMLImageElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+  const galleryRef = useRef<HTMLInputElement>(null);
   const previewUrl = useMemo(() => file && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "", [file]);
 
   useEffect(() => () => {
@@ -119,20 +121,36 @@ export function InspectionPhotoEditorContent({
     }
   }
 
+  function selectPhoto(nextFile: File | null) {
+    setFile(nextFile);
+    setEllipses([]);
+  }
+
   return <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
-    <label className="grid gap-1 text-sm font-semibold">
-      Take or choose photo
+    <div className="grid gap-2">
+      <span className="text-sm font-semibold">Add a photo</span>
+      <div className="grid grid-cols-2 gap-2">
+        <button className="button-secondary" type="button" onClick={() => cameraRef.current?.click()}>Take Photo</button>
+        <button className="button-secondary" type="button" onClick={() => galleryRef.current?.click()}>Choose From Gallery</button>
+      </div>
       <input
-        aria-label="Take or choose photo"
+        ref={cameraRef}
+        className="sr-only"
+        aria-label="Take inspection photo"
         accept="image/jpeg,image/png,image/webp"
         capture="environment"
         type="file"
-        onChange={(event) => {
-          setFile(event.target.files?.[0] ?? null);
-          setEllipses([]);
-        }}
+        onChange={(event) => selectPhoto(event.target.files?.[0] ?? null)}
       />
-    </label>
+      <input
+        ref={galleryRef}
+        className="sr-only"
+        aria-label="Choose inspection photo from gallery"
+        accept="image/jpeg,image/png,image/webp"
+        type="file"
+        onChange={(event) => selectPhoto(event.target.files?.[0] ?? null)}
+      />
+    </div>
     {file ? <>
       <div
         className={`relative overflow-hidden rounded-lg bg-slate-100 ${drawing ? "cursor-crosshair touch-none" : ""}`}

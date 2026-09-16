@@ -2,7 +2,10 @@ import { ellipseStyle, type PhotoEllipse } from "@/lib/inspection-photo-annotati
 import type { YearEndInspectionDto } from "@/lib/year-end-inspections-api";
 
 export type InspectionPhotoDto = { id: string; signedUrl: string; description: string | null; annotations: { version: 1; ellipses: PhotoEllipse[] } };
-export type InspectionRecordDto = Omit<YearEndInspectionDto, "entries"> & { entries: Array<YearEndInspectionDto["entries"][number] & { photos?: InspectionPhotoDto[]; maintenanceItem?: { id: string; state: "open" | "resolved"; resolutionNotes: string | null } | null }> };
+export type InspectionRecordDto = Omit<YearEndInspectionDto, "entries"> & {
+  managerIdentitySnapshot?: string | null;
+  entries: Array<YearEndInspectionDto["entries"][number] & { photos?: InspectionPhotoDto[]; maintenanceItem?: { id: string; state: "open" | "resolved"; resolutionNotes: string | null } | null }>;
+};
 
 export function InspectionRecordView({ inspection, onResolveRepair }: { inspection: InspectionRecordDto; onResolveRepair?: (itemId: string) => void }) {
   return <div className="grid gap-3">

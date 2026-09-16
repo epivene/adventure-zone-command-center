@@ -157,7 +157,8 @@ describe("ManagerYearEndInspectionPage", () => {
     await user.click(screen.getByRole("button", { name: "Save & inspect this piece" }));
 
     expect(await screen.findByRole("button", { name: /NEW-0001 Blue slide section/ })).toBeVisible();
-    expect(screen.getByLabelText("Take or choose photo")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Take Photo" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Choose From Gallery" })).toBeVisible();
     expect(screen.getByText("0 of 1 inspected")).toBeVisible();
   });
 });

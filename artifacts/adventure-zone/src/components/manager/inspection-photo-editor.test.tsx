@@ -24,7 +24,7 @@ describe("InspectionPhotoEditorContent", () => {
       />,
     );
     const file = new File([new Uint8Array([1, 2, 3])], "seam.jpg", { type: "image/jpeg" });
-    await user.upload(screen.getByLabelText("Take or choose photo"), file);
+    await user.upload(screen.getByLabelText("Choose inspection photo from gallery"), file);
     await user.type(screen.getByLabelText("Photo description"), "Circle shows the worn seam");
     await user.click(screen.getByRole("button", { name: "Save photo" }));
 
@@ -59,10 +59,28 @@ describe("InspectionPhotoEditorContent", () => {
       />,
     );
     await user.upload(
-      screen.getByLabelText("Take or choose photo"),
+      screen.getByLabelText("Choose inspection photo from gallery"),
       new File([new Uint8Array([1])], "part.jpg", { type: "image/jpeg" }),
     );
     const description = screen.getByLabelText("Photo description");
     expect(description.compareDocumentPosition(screen.getByRole("button", { name: "Save photo" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("offers separate camera and gallery inputs without forcing the camera for gallery photos", () => {
+    render(
+      <InspectionPhotoEditorContent
+        blobStore={new MemoryManagerBlobStore()}
+        entryId="20000000-0000-4000-8000-000000000001"
+        inspectionId="10000000-0000-4000-8000-000000000001"
+        legId="30000000-0000-4000-8000-000000000001"
+        managerApi={vi.fn()}
+        mutationStore={new MemoryManagerMutationStore()}
+      />,
+    );
+
+    expect(screen.getByLabelText("Take inspection photo")).toHaveAttribute("capture", "environment");
+    expect(screen.getByLabelText("Choose inspection photo from gallery")).not.toHaveAttribute("capture");
+    expect(screen.getByRole("button", { name: "Take Photo" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Choose From Gallery" })).toBeVisible();
   });
 });

@@ -40,7 +40,7 @@ async function setup() {
     currentLegId: legId, storageLocation: "Trailer 1", identityNotes: null,
     lifecycleStatus: "active", resourceId,
   }, actor);
-  return { client, service: new YearEndInspectionService(db), piece };
+  return { client, service: new YearEndInspectionService(db), piece, pieces };
 }
 
 afterEach(async () => {
@@ -161,5 +161,28 @@ describe("YearEndInspectionService", () => {
       inspectionNotes: "Anchor panel tear photographed",
       maintenanceItem: { state: "resolved", resolutionNotes: "Patched and pressure tested" },
     });
+  });
+
+  it("fully resets an inspection while deleting only pieces created by that manager during it", async () => {
+    const { service, piece: existingPiece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const discoveredPieceId = "40000000-0000-4000-8000-000000000001";
+    await service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: discoveredPieceId,
+      entryId: "50000000-0000-4000-8000-000000000001",
+      clientMutationId: "60000000-0000-4000-8000-000000000001",
+      code: null,
+      name: "Kristy's test section",
+      identityNotes: "Created during the test inspection",
+      resourceId: null,
+    }, actor);
+
+    expect(await service.resetForAdmin(inspection.id, { deleteDiscoveredPieces: true, actorId: "owner" }))
+      .toEqual({ deletedPieces: 1 });
+    expect(await service.get(inspection.id)).toBeNull();
+    expect(await pieces.get(discoveredPieceId)).toBeNull();
+    expect(await pieces.get(existingPiece.id)).not.toBeNull();
   });
 });

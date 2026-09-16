@@ -31,4 +31,39 @@ describe("YearEndInspectionsAdminPage", () => {
     expect(await screen.findByText("AZ-059")).toBeVisible();
     expect(screen.getByLabelText("Piece code")).toHaveValue("");
   });
+
+  it("requires confirmation before fully resetting Kristy's selected inspection", async () => {
+    const user = userEvent.setup();
+    const inspection: any = {
+      id: "10000000-0000-4000-8000-000000000001",
+      legId: "30000000-0000-4000-8000-000000000001",
+      inspectionYear: 2026,
+      managerIdentitySnapshot: "manager:Kristy",
+      status: "in_progress",
+      entries: [],
+      progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 0 },
+    };
+    let reset = false;
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections" && !options?.method) return { inspections: reset ? [] : [inspection] };
+      if (path === `/manager-admin/year-end-inspections/${inspection.id}` && !options?.method) return { inspection };
+      if (path === `/manager-admin/year-end-inspections/${inspection.id}/reset` && options?.method === "POST") {
+        reset = true;
+        return { ok: true, deletedPhotos: 1, deletedPieces: 2 };
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[{ id: inspection.legId, name: "Kristy's Leg" }]}
+    />);
+    await user.click(await screen.findByRole("button", { name: /Kristy's Leg · 2026/ }));
+    await user.click(await screen.findByRole("button", { name: "Fully reset inspection" }));
+
+    expect(await screen.findByText("Kristy's 2026 inspection was reset. 1 photo and 2 test pieces were removed.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Kristy's Leg · 2026/ })).not.toBeInTheDocument();
+  });
 });

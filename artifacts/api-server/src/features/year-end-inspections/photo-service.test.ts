@@ -114,4 +114,18 @@ describe("year-end inspection photo validation", () => {
     await expect(service.putImage(photo.id, legId, new Uint8Array(15 * 1024 * 1024 + 1), "image/jpeg"))
       .rejects.toThrow("PHOTO_TOO_LARGE");
   });
+
+  it("deletes every stored photo for an inspection before an admin reset", async () => {
+    const { service, storage, inspectionId, entryId } = await setup();
+    const photo = await service.createMetadata({
+      id: crypto.randomUUID(), clientMutationId: crypto.randomUUID(),
+      inspectionId, entryId, legId, mimeType: "image/jpeg",
+      description: "Test photo", annotations: { version: 1, ellipses: [] },
+    });
+    await service.putImage(photo.id, legId, new Uint8Array([1, 2, 3]), "image/jpeg");
+
+    expect(await service.deleteForInspection(inspectionId)).toEqual({ deletedPhotos: 1 });
+    expect(storage.deletes).toHaveLength(1);
+    expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
+  });
 });
