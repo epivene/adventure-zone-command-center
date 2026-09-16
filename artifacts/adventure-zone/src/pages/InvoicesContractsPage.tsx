@@ -21,6 +21,9 @@ type DocumentClient = {
   deleteDocument(documentId: string): Promise<unknown>;
   open(documentId: string): Promise<string>;
   searchProfiles(query: string): Promise<BusinessDocumentProfileOption[]>;
+  list(filters: { profileId: string; category: "invoice"; limit: number }): Promise<{
+    documents: Array<{ id: string; displayName: string }>;
+  }>;
 };
 
 const emptySummary: InvoiceAttentionSummary = {

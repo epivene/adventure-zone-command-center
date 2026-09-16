@@ -20,7 +20,7 @@ describe("InvoicesContractsPage", () => {
     render(<InvoicesContractsPage
       invoiceApi={invoiceApi}
       contractApi={{ list: vi.fn().mockResolvedValue({ contracts: [] }) }}
-      documentApi={{ upload: vi.fn(), deleteDocument: vi.fn(), open: vi.fn(), searchProfiles: vi.fn() }}
+      documentApi={{ upload: vi.fn(), deleteDocument: vi.fn(), open: vi.fn(), searchProfiles: vi.fn(), list: vi.fn() }}
     />);
     expect(await screen.findByText("Overdue balances")).toBeInTheDocument();
     expect(screen.getByText("$4,500.00 remaining")).toBeInTheDocument();
