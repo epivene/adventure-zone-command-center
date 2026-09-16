@@ -32,6 +32,15 @@ const photoMetadataSchema = z.object({
   description: z.string().max(4000).nullable().default(null),
   annotations: z.object({ version: z.literal(1), ellipses: z.array(z.any()).max(50) }),
 }).strict();
+const discoveredPieceSchema = z.object({
+  pieceId: uuid,
+  entryId: uuid,
+  clientMutationId: uuid,
+  code: z.string().trim().min(1).max(80).nullable().default(null),
+  name: z.string().trim().min(1).max(200).nullable().default(null),
+  identityNotes: z.string().trim().max(12000).nullable().default(null),
+  resourceId: uuid.nullable().default(null),
+}).strict();
 
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
@@ -52,6 +61,10 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     const year = Number(req.query.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2200) { res.status(400).json({ error: "Choose a valid inspection year." }); return; }
     res.json({ inspection: await service.getForLegYear(req.legManager!.legId, year) });
+  });
+
+  router.get("/manager/year-end-inspections/resources", requireManager, async (req, res) => {
+    res.json({ resources: await service.listResourcesForLeg(req.legManager!.legId) });
   });
 
   router.get("/manager/year-end-inspections/:inspectionId", requireManager, async (req, res) => {
@@ -96,6 +109,31 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     const inspection = await service.get(inspectionId);
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
     res.json({ inspection: await service.addPieceToInspection(inspectionId, parsed.data.pieceId) });
+  });
+
+  router.post("/manager/year-end-inspections/:inspectionId/discovered-pieces", requireManager, async (req, res) => {
+    const parsed = discoveredPieceSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review this piece." }); return; }
+    try {
+      const inspection = await service.createDiscoveredPieceForLeg(
+        param(req.params.inspectionId),
+        req.legManager!.legId,
+        parsed.data,
+        `manager:${req.legManager!.managerName ?? req.legManager!.legId}`,
+      );
+      res.status(201).json({ inspection });
+    } catch (error) {
+      if (error instanceof Error && ["INSPECTION_NOT_FOUND", "PIECE_OUTSIDE_LEG"].includes(error.message)) {
+        res.status(404).json({ error: "Inspection or piece not found." }); return;
+      }
+      if (error instanceof Error && ["PIECE_RESOURCE_UNAVAILABLE", "PIECE_RESOURCE_OUTSIDE_LEG"].includes(error.message)) {
+        res.status(400).json({ error: "Choose an attraction assigned to this leg." }); return;
+      }
+      if (error && typeof error === "object" && "code" in error && error.code === "inspection_completed") {
+        res.status(409).json({ error: error instanceof Error ? error.message : "Inspection is completed." }); return;
+      }
+      throw error;
+    }
   });
 
   router.post("/manager/year-end-inspections/:inspectionId/complete", requireManager, async (req, res) => {

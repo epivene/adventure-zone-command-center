@@ -96,4 +96,68 @@ describe("ManagerYearEndInspectionPage", () => {
     expect(await screen.findByText("1 of 2 inspected")).toBeVisible();
     expect(screen.getByRole("button", { name: "Complete inspection" })).toBeDisabled();
   });
+
+  it("lets a manager build a blank inspection by photographing and labeling newly discovered pieces", async () => {
+    const user = userEvent.setup();
+    let inspection: YearEndInspectionDto | null = null;
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.includes("?year=")) return { inspection: null };
+      if (path === "/manager/year-end-inspections/resources") {
+        return { resources: [{ id: "resource-1", name: "Warrior's Playground" }] };
+      }
+      if (path === "/manager/year-end-inspections" && options?.method === "POST") {
+        inspection = withProgress({
+          id: "10000000-0000-4000-8000-000000000001",
+          legId: "30000000-0000-4000-8000-000000000001",
+          inspectionYear: 2026,
+          status: "draft",
+          copiedFromInspectionId: null,
+          updatedAt: new Date().toISOString(),
+          completedAt: null,
+          entries: [],
+        });
+        return { inspection };
+      }
+      if (path.endsWith("/discovered-pieces") && options?.method === "POST") {
+        const body = JSON.parse(String(options.body));
+        inspection = withProgress({
+          ...inspection!,
+          status: "in_progress",
+          entries: [{
+            id: body.entryId,
+            pieceId: body.pieceId,
+            pieceCodeSnapshot: "NEW-0001",
+            pieceNameSnapshot: body.name,
+            resourceNameSnapshot: "Warrior's Playground",
+            entryState: "not_started",
+            condition: null,
+            inspectionNotes: body.identityNotes,
+            repairNeeded: false,
+            repairNotes: null,
+            retainForFutureUse: true,
+          }],
+        });
+        return { inspection };
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<ManagerYearEndInspectionContent
+      currentYear={2026}
+      legId="30000000-0000-4000-8000-000000000001"
+      managerApi={api as unknown as ManagerApi}
+      mutationStore={new MemoryManagerMutationStore()}
+    />);
+
+    await user.click(await screen.findByRole("button", { name: "Start inspecting pieces" }));
+    await user.click(await screen.findByRole("button", { name: "Add & Inspect a Piece" }));
+    await user.type(screen.getByLabelText("Piece name or label"), "Blue slide section");
+    await user.type(screen.getByLabelText("Identification notes"), "Rolled beside the generator");
+    await user.selectOptions(screen.getByLabelText("Whole attraction"), "resource-1");
+    await user.click(screen.getByRole("button", { name: "Save & inspect this piece" }));
+
+    expect(await screen.findByRole("button", { name: /NEW-0001 Blue slide section/ })).toBeVisible();
+    expect(screen.getByLabelText("Take or choose photo")).toBeVisible();
+    expect(screen.getByText("0 of 1 inspected")).toBeVisible();
+  });
 });

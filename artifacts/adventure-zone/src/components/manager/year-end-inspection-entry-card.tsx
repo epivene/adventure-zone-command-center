@@ -13,14 +13,16 @@ export function YearEndInspectionEntryCard({
   legId,
   managerApi,
   onSave,
+  initiallyOpen = false,
 }: {
   entry: YearEndInspectionEntryDto;
   inspectionId: string;
   legId: string;
   managerApi: ManagerApi;
   onSave: (entryId: string, patch: EntryPatch) => Promise<void>;
+  initiallyOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initiallyOpen);
   const [condition, setCondition] = useState<InspectionCondition | "">(entry.condition ?? "");
   const [notes, setNotes] = useState(entry.inspectionNotes ?? "");
   const [repairNotes, setRepairNotes] = useState(entry.repairNotes ?? "");

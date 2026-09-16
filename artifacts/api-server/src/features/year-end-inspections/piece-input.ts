@@ -5,6 +5,7 @@ const nullableText = (maximum: number) =>
   z.string().trim().max(maximum).nullable().default(null);
 
 export const pieceInputSchema = z.object({
+  id: z.string().uuid().optional(),
   clientMutationId: z.string().uuid().optional(),
   code: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1).max(200),
@@ -17,7 +18,7 @@ export const pieceInputSchema = z.object({
 }).strict();
 
 export const piecePatchSchema = pieceInputSchema
-  .omit({ clientMutationId: true, resourceId: true })
+  .omit({ id: true, clientMutationId: true, resourceId: true })
   .partial()
   .refine((input) => Object.keys(input).length > 0, "No piece changes provided");
 

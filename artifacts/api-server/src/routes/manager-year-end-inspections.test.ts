@@ -45,4 +45,33 @@ describe("manager year-end inspection routes", () => {
     expect(retry.body.inspection.id).toBe(inspectionId);
     expect(service.startForCurrentPieces).toHaveBeenCalledOnce();
   });
+
+  it("creates a discovered piece directly on the signed-in manager's leg", async () => {
+    const inspection = { id: inspectionId, legId, status: "in_progress", entries: [{ id: "entry-1" }] };
+    const service = {
+      createDiscoveredPieceForLeg: vi.fn(async () => inspection),
+    };
+    const body = {
+      pieceId: "40000000-0000-4000-8000-000000000001",
+      entryId: "50000000-0000-4000-8000-000000000001",
+      clientMutationId: "60000000-0000-4000-8000-000000000001",
+      code: null,
+      name: "Blue slide section",
+      identityNotes: "Rolled beside the generator",
+      resourceId: null,
+    };
+
+    const response = await request(appFor(service))
+      .post(`/manager/year-end-inspections/${inspectionId}/discovered-pieces`)
+      .send(body)
+      .expect(201);
+
+    expect(response.body.inspection.entries).toHaveLength(1);
+    expect(service.createDiscoveredPieceForLeg).toHaveBeenCalledWith(
+      inspectionId,
+      legId,
+      body,
+      "manager:Leg One",
+    );
+  });
 });

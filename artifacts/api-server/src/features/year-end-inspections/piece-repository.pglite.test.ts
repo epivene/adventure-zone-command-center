@@ -26,13 +26,13 @@ async function setup() {
     );
     CREATE TABLE resources (
       id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL,
-      status text NOT NULL DEFAULT 'available'
+      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid
     );
     INSERT INTO travel_legs (id, name, sort_order) VALUES
       ('${legId}', 'Leg One', 1), ('${secondLegId}', 'Leg Two', 2);
-    INSERT INTO resources (id, code, name, category) VALUES
-      ('${firstResourceId}', 'WP', 'Warrior Playground', 'inflatable'),
-      ('${secondResourceId}', 'AZ', 'Adventure Zone', 'inflatable');
+    INSERT INTO resources (id, code, name, category, normal_travel_leg_id) VALUES
+      ('${firstResourceId}', 'WP', 'Warrior Playground', 'inflatable', '${legId}'),
+      ('${secondResourceId}', 'AZ', 'Adventure Zone', 'inflatable', '${legId}');
   `);
   await client.exec(YEAR_END_INSPECTION_SCHEMA_SQL);
   return new DrizzlePieceRepository(drizzle(client, { schema: yearEndSchema }) as never);

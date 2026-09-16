@@ -26,11 +26,11 @@ async function setup() {
     );
     CREATE TABLE resources (
       id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL,
-      status text NOT NULL DEFAULT 'available'
+      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid
     );
     INSERT INTO travel_legs (id, name, sort_order) VALUES ('${legId}', 'Leg One', 1);
-    INSERT INTO resources (id, code, name, category) VALUES
-      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable');
+    INSERT INTO resources (id, code, name, category, status, normal_travel_leg_id) VALUES
+      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable', 'available', '${legId}');
   `);
   await client.exec(YEAR_END_INSPECTION_SCHEMA_SQL);
   const db = drizzle(client, { schema: yearEndSchema }) as never;
@@ -78,6 +78,35 @@ describe("YearEndInspectionService", () => {
       inspectionNotes: null,
     });
     expect(next.entries[0]!.id).not.toBe(prior.entries[0]!.id);
+  });
+
+  it("creates a newly discovered piece on the manager's leg and adds it to a blank inspection idempotently", async () => {
+    const { service } = await setup();
+    const inspection = await service.startBlank({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const input = {
+      pieceId: "40000000-0000-4000-8000-000000000001",
+      entryId: "50000000-0000-4000-8000-000000000001",
+      clientMutationId: "60000000-0000-4000-8000-000000000001",
+      code: null,
+      name: "Blue slide section",
+      identityNotes: "Rolled beside the generator",
+      resourceId,
+    };
+
+    const created = await service.createDiscoveredPieceForLeg(inspection.id, legId, input, actor);
+    const retried = await service.createDiscoveredPieceForLeg(inspection.id, legId, input, actor);
+
+    expect(created.entries).toHaveLength(1);
+    expect(retried.entries).toHaveLength(1);
+    expect(retried.entries[0]).toMatchObject({
+      id: input.entryId,
+      pieceId: input.pieceId,
+      pieceNameSnapshot: "Blue slide section",
+      resourceNameSnapshot: "Warrior Playground",
+      entryState: "not_started",
+    });
   });
 
   it("blocks completion until every piece is inspected or deliberately not present", async () => {
