@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/boss-auth-context", () => ({
@@ -15,14 +16,34 @@ import { BossShell } from "./boss-shell";
 
 afterEach(cleanup);
 
-describe("BossShell convention access", () => {
-  it("puts a direct Convention Game shortcut in Dave's navigation", () => {
+describe("BossShell navigation", () => {
+  it("keeps Dave's navigation in one menu without Assignments", async () => {
+    const user = userEvent.setup();
     render(<BossShell><p>Page</p></BossShell>);
 
-    const shortcuts = screen.getAllByRole("link", { name: "Convention Game" });
-    expect(shortcuts).toHaveLength(2);
-    for (const shortcut of shortcuts) {
-      expect(shortcut).toHaveAttribute("href", "/boss/conventions?view=game");
-    }
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.getByRole("menuitem", { name: "Documents" })).toHaveAttribute(
+      "href",
+      "/boss/templates-files",
+    );
+    expect(screen.getByRole("menuitem", { name: "Invoices & Contracts" })).toHaveAttribute(
+      "href",
+      "/boss/invoices-contracts",
+    );
+    expect(screen.queryByRole("menuitem", { name: "Assignments" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Assignments" })).not.toBeInTheDocument();
+  });
+
+  it("keeps a direct Convention Game shortcut in Dave's menu", async () => {
+    const user = userEvent.setup();
+    render(<BossShell><p>Page</p></BossShell>);
+
+    await user.click(screen.getByRole("button", { name: "Menu" }));
+
+    expect(screen.getByRole("menuitem", { name: "Convention Game" })).toHaveAttribute(
+      "href",
+      "/boss/conventions?view=game",
+    );
   });
 });
