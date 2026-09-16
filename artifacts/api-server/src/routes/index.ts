@@ -68,14 +68,13 @@ import bossAssignmentsRouter from "./boss-assignments";
 import bossOperationsRouter from "./boss-operations";
 import bossDocumentsRouter from "./boss-documents";
 import bossBusinessDocumentsRouter from "./boss-business-documents";
-import bossInvoicesRouter from "./boss-invoices";
+import { mountRoleScopedInvoiceRoutes } from "./role-scoped-invoices";
 import bossProfilesRouter from "./boss-profiles";
 import publicWebsiteInquiriesRouter from "./public-website-inquiries";
 import websiteInquiriesRouter from "./website-inquiries";
 import officeTasksRouter from "./office-tasks";
 import officeProfilesRouter from "./office-profiles";
 import officeDocumentsRouter from "./office-documents";
-import officeInvoicesRouter from "./office-invoices";
 import officeAttendanceHistoryRouter from "./office-attendance-history";
 import officeProfileSourceDocumentsRouter from "./office-profile-source-documents";
 import officeEventFamiliesRouter from "./office-event-families";
@@ -234,7 +233,7 @@ router.use(createTwilioInboundVoiceWebhooksRouter({
   voicemails: inboundVoicemailService,
 }));
 
-router.use(requireOwnerMiddleware);
+mountRoleScopedInvoiceRoutes(router, requireOwnerMiddleware);
 router.use("/outreach-planner", createOutreachPlannerRouter());
 router.use(conventionOutreachRouter);
 router.use(async (req, _res, next) => {
@@ -338,8 +337,6 @@ router.use(aiSuggestionsRouter);
 router.use(paperNotesRouter);
 router.use(contractsRouter);
 router.use(invoicesRouter);
-router.use(officeInvoicesRouter);
-router.use(bossInvoicesRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
