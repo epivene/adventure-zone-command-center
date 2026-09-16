@@ -59,12 +59,8 @@ export type BossContact = {
   phone?: string | null;
   organizationName?: string | null;
   role?: string | null;
-  jobTitle?: string | null;
-  address1?: string | null;
-  address2?: string | null;
   city?: string | null;
   region?: string | null;
-  postalCode?: string | null;
   [key: string]: unknown;
 };
 
@@ -105,4 +101,19 @@ export type ScheduleStop = {
   lat?: number | null;
   lng?: number | null;
   [key: string]: unknown;
+};
+
+export type BossMaintenanceSummary = {
+  id: string;
+  recordKind?: "checklist" | "year_end_inspection";
+  inspectionId?: string;
+  bookingId?: string;
+  legId: string | null;
+  legName: string | null;
+  title: string;
+  phase: string;
+  status: string;
+  dueAt?: string | null;
+  completedAt?: string | null;
+  notes?: string | null;
 };

@@ -25,6 +25,7 @@ import * as marketingSchema from "./marketing-schema";
 import * as businessDocumentSchema from "./business-document-schema";
 import * as invoiceSchema from "./invoice-schema";
 import * as googleDriveBackupSchema from "./google-drive-backup-schema";
+import * as yearEndInspectionSchema from "./year-end-inspection-schema";
 import { normalizeDatabaseConnectionString } from "./connection-string";
 import { databasePoolTimeouts } from "./pool-config";
 import {
@@ -100,6 +101,7 @@ const schema = {
   ...businessDocumentSchema,
   ...invoiceSchema,
   ...googleDriveBackupSchema,
+  ...yearEndInspectionSchema,
   designAssets,
   designCertificates,
   designOutputs,
@@ -137,7 +139,9 @@ export * from "./marketing-schema";
 export * from "./business-document-schema";
 export * from "./invoice-schema";
 export * from "./google-drive-backup-schema";
+export * from "./year-end-inspection-schema";
 
 
 
 export * from "./outreach-planner-schema";
+
