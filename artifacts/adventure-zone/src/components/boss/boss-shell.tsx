@@ -114,6 +114,8 @@ function AppearanceMenu({ onSignOut }: { onSignOut(): void }) {
 }
 
 function BossNavigationMenu() {
+  const [location] = useLocation();
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -129,9 +131,17 @@ function BossNavigationMenu() {
         <DropdownMenuSeparator />
         {navItems.map((item) => {
           const Icon = item.icon;
+          const itemPath = item.href.split("?")[0];
+          const active = itemPath === "/boss"
+            ? location === "/boss" || location === "/boss/"
+            : location.startsWith(itemPath);
           return (
             <DropdownMenuItem asChild key={item.href}>
-              <Link href={item.href}>
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={active ? "bg-secondary text-secondary-foreground" : undefined}
+                href={item.href}
+              >
                 <Icon className="h-4 w-4" />
                 {item.label}
               </Link>
