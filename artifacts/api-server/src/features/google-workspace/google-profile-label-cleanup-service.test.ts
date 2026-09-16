@@ -102,28 +102,36 @@ describe("GoogleProfileLabelCleanupService", () => {
     expect(deleteLabel).toHaveBeenCalledWith("old-1");
   });
 
-  it.each(["A".repeat(181), "Current / Fair"])(
-    "fails closed when current CRM profile name %j cannot be represented",
-    async (invalidName) => {
+  it.each([
+    ["A".repeat(181), `Profiles/${"A".repeat(181)}`],
+    ["Current / Fair", "Profiles/Current / Fair"],
+  ])(
+    "protects the current profile label when CRM profile name %j cannot be represented",
+    async (invalidName, protectedLabelName) => {
       const service = new GoogleProfileLabelCleanupService(
         {
           listCurrentProfileNames: async () => [invalidName],
         },
-      {
-        listLabels: async () => [
-          {
-            id: "old",
-            name: "Z - AdventureZone/Profiles/Old",
-            type: "user",
-          },
-        ],
-        deleteLabel: vi.fn(),
-      },
-    );
-
-      await expect(service.preview()).rejects.toThrow(
-        "GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID",
+        {
+          listLabels: async () => [
+            {
+              id: "protected",
+              name: protectedLabelName,
+              type: "user",
+            },
+            {
+              id: "old",
+              name: "Profiles/Old",
+              type: "user",
+            },
+          ],
+          deleteLabel: vi.fn(),
+        },
       );
+
+      await expect(service.preview()).resolves.toEqual({
+        labels: [{ id: "old", name: "Profiles/Old" }],
+      });
     },
   );
 
