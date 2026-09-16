@@ -1,5 +1,14 @@
-import { and, asc, eq, ne } from "drizzle-orm";
-import { resources, yearEndInspectionEntries } from "@workspace/db";
+import { and, asc, eq, gte, inArray, ne } from "drizzle-orm";
+import {
+  equipmentPieceAssignments,
+  equipmentPieces,
+  resources,
+  yearEndInspectionAuditEvents,
+  yearEndInspectionEntries,
+  yearEndInspectionMaintenanceItems,
+  yearEndInspectionPhotos,
+  yearEndLegInspections,
+} from "@workspace/db";
 
 import { DrizzleInspectionRepository, type EntrySeed } from "./inspection-repository";
 import { YearEndMaintenanceProjection } from "./maintenance-projection";
@@ -207,5 +216,54 @@ export class YearEndInspectionService {
 
   async resolveMaintenanceItem(itemId: string, input: { resolutionNotes: string }, actorId: string) {
     await this.maintenance.resolve(itemId, input, actorId);
+  }
+
+  async resetForAdmin(inspectionId: string, input: { deleteDiscoveredPieces: boolean; actorId: string }) {
+    return this.db.transaction(async (tx: Database) => {
+      const [inspection] = await tx.select().from(yearEndLegInspections)
+        .where(eq(yearEndLegInspections.id, inspectionId)).limit(1);
+      if (!inspection) throw new Error("INSPECTION_NOT_FOUND");
+      const entries = await tx.select({ id: yearEndInspectionEntries.id, pieceId: yearEndInspectionEntries.pieceId })
+        .from(yearEndInspectionEntries).where(eq(yearEndInspectionEntries.inspectionId, inspectionId));
+      const entryIds = entries.map((entry: { id: string }) => entry.id);
+      const pieceIds = entries.map((entry: { pieceId: string }) => entry.pieceId);
+      let discoveredPieceIds: string[] = [];
+
+      if (input.deleteDiscoveredPieces && inspection.startedAt && pieceIds.length) {
+        const created = await tx.select({ pieceId: yearEndInspectionAuditEvents.pieceId })
+          .from(yearEndInspectionAuditEvents)
+          .where(and(
+            inArray(yearEndInspectionAuditEvents.pieceId, pieceIds),
+            eq(yearEndInspectionAuditEvents.action, "piece_created"),
+            eq(yearEndInspectionAuditEvents.actorId, inspection.managerIdentitySnapshot ?? ""),
+            gte(yearEndInspectionAuditEvents.createdAt, inspection.startedAt),
+          ));
+        const createdIds = created.map((row: { pieceId: string | null }) => row.pieceId).filter((id: string | null): id is string => Boolean(id));
+        if (createdIds.length) {
+          const otherReferences = await tx.select({ pieceId: yearEndInspectionEntries.pieceId })
+            .from(yearEndInspectionEntries)
+            .where(and(
+              inArray(yearEndInspectionEntries.pieceId, createdIds),
+              ne(yearEndInspectionEntries.inspectionId, inspectionId),
+            ));
+          const protectedIds = new Set(otherReferences.map((row: { pieceId: string }) => row.pieceId));
+          discoveredPieceIds = createdIds.filter((id: string) => !protectedIds.has(id));
+        }
+      }
+
+      if (entryIds.length) {
+        await tx.delete(yearEndInspectionMaintenanceItems).where(inArray(yearEndInspectionMaintenanceItems.entryId, entryIds));
+        await tx.delete(yearEndInspectionPhotos).where(inArray(yearEndInspectionPhotos.entryId, entryIds));
+      }
+      await tx.delete(yearEndInspectionEntries).where(eq(yearEndInspectionEntries.inspectionId, inspectionId));
+      await tx.delete(yearEndInspectionAuditEvents).where(eq(yearEndInspectionAuditEvents.inspectionId, inspectionId));
+      if (discoveredPieceIds.length) {
+        await tx.delete(equipmentPieceAssignments).where(inArray(equipmentPieceAssignments.pieceId, discoveredPieceIds));
+        await tx.delete(yearEndInspectionAuditEvents).where(inArray(yearEndInspectionAuditEvents.pieceId, discoveredPieceIds));
+        await tx.delete(equipmentPieces).where(inArray(equipmentPieces.id, discoveredPieceIds));
+      }
+      await tx.delete(yearEndLegInspections).where(eq(yearEndLegInspections.id, inspectionId));
+      return { deletedPieces: discoveredPieceIds.length };
+    });
   }
 }

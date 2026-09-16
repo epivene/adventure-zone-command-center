@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   yearEndInspectionEntries,
   yearEndInspectionPhotos,
@@ -100,5 +100,22 @@ export class YearEndInspectionPhotoService {
     if (photo.objectKey && this.storage.delete) await this.storage.delete(photo.objectKey);
     await this.db.delete(yearEndInspectionPhotos).where(eq(yearEndInspectionPhotos.id, photoId));
     return true;
+  }
+
+  async deleteForInspection(inspectionId: string) {
+    const photos = await this.db.select({
+      id: yearEndInspectionPhotos.id,
+      objectKey: yearEndInspectionPhotos.objectKey,
+    }).from(yearEndInspectionPhotos)
+      .innerJoin(yearEndInspectionEntries, eq(yearEndInspectionEntries.id, yearEndInspectionPhotos.entryId))
+      .where(eq(yearEndInspectionEntries.inspectionId, inspectionId));
+    for (const photo of photos) {
+      if (photo.objectKey && this.storage.delete) await this.storage.delete(photo.objectKey);
+    }
+    if (photos.length) {
+      await this.db.delete(yearEndInspectionPhotos)
+        .where(inArray(yearEndInspectionPhotos.id, photos.map((photo: { id: string }) => photo.id)));
+    }
+    return { deletedPhotos: photos.length };
   }
 }

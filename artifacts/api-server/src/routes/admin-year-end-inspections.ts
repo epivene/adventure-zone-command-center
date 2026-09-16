@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
 import { z } from "zod";
 import { db } from "@workspace/db";
 
@@ -7,6 +7,7 @@ import { DrizzlePieceRepository } from "@/features/year-end-inspections/piece-re
 import { YearEndInspectionService } from "@/features/year-end-inspections/inspection-service";
 import { YearEndInspectionPhotoService } from "@/features/year-end-inspections/photo-service";
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
+import { requireOwnerMiddleware } from "@/lib/auth";
 
 const uuid = z.string().uuid();
 function param(value: string | string[] | undefined) {
@@ -17,9 +18,10 @@ export function createAdminYearEndInspectionsRouter(dependencies: {
   pieces: DrizzlePieceRepository;
   service: YearEndInspectionService;
   photoService?: YearEndInspectionPhotoService;
+  requireOwner?: RequestHandler;
 }) {
   const router = Router();
-  const { pieces, service, photoService } = dependencies;
+  const { pieces, service, photoService, requireOwner = requireOwnerMiddleware } = dependencies;
   router.get("/manager-admin/equipment-pieces", async (req, res) => {
     res.json({ pieces: await pieces.list({
       legId: typeof req.query.legId === "string" ? req.query.legId : undefined,
@@ -76,6 +78,16 @@ export function createAdminYearEndInspectionsRouter(dependencies: {
   });
   router.post("/manager-admin/year-end-inspections/:inspectionId/reopen", async (req, res) => {
     res.json({ inspection: await service.reopen(param(req.params.inspectionId), "owner") });
+  });
+  router.post("/manager-admin/year-end-inspections/:inspectionId/reset", requireOwner, async (req, res) => {
+    const parsed = z.object({ deleteDiscoveredPieces: z.literal(true) }).strict().safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "Confirm the full inspection reset." }); return; }
+    if (!photoService) { res.status(503).json({ error: "Photo cleanup is unavailable." }); return; }
+    const inspectionId = param(req.params.inspectionId);
+    if (!await service.get(inspectionId)) { res.status(404).json({ error: "Inspection not found." }); return; }
+    const photos = await photoService.deleteForInspection(inspectionId);
+    const reset = await service.resetForAdmin(inspectionId, { deleteDiscoveredPieces: true, actorId: "owner" });
+    res.json({ ok: true, ...photos, ...reset });
   });
   router.post("/manager-admin/year-end-inspection-maintenance/:itemId/resolve", async (req, res) => {
     const parsed = z.object({ resolutionNotes: z.string().trim().min(1).max(12000) }).strict().safeParse(req.body);
