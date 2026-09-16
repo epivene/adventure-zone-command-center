@@ -31,6 +31,7 @@ describe("BossShell navigation", () => {
       "href",
       "/boss/invoices-contracts",
     );
+    expect(screen.getByRole("menuitem", { name: "Home" })).toHaveAttribute("aria-current", "page");
     expect(screen.queryByRole("menuitem", { name: "Assignments" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Assignments" })).not.toBeInTheDocument();
   });
