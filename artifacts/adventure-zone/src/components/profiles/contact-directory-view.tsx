@@ -26,6 +26,7 @@ export function ContactDirectoryView({
   const desiredPath = useRef("");
   const requestState = useRef({
     inFlight: false,
+    activePath: null as string | null,
     queuedPath: null as string | null,
   });
 
@@ -39,6 +40,10 @@ export function ContactDirectoryView({
 
   const loadLatest = useCallback(async (nextPath: string) => {
     const state = requestState.current;
+    if (state.inFlight && state.activePath === nextPath) {
+      state.queuedPath = null;
+      return;
+    }
     state.queuedPath = nextPath;
     if (state.inFlight) return;
 
@@ -46,6 +51,7 @@ export function ContactDirectoryView({
     while (state.queuedPath !== null && mounted.current) {
       const requestedPath = state.queuedPath;
       state.queuedPath = null;
+      state.activePath = requestedPath;
       try {
         const data = await apiGet<ContactListPage>(requestedPath);
         if (mounted.current && desiredPath.current === requestedPath) {
@@ -60,6 +66,7 @@ export function ContactDirectoryView({
       }
     }
 
+    state.activePath = null;
     state.inFlight = false;
     if (mounted.current) setLoading(false);
   }, []);
