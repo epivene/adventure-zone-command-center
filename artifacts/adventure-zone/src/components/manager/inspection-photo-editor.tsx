@@ -14,7 +14,7 @@ import {
   queueManagerMutation,
 } from "@/lib/manager-sync-queue";
 import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
-import { ellipseStyle, pointerEllipse, type PhotoEllipse } from "@/lib/inspection-photo-annotations";
+import { ellipseStyle, pointerPathEllipse, type PhotoEllipse } from "@/lib/inspection-photo-annotations";
 
 type ManagerApi = <T>(path: string, options?: RequestInit) => Promise<T>;
 
@@ -41,24 +41,49 @@ export function InspectionPhotoEditorContent({
   const [description, setDescription] = useState("");
   const [ellipses, setEllipses] = useState<PhotoEllipse[]>([]);
   const [drawing, setDrawing] = useState(false);
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [draftEllipse, setDraftEllipse] = useState<PhotoEllipse | null>(null);
   const [syncState, setSyncState] = useState<"saved_offline" | "syncing" | "synced" | "needs_attention" | null>(null);
   const [error, setError] = useState("");
-  const imageRef = useRef<HTMLImageElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  const drawingPathRef = useRef<Array<{ x: number; y: number }>>([]);
+  const drawingPointerRef = useRef<number | null>(null);
   const previewUrl = useMemo(() => file && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "", [file]);
 
   useEffect(() => () => {
     if (previewUrl && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(previewUrl);
   }, [previewUrl]);
 
+  function startCircle(event: PointerEvent<HTMLDivElement>) {
+    if (!drawing) return;
+    drawingPointerRef.current = event.pointerId;
+    drawingPathRef.current = [{ x: event.clientX, y: event.clientY }];
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setDraftEllipse(null);
+  }
+
+  function updateCircle(event: PointerEvent<HTMLDivElement>) {
+    if (!drawing || drawingPointerRef.current !== event.pointerId || !drawingPathRef.current.length) return;
+    drawingPathRef.current = [...drawingPathRef.current, { x: event.clientX, y: event.clientY }];
+    const ellipse = pointerPathEllipse(drawingPathRef.current, event.currentTarget.getBoundingClientRect(), "circle-preview");
+    setDraftEllipse(ellipse.radiusX > 0.005 && ellipse.radiusY > 0.005 ? ellipse : null);
+  }
+
+  function clearDrawingGesture(target?: HTMLDivElement, pointerId?: number) {
+    if (target && pointerId !== undefined && target.hasPointerCapture?.(pointerId)) {
+      target.releasePointerCapture(pointerId);
+    }
+    drawingPointerRef.current = null;
+    drawingPathRef.current = [];
+    setDraftEllipse(null);
+  }
+
   function finishCircle(event: PointerEvent<HTMLDivElement>) {
-    if (!drawing || !dragStart || !imageRef.current) return;
-    const bounds = imageRef.current.getBoundingClientRect();
-    const ellipse = pointerEllipse(dragStart, { x: event.clientX, y: event.clientY }, bounds);
+    if (!drawing || drawingPointerRef.current !== event.pointerId || !drawingPathRef.current.length) return;
+    drawingPathRef.current = [...drawingPathRef.current, { x: event.clientX, y: event.clientY }];
+    const ellipse = pointerPathEllipse(drawingPathRef.current, event.currentTarget.getBoundingClientRect());
     if (ellipse.radiusX > 0.005 && ellipse.radiusY > 0.005) setEllipses((current) => [...current, ellipse]);
-    setDragStart(null);
+    clearDrawingGesture(event.currentTarget, event.pointerId);
   }
 
   async function save() {
@@ -124,6 +149,12 @@ export function InspectionPhotoEditorContent({
   function selectPhoto(nextFile: File | null) {
     setFile(nextFile);
     setEllipses([]);
+    clearDrawingGesture();
+  }
+
+  function toggleDrawing() {
+    if (drawing) clearDrawingGesture();
+    setDrawing((current) => !current);
   }
 
   return <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -153,12 +184,15 @@ export function InspectionPhotoEditorContent({
     </div>
     {file ? <>
       <div
+        aria-label="Photo annotation canvas"
         className={`relative overflow-hidden rounded-lg bg-slate-100 ${drawing ? "cursor-crosshair touch-none" : ""}`}
-        onPointerDown={(event) => drawing && setDragStart({ x: event.clientX, y: event.clientY })}
+        onPointerDown={startCircle}
+        onPointerMove={updateCircle}
         onPointerUp={finishCircle}
+        onPointerCancel={(event) => clearDrawingGesture(event.currentTarget, event.pointerId)}
       >
         {previewUrl
-          ? <img ref={imageRef} alt="Inspection preview" className="block h-auto w-full" src={previewUrl} />
+          ? <img alt="Inspection preview" className="block h-auto w-full" src={previewUrl} />
           : <div className="grid min-h-40 place-items-center text-sm text-slate-500">Photo selected: {file.name}</div>}
         {ellipses.map((ellipse) => <span
           key={ellipse.id}
@@ -166,6 +200,11 @@ export function InspectionPhotoEditorContent({
           className="pointer-events-none absolute rounded-full border-4 border-rose-500"
           style={ellipseStyle(ellipse)}
         />)}
+        {draftEllipse ? <span
+          aria-label="Circle preview"
+          className="pointer-events-none absolute rounded-full border-4 border-dashed border-rose-500"
+          style={ellipseStyle(draftEllipse)}
+        /> : null}
       </div>
       <label className="grid gap-1 text-sm font-semibold">
         Photo description
@@ -178,7 +217,7 @@ export function InspectionPhotoEditorContent({
         />
       </label>
       <div className="flex flex-wrap gap-2">
-        <button type="button" className="rounded-lg border px-3 py-2 font-semibold" onClick={() => setDrawing((current) => !current)}>
+        <button type="button" className="rounded-lg border px-3 py-2 font-semibold" onClick={toggleDrawing}>
           {drawing ? "Stop circling" : "Circle an area"}
         </button>
         <button type="button" className="rounded-lg border px-3 py-2 font-semibold" disabled={!ellipses.length} onClick={() => setEllipses((current) => current.slice(0, -1))}>Undo circle</button>
