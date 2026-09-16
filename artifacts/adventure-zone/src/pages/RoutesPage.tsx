@@ -43,11 +43,13 @@ export function RoutesContent({ season, legId, status, embedded = false, managem
   const [error, setError] = useState<string | null>(null);
 
   function loadData() {
-    return Promise.all([apiGet<any>("/routes"), apiGet<{ legs: LegManagerAccessStatus[] }>("/manager-admin/legs/access")])
-      .then(([routes, access]) => {
+    return Promise.all([apiGet<any>("/routes"), apiGet<{ legs: LegManagerAccessStatus[] }>("/manager-admin/legs/access"), apiGet<any>("/manager-admin/year-end-inspections").catch(() => ({ inspections: [] }))])
+      .then(([routes, access, annual]) => {
+        const currentYear = new Date().getFullYear();
+        const summaries = new Map((annual.inspections ?? []).filter((inspection: any) => inspection.inspectionYear === currentYear).map((inspection: any) => [inspection.legId, { status: inspection.status, inspected: inspection.progress.inspected + inspection.progress.notPresent, total: inspection.progress.total, needsAttention: inspection.progress.needsAttention }]));
         const next = {
           events: (routes.events ?? []).map((event: any) => ({ ...event, startsAt: event.startsAt ? new Date(event.startsAt) : null, endsAt: event.endsAt ? new Date(event.endsAt) : null })),
-          travelLegs: routes.travelLegs ?? [], legResources: routes.legResources ?? [], managerAccess: access.legs ?? [],
+          travelLegs: routes.travelLegs ?? [], legResources: (routes.legResources ?? []).map((resource: any) => ({ ...resource, yearEndInspectionSummary: summaries.get(resource.legId) })), managerAccess: access.legs ?? [],
         };
         setData(next);
         setPreviewLegId((current) => current || next.travelLegs.find((leg: any) => !leg.archivedAt)?.id || "");
@@ -141,3 +143,4 @@ export function LegManagementPage() {
 export default function RoutesPage() {
   return <div className="mx-auto max-w-7xl"><RoutesContent /></div>;
 }
+

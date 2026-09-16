@@ -9,6 +9,7 @@ import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repos
 import { createRequireBossMiddleware } from "@/features/boss/boss-middleware";
 import { BossWorkRequestService } from "@/features/boss-work-requests/boss-work-request-service";
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
+import { YearEndInspectionService } from "@/features/year-end-inspections/inspection-service";
 
 const router: IRouter = Router();
 const requireBoss = createRequireBossMiddleware(new DrizzleBossAccountRepository(db));
@@ -242,8 +243,13 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
       recommendReturn: item.recommendReturn,
     })),
   ];
+  const [annualInspections, annualLegRows] = await Promise.all([
+    new YearEndInspectionService(db).list(),
+    db.select({ id: travelLegs.id, name: travelLegs.name }).from(travelLegs),
+  ]);
+  const annualLegNames = new Map(annualLegRows.map((leg) => [leg.id, leg.name]));
   const recentCompletedMaintenanceEvents = recentCompletedChecklists.rows;
-  const checklistAndMaintenance = checklists.map((item) => ({
+  const checklistAndMaintenance = [...checklists.map((item) => ({
     id: item.id,
     bookingId: item.bookingId,
     title: item.bookingName,
@@ -254,7 +260,20 @@ router.get("/boss/dashboard", requireBoss, async (req, res) => {
     dueAt: item.startedAt,
     completedAt: item.completedAt,
     notes: item.unableReason,
-  }));
+    recordKind: "checklist" as const,
+  })), ...annualInspections.map((inspection) => ({
+    id: `year-end:${inspection.id}`,
+    inspectionId: inspection.id,
+    recordKind: "year_end_inspection" as const,
+    title: `${annualLegNames.get(inspection.legId) ?? "Travel leg"} · ${inspection.inspectionYear} year-end inspection`,
+    legId: inspection.legId,
+    legName: annualLegNames.get(inspection.legId) ?? null,
+    phase: "year_end_inspection",
+    status: inspection.status,
+    dueAt: inspection.startedAt,
+    completedAt: inspection.completedAt,
+    notes: `${inspection.progress.inspected + inspection.progress.notPresent} of ${inspection.progress.total} inspected · ${inspection.progress.needsAttention} need attention`,
+  }))];
   const visibleReceipts = await Promise.all(receipts.map(async ({ amountCents, imageStatus, objectKey, ...item }) => ({
     ...item,
     amount: amountCents / 100,

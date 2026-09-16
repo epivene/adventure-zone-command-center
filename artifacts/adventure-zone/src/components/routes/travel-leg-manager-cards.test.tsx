@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { TravelLegManagerCards } from "./travel-leg-manager-cards";
+import { TravelLegManagerCards, YearEndInspectionLegSummary } from "./travel-leg-manager-cards";
 
 const legs = [
   { id: "00000000-0000-4000-8000-000000000001", name: "Kristy", color: "#f97316", sortOrder: 1, baseAddress: "Killdeer, ND", defaultVehicleName: "Box truck", defaultMpg: 9, archivedAt: null },
@@ -54,3 +54,13 @@ describe("TravelLegManagerCards", () => {
     expect(screen.queryByLabelText("Manager / Leg name")).not.toBeInTheDocument();
   });
 });
+
+
+describe("YearEndInspectionLegSummary", () => {
+  it("shows inspection progress and repair attention", () => {
+    render(<YearEndInspectionLegSummary summary={{ inspected: 42, total: 58, needsAttention: 6, status: "in_progress" }} />);
+    expect(screen.getByText("42 of 58 inspected")).toBeVisible();
+    expect(screen.getByText("6 need repair")).toBeVisible();
+  });
+});
+

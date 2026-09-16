@@ -30,6 +30,7 @@ const ManagerRoutePage = lazy(() => import("@/pages/ManagerRoutePage"));
 const ManagerMoneyPage = lazy(() => import("@/pages/ManagerMoneyPage"));
 const ManagerReceiptsPage = lazy(() => import("@/pages/ManagerReceiptsPage"));
 const ManagerOperationsPage = lazy(() => import("@/pages/ManagerOperationsPage"));
+const ManagerYearEndInspectionPage = lazy(() => import("@/pages/ManagerYearEndInspectionPage"));
 const ManagerFinanceAdminPage = lazy(() => import("@/pages/ManagerFinanceAdminPage"));
 const ManagerCommunicationsAdminPage = lazy(() => import("@/pages/ManagerCommunicationsAdminPage"));
 const ManagerCrewAdminPage = lazy(() => import("@/pages/ManagerCrewAdminPage"));
@@ -66,6 +67,7 @@ const OrganizationsPage = lazy(() => import("@/pages/OrganizationsPage"));
 const EventFamilyPage = lazy(() => import("@/pages/EventFamilyPage"));
 const SchedulePage = lazy(() => import("@/pages/SchedulePage"));
 const LegManagementPage = lazy(() => import("@/pages/RoutesPage").then(({ LegManagementPage }) => ({ default: LegManagementPage })));
+const YearEndInspectionsAdminPage = lazy(() => import("@/pages/YearEndInspectionsAdminPage"));
 const TripDetailPage = lazy(() => import("@/pages/TripDetailPage"));
 const CallWorkspacePage = lazy(() => import("@/pages/CallWorkspacePage"));
 const VoicemailInboxPage = lazy(() => import("@/pages/VoicemailInboxPage"));
@@ -285,6 +287,7 @@ function ManagerProtectedApp() {
         <Route path="/manager/reviews"><ManagerEventReviewPage /></Route>
         <Route path="/manager/crew/:workerId">{(params)=><ManagerWorkerPage workerId={params.workerId}/>}</Route>
         <Route path="/manager/crew"><ManagerCrewPage /></Route>
+        <Route path="/manager/year-end-inspection"><ManagerYearEndInspectionPage /></Route>
         <Route path="/manager/operations"><ManagerOperationsPage /></Route>
         <Route path="/manager/receipts"><ManagerReceiptsPage /></Route>
         <Route path="/manager/money"><ManagerMoneyPage /></Route>
@@ -389,6 +392,7 @@ function AdminProtectedApp() {
           <Route path="/calendar"><ScheduleRedirect /></Route>
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>
           <Route path="/operations/legs" component={LegManagementPage} />
+          <Route path="/year-end-inspections" component={YearEndInspectionsAdminPage} />
           <Route path="/research-sources" component={ResearchSourcesPage} />
           <Route path="/imports/leads" component={LeadIntakePage} />
           <Route path="/imports/attendance-history" component={AttendanceHistoryImportPage} />
@@ -466,4 +470,3 @@ export default function App() {
     </QueryClientProvider>
   );
 }
-

@@ -3,6 +3,14 @@ import { ArrowDown, ArrowUp, ChevronDown, ChevronUp } from "lucide-react";
 import type { TravelLegDetails, TravelLegOrder } from "@/features/routes/travel-leg-input";
 import type { TravelLeg } from "@/features/routes/travel-leg-repository";
 import type { LegManagerAccessStatus, LegResourceSummary } from "./travel-leg-editor";
+import { Link } from "wouter";
+
+export type YearEndInspectionLegSummaryValue = NonNullable<LegResourceSummary["yearEndInspectionSummary"]>;
+
+export function YearEndInspectionLegSummary({ summary }: { summary?: YearEndInspectionLegSummaryValue }) {
+  if (!summary) return <p className="text-sm text-slate-600">No inspection started</p>;
+  return <div className="text-sm"><p className="font-semibold">{summary.status === "completed" ? "Completed" : `${summary.inspected} of ${summary.total} inspected`}</p>{summary.needsAttention > 0 ? <p className="text-rose-700">{summary.needsAttention} need repair</p> : <p className="text-emerald-700">No repairs flagged</p>}</div>;
+}
 
 type SaveLegResult = { ok: true; leg: TravelLeg } | { ok: false; error: string };
 type SaveOrderResult = { ok: true; legs: TravelLeg[] } | { ok: false; error: string };
@@ -108,6 +116,7 @@ export function TravelLegManagerCards({
             const access = managerAccess.find((row) => row.legId === leg.id);
             const enabled = Boolean(access?.enabled);
             const resources = legResources.filter((resource) => resource.legId === leg.id);
+            const inspectionSummary = resources.find((resource) => resource.yearEndInspectionSummary)?.yearEndInspectionSummary;
             const open = expanded.has(leg.id);
             const incomplete = !leg.baseAddress || !leg.defaultVehicleName || !leg.defaultMpg;
             return <article key={leg.id} className="rounded-xl border border-slate-200 bg-white">
@@ -122,6 +131,7 @@ export function TravelLegManagerCards({
                 <label className="grid gap-1 text-sm font-semibold">Base address<input aria-label={`Travel leg ${leg.sortOrder} base address`} value={leg.baseAddress} onChange={(e) => change(leg.id, "baseAddress", e.target.value)} /></label>
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_8rem]"><label className="grid gap-1 text-sm font-semibold">Default vehicle<input aria-label={`Travel leg ${leg.sortOrder} default vehicle`} value={leg.defaultVehicleName} onChange={(e) => change(leg.id, "defaultVehicleName", e.target.value)} /></label><label className="grid gap-1 text-sm font-semibold">Default MPG<input aria-label={`Travel leg ${leg.sortOrder} default MPG`} type="number" min="0" step="0.1" value={leg.defaultMpg} onChange={(e) => change(leg.id, "defaultMpg", e.target.value)} /></label></div>
                 <div className="rounded-lg bg-slate-50 p-3 text-sm"><p className="text-xs font-bold uppercase text-slate-500">Assigned resources</p><p className="mt-1">{resources.length ? resources.map((resource) => resource.name).join(", ") : "No resources assigned"}</p></div>
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-orange-200 bg-orange-50 p-3"><div><p className="text-xs font-bold uppercase text-orange-700">Year-end inspection</p><YearEndInspectionLegSummary summary={inspectionSummary} /></div><Link className="rounded-lg border border-orange-300 bg-white px-3 py-2 text-sm font-semibold" href={`/year-end-inspections?legId=${leg.id}&year=${new Date().getFullYear()}`}>Open record</Link></div>
                 <div className="grid gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="font-bold">Manager portal</p><p className="text-xs text-slate-500">{enabled ? "Portal enabled" : "Portal not configured"}</p></div>{enabled && onSignOutManagerDevices ? <button className="button-secondary" type="button" disabled={busy === `access:${leg.id}`} onClick={async () => { if (!window.confirm(`Sign out all manager devices for ${leg.name}?`)) return; setBusy(`access:${leg.id}`); try { await onSignOutManagerDevices(leg.id); setMessage(`${leg.name} manager devices signed out.`); } finally { setBusy(null); } }}>Sign Out All Devices</button> : null}</div>
                   {onSetManagerPassword ? <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"><label className="grid gap-1 text-sm font-semibold">{enabled ? "New password" : "Password"}<input aria-label={enabled ? "New password" : "Password"} type="password" autoComplete="new-password" value={passwords[leg.id] ?? ""} onChange={(e) => setPasswords((current) => ({ ...current, [leg.id]: e.target.value }))} /></label><button className="button-primary" type="button" disabled={!passwords[leg.id] || busy === `access:${leg.id}`} onClick={() => savePassword(leg.id, enabled)}>{busy === `access:${leg.id}` ? "Saving…" : enabled ? "Change password" : "Enable portal"}</button></div> : null}
                 </div>
@@ -137,3 +147,4 @@ export function TravelLegManagerCards({
     </section>
   );
 }
+

@@ -1,0 +1,104 @@
+import { and, asc, eq } from "drizzle-orm";
+import {
+  yearEndInspectionEntries,
+  yearEndInspectionPhotos,
+  yearEndLegInspections,
+} from "@workspace/db";
+
+import {
+  photoMetadataInputSchema,
+  photoPatchSchema,
+  type PhotoMetadataInput,
+  type PhotoPatch,
+} from "./photo-input";
+
+type Database = any;
+type PhotoStorage = {
+  put(key: string, bytes: Uint8Array, contentType: string): Promise<void>;
+  getSignedReadUrl(key: string, expiresInSeconds?: number): Promise<string>;
+  delete?(key: string): Promise<void>;
+};
+
+const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+const maximumBytes = 15 * 1024 * 1024;
+
+export class YearEndInspectionPhotoService {
+  constructor(private readonly db: Database, private readonly storage: PhotoStorage) {}
+
+  async createMetadata(rawInput: PhotoMetadataInput) {
+    const input = photoMetadataInputSchema.parse(rawInput);
+    const [owner] = await this.db.select({
+      inspectionId: yearEndInspectionEntries.inspectionId,
+      legId: yearEndLegInspections.legId,
+    }).from(yearEndInspectionEntries)
+      .innerJoin(yearEndLegInspections, eq(yearEndLegInspections.id, yearEndInspectionEntries.inspectionId))
+      .where(and(
+        eq(yearEndInspectionEntries.id, input.entryId),
+        eq(yearEndLegInspections.id, input.inspectionId),
+        eq(yearEndLegInspections.legId, input.legId),
+      )).limit(1);
+    if (!owner) throw new Error("PHOTO_ENTRY_NOT_FOUND");
+    const objectKey = `year-end-inspections/${input.legId}/${input.inspectionId}/${input.entryId}/${input.id}`;
+    await this.db.insert(yearEndInspectionPhotos).values({
+      id: input.id,
+      clientMutationId: input.clientMutationId,
+      entryId: input.entryId,
+      legId: input.legId,
+      objectKey,
+      mimeType: input.mimeType,
+      description: input.description,
+      annotations: input.annotations,
+    }).onConflictDoNothing({ target: yearEndInspectionPhotos.clientMutationId });
+    const [photo] = await this.db.select().from(yearEndInspectionPhotos)
+      .where(eq(yearEndInspectionPhotos.clientMutationId, input.clientMutationId)).limit(1);
+    if (!photo) throw new Error("PHOTO_METADATA_CREATE_FAILED");
+    return photo;
+  }
+
+  async putImage(photoId: string, legId: string, bytes: Uint8Array, contentType: string) {
+    if (!supportedTypes.has(contentType)) throw new Error("PHOTO_TYPE_UNSUPPORTED");
+    if (bytes.byteLength > maximumBytes) throw new Error("PHOTO_TOO_LARGE");
+    const [photo] = await this.db.select().from(yearEndInspectionPhotos)
+      .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
+    if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
+    if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
+    await this.storage.put(photo.objectKey, bytes, contentType);
+    await this.db.update(yearEndInspectionPhotos).set({
+      uploadStatus: "image_uploaded",
+      uploadedAt: new Date(),
+      updatedAt: new Date(),
+    }).where(eq(yearEndInspectionPhotos.id, photoId));
+  }
+
+  async patchDescriptionAndAnnotations(photoId: string, legId: string, rawPatch: PhotoPatch) {
+    const patch = photoPatchSchema.parse(rawPatch);
+    const [photo] = await this.db.update(yearEndInspectionPhotos).set({
+      ...patch,
+      updatedAt: new Date(),
+    }).where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId)))
+      .returning();
+    if (!photo) throw new Error("PHOTO_NOT_FOUND");
+    return photo;
+  }
+
+  async listWithSignedUrls(entryId: string, legId: string) {
+    const rows = await this.db.select().from(yearEndInspectionPhotos)
+      .where(and(eq(yearEndInspectionPhotos.entryId, entryId), eq(yearEndInspectionPhotos.legId, legId)))
+      .orderBy(asc(yearEndInspectionPhotos.sortOrder), asc(yearEndInspectionPhotos.createdAt));
+    return Promise.all(rows.map(async (photo: typeof yearEndInspectionPhotos.$inferSelect) => ({
+      ...photo,
+      imageUrl: photo.uploadStatus === "image_uploaded" && photo.objectKey
+        ? await this.storage.getSignedReadUrl(photo.objectKey, 15 * 60)
+        : null,
+    })));
+  }
+
+  async deletePhoto(photoId: string, legId: string) {
+    const [photo] = await this.db.select().from(yearEndInspectionPhotos)
+      .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
+    if (!photo) return false;
+    if (photo.objectKey && this.storage.delete) await this.storage.delete(photo.objectKey);
+    await this.db.delete(yearEndInspectionPhotos).where(eq(yearEndInspectionPhotos.id, photoId));
+    return true;
+  }
+}

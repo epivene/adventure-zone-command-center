@@ -31,8 +31,9 @@
     "./design-studio-schema": "./src/design-studio-schema.ts",
     "./contract-schema": "./src/contract-schema.ts",
     "./business-document-schema": "./src/business-document-schema.ts",
-    "./invoice-schema": "./src/invoice-schema.ts"
-    ,"./marketing-schema": "./src/marketing-schema.ts"
+    "./invoice-schema": "./src/invoice-schema.ts",
+    "./year-end-inspection-schema": "./src/year-end-inspection-schema.ts",
+    "./marketing-schema": "./src/marketing-schema.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",

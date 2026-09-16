@@ -5,7 +5,8 @@ import { Badge } from "@workspace/avz-crm/components/ui/badge";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import { Skeleton } from "@workspace/avz-crm/components/ui/skeleton";
 import { LegRecordPicker, UNASSIGNED_LEG_KEY, groupRecordsByLeg, recordsForLeg } from "@/components/boss/leg-record-picker";
-import { bossDelete, bossGet } from "@/lib/boss-auth-context";
+import { InspectionRecordView, type InspectionRecordDto } from "@/components/year-end-inspections/inspection-record-view";
+import { bossDelete, bossGet, bossPost } from "@/lib/boss-auth-context";
 
 type MaintenanceItem = {
   id?: string;
@@ -17,6 +18,8 @@ type MaintenanceItem = {
   status?: string | null;
   dueAt?: string | null;
   notes?: string | null;
+  recordKind?: "checklist" | "year_end_inspection";
+  inspectionId?: string;
   [key: string]: unknown;
 };
 
@@ -37,6 +40,10 @@ type MaintenanceEvent = {
   records: MaintenanceItem[];
 };
 
+function isInspectionRecord(record: MaintenanceRecord | InspectionRecordDto): record is InspectionRecordDto {
+  return "entries" in record;
+}
+
 function phaseLabel(phase?: string | null) {
   if (!phase) return null;
   const map: Record<string, string> = {
@@ -45,6 +52,7 @@ function phaseLabel(phase?: string | null) {
     pre_event: "Pre-event",
     post_event: "Post-event",
     maintenance: "Maintenance",
+    year_end_inspection: "Year-end inspection",
   };
   return map[phase] ?? phase;
 }
@@ -71,7 +79,9 @@ function groupByEvent(items: MaintenanceItem[]): MaintenanceEvent[] {
     const legacyEventKey = item.title?.trim()
       ? `legacy:${item.legId ?? "unassigned"}:${item.title.trim().toLowerCase()}`
       : null;
-    const key = item.bookingId ?? legacyEventKey ?? item.id ?? `maintenance-${index}`;
+    const key = item.recordKind === "year_end_inspection" && item.inspectionId
+      ? item.inspectionId
+      : item.bookingId ?? legacyEventKey ?? item.id ?? `maintenance-${index}`;
     const current = groups.get(key);
     if (current) current.records.push(item);
     else groups.set(key, { key, title: item.title ?? `Event ${index + 1}`, records: [item] });
@@ -91,26 +101,30 @@ export default function BossMaintenancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openEventKey, setOpenEventKey] = useState<string | null>(null);
-  const [recordsById, setRecordsById] = useState<Record<string, MaintenanceRecord>>({});
+  const [recordsById, setRecordsById] = useState<Record<string, MaintenanceRecord | InspectionRecordDto>>({});
   const [loadingById, setLoadingById] = useState<Record<string, boolean>>({});
   const [detailErrorsById, setDetailErrorsById] = useState<Record<string, string>>({});
   const detailGeneration = useRef(0);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function loadRecordIds(ids: string[], generation = detailGeneration.current) {
-    const uniqueIds = Array.from(new Set(ids));
-    if (uniqueIds.length === 0) return;
-    setLoadingById((current) => ({ ...current, ...Object.fromEntries(uniqueIds.map((id) => [id, true])) }));
+  async function loadRecords(records: MaintenanceItem[], generation = detailGeneration.current) {
+    const uniqueRecords = Array.from(new Map(records.filter((item) => item.id).map((item) => [item.id!, item])).values());
+    if (uniqueRecords.length === 0) return;
+    setLoadingById((current) => ({ ...current, ...Object.fromEntries(uniqueRecords.map((item) => [item.id!, true])) }));
     setDetailErrorsById((current) => {
       const next = { ...current };
-      uniqueIds.forEach((id) => delete next[id]);
+      uniqueRecords.forEach((item) => delete next[item.id!]);
       return next;
     });
-    await Promise.all(uniqueIds.map(async (id) => {
+    await Promise.all(uniqueRecords.map(async (item) => {
+      const id = item.id!;
       try {
-        const data = await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
+        const data = item.recordKind === "year_end_inspection" && item.inspectionId
+          ? await bossGet<{ inspection: InspectionRecordDto }>(`/boss/year-end-inspections/${item.inspectionId}`)
+          : await bossGet<{ record: MaintenanceRecord }>(`/boss/maintenance/${id}`);
+        const record = "inspection" in data ? data.inspection : data.record;
         if (detailGeneration.current === generation) {
-          setRecordsById((current) => ({ ...current, [id]: data.record }));
+          setRecordsById((current) => ({ ...current, [id]: record }));
         }
       } catch (cause) {
         if (detailGeneration.current === generation) {
@@ -153,12 +167,12 @@ export default function BossMaintenancePage() {
         const linkedEvent = groupByEvent(recordsForLeg(freshItems, linkedLegKey))
           .find((event) => event.key === linkedBookingId);
         if (linkedEvent) {
-          void loadRecordIds(linkedEvent.records.flatMap((item) => item.id ? [item.id] : []), generation);
+          void loadRecords(linkedEvent.records, generation);
         }
       } else if (openEventKey) {
         const openEvent = groupByEvent(recordsForLeg(freshItems, selectedLegKey)).find((event) => event.key === openEventKey);
         if (openEvent) {
-          void loadRecordIds(openEvent.records.flatMap((item) => item.id ? [item.id] : []), generation);
+          void loadRecords(openEvent.records, generation);
         }
       }
     } catch (cause) {
@@ -186,10 +200,9 @@ export default function BossMaintenancePage() {
       return;
     }
     setOpenEventKey(event.key);
-    const recordIds = event.records.flatMap((item) => item.id ? [item.id] : []);
-    const missingIds = recordIds.filter((id) => !recordsById[id] && !loadingById[id]);
-    if (missingIds.length === 0) return;
-    await loadRecordIds(missingIds);
+    const missingRecords = event.records.filter((item) => item.id && !recordsById[item.id] && !loadingById[item.id]);
+    if (missingRecords.length === 0) return;
+    await loadRecords(missingRecords);
   }
 
   async function removeRecord(item: MaintenanceItem) {
@@ -206,6 +219,19 @@ export default function BossMaintenancePage() {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not remove maintenance record.");
     } finally { setBusy(null); }
+  }
+
+  async function resolveAnnualRepair(itemId: string) {
+    const resolutionNotes = window.prompt("Repair completion notes");
+    if (!resolutionNotes?.trim()) return;
+    await bossPost(`/boss/year-end-inspection-maintenance/${itemId}/resolve`, { resolutionNotes });
+    await load();
+  }
+
+  async function reopenAnnualInspection(inspectionId: string) {
+    if (!window.confirm("Reopen this year-end inspection for the leg manager?")) return;
+    await bossPost(`/boss/year-end-inspections/${inspectionId}/reopen`, {});
+    await load();
   }
 
   return (
@@ -269,17 +295,22 @@ export default function BossMaintenancePage() {
                   ) : detailError ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-sm text-destructive">{detailError}</p>
-                      <Button size="sm" variant="outline" onClick={() => void loadRecordIds([item.id!])}>
+                      <Button size="sm" variant="outline" onClick={() => void loadRecords([item])}>
                         Retry {label.toLowerCase()} record
                       </Button>
                     </div>
                   ) : !item.id ? (
                     <p className="text-sm text-muted-foreground">No detailed checklist is available for this legacy record.</p>
                   ) : !loadedRecord ? (
-                    <Button size="sm" variant="outline" className="w-fit" onClick={() => void loadRecordIds([item.id!])}>
+                    <Button size="sm" variant="outline" className="w-fit" onClick={() => void loadRecords([item])}>
                       Retry {label.toLowerCase()} record
                     </Button>
-                  ) : (
+                  ) : item.recordKind === "year_end_inspection" && isInspectionRecord(loadedRecord) ? (
+                    <>
+                      <InspectionRecordView inspection={loadedRecord} onResolveRepair={(itemId) => void resolveAnnualRepair(itemId)} />
+                      {loadedRecord.status === "completed" ? <Button size="sm" variant="outline" className="w-fit" onClick={() => void reopenAnnualInspection(loadedRecord.id)}>Reopen inspection</Button> : null}
+                    </>
+                  ) : "items" in loadedRecord ? (
                     <>
                       {loadedRecord.items.length === 0 ? <p className="text-sm text-muted-foreground">No checklist answers.</p> : null}
                       {loadedRecord.items.map((detail) => (
@@ -293,9 +324,9 @@ export default function BossMaintenancePage() {
                         </div>
                       ))}
                     </>
-                  )}
+                  ) : null}
                   {item?.notes ? <p className="whitespace-pre-wrap text-sm text-muted-foreground">{item.notes as string}</p> : null}
-                  {item?.id ? (
+                  {item?.id && item.recordKind !== "year_end_inspection" ? (
                     <Button aria-label={`Remove ${label.toLowerCase()} record`} size="sm" variant="outline" className="w-fit text-destructive" disabled={busy === item.id} onClick={() => void removeRecord(item)}>
                       {busy === item.id ? "Removing…" : "Remove"}
                     </Button>
@@ -340,3 +371,4 @@ export default function BossMaintenancePage() {
     </div>
   );
 }
+

@@ -38,6 +38,7 @@ describe("runRequiredSchemaStartup", () => {
         return true;
       },
       ensureLegAssignment: async () => false,
+      ensureYearEndInspections: async () => false,
       ensureEventReviewDismissals: async () => false,
       ensureFollowUpDismissals: async () => true,
       ensureOrganizerFeedback: async () => false,
@@ -63,6 +64,7 @@ describe("runRequiredSchemaStartup", () => {
       "required Google Workspace schema",
       "required lead intake schema",
       "required leg assignment schema",
+      "required year-end inspection schema",
       "required event review dismissal schema",
       "required follow-up dismissal persistence",
       "required organizer feedback schema",
@@ -94,6 +96,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,
       ensureOrganizerFeedback: unchanged,
@@ -133,6 +136,7 @@ describe("runRequiredSchemaStartup", () => {
       ensureGoogleWorkspace: unchanged,
       ensureLeadIntake: unchanged,
       ensureLegAssignment: unchanged,
+      ensureYearEndInspections: unchanged,
       ensureEventReviewDismissals: unchanged,
       ensureFollowUpDismissals: unchanged,
       ensureOrganizerFeedback: unchanged,
@@ -154,5 +158,3 @@ describe("runRequiredSchemaStartup", () => {
   });
 
 });
-
-

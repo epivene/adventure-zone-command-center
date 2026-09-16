@@ -17,6 +17,7 @@ import { ensureProfileFillerSchemaBeforeListen } from "./profile-filler-required
 import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
 import { ensureGoogleDriveBackupSchemaBeforeListen } from "./google-drive-backup-required-startup";
 import { ensureCommunicationTemplateReviewSetSchemaBeforeListen } from "./communication-template-review-set-required-startup";
+import { ensureYearEndInspectionSchemaBeforeListen } from "./year-end-inspection-required-startup";
 
 const REQUIRED_SCHEMA_TIMEOUT_MS = 120_000;
 const REQUIRED_SCHEMA_RETRY_DELAYS_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
@@ -60,6 +61,7 @@ export async function runRequiredSchemaStartup(dependencies?: {
   ensureGoogleWorkspace?: RequiredStep;
   ensureLeadIntake?: RequiredStep;
   ensureLegAssignment?: RequiredStep;
+  ensureYearEndInspections?: RequiredStep;
   ensureEventReviewDismissals?: RequiredStep;
   ensureFollowUpDismissals?: RequiredStep;
   ensureOrganizerFeedback?: RequiredStep;
@@ -118,6 +120,10 @@ export async function runRequiredSchemaStartup(dependencies?: {
     dependencies?.ensureLegAssignment ?? ensureLegAssignmentSchemaBeforeListen,
   );
   await runRequired(
+    "required year-end inspection schema",
+    dependencies?.ensureYearEndInspections ?? ensureYearEndInspectionSchemaBeforeListen,
+  );
+  await runRequired(
     "required event review dismissal schema",
     dependencies?.ensureEventReviewDismissals ?? ensureEventReviewDismissalSchemaBeforeListen,
   );
@@ -171,5 +177,3 @@ export async function runRequiredSchemaStartup(dependencies?: {
     dependencies?.ensureGoogleDriveBackup ?? ensureGoogleDriveBackupSchemaBeforeListen,
   );
 }
-
-

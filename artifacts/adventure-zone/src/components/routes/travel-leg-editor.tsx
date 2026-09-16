@@ -25,6 +25,12 @@ export type LegResourceSummary = {
   code: string;
   name: string;
   category: string;
+  yearEndInspectionSummary?: {
+    status: "draft" | "in_progress" | "completed";
+    inspected: number;
+    total: number;
+    needsAttention: number;
+  };
 };
 
 export type LegManagerAccessStatus = {
@@ -450,3 +456,4 @@ export function TravelLegEditor({
     </section>
   );
 }
+
