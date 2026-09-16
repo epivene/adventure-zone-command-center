@@ -30,7 +30,8 @@
     "./leg-assignment-schema": "./src/leg-assignment-schema.ts",
     "./design-studio-schema": "./src/design-studio-schema.ts",
     "./contract-schema": "./src/contract-schema.ts",
-    "./business-document-schema": "./src/business-document-schema.ts"
+    "./business-document-schema": "./src/business-document-schema.ts",
+    "./invoice-schema": "./src/invoice-schema.ts"
     ,"./marketing-schema": "./src/marketing-schema.ts"
   },
   "scripts": {

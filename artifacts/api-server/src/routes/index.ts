@@ -51,6 +51,7 @@ import actRecoveryRouter from "./act-recovery";
 import aiSuggestionsRouter from "./ai-suggestions";
 import paperNotesRouter from "./paper-notes";
 import contractsRouter from "./contracts-runtime";
+import invoicesRouter from "./invoices-runtime";
 import leadIntakeRouter from "./lead-intake";
 import followUpsRouter from "./follow-ups";
 import opportunityEmailLiveRuntimeRouter from "./opportunity-email-live-runtime";
@@ -67,12 +68,14 @@ import bossAssignmentsRouter from "./boss-assignments";
 import bossOperationsRouter from "./boss-operations";
 import bossDocumentsRouter from "./boss-documents";
 import bossBusinessDocumentsRouter from "./boss-business-documents";
+import bossInvoicesRouter from "./boss-invoices";
 import bossProfilesRouter from "./boss-profiles";
 import publicWebsiteInquiriesRouter from "./public-website-inquiries";
 import websiteInquiriesRouter from "./website-inquiries";
 import officeTasksRouter from "./office-tasks";
 import officeProfilesRouter from "./office-profiles";
 import officeDocumentsRouter from "./office-documents";
+import officeInvoicesRouter from "./office-invoices";
 import officeAttendanceHistoryRouter from "./office-attendance-history";
 import officeProfileSourceDocumentsRouter from "./office-profile-source-documents";
 import officeEventFamiliesRouter from "./office-event-families";
@@ -334,9 +337,11 @@ router.use(actMigrationRouter);
 router.use(aiSuggestionsRouter);
 router.use(paperNotesRouter);
 router.use(contractsRouter);
+router.use(invoicesRouter);
+router.use(officeInvoicesRouter);
+router.use(bossInvoicesRouter);
 router.use("/follow-ups", followUpsRouter);
 
 export default router;
-
 
 

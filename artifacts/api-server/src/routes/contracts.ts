@@ -1,6 +1,7 @@
 import { OutreachError } from "../features/outreach-planner/outreach-repository";
 import express, { Router, type NextFunction, type Request, type Response } from "express";
 import { z } from "zod";
+import { contractStatusValues } from "@workspace/db";
 
 import {
   ContractDraftServiceError,
@@ -22,6 +23,7 @@ type DraftRoutes = {
 export type ContractRouteServices = {
   drafts: DraftRoutes;
   queries: {
+    listWorkspaceContracts(filters: { status?: typeof contractStatusValues[number]; organizationId?: string; bookingId?: string }): Promise<unknown>;
     listOrganization(organizationId: string): Promise<unknown>;
     listBooking(bookingId: string): Promise<unknown>;
     getVersion(versionId: string): Promise<unknown | null>;
@@ -112,6 +114,21 @@ export function createContractsRouter(input: { enabled?: boolean; services: Cont
     }
     try {
       res.json({ enabled: true, ...await input.services.settings.get() as object });
+    } catch (error) { mapError(error, res); }
+  });
+
+  router.get("/contracts/workspace", guard, async (req, res) => {
+    const parsed = z.object({
+      status: z.enum(contractStatusValues).optional(),
+      organizationId: z.string().uuid().optional(),
+      bookingId: z.string().uuid().optional(),
+    }).strict().safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Invalid contract filters." });
+      return;
+    }
+    try {
+      res.json({ contracts: await input.services.queries.listWorkspaceContracts(parsed.data) });
     } catch (error) { mapError(error, res); }
   });
 

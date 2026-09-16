@@ -11,6 +11,7 @@ import {
   Moon,
   Palette,
   Receipt,
+  FileSignature,
   Star,
   Sun,
   Wrench,
@@ -39,6 +40,7 @@ const navItems: NavItem[] = [
   { href: "/boss/maintenance", label: "Maintenance", icon: Wrench },
   { href: "/boss/assignments", label: "Assignments", icon: ClipboardList },
   { href: "/boss/templates-files", label: "Documents", icon: ClipboardCheck },
+  { href: "/boss/invoices-contracts", label: "Invoices & Contracts", icon: FileSignature },
 ];
 
 const appearanceOptions = [

@@ -30,6 +30,8 @@ import { completeFollowUpAction } from "@/actions/bookings";
 import { deleteFollowUpAction, editFollowUpAction } from "@/actions/follow-ups";
 import { FollowUpControls } from "@/components/follow-ups/follow-up-controls";
 import type { ReactNode } from "react";
+import { InvoiceContractSummaryCard } from "@/components/invoices/invoice-contract-summary-card";
+import { contractsWorkspaceApi, invoicesApi } from "@/lib/invoices-api";
 
 function formatDate(value: string | null) {
   if (!value) return "Not set";
@@ -195,6 +197,8 @@ export default function BookingDetailPage({ bookingId }: { bookingId: string }) 
         <h2 className="text-lg font-bold">Contract history</h2>
         {contractVersions.map((contract) => <ContractHistoryCard key={contract.id} version={contract} />)}
       </section> : null}
+
+      <InvoiceContractSummaryCard bookingId={bookingId} contractApi={contractsWorkspaceApi} invoiceApi={invoicesApi} />
 
       {bookingBrief ? (
         <BookingBriefCard brief={bookingBrief} context={assistantBundle} />

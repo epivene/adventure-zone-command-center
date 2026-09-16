@@ -89,6 +89,9 @@ const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWor
 const DriveBackupPage = lazy(() => import("@/pages/DriveBackupPage"));
 const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
 const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
+const OwnerInvoicesContractsPage = lazy(() => import("@/pages/OwnerInvoicesContractsPage"));
+const OfficeInvoicesContractsPage = lazy(() => import("@/pages/OfficeInvoicesContractsPage"));
+const BossInvoicesContractsPage = lazy(() => import("@/pages/BossInvoicesContractsPage"));
 const BusinessDocumentImportPage = lazy(() => import("@/pages/BusinessDocumentImportPage"));
 const EmailReviewPage = lazy(() => import("@/pages/EmailReviewPage"));
 const ActMigrationPage = lazy(() => import("@/pages/ActMigrationPage"));
@@ -306,6 +309,7 @@ function OfficeProtectedApp() {
         <Route path="/office/profiles/:profileId">{(params)=><OfficeProfilePage profileId={params.profileId}/>}</Route>
         <Route path="/office/profiles" component={OfficeProfilesPage} />
         <Route path="/office/documents" component={OfficeDocumentsPage} />
+        <Route path="/office/invoices-contracts" component={OfficeInvoicesContractsPage} />
         <Route path="/office/mail" component={OfficeMailPage} />
         <Route path="/office/emails" component={OfficeEmailDraftsPage} />
         <Route path="/office/tasks" component={OfficeTasksPage} />
@@ -337,6 +341,7 @@ function BossProtectedApp() {
         <Route path="/boss/design-studio/:id"><Redirect to="/boss" /></Route>
         <Route path="/boss/design-studio"><Redirect to="/boss" /></Route>
         <Route path="/boss/templates-files" component={BossTemplatesFilesPage} />
+        <Route path="/boss/invoices-contracts" component={BossInvoicesContractsPage} />
         <Route path="/boss/coi"><CoiManagementPage mode="boss" /></Route>
         {/* Redirect away from disallowed paths */}
         <Route path="/boss/today"><Redirect to="/boss" /></Route>
@@ -379,6 +384,7 @@ function AdminProtectedApp() {
           <Route path="/event-families/:id"><EventFamilyPage /></Route>
           <Route path="/business-documents/import" component={BusinessDocumentImportPage} />
           <Route path="/business-documents" component={BusinessDocumentsPage} />
+          <Route path="/invoices-contracts" component={OwnerInvoicesContractsPage} />
           <Route path="/schedule" component={SchedulePage} />
           <Route path="/calendar"><ScheduleRedirect /></Route>
           <Route path="/routes"><ScheduleRedirect view="map" /></Route>

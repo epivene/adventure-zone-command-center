@@ -5,12 +5,13 @@ const mediaExtensions = new Set([
 ]);
 
 const categoryOrder: BusinessDocumentCategory[] = [
-  "contract", "proposal", "vendor_application", "coi", "insurance_policy", "permit", "inspection",
+  "contract", "invoice", "proposal", "vendor_application", "coi", "insurance_policy", "permit", "inspection",
   "w9_tax", "deposit_receipt", "operational_template", "marketing", "other",
 ];
 
 const categoryLabels: Record<BusinessDocumentCategory, string> = {
   contract: "Contracts",
+  invoice: "Invoices",
   proposal: "Proposals",
   coi: "COIs",
   insurance_policy: "Insurance Policies",

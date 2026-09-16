@@ -13,6 +13,7 @@ export const DOCUMENT_TYPE_FOLDERS: Readonly<
   Record<BusinessDocumentCategory, string>
 > = {
   contract: "Contracts",
+  invoice: "Invoices",
   proposal: "Proposals",
   coi: "COI",
   insurance_policy: "Insurance",

@@ -8,6 +8,7 @@ function candidate(filename: string, mimeType = "application/pdf") {
 
 describe("classifyBusinessDocument", () => {
   it.each([
+    ["AZ-2027-001 invoice.pdf", "invoice"],
     ["COI 24-25 - City of Victor.pdf", "coi"],
     ["2026 W9 signed.pdf", "w9_tax"],
     ["North Ogden Cherry Days Proposal.docx", "proposal"],

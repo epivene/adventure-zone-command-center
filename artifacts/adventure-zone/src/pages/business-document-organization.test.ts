@@ -46,6 +46,11 @@ describe("business document organization", () => {
     expect(groups[1].years[0].events[0].label).toBe("Needs Sorting");
   });
 
+  it("shows invoices as their own document group", () => {
+    const groups = groupBusinessDocuments([record({ category: "invoice", originalFilename: "invoice.pdf" })]);
+    expect(groups[0]).toMatchObject({ key: "invoice", label: "Invoices" });
+  });
+
   it("never invents an event from an unlinked filename", () => {
     const groups = groupBusinessDocuments([
       record({ displayName: "Adventure Zone Agreement for LC Fair 002", category: "contract", effectiveDate: "2026-01-01" }),
