@@ -7,6 +7,9 @@ type DocumentClient = {
   upload(file: File, metadata: { displayName: string; category: "invoice" }): Promise<{ documentId?: string }>;
   deleteDocument(documentId: string): Promise<unknown>;
   searchProfiles(query: string): Promise<BusinessDocumentProfileOption[]>;
+  list(filters: { profileId: string; category: "invoice"; limit: number }): Promise<{
+    documents: Array<{ id: string; displayName: string }>;
+  }>;
 };
 
 function cents(value: string) {
@@ -29,6 +32,8 @@ export function InvoiceEditor({
   const [profileQuery, setProfileQuery] = useState("");
   const [profiles, setProfiles] = useState<BusinessDocumentProfileOption[]>([]);
   const [profile, setProfile] = useState<BusinessDocumentProfileOption | null>(null);
+  const [existingDocuments, setExistingDocuments] = useState<Array<{ id: string; displayName: string }>>([]);
+  const [existingDocumentId, setExistingDocumentId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [total, setTotal] = useState("");
   const [deposit, setDeposit] = useState("0");
@@ -44,17 +49,36 @@ export function InvoiceEditor({
     catch { setError("Could not search profiles."); }
   }
 
+  async function selectProfile(selectedProfile: BusinessDocumentProfileOption) {
+    setProfile(selectedProfile);
+    setProfiles([]);
+    setExistingDocuments([]);
+    setExistingDocumentId("");
+    setError("");
+    try {
+      const result = await documentApi.list({ profileId: selectedProfile.id, category: "invoice", limit: 100 });
+      setExistingDocuments(result.documents);
+      setExistingDocumentId(result.documents[0]?.id ?? "");
+    } catch {
+      setError("Could not load this profile's invoice PDFs. You can still upload one below.");
+    }
+  }
+
   async function save() {
-    if (!file || !profile || !invoiceNumber.trim() || cents(total) < 0 || cents(deposit) < 0) {
+    if ((!file && !existingDocumentId) || !profile || !invoiceNumber.trim() || cents(total) < 0 || cents(deposit) < 0) {
       setError("Choose a PDF and profile, then enter the invoice number and amounts.");
       return;
     }
     setBusy(true);
     setError("");
-    let documentId: string | undefined;
+    let uploadedDocumentId: string | undefined;
     try {
-      const upload = await documentApi.upload(file, { displayName: `${profile.name} · Invoice ${invoiceNumber.trim()}`, category: "invoice" });
-      documentId = upload.documentId;
+      let documentId = existingDocumentId || undefined;
+      if (!documentId && file) {
+        const upload = await documentApi.upload(file, { displayName: `${profile.name} · Invoice ${invoiceNumber.trim()}`, category: "invoice" });
+        uploadedDocumentId = upload.documentId;
+        documentId = uploadedDocumentId;
+      }
       if (!documentId) throw new Error("The invoice PDF did not finish uploading.");
       await api.create({
         organizationId: profile.id,
@@ -69,7 +93,7 @@ export function InvoiceEditor({
       });
       onCreated();
     } catch (cause) {
-      if (documentId) await documentApi.deleteDocument(documentId).catch(() => undefined);
+      if (uploadedDocumentId) await documentApi.deleteDocument(uploadedDocumentId).catch(() => undefined);
       setError(cause instanceof Error ? cause.message : "Could not save the invoice.");
     } finally {
       setBusy(false);
@@ -77,16 +101,22 @@ export function InvoiceEditor({
   }
 
   return <section aria-label="Add invoice" className="grid gap-4 rounded-xl border border-primary/30 bg-card p-4 shadow-sm">
-    <div><h2 className="text-xl font-black">Add an invoice</h2><p className="text-sm text-muted-foreground">Upload the existing PDF and record its payment terms.</p></div>
-    <label className="grid gap-1 text-sm font-semibold">Invoice PDF
-      <input accept="application/pdf,.pdf" aria-label="Invoice PDF" disabled={busy} onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" />
-    </label>
+    <div><h2 className="text-xl font-black">Add an invoice</h2><p className="text-sm text-muted-foreground">Use a PDF already on the profile, or upload a new one, then record its payment terms.</p></div>
     <div className="grid gap-2">
       <label className="grid gap-1 text-sm font-semibold">Profile
         <div className="flex gap-2"><input aria-label="Profile" disabled={busy} onChange={(event) => { setProfileQuery(event.target.value); setProfile(null); }} placeholder="Search event or fair…" value={profile?.name ?? profileQuery} /><Button onClick={() => void searchProfiles()} type="button" variant="outline">Search</Button></div>
       </label>
-      {profiles.length && !profile ? <div className="grid gap-1 rounded-lg border p-2">{profiles.map((item) => <button className="rounded-md p-2 text-left hover:bg-muted" key={item.id} onClick={() => { setProfile(item); setProfiles([]); }} type="button">{item.name}{item.city ? ` · ${item.city}, ${item.region ?? ""}` : ""}</button>)}</div> : null}
+      {profiles.length && !profile ? <div className="grid gap-1 rounded-lg border p-2">{profiles.map((item) => <button className="rounded-md p-2 text-left hover:bg-muted" key={item.id} onClick={() => void selectProfile(item)} type="button">{item.name}{item.city ? ` · ${item.city}, ${item.region ?? ""}` : ""}</button>)}</div> : null}
     </div>
+    {profile && existingDocuments.length ? <label className="grid gap-1 text-sm font-semibold">Existing invoice PDF
+      <select aria-label="Existing invoice PDF" disabled={busy} onChange={(event) => setExistingDocumentId(event.target.value)} value={existingDocumentId}>
+        {existingDocuments.map((document) => <option key={document.id} value={document.id}>{document.displayName}</option>)}
+        <option value="">Upload a different PDF</option>
+      </select>
+    </label> : null}
+    <label className="grid gap-1 text-sm font-semibold">{existingDocumentId ? "Upload a different PDF (optional)" : "Invoice PDF"}
+      <input accept="application/pdf,.pdf" aria-label="Invoice PDF" disabled={busy} onChange={(event) => { const nextFile = event.target.files?.[0] ?? null; setFile(nextFile); if (nextFile) setExistingDocumentId(""); }} type="file" />
+    </label>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="grid gap-1 text-sm font-semibold">Invoice number<input aria-label="Invoice number" onChange={(event) => setInvoiceNumber(event.target.value)} value={invoiceNumber} /></label>
       <label className="grid gap-1 text-sm font-semibold">Issue date<input aria-label="Issue date" onChange={(event) => setIssueDate(event.target.value)} type="date" value={issueDate} /></label>
