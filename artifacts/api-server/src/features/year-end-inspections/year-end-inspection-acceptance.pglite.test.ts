@@ -23,9 +23,9 @@ describe("year-end inspection acceptance", () => {
     clients.push(client);
     await client.exec(`
       CREATE TABLE travel_legs (id uuid PRIMARY KEY, name text NOT NULL, color text NOT NULL DEFAULT '#000', sort_order integer NOT NULL, archived_at timestamptz);
-      CREATE TABLE resources (id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL, status text NOT NULL DEFAULT 'available');
+      CREATE TABLE resources (id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL, status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid);
       INSERT INTO travel_legs (id, name, sort_order) VALUES ('${legId}', 'Leg One', 1);
-      INSERT INTO resources (id, code, name, category) VALUES ('${resourceOne}', 'R1', 'Warrior Wall', 'inflatable'), ('${resourceTwo}', 'R2', 'Obstacle Course', 'inflatable');
+      INSERT INTO resources (id, code, name, category, normal_travel_leg_id) VALUES ('${resourceOne}', 'R1', 'Warrior Wall', 'inflatable', '${legId}'), ('${resourceTwo}', 'R2', 'Obstacle Course', 'inflatable', '${legId}');
     `);
     await client.exec(YEAR_END_INSPECTION_SCHEMA_SQL);
     const db = drizzle(client, { schema }) as never;

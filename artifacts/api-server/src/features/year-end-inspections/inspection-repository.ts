@@ -28,6 +28,7 @@ export type NewInspection = {
 };
 
 export type EntrySeed = {
+  id?: string;
   clientMutationId: string;
   pieceId: string;
   pieceCodeSnapshot: string;

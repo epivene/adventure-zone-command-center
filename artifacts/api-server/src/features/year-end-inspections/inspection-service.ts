@@ -1,8 +1,9 @@
-import { eq } from "drizzle-orm";
-import { yearEndInspectionEntries } from "@workspace/db";
+import { and, asc, eq, ne } from "drizzle-orm";
+import { resources, yearEndInspectionEntries } from "@workspace/db";
 
 import { DrizzleInspectionRepository, type EntrySeed } from "./inspection-repository";
 import { YearEndMaintenanceProjection } from "./maintenance-projection";
+import { DrizzlePieceRepository } from "./piece-repository";
 import type { InspectionDetail, InspectionEntryPatch } from "./inspection-types";
 
 type Database = any;
@@ -36,6 +37,13 @@ export class YearEndInspectionService {
 
   async list() {
     return this.repository.list();
+  }
+
+  async listResourcesForLeg(legId: string) {
+    return this.db.select({ id: resources.id, name: resources.name })
+      .from(resources)
+      .where(and(eq(resources.normalTravelLegId, legId), ne(resources.status, "archived")))
+      .orderBy(asc(resources.name));
   }
 
   async startForCurrentPieces(input: {
@@ -141,6 +149,59 @@ export class YearEndInspectionService {
     const seed = (await this.repository.currentPieceSeeds(inspection.legId)).find((row) => row.pieceId === pieceId);
     if (!seed) throw new Error("PIECE_NOT_AVAILABLE_FOR_LEG");
     await this.repository.addEntry(inspectionId, { ...seed, sortOrder: pieces.length });
+    return (await this.repository.get(inspectionId))!;
+  }
+
+  async createDiscoveredPieceForLeg(
+    inspectionId: string,
+    legId: string,
+    input: {
+      pieceId: string;
+      entryId: string;
+      clientMutationId: string;
+      code: string | null;
+      name: string | null;
+      identityNotes: string | null;
+      resourceId: string | null;
+    },
+    actorId: string,
+  ): Promise<InspectionDetail> {
+    let inspection = await this.repository.get(inspectionId);
+    if (!inspection || inspection.legId !== legId) throw new Error("INSPECTION_NOT_FOUND");
+    if (inspection.status === "completed") throw new InspectionLifecycleError("inspection_completed", "Reopen the inspection before adding another piece.");
+    if (inspection.entries.some((entry) => entry.id === input.entryId || entry.pieceId === input.pieceId)) return inspection;
+
+    const pieces = new DrizzlePieceRepository(this.db);
+    let piece = await pieces.get(input.pieceId);
+    if (piece && piece.currentLegId !== legId) throw new Error("PIECE_OUTSIDE_LEG");
+    if (!piece) {
+      piece = await pieces.create({
+        id: input.pieceId,
+        clientMutationId: input.clientMutationId,
+        code: input.code?.trim() || `NEW-${input.pieceId.slice(0, 8).toUpperCase()}`,
+        name: input.name?.trim() || "Unidentified inflatable piece",
+        pieceType: "inflatable_component",
+        currentLegId: legId,
+        storageLocation: null,
+        identityNotes: input.identityNotes,
+        lifecycleStatus: "active",
+        resourceId: input.resourceId,
+      }, actorId);
+    }
+
+    inspection = (await this.repository.get(inspectionId))!;
+    if (!inspection.entries.some((entry) => entry.pieceId === piece.id)) {
+      await this.repository.addEntry(inspectionId, {
+        id: input.entryId,
+        clientMutationId: input.clientMutationId,
+        pieceId: piece.id,
+        pieceCodeSnapshot: piece.code,
+        pieceNameSnapshot: piece.name,
+        resourceIdSnapshot: piece.currentResourceId,
+        resourceNameSnapshot: piece.currentResourceName,
+        sortOrder: inspection.entries.length,
+      });
+    }
     return (await this.repository.get(inspectionId))!;
   }
 
