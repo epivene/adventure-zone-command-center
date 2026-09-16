@@ -80,18 +80,62 @@ export async function ensureOfficeCoordinatorSchema(client: Client): Promise<boo
         recipient_email text NOT NULL,
         subject text NOT NULL,
         body text NOT NULL,
+        body_format text NOT NULL DEFAULT 'plain_text',
+        design_project_id uuid,
+        design_version_id uuid,
         coordinator_note text,
-        state text NOT NULL DEFAULT 'draft' CHECK (state IN ('draft','submitted','needs_changes','sending','sent')),
+        state text NOT NULL DEFAULT 'draft',
         submitted_at timestamptz,
         owner_return_note text,
         sent_at timestamptz,
         sent_message_id text,
+        scheduled_for timestamptz,
+        business_time_zone text,
+        gmail_draft_id text,
+        gmail_message_id text,
+        gmail_thread_id text,
+        send_request_key text,
+        schedule_request_key text,
+        dispatch_lease_owner text,
+        dispatch_lease_expires_at timestamptz,
+        dispatch_attempt_count integer NOT NULL DEFAULT 0,
+        last_attempt_at timestamptz,
+        next_attempt_at timestamptz,
+        last_failure_code text,
+        last_failure_message text,
         last_send_error text,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       );
       ALTER TABLE office_email_drafts
-        ADD COLUMN IF NOT EXISTS communication_template_id uuid;
+        ADD COLUMN IF NOT EXISTS communication_template_id uuid,
+        ADD COLUMN IF NOT EXISTS body_format text NOT NULL DEFAULT 'plain_text',
+        ADD COLUMN IF NOT EXISTS design_project_id uuid,
+        ADD COLUMN IF NOT EXISTS design_version_id uuid,
+        ADD COLUMN IF NOT EXISTS scheduled_for timestamptz,
+        ADD COLUMN IF NOT EXISTS business_time_zone text,
+        ADD COLUMN IF NOT EXISTS gmail_draft_id text,
+        ADD COLUMN IF NOT EXISTS gmail_message_id text,
+        ADD COLUMN IF NOT EXISTS gmail_thread_id text,
+        ADD COLUMN IF NOT EXISTS send_request_key text,
+        ADD COLUMN IF NOT EXISTS schedule_request_key text,
+        ADD COLUMN IF NOT EXISTS dispatch_lease_owner text,
+        ADD COLUMN IF NOT EXISTS dispatch_lease_expires_at timestamptz,
+        ADD COLUMN IF NOT EXISTS dispatch_attempt_count integer NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS last_attempt_at timestamptz,
+        ADD COLUMN IF NOT EXISTS next_attempt_at timestamptz,
+        ADD COLUMN IF NOT EXISTS last_failure_code text,
+        ADD COLUMN IF NOT EXISTS last_failure_message text;
+      ALTER TABLE office_email_drafts
+        DROP CONSTRAINT IF EXISTS office_email_drafts_state_check,
+        DROP CONSTRAINT IF EXISTS office_email_drafts_state_valid,
+        DROP CONSTRAINT IF EXISTS office_email_drafts_body_format_check,
+        DROP CONSTRAINT IF EXISTS office_email_drafts_body_format_valid;
+      ALTER TABLE office_email_drafts
+        ADD CONSTRAINT office_email_drafts_state_valid
+          CHECK (state IN ('draft','submitted','needs_changes','gmail_draft','scheduled','sending','sent','failed','cancelled')),
+        ADD CONSTRAINT office_email_drafts_body_format_valid
+          CHECK (body_format IN ('plain_text','html'));
       CREATE INDEX IF NOT EXISTS office_email_drafts_state_submitted_idx
         ON office_email_drafts (state, submitted_at DESC);
       CREATE INDEX IF NOT EXISTS office_email_drafts_account_updated_idx
@@ -99,6 +143,17 @@ export async function ensureOfficeCoordinatorSchema(client: Client): Promise<boo
       CREATE INDEX IF NOT EXISTS office_email_drafts_template_idx
         ON office_email_drafts (communication_template_id)
         WHERE communication_template_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS office_email_drafts_design_project_unique
+        ON office_email_drafts (design_project_id)
+        WHERE design_project_id IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS office_email_drafts_send_request_unique
+        ON office_email_drafts (send_request_key)
+        WHERE send_request_key IS NOT NULL;
+      CREATE UNIQUE INDEX IF NOT EXISTS office_email_drafts_schedule_request_unique
+        ON office_email_drafts (schedule_request_key)
+        WHERE schedule_request_key IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS office_email_drafts_dispatch_idx
+        ON office_email_drafts (state, scheduled_for, next_attempt_at, dispatch_lease_expires_at);
 
       CREATE TABLE IF NOT EXISTS office_messages (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,7 +1,8 @@
-import type { OfficeEmailState } from "@/db/schema";
+import type { OfficeEmailBodyFormat, OfficeEmailState } from "@/db/schema";
 
 export type OfficeEmailDraftView = {
   id: string;
+  officeAccountId: string | null;
   organizationId: string;
   contactId: string;
   bookingId: string | null;
@@ -10,10 +11,21 @@ export type OfficeEmailDraftView = {
   recipientEmail: string;
   subject: string;
   body: string;
+  bodyFormat: OfficeEmailBodyFormat;
+  designProjectId: string | null;
+  designVersionId: string | null;
   coordinatorNote: string | null;
   state: OfficeEmailState;
   submittedAt: string | null;
   ownerReturnNote: string | null;
   sentAt: string | null;
+  scheduledFor: string | null;
+  businessTimeZone: string | null;
+  gmailDraftId: string | null;
+  gmailMessageId: string | null;
+  gmailThreadId: string | null;
+  dispatchAttemptCount: number;
+  lastFailureCode: string | null;
+  lastFailureMessage: string | null;
   updatedAt: string;
 };

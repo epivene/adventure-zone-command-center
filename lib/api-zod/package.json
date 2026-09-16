@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./design-studio-email": "./src/design-studio-email.ts"
   },
   "dependencies": {
     "zod": "catalog:"

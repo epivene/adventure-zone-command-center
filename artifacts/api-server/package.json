@@ -7,6 +7,7 @@
     "dev": "export NODE_ENV=development API_SOURCE_MAPS=true && pnpm run build && pnpm run start",
     "build": "node ./build.mjs",
     "start": "node ./dist/index.mjs",
+    "start:office-email-worker": "node ./dist/office-email-worker.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },

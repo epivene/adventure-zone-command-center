@@ -3,7 +3,6 @@ import { ExternalLink, FileText, Mail, Paperclip } from "lucide-react";
 
 import {
   copyGoogleProfileThreadFiles,
-  getGoogleProfileEmails,
   getGoogleProfileEmailThread,
   getGoogleProfileFiles,
   openGoogleProfileFile,
@@ -12,6 +11,7 @@ import {
   type GoogleProfileFile,
   type GoogleThreadDetail,
 } from "@/features/google-workspace/google-workspace-client";
+import { useProfileGoogleEmail } from "./use-profile-google-email";
 
 function fileSize(bytes: number): string {
   if (bytes < 1000) return `${bytes} B`;
@@ -27,34 +27,6 @@ function savedCopyLabel(thread: GoogleThreadDetail): string | null {
     return "Showing saved copy";
   }
   return thread.savedCopy ? "Saved in app" : null;
-}
-
-function conversationYear(conversation: GoogleProfileEmailConversation): number | null {
-  const parsedHeaderDate = Date.parse(conversation.date);
-  if (Number.isFinite(parsedHeaderDate)) {
-    return new Date(parsedHeaderDate).getUTCFullYear();
-  }
-  if (
-    typeof conversation.internalDateMs === "number" &&
-    Number.isFinite(conversation.internalDateMs)
-  ) {
-    return new Date(conversation.internalDateMs).getUTCFullYear();
-  }
-  return null;
-}
-
-function splitCurrentAndHistorical(
-  conversations: GoogleProfileEmailConversation[],
-  currentYear: number,
-) {
-  return {
-    current: conversations.filter(
-      (conversation) => conversationYear(conversation) === currentYear,
-    ),
-    historical: conversations.filter(
-      (conversation) => conversationYear(conversation) !== currentYear,
-    ),
-  };
 }
 
 function ThreadDetail({
@@ -223,14 +195,16 @@ function ThreadDetail({
   );
 }
 
-function ConversationCard({
+export function ProfileGoogleConversationCard({
   organizationId,
   conversation,
   onFilesCopied,
+  compact = false,
 }: {
   organizationId: string;
   conversation: GoogleProfileEmailConversation;
   onFilesCopied(files: GoogleProfileFile[]): void;
+  compact?: boolean;
 }) {
   const [thread, setThread] = useState<GoogleThreadDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -255,7 +229,7 @@ function ConversationCard({
   }
 
   return (
-    <article className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+    <article className={`${compact ? "rounded-md border-[#d8d1c4] bg-[#f6f2e9] p-2" : "rounded-xl border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40"} border`}>
       <button
         aria-expanded={Boolean(thread)}
         aria-label={conversation.subject || "Open email conversation"}
@@ -363,51 +337,42 @@ export function ProfileGoogleEmailPanel({
   organizationId: string;
 }) {
   const [tab, setTab] = useState<"emails" | "files">("emails");
-  const [conversations, setConversations] = useState<GoogleProfileEmailConversation[]>([]);
-  const [historicalConversations, setHistoricalConversations] = useState<GoogleProfileEmailConversation[]>([]);
   const [files, setFiles] = useState<GoogleProfileFile[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filesLoading, setFilesLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const currentYear = new Date().getUTCFullYear();
+  const {
+    current: conversations,
+    historical: historicalConversations,
+    loading,
+    error,
+  } = useProfileGoogleEmail(organizationId, currentYear);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     setFilesLoading(true);
-    setError(null);
-    void Promise.all([
-      getGoogleProfileEmails(organizationId),
-      getGoogleProfileFiles(organizationId),
-    ])
-      .then(([emailResult, fileResult]) => {
+    setFilesError(null);
+    void getGoogleProfileFiles(organizationId)
+      .then((fileResult) => {
         if (!active) return;
-        const returnedHistorical = (emailResult as any).historicalConversations;
-        if (Array.isArray(returnedHistorical)) {
-          setConversations(emailResult.conversations);
-          setHistoricalConversations(returnedHistorical);
-        } else {
-          const split = splitCurrentAndHistorical(emailResult.conversations, currentYear);
-          setConversations(split.current);
-          setHistoricalConversations(split.historical);
-        }
         setFiles(fileResult.files);
       })
       .catch((caught) => {
         if (active) {
-          setError(caught instanceof Error ? caught.message : "Could not load Google history.");
+          setFilesError(
+            caught instanceof Error ? caught.message : "Could not load profile files.",
+          );
         }
       })
       .finally(() => {
         if (active) {
-          setLoading(false);
           setFilesLoading(false);
         }
       });
     return () => {
       active = false;
     };
-  }, [organizationId, currentYear]);
+  }, [organizationId]);
 
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/20">
@@ -459,7 +424,7 @@ export function ProfileGoogleEmailPanel({
           {conversations.length > 0 ? (
             <div className="mt-2 grid gap-2">
               {conversations.map((conversation) => (
-                <ConversationCard
+                <ProfileGoogleConversationCard
                   conversation={conversation}
                   key={conversation.threadId}
                   onFilesCopied={setFiles}
@@ -478,7 +443,7 @@ export function ProfileGoogleEmailPanel({
               </p>
               <div className="mt-3 grid gap-2">
                 {historicalConversations.map((conversation) => (
-                  <ConversationCard
+                  <ProfileGoogleConversationCard
                     conversation={conversation}
                     key={conversation.threadId}
                     onFilesCopied={setFiles}
@@ -491,6 +456,7 @@ export function ProfileGoogleEmailPanel({
         </>
       ) : (
         <div className="mt-3">
+          {filesError ? <p className="mb-3 text-sm text-rose-700">{filesError}</p> : null}
           {filesLoading ? <p className="text-sm text-slate-500">Loading files…</p> : (
             <ProfileFiles files={files} organizationId={organizationId} />
           )}

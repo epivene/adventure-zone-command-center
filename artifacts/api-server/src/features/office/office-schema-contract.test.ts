@@ -29,7 +29,11 @@ describe("Office Coordinator database contract", () => {
     expect(source).toContain('"mail_brochure"');
     expect(source).toContain('"draft_email"');
     expect(source).toContain('"cancelled"');
+    expect(source).toContain('"gmail_draft"');
+    expect(source).toContain('"scheduled"');
+    expect(source).toContain('"failed"');
     expect(source).toContain('"sending"');
+    expect(source).toContain('officeEmailBodyFormatValues = ["plain_text", "html"]');
     expect(source).toContain('officeAccountId: uuid("office_account_id")');
     expect(source).toContain('ownerSortOrder: bigint("owner_sort_order"');
   });

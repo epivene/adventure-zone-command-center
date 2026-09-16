@@ -23,6 +23,18 @@ import { DrizzleBossAccountRepository } from "@/features/boss/boss-account-repos
 import { verifyToken } from "@/lib/auth";
 import { GoogleCloudPrivateObjectStorage } from "@/lib/private-object-storage";
 import { officeAccounts } from "@workspace/db/office-coordinator-schema";
+import {
+  freezeDesignEmailVersion,
+} from "@/features/office/design-email-renderer";
+import { createDrizzleDesignEmailFreezeStore } from "@/features/office/design-email-freeze-store";
+import { DrizzleOfficeEmailRepository } from "@/features/office/office-email-repository";
+import { OfficeDesignEmailService } from "@/features/office/office-design-email-service";
+import {
+  OfficeGmailProvider,
+  OfficeGmailProviderError,
+} from "@/features/office/office-gmail-provider";
+import { PostgresGoogleConnectionRepository } from "@/features/google-workspace/google-connection-repository";
+import { createProductionOutreachDispatch } from "@/features/outreach-planner/production-outreach-dispatch";
 
 const router: IRouter = Router();
 const officeRepository = new DrizzleOfficeAccountRepository(db);
@@ -32,6 +44,10 @@ const studioAssetStorage = new GoogleCloudPrivateObjectStorage(process.env, [
   "GOOGLE_CLOUD_STORAGE_BUCKET",
   "LEG_MANAGER_RECEIPT_BUCKET",
 ]);
+const designEmailFreezeStore = createDrizzleDesignEmailFreezeStore(db);
+const designEmailRepository = new DrizzleOfficeEmailRepository(db);
+const googleConnections = new PostgresGoogleConnectionRepository();
+const designEmailApproval = createProductionOutreachDispatch(db);
 
 async function resolveOwnerStudioAccount() {
   const accountFields = {
@@ -67,6 +83,54 @@ async function resolveOwnerStudioAccount() {
     .where(eq(officeAccounts.id, OWNER_STUDIO_ACCOUNT_ID))
     .limit(1);
   return concurrent ?? null;
+}
+
+export async function freezeDesignEmailVersionForDelivery(input: {
+  projectId: string;
+  accountId: string;
+}) {
+  return freezeDesignEmailVersion(input, designEmailFreezeStore);
+}
+
+async function createDesignEmailService(options: { requireGmail: boolean; requireSend?: boolean }) {
+  const connected = options.requireGmail
+    ? await googleConnections.createGmailDraftClient()
+    : null;
+  const delivery = options.requireSend
+    ? await googleConnections.createGmailDeliveryClient()
+    : null;
+  if (options.requireGmail && !connected) {
+    throw new OfficeGmailProviderError("GMAIL_CONNECTION_REQUIRED");
+  }
+  if (options.requireSend && !delivery) {
+    throw new OfficeGmailProviderError("GMAIL_CONNECTION_REQUIRED");
+  }
+  return new OfficeDesignEmailService({
+    repository: designEmailRepository,
+    gmail: connected
+      ? new OfficeGmailProvider(connected.client, delivery?.client)
+      : {
+          createOrUpdateDraft: async () => {
+            throw new OfficeGmailProviderError("GMAIL_CONNECTION_REQUIRED");
+          },
+        },
+    freeze: freezeDesignEmailVersionForDelivery,
+    approval: {
+      async assertApproved({ draftId, approvedFingerprint }) {
+        if (!designEmailApproval.enabled()) return;
+        const review = await designEmailApproval.review("office_email", draftId);
+        if (!review.approvalCurrent || review.digest !== approvedFingerprint) {
+          throw Object.assign(new Error("OUTREACH_APPROVAL_STALE"), { code: "OUTREACH_APPROVAL_STALE" });
+        }
+      },
+      async currentApprovedFingerprint(draftId) {
+        if (!designEmailApproval.enabled()) return "";
+        const review = await designEmailApproval.review("office_email", draftId);
+        if (!review.approvalCurrent) throw new Error("OUTREACH_APPROVAL_STALE");
+        return review.digest;
+      },
+    },
+  });
 }
 
 /**
@@ -165,6 +229,18 @@ const contractSignSchema = z
   })
   .strict();
 const voidSchema = z.object({ reason: z.string().trim().min(1).max(2000) }).strict();
+const emailContentCommandSchema = z
+  .object({ subject: z.string().trim().min(1).max(500) })
+  .strict();
+const deliveryRequestSchema = emailContentCommandSchema.extend({
+  requestKey: z.string().uuid(),
+  approvedFingerprint: z.string().trim().min(16).max(256),
+});
+const scheduleEmailSchema = deliveryRequestSchema.extend({
+  scheduledFor: z.string().datetime({ offset: true }),
+  businessTimeZone: z.string().trim().min(1).max(100),
+});
+const cancelEmailSchema = z.object({}).strict();
 const assetSchema = z
   .object({
     name: z.string().trim().min(1).max(240),
@@ -406,6 +482,215 @@ router.patch("/office/design-studio/projects/:projectId", requireStudio, async (
   } catch (err) {
     req.log.error({ err }, "Failed to update Design Studio project");
     res.status(500).json({ error: "Could not save the Design Studio project." });
+  }
+});
+
+async function runDesignEmailCommand(
+  req: any,
+  res: any,
+  command: "save" | "gmail-draft",
+) {
+  const projectId = routeParam(req.params.projectId);
+  const parsed = emailContentCommandSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(projectId).success || !parsed.success) {
+    res.status(400).json({
+      error: parsed.success
+        ? "Invalid project ID."
+        : parsed.error.issues[0]?.message ?? "Add an email subject.",
+    });
+    return;
+  }
+  try {
+    const service = await createDesignEmailService({ requireGmail: command === "gmail-draft" });
+    const input = {
+      projectId,
+      accountId: req.officeAccount!.accountId,
+      subject: parsed.data.subject,
+    };
+    const draft = command === "save"
+      ? await service.saveInApp(input)
+      : await service.createGmailDraft(input);
+    res.json({ draft });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "DESIGN_EMAIL_NOT_FOUND") {
+      res.status(404).json({ error: "Design email not found." });
+      return;
+    }
+    if (
+      code === "DESIGN_EMAIL_PROFILE_LINK_REQUIRED" ||
+      code === "CONTACT_NOT_LINKED" ||
+      code === "EMAIL_REQUIRED"
+    ) {
+      res.status(409).json({
+        error: "Link an active profile contact with an email address first.",
+      });
+      return;
+    }
+    if (code === "INVALID_STATE") {
+      res.status(409).json({ error: "This email is already scheduled, sending, or sent. Cancel a waiting schedule or start a new draft." });
+      return;
+    }
+    if (
+      error instanceof OfficeGmailProviderError &&
+      error.code === "GMAIL_CONNECTION_REQUIRED"
+    ) {
+      res.status(503).json({ error: "Connect Gmail before creating a Gmail draft." });
+      return;
+    }
+    req.log?.error?.(
+      { err: error, projectId, command },
+      "Design email command failed",
+    );
+    res.status(502).json({
+      error:
+        command === "gmail-draft"
+          ? "Gmail draft status needs review. Check Gmail before retrying."
+          : "Could not save the email draft.",
+    });
+  }
+}
+
+router.post(
+  "/office/design-studio/projects/:projectId/email/save",
+  requireStudio,
+  async (req, res) => runDesignEmailCommand(req, res, "save"),
+);
+
+router.post(
+  "/office/design-studio/projects/:projectId/email/gmail-draft",
+  requireStudio,
+  async (req, res) => runDesignEmailCommand(req, res, "gmail-draft"),
+);
+
+router.get("/office/design-studio/projects/:projectId/email/status", requireStudio, async (req: any, res: any) => {
+  const projectId = routeParam(req.params.projectId);
+  if (!projectIdSchema.safeParse(projectId).success) {
+    res.status(400).json({ error: "Invalid project ID." }); return;
+  }
+  try {
+    const accountId = req.officeAccount.accountId;
+    const [draft, gmailConnection] = await Promise.all([
+      designEmailRepository.findCanonicalByProject({ projectId, accountId }),
+      googleConnections.createGmailDraftClient().catch(() => null),
+    ]);
+    let recipientEmail: string | null = null;
+    try {
+      recipientEmail = (await designEmailRepository.resolveDesignRecipient({ projectId, accountId })).recipientEmail;
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      if (code !== "CONTACT_NOT_LINKED" && code !== "EMAIL_REQUIRED") throw error;
+    }
+    let approvalCurrent = false;
+    let approvedFingerprint: string | null = null;
+    if (draft && designEmailApproval.enabled()) {
+      const review = await designEmailApproval.review("office_email", draft.id);
+      approvalCurrent = review.approvalCurrent;
+      approvedFingerprint = review.approvalCurrent ? review.digest : null;
+    }
+    res.json({ recipientEmail, draft, gmailConnected: Boolean(gmailConnection),
+      approvalRequired: designEmailApproval.enabled(), approvalCurrent, approvedFingerprint });
+  } catch (error) {
+    req.log?.error?.({ err: error, projectId }, "Design email status failed");
+    res.status(500).json({ error: "Could not load email delivery status." });
+  }
+});
+
+router.post("/office/design-studio/projects/:projectId/email/schedule", requireStudio, async (req: any, res: any) => {
+  const projectId = routeParam(req.params.projectId);
+  const parsed = scheduleEmailSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(projectId).success || !parsed.success) {
+    res.status(400).json({ error: "Review the schedule, timezone, and approval." }); return;
+  }
+  try {
+    const service = await createDesignEmailService({ requireGmail: false });
+    const draft = await service.schedule({
+      projectId, accountId: req.officeAccount.accountId, subject: parsed.data.subject,
+      requestKey: parsed.data.requestKey, approvedFingerprint: parsed.data.approvedFingerprint,
+      scheduledFor: new Date(parsed.data.scheduledFor), businessTimeZone: parsed.data.businessTimeZone,
+    });
+    res.json({ draft });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code.startsWith("EMAIL_SCHEDULE_") || code === "EMAIL_TIME_ZONE_INVALID") {
+      res.status(400).json({ error: "Choose a valid future business-local time." }); return;
+    }
+    if (code === "OUTREACH_APPROVAL_STALE") {
+      res.status(409).json({ error: "Review and approve the exact current email before scheduling." }); return;
+    }
+    if (code === "INVALID_STATE") {
+      res.status(409).json({ error: "This email cannot be scheduled from its current delivery state." }); return;
+    }
+    req.log?.error?.({ err: error, projectId }, "Design email scheduling failed");
+    res.status(500).json({ error: "Could not schedule the email." });
+  }
+});
+
+router.post("/office/design-studio/projects/:projectId/email/reschedule", requireStudio, async (req: any, res: any) => {
+  const projectId = routeParam(req.params.projectId);
+  const parsed = scheduleEmailSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(projectId).success || !parsed.success) {
+    res.status(400).json({ error: "Review the schedule, timezone, and approval." }); return;
+  }
+  try {
+    const existing = await designEmailRepository.findCanonicalByProject({ projectId, accountId: req.officeAccount.accountId });
+    if (!existing) { res.status(404).json({ error: "Email draft not found." }); return; }
+    const service = await createDesignEmailService({ requireGmail: false });
+    const draft = await service.reschedule({
+      draftId: existing.id, accountId: req.officeAccount.accountId,
+      requestKey: parsed.data.requestKey, approvedFingerprint: parsed.data.approvedFingerprint,
+      scheduledFor: new Date(parsed.data.scheduledFor), businessTimeZone: parsed.data.businessTimeZone,
+    });
+    res.json({ draft });
+  } catch (error) {
+    const stale = error instanceof Error && error.message === "OUTREACH_APPROVAL_STALE";
+    res.status(stale ? 409 : 400).json({ error: stale
+      ? "Review and approve the exact current email before rescheduling."
+      : "Could not reschedule this email." });
+  }
+});
+
+router.post("/office/design-studio/projects/:projectId/email/cancel", requireStudio, async (req: any, res: any) => {
+  const projectId = routeParam(req.params.projectId);
+  if (!projectIdSchema.safeParse(projectId).success || !cancelEmailSchema.safeParse(req.body).success) {
+    res.status(400).json({ error: "Invalid cancellation request." }); return;
+  }
+  const existing = await designEmailRepository.findCanonicalByProject({ projectId, accountId: req.officeAccount.accountId });
+  if (!existing) { res.status(404).json({ error: "Email draft not found." }); return; }
+  try {
+    const service = await createDesignEmailService({ requireGmail: false });
+    res.json({ draft: await service.cancel({ draftId: existing.id, accountId: req.officeAccount.accountId }) });
+  } catch {
+    res.status(409).json({ error: "Only a waiting scheduled email can be cancelled." });
+  }
+});
+
+router.post("/office/design-studio/projects/:projectId/email/send", requireStudio, async (req: any, res: any) => {
+  const projectId = routeParam(req.params.projectId);
+  const parsed = deliveryRequestSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(projectId).success || !parsed.success) {
+    res.status(400).json({ error: "Review the email and delivery approval." }); return;
+  }
+  try {
+    const service = await createDesignEmailService({ requireGmail: true, requireSend: true });
+    const draft = await service.sendNow({
+      projectId, accountId: req.officeAccount.accountId, subject: parsed.data.subject,
+      requestKey: parsed.data.requestKey, approvedFingerprint: parsed.data.approvedFingerprint,
+    });
+    res.json({ draft });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    if (code === "OUTREACH_APPROVAL_STALE") {
+      res.status(409).json({ error: "Review and approve the exact current email before sending." }); return;
+    }
+    if (code === "INVALID_STATE" || code === "SEND_LOCKED") {
+      res.status(409).json({ error: "This email is already scheduled, sending, or sent." }); return;
+    }
+    if (error instanceof OfficeGmailProviderError && error.code === "GMAIL_CONNECTION_REQUIRED") {
+      res.status(503).json({ error: "Connect Gmail before sending." }); return;
+    }
+    req.log?.error?.({ err: error, projectId }, "Design email send failed");
+    res.status(502).json({ error: "Delivery needs review. Check Gmail Sent and Drafts before retrying." });
   }
 });
 

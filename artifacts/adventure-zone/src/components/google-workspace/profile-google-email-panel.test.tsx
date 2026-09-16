@@ -124,7 +124,6 @@ beforeEach(() => {
   });
   vi.spyOn(window, "open").mockImplementation(() => null);
 });
-
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();

@@ -22,6 +22,7 @@ import {
   createDefaultEmailDocument, normalizeEmailDocument, serializeEmailDocument,
   shouldAcknowledgeSave, type EmailBlock, type EmailBlockType, type EmailDocument,
 } from "@/lib/design-studio/email-model";
+import { EmailDeliveryBar } from "./EmailDeliveryBar";
 
 const LOCAL_MEDIA = [
   { src: `${import.meta.env.BASE_URL}assets/gallery-action-arena.jpg`, name: "Action arena", alt: "Action arena" },
@@ -242,7 +243,7 @@ export function BrandedEmailEditor({ project, assets, onProjectChange }: Props) 
 
       <Dialog open={showAiConnect} onOpenChange={setShowAiConnect}><DialogContent><DialogHeader><DialogTitle>Connect your AI helper</DialogTitle><DialogDescription>An administrator must connect an approved provider securely on the server. API keys and provider secrets are never collected or stored in this browser.</DialogDescription></DialogHeader><div className="border border-primary/20 bg-primary/5 p-3 text-sm text-muted-foreground">Once configured, the helper can receive the selected block, approved brand rules, and your prompt. Recipient data remains excluded.</div><DialogFooter><Button onClick={() => setShowAiConnect(false)}>Got it</Button></DialogFooter></DialogContent></Dialog>
       <Dialog open={showReview} onOpenChange={setShowReview}><DialogContent><DialogHeader><DialogTitle>Review this email version</DialogTitle><DialogDescription>Confirm the draft is prepared for publishing. This does not create a campaign template or deliver an email.</DialogDescription></DialogHeader><div className="space-y-3 border border-border p-4 text-sm"><div className="flex justify-between"><span className="text-muted-foreground">Project</span><strong>{name}</strong></div><div className="flex justify-between"><span className="text-muted-foreground">Content blocks</span><strong>{document.blocks.length}</strong></div><div className="flex justify-between"><span className="text-muted-foreground">Responsive check</span><span className="flex items-center gap-1 text-primary"><Check className="h-4 w-4" />Desktop + mobile</span></div></div><DialogFooter><Button onClick={() => setShowReview(false)} variant="outline">Keep editing</Button><Button disabled={saving} onClick={async () => { if (await save("ready")) setShowReview(false); }}>Mark ready for review</Button></DialogFooter><p className="text-center text-xs text-muted-foreground">Ready versions are prepared for a future publishing workflow; they are not published automatically.</p></DialogContent></Dialog>
-      <div className="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 border border-border bg-card px-3 py-2 text-xs shadow-lg"><span className="font-semibold">Review state</span><Badge variant={project.status === "ready" ? "default" : "outline"}>{project.status === "ready" ? "Ready for review" : "Draft"}</Badge></div>
+      <EmailDeliveryBar dirty={dirty} project={project} save={() => save()} saving={saving} />
     </div>
   );
 }

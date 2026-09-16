@@ -350,8 +350,16 @@ export class PostgresGoogleConnectionRepository {
     const environment = this.requireEnvironment();
     const refreshToken = decryptGoogleSecret(row.encrypted_refresh_token, environment.tokenEncryptionKey);
     const client = this.createClient({ environment, refreshToken });
-    if (!client.createGmailDraft) throw new Error("GOOGLE_WORKSPACE_GMAIL_DRAFT_CLIENT_UNAVAILABLE");
-    return { connectionId: row.id, client: { createGmailDraft: client.createGmailDraft.bind(client) } };
+    if (!client.createGmailDraft || !client.updateGmailDraft) {
+      throw new Error("GOOGLE_WORKSPACE_GMAIL_DRAFT_CLIENT_UNAVAILABLE");
+    }
+    return {
+      connectionId: row.id,
+      client: {
+        createGmailDraft: client.createGmailDraft.bind(client),
+        updateGmailDraft: client.updateGmailDraft.bind(client),
+      },
+    };
   }
 
   async createGmailLabelMutationClient(): Promise<{ connectionId: string; client: GoogleGmailLabelMutationClient } | null> {
@@ -512,4 +520,3 @@ export class PostgresGoogleConnectionRepository {
     return asRow(result.rows[0]);
   }
 }
-

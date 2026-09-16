@@ -13,6 +13,8 @@ export type DesignProject = {
   content?: string;
   notes?: string;
   canvas?: Record<string, unknown> | null;
+  linkedOrganizationId?: string | null;
+  linkedContactId?: string | null;
 };
 
 export type DesignTemplate = {
@@ -29,6 +31,8 @@ export type DesignTemplate = {
 export type CreateDesignProjectInput = Pick<DesignProject, "name" | "type"> & {
   content?: string;
   canvas?: Record<string, unknown>;
+  linkedOrganizationId?: string;
+  linkedContactId?: string;
 };
 
 export type DesignAsset = {
@@ -93,6 +97,29 @@ export type ContractReadiness = {
   signApiAvailable: boolean;
   reason: string;
   missing: string[];
+};
+
+export type DesignEmailDeliveryDraft = {
+  id: string;
+  state: "draft" | "submitted" | "needs_changes" | "gmail_draft" | "scheduled" | "sending" | "sent" | "failed" | "cancelled";
+  recipientEmail: string;
+  subject: string;
+  scheduledFor: string | null;
+  businessTimeZone: string | null;
+  gmailDraftId: string | null;
+  gmailMessageId: string | null;
+  gmailThreadId: string | null;
+  lastFailureCode: string | null;
+  lastFailureMessage: string | null;
+};
+
+export type DesignEmailDeliveryStatus = {
+  recipientEmail: string | null;
+  draft: DesignEmailDeliveryDraft | null;
+  gmailConnected: boolean;
+  approvalRequired: boolean;
+  approvalCurrent: boolean;
+  approvedFingerprint: string | null;
 };
 
 export function assetImageUrl(asset: DesignAsset): string | null {
@@ -198,6 +225,40 @@ export const designStudioApi = {
     input: Partial<Pick<DesignProject, "name" | "type" | "content" | "notes" | "status" | "canvas" | "syncState">>,
   ) {
     return apiPatch<DesignProject>(`/office/design-studio/projects/${encodeURIComponent(id)}`, input);
+  },
+  emailStatus(id: string) {
+    return apiGet<DesignEmailDeliveryStatus>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/status`);
+  },
+  saveEmailInApp(id: string, subject: string) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/save`, { subject });
+  },
+  createGmailDraft(id: string, subject: string) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/gmail-draft`, { subject });
+  },
+  reviewEmailContent(draftId: string) {
+    return apiPost<{ digest: string; approvalCurrent: boolean }>(`/outreach-planner/drafts/office_email/${encodeURIComponent(draftId)}/review-content`, {});
+  },
+  approveEmailContent(draftId: string, digest: string) {
+    return apiFetch(`/outreach-planner/drafts/office_email/${encodeURIComponent(draftId)}/approval`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ digest, intent: "exploratory", holdId: null, stage: "initial", overrides: {}, reason: "Approved in Design Studio for exact delivery." }),
+    }).then(async (response) => {
+      if (!response.ok) throw await responseError(response, "Could not approve this email.");
+      return response.json() as Promise<{ digest: string }>;
+    });
+  },
+  scheduleEmail(id: string, input: { subject: string; requestKey: string; approvedFingerprint: string; scheduledFor: string; businessTimeZone: string }) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/schedule`, input);
+  },
+  rescheduleEmail(id: string, input: { subject: string; requestKey: string; approvedFingerprint: string; scheduledFor: string; businessTimeZone: string }) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/reschedule`, input);
+  },
+  cancelScheduledEmail(id: string) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/cancel`, {});
+  },
+  sendEmailNow(id: string, input: { subject: string; requestKey: string; approvedFingerprint: string }) {
+    return apiPost<{ draft: DesignEmailDeliveryDraft }>(`/office/design-studio/projects/${encodeURIComponent(id)}/email/send`, input);
   },
   remove(id: string) {
     return apiDelete<{ ok: boolean }>(`/office/design-studio/projects/${encodeURIComponent(id)}`);

@@ -292,6 +292,21 @@ tokens, webhook bodies, recordings, or call notes into an incident report.
 
 ## Environment variable reference (summary)
 
+### Scheduled profile email worker
+
+Deploy the database migration and API release before starting the worker. Run a
+separate supervised worker process with:
+
+```bash
+pnpm --filter @workspace/api-server start:office-email-worker
+```
+
+The worker uses the same database and Google Workspace environment as the API.
+It claims one due email at a time with a renewable-safe lease, rechecks the
+existing exact-content outreach approval immediately before Gmail delivery, and
+stops cleanly on `SIGTERM` or `SIGINT`. Do not start an older worker binary
+against the new scheduling schema.
+
 ```
 # API service
 NODE_ENV=production              (set automatically by render.yaml)
