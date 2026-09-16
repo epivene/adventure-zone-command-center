@@ -41,6 +41,7 @@ function orgRepo() { return new DrizzleOrganizationRepository(db); }
 const mergeInputSchema = z.object({
   primaryId: z.string().uuid(),
   duplicateIds: z.array(z.string().uuid()).min(1),
+  reviewedLocationConflict: z.boolean().optional().default(false),
 });
 
 const familyCandidateIdsSchema = z
@@ -391,11 +392,15 @@ router.get("/organizations/:id", async (req, res): Promise<void> => {
 router.post("/organizations/merge", async (req, res): Promise<void> => {
   const parsed = mergeInputSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ ok: false, error: parsed.error.issues[0]?.message ?? "Invalid input" }); return; }
-  const { primaryId, duplicateIds } = parsed.data;
+  const { primaryId, duplicateIds, reviewedLocationConflict } = parsed.data;
   if (duplicateIds.includes(primaryId)) { res.status(400).json({ ok: false, error: "primaryId must not appear in duplicateIds" }); return; }
   try {
     await db.transaction(async (transaction) => {
-      await prepareSelectedProfileSubsetMerge(transaction, [primaryId, ...duplicateIds]);
+      await prepareSelectedProfileSubsetMerge(
+        transaction,
+        [primaryId, ...duplicateIds],
+        { reviewedLocationConflict },
+      );
       await prepareOrganizationMergeReferences(transaction, primaryId, duplicateIds);
       await orgRepo().mergeOrganizations(primaryId, duplicateIds, transaction);
     });
