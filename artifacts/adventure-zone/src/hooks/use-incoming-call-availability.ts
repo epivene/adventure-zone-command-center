@@ -23,6 +23,7 @@ export function useIncomingCallAvailability(createDevice: () => BrowserVoiceDevi
   }, []);
   const turnOn = useCallback(async (takeover = false) => {
     if (!capability?.enabled) { setState("unavailable"); return; }
+    if (lease.current || device.current) await turnOff();
     const current = ++epoch.current;
     if (heartbeat.current) clearInterval(heartbeat.current);
     heartbeat.current = null;
@@ -56,7 +57,7 @@ export function useIncomingCallAvailability(createDevice: () => BrowserVoiceDevi
     } catch {
       if (current === epoch.current) setState("unavailable");
     }
-  }, [capability?.enabled, createDevice, onIncoming]);
+  }, [capability?.enabled, createDevice, onIncoming, turnOff]);
   useEffect(() => () => { void turnOff(); }, [turnOff]);
   return { state, turnOn, turnOff, device: device.current, activeLease: Boolean(lease.current) };
 }
