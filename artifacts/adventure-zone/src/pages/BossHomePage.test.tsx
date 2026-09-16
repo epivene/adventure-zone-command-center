@@ -45,7 +45,7 @@ describe("BossHomePage", () => {
     );
   });
 
-  it("shows the contracts and invoices tracker instead of review, document, and assignment cards", async () => {
+  it("shows the tracker instead of attention, document, and assignment UI", async () => {
     mockBossGet.mockResolvedValueOnce({
       submittedReceipts: 3,
       submittedDrafts: [{ id: "d1", name: "Event Flyer", type: "flyer" }],
@@ -79,6 +79,7 @@ describe("BossHomePage", () => {
     expect(screen.queryByText("Business Documents")).not.toBeInTheDocument();
     expect(screen.queryByText("Assignments")).not.toBeInTheDocument();
     expect(screen.queryByText("High-Priority Assignments")).not.toBeInTheDocument();
+    expect(screen.getByText("Reviews")).toBeVisible();
   });
 
   it("shows only the three latest completed events across all legs", async () => {
