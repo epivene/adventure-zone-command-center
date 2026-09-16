@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { PGlite } from "@electric-sql/pglite";
 import { describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -6,7 +7,10 @@ vi.hoisted(() => {
     "postgres://postgres:postgres@127.0.0.1:5432/test";
 });
 
-import { ensureBusinessDocumentSchemaBeforeListen } from "./business-document-required-startup";
+import {
+  BUSINESS_DOCUMENT_CATEGORY_REPAIR_SQL,
+  ensureBusinessDocumentSchemaBeforeListen,
+} from "./business-document-required-startup";
 
 describe("ensureBusinessDocumentSchemaBeforeListen", () => {
   it("applies the canonical schema with a bounded lock timeout", async () => {
@@ -22,11 +26,62 @@ describe("ensureBusinessDocumentSchemaBeforeListen", () => {
     ).resolves.toBeUndefined();
 
     expect(client.query).toHaveBeenNthCalledWith(1, "SET lock_timeout = '5s'");
-    expect(String(client.query.mock.calls[1]?.[0])).toContain(
+    const schemaSql = String(client.query.mock.calls[1]?.[0]);
+    expect(schemaSql).toContain(
       "CREATE TABLE IF NOT EXISTS business_documents",
+    );
+    expect(schemaSql).toContain(
+      "DROP CONSTRAINT IF EXISTS business_documents_category_valid",
+    );
+    expect(schemaSql).toContain(
+      "'contract','invoice','proposal'",
     );
     expect(client.query).toHaveBeenLastCalledWith("RESET lock_timeout");
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  it("replaces the legacy unnamed category check and stays idempotent", async () => {
+    const client = new PGlite();
+    try {
+      await client.exec(`
+        create table business_documents (
+          id integer generated always as identity primary key,
+          category text not null default 'other'
+            check (category in (
+              'contract','proposal','coi','insurance_policy','w9_tax','permit',
+              'vendor_application','inspection','deposit_receipt',
+              'operational_template','marketing','other'
+            ))
+        );
+      `);
+
+      await client.exec(BUSINESS_DOCUMENT_CATEGORY_REPAIR_SQL);
+      await client.exec(BUSINESS_DOCUMENT_CATEGORY_REPAIR_SQL);
+      await client.exec(`
+        insert into business_documents (category) values
+          ('contract'), ('invoice'), ('proposal'), ('coi'),
+          ('insurance_policy'), ('w9_tax'), ('permit'),
+          ('vendor_application'), ('inspection'), ('deposit_receipt'),
+          ('operational_template'), ('marketing'), ('other');
+      `);
+
+      const constraints = await client.query<{ conname: string }>(`
+        select conname
+        from pg_constraint
+        where conrelid = 'business_documents'::regclass
+          and contype = 'c'
+      `);
+      expect(constraints.rows.map((row) => row.conname)).toEqual([
+        "business_documents_category_valid",
+      ]);
+      expect(
+        (await client.query<{ count: number }>(
+          "select count(*)::int as count from business_documents",
+        )).rows[0]?.count,
+      ).toBe(13);
+    } finally {
+      await client.close();
+    }
   });
 
   it("always resets the timeout and releases after a DDL failure", async () => {
