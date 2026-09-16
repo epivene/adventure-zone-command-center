@@ -28,6 +28,8 @@ afterEach(() => {
 
 describe("ContactDirectoryView request pressure regression", () => {
   it("still loads when React verifies effects in Strict Mode", async () => {
+    const first = deferred<typeof emptyPage>();
+    apiGet.mockImplementationOnce(() => first.promise);
     apiGet.mockResolvedValue(emptyPage);
 
     render(
@@ -37,6 +39,9 @@ describe("ContactDirectoryView request pressure regression", () => {
     );
 
     await waitFor(() => expect(apiGet).toHaveBeenCalledTimes(1));
+    first.resolve(emptyPage);
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+    expect(apiGet).toHaveBeenCalledTimes(1);
   });
 
   it("runs one contacts request at a time and keeps only the latest queued URL", async () => {
