@@ -73,6 +73,7 @@ describe("ManagerHomePage", () => {
     expect(screen.getByRole("link", { name: /Receipts/i })).toHaveAttribute("href", "/manager/receipts");
     expect(screen.getByRole("link", { name: /Crew/i })).toHaveAttribute("href", "/manager/crew");
     expect(screen.getByRole("link", { name: /Mileage/i })).toHaveAttribute("href", "/manager/operations");
+    expect(screen.getByRole("link", { name: /Year-End Inspection/i })).toHaveAttribute("href", "/manager/year-end-inspection");
     expect(screen.getByText("$300.00")).toBeInTheDocument();
     expect(screen.getByText("$125.00")).toBeInTheDocument();
     expect(managerApi).toHaveBeenCalledWith("/manager/dashboard");

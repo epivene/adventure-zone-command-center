@@ -108,10 +108,11 @@ export default function ManagerHomePage() {
 
       {reviewsDue > 0 ? <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4"><h2 className="font-bold">Needs Attention</h2><p className="mt-1 text-sm text-amber-900">{reviewsDue} {reviewsDue === 1 ? "event still needs" : "events still need"} a review.</p><Link href="/manager/reviews" className="button-secondary mt-3 inline-flex">Complete reviews</Link></section> : null}
 
-      <section className="grid grid-cols-3 gap-2">
+      <section className="grid grid-cols-2 gap-2">
         <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/receipts">Receipts</Link>
         <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/operations">Mileage</Link>
         <Link className="rounded-xl border border-slate-200 bg-white p-3 text-center text-sm font-semibold shadow-sm" href="/manager/crew">Crew</Link>
+        <Link className="rounded-xl border border-orange-300 bg-orange-50 p-3 text-center text-sm font-semibold text-orange-900 shadow-sm" href="/manager/year-end-inspection">Year-End Inspection</Link>
       </section>
     </div>
   );
