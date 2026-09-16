@@ -8,6 +8,7 @@ import {
 import {
   canonicalProfileLabelName,
   isProfileLabelPath,
+  normalizedProfileLabelPath,
   profileLabelIdentity,
 } from "./google-profile-label-config";
 
@@ -43,18 +44,25 @@ function cleanupErrorCode(error: unknown): string {
     : "GOOGLE_WORKSPACE_PROFILE_LABEL_CLEANUP_FAILED";
 }
 
+function currentProfileLabelIdentity(profileName: string): string | null {
+  try {
+    return profileLabelIdentity(canonicalProfileLabelName(profileName));
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      error.message !== "GOOGLE_WORKSPACE_PROFILE_LABEL_NAME_INVALID"
+    ) {
+      throw error;
+    }
+    return normalizedProfileLabelPath(profileName);
+  }
+}
+
 function candidates(
   labels: GoogleLabelSummary[],
   currentProfileNames: string[],
 ): GoogleProfileLabelCleanupCandidate[] {
-  // Converting every current name here is deliberately fail-closed. If even
-  // one current CRM profile cannot be represented by the canonical label
-  // policy, cleanup must not offer any labels for deletion.
-  const current = new Set(
-    currentProfileNames.map((name) =>
-      profileLabelIdentity(canonicalProfileLabelName(name)),
-    ),
-  );
+  const current = new Set(currentProfileNames.map(currentProfileLabelIdentity));
   return labels
     .filter(
       (label) =>
