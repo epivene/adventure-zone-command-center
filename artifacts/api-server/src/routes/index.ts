@@ -233,9 +233,7 @@ router.use(createTwilioInboundVoiceWebhooksRouter({
   voicemails: inboundVoicemailService,
 }));
 
-mountRoleScopedInvoiceRoutes(router);
-
-router.use(requireOwnerMiddleware);
+mountRoleScopedInvoiceRoutes(router, requireOwnerMiddleware);
 router.use("/outreach-planner", createOutreachPlannerRouter());
 router.use(conventionOutreachRouter);
 router.use(async (req, _res, next) => {
