@@ -12,17 +12,25 @@ type Bounds = { left: number; top: number; width: number; height: number };
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
 const precise = (value: number) => Number(value.toFixed(6));
 
-export function pointerEllipse(start: Point, end: Point, bounds: Bounds, id = crypto.randomUUID()): PhotoEllipse {
-  const startX = clamp((start.x - bounds.left) / bounds.width);
-  const startY = clamp((start.y - bounds.top) / bounds.height);
-  const endX = clamp((end.x - bounds.left) / bounds.width);
-  const endY = clamp((end.y - bounds.top) / bounds.height);
+export function pointerEllipse(start: Point, end: Point, bounds: Bounds, id: string = crypto.randomUUID()): PhotoEllipse {
+  return pointerPathEllipse([start, end], bounds, id);
+}
+
+export function pointerPathEllipse(points: Point[], bounds: Bounds, id: string = crypto.randomUUID()): PhotoEllipse {
+  const normalized = points.map((point) => ({
+    x: clamp((point.x - bounds.left) / bounds.width),
+    y: clamp((point.y - bounds.top) / bounds.height),
+  }));
+  const left = Math.min(...normalized.map((point) => point.x));
+  const right = Math.max(...normalized.map((point) => point.x));
+  const top = Math.min(...normalized.map((point) => point.y));
+  const bottom = Math.max(...normalized.map((point) => point.y));
   return {
     id,
-    x: precise((startX + endX) / 2),
-    y: precise((startY + endY) / 2),
-    radiusX: precise(Math.abs(endX - startX) / 2),
-    radiusY: precise(Math.abs(endY - startY) / 2),
+    x: precise((left + right) / 2),
+    y: precise((top + bottom) / 2),
+    radiusX: precise((right - left) / 2),
+    radiusY: precise((bottom - top) / 2),
   };
 }
 
