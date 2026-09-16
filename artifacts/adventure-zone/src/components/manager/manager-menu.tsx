@@ -16,6 +16,7 @@ const groups = [
     { href: "/manager/operations", label: "Mileage & Operations" },
   ] },
   { label: "Events", items: [
+    { href: "/manager/year-end-inspection", label: "Year-End Inspection" },
     { href: "/manager/reviews", label: "Event Reviews" },
     { href: "/manager/incidents", label: "Incidents" },
     { href: "/manager/incidents/new", label: "Report General Incident" },
