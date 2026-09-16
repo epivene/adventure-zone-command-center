@@ -1,7 +1,17 @@
 import type { OfficeEmailState } from "@/db/schema";
 
 export function canOfficeEditDraft(state: OfficeEmailState) {
-  return state === "draft" || state === "needs_changes";
+  return [
+    "draft",
+    "needs_changes",
+    "gmail_draft",
+    "scheduled",
+    "failed",
+  ].includes(state);
+}
+
+export function canOfficeCancelDraft(state: OfficeEmailState) {
+  return state === "scheduled";
 }
 
 export function canOfficeSubmitDraft(state: OfficeEmailState) {

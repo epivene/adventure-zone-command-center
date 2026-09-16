@@ -97,7 +97,9 @@ export function ProfileAtAGlance({
         (booking) => !["cancelled", "declined"].includes(booking.status ?? ""),
       )
       .map((booking) => dateValue(booking.startsAt))
-      .filter((date): date is Date => date !== null && date.getTime() >= today)
+      .filter((date): date is Date =>
+        date !== null && date.getTime() >= today,
+      )
       .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
   const primaryContact =
     profile.contacts.find((contact) => contact.isPrimary) ?? null;
@@ -110,7 +112,8 @@ export function ProfileAtAGlance({
   return (
     <section
       aria-labelledby="at-a-glance-heading"
-      className="bg-[#fffefa] px-4 py-5 sm:px-7"
+      className="border-l-4 border-[#e85d35] bg-[#fffefa] px-4 py-5 text-[#182225] sm:px-7"
+      data-testid="profile-detail-header"
     >
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
@@ -118,13 +121,13 @@ export function ProfileAtAGlance({
             Booking decision
           </p>
           <h2
-            className="mt-1 text-lg font-bold text-[#173b48]"
+            className="mt-1 text-lg font-bold text-[#182225]"
             id="at-a-glance-heading"
           >
             At a glance
           </h2>
         </div>
-        <p className="text-xs text-[#71848a]">Only recorded facts are shown.</p>
+        <p className="text-xs text-[#536064]">Only recorded facts are shown.</p>
       </div>
 
       <dl
@@ -136,7 +139,7 @@ export function ProfileAtAGlance({
             Next event date
           </dt>
           <dd className="mt-1 flex items-center gap-2 text-sm font-bold text-[#182225]">
-            <CalendarDays className="h-4 w-4 text-[#397064]" />
+            <CalendarDays className="h-4 w-4 text-[#157d78]" />
             {formatDate(nextEvent) ?? "Date not published"}
           </dd>
         </div>
@@ -194,7 +197,7 @@ export function ProfileAtAGlance({
         className="mt-5 grid gap-5 lg:grid-cols-2"
         data-testid="action-contact-columns"
       >
-        <div className="rounded-md border-t-4 border-orange-600 bg-[#f2ede3] p-4">
+        <div className="rounded-md border-t-4 border-[#e85d35] bg-[#f6f2e9] p-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
             Next action
           </p>
@@ -211,7 +214,7 @@ export function ProfileAtAGlance({
           {primaryContact ? (
             <div className="mt-2 grid gap-2 text-sm text-[#315b66]">
               <span className="inline-flex items-center gap-2 font-bold">
-                <UserRound className="h-4 w-4 text-[#397064]" />
+                <UserRound className="h-4 w-4 text-[#157d78]" />
                 {primaryContact.name}
               </span>
               {primaryContact.email ? (
@@ -234,7 +237,7 @@ export function ProfileAtAGlance({
               ) : null}
             </div>
           ) : (
-            <p className="mt-2 font-bold text-[#71848a]">No primary contact</p>
+            <p className="mt-2 font-bold text-[#536064]">No primary contact</p>
           )}
         </div>
       </div>

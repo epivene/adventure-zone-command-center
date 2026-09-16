@@ -146,8 +146,15 @@ export type GoogleCalendarEventTime = {
   timeZone?: string;
 };
 
-export type GoogleGmailDraft = { draftId: string; messageId: string };
-export type GoogleGmailDraftClient = { createGmailDraft(input: { raw: string }): Promise<GoogleGmailDraft> };
+export type GoogleGmailDraft = {
+  draftId: string;
+  messageId: string;
+  threadId?: string | null;
+};
+export type GoogleGmailDraftClient = {
+  createGmailDraft(input: { raw: string }): Promise<GoogleGmailDraft>;
+  updateGmailDraft?(input: { draftId: string; raw: string }): Promise<GoogleGmailDraft>;
+};
 
 export type GoogleCalendarEvent = {
   calendarId: string;
@@ -198,6 +205,7 @@ export interface GoogleWorkspaceReadClient {
   getThreadLabelIds?(threadId: string): Promise<string[]>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
   createGmailDraft?(input: { raw: string }): Promise<GoogleGmailDraft>;
+  updateGmailDraft?(input: { draftId: string; raw: string }): Promise<GoogleGmailDraft>;
   deleteLabel?(labelId: string): Promise<void>;
   listDriveFiles?(parentId: string, pageToken?: string | null): Promise<GoogleDrivePage>;
   downloadDriveFile?(fileId: string, mimeType?: string): Promise<Uint8Array>;

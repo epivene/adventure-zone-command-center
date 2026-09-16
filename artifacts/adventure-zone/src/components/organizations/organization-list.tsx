@@ -498,10 +498,10 @@ export function OrganizationList({
       {afterSearch}
 
       <section
-        className="overflow-hidden rounded-lg border border-[#c7c0b4] bg-[#e9e4da] lg:grid lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]"
-        data-testid="profile-workspace"
+        className="overflow-hidden rounded-md border border-[#d8d1c4] bg-[#f6f2e9] lg:grid lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]"
+        data-testid="profile-list-workspace"
       >
-        <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-[#b8b0a3] lg:p-4">
+        <div className="grid content-start gap-3 p-3 lg:max-h-[calc(100vh-10rem)] lg:overflow-y-auto lg:border-r lg:border-[#d8d1c4] lg:p-4">
           <p aria-live="polite" className="text-sm text-[#536064]">
             Showing {organizations.records.length} of {organizations.total}{" "}
             profiles
@@ -528,8 +528,8 @@ export function OrganizationList({
                           ? "true"
                           : undefined
                       }
-                      className={`group block rounded-md border bg-[#fffefa] p-4 text-left shadow-sm outline-none transition ${selectedProfileId === organization.id ? "border-orange-600 shadow-[inset_4px_0_0_#ea580c,0_7px_20px_rgba(29,35,37,0.09)]" : "border-[#cbc5b9] hover:border-[#9a9387] hover:shadow-md"} focus-visible:ring-2 focus-visible:ring-teal-700 focus-visible:ring-offset-2`}
-                      data-testid="profile-summary-card"
+                      className={`group block rounded-md border bg-[#fffefa] p-4 text-left shadow-sm outline-none transition ${selectedProfileId === organization.id ? "border-[#e85d35] shadow-[inset_4px_0_0_#e85d35,0_7px_20px_rgba(24,34,37,0.09)]" : "border-[#d8d1c4] hover:border-[#e85d35] hover:shadow-md"} focus-visible:ring-2 focus-visible:ring-[#157d78] focus-visible:ring-offset-2`}
+                      data-testid={`profile-card-${organization.id}`}
                       href={profileHref}
                       onClick={(event) => {
                         if (
@@ -561,7 +561,7 @@ export function OrganizationList({
                                   ? "No reviews"
                                   : `${rating.toFixed(1)} out of 5 stars from ${ratingCount} reviews`
                               }
-                              className="mt-1.5 block text-xs font-semibold text-[#8a6520]"
+                              className="mt-1.5 block text-xs font-semibold text-[#536064]"
                               data-testid="profile-rating-summary"
                             >
                               {rating === null ? (
@@ -570,7 +570,7 @@ export function OrganizationList({
                                 <>
                                   <span
                                     aria-hidden
-                                    className="tracking-[0.08em] text-[#c98a1c]"
+                                    className="tracking-[0.08em] text-[#efb33f]"
                                   >
                                     {"★".repeat(roundedRating)}
                                     {"☆".repeat(5 - roundedRating)}
@@ -607,7 +607,7 @@ export function OrganizationList({
                         <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">
                           <span
                             aria-hidden
-                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-orange-600 ring-4 ring-orange-100"
+                            className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[#e85d35] ring-4 ring-[#f6f2e9]"
                           />
                           <span>
                             {organization.nextActionKind

@@ -857,7 +857,74 @@ export function createGoogleWorkspaceReadClient(input: {
       if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_CREATE_FAILED");
       const message = payload.message && typeof payload.message === "object" ? payload.message as Record<string, unknown> : null;
       if (typeof payload.id !== "string" || !payload.id.trim() || !message || typeof message.id !== "string" || !message.id.trim()) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
-      return { draftId: payload.id.trim(), messageId: message.id.trim() };
+      return {
+        draftId: payload.id.trim(),
+        messageId: message.id.trim(),
+        threadId:
+          typeof message.threadId === "string" && message.threadId.trim()
+            ? message.threadId.trim()
+            : null,
+      };
+    },
+
+    async updateGmailDraft(input): Promise<GoogleGmailDraft> {
+      if (!input.draftId.trim() || !/^[A-Za-z0-9_-]+$/.test(input.raw)) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
+      }
+      let response: Response;
+      let payload: Record<string, unknown>;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), gmailDraftTimeoutMs);
+      try {
+        const token = await currentAccessToken(false, controller.signal);
+        response = await fetcher(
+          `${draftsEndpoint}/${encodeURIComponent(input.draftId.trim())}`,
+          {
+            method: "PUT",
+            headers: {
+              authorization: `Bearer ${token}`,
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({ message: { raw: input.raw } }),
+            signal: controller.signal,
+          },
+        );
+        payload = await responseJson(response);
+      } catch (error) {
+        if (
+          !controller.signal.aborted &&
+          error &&
+          typeof error === "object" &&
+          "code" in error &&
+          typeof (error as { code?: unknown }).code === "string"
+        ) {
+          throw error;
+        }
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
+      } finally {
+        clearTimeout(timeout);
+      }
+      if (!response.ok) throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_UPDATE_FAILED");
+      const message = payload.message && typeof payload.message === "object"
+        ? payload.message as Record<string, unknown>
+        : null;
+      if (
+        typeof payload.id !== "string" ||
+        !payload.id.trim() ||
+        !message ||
+        typeof message.id !== "string" ||
+        !message.id.trim()
+      ) {
+        throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_OUTCOME_UNCERTAIN");
+      }
+      return {
+        draftId: payload.id.trim(),
+        messageId: message.id.trim(),
+        threadId:
+          typeof message.threadId === "string" && message.threadId.trim()
+            ? message.threadId.trim()
+            : null,
+      };
     },
 
     async accountIdentity() {
@@ -1314,5 +1381,4 @@ export type {
   GoogleThreadDetail,
   GoogleWorkspaceReadClient,
 } from "./google-api-types";
-
 

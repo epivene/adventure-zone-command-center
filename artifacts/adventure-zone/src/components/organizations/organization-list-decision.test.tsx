@@ -1,8 +1,12 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 
 import { OrganizationList } from "./organization-list";
+
+vi.mock("@/components/profiles/profile-detail-sheet", () => ({
+  ProfileDetailSheet: () => null,
+}));
 
 const query = {
   search: "",
@@ -55,7 +59,7 @@ describe("OrganizationList booking decisions", () => {
     );
   });
 
-  it("shows the requested card hierarchy without a primary rating block", () => {
+  it("shows the decision hierarchy with review stars as secondary context", () => {
     render(
       <Router>
         <OrganizationList
@@ -102,9 +106,13 @@ describe("OrganizationList booking decisions", () => {
     expect(screen.getByText("Date not published")).toBeVisible();
     expect(screen.getByText("Deadline soon")).toBeVisible();
     expect(screen.getByText("Flat fee")).toBeVisible();
-    expect(screen.getByText(/Send pitch/)).toBeVisible();
+    expect(screen.getByText(/Send pitch/i)).toBeVisible();
+    expect(screen.getByTestId("profile-rating-summary")).toHaveTextContent(
+      "4.8 (4)",
+    );
+    expect(screen.getByLabelText(/4.8 out of 5 stars/i)).toBeVisible();
     expect(
-      screen.queryByTestId("profile-rating-summary"),
-    ).not.toBeInTheDocument();
+      screen.getByTestId("profile-card-10000000-0000-4000-8000-000000000001"),
+    ).toHaveClass("bg-[#fffefa]");
   });
 });

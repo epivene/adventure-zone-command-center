@@ -99,3 +99,4 @@ create table if not exists office_messages (
 );
 create index if not exists office_messages_account_created_idx
   on office_messages (office_account_id, created_at desc);
+

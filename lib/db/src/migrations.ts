@@ -619,6 +619,41 @@ const migrationFiles = [
     markerSql: `SELECT to_regclass(current_schema() || '.directory_import_20260910_batch') IS NOT NULL
       AND EXISTS (SELECT 1 FROM directory_import_20260910_batch WHERE batch = 'rmaf-online-directory-20260910-v1') AS ready`,
   },
+  {
+    name: "20260912_profile_html_email_delivery.sql",
+    markerSql: `SELECT
+      (SELECT count(*) = 17
+        FROM information_schema.columns
+        WHERE table_schema = current_schema()
+          AND table_name = 'office_email_drafts'
+          AND column_name IN (
+            'body_format', 'design_project_id', 'design_version_id',
+            'scheduled_for', 'business_time_zone', 'gmail_draft_id',
+            'gmail_message_id', 'gmail_thread_id', 'send_request_key',
+            'schedule_request_key', 'dispatch_lease_owner',
+            'dispatch_lease_expires_at', 'dispatch_attempt_count',
+            'last_attempt_at', 'next_attempt_at', 'last_failure_code',
+            'last_failure_message'
+          ))
+      AND (SELECT count(*) = 4
+        FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND indexname IN (
+            'office_email_drafts_design_project_unique',
+            'office_email_drafts_send_request_unique',
+            'office_email_drafts_schedule_request_unique',
+            'office_email_drafts_dispatch_idx'
+          ))
+      AND (SELECT count(*) = 4
+        FROM pg_constraint
+        WHERE connamespace = current_schema()::regnamespace
+          AND conname IN (
+            'office_email_drafts_state_valid',
+            'office_email_drafts_body_format_valid',
+            'office_email_drafts_design_project_fk',
+            'office_email_drafts_design_version_fk'
+          )) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

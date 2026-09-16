@@ -145,10 +145,10 @@ describe("OrganizationList profile summary cards", () => {
       </Router>,
     );
 
-    expect(screen.getByTestId("profile-summary-card")).toHaveClass(
+    expect(screen.getByTestId(/^profile-card-/)).toHaveClass(
       "rounded-md",
     );
-    expect(screen.getByTestId("profile-workspace")).toHaveClass(
+    expect(screen.getByTestId("profile-list-workspace")).toHaveClass(
       "lg:grid-cols-[minmax(19rem,0.72fr)_minmax(0,1.28fr)]",
     );
     expect(screen.queryByTestId("profile-avatar-link")).not.toBeInTheDocument();

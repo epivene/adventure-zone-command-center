@@ -30,6 +30,7 @@ import { ProfileEmailComposer, ProfileEmailDrafts, type ProfileEmailDraft } from
 import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { ProfileAtAGlance } from "@/components/profiles/profile-at-a-glance";
+import { ProfileEmailSummary } from "@/components/profiles/profile-email-summary";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import { mergeOptimisticActivities } from "@/components/profiles/profile-note-display";
 import {
@@ -142,7 +143,12 @@ export function SimpleFullProfile({
 }) {
   const [internalEditing, setInternalEditing] = useState(false);
   const [openSection, setOpenSection] = useState<OpenSection>(() =>
-    profile.bookings.length ? "events" : null,
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("section") === "emails"
+      ? "emails"
+      : profile.bookings.length
+        ? "events"
+        : null,
   );
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
@@ -168,7 +174,14 @@ export function SimpleFullProfile({
   }, [profile.id]);
 
   useEffect(() => {
-    setOpenSection(profile.bookings.length ? "events" : null);
+    setOpenSection(
+      typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("section") === "emails"
+        ? "emails"
+        : profile.bookings.length
+          ? "events"
+          : null,
+    );
   }, [profile.id, profile.bookings.length]);
 
   useEffect(() => {
@@ -631,7 +644,7 @@ export function SimpleFullProfile({
                 Call
               </Link>
             ) : null}
-            <button className="button-primary inline-flex items-center gap-2" type="button" onClick={createEmail}><Mail className="h-4 w-4" />Create Email</button>
+            <button className="button-secondary inline-flex items-center gap-2 !border-[#d8d1c4] !bg-transparent !text-[#536064]" type="button" onClick={createEmail}><Mail className="h-4 w-4" />Quick email</button>
             <button aria-label="Edit profile" className="button-secondary inline-flex items-center gap-2 !border-[#cad9d3] !bg-transparent !text-[#315b66]" onClick={() => setEditing(true)} type="button">Edit</button>
             <button
               className="button-primary inline-flex items-center gap-2"
@@ -679,6 +692,12 @@ export function SimpleFullProfile({
           </span>
         </div>
       </section>
+
+      <ProfileEmailSummary
+        contacts={profile.contacts}
+        organizationId={profile.id}
+        organizationName={profile.place.name}
+      />
 
       <ProfileAtAGlance profile={profile} />
 

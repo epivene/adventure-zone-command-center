@@ -1,50 +1,19 @@
 import { isStableImageUrl } from "@/lib/design-studio-api";
+import type {
+  DesignEmailBlock,
+  DesignEmailBlockType,
+  DesignEmailBrandKit,
+  DesignEmailDocument,
+  DesignEmailMediaReference,
+} from "@workspace/api-zod/design-studio-email";
 
 export const EMAIL_DOCUMENT_VERSION = 1 as const;
 
-export type EmailBlockType =
-  | "header"
-  | "hero"
-  | "heading"
-  | "paragraph"
-  | "button"
-  | "divider"
-  | "spacer"
-  | "footer";
-
-export type EmailBlock = {
-  id: string;
-  type: EmailBlockType;
-  label: string;
-  content: string;
-  link: string;
-  showOnMobile: boolean;
-};
-
-export type EmailMediaReference = {
-  assetId: string | null;
-  src: string | null;
-  alt: string;
-  name: string;
-};
-
-export type EmailBrandKit = {
-  name: string;
-  primaryColor: string;
-  accentColor: string;
-  textColor: string;
-  backgroundColor: string;
-  typography: string;
-  highContrastButtons: boolean;
-};
-
-export type EmailDocument = {
-  version: typeof EMAIL_DOCUMENT_VERSION;
-  kind: "branded-email";
-  blocks: EmailBlock[];
-  hero: EmailMediaReference;
-  brandKit: EmailBrandKit;
-};
+export type EmailBlockType = DesignEmailBlockType;
+export type EmailBlock = DesignEmailBlock;
+export type EmailMediaReference = DesignEmailMediaReference;
+export type EmailBrandKit = DesignEmailBrandKit;
+export type EmailDocument = DesignEmailDocument;
 
 const BLOCK_TYPES = new Set<EmailBlockType>([
   "header", "hero", "heading", "paragraph", "button", "divider", "spacer", "footer",

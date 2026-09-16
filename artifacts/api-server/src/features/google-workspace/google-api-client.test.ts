@@ -240,12 +240,44 @@ describe("GoogleWorkspaceReadClient", () => {
       "modifyMessageLabels",
       "modifyThreadLabels",
       "renameLabel",
+      "updateGmailDraft",
     ]);
     expect(Object.keys(client).some((name) => /send/i.test(name))).toBe(false);
     const scopes = GOOGLE_WORKSPACE_REQUIRED_SCOPES as readonly string[];
     expect(scopes).toContain("https://www.googleapis.com/auth/gmail.modify");
     expect(scopes).toContain("https://www.googleapis.com/auth/drive.file");
     expect(scopes).not.toContain("https://www.googleapis.com/auth/gmail.readonly");
+  });
+
+  it("updates an existing Gmail draft in place", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const client = createGoogleWorkspaceReadClient({
+      environment,
+      refreshToken: "refresh-token",
+      fetcher: async (input, init) => {
+        calls.push({ url: String(input), init });
+        if (String(input) === "https://oauth2.googleapis.com/token") {
+          return response({ access_token: "access-token", expires_in: 3600 });
+        }
+        return response({
+          id: "gmail-draft-1",
+          message: { id: "gmail-message-2", threadId: "thread-1" },
+        });
+      },
+    });
+
+    await expect(
+      client.updateGmailDraft?.({ draftId: "gmail-draft-1", raw: "YWJj" }),
+    ).resolves.toEqual({
+      draftId: "gmail-draft-1",
+      messageId: "gmail-message-2",
+      threadId: "thread-1",
+    });
+    const update = calls.find((call) => call.url.endsWith("/drafts/gmail-draft-1"));
+    expect(update?.init?.method).toBe("PUT");
+    expect(JSON.parse(String(update?.init?.body))).toEqual({
+      message: { raw: "YWJj" },
+    });
   });
 
   it("creates and updates only files addressed through the narrow Drive backup client", async () => {
@@ -373,4 +405,3 @@ describe("GoogleWorkspaceReadClient", () => {
   });
 
 });
-

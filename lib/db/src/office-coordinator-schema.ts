@@ -41,11 +41,18 @@ export const officeEmailStateValues = [
   "draft",
   "submitted",
   "needs_changes",
+  "gmail_draft",
+  "scheduled",
   "sending",
   "sent",
+  "failed",
   "cancelled",
 ] as const;
 export type OfficeEmailState = (typeof officeEmailStateValues)[number];
+
+export const officeEmailBodyFormatValues = ["plain_text", "html"] as const;
+export type OfficeEmailBodyFormat =
+  (typeof officeEmailBodyFormatValues)[number];
 
 export const officeAccounts = pgTable("office_accounts", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -126,22 +133,49 @@ export const officeEmailDrafts = pgTable("office_email_drafts", {
   recipientEmail: text("recipient_email").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
+  bodyFormat: text("body_format")
+    .$type<OfficeEmailBodyFormat>()
+    .default("plain_text")
+    .notNull(),
+  designProjectId: uuid("design_project_id"),
+  designVersionId: uuid("design_version_id"),
   coordinatorNote: text("coordinator_note"),
   state: text("state").$type<OfficeEmailState>().default("draft").notNull(),
   submittedAt: timestamp("submitted_at", { withTimezone: true }),
   ownerReturnNote: text("owner_return_note"),
   sentAt: timestamp("sent_at", { withTimezone: true }),
   sentMessageId: text("sent_message_id"),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+  businessTimeZone: text("business_time_zone"),
+  gmailDraftId: text("gmail_draft_id"),
+  gmailMessageId: text("gmail_message_id"),
+  gmailThreadId: text("gmail_thread_id"),
+  sendRequestKey: text("send_request_key"),
+  scheduleRequestKey: text("schedule_request_key"),
+  dispatchLeaseOwner: text("dispatch_lease_owner"),
+  dispatchLeaseExpiresAt: timestamp("dispatch_lease_expires_at", {
+    withTimezone: true,
+  }),
+  dispatchAttemptCount: integer("dispatch_attempt_count").default(0).notNull(),
+  lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+  nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+  lastFailureCode: text("last_failure_code"),
+  lastFailureMessage: text("last_failure_message"),
   lastSendError: text("last_send_error"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  check("office_email_drafts_state_valid", sql`${table.state} in ('draft','submitted','needs_changes','sending','sent','cancelled')`),
+  check("office_email_drafts_state_valid", sql`${table.state} in ('draft','submitted','needs_changes','gmail_draft','scheduled','sending','sent','failed','cancelled')`),
+  check("office_email_drafts_body_format_valid", sql`${table.bodyFormat} in ('plain_text','html')`),
   check("office_email_drafts_event_year_valid", sql`${table.eventYear} is null or ${table.eventYear} between 2000 and 2200`),
   index("office_email_drafts_state_submitted_idx").on(table.state, table.submittedAt),
   index("office_email_drafts_account_updated_idx").on(table.officeAccountId, table.updatedAt),
   index("office_email_drafts_template_idx").on(table.communicationTemplateId),
   index("office_email_drafts_organization_year_idx").on(table.organizationId, table.eventYear),
+  uniqueIndex("office_email_drafts_design_project_unique").on(table.designProjectId).where(sql`${table.designProjectId} is not null`),
+  uniqueIndex("office_email_drafts_send_request_unique").on(table.sendRequestKey).where(sql`${table.sendRequestKey} is not null`),
+  uniqueIndex("office_email_drafts_schedule_request_unique").on(table.scheduleRequestKey).where(sql`${table.scheduleRequestKey} is not null`),
+  index("office_email_drafts_dispatch_idx").on(table.state, table.scheduledFor, table.nextAttemptAt, table.dispatchLeaseExpiresAt),
 ]);
 
 export const officeMessages = pgTable("office_messages", {
