@@ -20,6 +20,7 @@ vi.mock("@/features/calls/incoming-calling-api", () => ({
 }));
 
 class FakeDevice implements BrowserVoiceDevice {
+  private readonly handlers = new Map<string, (...args: unknown[]) => void>();
   readonly prepare = vi.fn().mockResolvedValue(undefined);
   readonly register = vi.fn().mockResolvedValue(undefined);
   readonly unregister = vi.fn().mockResolvedValue(undefined);
@@ -33,18 +34,23 @@ class FakeDevice implements BrowserVoiceDevice {
   readonly selectInput = vi.fn().mockResolvedValue(undefined);
   readonly selectOutput = vi.fn().mockResolvedValue(false);
   readonly destroy = vi.fn().mockResolvedValue(undefined);
-  readonly on =
-    vi.fn<
-      (
-        event:
-          | "registered"
-          | "unregistered"
-          | "tokenWillExpire"
-          | "incoming"
-          | "error",
-        listener: (...args: unknown[]) => void,
-      ) => void
-    >();
+  readonly on = vi.fn(
+    (
+      event:
+        | "registered"
+        | "unregistered"
+        | "tokenWillExpire"
+        | "incoming"
+        | "error",
+      listener: (...args: unknown[]) => void,
+    ) => {
+      this.handlers.set(event, listener);
+    },
+  );
+
+  emit(event: "error"): void {
+    this.handlers.get(event)?.();
+  }
 }
 
 describe("useIncomingCallAvailability", () => {
