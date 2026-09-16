@@ -11,7 +11,7 @@ export const BUSINESS_DOCUMENT_SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS business_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), display_name text NOT NULL,
   original_filename text NOT NULL,
-  category text NOT NULL DEFAULT 'other' CHECK (category IN ('contract','proposal','coi','insurance_policy','w9_tax','permit','vendor_application','inspection','deposit_receipt','operational_template','marketing','other')),
+  category text NOT NULL DEFAULT 'other' CHECK (category IN ('contract','invoice','proposal','coi','insurance_policy','w9_tax','permit','vendor_application','inspection','deposit_receipt','operational_template','marketing','other')),
   lifecycle text NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active','archived','deleted')),
   review_state text NOT NULL DEFAULT 'needs_review' CHECK (review_state IN ('accepted','needs_review','rejected')),
   current_version_id uuid, effective_date date, issue_date date, expiration_date date,
@@ -20,6 +20,13 @@ CREATE TABLE IF NOT EXISTS business_documents (
   updated_at timestamptz NOT NULL DEFAULT now(), archived_at timestamptz, deleted_at timestamptz,
   CHECK (issue_date IS NULL OR expiration_date IS NULL OR issue_date <= expiration_date)
 );
+DO $invoice_category$ BEGIN
+  ALTER TABLE business_documents
+    DROP CONSTRAINT IF EXISTS business_documents_category_valid;
+  ALTER TABLE business_documents
+    ADD CONSTRAINT business_documents_category_valid
+    CHECK (category IN ('contract','invoice','proposal','coi','insurance_policy','w9_tax','permit','vendor_application','inspection','deposit_receipt','operational_template','marketing','other'));
+END $invoice_category$;
 CREATE INDEX IF NOT EXISTS business_documents_category_review_idx ON business_documents (category, review_state);
 CREATE INDEX IF NOT EXISTS business_documents_lifecycle_updated_idx ON business_documents (lifecycle, updated_at DESC);
 CREATE TABLE IF NOT EXISTS business_document_blobs (
