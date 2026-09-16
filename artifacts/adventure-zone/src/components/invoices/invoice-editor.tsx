@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
 import type { BusinessDocumentProfileOption } from "@/lib/business-documents-api";
 import type { InvoiceWorkspaceClient } from "@/features/invoices/invoice-types";
@@ -34,6 +34,10 @@ export function InvoiceEditor({
   const [profile, setProfile] = useState<BusinessDocumentProfileOption | null>(null);
   const [existingDocuments, setExistingDocuments] = useState<Array<{ id: string; displayName: string }>>([]);
   const [existingDocumentId, setExistingDocumentId] = useState("");
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  const documentRequestId = useRef(0);
+  const uploadSelected = useRef(false);
+  const fileInput = useRef<HTMLInputElement | null>(null);
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [total, setTotal] = useState("");
   const [deposit, setDeposit] = useState("0");
@@ -50,21 +54,28 @@ export function InvoiceEditor({
   }
 
   async function selectProfile(selectedProfile: BusinessDocumentProfileOption) {
+    const requestId = ++documentRequestId.current;
     setProfile(selectedProfile);
     setProfiles([]);
     setExistingDocuments([]);
     setExistingDocumentId("");
+    setDocumentsLoading(true);
     setError("");
     try {
       const result = await documentApi.list({ profileId: selectedProfile.id, category: "invoice", limit: 100 });
+      if (requestId !== documentRequestId.current) return;
       setExistingDocuments(result.documents);
-      setExistingDocumentId(result.documents[0]?.id ?? "");
+      setExistingDocumentId(uploadSelected.current ? "" : result.documents[0]?.id ?? "");
     } catch {
+      if (requestId !== documentRequestId.current) return;
       setError("Could not load this profile's invoice PDFs. You can still upload one below.");
+    } finally {
+      if (requestId === documentRequestId.current) setDocumentsLoading(false);
     }
   }
 
   async function save() {
+    if (documentsLoading) return;
     if ((!file && !existingDocumentId) || !profile || !invoiceNumber.trim() || cents(total) < 0 || cents(deposit) < 0) {
       setError("Choose a PDF and profile, then enter the invoice number and amounts.");
       return;
@@ -104,18 +115,18 @@ export function InvoiceEditor({
     <div><h2 className="text-xl font-black">Add an invoice</h2><p className="text-sm text-muted-foreground">Use a PDF already on the profile, or upload a new one, then record its payment terms.</p></div>
     <div className="grid gap-2">
       <label className="grid gap-1 text-sm font-semibold">Profile
-        <div className="flex gap-2"><input aria-label="Profile" disabled={busy} onChange={(event) => { setProfileQuery(event.target.value); setProfile(null); }} placeholder="Search event or fair…" value={profile?.name ?? profileQuery} /><Button onClick={() => void searchProfiles()} type="button" variant="outline">Search</Button></div>
+        <div className="flex gap-2"><input aria-label="Profile" disabled={busy} onChange={(event) => { documentRequestId.current += 1; setDocumentsLoading(false); setProfileQuery(event.target.value); setProfile(null); setExistingDocuments([]); setExistingDocumentId(""); }} placeholder="Search event or fair…" value={profile?.name ?? profileQuery} /><Button onClick={() => void searchProfiles()} type="button" variant="outline">Search</Button></div>
       </label>
       {profiles.length && !profile ? <div className="grid gap-1 rounded-lg border p-2">{profiles.map((item) => <button className="rounded-md p-2 text-left hover:bg-muted" key={item.id} onClick={() => void selectProfile(item)} type="button">{item.name}{item.city ? ` · ${item.city}, ${item.region ?? ""}` : ""}</button>)}</div> : null}
     </div>
     {profile && existingDocuments.length ? <label className="grid gap-1 text-sm font-semibold">Existing invoice PDF
-      <select aria-label="Existing invoice PDF" disabled={busy} onChange={(event) => setExistingDocumentId(event.target.value)} value={existingDocumentId}>
+      <select aria-label="Existing invoice PDF" disabled={busy} onChange={(event) => { const documentId = event.target.value; setExistingDocumentId(documentId); if (documentId) { setFile(null); uploadSelected.current = false; if (fileInput.current) fileInput.current.value = ""; } }} value={existingDocumentId}>
         {existingDocuments.map((document) => <option key={document.id} value={document.id}>{document.displayName}</option>)}
         <option value="">Upload a different PDF</option>
       </select>
     </label> : null}
     <label className="grid gap-1 text-sm font-semibold">{existingDocumentId ? "Upload a different PDF (optional)" : "Invoice PDF"}
-      <input accept="application/pdf,.pdf" aria-label="Invoice PDF" disabled={busy} onChange={(event) => { const nextFile = event.target.files?.[0] ?? null; setFile(nextFile); if (nextFile) setExistingDocumentId(""); }} type="file" />
+      <input accept="application/pdf,.pdf" aria-label="Invoice PDF" disabled={busy} onChange={(event) => { const nextFile = event.target.files?.[0] ?? null; uploadSelected.current = Boolean(nextFile); setFile(nextFile); if (nextFile) setExistingDocumentId(""); }} ref={fileInput} type="file" />
     </label>
     <div className="grid gap-3 sm:grid-cols-2">
       <label className="grid gap-1 text-sm font-semibold">Invoice number<input aria-label="Invoice number" onChange={(event) => setInvoiceNumber(event.target.value)} value={invoiceNumber} /></label>
@@ -126,6 +137,6 @@ export function InvoiceEditor({
       <label className="grid gap-1 text-sm font-semibold">Balance due<input aria-label="Balance due" onChange={(event) => setBalanceDueDate(event.target.value)} type="date" value={balanceDueDate} /></label>
     </div>
     {error ? <p className="text-sm font-semibold text-destructive" role="alert">{error}</p> : null}
-    <div className="flex flex-wrap gap-2"><Button disabled={busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Save invoice"}</Button><Button disabled={busy} onClick={onCancel} type="button" variant="outline">Cancel</Button></div>
+    <div className="flex flex-wrap gap-2"><Button disabled={busy || documentsLoading} onClick={() => void save()} type="button">{busy ? "Saving…" : documentsLoading ? "Checking profile PDFs…" : "Save invoice"}</Button><Button disabled={busy} onClick={onCancel} type="button" variant="outline">Cancel</Button></div>
   </section>;
 }
