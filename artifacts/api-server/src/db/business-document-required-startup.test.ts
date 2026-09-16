@@ -22,8 +22,15 @@ describe("ensureBusinessDocumentSchemaBeforeListen", () => {
     ).resolves.toBeUndefined();
 
     expect(client.query).toHaveBeenNthCalledWith(1, "SET lock_timeout = '5s'");
-    expect(String(client.query.mock.calls[1]?.[0])).toContain(
+    const schemaSql = String(client.query.mock.calls[1]?.[0]);
+    expect(schemaSql).toContain(
       "CREATE TABLE IF NOT EXISTS business_documents",
+    );
+    expect(schemaSql).toContain(
+      "DROP CONSTRAINT IF EXISTS business_documents_category_valid",
+    );
+    expect(schemaSql).toContain(
+      "'contract','invoice','proposal'",
     );
     expect(client.query).toHaveBeenLastCalledWith("RESET lock_timeout");
     expect(client.release).toHaveBeenCalledOnce();
