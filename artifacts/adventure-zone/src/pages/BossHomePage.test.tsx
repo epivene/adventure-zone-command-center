@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { BossAuthProvider } from "@/lib/boss-auth-context";
 
-// Mock bossFetch so tests don't hit a real network
 vi.mock("@/lib/boss-auth-context", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/boss-auth-context")>();
   return {
@@ -28,13 +26,10 @@ const EMPTY_DASHBOARD = {
 describe("BossHomePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockBossGet.mockImplementation(async (path) => path === "/boss/work-requests"
-      ? { active: [], recentlyCompleted: [] } as never
-      : EMPTY_DASHBOARD as never);
+    mockBossGet.mockResolvedValue(EMPTY_DASHBOARD as never);
   });
 
   it("shows all-clear when dashboard has no items", async () => {
-    mockBossGet.mockResolvedValueOnce(EMPTY_DASHBOARD);
     render(<BossHomePage />);
     await waitFor(() => {
       expect(screen.getByTestId("boss-home-empty")).toBeTruthy();
@@ -50,7 +45,7 @@ describe("BossHomePage", () => {
     );
   });
 
-  it("shows stats when dashboard has data", async () => {
+  it("shows the tracker instead of attention, document, and assignment UI", async () => {
     mockBossGet.mockResolvedValueOnce({
       submittedReceipts: 3,
       submittedDrafts: [{ id: "d1", name: "Event Flyer", type: "flyer" }],
@@ -72,13 +67,19 @@ describe("BossHomePage", () => {
       ],
       reviewAndWrapUp: [],
       checklistAndMaintenance: [],
-    });
+    } as never);
     render(<BossHomePage />);
-    await waitFor(() => {
-      expect(screen.getByTestId("stat-receipts").textContent).toBe("3");
-      expect(screen.getByTestId("stat-documents").textContent).toBe("4");
-      expect(screen.getByTestId("assignment-row-a1")).toBeTruthy();
-    });
+
+    expect(await screen.findByTestId("stat-receipts")).toHaveTextContent("3");
+    expect(screen.getByRole("link", { name: /Contracts & Invoices/i })).toHaveAttribute(
+      "href",
+      "/boss/invoices-contracts",
+    );
+    expect(screen.queryByText("Needs Your Attention")).not.toBeInTheDocument();
+    expect(screen.queryByText("Business Documents")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assignments")).not.toBeInTheDocument();
+    expect(screen.queryByText("High-Priority Assignments")).not.toBeInTheDocument();
+    expect(screen.getByText("Reviews")).toBeVisible();
   });
 
   it("shows only the three latest completed events across all legs", async () => {
@@ -91,7 +92,7 @@ describe("BossHomePage", () => {
         { id: "b-post", bookingId: "booking-b", title: "Second Event", status: "completed", completedAt: "2026-09-05T12:00:00.000Z" },
         { id: "c-post", bookingId: "booking-c", title: "Third Event", status: "completed", completedAt: "2026-09-04T12:00:00.000Z" },
       ],
-    });
+    } as never);
 
     render(<BossHomePage />);
 

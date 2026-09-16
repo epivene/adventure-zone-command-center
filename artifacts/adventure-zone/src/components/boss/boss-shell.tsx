@@ -5,9 +5,9 @@ import {
   Calendar,
   Check,
   ClipboardCheck,
-  ClipboardList,
   Gamepad2,
   House,
+  Menu as MenuIcon,
   Moon,
   Palette,
   Receipt,
@@ -31,14 +31,13 @@ import { readAppearance, saveAppearance, type Appearance } from "@/lib/appearanc
 type NavItem = { href: string; label: string; icon: typeof House };
 
 const navItems: NavItem[] = [
-  { href: "/boss", label: "Needs Attention", icon: House },
+  { href: "/boss", label: "Home", icon: House },
   { href: "/boss/schedule", label: "Schedule", icon: Calendar },
   { href: "/boss/profiles", label: "Profiles", icon: Building2 },
   { href: "/boss/conventions?view=game", label: "Convention Game", icon: Gamepad2 },
   { href: "/boss/receipts", label: "Receipts", icon: Receipt },
   { href: "/boss/reviews", label: "Reviews", icon: Star },
   { href: "/boss/maintenance", label: "Maintenance", icon: Wrench },
-  { href: "/boss/assignments", label: "Assignments", icon: ClipboardList },
   { href: "/boss/templates-files", label: "Documents", icon: ClipboardCheck },
   { href: "/boss/invoices-contracts", label: "Invoices & Contracts", icon: FileSignature },
 ];
@@ -114,6 +113,46 @@ function AppearanceMenu({ onSignOut }: { onSignOut(): void }) {
   );
 }
 
+function BossNavigationMenu() {
+  const [location] = useLocation();
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-xs font-semibold text-foreground shadow-sm hover:bg-muted"
+          type="button"
+        >
+          <MenuIcon className="h-4 w-4" /> Menu
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel>Boss navigation</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          const itemPath = item.href.split("?")[0];
+          const active = itemPath === "/boss"
+            ? location === "/boss" || location === "/boss/"
+            : location.startsWith(itemPath);
+          return (
+            <DropdownMenuItem asChild key={item.href}>
+              <Link
+                aria-current={active ? "page" : undefined}
+                className={active ? "bg-secondary text-secondary-foreground" : undefined}
+                href={item.href}
+              >
+                <Icon className="h-4 w-4" />
+                {item.label}
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function BossShell({ children }: { children: ReactNode }) {
   const { boss, signOut } = useBossAuth();
 
@@ -126,9 +165,7 @@ export function BossShell({ children }: { children: ReactNode }) {
               Adventure Zone
               <span className="ml-1.5 text-xs font-semibold text-primary">Boss</span>
             </Link>
-            <div className="ml-auto hidden xl:flex xl:flex-wrap xl:items-center xl:gap-1">
-              {navItems.map((item) => <NavLink key={item.href} item={item} />)}
-            </div>
+            <div className="ml-auto hidden xl:block"><BossNavigationMenu /></div>
             <AppearanceMenu onSignOut={signOut} />
             <button
               className="button-secondary hidden shrink-0 px-2.5 py-1.5 text-xs sm:inline-flex"
