@@ -116,4 +116,51 @@ describe("useIncomingCallAvailability", () => {
     );
     unmount();
   });
+  it("recovers its own active lease when availability is turned on again", async () => {
+    let serverLeaseActive = false;
+    incomingApi.acquireLease.mockImplementation(async () => {
+      if (serverLeaseActive) throw new Error("lease_unavailable");
+      serverLeaseActive = true;
+      return {
+        leaseId: "aa61c2c1-3015-433d-a209-7fcff1ca1d7d",
+        secret: "lease-secret",
+        clientIdentity: "inbound-browser",
+        expiresAt: "2026-09-03T17:50:45.000Z",
+        activeCall: false,
+      };
+    });
+    incomingApi.releaseLease.mockImplementation(async () => {
+      serverLeaseActive = false;
+    });
+    const firstDevice = new FakeDevice();
+    const secondDevice = new FakeDevice();
+    const createDevice = vi
+      .fn()
+      .mockReturnValueOnce(firstDevice)
+      .mockReturnValueOnce(secondDevice);
+    const { result } = renderHook(() =>
+      useIncomingCallAvailability(createDevice, { enabled: true }),
+    );
+
+    await act(async () => {
+      await result.current.turnOn();
+    });
+    act(() => {
+      firstDevice.emit("error");
+    });
+    expect(result.current.state).toBe("unavailable");
+    expect(result.current.activeLease).toBe(true);
+
+    await act(async () => {
+      await result.current.turnOn();
+    });
+
+    expect(result.current.state).toBe("ready");
+    expect(secondDevice.register).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      await result.current.turnOff();
+    });
+  });
+
 });
