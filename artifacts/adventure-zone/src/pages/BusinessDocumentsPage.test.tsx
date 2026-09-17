@@ -109,6 +109,26 @@ describe("BusinessDocumentsPage", () => {
     expect(screen.getByRole("button", { name: "Open Needs Review" })).toBeVisible();
   });
 
+  it("refreshes the sorting inbox after a review action", async () => {
+    const pendingDocument = {
+      ...documentFixture(),
+      id: "review-1",
+      displayName: "Unknown Fair File",
+      reviewState: "needs_review" as const,
+    };
+    mocks.listAll
+      .mockResolvedValueOnce({ documents: [pendingDocument] })
+      .mockResolvedValueOnce({ documents: [{ ...pendingDocument, reviewState: "rejected" }] });
+
+    render(<BusinessDocumentsPage />);
+    expect(await screen.findByRole("heading", { name: "1 document needs sorting" })).toBeVisible();
+
+    window.dispatchEvent(new CustomEvent("business-document-review-count-changed", { detail: 0 }));
+
+    await waitFor(() => expect(mocks.listAll).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "1 document needs sorting" })).not.toBeInTheDocument());
+  });
+
   it("searches filenames and combines type, status, source, link, and year filters", async () => {
     mocks.listAll.mockResolvedValue({
       documents: [
