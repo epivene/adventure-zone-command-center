@@ -49,23 +49,23 @@ export function DiscoveredPieceForm({
       className="button-primary min-h-12 w-full"
       disabled={disabled}
       onClick={() => setOpen(true)}
-    >Add &amp; Inspect a Piece</button>;
+    >Add &amp; Inspect an Attraction</button>;
   }
 
   return <section className="grid gap-3 rounded-xl border-2 border-orange-300 bg-orange-50 p-4">
     <div>
-      <h2 className="font-bold">Add the piece in front of you</h2>
-      <p className="mt-1 text-sm text-slate-700">It will be assigned to this leg now. You can rename or regroup it later.</p>
+      <h2 className="font-bold">Add the attraction in front of you</h2>
+      <p className="mt-1 text-sm text-slate-700">It will be added to this leg’s inspection now.</p>
     </div>
-    <label className="grid gap-1 text-sm font-semibold">Piece name or label
-      <input aria-label="Piece name or label" className="min-h-11 rounded-lg border px-3" value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Blue slide section" />
+    <label className="grid gap-1 text-sm font-semibold">Attraction name or label
+      <input aria-label="Attraction name or label" className="min-h-11 rounded-lg border px-3" value={name} onChange={(event) => setName(event.target.value)} placeholder="Example: Purple and Blue Castle" />
     </label>
     <label className="grid gap-1 text-sm font-semibold">Existing code or number (optional)
       <input aria-label="Existing code or number" className="min-h-11 rounded-lg border px-3" value={code} onChange={(event) => setCode(event.target.value)} placeholder="A temporary code is created if blank" />
     </label>
-    <label className="grid gap-1 text-sm font-semibold">Whole attraction
-      <select aria-label="Whole attraction" className="min-h-11 rounded-lg border px-3" value={resourceId} onChange={(event) => setResourceId(event.target.value)}>
-        <option value="">Not sure yet / assign later</option>
+    <label className="grid gap-1 text-sm font-semibold">Leg record
+      <select aria-label="Leg record" className="min-h-11 rounded-lg border px-3" value={resourceId} onChange={(event) => setResourceId(event.target.value)}>
+        <option value="">Not linked to a leg record</option>
         {resources.map((resource) => <option key={resource.id} value={resource.id}>{resource.name}</option>)}
       </select>
     </label>
@@ -74,7 +74,7 @@ export function DiscoveredPieceForm({
     </label>
     <div className="grid grid-cols-2 gap-2">
       <button type="button" className="min-h-11 rounded-lg border bg-white font-semibold" disabled={saving} onClick={() => setOpen(false)}>Cancel</button>
-      <button type="button" className="button-primary min-h-11" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save & inspect this piece"}</button>
+      <button type="button" className="button-primary min-h-11" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save & inspect this attraction"}</button>
     </div>
   </section>;
 }
