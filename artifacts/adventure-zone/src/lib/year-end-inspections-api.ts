@@ -1,3 +1,5 @@
+import type { PhotoEllipse } from "@/lib/inspection-photo-annotations";
+
 export type InspectionCondition = "good" | "needs_cleaning" | "minor_repair" | "major_repair" | "replace" | "retired";
 export type InspectionEntryState = "not_started" | "inspected" | "not_present";
 
@@ -13,6 +15,14 @@ export type YearEndInspectionEntryDto = {
   repairNeeded: boolean;
   repairNotes: string | null;
   retainForFutureUse: boolean;
+  photos?: InspectionPhotoDto[];
+};
+
+export type InspectionPhotoDto = {
+  id: string;
+  signedUrl: string;
+  description: string | null;
+  annotations: { version: 1; ellipses: PhotoEllipse[] };
 };
 
 export type InspectionProgressDto = {
