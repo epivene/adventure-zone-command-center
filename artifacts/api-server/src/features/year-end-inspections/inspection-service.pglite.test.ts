@@ -185,4 +185,34 @@ describe("YearEndInspectionService", () => {
     expect(await pieces.get(discoveredPieceId)).toBeNull();
     expect(await pieces.get(existingPiece.id)).not.toBeNull();
   });
+
+  it("removes an accidental discovered piece without removing existing inventory", async () => {
+    const { service, piece: existingPiece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const discoveredPieceId = "40000000-0000-4000-8000-000000000001";
+    const discoveredEntryId = "50000000-0000-4000-8000-000000000001";
+    await service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: discoveredPieceId,
+      entryId: discoveredEntryId,
+      clientMutationId: "60000000-0000-4000-8000-000000000001",
+      code: null,
+      name: "Duplicate balloon castle",
+      identityNotes: null,
+      resourceId: null,
+    }, actor);
+
+    const updated = await service.removeDiscoveredPieceForLeg(inspection.id, discoveredEntryId, legId, actor);
+
+    expect(updated.entries.map((entry) => entry.pieceId)).toEqual([existingPiece.id]);
+    expect(await pieces.get(discoveredPieceId)).toBeNull();
+    expect(await pieces.get(existingPiece.id)).not.toBeNull();
+    await expect(service.removeDiscoveredPieceForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      actor,
+    )).rejects.toThrow("PIECE_NOT_DISCOVERED_DURING_INSPECTION");
+  });
 });

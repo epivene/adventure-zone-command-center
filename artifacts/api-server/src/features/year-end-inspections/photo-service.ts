@@ -118,4 +118,20 @@ export class YearEndInspectionPhotoService {
     }
     return { deletedPhotos: photos.length };
   }
+
+  async deleteForEntry(entryId: string, legId: string) {
+    const photos = await this.db.select({
+      id: yearEndInspectionPhotos.id,
+      objectKey: yearEndInspectionPhotos.objectKey,
+    }).from(yearEndInspectionPhotos)
+      .where(and(eq(yearEndInspectionPhotos.entryId, entryId), eq(yearEndInspectionPhotos.legId, legId)));
+    for (const photo of photos) {
+      if (photo.objectKey && this.storage.delete) await this.storage.delete(photo.objectKey);
+    }
+    if (photos.length) {
+      await this.db.delete(yearEndInspectionPhotos)
+        .where(inArray(yearEndInspectionPhotos.id, photos.map((photo: { id: string }) => photo.id)));
+    }
+    return { deletedPhotos: photos.length };
+  }
 }
