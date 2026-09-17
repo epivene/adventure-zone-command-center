@@ -106,4 +106,34 @@ describe("manager year-end inspection routes", () => {
       "manager:Leg One",
     );
   });
+
+  it("removes an accidental discovered piece and its stored photos", async () => {
+    const entryId = "50000000-0000-4000-8000-000000000001";
+    const inspection = { id: inspectionId, legId, status: "in_progress", entries: [] };
+    const service = {
+      get: vi.fn(async () => ({ id: inspectionId, legId, entries: [{ id: entryId }] })),
+      canRemoveDiscoveredPieceForLeg: vi.fn(async () => true),
+      removeDiscoveredPieceForLeg: vi.fn(async () => inspection),
+    };
+    const photoService = { deleteForEntry: vi.fn(async () => ({ deletedPhotos: 1 })) };
+
+    const response = await request(appFor(service, photoService))
+      .delete(`/manager/year-end-inspections/${inspectionId}/discovered-pieces/${entryId}`)
+      .expect(200);
+
+    expect(response.body).toEqual({ inspection, deletedPhotos: 1 });
+    expect(service.canRemoveDiscoveredPieceForLeg).toHaveBeenCalledWith(
+      inspectionId,
+      entryId,
+      legId,
+      "manager:Leg One",
+    );
+    expect(photoService.deleteForEntry).toHaveBeenCalledWith(entryId, legId);
+    expect(service.removeDiscoveredPieceForLeg).toHaveBeenCalledWith(
+      inspectionId,
+      entryId,
+      legId,
+      "manager:Leg One",
+    );
+  });
 });
