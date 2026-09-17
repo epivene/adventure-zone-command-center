@@ -12,7 +12,7 @@ describe("manager shell Business Drive reconciliation", () => {
   });
 
   it("keeps checklist attachment upload routing and metadata gating", () => {
-    expect(source).toContain('inferredKind === "checklist_attachment"');
+    expect(source).toContain('kind === "checklist_attachment"');
     expect(source).toContain("row.bookingId");
     expect(source).toContain("/checklist-attachments/${row.receiptId}/image");
     expect(source).toContain("/checklist-results/");

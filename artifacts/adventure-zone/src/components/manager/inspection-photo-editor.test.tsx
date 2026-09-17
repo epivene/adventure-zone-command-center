@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -156,9 +156,11 @@ describe("InspectionPhotoEditorContent", () => {
     );
     await user.click(screen.getByRole("button", { name: "Save photo" }));
 
-    const rows = await blobStore.list();
-    expect(rows.find((row) => row.id === "receipt-1")?.state).toBe("image_pending");
-    expect(rows.find((row) => row.kind === "year_end_inspection_photo")?.state).toBe("image_uploaded");
+    await waitFor(async () => {
+      const rows = await blobStore.list();
+      expect(rows.find((row) => row.id === "receipt-1")?.state).toBe("image_pending");
+      expect(rows.find((row) => row.kind === "year_end_inspection_photo")?.state).toBe("image_uploaded");
+    });
     online.mockRestore();
   });
 });
