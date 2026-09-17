@@ -31,6 +31,25 @@ function renderCard(onSave = vi.fn(async () => undefined)) {
   return onSave;
 }
 
+it("requires a second click before removing an accidental discovered piece", async () => {
+  const user = userEvent.setup();
+  const onRemove = vi.fn(async () => undefined);
+  render(<YearEndInspectionEntryCard
+    entry={entry}
+    inspectionId="10000000-0000-4000-8000-000000000001"
+    legId="40000000-0000-4000-8000-000000000001"
+    managerApi={vi.fn()}
+    onSave={vi.fn(async () => undefined)}
+    onRemove={onRemove}
+    initiallyOpen
+  />);
+
+  await user.click(screen.getByRole("button", { name: "Remove accidental piece" }));
+  expect(onRemove).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Confirm removal" }));
+  expect(onRemove).toHaveBeenCalledWith(entry.id);
+});
+
 describe("YearEndInspectionEntryCard", () => {
   it("uses one notes field for both the inspection and a needed repair", async () => {
     const user = userEvent.setup();
