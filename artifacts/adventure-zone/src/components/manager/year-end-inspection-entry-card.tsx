@@ -27,8 +27,7 @@ export function YearEndInspectionEntryCard({
 }) {
   const [open, setOpen] = useState(initiallyOpen);
   const [condition, setCondition] = useState<InspectionCondition | "">(entry.condition ?? "");
-  const [notes, setNotes] = useState(entry.inspectionNotes ?? "");
-  const [repairNotes, setRepairNotes] = useState(entry.repairNotes ?? "");
+  const [notes, setNotes] = useState(entry.inspectionNotes ?? entry.repairNotes ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save() {
@@ -40,7 +39,7 @@ export function YearEndInspectionEntryCard({
         condition,
         inspectionNotes: notes.trim() || null,
         repairNeeded: attentionConditions.has(condition),
-        repairNotes: repairNotes.trim() || null,
+        repairNotes: attentionConditions.has(condition) ? notes.trim() || null : null,
         retainForFutureUse: condition !== "retired",
       });
       setOpen(false);
@@ -75,13 +74,6 @@ export function YearEndInspectionEntryCard({
       <label className="grid gap-1 text-sm font-semibold">Inspection notes
         <textarea aria-label="Inspection notes" className="min-h-28 rounded-lg border p-2" value={notes} onChange={(event) => setNotes(event.target.value)} />
       </label>
-      {condition && attentionConditions.has(condition) ? <label className="grid gap-1 text-sm font-semibold">Repair notes
-        <textarea aria-label="Repair notes" className="min-h-20 rounded-lg border p-2" value={repairNotes} onChange={(event) => setRepairNotes(event.target.value)} />
-      </label> : null}
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, { entryState: "not_present", condition: null, repairNeeded: false })}>Mark not present</button>
-        <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save piece inspection"}</button>
-      </div>
       {entry.photos?.length ? <section className="grid gap-3" aria-label="Saved inspection photos">
         <h4 className="text-sm font-bold">Saved photos</h4>
         {entry.photos.map((photo) => <figure key={photo.id} className="overflow-hidden rounded-lg border">
@@ -108,6 +100,10 @@ export function YearEndInspectionEntryCard({
         managerApi={managerApi}
         onSaved={onPhotoSaved}
       />
+      <div className="grid gap-2 sm:grid-cols-2">
+        <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, { entryState: "not_present", condition: null, repairNeeded: false })}>Mark not present</button>
+        <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save piece inspection"}</button>
+      </div>
     </div> : null}
   </article>;
 }
