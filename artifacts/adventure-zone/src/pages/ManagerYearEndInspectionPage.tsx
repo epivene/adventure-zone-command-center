@@ -110,6 +110,19 @@ export function ManagerYearEndInspectionContent({
     }
   }
 
+  async function refreshInspectionPhotos() {
+    if (!inspection) return;
+    try {
+      const refreshed = await managerApi<{ inspection: YearEndInspectionDto }>(`/manager/year-end-inspections/${inspection.id}`);
+      if (refreshed.inspection) {
+        setInspection(refreshed.inspection);
+        setNotice("Photo saved and attached to this piece");
+      }
+    } catch {
+      setNotice("Photo saved — it will appear here after syncing finishes");
+    }
+  }
+
   async function complete() {
     if (!inspection) return;
     try {
@@ -237,6 +250,7 @@ export function ManagerYearEndInspectionContent({
           managerApi={managerApi}
           onSave={saveEntry}
           onRemove={removeDiscoveredPiece}
+          onPhotoSaved={() => void refreshInspectionPhotos()}
           initiallyOpen={entry.id === newEntryId}
         />)}
         {!visibleEntries.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No pieces match this view.</p> : null}
