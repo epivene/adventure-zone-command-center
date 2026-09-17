@@ -44,7 +44,7 @@ it("requires a second click before removing an accidental discovered piece", asy
     initiallyOpen
   />);
 
-  await user.click(screen.getByRole("button", { name: "Remove accidental piece" }));
+  await user.click(screen.getByRole("button", { name: "Remove accidental attraction" }));
   expect(onRemove).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Confirm removal" }));
   expect(onRemove).toHaveBeenCalledWith(entry.id);
@@ -62,7 +62,7 @@ describe("YearEndInspectionEntryCard", () => {
     await user.selectOptions(screen.getByLabelText("Condition"), "minor_repair");
     await user.clear(notes);
     await user.type(notes, "Patch the entrance seam");
-    await user.click(screen.getByRole("button", { name: "Save piece inspection" }));
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
 
     expect(onSave).toHaveBeenCalledWith(entry.id, expect.objectContaining({
       inspectionNotes: "Patch the entrance seam",
@@ -75,7 +75,7 @@ describe("YearEndInspectionEntryCard", () => {
     renderCard();
 
     const photoHeading = screen.getByText("Add a photo");
-    const saveButton = screen.getByRole("button", { name: "Save piece inspection" });
+    const saveButton = screen.getByRole("button", { name: "Save attraction inspection" });
     expect(photoHeading.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
