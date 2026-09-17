@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { MemoryManagerMutationStore } from "@/lib/manager-sync-queue";
-import { MemoryManagerBlobStore } from "@/lib/manager-blob-queue";
+import { MemoryManagerBlobStore, queueManagerBlob } from "@/lib/manager-blob-queue";
 import { InspectionPhotoEditorContent } from "./inspection-photo-editor";
 
 describe("InspectionPhotoEditorContent", () => {
@@ -124,5 +124,41 @@ describe("InspectionPhotoEditorContent", () => {
 
     expect(screen.queryByLabelText("Circle preview")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Marked photo area")).toBeVisible();
+  });
+
+  it("does not mark unrelated queued images uploaded when saving an inspection photo", async () => {
+    const user = userEvent.setup();
+    const mutationStore = new MemoryManagerMutationStore();
+    const blobStore = new MemoryManagerBlobStore();
+    await queueManagerBlob({
+      id: "receipt-1",
+      legId: "30000000-0000-4000-8000-000000000001",
+      receiptId: "receipt-1",
+      kind: "receipt",
+      blob: new Blob(["receipt"], { type: "image/jpeg" }),
+      createdAt: "2026-09-17T00:00:00.000Z",
+    }, blobStore);
+    const online = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(true);
+
+    render(
+      <InspectionPhotoEditorContent
+        blobStore={blobStore}
+        entryId="20000000-0000-4000-8000-000000000001"
+        inspectionId="10000000-0000-4000-8000-000000000001"
+        legId="30000000-0000-4000-8000-000000000001"
+        managerApi={vi.fn(async () => ({ ok: true }))}
+        mutationStore={mutationStore}
+      />,
+    );
+    await user.upload(
+      screen.getByLabelText("Choose inspection photo from gallery"),
+      new File([new Uint8Array([1, 2, 3])], "part.jpg", { type: "image/jpeg" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Save photo" }));
+
+    const rows = await blobStore.list();
+    expect(rows.find((row) => row.id === "receipt-1")?.state).toBe("image_pending");
+    expect(rows.find((row) => row.kind === "year_end_inspection_photo")?.state).toBe("image_uploaded");
+    online.mockRestore();
   });
 });
