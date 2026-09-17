@@ -128,4 +128,18 @@ describe("year-end inspection photo validation", () => {
     expect(storage.deletes).toHaveLength(1);
     expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
   });
+
+  it("deletes stored photos for one removed inspection entry", async () => {
+    const { service, storage, inspectionId, entryId } = await setup();
+    const photo = await service.createMetadata({
+      id: crypto.randomUUID(), clientMutationId: crypto.randomUUID(),
+      inspectionId, entryId, legId, mimeType: "image/jpeg",
+      description: "Duplicate piece", annotations: { version: 1, ellipses: [] },
+    });
+    await service.putImage(photo.id, legId, new Uint8Array([1, 2, 3]), "image/jpeg");
+
+    expect(await service.deleteForEntry(entryId, legId)).toEqual({ deletedPhotos: 1 });
+    expect(storage.deletes).toHaveLength(1);
+    expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
+  });
 });

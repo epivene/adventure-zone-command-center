@@ -214,6 +214,62 @@ export class YearEndInspectionService {
     return (await this.repository.get(inspectionId))!;
   }
 
+  async canRemoveDiscoveredPieceForLeg(inspectionId: string, entryId: string, legId: string, actorId: string) {
+    const [inspection] = await this.db.select().from(yearEndLegInspections)
+      .where(and(eq(yearEndLegInspections.id, inspectionId), eq(yearEndLegInspections.legId, legId)))
+      .limit(1);
+    const [entry] = await this.db.select().from(yearEndInspectionEntries)
+      .where(and(eq(yearEndInspectionEntries.id, entryId), eq(yearEndInspectionEntries.inspectionId, inspectionId)))
+      .limit(1);
+    if (!inspection || !entry) return false;
+    const [createdDuringInspection] = await this.db.select({ pieceId: yearEndInspectionAuditEvents.pieceId })
+      .from(yearEndInspectionAuditEvents)
+      .where(and(
+        eq(yearEndInspectionAuditEvents.pieceId, entry.pieceId),
+        eq(yearEndInspectionAuditEvents.action, "piece_created"),
+        eq(yearEndInspectionAuditEvents.actorId, inspection.managerIdentitySnapshot ?? actorId),
+        gte(yearEndInspectionAuditEvents.createdAt, inspection.startedAt),
+      ))
+      .limit(1);
+    const [otherReference] = await this.db.select({ id: yearEndInspectionEntries.id })
+      .from(yearEndInspectionEntries)
+      .where(and(eq(yearEndInspectionEntries.pieceId, entry.pieceId), ne(yearEndInspectionEntries.id, entryId)))
+      .limit(1);
+    return Boolean(createdDuringInspection && !otherReference);
+  }
+
+  async removeDiscoveredPieceForLeg(inspectionId: string, entryId: string, legId: string, actorId: string) {
+    if (!await this.canRemoveDiscoveredPieceForLeg(inspectionId, entryId, legId, actorId)) {
+      throw new Error("PIECE_NOT_DISCOVERED_DURING_INSPECTION");
+    }
+    await this.db.transaction(async (tx: Database) => {
+      const [inspection] = await tx.select().from(yearEndLegInspections)
+        .where(and(eq(yearEndLegInspections.id, inspectionId), eq(yearEndLegInspections.legId, legId)))
+        .limit(1);
+      const [entry] = await tx.select().from(yearEndInspectionEntries)
+        .where(and(eq(yearEndInspectionEntries.id, entryId), eq(yearEndInspectionEntries.inspectionId, inspectionId)))
+        .limit(1);
+      if (!inspection || !entry) throw new Error("INSPECTION_ENTRY_NOT_FOUND");
+
+      await tx.delete(yearEndInspectionMaintenanceItems).where(eq(yearEndInspectionMaintenanceItems.entryId, entryId));
+      await tx.delete(yearEndInspectionPhotos).where(eq(yearEndInspectionPhotos.entryId, entryId));
+      await tx.delete(yearEndInspectionEntries).where(eq(yearEndInspectionEntries.id, entryId));
+      await tx.delete(equipmentPieceAssignments).where(eq(equipmentPieceAssignments.pieceId, entry.pieceId));
+      await tx.delete(yearEndInspectionAuditEvents).where(eq(yearEndInspectionAuditEvents.pieceId, entry.pieceId));
+      await tx.delete(equipmentPieces).where(eq(equipmentPieces.id, entry.pieceId));
+      await tx.update(yearEndLegInspections).set({ updatedAt: new Date() })
+        .where(eq(yearEndLegInspections.id, inspectionId));
+      await tx.insert(yearEndInspectionAuditEvents).values({
+        inspectionId,
+        pieceId: null,
+        action: "discovered_piece_removed",
+        actorId,
+        payload: { entryId, code: entry.pieceCodeSnapshot, name: entry.pieceNameSnapshot },
+      });
+    });
+    return (await this.repository.get(inspectionId))!;
+  }
+
   async resolveMaintenanceItem(itemId: string, input: { resolutionNotes: string }, actorId: string) {
     await this.maintenance.resolve(itemId, input, actorId);
   }

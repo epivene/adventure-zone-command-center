@@ -145,6 +145,20 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     }
   });
 
+  router.delete("/manager/year-end-inspections/:inspectionId/discovered-pieces/:entryId", requireManager, async (req, res) => {
+    const inspectionId = param(req.params.inspectionId);
+    const entryId = param(req.params.entryId);
+    const legId = req.legManager!.legId;
+    const actorId = `manager:${req.legManager!.managerName ?? legId}`;
+    if (!await service.canRemoveDiscoveredPieceForLeg(inspectionId, entryId, legId, actorId)) {
+      res.status(409).json({ error: "Only a piece discovered during this inspection can be removed." });
+      return;
+    }
+    const { deletedPhotos } = await photoService.deleteForEntry(entryId, legId);
+    const inspection = await service.removeDiscoveredPieceForLeg(inspectionId, entryId, legId, actorId);
+    res.json({ inspection, deletedPhotos });
+  });
+
   router.post("/manager/year-end-inspections/:inspectionId/complete", requireManager, async (req, res) => {
     const id = param(req.params.inspectionId);
     const inspection = await service.get(id);
