@@ -112,7 +112,7 @@ export function InspectionPhotoEditorContent({
       await queueManagerBlob({
         id: photoId,
         legId,
-        receiptId: photoId,
+        receiptId: clientMutationId,
         kind: "year_end_inspection_photo",
         inspectionId,
         entryId,
@@ -124,13 +124,13 @@ export function InspectionPhotoEditorContent({
       if (typeof navigator !== "undefined" && navigator.onLine) {
         await flushManagerMutationQueue(managerApi, mutationStore);
         await flushManagerBlobQueue(async (row) => {
-          if (row.kind !== "year_end_inspection_photo" || !row.inspectionId || !row.photoId) return;
+          if (!row.inspectionId || !row.photoId) throw new Error("Inspection photo is missing inspection context");
           await managerApi(`/manager/year-end-inspections/${row.inspectionId}/photos/${row.photoId}/image`, {
             method: "PUT",
             headers: { "Content-Type": row.blob.type },
             body: row.blob,
           });
-        }, blobStore);
+        }, blobStore, async (row) => row.kind === "year_end_inspection_photo");
         setSyncState("synced");
       } else {
         setSyncState("saved_offline");

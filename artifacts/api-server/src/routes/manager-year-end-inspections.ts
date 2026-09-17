@@ -56,11 +56,20 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
 }) {
   const router = Router();
   const { requireManager, service, photoService } = dependencies;
+  const withPhotos = async (inspection: Awaited<ReturnType<InspectionService["get"]>>) => inspection ? {
+    ...inspection,
+    entries: await Promise.all(inspection.entries.map(async (entry) => ({
+      ...entry,
+      photos: (await photoService.listWithSignedUrls(entry.id, inspection.legId))
+        .filter((photo) => Boolean(photo.imageUrl))
+        .map(({ imageUrl, ...photo }) => ({ ...photo, signedUrl: imageUrl! })),
+    }))),
+  } : inspection;
 
   router.get("/manager/year-end-inspections", requireManager, async (req, res) => {
     const year = Number(req.query.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2200) { res.status(400).json({ error: "Choose a valid inspection year." }); return; }
-    res.json({ inspection: await service.getForLegYear(req.legManager!.legId, year) });
+    res.json({ inspection: await withPhotos(await service.getForLegYear(req.legManager!.legId, year)) });
   });
 
   router.get("/manager/year-end-inspections/resources", requireManager, async (req, res) => {
@@ -70,7 +79,7 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
   router.get("/manager/year-end-inspections/:inspectionId", requireManager, async (req, res) => {
     const inspection = await service.get(param(req.params.inspectionId));
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
-    res.json({ inspection });
+    res.json({ inspection: await withPhotos(inspection) });
   });
 
   router.post("/manager/year-end-inspections", requireManager, async (req, res) => {

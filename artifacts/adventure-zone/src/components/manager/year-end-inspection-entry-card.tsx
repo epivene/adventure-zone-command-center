@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { InspectionPhotoEditorContent } from "@/components/manager/inspection-photo-editor";
+import { ellipseStyle } from "@/lib/inspection-photo-annotations";
 import type { InspectionCondition, ManagerApi, YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
 
 type EntryPatch = Partial<Pick<YearEndInspectionEntryDto, "entryState" | "condition" | "inspectionNotes" | "repairNeeded" | "repairNotes" | "retainForFutureUse">>;
@@ -13,6 +14,7 @@ export function YearEndInspectionEntryCard({
   legId,
   managerApi,
   onSave,
+  onPhotoSaved,
   initiallyOpen = false,
 }: {
   entry: YearEndInspectionEntryDto;
@@ -20,6 +22,7 @@ export function YearEndInspectionEntryCard({
   legId: string;
   managerApi: ManagerApi;
   onSave: (entryId: string, patch: EntryPatch) => Promise<void>;
+  onPhotoSaved?: () => void;
   initiallyOpen?: boolean;
 }) {
   const [open, setOpen] = useState(initiallyOpen);
@@ -51,6 +54,7 @@ export function YearEndInspectionEntryCard({
       <span>
         <span className="block font-bold">{entry.pieceCodeSnapshot} {entry.pieceNameSnapshot}</span>
         <span className="block text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Unassigned piece"}</span>
+        {entry.photos?.length ? <span className="block text-xs font-semibold text-emerald-700">{entry.photos.length} photo{entry.photos.length === 1 ? "" : "s"} saved</span> : null}
       </span>
       <span className={`rounded-full px-2 py-1 text-xs font-bold ${entry.entryState === "not_started" ? "bg-slate-100" : entry.repairNeeded ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>
         {entry.entryState === "not_started" ? "Not started" : entry.entryState === "not_present" ? "Not present" : entry.repairNeeded ? "Needs attention" : "Inspected"}
@@ -78,7 +82,32 @@ export function YearEndInspectionEntryCard({
         <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, { entryState: "not_present", condition: null, repairNeeded: false })}>Mark not present</button>
         <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save piece inspection"}</button>
       </div>
-      <InspectionPhotoEditorContent inspectionId={inspectionId} entryId={entry.id} legId={legId} managerApi={managerApi} />
+      {entry.photos?.length ? <section className="grid gap-3" aria-label="Saved inspection photos">
+        <h4 className="text-sm font-bold">Saved photos</h4>
+        {entry.photos.map((photo) => <figure key={photo.id} className="overflow-hidden rounded-lg border">
+          <div className="relative">
+            <img
+              src={photo.signedUrl}
+              alt={photo.description || `${entry.pieceCodeSnapshot} inspection photo`}
+              className="block h-auto w-full"
+            />
+            {photo.annotations.ellipses.map((ellipse) => <span
+              key={ellipse.id}
+              aria-label="Marked photo area"
+              className="pointer-events-none absolute rounded-full border-4 border-rose-500"
+              style={ellipseStyle(ellipse)}
+            />)}
+          </div>
+          {photo.description ? <figcaption className="bg-slate-50 p-3 text-sm">{photo.description}</figcaption> : null}
+        </figure>)}
+      </section> : null}
+      <InspectionPhotoEditorContent
+        inspectionId={inspectionId}
+        entryId={entry.id}
+        legId={legId}
+        managerApi={managerApi}
+        onSaved={onPhotoSaved}
+      />
     </div> : null}
   </article>;
 }

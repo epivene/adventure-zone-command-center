@@ -3,13 +3,59 @@ import { Link, useLocation } from "wouter";
 import { ArrowLeft } from "lucide-react";
 import { useManagerAuth } from "@/lib/manager-auth-context";
 import { flushManagerMutationQueue } from "@/lib/manager-sync-queue";
-import { indexedDbManagerMutationStore } from "@/lib/manager-offline-db";
-import { flushManagerBlobQueue, type ManagerBlobKind } from "@/lib/manager-blob-queue";
+import { indexedDbManagerMutationStore, type ManagerMutation } from "@/lib/manager-offline-db";
+import { flushManagerBlobQueue, type ManagerBlobKind, type ManagerBlobRow } from "@/lib/manager-blob-queue";
 import { managerBackTarget } from "@/lib/manager-back-target";
 import { ManagerAssistantProvider } from "@/features/manager-assistant/manager-assistant-context";
 import { MessageBubbleLink } from "@/components/navigation/message-bubble-link";
 import { ManagerActionCenter } from "./manager-action-center";
 import { ManagerMobileNav } from "./manager-mobile-nav";
+
+function mutationPhotoId(body: unknown) {
+  if (!body || typeof body !== "object" || !("id" in body)) return undefined;
+  return typeof body.id === "string" ? body.id : undefined;
+}
+
+export function findManagerBlobMutation(row: ManagerBlobRow, mutations: ManagerMutation[]) {
+  const direct = mutations.find((candidate) => candidate.id === row.receiptId);
+  if (direct || row.kind !== "year_end_inspection_photo" || !row.photoId) return direct;
+  return mutations.find((candidate) => mutationPhotoId(candidate.body) === row.photoId);
+}
+
+export function managerBlobUploadPath(row: ManagerBlobRow, kind: ManagerBlobKind) {
+  if (kind === "incident") return `/manager/incident-attachments/${row.receiptId}/image`;
+  if (kind === "checklist_attachment") {
+    if (!row.bookingId) throw new Error("Checklist image is missing booking context");
+    return `/manager/events/${row.bookingId}/checklist-attachments/${row.receiptId}/image`;
+  }
+  if (kind === "year_end_inspection_photo") {
+    if (!row.inspectionId || !row.photoId) throw new Error("Inspection photo is missing inspection context");
+    return `/manager/year-end-inspections/${row.inspectionId}/photos/${row.photoId}/image`;
+  }
+  return `/manager/receipts/${row.receiptId}/image`;
+}
+
+export function managerBlobMetadataMatches(row: ManagerBlobRow, mutation: ManagerMutation | undefined) {
+  if (!mutation || mutation.state !== "synced") return false;
+  if (row.kind === "receipt") return mutation.path === "/manager/receipts";
+  if (row.kind === "incident") return mutation.path === "/manager/incident-attachments";
+  if (row.kind === "checklist_attachment") {
+    return Boolean(
+      row.bookingId &&
+      mutation.path.startsWith(`/manager/events/${row.bookingId}/checklist-results/`) &&
+      mutation.path.endsWith("/attachments"),
+    );
+  }
+  if (row.kind === "year_end_inspection_photo") {
+    return Boolean(
+      row.inspectionId &&
+      row.photoId &&
+      mutation.path === `/manager/year-end-inspections/${row.inspectionId}/photos` &&
+      mutationPhotoId(mutation.body) === row.photoId,
+    );
+  }
+  return mutation.path === "/manager/receipts" || mutation.path === "/manager/incident-attachments";
+}
 
 function ManagerShellInner({ children }: { children: React.ReactNode }) {
   const { manager, signOut, managerApi } = useManagerAuth();
@@ -23,35 +69,19 @@ function ManagerShellInner({ children }: { children: React.ReactNode }) {
       await flushManagerBlobQueue(
         async row => {
           const mutations = await indexedDbManagerMutationStore.list();
-          const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
+          const mutation = findManagerBlobMutation(row, mutations);
           const inferredKind: ManagerBlobKind | undefined = row.kind ?? (mutation?.path === "/manager/incident-attachments" ? "incident" : mutation?.path === "/manager/receipts" ? "receipt" : undefined);
           if (!inferredKind) throw new Error("Image type is unknown");
-          let path: string;
-          if (inferredKind === "incident") {
-            path = `/manager/incident-attachments/${row.receiptId}/image`;
-          } else if (inferredKind === "checklist_attachment") {
-            if (!row.bookingId) throw new Error("Checklist image is missing booking context");
-            path = `/manager/events/${row.bookingId}/checklist-attachments/${row.receiptId}/image`;
-          } else {
-            path = `/manager/receipts/${row.receiptId}/image`;
-          }
-          await managerApi(path, { method: "PUT", headers: { "Content-Type": row.blob.type || "image/jpeg" }, body: row.blob });
+          await managerApi(managerBlobUploadPath(row, inferredKind), {
+            method: "PUT",
+            headers: { "Content-Type": row.blob.type || "image/jpeg" },
+            body: row.blob,
+          });
         },
         undefined,
         async row => {
           const mutations = await indexedDbManagerMutationStore.list();
-          const mutation = mutations.find((candidate) => candidate.id === row.receiptId);
-          if (!mutation || mutation.state !== "synced") return false;
-          if (row.kind === "receipt") return mutation.path === "/manager/receipts";
-          if (row.kind === "incident") return mutation.path === "/manager/incident-attachments";
-          if (row.kind === "checklist_attachment") {
-            return Boolean(
-              row.bookingId &&
-              mutation.path.startsWith(`/manager/events/${row.bookingId}/checklist-results/`) &&
-              mutation.path.endsWith("/attachments"),
-            );
-          }
-          return mutation.path === "/manager/receipts" || mutation.path === "/manager/incident-attachments";
+          return managerBlobMetadataMatches(row, findManagerBlobMutation(row, mutations));
         },
       );
     })().catch(() => undefined);
