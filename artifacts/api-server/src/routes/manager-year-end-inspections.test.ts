@@ -10,7 +10,7 @@ const legId = "10000000-0000-4000-8000-000000000001";
 const otherLegId = "10000000-0000-4000-8000-000000000002";
 const inspectionId = "20000000-0000-4000-8000-000000000001";
 
-function appFor(service: Record<string, any>) {
+function appFor(service: Record<string, any>, photoService: Record<string, any> = {}) {
   const app = express();
   app.use(express.json());
   app.use(createManagerYearEndInspectionsRouter({
@@ -19,7 +19,7 @@ function appFor(service: Record<string, any>) {
       next();
     },
     service: service as never,
-    photoService: {} as never,
+    photoService: photoService as never,
   }));
   return app;
 }
@@ -28,6 +28,38 @@ describe("manager year-end inspection routes", () => {
   it("returns 404 instead of exposing another leg's inspection", async () => {
     const service = { get: vi.fn(async () => ({ id: inspectionId, legId: otherLegId })) };
     await request(appFor(service)).get(`/manager/year-end-inspections/${inspectionId}`).expect(404);
+  });
+
+  it("returns uploaded photos with signed URLs when a manager reloads an inspection", async () => {
+    const inspection = {
+      id: inspectionId,
+      legId,
+      entries: [{ id: "30000000-0000-4000-8000-000000000001" }],
+    };
+    const service = { get: vi.fn(async () => inspection) };
+    const photoService = {
+      listWithSignedUrls: vi.fn(async () => [{
+        id: "40000000-0000-4000-8000-000000000001",
+        description: "Worn seam",
+        annotations: { version: 1, ellipses: [] },
+        imageUrl: "https://signed.example/year-end/photo",
+      }]),
+    };
+
+    const response = await request(appFor(service, photoService))
+      .get(`/manager/year-end-inspections/${inspectionId}`)
+      .expect(200);
+
+    expect(response.body.inspection.entries[0].photos).toEqual([{
+      id: "40000000-0000-4000-8000-000000000001",
+      description: "Worn seam",
+      annotations: { version: 1, ellipses: [] },
+      signedUrl: "https://signed.example/year-end/photo",
+    }]);
+    expect(photoService.listWithSignedUrls).toHaveBeenCalledWith(
+      "30000000-0000-4000-8000-000000000001",
+      legId,
+    );
   });
 
   it("returns the existing inspection when an offline start mutation is retried", async () => {
