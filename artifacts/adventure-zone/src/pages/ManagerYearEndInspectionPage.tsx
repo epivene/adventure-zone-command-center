@@ -184,6 +184,22 @@ export function ManagerYearEndInspectionContent({
     }
   }
 
+  async function removeDiscoveredPiece(entryId: string) {
+    if (!inspection) return;
+    setError("");
+    try {
+      const response = await managerApi<{ inspection: YearEndInspectionDto; deletedPhotos: number }>(
+        `/manager/year-end-inspections/${inspection.id}/discovered-pieces/${entryId}`,
+        { method: "DELETE" },
+      );
+      setInspection(response.inspection);
+      setNotice("Accidental piece removed");
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Could not remove this piece");
+      throw removeError;
+    }
+  }
+
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
     return inspection?.entries.filter((entry) => {
@@ -233,6 +249,7 @@ export function ManagerYearEndInspectionContent({
           legId={legId}
           managerApi={managerApi}
           onSave={saveEntry}
+          onRemove={removeDiscoveredPiece}
           onPhotoSaved={() => void refreshInspectionPhotos()}
           initiallyOpen={entry.id === newEntryId}
         />)}

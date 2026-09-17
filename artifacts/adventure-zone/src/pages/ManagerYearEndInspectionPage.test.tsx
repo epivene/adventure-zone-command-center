@@ -161,4 +161,43 @@ describe("ManagerYearEndInspectionPage", () => {
     expect(screen.getByRole("button", { name: "Choose From Gallery" })).toBeVisible();
     expect(screen.getByText("0 of 1 inspected")).toBeVisible();
   });
+
+  it("removes an accidental discovered piece through the guarded endpoint", async () => {
+    const user = userEvent.setup();
+    const discovered = { ...entries[0], pieceCodeSnapshot: "NEW-A058BD54", pieceNameSnapshot: "Hot Air Balloon Castle" };
+    let inspection = withProgress({
+      id: "10000000-0000-4000-8000-000000000001",
+      legId: "30000000-0000-4000-8000-000000000001",
+      inspectionYear: 2026,
+      status: "in_progress",
+      copiedFromInspectionId: null,
+      updatedAt: new Date().toISOString(),
+      completedAt: null,
+      entries: [discovered],
+    });
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.includes("?year=2025")) return { inspection: null };
+      if (path.includes("?year=2026")) return { inspection };
+      if (path === "/manager/year-end-inspections/resources") return { resources: [] };
+      if (path.endsWith(`/discovered-pieces/${discovered.id}`) && options?.method === "DELETE") {
+        inspection = withProgress({ ...inspection, entries: [] });
+        return { inspection, deletedPhotos: 1 };
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<ManagerYearEndInspectionContent
+      currentYear={2026}
+      legId="30000000-0000-4000-8000-000000000001"
+      managerApi={api as unknown as ManagerApi}
+      mutationStore={new MemoryManagerMutationStore()}
+    />);
+
+    await user.click(await screen.findByRole("button", { name: /NEW-A058BD54 Hot Air Balloon Castle/ }));
+    await user.click(screen.getByRole("button", { name: "Remove accidental piece" }));
+    await user.click(screen.getByRole("button", { name: "Confirm removal" }));
+
+    expect(await screen.findByText("Accidental piece removed")).toBeVisible();
+    expect(screen.queryByText("Hot Air Balloon Castle")).not.toBeInTheDocument();
+  });
 });

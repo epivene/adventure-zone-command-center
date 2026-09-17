@@ -14,6 +14,7 @@ export function YearEndInspectionEntryCard({
   legId,
   managerApi,
   onSave,
+  onRemove,
   onPhotoSaved,
   initiallyOpen = false,
 }: {
@@ -22,6 +23,7 @@ export function YearEndInspectionEntryCard({
   legId: string;
   managerApi: ManagerApi;
   onSave: (entryId: string, patch: EntryPatch) => Promise<void>;
+  onRemove?: (entryId: string) => Promise<void>;
   onPhotoSaved?: () => void;
   initiallyOpen?: boolean;
 }) {
@@ -29,6 +31,8 @@ export function YearEndInspectionEntryCard({
   const [condition, setCondition] = useState<InspectionCondition | "">(entry.condition ?? "");
   const [notes, setNotes] = useState(entry.inspectionNotes ?? entry.repairNotes ?? "");
   const [saving, setSaving] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   async function save() {
     if (!condition) return;
@@ -104,6 +108,19 @@ export function YearEndInspectionEntryCard({
         <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, { entryState: "not_present", condition: null, repairNeeded: false })}>Mark not present</button>
         <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save piece inspection"}</button>
       </div>
+      {onRemove && entry.pieceCodeSnapshot.startsWith("NEW-") ? <button
+        type="button"
+        className="min-h-11 rounded-lg border border-rose-300 font-semibold text-rose-800"
+        disabled={removing}
+        onClick={() => {
+          if (!confirmingRemoval) {
+            setConfirmingRemoval(true);
+            return;
+          }
+          setRemoving(true);
+          void onRemove(entry.id).finally(() => setRemoving(false));
+        }}
+      >{removing ? "Removing…" : confirmingRemoval ? "Confirm removal" : "Remove accidental piece"}</button> : null}
     </div> : null}
   </article>;
 }
