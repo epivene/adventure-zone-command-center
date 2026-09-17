@@ -110,19 +110,6 @@ export function ManagerYearEndInspectionContent({
     }
   }
 
-  async function refreshInspectionPhotos() {
-    if (!inspection) return;
-    try {
-      const refreshed = await managerApi<{ inspection: YearEndInspectionDto }>(`/manager/year-end-inspections/${inspection.id}`);
-      if (refreshed.inspection) {
-        setInspection(refreshed.inspection);
-        setNotice("Photo saved and attached to this piece");
-      }
-    } catch {
-      setNotice("Photo saved — it will appear here after syncing finishes");
-    }
-  }
-
   async function complete() {
     if (!inspection) return;
     try {
@@ -184,6 +171,22 @@ export function ManagerYearEndInspectionContent({
     }
   }
 
+  async function removeDiscoveredPiece(entryId: string) {
+    if (!inspection) return;
+    setError("");
+    try {
+      const response = await managerApi<{ inspection: YearEndInspectionDto; deletedPhotos: number }>(
+        `/manager/year-end-inspections/${inspection.id}/discovered-pieces/${entryId}`,
+        { method: "DELETE" },
+      );
+      setInspection(response.inspection);
+      setNotice("Accidental piece removed");
+    } catch (removeError) {
+      setError(removeError instanceof Error ? removeError.message : "Could not remove this piece");
+      throw removeError;
+    }
+  }
+
   const visibleEntries = useMemo(() => {
     const query = search.trim().toLowerCase();
     return inspection?.entries.filter((entry) => {
@@ -233,7 +236,7 @@ export function ManagerYearEndInspectionContent({
           legId={legId}
           managerApi={managerApi}
           onSave={saveEntry}
-          onPhotoSaved={() => void refreshInspectionPhotos()}
+          onRemove={removeDiscoveredPiece}
           initiallyOpen={entry.id === newEntryId}
         />)}
         {!visibleEntries.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No pieces match this view.</p> : null}
