@@ -56,7 +56,7 @@ export function YearEndInspectionEntryCard({
     <button type="button" className="flex min-h-12 w-full items-center justify-between gap-3 p-4 text-left" onClick={() => setOpen((value) => !value)}>
       <span>
         <span className="block font-bold">{entry.pieceCodeSnapshot} {entry.pieceNameSnapshot}</span>
-        <span className="block text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Unassigned piece"}</span>
+        <span className="block text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Not linked to a leg record"}</span>
         {entry.photos?.length ? <span className="block text-xs font-semibold text-emerald-700">{entry.photos.length} photo{entry.photos.length === 1 ? "" : "s"} saved</span> : null}
       </span>
       <span className={`rounded-full px-2 py-1 text-xs font-bold ${entry.entryState === "not_started" ? "bg-slate-100" : entry.repairNeeded ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>
@@ -72,7 +72,7 @@ export function YearEndInspectionEntryCard({
           <option value="minor_repair">Minor repair</option>
           <option value="major_repair">Major repair</option>
           <option value="replace">Replace</option>
-          <option value="retired">Retire piece</option>
+          <option value="retired">Retire attraction</option>
         </select>
       </label>
       <label className="grid gap-1 text-sm font-semibold">Inspection notes
@@ -106,7 +106,7 @@ export function YearEndInspectionEntryCard({
       />
       <div className="grid gap-2 sm:grid-cols-2">
         <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, { entryState: "not_present", condition: null, repairNeeded: false })}>Mark not present</button>
-        <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save piece inspection"}</button>
+        <button type="button" className="button-primary min-h-11" disabled={!condition || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save attraction inspection"}</button>
       </div>
       {onRemove && entry.pieceCodeSnapshot.startsWith("NEW-") ? <button
         type="button"
@@ -120,7 +120,7 @@ export function YearEndInspectionEntryCard({
           setRemoving(true);
           void onRemove(entry.id).finally(() => setRemoving(false));
         }}
-      >{removing ? "Removing…" : confirmingRemoval ? "Confirm removal" : "Remove accidental piece"}</button> : null}
+      >{removing ? "Removing…" : confirmingRemoval ? "Confirm removal" : "Remove accidental attraction"}</button> : null}
     </div> : null}
   </article>;
 }
