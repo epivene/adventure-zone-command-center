@@ -10,7 +10,7 @@ export type InspectionRecordDto = Omit<YearEndInspectionDto, "entries"> & {
 export function InspectionRecordView({ inspection, onResolveRepair }: { inspection: InspectionRecordDto; onResolveRepair?: (itemId: string) => void }) {
   return <div className="grid gap-3">
     {inspection.entries.map((entry) => <article key={entry.id} className="rounded-xl border bg-white p-4">
-      <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{entry.pieceCodeSnapshot} {entry.pieceNameSnapshot}</h3><p className="text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Unassigned piece"}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{entry.entryState.replace("_", " ")}</span></div>
+      <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-bold">{entry.pieceCodeSnapshot} {entry.pieceNameSnapshot}</h3><p className="text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Not linked to a leg record"}</p></div><span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold">{entry.entryState.replace("_", " ")}</span></div>
       {entry.condition ? <p className="mt-3 text-sm"><strong>Original condition:</strong> {entry.condition.replaceAll("_", " ")}</p> : null}
       {entry.inspectionNotes ? <p className="mt-1 whitespace-pre-wrap text-sm">{entry.inspectionNotes}</p> : null}
       {entry.repairNotes ? <p className="mt-1 whitespace-pre-wrap text-sm text-rose-800"><strong>Repair:</strong> {entry.repairNotes}</p> : null}

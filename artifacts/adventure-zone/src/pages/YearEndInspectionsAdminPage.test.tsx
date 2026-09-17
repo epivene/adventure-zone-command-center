@@ -5,17 +5,9 @@ import { describe, expect, it, vi } from "vitest";
 import { YearEndInspectionsAdminContent, type AdminInspectionApi } from "./YearEndInspectionsAdminPage";
 
 describe("YearEndInspectionsAdminPage", () => {
-  it("quick-adds pieces without a fixed inventory limit", async () => {
-    const user = userEvent.setup();
-    const pieces: any[] = [];
+  it("uses leg inspection records instead of a separate piece inventory", async () => {
     const api = vi.fn(async (path: string, options?: RequestInit) => {
-      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces };
       if (path === "/manager-admin/year-end-inspections") return { inspections: [] };
-      if (path === "/manager-admin/equipment-pieces" && options?.method === "POST") {
-        const piece = { id: crypto.randomUUID(), ...JSON.parse(String(options.body)), currentResourceName: null, archivedAt: null };
-        pieces.push(piece);
-        return { piece };
-      }
       throw new Error(`Unexpected request ${path}`);
     });
 
@@ -23,13 +15,10 @@ describe("YearEndInspectionsAdminPage", () => {
       api={api as unknown as AdminInspectionApi}
       legs={[{ id: "30000000-0000-4000-8000-000000000001", name: "Leg 1" }]}
     />);
-    await user.click(await screen.findByRole("button", { name: "Add piece" }));
-    await user.type(screen.getByLabelText("Piece code"), "AZ-059");
-    await user.type(screen.getByLabelText("Piece name"), "Warrior wall section");
-    await user.selectOptions(screen.getByLabelText("Leg"), "30000000-0000-4000-8000-000000000001");
-    await user.click(screen.getByRole("button", { name: "Save and add another" }));
-    expect(await screen.findByText("AZ-059")).toBeVisible();
-    expect(screen.getByLabelText("Piece code")).toHaveValue("");
+    expect(await screen.findByRole("heading", { name: "Leg inspection records" })).toBeVisible();
+    expect(screen.queryByRole("heading", { name: "Piece inventory" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add piece" })).not.toBeInTheDocument();
+    expect(api).not.toHaveBeenCalledWith(expect.stringContaining("equipment-pieces"), expect.anything());
   });
 
   it("requires confirmation before fully resetting Kristy's selected inspection", async () => {
@@ -45,7 +34,6 @@ describe("YearEndInspectionsAdminPage", () => {
     };
     let reset = false;
     const api = vi.fn(async (path: string, options?: RequestInit) => {
-      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces: [] };
       if (path === "/manager-admin/year-end-inspections" && !options?.method) return { inspections: reset ? [] : [inspection] };
       if (path === `/manager-admin/year-end-inspections/${inspection.id}` && !options?.method) return { inspection };
       if (path === `/manager-admin/year-end-inspections/${inspection.id}/reset` && options?.method === "POST") {
@@ -63,7 +51,7 @@ describe("YearEndInspectionsAdminPage", () => {
     await user.click(await screen.findByRole("button", { name: /Kristy's Leg · 2026/ }));
     await user.click(await screen.findByRole("button", { name: "Fully reset inspection" }));
 
-    expect(await screen.findByText("Kristy's 2026 inspection was reset. 1 photo and 2 test pieces were removed.")).toBeVisible();
+    expect(await screen.findByText("Kristy's 2026 inspection was reset. 1 photo and 2 attractions added during the inspection were removed.")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Kristy's Leg · 2026/ })).not.toBeInTheDocument();
   });
 });

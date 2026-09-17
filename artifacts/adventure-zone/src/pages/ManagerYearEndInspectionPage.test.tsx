@@ -87,12 +87,12 @@ describe("ManagerYearEndInspectionPage", () => {
       managerApi={api as unknown as ManagerApi}
       mutationStore={new MemoryManagerMutationStore()}
     />);
-    await user.click(await screen.findByRole("button", { name: "Use pieces assigned to this leg" }));
+    await user.click(await screen.findByRole("button", { name: "Use this leg's attraction records" }));
     expect(await screen.findByText("0 of 2 inspected")).toBeVisible();
     await user.click(screen.getByRole("button", { name: /AZ-017 Front section/ }));
     await user.selectOptions(screen.getByLabelText("Condition"), "minor_repair");
     await user.type(screen.getByLabelText("Inspection notes"), "Worn seam near entrance");
-    await user.click(screen.getByRole("button", { name: "Save piece inspection" }));
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
     expect(await screen.findByText("1 of 2 inspected")).toBeVisible();
     expect(screen.getByRole("button", { name: "Complete inspection" })).toBeDisabled();
   });
@@ -149,12 +149,12 @@ describe("ManagerYearEndInspectionPage", () => {
       mutationStore={new MemoryManagerMutationStore()}
     />);
 
-    await user.click(await screen.findByRole("button", { name: "Start inspecting pieces" }));
-    await user.click(await screen.findByRole("button", { name: "Add & Inspect a Piece" }));
-    await user.type(screen.getByLabelText("Piece name or label"), "Blue slide section");
+    await user.click(await screen.findByRole("button", { name: "Start inspecting attractions" }));
+    await user.click(await screen.findByRole("button", { name: "Add & Inspect an Attraction" }));
+    await user.type(screen.getByLabelText("Attraction name or label"), "Blue slide section");
     await user.type(screen.getByLabelText("Identification notes"), "Rolled beside the generator");
-    await user.selectOptions(screen.getByLabelText("Whole attraction"), "resource-1");
-    await user.click(screen.getByRole("button", { name: "Save & inspect this piece" }));
+    await user.selectOptions(screen.getByLabelText("Leg record"), "resource-1");
+    await user.click(screen.getByRole("button", { name: "Save & inspect this attraction" }));
 
     expect(await screen.findByRole("button", { name: /NEW-0001 Blue slide section/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "Take Photo" })).toBeVisible();
@@ -194,10 +194,10 @@ describe("ManagerYearEndInspectionPage", () => {
     />);
 
     await user.click(await screen.findByRole("button", { name: /NEW-A058BD54 Hot Air Balloon Castle/ }));
-    await user.click(screen.getByRole("button", { name: "Remove accidental piece" }));
+    await user.click(screen.getByRole("button", { name: "Remove accidental attraction" }));
     await user.click(screen.getByRole("button", { name: "Confirm removal" }));
 
-    expect(await screen.findByText("Accidental piece removed")).toBeVisible();
+    expect(await screen.findByText("Accidental attraction removed")).toBeVisible();
     expect(screen.queryByText("Hot Air Balloon Castle")).not.toBeInTheDocument();
   });
 });

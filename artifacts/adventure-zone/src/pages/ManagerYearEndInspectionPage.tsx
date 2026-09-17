@@ -116,7 +116,7 @@ export function ManagerYearEndInspectionContent({
       const refreshed = await managerApi<{ inspection: YearEndInspectionDto }>(`/manager/year-end-inspections/${inspection.id}`);
       if (refreshed.inspection) {
         setInspection(refreshed.inspection);
-        setNotice("Photo saved and attached to this piece");
+        setNotice("Photo saved and attached to this attraction");
       }
     } catch {
       setNotice("Photo saved — it will appear here after syncing finishes");
@@ -157,7 +157,7 @@ export function ManagerYearEndInspectionContent({
           id: entryId,
           pieceId,
           pieceCodeSnapshot: draft.code || `NEW-${pieceId.slice(0, 8).toUpperCase()}`,
-          pieceNameSnapshot: draft.name || "Unidentified inflatable piece",
+          pieceNameSnapshot: draft.name || "Unidentified attraction",
           resourceNameSnapshot: resources.find((resource) => resource.id === draft.resourceId)?.name ?? null,
           entryState: "not_started",
           condition: null,
@@ -168,7 +168,7 @@ export function ManagerYearEndInspectionContent({
         };
         const entries = [...inspection.entries, optimisticEntry];
         setInspection({ ...inspection, status: "in_progress", entries, progress: progressForEntries(entries) });
-        setNotice("Piece saved offline — add its photos and notes now");
+        setNotice("Attraction saved offline — add its photos and notes now");
         return;
       }
       const response = await managerApi<{ inspection: YearEndInspectionDto }>(path, {
@@ -176,10 +176,10 @@ export function ManagerYearEndInspectionContent({
         body: JSON.stringify(body),
       });
       setInspection(response.inspection);
-      setNotice("Piece assigned to this leg — add its photos and inspection notes");
+      setNotice("Attraction added to this leg — add its photos and inspection notes");
     } catch (addError) {
       setNewEntryId(null);
-      setError(addError instanceof Error ? addError.message : "Could not add this piece");
+      setError(addError instanceof Error ? addError.message : "Could not add this attraction");
       throw addError;
     }
   }
@@ -193,9 +193,9 @@ export function ManagerYearEndInspectionContent({
         { method: "DELETE" },
       );
       setInspection(response.inspection);
-      setNotice("Accidental piece removed");
+      setNotice("Accidental attraction removed");
     } catch (removeError) {
-      setError(removeError instanceof Error ? removeError.message : "Could not remove this piece");
+      setError(removeError instanceof Error ? removeError.message : "Could not remove this attraction");
       throw removeError;
     }
   }
@@ -216,21 +216,21 @@ export function ManagerYearEndInspectionContent({
     <header>
       <p className="text-xs font-bold uppercase tracking-wider text-orange-700">End of season</p>
       <h1 className="text-2xl font-bold">{currentYear} Year-End Inspection</h1>
-      <p className="mt-1 text-sm text-slate-600">Photograph, label, and inspect every inflatable piece you find. Each new piece is assigned to this leg as you go.</p>
+      <p className="mt-1 text-sm text-slate-600">Photograph and inspect every bounce house or attraction on this leg.</p>
     </header>
     {error ? <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-rose-800">{error}</p> : null}
     {!inspection ? <section className="grid gap-3 rounded-xl border bg-white p-4">
       <h2 className="font-bold">Start this leg’s inspection</h2>
-      <button type="button" className="button-primary min-h-12" disabled={starting} onClick={() => void start("blank")}>Start inspecting pieces</button>
+      <button type="button" className="button-primary min-h-12" disabled={starting} onClick={() => void start("blank")}>Start inspecting attractions</button>
       {priorInspection ? <button type="button" className="min-h-12 rounded-lg border font-semibold" disabled={starting} onClick={() => void start("prior_year")}>Copy {currentYear - 1} inspection list</button> : null}
-      <button type="button" className="min-h-12 rounded-lg border font-semibold" disabled={starting} onClick={() => void start("current_pieces")}>Use pieces assigned to this leg</button>
-      <p className="text-xs text-slate-500">No pieces need to be assigned ahead of time. Add and identify them one at a time during the inspection.</p>
+      <button type="button" className="min-h-12 rounded-lg border font-semibold" disabled={starting} onClick={() => void start("current_pieces")}>Use this leg's attraction records</button>
+      <p className="text-xs text-slate-500">Use the leg records or add an attraction while you inspect it.</p>
     </section> : <>
       <YearEndInspectionProgress progress={inspection.progress} />
       <DiscoveredPieceForm resources={resources} disabled={inspection.status === "completed"} onAdd={addDiscoveredPiece} />
       <section className="grid gap-3 rounded-xl border bg-white p-3">
-        <label className="grid gap-1 text-sm font-semibold">Search pieces
-          <input className="min-h-11 rounded-lg border px-3" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Code, name, or attraction" />
+        <label className="grid gap-1 text-sm font-semibold">Search attractions
+          <input className="min-h-11 rounded-lg border px-3" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Code or attraction name" />
         </label>
         <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Inspection filters">
           {(["all", "not_started", "inspected", "attention", "not_present"] as Filter[]).map((value) => <button
@@ -253,7 +253,7 @@ export function ManagerYearEndInspectionContent({
           onPhotoSaved={() => void refreshInspectionPhotos()}
           initiallyOpen={entry.id === newEntryId}
         />)}
-        {!visibleEntries.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No pieces match this view.</p> : null}
+        {!visibleEntries.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No attractions match this view.</p> : null}
       </section>
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-white/95 p-3 backdrop-blur sm:static sm:rounded-xl sm:border">
         <button type="button" className="button-primary min-h-12 w-full" disabled={inspection.progress.total === 0 || inspection.progress.notStarted > 0 || inspection.status === "completed"} onClick={() => void complete()}>
