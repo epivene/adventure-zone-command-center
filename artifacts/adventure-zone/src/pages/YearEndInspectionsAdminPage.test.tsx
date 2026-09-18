@@ -364,4 +364,39 @@ describe("YearEndInspectionsAdminPage", () => {
     expect(within(screen.getByLabelText("Printable inspection report")).getByText("Patched")).toBeVisible();
   });
 
+
+  it("does not switch back when an old inspection mutation finishes after a new selection", async () => {
+    const user = userEvent.setup();
+    const inspectionA: any = { id: "10000000-0000-4000-8000-000000000041", legId: "30000000-0000-4000-8000-000000000041", inspectionYear: 2026, status: "completed", managerIdentitySnapshot: "manager:A", entries: [], progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 } };
+    const inspectionB: any = { id: "10000000-0000-4000-8000-000000000042", legId: "30000000-0000-4000-8000-000000000042", inspectionYear: 2026, status: "completed", managerIdentitySnapshot: "manager:B", entries: [], progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 } };
+    let resolveReopen!: (value: { inspection: typeof inspectionA }) => void;
+    const reopen = new Promise<{ inspection: typeof inspectionA }>((resolve) => { resolveReopen = resolve; });
+    let detailARequests = 0;
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections" && !options?.method) return { inspections: [inspectionA, inspectionB] };
+      if (path === `/manager-admin/year-end-inspections/${inspectionA.id}` && !options?.method) {
+        detailARequests += 1;
+        return { inspection: inspectionA };
+      }
+      if (path === `/manager-admin/year-end-inspections/${inspectionB.id}` && !options?.method) return { inspection: inspectionB };
+      if (path === `/manager-admin/year-end-inspections/${inspectionA.id}/reopen` && options?.method === "POST") return reopen;
+      throw new Error(`Unexpected request ${path}`);
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[{ id: inspectionA.legId, name: "Alpha Leg" }, { id: inspectionB.legId, name: "Beta Leg" }]}
+    />);
+    await user.click(await screen.findByRole("button", { name: /Alpha Leg · 2026/ }));
+    await user.click(await screen.findByRole("button", { name: "Reopen inspection" }));
+    await user.click(screen.getByRole("button", { name: /Beta Leg · 2026/ }));
+    expect(await screen.findByRole("heading", { name: "Beta Leg 2026 full inspection report" })).toBeVisible();
+
+    await act(async () => { resolveReopen({ inspection: { ...inspectionA, status: "in_progress" } }); });
+    expect(screen.getByRole("heading", { name: "Beta Leg 2026 full inspection report" })).toBeVisible();
+    expect(detailARequests).toBe(1);
+  });
+
 });
