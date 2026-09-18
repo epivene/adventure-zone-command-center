@@ -151,16 +151,48 @@ export class DrizzleInspectionRepository {
   }
 
   async patchEntry(id: string, patch: InspectionEntryPatch, actorId: string): Promise<InspectionEntryRecord | null> {
-    const statePatch = patch.entryState === "inspected"
-      ? { inspectedAt: new Date(), inspectorIdentitySnapshot: actorId }
-      : patch.entryState === "not_present"
-        ? { inspectedAt: new Date(), inspectorIdentitySnapshot: actorId, condition: null }
-        : {};
-    const [updated] = await this.db.update(yearEndInspectionEntries)
-      .set({ ...patch, ...statePatch, updatedAt: new Date() })
-      .where(eq(yearEndInspectionEntries.id, id))
-      .returning({ id: yearEndInspectionEntries.id });
-    return updated ? this.getEntry(id) : null;
+    const updatedId = await this.db.transaction(async (tx: Database) => {
+      const [existing] = await tx.select().from(yearEndInspectionEntries)
+        .where(eq(yearEndInspectionEntries.id, id)).limit(1);
+      if (!existing) return null;
+
+      const { pieceCodeSnapshot, pieceNameSnapshot, ...inspectionPatch } = patch;
+      const identityPatch = {
+        ...(pieceCodeSnapshot !== undefined ? { pieceCodeSnapshot: pieceCodeSnapshot.trim() } : {}),
+        ...(pieceNameSnapshot !== undefined ? { pieceNameSnapshot: pieceNameSnapshot.trim() } : {}),
+      };
+      if (Object.keys(identityPatch).length) {
+        await tx.update(equipmentPieces).set({
+          ...(pieceCodeSnapshot !== undefined ? { code: pieceCodeSnapshot.trim() } : {}),
+          ...(pieceNameSnapshot !== undefined ? { name: pieceNameSnapshot.trim() } : {}),
+          updatedAt: new Date(),
+        }).where(eq(equipmentPieces.id, existing.pieceId));
+        await tx.insert(yearEndInspectionAuditEvents).values({
+          inspectionId: existing.inspectionId,
+          pieceId: existing.pieceId,
+          action: "piece_identity_corrected",
+          actorId,
+          payload: {
+            previousCode: existing.pieceCodeSnapshot,
+            previousName: existing.pieceNameSnapshot,
+            nextCode: pieceCodeSnapshot?.trim() ?? existing.pieceCodeSnapshot,
+            nextName: pieceNameSnapshot?.trim() ?? existing.pieceNameSnapshot,
+          },
+        });
+      }
+
+      const statePatch = inspectionPatch.entryState === "inspected"
+        ? { inspectedAt: new Date(), inspectorIdentitySnapshot: actorId }
+        : inspectionPatch.entryState === "not_present"
+          ? { inspectedAt: new Date(), inspectorIdentitySnapshot: actorId, condition: null }
+          : {};
+      const [updated] = await tx.update(yearEndInspectionEntries)
+        .set({ ...inspectionPatch, ...identityPatch, ...statePatch, updatedAt: new Date() })
+        .where(eq(yearEndInspectionEntries.id, id))
+        .returning({ id: yearEndInspectionEntries.id });
+      return updated?.id ?? null;
+    });
+    return updatedId ? this.getEntry(updatedId) : null;
   }
 
   async markCompleted(id: string, actorId: string): Promise<void> {

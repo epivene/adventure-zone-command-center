@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { InspectionRecordView, type InspectionRecordDto } from "@/components/year-end-inspections/inspection-record-view";
+import type { InspectionRecordDto } from "@/components/year-end-inspections/inspection-record-view";
+import { YearEndInspectionEntryCard } from "@/components/manager/year-end-inspection-entry-card";
+import { progressForEntries, type YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
 import { PieceInventoryTable, type EquipmentPieceDto, type ResourceOption } from "@/components/year-end-inspections/piece-inventory-table";
 import { apiFetch, apiGet } from "@/lib/auth-token";
 
@@ -79,6 +81,24 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
     await load();
   }
 
+  async function saveInspectionEntry(entryId: string, patch: Partial<YearEndInspectionEntryDto>) {
+    if (!selectedInspectionId) return;
+    const response = await api<{ entry: YearEndInspectionEntryDto }>(
+      `/manager-admin/year-end-inspections/${selectedInspectionId}/entries/${entryId}`,
+      { method: "PATCH", body: JSON.stringify(patch) },
+    );
+    setInspections((current) => current.map((inspection) => {
+      if (inspection.id !== selectedInspectionId) return inspection;
+      const entries = inspection.entries.map((entry) => entry.id === entryId ? { ...entry, ...response.entry } : entry);
+      return { ...inspection, entries, progress: progressForEntries(entries) };
+    }));
+    setNotice("Attraction inspection updated.");
+  }
+
+  async function refreshSelectedInspection() {
+    if (selectedInspectionId) await openInspection(selectedInspectionId);
+  }
+
   async function resetInspection(inspection: InspectionRecordDto) {
     const managerName = inspection.managerIdentitySnapshot?.replace(/^manager:/, "") || "this manager";
     if (!window.confirm(`Fully reset ${managerName}'s ${inspection.inspectionYear} inspection? This permanently removes its photos, notes, and test pieces created during the inspection.`)) return;
@@ -130,7 +150,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
       <h2 className="text-xl font-bold">Inspection records</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{inspections.map((inspection) => <button key={inspection.id} type="button" className="rounded-xl border bg-white p-4 text-left" onClick={() => void openInspection(inspection.id)}><span className="font-bold">{legNames[inspection.legId] ?? "Travel leg"} · {inspection.inspectionYear}</span><span className="mt-1 block text-sm">{inspection.progress.inspected + inspection.progress.notPresent} of {inspection.progress.total} inspected · {inspection.status}</span><span className="block text-sm text-rose-700">{inspection.progress.needsAttention} need repair</span></button>)}</div>
       {!inspections.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No year-end inspections have been started.</p> : null}
-      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2">{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><InspectionRecordView inspection={selectedInspection} onResolveRepair={(id) => void resolveRepair(id)} /></div> : null}
+      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2">{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><div className="grid gap-3">{selectedInspection.entries.map((entry) => <div key={entry.id} className="grid gap-2"><YearEndInspectionEntryCard entry={entry} inspectionId={selectedInspection.id} legId={selectedInspection.legId} managerApi={api} apiPrefix="/manager-admin" onSave={saveInspectionEntry} onPhotoSaved={() => void refreshSelectedInspection()} />{entry.maintenanceItem ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Repair follow-up: {entry.maintenanceItem.state}</p>{entry.maintenanceItem.resolutionNotes ? <p>{entry.maintenanceItem.resolutionNotes}</p> : null}{entry.maintenanceItem.state === "open" ? <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-2 font-semibold" onClick={() => void resolveRepair(entry.maintenanceItem!.id)}>Mark repair completed</button> : null}</div> : null}</div>)}</div></div> : null}
     </section>
   </div>;
 }

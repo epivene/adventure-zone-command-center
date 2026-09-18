@@ -17,6 +17,8 @@ const startSchema = z.object({
   clientMutationId: uuid,
 }).strict();
 const entryPatchSchema = z.object({
+  pieceCodeSnapshot: z.string().trim().min(1).max(80).optional(),
+  pieceNameSnapshot: z.string().trim().min(1).max(200).optional(),
   entryState: z.enum(["not_started", "inspected", "not_present"]).optional(),
   condition: z.enum(["good", "needs_cleaning", "minor_repair", "major_repair", "replace", "retired"]).nullable().optional(),
   inspectionNotes: z.string().max(12000).nullable().optional(),
@@ -178,7 +180,9 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     const inspectionId = param(req.params.inspectionId);
     if (!parsed.success) { res.status(400).json({ error: "Review the photo details." }); return; }
     const inspection = await service.get(inspectionId);
-    if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    if (!inspection || inspection.legId !== req.legManager!.legId || !inspection.entries.some((entry) => entry.id === parsed.data.entryId)) {
+      res.status(404).json({ error: "Inspection entry not found." }); return;
+    }
     const photo = await photoService.createMetadata({ ...parsed.data, inspectionId, legId: req.legManager!.legId });
     res.status(201).json({ photo });
   });
