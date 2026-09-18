@@ -36,7 +36,7 @@ test('foam party promo uses the approved artwork and links to contact', () => {
     const link = foamParty.querySelector('a');
     const image = foamParty.querySelector('img');
     assert.equal(link.getAttribute('href'), '#contact');
-    assert.equal(image.src, 'https://static.wixstatic.com/media/0e6e2c_c43dd0a344e2430d8881ed0cb8f84da9~mv2.png');
+    assert.equal(image.src, 'https://static.wixstatic.com/media/0e6e2c_edfe6538ed2442a3809e6ee2f100ef55~mv2.png');
     assert.match(image.alt, /Foam Party add-on.*Only \$3,500/i);
     assert.doesNotMatch(foamParty.textContent, /Pricing increases|Only one Foam Party booking/i);
   } finally { dom.window.close(); }
