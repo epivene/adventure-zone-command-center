@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryManagerMutationStore } from "@/lib/manager-sync-queue";
 import { MemoryManagerBlobStore, queueManagerBlob } from "@/lib/manager-blob-queue";
 import { InspectionPhotoEditorContent } from "./inspection-photo-editor";
+import type { ManagerApi } from "@/lib/year-end-inspections-api";
 
 describe("InspectionPhotoEditorContent", () => {
   it("queues photo metadata and the original image while offline", async () => {
@@ -146,7 +147,7 @@ describe("InspectionPhotoEditorContent", () => {
         entryId="20000000-0000-4000-8000-000000000001"
         inspectionId="10000000-0000-4000-8000-000000000001"
         legId="30000000-0000-4000-8000-000000000001"
-        managerApi={vi.fn(async <T,>(_path: string, _options?: RequestInit) => ({ ok: true } as T))}
+        managerApi={vi.fn(async () => ({ ok: true })) as unknown as ManagerApi}
         mutationStore={mutationStore}
       />,
     );
