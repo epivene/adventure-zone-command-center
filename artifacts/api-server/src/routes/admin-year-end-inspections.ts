@@ -6,7 +6,7 @@ import { pieceInputSchema, piecePatchSchema } from "@/features/year-end-inspecti
 import { DrizzlePieceRepository } from "@/features/year-end-inspections/piece-repository";
 import { YearEndInspectionService } from "@/features/year-end-inspections/inspection-service";
 import { YearEndInspectionPhotoService } from "@/features/year-end-inspections/photo-service";
-import { photoPatchSchema } from "@/features/year-end-inspections/photo-input";
+import { annotationDocumentSchema, photoPatchSchema } from "@/features/year-end-inspections/photo-input";
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
 import { requireOwnerMiddleware } from "@/lib/auth";
 
@@ -27,7 +27,7 @@ const photoMetadataSchema = z.object({
   entryId: uuid,
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
   description: z.string().max(4000).nullable().default(null),
-  annotations: z.object({ version: z.literal(1), ellipses: z.array(z.any()).max(50) }),
+  annotations: annotationDocumentSchema,
 }).strict();
 function param(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";

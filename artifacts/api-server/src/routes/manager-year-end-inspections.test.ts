@@ -166,4 +166,18 @@ describe("manager year-end inspection routes", () => {
       "manager:Leg One",
     );
   });
+
+  it("rejects malformed photo annotations as a client error", async () => {
+    await request(appFor({}, { createMetadata: vi.fn() }))
+      .post(`/manager/year-end-inspections/${inspectionId}/photos`)
+      .send({
+        id: "40000000-0000-4000-8000-000000000001",
+        clientMutationId: "50000000-0000-4000-8000-000000000001",
+        entryId: "30000000-0000-4000-8000-000000000001",
+        mimeType: "image/jpeg",
+        description: "Bad circle",
+        annotations: { version: 1, ellipses: [{ id: "circle", x: 2 }] },
+      })
+      .expect(400);
+  });
 });

@@ -167,4 +167,27 @@ describe("admin year-end inspection routes", () => {
       .send({})
       .expect(401);
   });
+
+  it("rejects malformed photo annotations as a client error", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(createAdminYearEndInspectionsRouter({
+      pieces: {} as never,
+      service: { get: vi.fn() } as never,
+      photoService: { createMetadata: vi.fn() } as never,
+      requireOwner: (_req, _res, next) => next(),
+    }));
+
+    await request(app)
+      .post("/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos")
+      .send({
+        id: "30000000-0000-4000-8000-000000000001",
+        clientMutationId: "50000000-0000-4000-8000-000000000001",
+        entryId: "20000000-0000-4000-8000-000000000001",
+        mimeType: "image/jpeg",
+        description: "Bad circle",
+        annotations: { version: 1, ellipses: [{ id: "circle", x: 2 }] },
+      })
+      .expect(400);
+  });
 });

@@ -7,7 +7,7 @@ import { createRequireLegManagerMiddleware } from "@/features/leg-manager/leg-ma
 import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-manager-object-storage";
 import { YearEndInspectionService } from "@/features/year-end-inspections/inspection-service";
 import { YearEndInspectionPhotoService } from "@/features/year-end-inspections/photo-service";
-import { photoPatchSchema } from "@/features/year-end-inspections/photo-input";
+import { annotationDocumentSchema, photoPatchSchema } from "@/features/year-end-inspections/photo-input";
 
 const uuid = z.string().uuid();
 const startSchema = z.object({
@@ -32,7 +32,7 @@ const photoMetadataSchema = z.object({
   entryId: uuid,
   mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
   description: z.string().max(4000).nullable().default(null),
-  annotations: z.object({ version: z.literal(1), ellipses: z.array(z.any()).max(50) }),
+  annotations: annotationDocumentSchema,
 }).strict();
 const discoveredPieceSchema = z.object({
   pieceId: uuid,
