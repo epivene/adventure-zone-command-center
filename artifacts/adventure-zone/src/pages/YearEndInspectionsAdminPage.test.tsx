@@ -106,7 +106,7 @@ describe("YearEndInspectionsAdminPage", () => {
     await user.click(await screen.findByRole("button", { name: "Edit attraction" }));
     await user.clear(screen.getByLabelText("Attraction name"));
     await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
-    await user.click(screen.getByRole("button", { name: "Save attraction changes" }));
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
 
     expect(api).toHaveBeenCalledWith(
       `/manager-admin/year-end-inspections/${inspection.id}/entries/${entry.id}`,

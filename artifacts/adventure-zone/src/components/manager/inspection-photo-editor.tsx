@@ -50,6 +50,7 @@ export function InspectionPhotoEditorContent({
   const galleryRef = useRef<HTMLInputElement>(null);
   const drawingPathRef = useRef<Array<{ x: number; y: number }>>([]);
   const drawingPointerRef = useRef<number | null>(null);
+  const adminUploadIdsRef = useRef<{ photoId: string; clientMutationId: string } | null>(null);
   const previewUrl = useMemo(() => file && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "", [file]);
 
   useEffect(() => () => {
@@ -92,8 +93,11 @@ export function InspectionPhotoEditorContent({
     if (!file) return;
     setError("");
     setSyncState("syncing");
-    const photoId = crypto.randomUUID();
-    const clientMutationId = crypto.randomUUID();
+    const uploadIds = apiPrefix === "/manager-admin"
+      ? adminUploadIdsRef.current ?? { photoId: crypto.randomUUID(), clientMutationId: crypto.randomUUID() }
+      : { photoId: crypto.randomUUID(), clientMutationId: crypto.randomUUID() };
+    if (apiPrefix === "/manager-admin") adminUploadIdsRef.current = uploadIds;
+    const { photoId, clientMutationId } = uploadIds;
     const createdAt = new Date().toISOString();
     try {
       if (apiPrefix === "/manager-admin") {
@@ -115,6 +119,7 @@ export function InspectionPhotoEditorContent({
         });
         setSyncState("synced");
         onSaved?.();
+        adminUploadIdsRef.current = null;
         setFile(null);
         setDescription("");
         setEllipses([]);
@@ -167,6 +172,11 @@ export function InspectionPhotoEditorContent({
       setDescription("");
       setEllipses([]);
     } catch (saveError) {
+      if (apiPrefix === "/manager-admin") {
+        setSyncState("needs_attention");
+        setError(saveError instanceof Error ? saveError.message : "Photo upload failed. Keep this photo selected and try again.");
+        return;
+      }
       setSyncState("saved_offline");
       setError(saveError instanceof Error ? saveError.message : "Photo saved offline and will retry later");
       onSaved?.();
@@ -174,6 +184,7 @@ export function InspectionPhotoEditorContent({
   }
 
   function selectPhoto(nextFile: File | null) {
+    adminUploadIdsRef.current = null;
     setFile(nextFile);
     setEllipses([]);
     clearDrawingGesture();

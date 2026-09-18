@@ -267,4 +267,29 @@ describe("YearEndInspectionService", () => {
     )).resolves.toBeNull();
     expect(await pieces.get(piece.id)).toMatchObject({ name: "Front wall section" });
   });
+
+  it("does not audit unchanged attraction identity fields during a normal inspection save", async () => {
+    const { client, service } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+
+    await service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      {
+        pieceCodeSnapshot: "WP-001",
+        pieceNameSnapshot: "Front wall section",
+        entryState: "inspected",
+        condition: "good",
+      },
+      actor,
+    );
+
+    const audit = await client.query<{ count: string }>(
+      "select count(*)::text as count from year_end_inspection_audit_events where action = 'piece_identity_corrected'",
+    );
+    expect(audit.rows[0]?.count).toBe("0");
+  });
 });

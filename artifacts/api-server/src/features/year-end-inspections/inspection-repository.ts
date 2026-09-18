@@ -157,14 +157,18 @@ export class DrizzleInspectionRepository {
       if (!existing) return null;
 
       const { pieceCodeSnapshot, pieceNameSnapshot, ...inspectionPatch } = patch;
+      const nextCode = pieceCodeSnapshot?.trim() ?? existing.pieceCodeSnapshot;
+      const nextName = pieceNameSnapshot?.trim() ?? existing.pieceNameSnapshot;
+      const codeChanged = pieceCodeSnapshot !== undefined && nextCode !== existing.pieceCodeSnapshot;
+      const nameChanged = pieceNameSnapshot !== undefined && nextName !== existing.pieceNameSnapshot;
       const identityPatch = {
-        ...(pieceCodeSnapshot !== undefined ? { pieceCodeSnapshot: pieceCodeSnapshot.trim() } : {}),
-        ...(pieceNameSnapshot !== undefined ? { pieceNameSnapshot: pieceNameSnapshot.trim() } : {}),
+        ...(codeChanged ? { pieceCodeSnapshot: nextCode } : {}),
+        ...(nameChanged ? { pieceNameSnapshot: nextName } : {}),
       };
-      if (Object.keys(identityPatch).length) {
+      if (codeChanged || nameChanged) {
         await tx.update(equipmentPieces).set({
-          ...(pieceCodeSnapshot !== undefined ? { code: pieceCodeSnapshot.trim() } : {}),
-          ...(pieceNameSnapshot !== undefined ? { name: pieceNameSnapshot.trim() } : {}),
+          ...(codeChanged ? { code: nextCode } : {}),
+          ...(nameChanged ? { name: nextName } : {}),
           updatedAt: new Date(),
         }).where(eq(equipmentPieces.id, existing.pieceId));
         await tx.insert(yearEndInspectionAuditEvents).values({
@@ -175,8 +179,8 @@ export class DrizzleInspectionRepository {
           payload: {
             previousCode: existing.pieceCodeSnapshot,
             previousName: existing.pieceNameSnapshot,
-            nextCode: pieceCodeSnapshot?.trim() ?? existing.pieceCodeSnapshot,
-            nextName: pieceNameSnapshot?.trim() ?? existing.pieceNameSnapshot,
+            nextCode,
+            nextName,
           },
         });
       }

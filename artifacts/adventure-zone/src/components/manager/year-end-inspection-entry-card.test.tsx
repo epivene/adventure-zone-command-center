@@ -115,4 +115,39 @@ describe("YearEndInspectionEntryCard", () => {
       pieceNameSnapshot: "Balloon Castle",
     }));
   });
+
+  it("lets both role-specific APIs describe and delete a saved photo", async () => {
+    const user = userEvent.setup();
+    const managerApi = vi.fn(async () => ({}));
+    vi.spyOn(window, "prompt").mockReturnValue("Updated description");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<YearEndInspectionEntryCard
+      entry={{
+        ...entry,
+        photos: [{
+          id: "50000000-0000-4000-8000-000000000001",
+          signedUrl: "https://example.test/photo",
+          description: "Saved entrance photo",
+          annotations: { version: 1, ellipses: [] },
+        }],
+      }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={managerApi}
+      apiPrefix="/manager-admin"
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    await user.click(screen.getByRole("button", { name: "Edit description" }));
+    expect(managerApi).toHaveBeenCalledWith(
+      "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete photo" }));
+    expect(managerApi).toHaveBeenCalledWith(
+      "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ method: "DELETE" }),
+    );
+  });
 });

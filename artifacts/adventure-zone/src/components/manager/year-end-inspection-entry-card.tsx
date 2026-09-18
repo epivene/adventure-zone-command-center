@@ -37,10 +37,14 @@ export function YearEndInspectionEntryCard({
   const [saving, setSaving] = useState(false);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [photoBusyId, setPhotoBusyId] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState("");
 
   async function save() {
     if (!condition || !code.trim() || !name.trim()) return;
     setSaving(true);
+    setSaveError("");
     try {
       await onSave(entry.id, {
         pieceCodeSnapshot: code.trim(),
@@ -53,6 +57,28 @@ export function YearEndInspectionEntryCard({
         retainForFutureUse: condition !== "retired",
       });
       setOpen(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save this attraction inspection.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function markNotPresent() {
+    if (!code.trim() || !name.trim()) return;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(entry.id, {
+        pieceCodeSnapshot: code.trim(),
+        pieceNameSnapshot: name.trim(),
+        entryState: "not_present",
+        condition: null,
+        repairNeeded: false,
+      });
+      setOpen(false);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save this attraction inspection.");
     } finally {
       setSaving(false);
     }
@@ -61,17 +87,33 @@ export function YearEndInspectionEntryCard({
   async function editPhoto(photo: NonNullable<YearEndInspectionEntryDto["photos"]>[number]) {
     const description = window.prompt("Photo description", photo.description ?? "");
     if (description === null) return;
-    await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos/${photo.id}`, {
-      method: "PATCH",
-      body: JSON.stringify({ description: description.trim() || null, annotations: photo.annotations }),
-    });
-    onPhotoSaved?.();
+    setPhotoError("");
+    setPhotoBusyId(photo.id);
+    try {
+      await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos/${photo.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ description: description.trim() || null, annotations: photo.annotations }),
+      });
+      onPhotoSaved?.();
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Could not update the photo description.");
+    } finally {
+      setPhotoBusyId(null);
+    }
   }
 
   async function deletePhoto(photoId: string) {
     if (!window.confirm("Delete this inspection photo?")) return;
-    await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos/${photoId}`, { method: "DELETE" });
-    onPhotoSaved?.();
+    setPhotoError("");
+    setPhotoBusyId(photoId);
+    try {
+      await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos/${photoId}`, { method: "DELETE" });
+      onPhotoSaved?.();
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : "Could not delete the photo.");
+    } finally {
+      setPhotoBusyId(null);
+    }
   }
 
   return <article className="rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -109,11 +151,12 @@ export function YearEndInspectionEntryCard({
           </div>
           {photo.description ? <figcaption className="p-3 text-sm">{photo.description}</figcaption> : null}
           <div className="flex gap-2 border-t p-2">
-            <button type="button" className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => void editPhoto(photo)}>Edit description</button>
-            <button type="button" className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800" onClick={() => void deletePhoto(photo.id)}>Delete photo</button>
+            <button type="button" disabled={photoBusyId === photo.id} className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => void editPhoto(photo)}>Edit description</button>
+            <button type="button" disabled={photoBusyId === photo.id} className="rounded-lg border border-rose-300 px-3 py-2 text-sm font-semibold text-rose-800" onClick={() => void deletePhoto(photo.id)}>Delete photo</button>
           </div>
         </figure>)}
       </div>
+      {photoError ? <p role="alert" className="text-sm text-rose-700">{photoError}</p> : null}
     </section> : null}
     {open ? <div className="grid gap-3 border-t p-4">
       <div className="grid gap-3 sm:grid-cols-2">
@@ -148,15 +191,10 @@ export function YearEndInspectionEntryCard({
         onSaved={onPhotoSaved}
       />
       <div className="grid gap-2 sm:grid-cols-2">
-        <button type="button" className="min-h-11 rounded-lg border font-semibold" onClick={() => void onSave(entry.id, {
-          pieceCodeSnapshot: code.trim(),
-          pieceNameSnapshot: name.trim(),
-          entryState: "not_present",
-          condition: null,
-          repairNeeded: false,
-        })}>Mark not present</button>
+        <button type="button" className="min-h-11 rounded-lg border font-semibold" disabled={!code.trim() || !name.trim() || saving} onClick={() => void markNotPresent()}>Mark not present</button>
         <button type="button" className="button-primary min-h-11" disabled={!condition || !code.trim() || !name.trim() || saving} onClick={() => void save()}>{saving ? "Saving…" : "Save attraction inspection"}</button>
       </div>
+      {saveError ? <p role="alert" className="text-sm text-rose-700">{saveError}</p> : null}
       {onRemove && entry.pieceCodeSnapshot.startsWith("NEW-") ? <button
         type="button"
         className="min-h-11 rounded-lg border border-rose-300 font-semibold text-rose-800"

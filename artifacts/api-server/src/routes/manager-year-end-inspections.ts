@@ -102,15 +102,22 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
   router.patch("/manager/year-end-inspections/:inspectionId/entries/:entryId", requireManager, async (req, res) => {
     const parsed = entryPatchSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review this piece inspection." }); return; }
-    const entry = await service.patchEntryForLeg(
-      param(req.params.inspectionId),
-      param(req.params.entryId),
-      req.legManager!.legId,
-      parsed.data,
-      `manager:${req.legManager!.managerName ?? req.legManager!.legId}`,
-    );
-    if (!entry) { res.status(404).json({ error: "Inspection entry not found." }); return; }
-    res.json({ entry });
+    try {
+      const entry = await service.patchEntryForLeg(
+        param(req.params.inspectionId),
+        param(req.params.entryId),
+        req.legManager!.legId,
+        parsed.data,
+        `manager:${req.legManager!.managerName ?? req.legManager!.legId}`,
+      );
+      if (!entry) { res.status(404).json({ error: "Inspection entry not found." }); return; }
+      res.json({ entry });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+        res.status(409).json({ error: "That attraction code is already in use." }); return;
+      }
+      throw error;
+    }
   });
 
   router.post("/manager/year-end-inspections/:inspectionId/pieces", requireManager, async (req, res) => {
@@ -192,13 +199,23 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     requireManager,
     express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "15mb" }),
     async (req, res) => {
-      await photoService.putImage(
-        param(req.params.photoId),
-        req.legManager!.legId,
-        new Uint8Array(req.body),
-        req.headers["content-type"] ?? "",
-      );
-      res.json({ ok: true });
+      try {
+        await photoService.putImage(
+          param(req.params.photoId),
+          req.legManager!.legId,
+          new Uint8Array(req.body),
+          req.headers["content-type"] ?? "",
+        );
+        res.json({ ok: true });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : "";
+        if (code === "PHOTO_NOT_FOUND") { res.status(404).json({ error: "Photo not found." }); return; }
+        if (code === "PHOTO_TOO_LARGE") { res.status(413).json({ error: "Photo must be 15 MB or smaller." }); return; }
+        if (["PHOTO_TYPE_UNSUPPORTED", "PHOTO_TYPE_MISMATCH"].includes(code)) {
+          res.status(400).json({ error: "Photo must be a JPEG, PNG, or WebP image." }); return;
+        }
+        throw error;
+      }
     },
   );
 
@@ -207,7 +224,14 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     if (!parsed.success) { res.status(400).json({ error: "Review the photo details." }); return; }
     const inspection = await service.get(param(req.params.inspectionId));
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
-    res.json({ photo: await photoService.patchDescriptionAndAnnotations(param(req.params.photoId), req.legManager!.legId, parsed.data) });
+    try {
+      res.json({ photo: await photoService.patchDescriptionAndAnnotations(param(req.params.photoId), req.legManager!.legId, parsed.data) });
+    } catch (error) {
+      if (error instanceof Error && error.message === "PHOTO_NOT_FOUND") {
+        res.status(404).json({ error: "Photo not found." }); return;
+      }
+      throw error;
+    }
   });
 
   router.delete("/manager/year-end-inspections/:inspectionId/photos/:photoId", requireManager, async (req, res) => {

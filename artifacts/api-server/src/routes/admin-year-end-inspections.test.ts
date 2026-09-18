@@ -12,7 +12,11 @@ describe("admin year-end inspection routes", () => {
     const pieces = { transferLeg: vi.fn(async () => piece) };
     const app = express();
     app.use(express.json());
-    app.use(createAdminYearEndInspectionsRouter({ pieces: pieces as never, service: {} as never }));
+    app.use(createAdminYearEndInspectionsRouter({
+      pieces: pieces as never,
+      service: {} as never,
+      requireOwner: (_req, _res, next) => next(),
+    }));
     const response = await request(app)
       .post(`/manager-admin/equipment-pieces/${piece.id}/transfer`)
       .send({ legId: piece.currentLegId })
@@ -73,7 +77,11 @@ describe("admin year-end inspection routes", () => {
     };
     const app = express();
     app.use(express.json());
-    app.use(createAdminYearEndInspectionsRouter({ pieces: {} as never, service: service as never }));
+    app.use(createAdminYearEndInspectionsRouter({
+      pieces: {} as never,
+      service: service as never,
+      requireOwner: (_req, _res, next) => next(),
+    }));
 
     const response = await request(app)
       .patch(`/manager-admin/year-end-inspections/${inspectionId}/entries/${entryId}`)
@@ -92,6 +100,8 @@ describe("admin year-end inspection routes", () => {
     const photoService = {
       createMetadata: vi.fn(async (input) => input),
       patchDescriptionAndAnnotations: vi.fn(async (_id, _legId, input) => ({ id: photoId, ...input })),
+      putImage: vi.fn(async () => undefined),
+      deletePhoto: vi.fn(async () => true),
     };
     const app = express();
     app.use(express.json());
@@ -99,6 +109,7 @@ describe("admin year-end inspection routes", () => {
       pieces: {} as never,
       service: service as never,
       photoService: photoService as never,
+      requireOwner: (_req, _res, next) => next(),
     }));
 
     await request(app)
@@ -119,5 +130,41 @@ describe("admin year-end inspection routes", () => {
       .expect(200);
 
     expect(response.body.photo).toMatchObject({ id: photoId, description: "Worn entrance seam" });
+
+    await request(app)
+      .put(`/manager-admin/year-end-inspections/${inspectionId}/photos/${photoId}/image`)
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("photo"))
+      .expect(200);
+    expect(photoService.putImage).toHaveBeenCalledWith(
+      photoId,
+      "40000000-0000-4000-8000-000000000001",
+      expect.any(Uint8Array),
+      "image/jpeg",
+    );
+
+    await request(app)
+      .delete(`/manager-admin/year-end-inspections/${inspectionId}/photos/${photoId}`)
+      .expect(200);
+    expect(photoService.deletePhoto).toHaveBeenCalledWith(photoId, "40000000-0000-4000-8000-000000000001");
+  });
+
+  it("protects admin inspection edits and photos with owner authentication", async () => {
+    const app = express();
+    app.use(express.json());
+    app.use(createAdminYearEndInspectionsRouter({
+      pieces: {} as never,
+      service: { get: vi.fn() } as never,
+      photoService: {} as never,
+    }));
+
+    await request(app)
+      .patch("/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/entries/20000000-0000-4000-8000-000000000001")
+      .send({ pieceNameSnapshot: "Blocked edit" })
+      .expect(401);
+    await request(app)
+      .post("/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos")
+      .send({})
+      .expect(401);
   });
 });
