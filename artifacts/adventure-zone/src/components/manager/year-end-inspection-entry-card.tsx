@@ -116,22 +116,31 @@ export function YearEndInspectionEntryCard({
     }
   }
 
+  const photoCount = entry.photos?.length ?? 0;
+  const statusLabel = entry.entryState === "not_started"
+    ? "Not started"
+    : entry.entryState === "not_present"
+      ? "Not present"
+      : entry.repairNeeded
+        ? "Needs attention"
+        : "Inspected";
+
   return <article className="rounded-xl border border-slate-200 bg-white shadow-sm">
     <button
       type="button"
       className="flex min-h-16 w-full items-start justify-between gap-3 p-4 text-left"
       aria-expanded={open}
-      aria-label={`${open ? "Close" : "Open"} ${entry.pieceCodeSnapshot} ${entry.pieceNameSnapshot}`}
+      aria-label={`${open ? "Close" : "Open"} ${entry.pieceCodeSnapshot} ${entry.pieceNameSnapshot}. ${entry.resourceNameSnapshot ?? "Unassigned attraction"}. ${statusLabel}. ${photoCount} photo${photoCount === 1 ? "" : "s"} saved`}
       onClick={() => setOpen((value) => !value)}
     >
       <span>
         <span className="block font-bold">{entry.pieceCodeSnapshot} {entry.pieceNameSnapshot}</span>
         <span className="block text-sm text-slate-600">{entry.resourceNameSnapshot ?? "Unassigned attraction"}</span>
-        {entry.photos?.length ? <span className="block text-xs font-semibold text-emerald-700">{entry.photos.length} photo{entry.photos.length === 1 ? "" : "s"} saved</span> : null}
+        <span className="block text-xs font-semibold text-emerald-700">{photoCount} photo{photoCount === 1 ? "" : "s"} saved</span>
       </span>
       <span className="grid shrink-0 justify-items-end gap-2">
         <span className={`rounded-full px-2 py-1 text-xs font-bold ${entry.entryState === "not_started" ? "bg-slate-100" : entry.repairNeeded ? "bg-rose-100 text-rose-800" : "bg-emerald-100 text-emerald-800"}`}>
-          {entry.entryState === "not_started" ? "Not started" : entry.entryState === "not_present" ? "Not present" : entry.repairNeeded ? "Needs attention" : "Inspected"}
+          {statusLabel}
         </span>
         <span aria-hidden="true" className="text-sm font-bold text-slate-500">{open ? "▲" : "▼"}</span>
       </span>
