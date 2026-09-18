@@ -26,6 +26,7 @@ type InspectionPhotoEditorContentProps = {
   onSaved?: () => void;
   mutationStore?: ManagerMutationStore;
   blobStore?: ManagerBlobStore;
+  apiPrefix?: "/manager" | "/manager-admin";
 };
 
 export function InspectionPhotoEditorContent({
@@ -36,6 +37,7 @@ export function InspectionPhotoEditorContent({
   onSaved,
   mutationStore = indexedDbManagerMutationStore,
   blobStore = indexedDbManagerBlobStore,
+  apiPrefix = "/manager",
 }: InspectionPhotoEditorContentProps) {
   const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
@@ -48,6 +50,7 @@ export function InspectionPhotoEditorContent({
   const galleryRef = useRef<HTMLInputElement>(null);
   const drawingPathRef = useRef<Array<{ x: number; y: number }>>([]);
   const drawingPointerRef = useRef<number | null>(null);
+  const adminUploadIdsRef = useRef<{ photoId: string; clientMutationId: string } | null>(null);
   const previewUrl = useMemo(() => file && typeof URL.createObjectURL === "function" ? URL.createObjectURL(file) : "", [file]);
 
   useEffect(() => () => {
@@ -90,15 +93,44 @@ export function InspectionPhotoEditorContent({
     if (!file) return;
     setError("");
     setSyncState("syncing");
-    const photoId = crypto.randomUUID();
-    const clientMutationId = crypto.randomUUID();
+    const uploadIds = apiPrefix === "/manager-admin"
+      ? adminUploadIdsRef.current ?? { photoId: crypto.randomUUID(), clientMutationId: crypto.randomUUID() }
+      : { photoId: crypto.randomUUID(), clientMutationId: crypto.randomUUID() };
+    if (apiPrefix === "/manager-admin") adminUploadIdsRef.current = uploadIds;
+    const { photoId, clientMutationId } = uploadIds;
     const createdAt = new Date().toISOString();
     try {
+      if (apiPrefix === "/manager-admin") {
+        await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos`, {
+          method: "POST",
+          body: JSON.stringify({
+            id: photoId,
+            clientMutationId,
+            entryId,
+            mimeType: file.type,
+            description: description.trim(),
+            annotations: { version: 1, ellipses },
+          }),
+        });
+        await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos/${photoId}/image`, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+        setSyncState("synced");
+        onSaved?.();
+        adminUploadIdsRef.current = null;
+        setFile(null);
+        setDescription("");
+        setEllipses([]);
+        return;
+      }
+
       await queueManagerMutation({
         id: clientMutationId,
         legId,
         method: "POST",
-        path: `/manager/year-end-inspections/${inspectionId}/photos`,
+        path: `${apiPrefix}/year-end-inspections/${inspectionId}/photos`,
         body: {
           id: photoId,
           clientMutationId,
@@ -125,7 +157,7 @@ export function InspectionPhotoEditorContent({
         await flushManagerMutationQueue(managerApi, mutationStore);
         await flushManagerBlobQueue(async (row) => {
           if (!row.inspectionId || !row.photoId) throw new Error("Inspection photo is missing inspection context");
-          await managerApi(`/manager/year-end-inspections/${row.inspectionId}/photos/${row.photoId}/image`, {
+          await managerApi(`${apiPrefix}/year-end-inspections/${row.inspectionId}/photos/${row.photoId}/image`, {
             method: "PUT",
             headers: { "Content-Type": row.blob.type },
             body: row.blob,
@@ -140,6 +172,11 @@ export function InspectionPhotoEditorContent({
       setDescription("");
       setEllipses([]);
     } catch (saveError) {
+      if (apiPrefix === "/manager-admin") {
+        setSyncState("needs_attention");
+        setError(saveError instanceof Error ? saveError.message : "Photo upload failed. Keep this photo selected and try again.");
+        return;
+      }
       setSyncState("saved_offline");
       setError(saveError instanceof Error ? saveError.message : "Photo saved offline and will retry later");
       onSaved?.();
@@ -147,6 +184,7 @@ export function InspectionPhotoEditorContent({
   }
 
   function selectPhoto(nextFile: File | null) {
+    adminUploadIdsRef.current = null;
     setFile(nextFile);
     setEllipses([]);
     clearDrawingGesture();

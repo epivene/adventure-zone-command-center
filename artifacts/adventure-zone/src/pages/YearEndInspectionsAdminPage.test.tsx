@@ -66,4 +66,52 @@ describe("YearEndInspectionsAdminPage", () => {
     expect(await screen.findByText("Kristy's 2026 inspection was reset. 1 photo and 2 test pieces were removed.")).toBeVisible();
     expect(screen.queryByRole("button", { name: /Kristy's Leg · 2026/ })).not.toBeInTheDocument();
   });
+
+  it("lets an admin edit an attraction inside a selected inspection", async () => {
+    const user = userEvent.setup();
+    const entry = {
+      id: "20000000-0000-4000-8000-000000000001",
+      pieceId: "30000000-0000-4000-8000-000000000001",
+      pieceCodeSnapshot: "OLD-1",
+      pieceNameSnapshot: "Old attraction name",
+      resourceNameSnapshot: null,
+      entryState: "not_started",
+      condition: null,
+      inspectionNotes: null,
+      repairNeeded: false,
+      repairNotes: null,
+      retainForFutureUse: true,
+      photos: [],
+    };
+    const inspection: any = {
+      id: "10000000-0000-4000-8000-000000000001",
+      legId: "40000000-0000-4000-8000-000000000001",
+      inspectionYear: 2026,
+      status: "in_progress",
+      entries: [entry],
+      progress: { total: 1, inspected: 0, notPresent: 0, notStarted: 1, needsAttention: 0, percentComplete: 0 },
+    };
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections" && !options?.method) return { inspections: [inspection] };
+      if (path === `/manager-admin/year-end-inspections/${inspection.id}` && !options?.method) return { inspection };
+      if (path === `/manager-admin/year-end-inspections/${inspection.id}/entries/${entry.id}` && options?.method === "PATCH") {
+        return { entry: { ...entry, ...JSON.parse(String(options.body)) } };
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<YearEndInspectionsAdminContent api={api as unknown as AdminInspectionApi} legs={[{ id: inspection.legId, name: "Leg 1" }]} />);
+    await user.click(await screen.findByRole("button", { name: /Leg 1 · 2026/ }));
+    await user.click(await screen.findByRole("button", { name: "Edit attraction" }));
+    await user.clear(screen.getByLabelText("Attraction name"));
+    await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
+
+    expect(api).toHaveBeenCalledWith(
+      `/manager-admin/year-end-inspections/${inspection.id}/entries/${entry.id}`,
+      expect.objectContaining({ method: "PATCH" }),
+    );
+    expect(await screen.findByText(/Balloon Castle/)).toBeVisible();
+  });
 });

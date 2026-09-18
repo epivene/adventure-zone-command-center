@@ -44,7 +44,7 @@ it("requires a second click before removing an accidental discovered piece", asy
     initiallyOpen
   />);
 
-  await user.click(screen.getByRole("button", { name: "Remove accidental piece" }));
+  await user.click(screen.getByRole("button", { name: "Remove accidental attraction" }));
   expect(onRemove).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Confirm removal" }));
   expect(onRemove).toHaveBeenCalledWith(entry.id);
@@ -62,7 +62,7 @@ describe("YearEndInspectionEntryCard", () => {
     await user.selectOptions(screen.getByLabelText("Condition"), "minor_repair");
     await user.clear(notes);
     await user.type(notes, "Patch the entrance seam");
-    await user.click(screen.getByRole("button", { name: "Save piece inspection" }));
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
 
     expect(onSave).toHaveBeenCalledWith(entry.id, expect.objectContaining({
       inspectionNotes: "Patch the entrance seam",
@@ -75,7 +75,79 @@ describe("YearEndInspectionEntryCard", () => {
     renderCard();
 
     const photoHeading = screen.getByText("Add a photo");
-    const saveButton = screen.getByRole("button", { name: "Save piece inspection" });
+    const saveButton = screen.getByRole("button", { name: "Save attraction inspection" });
     expect(photoHeading.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("shows saved photos even while the inspection editor is collapsed", () => {
+    render(<YearEndInspectionEntryCard
+      entry={{
+        ...entry,
+        photos: [{
+          id: "50000000-0000-4000-8000-000000000001",
+          signedUrl: "https://example.test/photo",
+          description: "Saved entrance photo",
+          annotations: { version: 1, ellipses: [] },
+        }],
+      }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByRole("img", { name: "Saved entrance photo" })).toBeVisible();
+  });
+
+  it("lets the leg manager correct the attraction name and code", async () => {
+    const user = userEvent.setup();
+    const onSave = renderCard();
+
+    await user.clear(screen.getByLabelText("Attraction code"));
+    await user.type(screen.getByLabelText("Attraction code"), "BC-001");
+    await user.clear(screen.getByLabelText("Attraction name"));
+    await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
+    await user.selectOptions(screen.getByLabelText("Condition"), "good");
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
+
+    expect(onSave).toHaveBeenCalledWith(entry.id, expect.objectContaining({
+      pieceCodeSnapshot: "BC-001",
+      pieceNameSnapshot: "Balloon Castle",
+    }));
+  });
+
+  it("lets both role-specific APIs describe and delete a saved photo", async () => {
+    const user = userEvent.setup();
+    const managerApi = vi.fn(async () => ({}));
+    vi.spyOn(window, "prompt").mockReturnValue("Updated description");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<YearEndInspectionEntryCard
+      entry={{
+        ...entry,
+        photos: [{
+          id: "50000000-0000-4000-8000-000000000001",
+          signedUrl: "https://example.test/photo",
+          description: "Saved entrance photo",
+          annotations: { version: 1, ellipses: [] },
+        }],
+      }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={managerApi}
+      apiPrefix="/manager-admin"
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    await user.click(screen.getByRole("button", { name: "Edit description" }));
+    expect(managerApi).toHaveBeenCalledWith(
+      "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ method: "PATCH" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete photo" }));
+    expect(managerApi).toHaveBeenCalledWith(
+      "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
+      expect.objectContaining({ method: "DELETE" }),
+    );
   });
 });

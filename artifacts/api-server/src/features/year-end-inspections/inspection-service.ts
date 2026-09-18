@@ -134,6 +134,13 @@ export class YearEndInspectionService {
     return this.patchEntry(entryId, patch, actorId);
   }
 
+  async patchEntryForAdmin(inspectionId: string, entryId: string, patch: InspectionEntryPatch, actorId: string) {
+    const inspection = await this.repository.get(inspectionId);
+    const entry = await this.repository.getEntry(entryId);
+    if (!inspection || !entry || entry.inspectionId !== inspectionId) return null;
+    return this.patchEntry(entryId, patch, actorId);
+  }
+
   async complete(id: string, actorId: string): Promise<InspectionDetail> {
     const inspection = await this.repository.get(id);
     if (!inspection) throw new Error("INSPECTION_NOT_FOUND");

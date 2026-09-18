@@ -66,5 +66,5 @@ export type InspectionDetail = {
 
 export type InspectionEntryPatch = Partial<Pick<
   InspectionEntryRecord,
-  "entryState" | "condition" | "inspectionNotes" | "repairNeeded" | "repairNotes" | "retainForFutureUse"
+  "pieceCodeSnapshot" | "pieceNameSnapshot" | "entryState" | "condition" | "inspectionNotes" | "repairNeeded" | "repairNotes" | "retainForFutureUse"
 >>;

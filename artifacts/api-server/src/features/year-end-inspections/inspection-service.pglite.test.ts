@@ -215,4 +215,81 @@ describe("YearEndInspectionService", () => {
       actor,
     )).rejects.toThrow("PIECE_NOT_DISCOVERED_DURING_INSPECTION");
   });
+
+  it("lets a leg manager correct an attraction name and code for this inspection and future years", async () => {
+    const { service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+
+    const updated = await service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      {
+        pieceCodeSnapshot: "WW-001",
+        pieceNameSnapshot: "Warrior Wall",
+        entryState: "inspected",
+        condition: "good",
+        inspectionNotes: "Corrected attraction identity",
+      },
+      actor,
+    );
+
+    expect(updated).toMatchObject({
+      pieceCodeSnapshot: "WW-001",
+      pieceNameSnapshot: "Warrior Wall",
+      inspectionNotes: "Corrected attraction identity",
+    });
+    expect(await pieces.get(piece.id)).toMatchObject({ code: "WW-001", name: "Warrior Wall" });
+
+    const next = await service.startForCurrentPieces({
+      legId, year: 2027, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    expect(next.entries[0]).toMatchObject({
+      pieceCodeSnapshot: "WW-001",
+      pieceNameSnapshot: "Warrior Wall",
+    });
+  });
+
+  it("does not let a manager edit an inspection outside their leg", async () => {
+    const { service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+
+    await expect(service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      "10000000-0000-4000-8000-000000000099",
+      { pieceNameSnapshot: "Wrong leg edit" },
+      actor,
+    )).resolves.toBeNull();
+    expect(await pieces.get(piece.id)).toMatchObject({ name: "Front wall section" });
+  });
+
+  it("does not audit unchanged attraction identity fields during a normal inspection save", async () => {
+    const { client, service } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+
+    await service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      {
+        pieceCodeSnapshot: "WP-001",
+        pieceNameSnapshot: "Front wall section",
+        entryState: "inspected",
+        condition: "good",
+      },
+      actor,
+    );
+
+    const audit = await client.query<{ count: string }>(
+      "select count(*)::text as count from year_end_inspection_audit_events where action = 'piece_identity_corrected'",
+    );
+    expect(audit.rows[0]?.count).toBe("0");
+  });
 });
