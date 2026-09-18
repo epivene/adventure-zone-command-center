@@ -63,4 +63,61 @@ describe("admin year-end inspection routes", () => {
       .send({ deleteDiscoveredPieces: true })
       .expect(401);
   });
+
+  it("allows an admin to edit any inspection entry", async () => {
+    const inspectionId = "10000000-0000-4000-8000-000000000001";
+    const entryId = "20000000-0000-4000-8000-000000000001";
+    const patch = { pieceCodeSnapshot: "BC-002", pieceNameSnapshot: "Balloon Castle" };
+    const service = {
+      patchEntryForAdmin: vi.fn(async () => ({ id: entryId, ...patch })),
+    };
+    const app = express();
+    app.use(express.json());
+    app.use(createAdminYearEndInspectionsRouter({ pieces: {} as never, service: service as never }));
+
+    const response = await request(app)
+      .patch(`/manager-admin/year-end-inspections/${inspectionId}/entries/${entryId}`)
+      .send(patch)
+      .expect(200);
+
+    expect(response.body.entry).toMatchObject(patch);
+    expect(service.patchEntryForAdmin).toHaveBeenCalledWith(inspectionId, entryId, patch, "owner");
+  });
+
+  it("allows an admin to create and describe inspection photos", async () => {
+    const inspectionId = "10000000-0000-4000-8000-000000000001";
+    const photoId = "30000000-0000-4000-8000-000000000001";
+    const entryId = "20000000-0000-4000-8000-000000000001";
+    const service = { get: vi.fn(async () => ({ id: inspectionId, legId: "40000000-0000-4000-8000-000000000001", entries: [{ id: entryId }] })) };
+    const photoService = {
+      createMetadata: vi.fn(async (input) => input),
+      patchDescriptionAndAnnotations: vi.fn(async (_id, _legId, input) => ({ id: photoId, ...input })),
+    };
+    const app = express();
+    app.use(express.json());
+    app.use(createAdminYearEndInspectionsRouter({
+      pieces: {} as never,
+      service: service as never,
+      photoService: photoService as never,
+    }));
+
+    await request(app)
+      .post(`/manager-admin/year-end-inspections/${inspectionId}/photos`)
+      .send({
+        id: photoId,
+        clientMutationId: "50000000-0000-4000-8000-000000000001",
+        entryId,
+        mimeType: "image/jpeg",
+        description: "Entrance seam",
+        annotations: { version: 1, ellipses: [] },
+      })
+      .expect(201);
+
+    const response = await request(app)
+      .patch(`/manager-admin/year-end-inspections/${inspectionId}/photos/${photoId}`)
+      .send({ description: "Worn entrance seam", annotations: { version: 1, ellipses: [] } })
+      .expect(200);
+
+    expect(response.body.photo).toMatchObject({ id: photoId, description: "Worn entrance seam" });
+  });
 });

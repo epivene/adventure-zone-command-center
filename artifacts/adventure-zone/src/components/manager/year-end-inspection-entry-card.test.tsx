@@ -78,4 +78,41 @@ describe("YearEndInspectionEntryCard", () => {
     const saveButton = screen.getByRole("button", { name: "Save piece inspection" });
     expect(photoHeading.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it("shows saved photos even while the inspection editor is collapsed", () => {
+    render(<YearEndInspectionEntryCard
+      entry={{
+        ...entry,
+        photos: [{
+          id: "50000000-0000-4000-8000-000000000001",
+          signedUrl: "https://example.test/photo",
+          description: "Saved entrance photo",
+          annotations: { version: 1, ellipses: [] },
+        }],
+      }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByRole("img", { name: "Saved entrance photo" })).toBeVisible();
+  });
+
+  it("lets the leg manager correct the attraction name and code", async () => {
+    const user = userEvent.setup();
+    const onSave = renderCard();
+
+    await user.clear(screen.getByLabelText("Attraction code"));
+    await user.type(screen.getByLabelText("Attraction code"), "BC-001");
+    await user.clear(screen.getByLabelText("Attraction name"));
+    await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
+    await user.selectOptions(screen.getByLabelText("Condition"), "good");
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
+
+    expect(onSave).toHaveBeenCalledWith(entry.id, expect.objectContaining({
+      pieceCodeSnapshot: "BC-001",
+      pieceNameSnapshot: "Balloon Castle",
+    }));
+  });
 });
