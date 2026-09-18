@@ -191,4 +191,18 @@ describe("YearEndInspectionEntryCard", () => {
     })).toBeVisible();
   });
 
+
+  it("does not label an attraction that needs cleaning as All Good", () => {
+    render(<YearEndInspectionEntryCard
+      entry={{ ...entry, entryState: "inspected", condition: "needs_cleaning", repairNeeded: false }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByText("Needs cleaning")).toBeVisible();
+    expect(screen.queryByText("All Good")).not.toBeInTheDocument();
+  });
+
 });
