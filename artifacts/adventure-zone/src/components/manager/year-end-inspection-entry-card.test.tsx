@@ -79,7 +79,8 @@ describe("YearEndInspectionEntryCard", () => {
     expect(photoHeading.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("shows saved photos even while the inspection editor is collapsed", () => {
+  it("keeps attraction details and saved photos inside the dropdown", async () => {
+    const user = userEvent.setup();
     render(<YearEndInspectionEntryCard
       entry={{
         ...entry,
@@ -96,7 +97,15 @@ describe("YearEndInspectionEntryCard", () => {
       onSave={vi.fn(async () => undefined)}
     />);
 
+    expect(screen.getByText("1 photo saved")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Saved entrance photo" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Attraction name")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Open NEW-A058BD54 Hot Air Balloon Castle/ }));
+
     expect(screen.getByRole("img", { name: "Saved entrance photo" })).toBeVisible();
+    expect(screen.getByLabelText("Attraction name")).toBeVisible();
+    expect(screen.getByRole("button", { name: /Close NEW-A058BD54 Hot Air Balloon Castle/ })).toBeVisible();
   });
 
   it("lets the leg manager correct the attraction name and code", async () => {
@@ -138,6 +147,7 @@ describe("YearEndInspectionEntryCard", () => {
       onSave={vi.fn(async () => undefined)}
     />);
 
+    await user.click(screen.getByRole("button", { name: /Open NEW-A058BD54 Hot Air Balloon Castle/ }));
     await user.click(screen.getByRole("button", { name: "Edit description" }));
     expect(managerApi).toHaveBeenCalledWith(
       "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
