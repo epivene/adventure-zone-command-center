@@ -123,7 +123,7 @@ export function YearEndInspectionEntryCard({
       ? "Not present"
       : entry.repairNeeded
         ? "Needs attention"
-        : "Inspected";
+        : "All Good";
 
   return <article className="rounded-xl border border-slate-200 bg-white shadow-sm">
     <button
