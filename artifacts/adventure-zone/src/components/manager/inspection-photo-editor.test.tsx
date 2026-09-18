@@ -146,7 +146,7 @@ describe("InspectionPhotoEditorContent", () => {
         entryId="20000000-0000-4000-8000-000000000001"
         inspectionId="10000000-0000-4000-8000-000000000001"
         legId="30000000-0000-4000-8000-000000000001"
-        managerApi={vi.fn(async () => ({ ok: true }))}
+        managerApi={vi.fn(async <T,>() => ({ ok: true } as T))}
         mutationStore={mutationStore}
       />,
     );
