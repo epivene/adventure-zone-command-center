@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -114,4 +114,117 @@ describe("YearEndInspectionsAdminPage", () => {
     );
     expect(await screen.findByText(/Balloon Castle/)).toBeVisible();
   });
+
+  it("sorts inspection records by newest year and then leg name", async () => {
+    const inspections: any[] = [
+      {
+        id: "10000000-0000-4000-8000-000000000001",
+        legId: "30000000-0000-4000-8000-000000000002",
+        inspectionYear: 2025,
+        status: "completed",
+        entries: [],
+        progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 },
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        legId: "30000000-0000-4000-8000-000000000002",
+        inspectionYear: 2026,
+        status: "in_progress",
+        entries: [],
+        progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 0 },
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000003",
+        legId: "30000000-0000-4000-8000-000000000001",
+        inspectionYear: 2026,
+        status: "completed",
+        entries: [],
+        progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 },
+      },
+    ];
+    const api = vi.fn(async (path: string) => {
+      if (path.startsWith("/manager-admin/equipment-pieces")) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections") return { inspections };
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[
+        { id: "30000000-0000-4000-8000-000000000001", name: "Alpha Leg" },
+        { id: "30000000-0000-4000-8000-000000000002", name: "Zebra Leg" },
+      ]}
+    />);
+
+    await screen.findByRole("button", { name: /Alpha Leg · 2026/ });
+    const recordNames = screen.getAllByRole("button", { name: /· 20\d\d/ }).map((button) => button.textContent);
+    expect(recordNames).toEqual([
+      expect.stringMatching(/^Alpha Leg · 2026/),
+      expect.stringMatching(/^Zebra Leg · 2026/),
+      expect.stringMatching(/^Zebra Leg · 2025/),
+    ]);
+  });
+
+  it("prints a complete report for the selected leg and year", async () => {
+    const user = userEvent.setup();
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    const inspection: any = {
+      id: "10000000-0000-4000-8000-000000000001",
+      legId: "30000000-0000-4000-8000-000000000001",
+      inspectionYear: 2026,
+      managerIdentitySnapshot: "manager:Kristy",
+      status: "completed",
+      entries: [{
+        id: "20000000-0000-4000-8000-000000000001",
+        pieceId: "30000000-0000-4000-8000-000000000002",
+        pieceCodeSnapshot: "BC-1",
+        pieceNameSnapshot: "Balloon Castle",
+        resourceNameSnapshot: "Balloon combo",
+        entryState: "inspected",
+        condition: "minor_repair",
+        inspectionNotes: "Patch the entrance seam",
+        repairNeeded: true,
+        repairNotes: "Patch the entrance seam",
+        retainForFutureUse: true,
+        photos: [{
+          id: "50000000-0000-4000-8000-000000000001",
+          signedUrl: "https://example.test/photo",
+          description: "Issues: Hole / tear\nHole near entrance",
+          annotations: { version: 1, ellipses: [] },
+        }],
+        maintenanceItem: {
+          id: "60000000-0000-4000-8000-000000000001",
+          state: "resolved",
+          resolutionNotes: "Patched and pressure tested",
+        },
+      }],
+      progress: { total: 1, inspected: 1, notPresent: 0, notStarted: 0, needsAttention: 1, percentComplete: 100 },
+    };
+    const api = vi.fn(async (path: string) => {
+      if (path.startsWith("/manager-admin/equipment-pieces")) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections") return { inspections: [inspection] };
+      if (path === `/manager-admin/year-end-inspections/${inspection.id}`) return { inspection };
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[{ id: inspection.legId, name: "Leg 1" }]}
+    />);
+    await user.click(await screen.findByRole("button", { name: /Leg 1 · 2026/ }));
+
+    const report = screen.getByLabelText("Printable inspection report");
+    expect(within(report).getByRole("heading", { name: "Leg 1 2026 full inspection report" })).toBeVisible();
+    expect(within(report).getByText("Manager: Kristy")).toBeVisible();
+    expect(within(report).getByText("Status: completed")).toBeVisible();
+    expect(within(report).getByText("Progress: 1 of 1 inspected")).toBeVisible();
+    expect(within(report).getByRole("heading", { name: "BC-1 Balloon Castle" })).toBeVisible();
+    expect(within(report).getByRole("img", { name: "Issues: Hole / tear Hole near entrance" })).toBeInTheDocument();
+    expect(within(report).getByText("Patched and pressure tested")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Print full report" }));
+    expect(print).toHaveBeenCalledOnce();
+    print.mockRestore();
+  });
+
 });
