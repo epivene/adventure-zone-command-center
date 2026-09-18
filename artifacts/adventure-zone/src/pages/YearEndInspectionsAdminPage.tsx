@@ -71,8 +71,9 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
 
   async function reopen(inspection: InspectionRecordDto) {
     if (!window.confirm(`Reopen the ${inspection.inspectionYear} inspection?`)) return;
+    const selectionGeneration = detailRequestRef.current;
     await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspection.id}/reopen`, { method: "POST", body: "{}" });
-    await openInspection(inspection.id);
+    if (selectionGeneration === detailRequestRef.current) await openInspection(inspection.id);
     setNotice("Inspection reopened for the leg manager.");
   }
 
@@ -80,8 +81,9 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
     const resolutionNotes = window.prompt("Repair completion notes");
     if (!resolutionNotes?.trim()) return;
     const inspectionId = selectedInspectionId;
+    const selectionGeneration = detailRequestRef.current;
     await api(`/manager-admin/year-end-inspection-maintenance/${itemId}/resolve`, { method: "POST", body: JSON.stringify({ resolutionNotes }) });
-    if (inspectionId) await openInspection(inspectionId);
+    if (inspectionId && selectionGeneration === detailRequestRef.current) await openInspection(inspectionId);
   }
 
   async function saveInspectionEntry(entryId: string, patch: Partial<YearEndInspectionEntryDto>) {
