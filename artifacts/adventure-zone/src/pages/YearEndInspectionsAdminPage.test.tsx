@@ -222,10 +222,44 @@ describe("YearEndInspectionsAdminPage", () => {
     expect(within(report).getByRole("heading", { name: "BC-1 Balloon Castle" })).toBeVisible();
     expect(within(report).getByRole("img", { name: /Issues: Hole \/ tear\s+Hole near entrance/ })).toBeInTheDocument();
     expect(within(report).getByText("Patched and pressure tested")).toBeVisible();
+    expect(within(report).getByText("Retained for future use: Yes")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Print full report" }));
     expect(print).toHaveBeenCalledOnce();
     print.mockRestore();
+  });
+
+
+  it("waits for the complete inspection detail before offering to print", async () => {
+    const user = userEvent.setup();
+    const summary: any = {
+      id: "10000000-0000-4000-8000-000000000010",
+      legId: "30000000-0000-4000-8000-000000000010",
+      inspectionYear: 2026,
+      status: "completed",
+      entries: [],
+      progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 },
+    };
+    let resolveDetail!: (value: { inspection: typeof summary }) => void;
+    const detail = new Promise<{ inspection: typeof summary }>((resolve) => { resolveDetail = resolve; });
+    const api = vi.fn(async (path: string) => {
+      if (path.startsWith("/manager-admin/equipment-pieces")) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections") return { inspections: [summary] };
+      if (path === `/manager-admin/year-end-inspections/${summary.id}`) return detail;
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[{ id: summary.legId, name: "Leg 1" }]}
+    />);
+    await user.click(await screen.findByRole("button", { name: /Leg 1 · 2026/ }));
+
+    expect(screen.getByRole("status")).toHaveTextContent("Loading complete inspection report");
+    expect(screen.queryByRole("button", { name: "Print full report" })).not.toBeInTheDocument();
+
+    resolveDetail({ inspection: summary });
+    expect(await screen.findByRole("button", { name: "Print full report" })).toBeVisible();
   });
 
 });
