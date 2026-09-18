@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InspectionRecordView, type InspectionRecordDto } from "@/components/year-end-inspections/inspection-record-view";
 import { YearEndInspectionEntryCard } from "@/components/manager/year-end-inspection-entry-card";
@@ -28,6 +28,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const detailRequestRef = useRef(0);
 
   const load = useCallback(async () => {
     try {
@@ -70,16 +71,17 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
 
   async function reopen(inspection: InspectionRecordDto) {
     if (!window.confirm(`Reopen the ${inspection.inspectionYear} inspection?`)) return;
-    const response = await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspection.id}/reopen`, { method: "POST", body: "{}" });
-    setInspections((current) => current.map((row) => row.id === inspection.id ? response.inspection : row));
+    await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspection.id}/reopen`, { method: "POST", body: "{}" });
+    await openInspection(inspection.id);
     setNotice("Inspection reopened for the leg manager.");
   }
 
   async function resolveRepair(itemId: string) {
     const resolutionNotes = window.prompt("Repair completion notes");
     if (!resolutionNotes?.trim()) return;
+    const inspectionId = selectedInspectionId;
     await api(`/manager-admin/year-end-inspection-maintenance/${itemId}/resolve`, { method: "POST", body: JSON.stringify({ resolutionNotes }) });
-    await load();
+    if (inspectionId) await openInspection(inspectionId);
   }
 
   async function saveInspectionEntry(entryId: string, patch: Partial<YearEndInspectionEntryDto>) {
@@ -118,17 +120,21 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
   }
 
   async function openInspection(inspectionId: string) {
+    const requestId = detailRequestRef.current + 1;
+    detailRequestRef.current = requestId;
     setSelectedInspectionLoading(true);
     setSelectedInspectionId("");
     setError("");
     try {
       const response = await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspectionId}`);
+      if (requestId !== detailRequestRef.current) return;
       setInspections((current) => current.map((inspection) => inspection.id === inspectionId ? response.inspection : inspection));
       setSelectedInspectionId(inspectionId);
     } catch (loadError) {
+      if (requestId !== detailRequestRef.current) return;
       setError(loadError instanceof Error ? loadError.message : "Could not load the complete inspection report");
     } finally {
-      setSelectedInspectionLoading(false);
+      if (requestId === detailRequestRef.current) setSelectedInspectionLoading(false);
     }
   }
 
