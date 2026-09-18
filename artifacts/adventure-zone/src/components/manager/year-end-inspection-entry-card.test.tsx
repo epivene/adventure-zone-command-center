@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { YearEndInspectionEntryCard } from "./year-end-inspection-entry-card";
-import type { YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
+import type { ManagerApi, YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
 
 const entry: YearEndInspectionEntryDto = {
   id: "20000000-0000-4000-8000-000000000001",
@@ -142,7 +142,7 @@ describe("YearEndInspectionEntryCard", () => {
 
   it("lets both role-specific APIs describe and delete a saved photo", async () => {
     const user = userEvent.setup();
-    const managerApi = vi.fn(async <T,>(_path: string, _options?: RequestInit) => ({} as T));
+    const managerApi = vi.fn(async () => ({})) as unknown as ManagerApi;
     vi.spyOn(window, "prompt").mockReturnValue("Updated description");
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<YearEndInspectionEntryCard
