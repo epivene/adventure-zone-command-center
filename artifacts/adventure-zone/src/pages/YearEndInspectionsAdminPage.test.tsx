@@ -106,6 +106,7 @@ describe("YearEndInspectionsAdminPage", () => {
     await user.click(await screen.findByRole("button", { name: /Open OLD-1 Old attraction name/ }));
     await user.clear(screen.getByLabelText("Attraction name"));
     await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
+    await user.selectOptions(screen.getByLabelText("Condition"), "good");
     await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
 
     expect(api).toHaveBeenCalledWith(
@@ -219,7 +220,7 @@ describe("YearEndInspectionsAdminPage", () => {
     expect(within(report).getByText("Status: completed")).toBeVisible();
     expect(within(report).getByText("Progress: 1 of 1 inspected")).toBeVisible();
     expect(within(report).getByRole("heading", { name: "BC-1 Balloon Castle" })).toBeVisible();
-    expect(within(report).getByRole("img", { name: "Issues: Hole / tear Hole near entrance" })).toBeInTheDocument();
+    expect(within(report).getByRole("img", { name: /Issues: Hole \/ tear\s+Hole near entrance/ })).toBeInTheDocument();
     expect(within(report).getByText("Patched and pressure tested")).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Print full report" }));
