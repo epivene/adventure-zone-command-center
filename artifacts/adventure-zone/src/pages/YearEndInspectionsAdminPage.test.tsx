@@ -323,10 +323,11 @@ describe("YearEndInspectionsAdminPage", () => {
       progress: { total: 1, inspected: 1, notPresent: 0, notStarted: 0, needsAttention: 1, percentComplete: 100 },
     };
     let detailGets = 0;
+    let reopened = false;
     let repaired = false;
     const completeDetail = () => ({
       ...summary,
-      status: "in_progress",
+      status: reopened ? "in_progress" : "completed",
       entries: [{ ...entry, maintenanceItem: repaired ? { ...entry.maintenanceItem, state: "resolved", resolutionNotes: "Patched" } : entry.maintenanceItem }],
     });
     const api = vi.fn(async (path: string, options?: RequestInit) => {
@@ -337,6 +338,7 @@ describe("YearEndInspectionsAdminPage", () => {
         return { inspection: completeDetail() };
       }
       if (path === `/manager-admin/year-end-inspections/${summary.id}/reopen` && options?.method === "POST") {
+        reopened = true;
         return { inspection: { ...summary, status: "in_progress", entries: [{ ...entry, photos: undefined }] } };
       }
       if (path === `/manager-admin/year-end-inspection-maintenance/${entry.maintenanceItem.id}/resolve` && options?.method === "POST") {
