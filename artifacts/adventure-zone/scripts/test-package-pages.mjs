@@ -17,6 +17,28 @@ function mount(path = '/', tag = 'adventure-zone-site') {
   return { dom, w, element, root: element.shadowRoot };
 }
 
+test('foam party add-on follows package cards before How It Works', () => {
+  const { dom, root } = mount();
+  try {
+    const packages = root.querySelector('#packages');
+    const foamParty = root.querySelector('#foam-party');
+    const howItWorks = root.querySelector('.how');
+    assert.ok(foamParty, 'foam party add-on is rendered');
+    assert.ok(packages.compareDocumentPosition(foamParty) & 4, 'foam party follows packages');
+    assert.ok(foamParty.compareDocumentPosition(howItWorks) & 4, 'foam party precedes How It Works');
+  } finally { dom.window.close(); }
+});
+
+test('foam party add-on presents approved offer copy', () => {
+  const { dom, root } = mount();
+  try {
+    const foamParty = root.querySelector('#foam-party');
+    assert.equal(foamParty.querySelector('.foam-addon-price').textContent.trim(), 'Only $3,500');
+    assert.match(foamParty.textContent, /Available exclusively with an Adventure Zone package\./);
+    assert.doesNotMatch(foamParty.textContent, /Pricing increases|Only one Foam Party booking/i);
+  } finally { dom.window.close(); }
+});
+
 test('package link opens matching details and booking selects that package', () => {
   const { dom, w, root } = mount();
   try {
