@@ -13,7 +13,7 @@
     rmaf: "https://adventure-zone-command-center-1.onrender.com/assets/rmaf-logo.png",
     waf: "https://adventure-zone-command-center-1.onrender.com/assets/waf-logo.png",
     adventure: "https://static.wixstatic.com/media/0e6e2c_d18d32eac9704b44a2dc9a1c28f9158b~mv2.jpg",
-    foamParty: "https://static.wixstatic.com/media/0e6e2c_f9d30ef22dfb4f62b36e5292e2f3d32e~mv2.png",
+    foamParty: "https://static.wixstatic.com/media/0e6e2c_edfe6538ed2442a3809e6ee2f100ef55~mv2.png",
     pirate: "https://adventure-zone-command-center-1.onrender.com/assets/pirates-rebellion-paddle-boats.jpg",
     warrior: "https://static.wixstatic.com/media/0e6e2c_a25608d697b146ac981ab5b6f074664c~mv2.jpg",
     spectacle01: "https://static.wixstatic.com/media/0e6e2c_2581795bc5464c6aabcb11f1ef326fd6~mv2.jpg",
@@ -398,24 +398,15 @@
     .price-days { color: var(--az-muted); font-size: 14px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
     .extended-rate { margin-top: 8px; color: var(--az-muted); font-size: 11px; font-weight: 700; letter-spacing: .02em; line-height: 1.35; }
 
-    .foam-addon { position: relative; overflow: hidden; color: var(--az-white); background: linear-gradient(145deg, #071f4d 0%, var(--az-navy) 58%, #0a3970 100%); }
-    .foam-addon::before, .foam-addon::after { position: absolute; content: ""; pointer-events: none; border-radius: 50%; border: 3px solid rgba(255,255,255,.48); box-shadow: 42px 18px 0 -9px rgba(255,255,255,.18), 78px -10px 0 -5px rgba(255,255,255,.24); }
-    .foam-addon::before { top: 42px; left: 5%; width: 34px; height: 34px; }
-    .foam-addon::after { right: 10%; bottom: 54px; width: 52px; height: 52px; }
-    .foam-addon > .container { position: relative; z-index: 1; }
-    .foam-addon-heading { margin-bottom: 32px; text-align: center; }
-    .foam-addon-heading .display { margin: 12px 0 0; color: var(--az-white); font-size: clamp(2.5rem, 8vw, 4.75rem); line-height: .9; text-transform: uppercase; }
-    .foam-addon-kicker, .foam-addon-label { display: inline-block; transform: rotate(-2deg); padding: 8px 20px; color: var(--az-white); background: var(--az-pink); font-size: 13px; font-weight: 950; letter-spacing: .12em; text-transform: uppercase; box-shadow: 5px 5px 0 rgba(5,24,57,.28); }
-    .foam-addon-card { display: grid; overflow: hidden; color: var(--az-navy); background: linear-gradient(160deg, #fff 0%, #f2fbff 65%, #ccefff 100%); border: 4px solid var(--az-white); border-radius: 28px; box-shadow: 10px 12px 0 rgba(242,32,126,.72); }
-    .foam-addon-photo { min-height: 320px; overflow: hidden; border-bottom: 4px solid var(--az-navy); }
-    .foam-addon-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 32%; }
-    .foam-addon-copy { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px 36px; text-align: center; }
-    .foam-addon-copy h3 { margin: 18px 0 20px; color: var(--az-pink); font-size: clamp(3.4rem, 12vw, 6.4rem); line-height: .78; text-transform: uppercase; text-shadow: 3px 3px 0 var(--az-navy); }
-    .foam-addon-price { margin: 0 0 18px; padding: 10px 20px; color: var(--az-navy); background: var(--az-yellow); font-size: clamp(1.75rem, 6vw, 2.75rem); line-height: 1; text-transform: uppercase; box-shadow: 6px 6px 0 var(--az-navy); }
-    .foam-addon-note { margin: 0 0 24px; color: var(--az-navy); font-size: 16px; font-weight: 850; }
-    .foam-addon-button { width: 100%; max-width: 360px; justify-content: center; color: var(--az-white); background: var(--az-pink); }
+    .packages-heading-row { display: grid; align-items: center; gap: 28px; margin-bottom: 48px; }
+    .packages-heading-copy { min-width: 0; text-align: center; }
+    .packages-heading-copy .packages-intro { margin-bottom: 0; }
+    .foam-promo { width: 100%; max-width: 680px; margin: 0 auto; transform: rotate(-1deg); transition: transform .24s cubic-bezier(.22,1,.36,1); }
+    .foam-promo:hover { transform: translateY(-6px) rotate(-.4deg); }
+    .foam-promo a { display: block; border-radius: 24px; filter: drop-shadow(10px 12px 0 rgba(0,0,0,.26)); }
+    .foam-promo img { display: block; width: 100%; height: auto; }
 
-        .how { background: var(--az-yellow); }
+    .how { background: var(--az-yellow); }
     .how-layout { display: grid; gap: 40px; }
     .how-copy p { margin: 0 0 32px; font-size: 19px; font-weight: 800; }
     .how-copy .button { background: var(--az-cream); }
@@ -607,11 +598,12 @@
       .packages-intro { margin-bottom: 60px; font-size: 20px; }
       .package-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .package-image { height: 240px; }
-      .foam-addon-card { grid-template-columns: minmax(0,1.08fr) minmax(0,.92fr); }
-      .foam-addon-photo { min-height: 470px; border-right: 4px solid var(--az-navy); border-bottom: 0; }
-      .foam-addon-copy { padding: 44px 36px; }
-      .foam-addon-note { font-size: 18px; }
-            .attraction-lineup-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .packages-heading-row { grid-template-columns: minmax(0,1fr) minmax(360px,.92fr); gap: 48px; margin-bottom: 64px; }
+      .packages-heading-copy { text-align: left; }
+      .packages-heading-copy .fleet-label { justify-content: flex-start; }
+      .packages-heading-copy .packages-intro { margin: 0; text-align: left; }
+      .foam-promo { max-width: none; margin: 0; transform: rotate(-2deg); }
+      .attraction-lineup-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .how-layout { grid-template-columns: 1fr 2fr; gap: 48px; }
       .how-copy p { font-size: 20px; }
       .step-grid { grid-template-columns: repeat(2, minmax(0,1fr)); }
@@ -1004,26 +996,19 @@
       </div></section>
 
       <section class="section packages" id="packages"><div class="container">
-        <div class="section-heading"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
+        <div class="packages-heading-row">
+          <div class="section-heading packages-heading-copy"><div class="fleet-label">The Fleet</div><h2 class="display">Epic Packages</h2><p class="packages-intro">Choose the footprint that fits your event.</p></div>
+          <aside class="foam-promo" id="foam-party" aria-label="Featured add-on">
+            <a href="#contact" aria-label="Ask about the Foam Party add-on for only $3,500">
+              <img src="${IMAGE.foamParty}" alt="Foam Party add-on — Only $3,500">
+            </a>
+          </aside>
+        </div>
         <div class="package-grid">
           ${packageDefinitions().map(packageCard).join("")}
           
           
         </div>
-      </div></section>
-
-      <section class="section foam-addon" id="foam-party"><div class="container">
-        <div class="foam-addon-heading"><span class="foam-addon-kicker">New Add-On</span><h2 class="display">Make It Even Bigger</h2></div>
-        <article class="foam-addon-card">
-          <div class="foam-addon-photo"><img src="${IMAGE.foamParty}" alt="Adventure Zone Foam Party"></div>
-          <div class="foam-addon-copy">
-            <span class="foam-addon-label">New Add-On</span>
-            <h3 class="display">Foam Party</h3>
-            <p class="foam-addon-price display">Only $3,500</p>
-            <p class="foam-addon-note">Available exclusively with an Adventure Zone package.</p>
-            <a class="button foam-addon-button" href="#contact">See The Foam Party →</a>
-          </div>
-        </article>
       </div></section>
 
       <section class="section how"><div class="container how-layout">
