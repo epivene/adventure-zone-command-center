@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -260,6 +260,106 @@ describe("YearEndInspectionsAdminPage", () => {
 
     resolveDetail({ inspection: summary });
     expect(await screen.findByRole("button", { name: "Print full report" })).toBeVisible();
+  });
+
+
+  it("keeps the latest record selected when detail requests resolve out of order", async () => {
+    const user = userEvent.setup();
+    const legA = "30000000-0000-4000-8000-000000000021";
+    const legB = "30000000-0000-4000-8000-000000000022";
+    const summaryA: any = { id: "10000000-0000-4000-8000-000000000021", legId: legA, inspectionYear: 2026, status: "completed", entries: [], progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 } };
+    const summaryB: any = { id: "10000000-0000-4000-8000-000000000022", legId: legB, inspectionYear: 2026, status: "completed", entries: [], progress: { total: 0, inspected: 0, notPresent: 0, notStarted: 0, needsAttention: 0, percentComplete: 100 } };
+    let resolveA!: (value: { inspection: typeof summaryA }) => void;
+    let resolveB!: (value: { inspection: typeof summaryB }) => void;
+    const detailA = new Promise<{ inspection: typeof summaryA }>((resolve) => { resolveA = resolve; });
+    const detailB = new Promise<{ inspection: typeof summaryB }>((resolve) => { resolveB = resolve; });
+    const api = vi.fn(async (path: string) => {
+      if (path.startsWith("/manager-admin/equipment-pieces")) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections") return { inspections: [summaryA, summaryB] };
+      if (path.endsWith(summaryA.id)) return detailA;
+      if (path.endsWith(summaryB.id)) return detailB;
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    render(<YearEndInspectionsAdminContent
+      api={api as unknown as AdminInspectionApi}
+      legs={[{ id: legA, name: "Alpha Leg" }, { id: legB, name: "Beta Leg" }]}
+    />);
+    await user.click(await screen.findByRole("button", { name: /Alpha Leg · 2026/ }));
+    await user.click(screen.getByRole("button", { name: /Beta Leg · 2026/ }));
+
+    await act(async () => { resolveA({ inspection: summaryA }); });
+    expect(screen.queryByRole("button", { name: "Print full report" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Loading complete inspection report");
+
+    await act(async () => { resolveB({ inspection: summaryB }); });
+    expect(await screen.findByRole("heading", { name: "Beta Leg 2026 full inspection report" })).toBeVisible();
+  });
+
+  it("refetches complete detail after reopen and repair resolution mutations", async () => {
+    const user = userEvent.setup();
+    const entry: any = {
+      id: "20000000-0000-4000-8000-000000000031",
+      pieceId: "30000000-0000-4000-8000-000000000031",
+      pieceCodeSnapshot: "BC-31",
+      pieceNameSnapshot: "Balloon Castle",
+      resourceNameSnapshot: null,
+      entryState: "inspected",
+      condition: "minor_repair",
+      inspectionNotes: "Entrance tear",
+      repairNeeded: true,
+      repairNotes: "Entrance tear",
+      retainForFutureUse: true,
+      photos: [{ id: "50000000-0000-4000-8000-000000000031", signedUrl: "https://example.test/photo-31", description: "Entrance tear", annotations: { version: 1, ellipses: [] } }],
+      maintenanceItem: { id: "60000000-0000-4000-8000-000000000031", state: "open", resolutionNotes: null },
+    };
+    const summary: any = {
+      id: "10000000-0000-4000-8000-000000000031",
+      legId: "30000000-0000-4000-8000-000000000032",
+      inspectionYear: 2026,
+      managerIdentitySnapshot: "manager:Kristy",
+      status: "completed",
+      entries: [],
+      progress: { total: 1, inspected: 1, notPresent: 0, notStarted: 0, needsAttention: 1, percentComplete: 100 },
+    };
+    let detailGets = 0;
+    let repaired = false;
+    const completeDetail = () => ({
+      ...summary,
+      status: "in_progress",
+      entries: [{ ...entry, maintenanceItem: repaired ? { ...entry.maintenanceItem, state: "resolved", resolutionNotes: "Patched" } : entry.maintenanceItem }],
+    });
+    const api = vi.fn(async (path: string, options?: RequestInit) => {
+      if (path.startsWith("/manager-admin/equipment-pieces") && !options?.method) return { pieces: [] };
+      if (path === "/manager-admin/year-end-inspections" && !options?.method) return { inspections: [summary] };
+      if (path === `/manager-admin/year-end-inspections/${summary.id}` && !options?.method) {
+        detailGets += 1;
+        return { inspection: completeDetail() };
+      }
+      if (path === `/manager-admin/year-end-inspections/${summary.id}/reopen` && options?.method === "POST") {
+        return { inspection: { ...summary, status: "in_progress", entries: [{ ...entry, photos: undefined }] } };
+      }
+      if (path === `/manager-admin/year-end-inspection-maintenance/${entry.maintenanceItem.id}/resolve` && options?.method === "POST") {
+        repaired = true;
+        return { ok: true };
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    vi.spyOn(window, "prompt").mockReturnValue("Patched");
+
+    render(<YearEndInspectionsAdminContent api={api as unknown as AdminInspectionApi} legs={[{ id: summary.legId, name: "Leg 1" }]} />);
+    await user.click(await screen.findByRole("button", { name: /Leg 1 · 2026/ }));
+    expect(await screen.findByRole("img", { name: "Entrance tear" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Reopen inspection" }));
+    await waitFor(() => expect(detailGets).toBe(2));
+    expect(screen.getByLabelText("Printable inspection report")).toContainElement(screen.getByRole("img", { name: "Entrance tear" }));
+
+    await user.click(screen.getByRole("button", { name: "Mark repair completed" }));
+    await waitFor(() => expect(detailGets).toBe(3));
+    expect(screen.getByLabelText("Printable inspection report")).toContainElement(screen.getByRole("img", { name: "Entrance tear" }));
+    expect(within(screen.getByLabelText("Printable inspection report")).getByText("Patched")).toBeVisible();
   });
 
 });
