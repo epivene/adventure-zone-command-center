@@ -17,24 +17,27 @@ function mount(path = '/', tag = 'adventure-zone-site') {
   return { dom, w, element, root: element.shadowRoot };
 }
 
-test('foam party add-on follows package cards before How It Works', () => {
+test('foam party promo is featured inside Epic Packages before the package cards', () => {
   const { dom, root } = mount();
   try {
     const packages = root.querySelector('#packages');
-    const foamParty = root.querySelector('#foam-party');
-    const howItWorks = root.querySelector('.how');
-    assert.ok(foamParty, 'foam party add-on is rendered');
-    assert.ok(packages.compareDocumentPosition(foamParty) & 4, 'foam party follows packages');
-    assert.ok(foamParty.compareDocumentPosition(howItWorks) & 4, 'foam party precedes How It Works');
+    const foamParty = packages.querySelector('#foam-party');
+    const packageGrid = packages.querySelector('.package-grid');
+    assert.ok(foamParty, 'foam party promo is rendered inside Epic Packages');
+    assert.ok(foamParty.compareDocumentPosition(packageGrid) & 4, 'foam party promo precedes the package cards');
+    assert.equal(root.querySelector('.how #foam-party'), null);
   } finally { dom.window.close(); }
 });
 
-test('foam party add-on presents approved offer copy', () => {
+test('foam party promo uses the approved artwork and links to contact', () => {
   const { dom, root } = mount();
   try {
     const foamParty = root.querySelector('#foam-party');
-    assert.equal(foamParty.querySelector('.foam-addon-price').textContent.trim(), 'Only $3,500');
-    assert.match(foamParty.textContent, /Available exclusively with an Adventure Zone package\./);
+    const link = foamParty.querySelector('a');
+    const image = foamParty.querySelector('img');
+    assert.equal(link.getAttribute('href'), '#contact');
+    assert.equal(image.src, 'https://static.wixstatic.com/media/0e6e2c_c43dd0a344e2430d8881ed0cb8f84da9~mv2.png');
+    assert.match(image.alt, /Foam Party add-on.*Only \$3,500/i);
     assert.doesNotMatch(foamParty.textContent, /Pricing increases|Only one Foam Party booking/i);
   } finally { dom.window.close(); }
 });
