@@ -79,6 +79,21 @@ describe("YearEndInspectionEntryCard", () => {
     expect(photoHeading.compareDocumentPosition(saveButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("includes status, attraction group, and a zero-photo count in the closed dropdown summary", () => {
+    render(<YearEndInspectionEntryCard
+      entry={entry}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByText("0 photos saved")).toBeVisible();
+    expect(screen.getByRole("button", {
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. Not started\. 0 photos saved/,
+    })).toBeVisible();
+  });
+
   it("keeps attraction details and saved photos inside the dropdown", async () => {
     const user = userEvent.setup();
     render(<YearEndInspectionEntryCard
