@@ -18,6 +18,24 @@ import { ellipseStyle, pointerPathEllipse, type PhotoEllipse } from "@/lib/inspe
 
 type ManagerApi = <T>(path: string, options?: RequestInit) => Promise<T>;
 
+const PHOTO_ISSUE_LABELS = [
+  "Hole / tear",
+  "Fraying",
+  "Seam coming apart",
+  "Part coming loose",
+  "Falling off",
+  "Zipper issue",
+  "Velcro worn",
+  "Anchor / D-ring damaged",
+  "Mold / stain",
+  "Needs cleaning",
+  "Fading",
+  "Missing part",
+  "Water damage",
+  "Patch needed",
+  "Other",
+] as const;
+
 type InspectionPhotoEditorContentProps = {
   inspectionId: string;
   entryId: string;
@@ -41,6 +59,7 @@ export function InspectionPhotoEditorContent({
 }: InspectionPhotoEditorContentProps) {
   const [file, setFile] = useState<File | null>(null);
   const [description, setDescription] = useState("");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [ellipses, setEllipses] = useState<PhotoEllipse[]>([]);
   const [drawing, setDrawing] = useState(false);
   const [draftEllipse, setDraftEllipse] = useState<PhotoEllipse | null>(null);
@@ -99,6 +118,10 @@ export function InspectionPhotoEditorContent({
     if (apiPrefix === "/manager-admin") adminUploadIdsRef.current = uploadIds;
     const { photoId, clientMutationId } = uploadIds;
     const createdAt = new Date().toISOString();
+    const savedDescription = [
+      selectedLabels.length ? `Issues: ${selectedLabels.join(", ")}` : "",
+      description.trim(),
+    ].filter(Boolean).join("\n");
     try {
       if (apiPrefix === "/manager-admin") {
         await managerApi(`${apiPrefix}/year-end-inspections/${inspectionId}/photos`, {
@@ -108,7 +131,7 @@ export function InspectionPhotoEditorContent({
             clientMutationId,
             entryId,
             mimeType: file.type,
-            description: description.trim(),
+            description: savedDescription,
             annotations: { version: 1, ellipses },
           }),
         });
@@ -122,6 +145,7 @@ export function InspectionPhotoEditorContent({
         adminUploadIdsRef.current = null;
         setFile(null);
         setDescription("");
+        setSelectedLabels([]);
         setEllipses([]);
         return;
       }
@@ -136,7 +160,7 @@ export function InspectionPhotoEditorContent({
           clientMutationId,
           entryId,
           mimeType: file.type,
-          description: description.trim(),
+          description: savedDescription,
           annotations: { version: 1, ellipses },
         },
         createdAt,
@@ -170,6 +194,7 @@ export function InspectionPhotoEditorContent({
       onSaved?.();
       setFile(null);
       setDescription("");
+      setSelectedLabels([]);
       setEllipses([]);
     } catch (saveError) {
       if (apiPrefix === "/manager-admin") {
@@ -186,6 +211,7 @@ export function InspectionPhotoEditorContent({
   function selectPhoto(nextFile: File | null) {
     adminUploadIdsRef.current = null;
     setFile(nextFile);
+    setSelectedLabels([]);
     setEllipses([]);
     clearDrawingGesture();
   }
@@ -193,6 +219,12 @@ export function InspectionPhotoEditorContent({
   function toggleDrawing() {
     if (drawing) clearDrawingGesture();
     setDrawing((current) => !current);
+  }
+
+  function toggleIssueLabel(label: string) {
+    setSelectedLabels((current) => current.includes(label)
+      ? current.filter((value) => value !== label)
+      : [...current, label]);
   }
 
   return <section className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4">
@@ -254,6 +286,22 @@ export function InspectionPhotoEditorContent({
           onChange={(event) => setDescription(event.target.value)}
         />
       </label>
+      <fieldset className="grid gap-2">
+        <legend className="text-sm font-semibold">Quick issue labels</legend>
+        <p className="text-xs text-slate-500">Choose any that apply. They will be saved with your description.</p>
+        <div className="flex flex-wrap gap-2">
+          {PHOTO_ISSUE_LABELS.map((label) => {
+            const selected = selectedLabels.includes(label);
+            return <button
+              key={label}
+              type="button"
+              aria-pressed={selected}
+              className={`rounded-full border px-3 py-2 text-sm font-semibold ${selected ? "border-orange-600 bg-orange-50 text-orange-800" : "border-slate-300"}`}
+              onClick={() => toggleIssueLabel(label)}
+            >{label}</button>;
+          })}
+        </div>
+      </fieldset>
       <div className="flex flex-wrap gap-2">
         <button type="button" className="rounded-lg border px-3 py-2 font-semibold" onClick={toggleDrawing}>
           {drawing ? "Stop circling" : "Circle an area"}

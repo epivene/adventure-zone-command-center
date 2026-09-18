@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryManagerMutationStore } from "@/lib/manager-sync-queue";
 import { MemoryManagerBlobStore, queueManagerBlob } from "@/lib/manager-blob-queue";
 import { InspectionPhotoEditorContent } from "./inspection-photo-editor";
+import type { ManagerApi } from "@/lib/year-end-inspections-api";
 
 describe("InspectionPhotoEditorContent", () => {
   it("queues photo metadata and the original image while offline", async () => {
@@ -146,7 +147,7 @@ describe("InspectionPhotoEditorContent", () => {
         entryId="20000000-0000-4000-8000-000000000001"
         inspectionId="10000000-0000-4000-8000-000000000001"
         legId="30000000-0000-4000-8000-000000000001"
-        managerApi={vi.fn(async () => ({ ok: true }))}
+        managerApi={vi.fn(async () => ({ ok: true })) as unknown as ManagerApi}
         mutationStore={mutationStore}
       />,
     );
@@ -163,4 +164,37 @@ describe("InspectionPhotoEditorContent", () => {
     });
     online.mockRestore();
   });
+
+  it("saves multiple quick issue labels together with the custom photo description", async () => {
+    const user = userEvent.setup();
+    const mutationStore = new MemoryManagerMutationStore();
+    render(
+      <InspectionPhotoEditorContent
+        blobStore={new MemoryManagerBlobStore()}
+        entryId="20000000-0000-4000-8000-000000000001"
+        inspectionId="10000000-0000-4000-8000-000000000001"
+        legId="30000000-0000-4000-8000-000000000001"
+        managerApi={vi.fn()}
+        mutationStore={mutationStore}
+      />,
+    );
+    await user.upload(
+      screen.getByLabelText("Choose inspection photo from gallery"),
+      new File([new Uint8Array([1])], "damage.jpg", { type: "image/jpeg" }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Hole / tear" }));
+    await user.click(screen.getByRole("button", { name: "Fraying" }));
+    expect(screen.getByRole("button", { name: "Hole / tear" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Fraying" })).toHaveAttribute("aria-pressed", "true");
+
+    await user.type(screen.getByLabelText("Photo description"), "Damage beside the entrance");
+    await user.click(screen.getByRole("button", { name: "Save photo" }));
+
+    const [mutation] = await mutationStore.list();
+    expect(mutation.body).toEqual(expect.objectContaining({
+      description: "Issues: Hole / tear, Fraying\nDamage beside the entrance",
+    }));
+  });
+
 });

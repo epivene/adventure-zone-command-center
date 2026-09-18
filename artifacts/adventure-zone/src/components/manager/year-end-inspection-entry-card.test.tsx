@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { YearEndInspectionEntryCard } from "./year-end-inspection-entry-card";
-import type { YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
+import type { ManagerApi, YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
 
 const entry: YearEndInspectionEntryDto = {
   id: "20000000-0000-4000-8000-000000000001",
@@ -142,7 +142,7 @@ describe("YearEndInspectionEntryCard", () => {
 
   it("lets both role-specific APIs describe and delete a saved photo", async () => {
     const user = userEvent.setup();
-    const managerApi = vi.fn(async () => ({}));
+    const managerApi = vi.fn(async () => ({})) as unknown as ManagerApi;
     vi.spyOn(window, "prompt").mockReturnValue("Updated description");
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<YearEndInspectionEntryCard
@@ -175,4 +175,34 @@ describe("YearEndInspectionEntryCard", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("labels a completed attraction without repairs as All Good", () => {
+    render(<YearEndInspectionEntryCard
+      entry={{ ...entry, entryState: "inspected", condition: "good" }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByText("All Good")).toBeVisible();
+    expect(screen.getByRole("button", {
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. All Good\. 0 photos saved/,
+    })).toBeVisible();
+  });
+
+
+  it("does not label an attraction that needs cleaning as All Good", () => {
+    render(<YearEndInspectionEntryCard
+      entry={{ ...entry, entryState: "inspected", condition: "needs_cleaning", repairNeeded: false }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={vi.fn(async () => undefined)}
+    />);
+
+    expect(screen.getByText("Needs cleaning")).toBeVisible();
+    expect(screen.queryByText("All Good")).not.toBeInTheDocument();
+  });
+
 });
