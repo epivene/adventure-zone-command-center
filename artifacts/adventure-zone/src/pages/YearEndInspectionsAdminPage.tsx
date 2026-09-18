@@ -23,6 +23,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
   const [pieces, setPieces] = useState<EquipmentPieceDto[]>([]);
   const [inspections, setInspections] = useState<InspectionRecordDto[]>([]);
   const [selectedInspectionId, setSelectedInspectionId] = useState("");
+  const [selectedInspectionLoading, setSelectedInspectionLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
@@ -117,9 +118,18 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
   }
 
   async function openInspection(inspectionId: string) {
-    setSelectedInspectionId(inspectionId);
-    const response = await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspectionId}`);
-    setInspections((current) => current.map((inspection) => inspection.id === inspectionId ? response.inspection : inspection));
+    setSelectedInspectionLoading(true);
+    setSelectedInspectionId("");
+    setError("");
+    try {
+      const response = await api<{ inspection: InspectionRecordDto }>(`/manager-admin/year-end-inspections/${inspectionId}`);
+      setInspections((current) => current.map((inspection) => inspection.id === inspectionId ? response.inspection : inspection));
+      setSelectedInspectionId(inspectionId);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Could not load the complete inspection report");
+    } finally {
+      setSelectedInspectionLoading(false);
+    }
   }
 
   const selectedInspection = inspections.find((inspection) => inspection.id === selectedInspectionId) ?? null;
@@ -130,11 +140,13 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
     return (legNames[left.legId] ?? "Travel leg").localeCompare(legNames[right.legId] ?? "Travel leg");
   }), [inspections, legNames]);
 
-  return <div className="grid gap-6">
+  return <div data-year-end-admin className="grid gap-6">
     <style>{`@media print {
       body * { visibility: hidden !important; }
+      [data-year-end-admin] > :not(style):not([data-print-report]) { display: none !important; }
       [data-print-report], [data-print-report] * { visibility: visible !important; }
-      [data-print-report] { position: absolute; inset: 0; width: 100%; border: 0 !important; box-shadow: none !important; }
+      [data-print-report] { display: block !important; position: static !important; width: 100%; margin: 0 !important; border: 0 !important; box-shadow: none !important; }
+      [data-print-entry], [data-print-report] figure { break-inside: avoid; page-break-inside: avoid; }
     }`}</style>
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div><p className="text-xs font-bold uppercase tracking-wider text-orange-700">Equipment & maintenance</p><h1 className="text-3xl font-bold">Year-End Inspections</h1><p className="mt-1 text-sm text-slate-600">Track every physical inflatable piece, group components into attractions, and preserve each leg’s annual record.</p></div>
@@ -160,7 +172,10 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
       <h2 className="text-xl font-bold">Inspection records</h2>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{sortedInspections.map((inspection) => <button key={inspection.id} type="button" className="rounded-xl border bg-white p-4 text-left" onClick={() => void openInspection(inspection.id)}><span className="font-bold">{legNames[inspection.legId] ?? "Travel leg"} · {inspection.inspectionYear}</span><span className="mt-1 block text-sm">{inspection.progress.inspected + inspection.progress.notPresent} of {inspection.progress.total} inspected · {inspection.status}</span><span className="block text-sm text-rose-700">{inspection.progress.needsAttention} need repair</span></button>)}</div>
       {!inspections.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No year-end inspections have been started.</p> : null}
-      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2"><button type="button" className="button-primary" onClick={() => window.print()}>Print full report</button>{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><div className="grid gap-3">{selectedInspection.entries.map((entry) => <div key={entry.id} className="grid gap-2"><YearEndInspectionEntryCard entry={entry} inspectionId={selectedInspection.id} legId={selectedInspection.legId} managerApi={api} apiPrefix="/manager-admin" onSave={saveInspectionEntry} onPhotoSaved={() => void refreshSelectedInspection()} />{entry.maintenanceItem ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Repair follow-up: {entry.maintenanceItem.state}</p>{entry.maintenanceItem.resolutionNotes ? <p>{entry.maintenanceItem.resolutionNotes}</p> : null}{entry.maintenanceItem.state === "open" ? <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-2 font-semibold" onClick={() => void resolveRepair(entry.maintenanceItem!.id)}>Mark repair completed</button> : null}</div> : null}</div>)}</div><section
+      {selectedInspectionLoading ? <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700">Loading complete inspection report…</p> : null}
+      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2"><button type="button" className="button-primary" onClick={() => window.print()}>Print full report</button>{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><div className="grid gap-3">{selectedInspection.entries.map((entry) => <div key={entry.id} className="grid gap-2"><YearEndInspectionEntryCard entry={entry} inspectionId={selectedInspection.id} legId={selectedInspection.legId} managerApi={api} apiPrefix="/manager-admin" onSave={saveInspectionEntry} onPhotoSaved={() => void refreshSelectedInspection()} />{entry.maintenanceItem ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Repair follow-up: {entry.maintenanceItem.state}</p>{entry.maintenanceItem.resolutionNotes ? <p>{entry.maintenanceItem.resolutionNotes}</p> : null}{entry.maintenanceItem.state === "open" ? <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-2 font-semibold" onClick={() => void resolveRepair(entry.maintenanceItem!.id)}>Mark repair completed</button> : null}</div> : null}</div>)}</div></div> : null}
+    </section>
+    {selectedInspection ? <section
         aria-label="Printable inspection report"
         data-print-report
         className="mt-5 grid gap-4 rounded-xl border-2 border-slate-300 bg-white p-5 shadow-sm"
@@ -176,8 +191,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
           </div>
         </header>
         <InspectionRecordView inspection={selectedInspection} />
-      </section></div> : null}
-    </section>
+      </section> : null}
   </div>;
 }
 
