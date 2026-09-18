@@ -142,7 +142,7 @@ describe("YearEndInspectionEntryCard", () => {
 
   it("lets both role-specific APIs describe and delete a saved photo", async () => {
     const user = userEvent.setup();
-    const managerApi = vi.fn(async () => ({}));
+    const managerApi = vi.fn(async <T,>() => ({} as T));
     vi.spyOn(window, "prompt").mockReturnValue("Updated description");
     vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<YearEndInspectionEntryCard
