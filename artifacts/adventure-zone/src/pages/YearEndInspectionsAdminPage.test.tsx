@@ -113,7 +113,7 @@ describe("YearEndInspectionsAdminPage", () => {
       `/manager-admin/year-end-inspections/${inspection.id}/entries/${entry.id}`,
       expect.objectContaining({ method: "PATCH" }),
     );
-    expect(await screen.findByText(/Balloon Castle/)).toBeVisible();
+    expect(await screen.findByRole("button", { name: /Open OLD-1 Balloon Castle/ })).toBeVisible();
   });
 
   it("sorts inspection records by newest year and then leg name", async () => {
