@@ -103,7 +103,7 @@ describe("YearEndInspectionsAdminPage", () => {
 
     render(<YearEndInspectionsAdminContent api={api as unknown as AdminInspectionApi} legs={[{ id: inspection.legId, name: "Leg 1" }]} />);
     await user.click(await screen.findByRole("button", { name: /Leg 1 · 2026/ }));
-    await user.click(await screen.findByRole("button", { name: "Edit attraction" }));
+    await user.click(await screen.findByRole("button", { name: /Open OLD-1 Old attraction name/ }));
     await user.clear(screen.getByLabelText("Attraction name"));
     await user.type(screen.getByLabelText("Attraction name"), "Balloon Castle");
     await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
