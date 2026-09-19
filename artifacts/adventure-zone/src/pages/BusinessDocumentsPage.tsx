@@ -97,6 +97,13 @@ export default function BusinessDocumentsPage({
   const [linkState, setLinkState] = useState("");
   const [year, setYear] = useState("");
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [reviewReloadToken, setReviewReloadToken] = useState(0);
+
+  useEffect(() => {
+    const refreshDocuments = () => setReviewReloadToken((current) => current + 1);
+    window.addEventListener("business-document-review-count-changed", refreshDocuments);
+    return () => window.removeEventListener("business-document-review-count-changed", refreshDocuments);
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -107,7 +114,7 @@ export default function BusinessDocumentsPage({
       .catch(() => { if (current) setError("Could not load business documents."); })
       .finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [api, profileId, reloadToken]);
+  }, [api, profileId, reloadToken, reviewReloadToken]);
 
   async function openDocument(document: BusinessDocumentRecord) {
     setOpeningId(document.id);
