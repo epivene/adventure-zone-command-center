@@ -180,9 +180,10 @@ export class DrizzleInspectionRepository {
             name: resources.name,
             status: resources.status,
             normalTravelLegId: resources.normalTravelLegId,
+            countsAsAttraction: resources.countsAsAttraction,
           }).from(resources).where(eq(resources.id, resourceAssignment.resourceId)).limit(1);
           if (found) {
-            if (found.status === "archived") throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+            if (found.status === "archived" || !found.countsAsAttraction) throw new Error("PIECE_RESOURCE_UNAVAILABLE");
             if (found.normalTravelLegId !== inspection.legId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
             nextResource = { id: found.id, name: found.name };
           } else if (resourceAssignment.mode === "new") {
