@@ -68,3 +68,12 @@ export type InspectionEntryPatch = Partial<Pick<
   InspectionEntryRecord,
   "pieceCodeSnapshot" | "pieceNameSnapshot" | "entryState" | "condition" | "inspectionNotes" | "repairNeeded" | "repairNotes" | "retainForFutureUse"
 >>;
+
+export type InspectionResourceAssignment =
+  | { mode: "none" }
+  | { mode: "existing"; resourceId: string }
+  | { mode: "new"; resourceId: string; name: string };
+
+export type InspectionEntryUpdate = InspectionEntryPatch & {
+  resourceAssignment?: InspectionResourceAssignment;
+};
