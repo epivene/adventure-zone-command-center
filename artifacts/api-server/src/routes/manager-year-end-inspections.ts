@@ -259,17 +259,17 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
           res.status(404).json({ error: "Photo not found." }); return;
         }
         // Image bytes may finish syncing after completion when their metadata was created while the inspection was open.
-        await photoService.putImage(
+        const upload = await photoService.putImage(
           photoId,
           req.legManager!.legId,
           new Uint8Array(req.body),
           req.headers["content-type"] ?? "",
         );
-        res.json({ ok: true });
+        res.json({ ok: true, alreadyUploaded: upload.alreadyUploaded });
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         if (code === "PHOTO_NOT_FOUND") { res.status(404).json({ error: "Photo not found." }); return; }
-        if (code === "PHOTO_ALREADY_UPLOADED") { res.status(409).json({ error: "This photo is already saved and cannot be replaced." }); return; }
+        if (code === "PHOTO_UPLOAD_NOT_PENDING") { res.status(409).json({ error: "This photo upload is not ready to be saved." }); return; }
         if (code === "PHOTO_TOO_LARGE") { res.status(413).json({ error: "Photo must be 15 MB or smaller." }); return; }
         if (["PHOTO_TYPE_UNSUPPORTED", "PHOTO_TYPE_MISMATCH"].includes(code)) {
           res.status(400).json({ error: "Photo must be a JPEG, PNG, or WebP image." }); return;
