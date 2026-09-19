@@ -11,7 +11,7 @@ import {
 
 import type {
   InspectionDetail,
-  InspectionEntryPatch,
+  InspectionEntryUpdate,
   InspectionEntryRecord,
   InspectionMaintenanceItem,
 } from "./inspection-types";
@@ -150,13 +150,13 @@ export class DrizzleInspectionRepository {
     return row ? { ...row.entry, maintenanceItem: row.maintenance } as InspectionEntryRecord : null;
   }
 
-  async patchEntry(id: string, patch: InspectionEntryPatch, actorId: string): Promise<InspectionEntryRecord | null> {
+  async patchEntry(id: string, patch: InspectionEntryUpdate, actorId: string): Promise<InspectionEntryRecord | null> {
     const updatedId = await this.db.transaction(async (tx: Database) => {
       const [existing] = await tx.select().from(yearEndInspectionEntries)
         .where(eq(yearEndInspectionEntries.id, id)).limit(1);
       if (!existing) return null;
 
-      const { pieceCodeSnapshot, pieceNameSnapshot, ...inspectionPatch } = patch;
+      const { pieceCodeSnapshot, pieceNameSnapshot, resourceAssignment, ...inspectionPatch } = patch;
       const nextCode = pieceCodeSnapshot?.trim() ?? existing.pieceCodeSnapshot;
       const nextName = pieceNameSnapshot?.trim() ?? existing.pieceNameSnapshot;
       const codeChanged = pieceCodeSnapshot !== undefined && nextCode !== existing.pieceCodeSnapshot;
@@ -165,6 +165,71 @@ export class DrizzleInspectionRepository {
         ...(codeChanged ? { pieceCodeSnapshot: nextCode } : {}),
         ...(nameChanged ? { pieceNameSnapshot: nextName } : {}),
       };
+      let resourceSnapshotPatch: { resourceIdSnapshot?: string | null; resourceNameSnapshot?: string | null } = {};
+      if (resourceAssignment) {
+        const [inspection] = await tx.select({ legId: yearEndLegInspections.legId })
+          .from(yearEndLegInspections)
+          .where(eq(yearEndLegInspections.id, existing.inspectionId))
+          .limit(1);
+        if (!inspection) throw new Error("INSPECTION_NOT_FOUND");
+
+        let nextResource: { id: string; name: string } | null = null;
+        if (resourceAssignment.mode !== "none") {
+          const [found] = await tx.select({
+            id: resources.id,
+            name: resources.name,
+            status: resources.status,
+            normalTravelLegId: resources.normalTravelLegId,
+          }).from(resources).where(eq(resources.id, resourceAssignment.resourceId)).limit(1);
+          if (found) {
+            if (found.status === "archived") throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+            if (found.normalTravelLegId !== inspection.legId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
+            nextResource = { id: found.id, name: found.name };
+          } else if (resourceAssignment.mode === "new") {
+            const [created] = await tx.insert(resources).values({
+              id: resourceAssignment.resourceId,
+              code: `inspection_${resourceAssignment.resourceId.replace(/-/g, "").slice(0, 12)}`,
+              name: resourceAssignment.name.trim(),
+              category: "Inflatable attraction",
+              countsAsAttraction: true,
+              normalTravelLegId: inspection.legId,
+              status: "available",
+            }).returning({ id: resources.id, name: resources.name });
+            if (!created) throw new Error("RESOURCE_CREATE_FAILED");
+            nextResource = created;
+          } else {
+            throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+          }
+        }
+
+        const [currentAssignment] = await tx.select({ resourceId: equipmentPieceAssignments.resourceId })
+          .from(equipmentPieceAssignments)
+          .where(and(eq(equipmentPieceAssignments.pieceId, existing.pieceId), isNull(equipmentPieceAssignments.removedAt)))
+          .limit(1);
+        if ((currentAssignment?.resourceId ?? null) !== (nextResource?.id ?? null)) {
+          await tx.update(equipmentPieceAssignments).set({ removedAt: new Date() })
+            .where(and(eq(equipmentPieceAssignments.pieceId, existing.pieceId), isNull(equipmentPieceAssignments.removedAt)));
+          if (nextResource) {
+            await tx.insert(equipmentPieceAssignments).values({
+              pieceId: existing.pieceId,
+              resourceId: nextResource.id,
+              actorId,
+              reason: "Assigned during year-end inspection",
+            });
+          }
+          await tx.insert(yearEndInspectionAuditEvents).values({
+            inspectionId: existing.inspectionId,
+            pieceId: existing.pieceId,
+            action: nextResource ? "piece_regrouped" : "piece_unassigned",
+            actorId,
+            payload: { previousResourceId: currentAssignment?.resourceId ?? null, resourceId: nextResource?.id ?? null },
+          });
+        }
+        resourceSnapshotPatch = {
+          resourceIdSnapshot: nextResource?.id ?? null,
+          resourceNameSnapshot: nextResource?.name ?? null,
+        };
+      }
       if (codeChanged || nameChanged) {
         await tx.update(equipmentPieces).set({
           ...(codeChanged ? { code: nextCode } : {}),
@@ -191,7 +256,7 @@ export class DrizzleInspectionRepository {
           ? { inspectedAt: new Date(), inspectorIdentitySnapshot: actorId, condition: null }
           : {};
       const [updated] = await tx.update(yearEndInspectionEntries)
-        .set({ ...inspectionPatch, ...identityPatch, ...statePatch, updatedAt: new Date() })
+        .set({ ...inspectionPatch, ...identityPatch, ...resourceSnapshotPatch, ...statePatch, updatedAt: new Date() })
         .where(eq(yearEndInspectionEntries.id, id))
         .returning({ id: yearEndInspectionEntries.id });
       return updated?.id ?? null;
