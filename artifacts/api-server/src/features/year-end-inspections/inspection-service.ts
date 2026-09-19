@@ -51,8 +51,19 @@ export class YearEndInspectionService {
   async listResourcesForLeg(legId: string) {
     return this.db.select({ id: resources.id, name: resources.name })
       .from(resources)
-      .where(and(eq(resources.normalTravelLegId, legId), ne(resources.status, "archived")))
+      .where(and(
+        eq(resources.normalTravelLegId, legId),
+        eq(resources.countsAsAttraction, true),
+        ne(resources.status, "archived"),
+      ))
       .orderBy(asc(resources.name));
+  }
+
+  private verifyStartReplay(existing: InspectionDetail, input: { legId: string; year: number }) {
+    if (existing.legId !== input.legId || existing.inspectionYear !== input.year) {
+      throw new InspectionLifecycleError("mutation_conflict", "That saved start request belongs to a different leg or inspection year.");
+    }
+    return existing;
   }
 
   async startForCurrentPieces(input: {
@@ -62,7 +73,7 @@ export class YearEndInspectionService {
     actorId: string;
   }): Promise<InspectionDetail> {
     const existing = await this.repository.findByMutation(input.clientMutationId);
-    if (existing) return existing;
+    if (existing) return this.verifyStartReplay(existing, input);
     const seeds = await this.repository.currentPieceSeeds(input.legId);
     const id = await this.repository.create({
       clientMutationId: input.clientMutationId,
@@ -80,7 +91,7 @@ export class YearEndInspectionService {
     actorId: string;
   }): Promise<InspectionDetail> {
     const existing = await this.repository.findByMutation(input.clientMutationId);
-    if (existing) return existing;
+    if (existing) return this.verifyStartReplay(existing, input);
     const id = await this.repository.create({
       clientMutationId: input.clientMutationId,
       legId: input.legId,
@@ -98,7 +109,7 @@ export class YearEndInspectionService {
     actorId: string;
   }): Promise<InspectionDetail> {
     const existing = await this.repository.findByMutation(input.clientMutationId);
-    if (existing) return existing;
+    if (existing) return this.verifyStartReplay(existing, input);
     const source = await this.repository.get(input.sourceInspectionId);
     if (!source || source.legId !== input.legId) throw new Error("SOURCE_INSPECTION_NOT_FOUND");
     const seeds: EntrySeed[] = source.entries.map((entry, index) => ({
@@ -131,6 +142,12 @@ export class YearEndInspectionService {
     const inspection = await this.repository.get(inspectionId);
     const entry = await this.repository.getEntry(entryId);
     if (!inspection || inspection.legId !== legId || !entry || entry.inspectionId !== inspectionId) return null;
+    if (inspection.status === "completed") {
+      throw new InspectionLifecycleError("inspection_completed", "Reopen the inspection before making changes.");
+    }
+    const [piece] = await this.db.select({ currentLegId: equipmentPieces.currentLegId })
+      .from(equipmentPieces).where(eq(equipmentPieces.id, entry.pieceId)).limit(1);
+    if (!piece || piece.currentLegId !== legId) throw new Error("PIECE_OUTSIDE_LEG");
     return this.patchEntry(entryId, patch, actorId);
   }
 
@@ -162,6 +179,7 @@ export class YearEndInspectionService {
       .where(eq(yearEndInspectionEntries.inspectionId, inspectionId));
     const inspection = await this.repository.get(inspectionId);
     if (!inspection) throw new Error("INSPECTION_NOT_FOUND");
+    if (inspection.status === "completed") throw new InspectionLifecycleError("inspection_completed", "Reopen the inspection before adding another piece.");
     const seed = (await this.repository.currentPieceSeeds(inspection.legId)).find((row) => row.pieceId === pieceId);
     if (!seed) throw new Error("PIECE_NOT_AVAILABLE_FOR_LEG");
     await this.repository.addEntry(inspectionId, { ...seed, sortOrder: pieces.length });
@@ -183,23 +201,26 @@ export class YearEndInspectionService {
     },
     actorId: string,
   ): Promise<InspectionDetail> {
-    let inspection = await this.repository.get(inspectionId);
+    return this.db.transaction(async (tx: Database) => {
+    const repository = new DrizzleInspectionRepository(tx);
+    let inspection = await repository.get(inspectionId);
     if (!inspection || inspection.legId !== legId) throw new Error("INSPECTION_NOT_FOUND");
     if (inspection.status === "completed") throw new InspectionLifecycleError("inspection_completed", "Reopen the inspection before adding another piece.");
     if (inspection.entries.some((entry) => entry.id === input.entryId || entry.pieceId === input.pieceId)) return inspection;
 
     let resourceId = input.resourceId;
     if (input.newResource) {
-      const [found] = await this.db.select({
+      const [found] = await tx.select({
         id: resources.id,
         status: resources.status,
         normalTravelLegId: resources.normalTravelLegId,
+        countsAsAttraction: resources.countsAsAttraction,
       }).from(resources).where(eq(resources.id, input.newResource.id)).limit(1);
       if (found) {
-        if (found.status === "archived") throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+        if (found.status === "archived" || !found.countsAsAttraction) throw new Error("PIECE_RESOURCE_UNAVAILABLE");
         if (found.normalTravelLegId !== legId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
       } else {
-        await this.db.insert(resources).values({
+        await tx.insert(resources).values({
           id: input.newResource.id,
           code: `inspection_${input.newResource.id.replace(/-/g, "").slice(0, 12)}`,
           name: input.newResource.name.trim(),
@@ -212,7 +233,17 @@ export class YearEndInspectionService {
       resourceId = input.newResource.id;
     }
 
-    const pieces = new DrizzlePieceRepository(this.db);
+    if (resourceId) {
+      const [selectedResource] = await tx.select({
+        status: resources.status,
+        normalTravelLegId: resources.normalTravelLegId,
+        countsAsAttraction: resources.countsAsAttraction,
+      }).from(resources).where(eq(resources.id, resourceId)).limit(1);
+      if (!selectedResource || selectedResource.status === "archived" || !selectedResource.countsAsAttraction) throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+      if (selectedResource.normalTravelLegId !== legId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
+    }
+
+    const pieces = new DrizzlePieceRepository(tx);
     let piece = await pieces.get(input.pieceId);
     if (piece && piece.currentLegId !== legId) throw new Error("PIECE_OUTSIDE_LEG");
     if (!piece) {
@@ -230,9 +261,9 @@ export class YearEndInspectionService {
       }, actorId);
     }
 
-    inspection = (await this.repository.get(inspectionId))!;
+    inspection = (await repository.get(inspectionId))!;
     if (!inspection.entries.some((entry) => entry.pieceId === piece.id)) {
-      await this.repository.addEntry(inspectionId, {
+      await repository.addEntry(inspectionId, {
         id: input.entryId,
         clientMutationId: input.clientMutationId,
         pieceId: piece.id,
@@ -243,7 +274,8 @@ export class YearEndInspectionService {
         sortOrder: inspection.entries.length,
       });
     }
-    return (await this.repository.get(inspectionId))!;
+    return (await repository.get(inspectionId))!;
+    });
   }
 
   async canRemoveDiscoveredPieceForLeg(inspectionId: string, entryId: string, legId: string, actorId: string) {
