@@ -16,6 +16,7 @@ export type YearEndInspectionEntryDto = {
   repairNeeded: boolean;
   repairNotes: string | null;
   retainForFutureUse: boolean;
+  canRemoveAsAccidental?: boolean;
   photos?: InspectionPhotoDto[];
 };
 
