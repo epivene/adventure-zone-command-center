@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
+
 import { clearManagerPrivateData, flushManagerMutationQueue, MemoryManagerMutationStore, queueManagerMutation } from "./manager-sync-queue";
 
 function mutation(id: string, legId = "leg-a", createdAt = "2026-08-15T10:00:00.000Z") {
   return { id, legId, method: "POST", path: "/manager/issues", body: { clientMutationId: id }, createdAt };
+}
+
+function conflict(message: string) {
+  return Object.assign(new Error(message), { status: 409 });
 }
 
 describe("manager sync queue", () => {
@@ -41,9 +46,30 @@ describe("manager sync queue", () => {
   it("marks 409 conflicts as needs attention", async () => {
     const store = new MemoryManagerMutationStore();
     await queueManagerMutation(mutation("m1"), store);
-    const error = Object.assign(new Error("conflict"), { status: 409 });
-    await flushManagerMutationQueue(vi.fn(async () => { throw error; }), store);
+    await flushManagerMutationQueue(vi.fn(async () => { throw conflict("conflict"); }), store);
     expect((await store.list())[0]?.state).toBe("needs_attention");
+  });
+
+  it("marks permanent attraction conflicts for review and continues later work", async () => {
+    const store = new MemoryManagerMutationStore();
+    const base = { legId: "leg-1", method: "POST", body: {}, createdAt: "2026-09-19T00:00:00.000Z" };
+    await queueManagerMutation({ ...base, id: "moved", path: "/discovered/moved" }, store);
+    await queueManagerMutation({ ...base, id: "duplicate", path: "/discovered/duplicate", createdAt: "2026-09-19T00:00:01.000Z" }, store);
+    await queueManagerMutation({ ...base, id: "later", path: "/entries/later", createdAt: "2026-09-19T00:00:02.000Z" }, store);
+    const managerApi = vi.fn(async (path: string) => {
+      if (path.includes("moved")) throw conflict("Attraction moved to another leg");
+      if (path.includes("duplicate")) throw conflict("Attraction code is already in use");
+      return {};
+    });
+
+    const rows = await flushManagerMutationQueue(managerApi, store);
+
+    expect(rows.map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: "moved", state: "needs_attention" },
+      { id: "duplicate", state: "needs_attention" },
+      { id: "later", state: "synced" },
+    ]);
+    expect(managerApi).toHaveBeenCalledTimes(3);
   });
 
   it("purges private queued data for only the signed-out leg", async () => {
