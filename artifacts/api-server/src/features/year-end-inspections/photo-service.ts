@@ -62,6 +62,9 @@ export class YearEndInspectionPhotoService {
       .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
     if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
     if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
+    // Inspection photos are evidence: the first successful upload is immutable.
+    // A pending upload may still finish after the inspection itself is completed.
+    if (photo.uploadStatus !== "image_pending") throw new Error("PHOTO_ALREADY_UPLOADED");
     await this.storage.put(photo.objectKey, bytes, contentType);
     await this.db.update(yearEndInspectionPhotos).set({
       uploadStatus: "image_uploaded",
