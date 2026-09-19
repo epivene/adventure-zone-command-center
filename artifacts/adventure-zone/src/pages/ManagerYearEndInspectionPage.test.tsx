@@ -101,6 +101,11 @@ describe("ManagerYearEndInspectionPage", () => {
     expect(await screen.findByText("1 of 2 inspected")).toBeVisible();
     expect(screen.getByRole("button", { name: /Close AZ-018 Back section/ })).toBeVisible();
     expect(screen.getByRole("button", { name: "Review & finish inspection" })).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText("Condition"), "good");
+    await user.click(screen.getByRole("button", { name: "Save & inspect next" }));
+    expect(await screen.findByText("2 of 2 inspected")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Review & finish inspection" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Close AZ-018 Back section/ })).not.toBeInTheDocument();
   });
 
   it("lets a manager build a blank inspection by photographing and labeling newly discovered pieces", async () => {
