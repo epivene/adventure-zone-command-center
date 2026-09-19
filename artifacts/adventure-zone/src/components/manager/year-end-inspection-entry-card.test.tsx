@@ -92,7 +92,7 @@ describe("YearEndInspectionEntryCard", () => {
 
     expect(screen.getByText("0 photos saved")).toBeVisible();
     expect(screen.getByRole("button", {
-      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. Not started\. 0 photos saved/,
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Attraction: Ballon combo\. Not started\. 0 photos saved/,
     })).toBeVisible();
   });
 
@@ -143,7 +143,7 @@ describe("YearEndInspectionEntryCard", () => {
       initiallyOpen
     />);
 
-    expect(screen.getByText("No attraction assigned yet")).toBeVisible();
+    expect(screen.getAllByText("No attraction assigned yet")[0]).toBeVisible();
     await user.selectOptions(screen.getByLabelText("Attraction assignment"), "new");
     expect(screen.getByLabelText("New attraction name")).toHaveValue("Hot Air Balloon Castle");
     await user.selectOptions(screen.getByLabelText("Condition"), "good");
@@ -198,6 +198,7 @@ describe("YearEndInspectionEntryCard", () => {
     />);
 
     await user.click(screen.getByRole("button", { name: /Open NEW-A058BD54 Hot Air Balloon Castle/ }));
+    await user.click(screen.getByRole("button", { name: "View saved photos (1)" }));
     await user.click(screen.getByRole("button", { name: "Edit description" }));
     expect(managerApi).toHaveBeenCalledWith(
       "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
@@ -222,7 +223,7 @@ describe("YearEndInspectionEntryCard", () => {
 
     expect(screen.getByText("All Good")).toBeVisible();
     expect(screen.getByRole("button", {
-      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. All Good\. 0 photos saved/,
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Attraction: Ballon combo\. All Good\. 0 photos saved/,
     })).toBeVisible();
   });
 
