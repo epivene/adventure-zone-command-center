@@ -281,7 +281,7 @@ export function ManagerYearEndInspectionContent({
   function inspectNext(entryId: string) {
     if (!inspection) return;
     const currentIndex = inspection.entries.findIndex((entry) => entry.id === entryId);
-    const ordered = [...inspection.entries.slice(currentIndex + 1), ...inspection.entries.slice(0, currentIndex + 1)];
+    const ordered = [...inspection.entries.slice(currentIndex + 1), ...inspection.entries.slice(0, currentIndex)];
     setOpenEntryId(ordered.find((entry) => entry.entryState === "not_started")?.id ?? null);
   }
 
