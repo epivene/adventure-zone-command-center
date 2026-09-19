@@ -264,14 +264,14 @@ describe("manager year-end inspection routes", () => {
     expect(photoService.putImage).not.toHaveBeenCalled();
   });
 
-  it("finishes a pending photo after completion but refuses to replace saved evidence", async () => {
+  it("treats a lost-response retry as success without replacing saved evidence", async () => {
     const photoId = "40000000-0000-4000-8000-000000000003";
     const service = { get: vi.fn(async () => ({ id: inspectionId, legId, status: "completed", entries: [] })) };
     const photoService = {
       belongsToInspection: vi.fn(async () => true),
       putImage: vi.fn()
-        .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new Error("PHOTO_ALREADY_UPLOADED")),
+        .mockResolvedValueOnce({ alreadyUploaded: false })
+        .mockResolvedValueOnce({ alreadyUploaded: true }),
     };
     const app = appFor(service, photoService);
 
@@ -284,7 +284,8 @@ describe("manager year-end inspection routes", () => {
       .put(`/manager/year-end-inspections/${inspectionId}/photos/${photoId}/image`)
       .set("Content-Type", "image/jpeg")
       .send(Buffer.from("replacement"))
-      .expect(409);
+      .expect(200)
+      .expect({ ok: true, alreadyUploaded: true });
     expect(photoService.putImage).toHaveBeenCalledTimes(2);
   });
 
