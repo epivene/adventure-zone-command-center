@@ -123,6 +123,28 @@ describe("manager year-end inspection routes", () => {
     );
   });
 
+  it.each([
+    [new Error("PIECE_RESOURCE_UNAVAILABLE"), "moved attraction"],
+    [Object.assign(new Error("duplicate code"), { code: "23505" }), "duplicate attraction code"],
+  ])("returns a queue-resolvable conflict for a discovered piece with a %s", async (failure) => {
+    const service = {
+      createDiscoveredPieceForLeg: vi.fn(async () => { throw failure; }),
+    };
+    await request(appFor(service))
+      .post(`/manager/year-end-inspections/${inspectionId}/discovered-pieces`)
+      .send({
+        pieceId: "40000000-0000-4000-8000-000000000001",
+        entryId: "50000000-0000-4000-8000-000000000001",
+        clientMutationId: "60000000-0000-4000-8000-000000000001",
+        code: "BLUE-1",
+        name: "Blue slide",
+        identityNotes: null,
+        resourceId: "70000000-0000-4000-8000-000000000001",
+        newResource: null,
+      })
+      .expect(409);
+  });
+
   it("lets the signed-in leg manager reopen a completed inspection", async () => {
     const inspection = { id: inspectionId, legId, status: "completed", entries: [] };
     const reopened = { ...inspection, status: "in_progress" };
@@ -240,6 +262,30 @@ describe("manager year-end inspection routes", () => {
       .send(Buffer.from("photo"))
       .expect(404);
     expect(photoService.putImage).not.toHaveBeenCalled();
+  });
+
+  it("finishes a pending photo after completion but refuses to replace saved evidence", async () => {
+    const photoId = "40000000-0000-4000-8000-000000000003";
+    const service = { get: vi.fn(async () => ({ id: inspectionId, legId, status: "completed", entries: [] })) };
+    const photoService = {
+      belongsToInspection: vi.fn(async () => true),
+      putImage: vi.fn()
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error("PHOTO_ALREADY_UPLOADED")),
+    };
+    const app = appFor(service, photoService);
+
+    await request(app)
+      .put(`/manager/year-end-inspections/${inspectionId}/photos/${photoId}/image`)
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("pending photo"))
+      .expect(200);
+    await request(app)
+      .put(`/manager/year-end-inspections/${inspectionId}/photos/${photoId}/image`)
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("replacement"))
+      .expect(409);
+    expect(photoService.putImage).toHaveBeenCalledTimes(2);
   });
 
   it("rejects malformed photo annotations as a client error", async () => {
