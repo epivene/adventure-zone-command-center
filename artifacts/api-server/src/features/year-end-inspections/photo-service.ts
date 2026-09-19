@@ -58,19 +58,23 @@ export class YearEndInspectionPhotoService {
   async putImage(photoId: string, legId: string, bytes: Uint8Array, contentType: string) {
     if (!supportedTypes.has(contentType)) throw new Error("PHOTO_TYPE_UNSUPPORTED");
     if (bytes.byteLength > maximumBytes) throw new Error("PHOTO_TOO_LARGE");
-    const [photo] = await this.db.select().from(yearEndInspectionPhotos)
-      .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
-    if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
-    if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
-    // Inspection photos are evidence: the first successful upload is immutable.
-    // A pending upload may still finish after the inspection itself is completed.
-    if (photo.uploadStatus !== "image_pending") throw new Error("PHOTO_ALREADY_UPLOADED");
-    await this.storage.put(photo.objectKey, bytes, contentType);
-    await this.db.update(yearEndInspectionPhotos).set({
-      uploadStatus: "image_uploaded",
-      uploadedAt: new Date(),
-      updatedAt: new Date(),
-    }).where(eq(yearEndInspectionPhotos.id, photoId));
+    await this.db.transaction(async (tx: Database) => {
+      const [photo] = await tx.select().from(yearEndInspectionPhotos)
+        .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId)))
+        .for("update")
+        .limit(1);
+      if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
+      if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
+      // Inspection photos are evidence: lock the row so simultaneous uploads cannot
+      // both replace the original. A pending upload may finish after completion.
+      if (photo.uploadStatus !== "image_pending") throw new Error("PHOTO_ALREADY_UPLOADED");
+      await this.storage.put(photo.objectKey, bytes, contentType);
+      await tx.update(yearEndInspectionPhotos).set({
+        uploadStatus: "image_uploaded",
+        uploadedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(yearEndInspectionPhotos.id, photoId));
+    });
   }
 
   async patchDescriptionAndAnnotations(photoId: string, legId: string, rawPatch: PhotoPatch) {
