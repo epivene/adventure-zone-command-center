@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   YearEndInspectionEntryCard,
@@ -46,8 +46,11 @@ export function ManagerYearEndInspectionContent({
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const loadRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = loadRequestRef.current + 1;
+    loadRequestRef.current = requestId;
     setLoading(true);
     setError("");
     try {
@@ -57,15 +60,22 @@ export function ManagerYearEndInspectionContent({
         managerApi<{ resources: LegInspectionResource[] }>("/manager/year-end-inspections/resources")
           .catch(() => ({ resources: [] })),
       ]);
+      if (requestId !== loadRequestRef.current) return;
+      if (current.inspection && current.inspection.inspectionYear !== selectedYear) {
+        throw new Error(`The server returned the wrong inspection year. Please reload ${selectedYear}.`);
+      }
       setInspection(current.inspection);
       setPriorInspection(prior.inspection);
       setResources(resourceResponse.resources ?? []);
-      setOpenEntryId(null);
+      setOpenEntryId(current.inspection?.status === "completed"
+        ? null
+        : current.inspection?.entries.find((entry) => entry.entryState === "not_started")?.id ?? null);
       setReviewing(false);
     } catch (loadError) {
+      if (requestId !== loadRequestRef.current) return;
       setError(loadError instanceof Error ? loadError.message : "Could not load the inspection");
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [currentYear, managerApi, selectedYear]);
 
@@ -85,7 +95,7 @@ export function ManagerYearEndInspectionContent({
         }),
       });
       setInspection(response.inspection);
-      setOpenEntryId(null);
+      setOpenEntryId(response.inspection.entries.find((entry) => entry.entryState === "not_started")?.id ?? null);
     } catch (startError) {
       setError(startError instanceof Error ? startError.message : "Could not start the inspection");
     } finally {
@@ -208,6 +218,7 @@ export function ManagerYearEndInspectionContent({
           repairNeeded: false,
           repairNotes: null,
           retainForFutureUse: true,
+          canRemoveAsAccidental: true,
         };
         const entries = [...inspection.entries, optimisticEntry];
         setInspection({ ...inspection, status: "in_progress", entries, progress: progressForEntries(entries) });
