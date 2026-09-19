@@ -91,6 +91,10 @@ describe("manager year-end inspection routes", () => {
       name: "Blue slide section",
       identityNotes: "Rolled beside the generator",
       resourceId: null,
+      newResource: {
+        id: "70000000-0000-4000-8000-000000000001",
+        name: "Blue slide section",
+      },
     };
 
     const response = await request(appFor(service))
@@ -105,6 +109,24 @@ describe("manager year-end inspection routes", () => {
       body,
       "manager:Leg One",
     );
+  });
+
+  it("lets the signed-in leg manager reopen a completed inspection", async () => {
+    const inspection = { id: inspectionId, legId, status: "completed", entries: [] };
+    const reopened = { ...inspection, status: "in_progress" };
+    const service = {
+      get: vi.fn(async () => inspection),
+      reopen: vi.fn(async () => reopened),
+    };
+    const photoService = { listWithSignedUrls: vi.fn(async () => []) };
+
+    const response = await request(appFor(service, photoService))
+      .post(`/manager/year-end-inspections/${inspectionId}/reopen`)
+      .send({})
+      .expect(200);
+
+    expect(response.body.inspection.status).toBe("in_progress");
+    expect(service.reopen).toHaveBeenCalledWith(inspectionId, "manager:Leg One");
   });
 
   it("removes an accidental discovered piece and its stored photos", async () => {
@@ -144,6 +166,7 @@ describe("manager year-end inspection routes", () => {
         id: entryId,
         pieceCodeSnapshot: "WW-001",
         pieceNameSnapshot: "Warrior Wall",
+        inspectionNotes: "Identity corrected during inspection",
       })),
     };
     const patch = {
