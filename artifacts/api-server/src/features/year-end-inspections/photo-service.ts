@@ -93,6 +93,18 @@ export class YearEndInspectionPhotoService {
     })));
   }
 
+  async belongsToInspection(photoId: string, inspectionId: string, legId: string) {
+    const [photo] = await this.db.select({ id: yearEndInspectionPhotos.id })
+      .from(yearEndInspectionPhotos)
+      .innerJoin(yearEndInspectionEntries, eq(yearEndInspectionEntries.id, yearEndInspectionPhotos.entryId))
+      .where(and(
+        eq(yearEndInspectionPhotos.id, photoId),
+        eq(yearEndInspectionPhotos.legId, legId),
+        eq(yearEndInspectionEntries.inspectionId, inspectionId),
+      )).limit(1);
+    return Boolean(photo);
+  }
+
   async deletePhoto(photoId: string, legId: string) {
     const [photo] = await this.db.select().from(yearEndInspectionPhotos)
       .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
