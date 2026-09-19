@@ -102,6 +102,10 @@ describe("year-end inspection photo validation", () => {
     });
     expect(await service.belongsToInspection(photo.id, inspectionId, legId)).toBe(true);
     expect(await service.belongsToInspection(photo.id, crypto.randomUUID(), legId)).toBe(false);
+
+    await expect(service.putImage(photo.id, legId, new Uint8Array([9, 9, 9]), "image/jpeg"))
+      .rejects.toThrow("PHOTO_ALREADY_UPLOADED");
+    expect([...storage.objects.values()][0]?.bytes).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it("rejects unsupported formats and images larger than 15 MiB", async () => {
