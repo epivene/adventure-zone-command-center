@@ -1,6 +1,22 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { MemoryManagerBlobStore, queueManagerBlob, flushManagerBlobQueue } from "./manager-blob-queue";
+
+import { flushManagerBlobQueue, MemoryManagerBlobStore, queueManagerBlob, type ManagerBlobRow } from "./manager-blob-queue";
+
+function photoRow(id: string, state: ManagerBlobRow["state"], createdAt: string): ManagerBlobRow {
+  return {
+    id,
+    legId: "leg-1",
+    receiptId: id,
+    kind: "year_end_inspection_photo",
+    inspectionId: "inspection-1",
+    entryId: "entry-1",
+    photoId: id,
+    blob: new Blob([id], { type: "image/jpeg" }),
+    createdAt,
+    state,
+  };
+}
 
 describe("manager blob queue", () => {
   it("keeps failed receipt images for retry", async () => {
@@ -39,6 +55,21 @@ describe("manager blob queue", () => {
     const rows = await store.list();
     expect(rows.find((row) => row.id === "receipt-1")?.state).toBe("image_pending");
     expect(rows.find((row) => row.id === "incident-1")?.state).toBe("image_uploaded");
+  });
+
+  it("accepts a lost-response photo retry and continues later uploads", async () => {
+    const store = new MemoryManagerBlobStore();
+    await store.put(photoRow("already-saved", "image_failed", "2026-09-19T00:00:00.000Z"));
+    await store.put(photoRow("later-photo", "image_pending", "2026-09-19T00:00:01.000Z"));
+    const upload = vi.fn(async () => undefined);
+
+    const rows = await flushManagerBlobQueue(upload, store);
+
+    expect(rows.map(({ id, state }) => ({ id, state }))).toEqual([
+      { id: "already-saved", state: "image_uploaded" },
+      { id: "later-photo", state: "image_uploaded" },
+    ]);
+    expect(upload).toHaveBeenCalledTimes(2);
   });
 
   it("purges only signed out leg", async () => {

@@ -10,6 +10,11 @@ import { YearEndInspectionPhotoService } from "@/features/year-end-inspections/p
 import { annotationDocumentSchema, photoPatchSchema } from "@/features/year-end-inspections/photo-input";
 
 const uuid = z.string().uuid();
+const resourceAssignmentSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("existing"), resourceId: uuid }).strict(),
+  z.object({ mode: z.literal("new"), resourceId: uuid, name: z.string().trim().min(1).max(200) }).strict(),
+]);
 const startSchema = z.object({
   year: z.number().int().min(2000).max(2200),
   source: z.enum(["blank", "current_pieces", "prior_year"]),
@@ -25,6 +30,7 @@ const entryPatchSchema = z.object({
   repairNeeded: z.boolean().optional(),
   repairNotes: z.string().max(12000).nullable().optional(),
   retainForFutureUse: z.boolean().optional(),
+  resourceAssignment: resourceAssignmentSchema.optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "No inspection changes provided");
 const photoMetadataSchema = z.object({
   id: uuid,
@@ -42,6 +48,7 @@ const discoveredPieceSchema = z.object({
   name: z.string().trim().min(1).max(200).nullable().default(null),
   identityNotes: z.string().trim().max(12000).nullable().default(null),
   resourceId: uuid.nullable().default(null),
+  newResource: z.object({ id: uuid, name: z.string().trim().min(1).max(200) }).strict().nullable().default(null),
 }).strict();
 
 function param(value: string | string[] | undefined) {
@@ -58,10 +65,13 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
 }) {
   const router = Router();
   const { requireManager, service, photoService } = dependencies;
-  const withPhotos = async (inspection: Awaited<ReturnType<InspectionService["get"]>>) => inspection ? {
+  const withPhotos = async (inspection: Awaited<ReturnType<InspectionService["get"]>>, actorId: string) => inspection ? {
     ...inspection,
     entries: await Promise.all(inspection.entries.map(async (entry) => ({
       ...entry,
+      canRemoveAsAccidental: typeof service.canRemoveDiscoveredPieceForLeg === "function"
+        ? await service.canRemoveDiscoveredPieceForLeg(inspection.id, entry.id, inspection.legId, actorId)
+        : false,
       photos: (await photoService.listWithSignedUrls(entry.id, inspection.legId))
         .filter((photo) => Boolean(photo.imageUrl))
         .map(({ imageUrl, ...photo }) => ({ ...photo, signedUrl: imageUrl! })),
@@ -71,7 +81,8 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
   router.get("/manager/year-end-inspections", requireManager, async (req, res) => {
     const year = Number(req.query.year);
     if (!Number.isInteger(year) || year < 2000 || year > 2200) { res.status(400).json({ error: "Choose a valid inspection year." }); return; }
-    res.json({ inspection: await withPhotos(await service.getForLegYear(req.legManager!.legId, year)) });
+    const actorId = `manager:${req.legManager!.managerName ?? req.legManager!.legId}`;
+    res.json({ inspection: await withPhotos(await service.getForLegYear(req.legManager!.legId, year), actorId) });
   });
 
   router.get("/manager/year-end-inspections/resources", requireManager, async (req, res) => {
@@ -81,22 +92,34 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
   router.get("/manager/year-end-inspections/:inspectionId", requireManager, async (req, res) => {
     const inspection = await service.get(param(req.params.inspectionId));
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
-    res.json({ inspection: await withPhotos(inspection) });
+    res.json({ inspection: await withPhotos(inspection, `manager:${req.legManager!.managerName ?? req.legManager!.legId}`) });
   });
 
   router.post("/manager/year-end-inspections", requireManager, async (req, res) => {
     const parsed = startSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: parsed.error.issues[0]?.message ?? "Review this inspection." }); return; }
-    const existing = await service.findByMutation(parsed.data.clientMutationId);
-    if (existing) { res.json({ inspection: existing }); return; }
     const actorId = `manager:${req.legManager!.managerName ?? req.legManager!.legId}`;
+    const existing = await service.findByMutation(parsed.data.clientMutationId);
+    if (existing) {
+      if (existing.legId !== req.legManager!.legId || existing.inspectionYear !== parsed.data.year) {
+        res.status(409).json({ error: "That saved start request belongs to a different leg or inspection year." }); return;
+      }
+      res.json({ inspection: existing }); return;
+    }
     const base = { legId: req.legManager!.legId, year: parsed.data.year, clientMutationId: parsed.data.clientMutationId, actorId };
-    const inspection = parsed.data.source === "blank"
-      ? await service.startBlank(base)
-      : parsed.data.source === "prior_year"
-        ? await service.copyPriorYear({ ...base, sourceInspectionId: parsed.data.sourceInspectionId ?? "" })
-        : await service.startForCurrentPieces(base);
-    res.status(201).json({ inspection });
+    try {
+      const inspection = parsed.data.source === "blank"
+        ? await service.startBlank(base)
+        : parsed.data.source === "prior_year"
+          ? await service.copyPriorYear({ ...base, sourceInspectionId: parsed.data.sourceInspectionId ?? "" })
+          : await service.startForCurrentPieces(base);
+      res.status(201).json({ inspection });
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === "mutation_conflict") {
+        res.status(409).json({ error: error instanceof Error ? error.message : "That start request conflicts with another inspection." }); return;
+      }
+      throw error;
+    }
   });
 
   router.patch("/manager/year-end-inspections/:inspectionId/entries/:entryId", requireManager, async (req, res) => {
@@ -116,6 +139,12 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
       if (error && typeof error === "object" && "code" in error && error.code === "23505") {
         res.status(409).json({ error: "That attraction code is already in use." }); return;
       }
+      if (error instanceof Error && ["PIECE_RESOURCE_UNAVAILABLE", "PIECE_RESOURCE_OUTSIDE_LEG", "PIECE_OUTSIDE_LEG"].includes(error.message)) {
+        res.status(409).json({ error: "This attraction moved or is no longer available to this leg. Refresh the inspection or ask an admin for help." }); return;
+      }
+      if (error && typeof error === "object" && "code" in error && error.code === "inspection_completed") {
+        res.status(409).json({ error: error instanceof Error ? error.message : "Reopen the inspection before making changes." }); return;
+      }
       throw error;
     }
   });
@@ -126,6 +155,7 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     const inspectionId = param(req.params.inspectionId);
     const inspection = await service.get(inspectionId);
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    if (inspection.status === "completed") { res.status(409).json({ error: "Reopen the inspection before adding attractions." }); return; }
     res.json({ inspection: await service.addPieceToInspection(inspectionId, parsed.data.pieceId) });
   });
 
@@ -139,13 +169,23 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
         parsed.data,
         `manager:${req.legManager!.managerName ?? req.legManager!.legId}`,
       );
-      res.status(201).json({ inspection });
+      res.status(201).json({
+        inspection: {
+          ...inspection,
+          entries: inspection.entries.map((entry) => entry.id === parsed.data.entryId
+            ? { ...entry, canRemoveAsAccidental: true }
+            : entry),
+        },
+      });
     } catch (error) {
       if (error instanceof Error && ["INSPECTION_NOT_FOUND", "PIECE_OUTSIDE_LEG"].includes(error.message)) {
         res.status(404).json({ error: "Inspection or piece not found." }); return;
       }
       if (error instanceof Error && ["PIECE_RESOURCE_UNAVAILABLE", "PIECE_RESOURCE_OUTSIDE_LEG"].includes(error.message)) {
-        res.status(400).json({ error: "Choose an attraction assigned to this leg." }); return;
+        res.status(409).json({ error: "That attraction moved or is no longer available to this leg. Refresh and choose another attraction." }); return;
+      }
+      if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+        res.status(409).json({ error: "That attraction code is already in use. Choose another code." }); return;
       }
       if (error && typeof error === "object" && "code" in error && error.code === "inspection_completed") {
         res.status(409).json({ error: error instanceof Error ? error.message : "Inspection is completed." }); return;
@@ -159,6 +199,9 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     const entryId = param(req.params.entryId);
     const legId = req.legManager!.legId;
     const actorId = `manager:${req.legManager!.managerName ?? legId}`;
+    const selected = await service.get(inspectionId);
+    if (!selected || selected.legId !== legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    if (selected.status === "completed") { res.status(409).json({ error: "Reopen the inspection before removing an attraction." }); return; }
     if (!await service.canRemoveDiscoveredPieceForLeg(inspectionId, entryId, legId, actorId)) {
       res.status(409).json({ error: "Only a piece discovered during this inspection can be removed." });
       return;
@@ -182,6 +225,14 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     }
   });
 
+  router.post("/manager/year-end-inspections/:inspectionId/reopen", requireManager, async (req, res) => {
+    const id = param(req.params.inspectionId);
+    const inspection = await service.get(id);
+    if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    const actorId = `manager:${req.legManager!.managerName ?? req.legManager!.legId}`;
+    res.json({ inspection: await withPhotos(await service.reopen(id, actorId), actorId) });
+  });
+
   router.post("/manager/year-end-inspections/:inspectionId/photos", requireManager, async (req, res) => {
     const parsed = photoMetadataSchema.safeParse(req.body);
     const inspectionId = param(req.params.inspectionId);
@@ -190,6 +241,7 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     if (!inspection || inspection.legId !== req.legManager!.legId || !inspection.entries.some((entry) => entry.id === parsed.data.entryId)) {
       res.status(404).json({ error: "Inspection entry not found." }); return;
     }
+    if (inspection.status === "completed") { res.status(409).json({ error: "Reopen the inspection before adding photos." }); return; }
     const photo = await photoService.createMetadata({ ...parsed.data, inspectionId, legId: req.legManager!.legId });
     res.status(201).json({ photo });
   });
@@ -200,16 +252,24 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     express.raw({ type: ["image/jpeg", "image/png", "image/webp"], limit: "15mb" }),
     async (req, res) => {
       try {
-        await photoService.putImage(
-          param(req.params.photoId),
+        const inspectionId = param(req.params.inspectionId);
+        const photoId = param(req.params.photoId);
+        const inspection = await service.get(inspectionId);
+        if (!inspection || inspection.legId !== req.legManager!.legId || !await photoService.belongsToInspection(photoId, inspectionId, req.legManager!.legId)) {
+          res.status(404).json({ error: "Photo not found." }); return;
+        }
+        // Image bytes may finish syncing after completion when their metadata was created while the inspection was open.
+        const upload = await photoService.putImage(
+          photoId,
           req.legManager!.legId,
           new Uint8Array(req.body),
           req.headers["content-type"] ?? "",
         );
-        res.json({ ok: true });
+        res.json({ ok: true, alreadyUploaded: upload.alreadyUploaded });
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         if (code === "PHOTO_NOT_FOUND") { res.status(404).json({ error: "Photo not found." }); return; }
+        if (code === "PHOTO_UPLOAD_NOT_PENDING") { res.status(409).json({ error: "This photo upload is not ready to be saved." }); return; }
         if (code === "PHOTO_TOO_LARGE") { res.status(413).json({ error: "Photo must be 15 MB or smaller." }); return; }
         if (["PHOTO_TYPE_UNSUPPORTED", "PHOTO_TYPE_MISMATCH"].includes(code)) {
           res.status(400).json({ error: "Photo must be a JPEG, PNG, or WebP image." }); return;
@@ -224,6 +284,8 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
     if (!parsed.success) { res.status(400).json({ error: "Review the photo details." }); return; }
     const inspection = await service.get(param(req.params.inspectionId));
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    if (inspection.status === "completed") { res.status(409).json({ error: "Reopen the inspection before editing photos." }); return; }
+    if (!await photoService.belongsToInspection(param(req.params.photoId), inspection.id, req.legManager!.legId)) { res.status(404).json({ error: "Photo not found." }); return; }
     try {
       res.json({ photo: await photoService.patchDescriptionAndAnnotations(param(req.params.photoId), req.legManager!.legId, parsed.data) });
     } catch (error) {
@@ -237,6 +299,8 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
   router.delete("/manager/year-end-inspections/:inspectionId/photos/:photoId", requireManager, async (req, res) => {
     const inspection = await service.get(param(req.params.inspectionId));
     if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    if (inspection.status === "completed") { res.status(409).json({ error: "Reopen the inspection before deleting photos." }); return; }
+    if (!await photoService.belongsToInspection(param(req.params.photoId), inspection.id, req.legManager!.legId)) { res.status(404).json({ error: "Photo not found." }); return; }
     if (!await photoService.deletePhoto(param(req.params.photoId), req.legManager!.legId)) { res.status(404).json({ error: "Photo not found." }); return; }
     res.json({ ok: true });
   });

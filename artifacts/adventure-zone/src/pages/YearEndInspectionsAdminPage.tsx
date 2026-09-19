@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { InspectionRecordView, type InspectionRecordDto } from "@/components/year-end-inspections/inspection-record-view";
-import { YearEndInspectionEntryCard } from "@/components/manager/year-end-inspection-entry-card";
+import { YearEndInspectionEntryCard, type ResourceAssignmentInput } from "@/components/manager/year-end-inspection-entry-card";
 import { progressForEntries, type YearEndInspectionEntryDto } from "@/lib/year-end-inspections-api";
 import { PieceInventoryTable, type EquipmentPieceDto, type ResourceOption } from "@/components/year-end-inspections/piece-inventory-table";
 import { apiFetch, apiGet } from "@/lib/auth-token";
 
 export type AdminInspectionApi = <T>(path: string, options?: RequestInit) => Promise<T>;
 type LegOption = { id: string; name: string };
+type InspectionEntryEditPatch = Partial<YearEndInspectionEntryDto> & { resourceAssignment?: ResourceAssignmentInput };
 
 const emptyForm = {
   code: "",
@@ -86,7 +87,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
     if (inspectionId && selectionGeneration === detailRequestRef.current) await openInspection(inspectionId);
   }
 
-  async function saveInspectionEntry(entryId: string, patch: Partial<YearEndInspectionEntryDto>) {
+  async function saveInspectionEntry(entryId: string, patch: InspectionEntryEditPatch) {
     if (!selectedInspectionId) return;
     const response = await api<{ entry: YearEndInspectionEntryDto }>(
       `/manager-admin/year-end-inspections/${selectedInspectionId}/entries/${entryId}`,
@@ -181,7 +182,7 @@ export function YearEndInspectionsAdminContent({ api, legs, resources = [] }: { 
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{sortedInspections.map((inspection) => <button key={inspection.id} type="button" className="rounded-xl border bg-white p-4 text-left" onClick={() => void openInspection(inspection.id)}><span className="font-bold">{legNames[inspection.legId] ?? "Travel leg"} · {inspection.inspectionYear}</span><span className="mt-1 block text-sm">{inspection.progress.inspected + inspection.progress.notPresent} of {inspection.progress.total} inspected · {inspection.status}</span><span className="block text-sm text-rose-700">{inspection.progress.needsAttention} need repair</span></button>)}</div>
       {!inspections.length ? <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">No year-end inspections have been started.</p> : null}
       {selectedInspectionLoading ? <p role="status" className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-semibold text-slate-700">Loading complete inspection report…</p> : null}
-      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2"><button type="button" className="button-primary" onClick={() => window.print()}>Print full report</button>{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><div className="grid gap-3">{selectedInspection.entries.map((entry) => <div key={entry.id} className="grid gap-2"><YearEndInspectionEntryCard entry={entry} inspectionId={selectedInspection.id} legId={selectedInspection.legId} managerApi={api} apiPrefix="/manager-admin" onSave={saveInspectionEntry} onPhotoSaved={() => void refreshSelectedInspection()} />{entry.maintenanceItem ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Repair follow-up: {entry.maintenanceItem.state}</p>{entry.maintenanceItem.resolutionNotes ? <p>{entry.maintenanceItem.resolutionNotes}</p> : null}{entry.maintenanceItem.state === "open" ? <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-2 font-semibold" onClick={() => void resolveRepair(entry.maintenanceItem!.id)}>Mark repair completed</button> : null}</div> : null}</div>)}</div></div> : null}
+      {selectedInspection ? <div className="grid gap-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h2 className="text-xl font-bold">{legNames[selectedInspection.legId] ?? "Travel leg"} {selectedInspection.inspectionYear} record</h2><p className="text-sm text-slate-600">Manager: {selectedInspection.managerIdentitySnapshot?.replace(/^manager:/, "") ?? "Unknown"}</p></div><div className="flex flex-wrap gap-2"><button type="button" className="button-primary" onClick={() => window.print()}>Print full report</button>{selectedInspection.status === "completed" ? <button type="button" className="button-secondary" onClick={() => void reopen(selectedInspection)}>Reopen inspection</button> : null}<button type="button" className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 font-semibold text-rose-800" onClick={() => void resetInspection(selectedInspection)}>Fully reset inspection</button></div></div><div className="grid gap-3">{selectedInspection.entries.map((entry) => <div key={entry.id} className="grid gap-2"><YearEndInspectionEntryCard entry={entry} inspectionId={selectedInspection.id} legId={selectedInspection.legId} managerApi={api} apiPrefix="/manager-admin" resources={resources.filter((resource) => !resource.legId || resource.legId === selectedInspection.legId)} readOnly={selectedInspection.status === "completed"} onSave={saveInspectionEntry} onPhotoSaved={() => void refreshSelectedInspection()} />{entry.maintenanceItem ? <div className="rounded-lg bg-amber-50 p-3 text-sm"><p className="font-bold">Repair follow-up: {entry.maintenanceItem.state}</p>{entry.maintenanceItem.resolutionNotes ? <p>{entry.maintenanceItem.resolutionNotes}</p> : null}{entry.maintenanceItem.state === "open" ? <button type="button" className="mt-2 rounded-lg border bg-white px-3 py-2 font-semibold" onClick={() => void resolveRepair(entry.maintenanceItem!.id)}>Mark repair completed</button> : null}</div> : null}</div>)}</div></div> : null}
     </section>
     {selectedInspection ? <section
         aria-label="Printable inspection report"

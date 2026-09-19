@@ -9,7 +9,9 @@ const entry: YearEndInspectionEntryDto = {
   id: "20000000-0000-4000-8000-000000000001",
   pieceId: "30000000-0000-4000-8000-000000000001",
   pieceCodeSnapshot: "NEW-A058BD54",
+  canRemoveAsAccidental: true,
   pieceNameSnapshot: "Hot Air Balloon Castle",
+  resourceIdSnapshot: "60000000-0000-4000-8000-000000000001",
   resourceNameSnapshot: "Ballon combo",
   entryState: "not_started",
   condition: null,
@@ -26,6 +28,7 @@ function renderCard(onSave = vi.fn(async () => undefined)) {
     legId="40000000-0000-4000-8000-000000000001"
     managerApi={vi.fn()}
     onSave={onSave}
+    resources={[{ id: "60000000-0000-4000-8000-000000000001", name: "Ballon combo" }]}
     initiallyOpen
   />);
   return onSave;
@@ -90,11 +93,11 @@ describe("YearEndInspectionEntryCard", () => {
 
     expect(screen.getByText("0 photos saved")).toBeVisible();
     expect(screen.getByRole("button", {
-      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. Not started\. 0 photos saved/,
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Attraction: Ballon combo\. Not started\. 0 photos saved/,
     })).toBeVisible();
   });
 
-  it("keeps attraction details and saved photos inside the dropdown", async () => {
+  it("keeps saved photos collapsed below the inspection fields until requested", async () => {
     const user = userEvent.setup();
     render(<YearEndInspectionEntryCard
       entry={{
@@ -118,9 +121,42 @@ describe("YearEndInspectionEntryCard", () => {
 
     await user.click(screen.getByRole("button", { name: /Open NEW-A058BD54 Hot Air Balloon Castle/ }));
 
-    expect(screen.getByRole("img", { name: "Saved entrance photo" })).toBeVisible();
     expect(screen.getByLabelText("Attraction name")).toBeVisible();
+    expect(screen.queryByRole("img", { name: "Saved entrance photo" })).not.toBeInTheDocument();
+    const photoButton = screen.getByRole("button", { name: "View saved photos (1)" });
+    expect(screen.getByLabelText("Condition").compareDocumentPosition(photoButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    await user.click(photoButton);
+    expect(screen.getByRole("img", { name: "Saved entrance photo" })).toBeVisible();
     expect(screen.getByRole("button", { name: /Close NEW-A058BD54 Hot Air Balloon Castle/ })).toBeVisible();
+  });
+
+  it("creates and assigns a named attraction from an unassigned inspection card", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(async () => undefined);
+    render(<YearEndInspectionEntryCard
+      entry={{ ...entry, resourceIdSnapshot: null, resourceNameSnapshot: null }}
+      inspectionId="10000000-0000-4000-8000-000000000001"
+      legId="40000000-0000-4000-8000-000000000001"
+      managerApi={vi.fn()}
+      onSave={onSave}
+      resources={[{ id: "60000000-0000-4000-8000-000000000001", name: "Ballon combo" }]}
+      initiallyOpen
+    />);
+
+    expect(screen.getAllByText("No attraction assigned yet")[0]).toBeVisible();
+    await user.selectOptions(screen.getByLabelText("Attraction assignment"), "new");
+    expect(screen.getByLabelText("New attraction name")).toHaveValue("Hot Air Balloon Castle");
+    await user.selectOptions(screen.getByLabelText("Condition"), "good");
+    await user.click(screen.getByRole("button", { name: "Save attraction inspection" }));
+
+    expect(onSave).toHaveBeenCalledWith(entry.id, expect.objectContaining({
+      resourceAssignment: {
+        mode: "new",
+        resourceId: expect.stringMatching(/^[0-9a-f-]{36}$/),
+        name: "Hot Air Balloon Castle",
+      },
+    }));
   });
 
   it("lets the leg manager correct the attraction name and code", async () => {
@@ -163,6 +199,7 @@ describe("YearEndInspectionEntryCard", () => {
     />);
 
     await user.click(screen.getByRole("button", { name: /Open NEW-A058BD54 Hot Air Balloon Castle/ }));
+    await user.click(screen.getByRole("button", { name: "View saved photos (1)" }));
     await user.click(screen.getByRole("button", { name: "Edit description" }));
     expect(managerApi).toHaveBeenCalledWith(
       "/manager-admin/year-end-inspections/10000000-0000-4000-8000-000000000001/photos/50000000-0000-4000-8000-000000000001",
@@ -187,7 +224,7 @@ describe("YearEndInspectionEntryCard", () => {
 
     expect(screen.getByText("All Good")).toBeVisible();
     expect(screen.getByRole("button", {
-      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Ballon combo\. All Good\. 0 photos saved/,
+      name: /Open NEW-A058BD54 Hot Air Balloon Castle\. Attraction: Ballon combo\. All Good\. 0 photos saved/,
     })).toBeVisible();
   });
 

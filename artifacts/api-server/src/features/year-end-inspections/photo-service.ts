@@ -58,16 +58,25 @@ export class YearEndInspectionPhotoService {
   async putImage(photoId: string, legId: string, bytes: Uint8Array, contentType: string) {
     if (!supportedTypes.has(contentType)) throw new Error("PHOTO_TYPE_UNSUPPORTED");
     if (bytes.byteLength > maximumBytes) throw new Error("PHOTO_TOO_LARGE");
-    const [photo] = await this.db.select().from(yearEndInspectionPhotos)
-      .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId))).limit(1);
-    if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
-    if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
-    await this.storage.put(photo.objectKey, bytes, contentType);
-    await this.db.update(yearEndInspectionPhotos).set({
-      uploadStatus: "image_uploaded",
-      uploadedAt: new Date(),
-      updatedAt: new Date(),
-    }).where(eq(yearEndInspectionPhotos.id, photoId));
+    return this.db.transaction(async (tx: Database) => {
+      const [photo] = await tx.select().from(yearEndInspectionPhotos)
+        .where(and(eq(yearEndInspectionPhotos.id, photoId), eq(yearEndInspectionPhotos.legId, legId)))
+        .for("update")
+        .limit(1);
+      if (!photo?.objectKey) throw new Error("PHOTO_NOT_FOUND");
+      if (photo.mimeType !== contentType) throw new Error("PHOTO_TYPE_MISMATCH");
+      // Inspection photos are evidence: lock the row so simultaneous uploads cannot
+      // both replace the original. A pending upload may finish after completion.
+      if (photo.uploadStatus === "image_uploaded") return { alreadyUploaded: true };
+      if (photo.uploadStatus !== "image_pending") throw new Error("PHOTO_UPLOAD_NOT_PENDING");
+      await this.storage.put(photo.objectKey, bytes, contentType);
+      await tx.update(yearEndInspectionPhotos).set({
+        uploadStatus: "image_uploaded",
+        uploadedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(yearEndInspectionPhotos.id, photoId));
+      return { alreadyUploaded: false };
+    });
   }
 
   async patchDescriptionAndAnnotations(photoId: string, legId: string, rawPatch: PhotoPatch) {
@@ -91,6 +100,18 @@ export class YearEndInspectionPhotoService {
         ? await this.storage.getSignedReadUrl(photo.objectKey, 15 * 60)
         : null,
     })));
+  }
+
+  async belongsToInspection(photoId: string, inspectionId: string, legId: string) {
+    const [photo] = await this.db.select({ id: yearEndInspectionPhotos.id })
+      .from(yearEndInspectionPhotos)
+      .innerJoin(yearEndInspectionEntries, eq(yearEndInspectionEntries.id, yearEndInspectionPhotos.entryId))
+      .where(and(
+        eq(yearEndInspectionPhotos.id, photoId),
+        eq(yearEndInspectionPhotos.legId, legId),
+        eq(yearEndInspectionEntries.inspectionId, inspectionId),
+      )).limit(1);
+    return Boolean(photo);
   }
 
   async deletePhoto(photoId: string, legId: string) {

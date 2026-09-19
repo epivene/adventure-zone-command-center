@@ -100,6 +100,12 @@ describe("year-end inspection photo validation", () => {
       annotations: { version: 1, ellipses: [{ id: "e1" }] },
       imageUrl: expect.stringContaining("https://signed.example/"),
     });
+    expect(await service.belongsToInspection(photo.id, inspectionId, legId)).toBe(true);
+    expect(await service.belongsToInspection(photo.id, crypto.randomUUID(), legId)).toBe(false);
+
+    await expect(service.putImage(photo.id, legId, new Uint8Array([9, 9, 9]), "image/jpeg"))
+      .resolves.toEqual({ alreadyUploaded: true });
+    expect([...storage.objects.values()][0]?.bytes).toEqual(new Uint8Array([1, 2, 3]));
   });
 
   it("rejects unsupported formats and images larger than 15 MiB", async () => {
@@ -115,20 +121,6 @@ describe("year-end inspection photo validation", () => {
       .rejects.toThrow("PHOTO_TOO_LARGE");
   });
 
-  it("deletes every stored photo for an inspection before an admin reset", async () => {
-    const { service, storage, inspectionId, entryId } = await setup();
-    const photo = await service.createMetadata({
-      id: crypto.randomUUID(), clientMutationId: crypto.randomUUID(),
-      inspectionId, entryId, legId, mimeType: "image/jpeg",
-      description: "Test photo", annotations: { version: 1, ellipses: [] },
-    });
-    await service.putImage(photo.id, legId, new Uint8Array([1, 2, 3]), "image/jpeg");
-
-    expect(await service.deleteForInspection(inspectionId)).toEqual({ deletedPhotos: 1 });
-    expect(storage.deletes).toHaveLength(1);
-    expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
-  });
-
   it("deletes stored photos for one removed inspection entry", async () => {
     const { service, storage, inspectionId, entryId } = await setup();
     const photo = await service.createMetadata({
@@ -139,6 +131,20 @@ describe("year-end inspection photo validation", () => {
     await service.putImage(photo.id, legId, new Uint8Array([1, 2, 3]), "image/jpeg");
 
     expect(await service.deleteForEntry(entryId, legId)).toEqual({ deletedPhotos: 1 });
+    expect(storage.deletes).toHaveLength(1);
+    expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
+  });
+
+  it("deletes every stored photo for an inspection before an admin reset", async () => {
+    const { service, storage, inspectionId, entryId } = await setup();
+    const photo = await service.createMetadata({
+      id: crypto.randomUUID(), clientMutationId: crypto.randomUUID(),
+      inspectionId, entryId, legId, mimeType: "image/jpeg",
+      description: "Test photo", annotations: { version: 1, ellipses: [] },
+    });
+    await service.putImage(photo.id, legId, new Uint8Array([1, 2, 3]), "image/jpeg");
+
+    expect(await service.deleteForInspection(inspectionId)).toEqual({ deletedPhotos: 1 });
     expect(storage.deletes).toHaveLength(1);
     expect(await service.listWithSignedUrls(entryId, legId)).toEqual([]);
   });

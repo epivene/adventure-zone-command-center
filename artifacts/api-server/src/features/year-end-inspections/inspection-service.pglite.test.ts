@@ -26,11 +26,17 @@ async function setup() {
     );
     CREATE TABLE resources (
       id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL,
-      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid
+      counts_as_attraction boolean NOT NULL DEFAULT false,
+      movable boolean NOT NULL DEFAULT false,
+      setup_minutes integer NOT NULL DEFAULT 0,
+      teardown_minutes integer NOT NULL DEFAULT 0,
+      minimum_transfer_minutes integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     INSERT INTO travel_legs (id, name, sort_order) VALUES ('${legId}', 'Leg One', 1);
-    INSERT INTO resources (id, code, name, category, status, normal_travel_leg_id) VALUES
-      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable', 'available', '${legId}');
+    INSERT INTO resources (id, code, name, category, counts_as_attraction, status, normal_travel_leg_id) VALUES
+      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable', true, 'available', '${legId}');
   `);
   await client.exec(YEAR_END_INSPECTION_SCHEMA_SQL);
   const db = drizzle(client, { schema: yearEndSchema }) as never;
@@ -107,6 +113,103 @@ describe("YearEndInspectionService", () => {
       resourceNameSnapshot: "Warrior Playground",
       entryState: "not_started",
     });
+  });
+
+  it("creates and assigns a named attraction while adding a discovered attraction", async () => {
+    const { service } = await setup();
+    const inspection = await service.startBlank({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResource = {
+      id: "70000000-0000-4000-8000-000000000001",
+      name: "Blue Slide",
+    };
+
+    const updated = await service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: "40000000-0000-4000-8000-000000000002",
+      entryId: "50000000-0000-4000-8000-000000000002",
+      clientMutationId: "60000000-0000-4000-8000-000000000002",
+      code: null,
+      name: "Blue slide section",
+      identityNotes: null,
+      resourceId: null,
+      newResource,
+    }, actor);
+
+    expect(updated.entries[0]).toMatchObject({
+      resourceIdSnapshot: newResource.id,
+      resourceNameSnapshot: newResource.name,
+    });
+    expect(await service.listResourcesForLeg(legId)).toContainEqual(newResource);
+  });
+
+  it("rolls back a new attraction when the discovered piece cannot be created", async () => {
+    const { service } = await setup();
+    const inspection = await service.startBlank({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResource = { id: "70000000-0000-4000-8000-000000000002", name: "Should roll back" };
+
+    await expect(service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: "40000000-0000-4000-8000-000000000003",
+      entryId: "50000000-0000-4000-8000-000000000003",
+      clientMutationId: "60000000-0000-4000-8000-000000000003",
+      code: "WP-001",
+      name: "Duplicate code",
+      identityNotes: null,
+      resourceId: null,
+      newResource,
+    }, actor)).rejects.toBeTruthy();
+
+    expect(await service.listResourcesForLeg(legId)).not.toContainEqual(newResource);
+    expect((await service.get(inspection.id))?.entries).toEqual([]);
+  });
+
+  it("lists only actual attractions for assignment", async () => {
+    const { client, service } = await setup();
+    await client.exec(`
+      INSERT INTO resources (id, code, name, category, counts_as_attraction, status, normal_travel_leg_id)
+      VALUES ('70000000-0000-4000-8000-000000000004', 'GEN', 'Generator', 'equipment', false, 'available', '${legId}')
+    `);
+
+    expect(await service.listResourcesForLeg(legId)).toEqual([{ id: resourceId, name: "Warrior Playground" }]);
+  });
+
+  it("blocks a former leg manager from changing a piece after it transfers", async () => {
+    const { client, service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const otherLegId = "10000000-0000-4000-8000-000000000002";
+    await client.exec(`INSERT INTO travel_legs (id, name, sort_order) VALUES ('${otherLegId}', 'Leg Two', 2)`);
+    await pieces.transferLeg(piece.id, otherLegId, "owner");
+
+    await expect(service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      { pieceNameSnapshot: "Unauthorized rename" },
+      actor,
+    )).rejects.toThrow("PIECE_OUTSIDE_LEG");
+  });
+
+  it("requires reopening before a leg manager changes a completed inspection", async () => {
+    const { service } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    await service.patchEntryForLeg(inspection.id, inspection.entries[0]!.id, legId, {
+      entryState: "not_present", condition: null, repairNeeded: false,
+    }, actor);
+    await service.complete(inspection.id, actor);
+
+    await expect(service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      { pieceNameSnapshot: "Blocked until reopened" },
+      actor,
+    )).rejects.toMatchObject({ code: "inspection_completed" });
   });
 
   it("blocks completion until every piece is inspected or deliberately not present", async () => {
@@ -249,6 +352,51 @@ describe("YearEndInspectionService", () => {
     expect(next.entries[0]).toMatchObject({
       pieceCodeSnapshot: "WW-001",
       pieceNameSnapshot: "Warrior Wall",
+    });
+  });
+
+  it("creates a named attraction, assigns the inspected item, and retains it for future years", async () => {
+    const { service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResourceId = "20000000-0000-4000-8000-000000000099";
+
+    const updated = await service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      {
+        entryState: "inspected",
+        condition: "good",
+        resourceAssignment: {
+          mode: "new",
+          resourceId: newResourceId,
+          name: "Old Old OBS",
+        },
+      },
+      actor,
+    );
+
+    expect(updated).toMatchObject({
+      resourceIdSnapshot: newResourceId,
+      resourceNameSnapshot: "Old Old OBS",
+    });
+    expect(await pieces.get(piece.id)).toMatchObject({
+      currentResourceId: newResourceId,
+      currentResourceName: "Old Old OBS",
+    });
+    await expect(service.listResourcesForLeg(legId)).resolves.toContainEqual({
+      id: newResourceId,
+      name: "Old Old OBS",
+    });
+
+    const next = await service.startForCurrentPieces({
+      legId, year: 2027, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    expect(next.entries[0]).toMatchObject({
+      resourceIdSnapshot: newResourceId,
+      resourceNameSnapshot: "Old Old OBS",
     });
   });
 

@@ -8,6 +8,7 @@ export type YearEndInspectionEntryDto = {
   pieceId: string;
   pieceCodeSnapshot: string;
   pieceNameSnapshot: string;
+  resourceIdSnapshot?: string | null;
   resourceNameSnapshot: string | null;
   entryState: InspectionEntryState;
   condition: InspectionCondition | null;
@@ -15,6 +16,7 @@ export type YearEndInspectionEntryDto = {
   repairNeeded: boolean;
   repairNotes: string | null;
   retainForFutureUse: boolean;
+  canRemoveAsAccidental?: boolean;
   photos?: InspectionPhotoDto[];
 };
 
