@@ -42,3 +42,4 @@ export function ellipseStyle(ellipse: PhotoEllipse) {
     height: `${ellipse.radiusY * 200}%`,
   };
 }
+
