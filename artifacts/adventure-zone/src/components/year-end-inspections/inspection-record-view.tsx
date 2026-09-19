@@ -32,3 +32,4 @@ export function InspectionRecordView({ inspection, onResolveRepair }: { inspecti
     </article>)}
   </div>;
 }
+
