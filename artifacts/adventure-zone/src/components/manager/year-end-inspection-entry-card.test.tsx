@@ -9,6 +9,7 @@ const entry: YearEndInspectionEntryDto = {
   id: "20000000-0000-4000-8000-000000000001",
   pieceId: "30000000-0000-4000-8000-000000000001",
   pieceCodeSnapshot: "NEW-A058BD54",
+  canRemoveAsAccidental: true,
   pieceNameSnapshot: "Hot Air Balloon Castle",
   resourceIdSnapshot: "60000000-0000-4000-8000-000000000001",
   resourceNameSnapshot: "Ballon combo",
