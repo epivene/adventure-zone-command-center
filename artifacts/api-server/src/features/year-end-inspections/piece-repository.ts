@@ -32,15 +32,10 @@ export class DrizzlePieceRepository {
     if (!leg || leg.archivedAt) throw new Error("PIECE_LEG_UNAVAILABLE");
   }
 
-  private async requireActiveResource(database: Database, resourceId: string, expectedLegId?: string | null) {
-    const [resource] = await database.select({
-      id: resources.id,
-      status: resources.status,
-      normalTravelLegId: resources.normalTravelLegId,
-    })
+  private async requireActiveResource(database: Database, resourceId: string) {
+    const [resource] = await database.select({ id: resources.id, status: resources.status })
       .from(resources).where(eq(resources.id, resourceId)).limit(1);
     if (!resource || resource.status === "archived") throw new Error("PIECE_RESOURCE_UNAVAILABLE");
-    if (expectedLegId && resource.normalTravelLegId !== expectedLegId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
   }
 
   private async audit(database: Database, pieceId: string, action: string, actorId: string, payload: Record<string, unknown> = {}) {
@@ -57,9 +52,9 @@ export class DrizzlePieceRepository {
     const input = pieceInputSchema.parse(rawInput);
     const pieceId = await this.db.transaction(async (tx: Database) => {
       await this.requireActiveLeg(tx, input.currentLegId);
-      if (input.resourceId) await this.requireActiveResource(tx, input.resourceId, input.currentLegId);
+      if (input.resourceId) await this.requireActiveResource(tx, input.resourceId);
       const [piece] = await tx.insert(equipmentPieces).values({
-        id: input.id,
+        ...(input.id ? { id: input.id } : {}),
         code: input.code,
         name: input.name,
         pieceType: input.pieceType,
