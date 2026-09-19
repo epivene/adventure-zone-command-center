@@ -11,6 +11,11 @@ import { GoogleCloudLegManagerObjectStorage } from "@/features/leg-manager/leg-m
 import { requireOwnerMiddleware } from "@/lib/auth";
 
 const uuid = z.string().uuid();
+const resourceAssignmentSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("existing"), resourceId: uuid }).strict(),
+  z.object({ mode: z.literal("new"), resourceId: uuid, name: z.string().trim().min(1).max(200) }).strict(),
+]);
 const entryPatchSchema = z.object({
   pieceCodeSnapshot: z.string().trim().min(1).max(80).optional(),
   pieceNameSnapshot: z.string().trim().min(1).max(200).optional(),
@@ -20,6 +25,7 @@ const entryPatchSchema = z.object({
   repairNeeded: z.boolean().optional(),
   repairNotes: z.string().max(12000).nullable().optional(),
   retainForFutureUse: z.boolean().optional(),
+  resourceAssignment: resourceAssignmentSchema.optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "No inspection changes provided");
 const photoMetadataSchema = z.object({
   id: uuid,
