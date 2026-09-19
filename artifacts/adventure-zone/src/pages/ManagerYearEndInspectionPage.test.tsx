@@ -94,7 +94,7 @@ describe("ManagerYearEndInspectionPage", () => {
       body: expect.stringContaining('"source":"current_pieces"'),
     }));
     expect(await screen.findByText("0 of 2 inspected")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: /AZ-017 Front section/ }));
+    expect(screen.getByRole("button", { name: /Close AZ-017 Front section/ })).toBeVisible();
     await user.selectOptions(screen.getByLabelText("Condition"), "minor_repair");
     await user.type(screen.getByLabelText("Inspection notes"), "Worn seam near entrance");
     await user.click(screen.getByRole("button", { name: "Save & inspect next" }));
@@ -178,7 +178,7 @@ describe("ManagerYearEndInspectionPage", () => {
 
   it("removes an accidental discovered piece through the guarded endpoint", async () => {
     const user = userEvent.setup();
-    const discovered = { ...entries[0], pieceCodeSnapshot: "NEW-A058BD54", pieceNameSnapshot: "Hot Air Balloon Castle" };
+    const discovered = { ...entries[0], pieceCodeSnapshot: "CUSTOM-CASTLE", pieceNameSnapshot: "Hot Air Balloon Castle", canRemoveAsAccidental: true };
     let inspection = withProgress({
       id: "10000000-0000-4000-8000-000000000001",
       legId: "30000000-0000-4000-8000-000000000001",
@@ -207,7 +207,7 @@ describe("ManagerYearEndInspectionPage", () => {
       mutationStore={new MemoryManagerMutationStore()}
     />);
 
-    await user.click(await screen.findByRole("button", { name: /NEW-A058BD54 Hot Air Balloon Castle/ }));
+    expect(await screen.findByRole("button", { name: /Close CUSTOM-CASTLE Hot Air Balloon Castle/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Remove accidental attraction" }));
     await user.click(screen.getByRole("button", { name: "Confirm removal" }));
 
