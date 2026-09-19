@@ -10,6 +10,11 @@ import { YearEndInspectionPhotoService } from "@/features/year-end-inspections/p
 import { annotationDocumentSchema, photoPatchSchema } from "@/features/year-end-inspections/photo-input";
 
 const uuid = z.string().uuid();
+const resourceAssignmentSchema = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("none") }).strict(),
+  z.object({ mode: z.literal("existing"), resourceId: uuid }).strict(),
+  z.object({ mode: z.literal("new"), resourceId: uuid, name: z.string().trim().min(1).max(200) }).strict(),
+]);
 const startSchema = z.object({
   year: z.number().int().min(2000).max(2200),
   source: z.enum(["blank", "current_pieces", "prior_year"]),
@@ -25,6 +30,7 @@ const entryPatchSchema = z.object({
   repairNeeded: z.boolean().optional(),
   repairNotes: z.string().max(12000).nullable().optional(),
   retainForFutureUse: z.boolean().optional(),
+  resourceAssignment: resourceAssignmentSchema.optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, "No inspection changes provided");
 const photoMetadataSchema = z.object({
   id: uuid,
@@ -42,6 +48,7 @@ const discoveredPieceSchema = z.object({
   name: z.string().trim().min(1).max(200).nullable().default(null),
   identityNotes: z.string().trim().max(12000).nullable().default(null),
   resourceId: uuid.nullable().default(null),
+  newResource: z.object({ id: uuid, name: z.string().trim().min(1).max(200) }).strict().nullable().default(null),
 }).strict();
 
 function param(value: string | string[] | undefined) {
@@ -180,6 +187,13 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
       }
       throw error;
     }
+  });
+
+  router.post("/manager/year-end-inspections/:inspectionId/reopen", requireManager, async (req, res) => {
+    const id = param(req.params.inspectionId);
+    const inspection = await service.get(id);
+    if (!inspection || inspection.legId !== req.legManager!.legId) { res.status(404).json({ error: "Inspection not found." }); return; }
+    res.json({ inspection: await withPhotos(await service.reopen(id, `manager:${req.legManager!.managerName ?? req.legManager!.legId}`)) });
   });
 
   router.post("/manager/year-end-inspections/:inspectionId/photos", requireManager, async (req, res) => {
