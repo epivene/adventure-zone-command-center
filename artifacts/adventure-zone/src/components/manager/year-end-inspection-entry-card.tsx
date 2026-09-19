@@ -259,7 +259,7 @@ export function YearEndInspectionEntryCard({
         {photoError ? <p role="alert" className="text-sm text-rose-700">{photoError}</p> : null}
       </section> : null}
       {saveError ? <p role="alert" className="text-sm text-rose-700">{saveError}</p> : null}
-      {!readOnly && onRemove && entry.pieceCodeSnapshot.startsWith("NEW-") ? <button
+      {!readOnly && onRemove && entry.canRemoveAsAccidental ? <button
         type="button"
         className="min-h-11 rounded-lg border border-rose-300 font-semibold text-rose-800"
         disabled={removing}
