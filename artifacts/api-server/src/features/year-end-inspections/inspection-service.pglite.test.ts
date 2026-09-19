@@ -35,8 +35,8 @@ async function setup() {
       created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     INSERT INTO travel_legs (id, name, sort_order) VALUES ('${legId}', 'Leg One', 1);
-    INSERT INTO resources (id, code, name, category, status, normal_travel_leg_id) VALUES
-      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable', 'available', '${legId}');
+    INSERT INTO resources (id, code, name, category, counts_as_attraction, status, normal_travel_leg_id) VALUES
+      ('${resourceId}', 'WP', 'Warrior Playground', 'inflatable', true, 'available', '${legId}');
   `);
   await client.exec(YEAR_END_INSPECTION_SCHEMA_SQL);
   const db = drizzle(client, { schema: yearEndSchema }) as never;
@@ -141,6 +141,75 @@ describe("YearEndInspectionService", () => {
       resourceNameSnapshot: newResource.name,
     });
     expect(await service.listResourcesForLeg(legId)).toContainEqual(newResource);
+  });
+
+  it("rolls back a new attraction when the discovered piece cannot be created", async () => {
+    const { service } = await setup();
+    const inspection = await service.startBlank({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResource = { id: "70000000-0000-4000-8000-000000000002", name: "Should roll back" };
+
+    await expect(service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: "40000000-0000-4000-8000-000000000003",
+      entryId: "50000000-0000-4000-8000-000000000003",
+      clientMutationId: "60000000-0000-4000-8000-000000000003",
+      code: "WP-001",
+      name: "Duplicate code",
+      identityNotes: null,
+      resourceId: null,
+      newResource,
+    }, actor)).rejects.toBeTruthy();
+
+    expect(await service.listResourcesForLeg(legId)).not.toContainEqual(newResource);
+    expect((await service.get(inspection.id))?.entries).toEqual([]);
+  });
+
+  it("lists only actual attractions for assignment", async () => {
+    const { client, service } = await setup();
+    await client.exec(`
+      INSERT INTO resources (id, code, name, category, counts_as_attraction, status, normal_travel_leg_id)
+      VALUES ('70000000-0000-4000-8000-000000000004', 'GEN', 'Generator', 'equipment', false, 'available', '${legId}')
+    `);
+
+    expect(await service.listResourcesForLeg(legId)).toEqual([{ id: resourceId, name: "Warrior Playground" }]);
+  });
+
+  it("blocks a former leg manager from changing a piece after it transfers", async () => {
+    const { client, service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const otherLegId = "10000000-0000-4000-8000-000000000002";
+    await client.exec(`INSERT INTO travel_legs (id, name, sort_order) VALUES ('${otherLegId}', 'Leg Two', 2)`);
+    await pieces.transferLeg(piece.id, otherLegId, "owner");
+
+    await expect(service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      { pieceNameSnapshot: "Unauthorized rename" },
+      actor,
+    )).rejects.toThrow("PIECE_OUTSIDE_LEG");
+  });
+
+  it("requires reopening before a leg manager changes a completed inspection", async () => {
+    const { service } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    await service.patchEntryForLeg(inspection.id, inspection.entries[0]!.id, legId, {
+      entryState: "not_present", condition: null, repairNeeded: false,
+    }, actor);
+    await service.complete(inspection.id, actor);
+
+    await expect(service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      { pieceNameSnapshot: "Blocked until reopened" },
+      actor,
+    )).rejects.toMatchObject({ code: "inspection_completed" });
   });
 
   it("blocks completion until every piece is inspected or deliberately not present", async () => {
