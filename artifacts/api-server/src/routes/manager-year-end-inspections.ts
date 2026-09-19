@@ -182,7 +182,10 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
         res.status(404).json({ error: "Inspection or piece not found." }); return;
       }
       if (error instanceof Error && ["PIECE_RESOURCE_UNAVAILABLE", "PIECE_RESOURCE_OUTSIDE_LEG"].includes(error.message)) {
-        res.status(400).json({ error: "Choose an attraction assigned to this leg." }); return;
+        res.status(409).json({ error: "That attraction moved or is no longer available to this leg. Refresh and choose another attraction." }); return;
+      }
+      if (error && typeof error === "object" && "code" in error && error.code === "23505") {
+        res.status(409).json({ error: "That attraction code is already in use. Choose another code." }); return;
       }
       if (error && typeof error === "object" && "code" in error && error.code === "inspection_completed") {
         res.status(409).json({ error: error instanceof Error ? error.message : "Inspection is completed." }); return;
@@ -266,6 +269,7 @@ export function createManagerYearEndInspectionsRouter(dependencies: {
       } catch (error) {
         const code = error instanceof Error ? error.message : "";
         if (code === "PHOTO_NOT_FOUND") { res.status(404).json({ error: "Photo not found." }); return; }
+        if (code === "PHOTO_ALREADY_UPLOADED") { res.status(409).json({ error: "This photo is already saved and cannot be replaced." }); return; }
         if (code === "PHOTO_TOO_LARGE") { res.status(413).json({ error: "Photo must be 15 MB or smaller." }); return; }
         if (["PHOTO_TYPE_UNSUPPORTED", "PHOTO_TYPE_MISMATCH"].includes(code)) {
           res.status(400).json({ error: "Photo must be a JPEG, PNG, or WebP image." }); return;
