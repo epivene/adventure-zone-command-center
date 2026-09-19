@@ -115,6 +115,34 @@ describe("YearEndInspectionService", () => {
     });
   });
 
+  it("creates and assigns a named attraction while adding a discovered attraction", async () => {
+    const { service } = await setup();
+    const inspection = await service.startBlank({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResource = {
+      id: "70000000-0000-4000-8000-000000000001",
+      name: "Blue Slide",
+    };
+
+    const updated = await service.createDiscoveredPieceForLeg(inspection.id, legId, {
+      pieceId: "40000000-0000-4000-8000-000000000002",
+      entryId: "50000000-0000-4000-8000-000000000002",
+      clientMutationId: "60000000-0000-4000-8000-000000000002",
+      code: null,
+      name: "Blue slide section",
+      identityNotes: null,
+      resourceId: null,
+      newResource,
+    }, actor);
+
+    expect(updated.entries[0]).toMatchObject({
+      resourceIdSnapshot: newResource.id,
+      resourceNameSnapshot: newResource.name,
+    });
+    expect(await service.listResourcesForLeg(legId)).toContainEqual(newResource);
+  });
+
   it("blocks completion until every piece is inspected or deliberately not present", async () => {
     const { service } = await setup();
     const inspection = await service.startForCurrentPieces({
