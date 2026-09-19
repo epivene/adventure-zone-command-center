@@ -26,7 +26,13 @@ async function setup() {
     );
     CREATE TABLE resources (
       id uuid PRIMARY KEY, code text NOT NULL, name text NOT NULL, category text NOT NULL,
-      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid
+      counts_as_attraction boolean NOT NULL DEFAULT false,
+      movable boolean NOT NULL DEFAULT false,
+      setup_minutes integer NOT NULL DEFAULT 0,
+      teardown_minutes integer NOT NULL DEFAULT 0,
+      minimum_transfer_minutes integer NOT NULL DEFAULT 0,
+      status text NOT NULL DEFAULT 'available', normal_travel_leg_id uuid,
+      created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
     );
     INSERT INTO travel_legs (id, name, sort_order) VALUES ('${legId}', 'Leg One', 1);
     INSERT INTO resources (id, code, name, category, status, normal_travel_leg_id) VALUES
@@ -249,6 +255,51 @@ describe("YearEndInspectionService", () => {
     expect(next.entries[0]).toMatchObject({
       pieceCodeSnapshot: "WW-001",
       pieceNameSnapshot: "Warrior Wall",
+    });
+  });
+
+  it("creates a named attraction, assigns the inspected item, and retains it for future years", async () => {
+    const { service, piece, pieces } = await setup();
+    const inspection = await service.startForCurrentPieces({
+      legId, year: 2026, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    const newResourceId = "20000000-0000-4000-8000-000000000099";
+
+    const updated = await service.patchEntryForLeg(
+      inspection.id,
+      inspection.entries[0]!.id,
+      legId,
+      {
+        entryState: "inspected",
+        condition: "good",
+        resourceAssignment: {
+          mode: "new",
+          resourceId: newResourceId,
+          name: "Old Old OBS",
+        },
+      },
+      actor,
+    );
+
+    expect(updated).toMatchObject({
+      resourceIdSnapshot: newResourceId,
+      resourceNameSnapshot: "Old Old OBS",
+    });
+    expect(await pieces.get(piece.id)).toMatchObject({
+      currentResourceId: newResourceId,
+      currentResourceName: "Old Old OBS",
+    });
+    await expect(service.listResourcesForLeg(legId)).resolves.toContainEqual({
+      id: newResourceId,
+      name: "Old Old OBS",
+    });
+
+    const next = await service.startForCurrentPieces({
+      legId, year: 2027, clientMutationId: crypto.randomUUID(), actorId: actor,
+    });
+    expect(next.entries[0]).toMatchObject({
+      resourceIdSnapshot: newResourceId,
+      resourceNameSnapshot: "Old Old OBS",
     });
   });
 
