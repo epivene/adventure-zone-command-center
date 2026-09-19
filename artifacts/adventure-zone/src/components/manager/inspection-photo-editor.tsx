@@ -320,3 +320,4 @@ export function InspectionPhotoEditor(props: Omit<InspectionPhotoEditorContentPr
   const { managerApi } = useManagerAuth();
   return <InspectionPhotoEditorContent {...props} managerApi={managerApi} />;
 }
+
