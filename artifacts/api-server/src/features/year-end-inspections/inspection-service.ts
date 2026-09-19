@@ -13,7 +13,7 @@ import {
 import { DrizzleInspectionRepository, type EntrySeed } from "./inspection-repository";
 import { YearEndMaintenanceProjection } from "./maintenance-projection";
 import { DrizzlePieceRepository } from "./piece-repository";
-import type { InspectionDetail, InspectionEntryPatch } from "./inspection-types";
+import type { InspectionDetail, InspectionEntryPatch, InspectionEntryUpdate } from "./inspection-types";
 
 type Database = any;
 
@@ -127,14 +127,14 @@ export class YearEndInspectionService {
     return this.repository.getEntry(id);
   }
 
-  async patchEntryForLeg(inspectionId: string, entryId: string, legId: string, patch: InspectionEntryPatch, actorId: string) {
+  async patchEntryForLeg(inspectionId: string, entryId: string, legId: string, patch: InspectionEntryUpdate, actorId: string) {
     const inspection = await this.repository.get(inspectionId);
     const entry = await this.repository.getEntry(entryId);
     if (!inspection || inspection.legId !== legId || !entry || entry.inspectionId !== inspectionId) return null;
     return this.patchEntry(entryId, patch, actorId);
   }
 
-  async patchEntryForAdmin(inspectionId: string, entryId: string, patch: InspectionEntryPatch, actorId: string) {
+  async patchEntryForAdmin(inspectionId: string, entryId: string, patch: InspectionEntryUpdate, actorId: string) {
     const inspection = await this.repository.get(inspectionId);
     const entry = await this.repository.getEntry(entryId);
     if (!inspection || !entry || entry.inspectionId !== inspectionId) return null;
@@ -179,6 +179,7 @@ export class YearEndInspectionService {
       name: string | null;
       identityNotes: string | null;
       resourceId: string | null;
+      newResource?: { id: string; name: string } | null;
     },
     actorId: string,
   ): Promise<InspectionDetail> {
@@ -186,6 +187,30 @@ export class YearEndInspectionService {
     if (!inspection || inspection.legId !== legId) throw new Error("INSPECTION_NOT_FOUND");
     if (inspection.status === "completed") throw new InspectionLifecycleError("inspection_completed", "Reopen the inspection before adding another piece.");
     if (inspection.entries.some((entry) => entry.id === input.entryId || entry.pieceId === input.pieceId)) return inspection;
+
+    let resourceId = input.resourceId;
+    if (input.newResource) {
+      const [found] = await this.db.select({
+        id: resources.id,
+        status: resources.status,
+        normalTravelLegId: resources.normalTravelLegId,
+      }).from(resources).where(eq(resources.id, input.newResource.id)).limit(1);
+      if (found) {
+        if (found.status === "archived") throw new Error("PIECE_RESOURCE_UNAVAILABLE");
+        if (found.normalTravelLegId !== legId) throw new Error("PIECE_RESOURCE_OUTSIDE_LEG");
+      } else {
+        await this.db.insert(resources).values({
+          id: input.newResource.id,
+          code: `inspection_${input.newResource.id.replace(/-/g, "").slice(0, 12)}`,
+          name: input.newResource.name.trim(),
+          category: "Inflatable attraction",
+          countsAsAttraction: true,
+          normalTravelLegId: legId,
+          status: "available",
+        });
+      }
+      resourceId = input.newResource.id;
+    }
 
     const pieces = new DrizzlePieceRepository(this.db);
     let piece = await pieces.get(input.pieceId);
@@ -201,7 +226,7 @@ export class YearEndInspectionService {
         storageLocation: null,
         identityNotes: input.identityNotes,
         lifecycleStatus: "active",
-        resourceId: input.resourceId,
+        resourceId,
       }, actorId);
     }
 
