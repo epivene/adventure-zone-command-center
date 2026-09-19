@@ -63,7 +63,7 @@ describe("manager year-end inspection routes", () => {
   });
 
   it("returns the existing inspection when an offline start mutation is retried", async () => {
-    const inspection = { id: inspectionId, legId, status: "in_progress", entries: [] };
+    const inspection = { id: inspectionId, legId, inspectionYear: 2026, status: "in_progress", entries: [] };
     const service = {
       findByMutation: vi.fn()
         .mockResolvedValueOnce(null)
@@ -76,6 +76,18 @@ describe("manager year-end inspection routes", () => {
     const retry = await request(app).post("/manager/year-end-inspections").send(body).expect(200);
     expect(retry.body.inspection.id).toBe(inspectionId);
     expect(service.startForCurrentPieces).toHaveBeenCalledOnce();
+  });
+
+  it("does not expose another leg's inspection when a start mutation id is reused", async () => {
+    const service = {
+      findByMutation: vi.fn(async () => ({ id: inspectionId, legId: otherLegId, inspectionYear: 2026, entries: [] })),
+      startForCurrentPieces: vi.fn(),
+    };
+    await request(appFor(service))
+      .post("/manager/year-end-inspections")
+      .send({ year: 2026, source: "current_pieces", clientMutationId: "30000000-0000-4000-8000-000000000009" })
+      .expect(409);
+    expect(service.startForCurrentPieces).not.toHaveBeenCalled();
   });
 
   it("creates a discovered piece directly on the signed-in manager's leg", async () => {
@@ -188,6 +200,46 @@ describe("manager year-end inspection routes", () => {
       patch,
       "manager:Leg One",
     );
+  });
+
+  it("requires reopening before manager entry or photo edits", async () => {
+    const entryId = "30000000-0000-4000-8000-000000000001";
+    const photoId = "40000000-0000-4000-8000-000000000001";
+    const completedError = Object.assign(new Error("Reopen the inspection before making changes."), { code: "inspection_completed" });
+    const service = {
+      get: vi.fn(async () => ({ id: inspectionId, legId, status: "completed", entries: [{ id: entryId }] })),
+      patchEntryForLeg: vi.fn(async () => { throw completedError; }),
+    };
+    const photoService = {
+      belongsToInspection: vi.fn(async () => true),
+      patchDescriptionAndAnnotations: vi.fn(),
+    };
+    const app = appFor(service, photoService);
+
+    await request(app)
+      .patch(`/manager/year-end-inspections/${inspectionId}/entries/${entryId}`)
+      .send({ pieceNameSnapshot: "Blocked" })
+      .expect(409);
+    await request(app)
+      .patch(`/manager/year-end-inspections/${inspectionId}/photos/${photoId}`)
+      .send({ description: "Blocked", annotations: { version: 1, ellipses: [] } })
+      .expect(409);
+    expect(photoService.patchDescriptionAndAnnotations).not.toHaveBeenCalled();
+  });
+
+  it("does not upload a photo through a different inspection id", async () => {
+    const photoId = "40000000-0000-4000-8000-000000000002";
+    const service = { get: vi.fn(async () => ({ id: inspectionId, legId, status: "in_progress", entries: [] })) };
+    const photoService = {
+      belongsToInspection: vi.fn(async () => false),
+      putImage: vi.fn(),
+    };
+    await request(appFor(service, photoService))
+      .put(`/manager/year-end-inspections/${inspectionId}/photos/${photoId}/image`)
+      .set("Content-Type", "image/jpeg")
+      .send(Buffer.from("photo"))
+      .expect(404);
+    expect(photoService.putImage).not.toHaveBeenCalled();
   });
 
   it("rejects malformed photo annotations as a client error", async () => {
