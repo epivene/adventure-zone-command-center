@@ -66,6 +66,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
 
   useEffect(() => {
+    if (immersiveProfile) return;
     let active = true;
     const refresh = async () => {
       try {
@@ -76,22 +77,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
     };
     void refresh();
-    const id = window.setInterval(refresh, 15000);
+    const id = window.setInterval(refresh, 60000);
     return () => { active = false; window.clearInterval(id); };
-  }, [location]);
+  }, [immersiveProfile]);
 
   useEffect(() => {
+    if (immersiveProfile) return;
     let active = true;
     const refresh = () =>
       apiGet<{ newCount: number }>("/website-inquiries/count")
         .then((data) => { if (active) setWebsiteInquiryCount(data.newCount ?? 0); })
         .catch(() => {});
     void refresh();
-    const id = window.setInterval(refresh, 15000);
+    const id = window.setInterval(refresh, 60000);
     return () => { active = false; window.clearInterval(id); };
-  }, []);
+  }, [immersiveProfile]);
 
   useEffect(() => {
+    if (immersiveProfile) return;
     let active = true;
     const refresh = () =>
       getGoogleWorkspaceValidationReview()
@@ -104,14 +107,14 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (active && Number.isFinite(count)) setPendingEmailReviewCount(count);
     };
     void refresh();
-    const id = window.setInterval(refresh, 60000);
+    const id = window.setInterval(refresh, 120000);
     window.addEventListener("email-review-count-changed", updateFromReview);
     return () => {
       active = false;
       window.clearInterval(id);
       window.removeEventListener("email-review-count-changed", updateFromReview);
     };
-  }, []);
+  }, [immersiveProfile]);
 
   useEffect(() => {
     if (!immersiveProfile) rememberProfileOrigin(location);
