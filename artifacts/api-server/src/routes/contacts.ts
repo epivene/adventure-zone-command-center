@@ -54,6 +54,18 @@ router.post("/contacts", async (req, res): Promise<void> => {
   }
 });
 
+router.get("/contacts/:id/edit-data", async (req, res): Promise<void> => {
+  const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  try {
+    const detail = await contactRepo().getContactDetail(id);
+    if (!detail) { res.status(404).json({ error: "Not found" }); return; }
+    res.json(detail);
+  } catch (err) {
+    req.log.error({ err }, "Failed to get contact edit data");
+    res.status(500).json({ error: "Failed to get contact edit data" });
+  }
+});
+
 router.get("/contacts/:id", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   try {
