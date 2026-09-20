@@ -167,7 +167,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
       return;
     }
     setLoadingContact(true);
-    apiGet<ContactDetail>(`/contacts/${selectedContact.id}`)
+    apiGet<ContactDetail>(`/contacts/${selectedContact.id}/edit-data`)
       .then((detail) => {
         setContactValues({
           firstName: detail.contact.firstName ?? "",
