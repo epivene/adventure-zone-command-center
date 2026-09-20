@@ -97,7 +97,7 @@ export default function EventProfilePage() {
       };
 
       const callablePhones = await Promise.all((normalized.contacts ?? []).map(async (contact: any) => {
-        const detail = await apiGet<any>(`/contacts/${contact.id}`).catch(() => null);
+        const detail = await apiGet<any>(`/contacts/${contact.id}/edit-data`).catch(() => null);
         if (!detail) return [contact.id as string, null] as const;
         const phones = Array.isArray(detail?.phones) ? detail.phones : [];
         const callablePhone = phones
