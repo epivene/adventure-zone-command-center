@@ -9,6 +9,7 @@ import * as earlyBirdPromoSchema from "./early-bird-promo-schema";
 import * as eventChecklistSchema from "./event-checklist-schema";
 import * as resourceSourceCandidateSchema from "./resource-source-candidate-schema";
 import * as eventAttendanceHistorySchema from "./event-attendance-history-schema";
+import * as eventDateCoverageSchema from "./event-date-coverage-schema";
 import * as officeCoordinatorSchema from "./office-coordinator-schema";
 import * as bossSchema from "./boss-schema";
 import * as bossWorkRequestSchema from "./boss-work-request-schema";
@@ -85,6 +86,7 @@ const schema = {
   ...eventChecklistSchema,
   ...resourceSourceCandidateSchema,
   ...eventAttendanceHistorySchema,
+  ...eventDateCoverageSchema,
   ...officeCoordinatorSchema,
   ...bossSchema,
   ...bossWorkRequestSchema,
@@ -122,6 +124,7 @@ export * from "./early-bird-promo-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
+export * from "./event-date-coverage-schema";
 export * from "./office-coordinator-schema";
 export * from "./boss-schema";
 export * from "./boss-work-request-schema";
@@ -140,8 +143,4 @@ export * from "./business-document-schema";
 export * from "./invoice-schema";
 export * from "./google-drive-backup-schema";
 export * from "./year-end-inspection-schema";
-
-
-
 export * from "./outreach-planner-schema";
-
