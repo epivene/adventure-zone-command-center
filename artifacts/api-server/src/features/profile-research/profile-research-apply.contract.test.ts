@@ -11,20 +11,20 @@ describe("profile research apply safety contract", () => {
     expect(apply).toContain("result.stale.push(id)");
   });
 
-  it("limits mutation targets to factual profile/contact/booking fields", () => {
-    expect(apply).toContain('"website", "phone", "address1", "address2", "city", "region", "postalCode", "placeType"');
-    expect(apply).toContain('"name", "role", "email", "phone"');
-    expect(apply).toContain('"startsAt", "endsAt", "city", "region", "name"');
+  it("routes researched dates through facts rather than booking fields", () => {
+    expect(apply).toContain('suggestion.targetKind === "event_date_fact"');
+    expect(apply).toContain("EventDateRepository");
+    expect(apply).toContain("supersedeActiveFact");
     expect(apply).not.toContain('"status", "probability"');
   });
 
-  it("validates website, email, phone, state, category, and dates before writing", () => {
+  it("validates website, email, phone, state, and category before writing", () => {
     expect(apply).toContain("z.url()");
     expect(apply).toContain("z.email()");
     expect(apply).toContain("normalizeNorthAmericanPhone");
     expect(apply).toContain("two-letter state/region");
     expect(apply).toContain("placeTypes.has");
-    expect(apply).toContain("suggested event date is invalid");
+    expect(apply).toContain("Researched event dates must be stored as date facts");
   });
 
   it("bulk applies only high-confidence non-conflicting pending suggestions", () => {
