@@ -89,11 +89,8 @@ function conciseBody(
     `Event location: ${claim.eventLocation ?? "Not provided"}`,
     `Package interest: ${claim.packageInterest ?? "Not provided"}`,
     "",
-    "Open in the owner workspace:",
+    "Open in the workspace:",
     `${inboxBaseUrl}/website-inquiries?inquiry=${inquiry}`,
-    "",
-    "Open in the Office workspace:",
-    `${inboxBaseUrl}/office/website-inquiries?inquiry=${inquiry}`,
     "",
     "The visitor's full message is available only inside the authenticated inbox.",
   ].join("\n");
