@@ -7,6 +7,10 @@ const source = readFileSync(
   new URL("../public/adventure-zone-site-20260921-responsive-foam.js", import.meta.url),
   "utf8",
 );
+const homeSource = readFileSync(
+  new URL("../public/adventure-zone-site-20260921-responsive-home.js", import.meta.url),
+  "utf8",
+);
 
 function mount(path, tag = "adventure-zone-package", packageKey = "") {
   const dom = new JSDOM("<body></body>", {
@@ -55,4 +59,33 @@ test("mobile package surfaces explicitly remove desktop width caps and gutters",
     source,
     /@media\s*\(max-width:\s*767px\)[\s\S]*?\.package-page[\s\S]*?max-width:\s*none[\s\S]*?width:\s*100%[\s\S]*?margin:\s*0/,
   );
+});
+
+
+test("mobile homepage surface explicitly removes inherited width caps", () => {
+  assert.match(
+    homeSource,
+    /@media\s*\(max-width:\s*767px\)[\s\S]*?:host[\s\S]*?width:\s*100%[\s\S]*?\.az-site[\s\S]*?max-width:\s*none[\s\S]*?margin:\s*0/,
+  );
+});
+
+test("existing standalone packages keep their media-first details", () => {
+  for (const [path, key, title] of [
+    ["/adventure-zone-package", "adventure-zone", "Adventure Zone"],
+    ["/pirates-rebellion-package", "pirates-rebellion", "Pirate's Rebellion"],
+    ["/warriors-playground-package", "weekend-warriors", "Warrior's Playground"],
+  ]) {
+    const page = mount(path, "adventure-zone-package", key);
+    try {
+      assert.equal(page.root.querySelector("h1").textContent, title);
+      assert.ok(page.root.querySelector(".package-video video"));
+      assert.ok(
+        page.root
+          .querySelector(".package-video")
+          .compareDocumentPosition(page.root.querySelector("#package-detail-title")) & 4,
+      );
+    } finally {
+      page.dom.window.close();
+    }
+  }
 });
