@@ -491,6 +491,12 @@
     .field.full { grid-column: 1 / -1; }
     .field label { margin-bottom: 8px; color: var(--az-navy); font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
     .field input, .field select, .field textarea { width: 100%; border: 4px solid var(--az-navy); border-radius: 0; padding: 12px; color: var(--az-navy); background: var(--az-white); font-size: 15px; font-weight: 800; }
+    .foam-addon-option { display: flex; align-items: flex-start; gap: 12px; margin: 0; border: 4px solid var(--az-navy); padding: 12px; background: var(--az-yellow); cursor: pointer; }
+    .foam-addon-option input { flex: 0 0 22px; width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--az-pink); }
+    .foam-addon-option span { display: grid; gap: 4px; }
+    .foam-addon-option strong { font-size: 14px; letter-spacing: .04em; }
+    .foam-addon-option small { color: var(--az-muted); font-size: 12px; font-weight: 800; letter-spacing: 0; text-transform: none; }
+    .foam-addon-option:has(input:disabled) { background: #ece9e1; cursor: not-allowed; opacity: .7; }
     .field textarea { min-height: 150px; resize: vertical; }
     .field input::placeholder, .field textarea::placeholder { color: var(--az-muted); opacity: .8; }
     .field input:focus, .field select:focus, .field textarea:focus { outline: 4px solid var(--az-pink); outline-offset: 0; }
@@ -992,13 +998,32 @@
         <div class="field"><label for="az-event">Event or Organization *</label><input id="az-event" name="eventName" required maxlength="160" placeholder="Fall Festival"></div>
         <div class="field"><label for="az-date">Event Date</label><input id="az-date" name="eventDate" type="date"></div>
         <div class="field"><label for="az-location">Event Location</label><input id="az-location" name="eventLocation" maxlength="200" placeholder="City, State"></div>
-        <div class="field"><label for="az-package">Package Interest</label><select id="az-package" name="packageInterest"><option value="">Not sure yet</option><option>Adventure Zone</option><option>Pirate's Rebellion</option><option>Warrior's Playground</option><option>Foam Party Add-On</option></select></div>
+        <div class="field"><label for="az-package">Package Interest</label><select id="az-package" name="packageInterest"><option value="">Choose a package</option><option>Adventure Zone</option><option>Pirate's Rebellion</option><option>Warrior's Playground</option></select></div>
+        <div class="field full"><label class="foam-addon-option" for="az-foam-addon"><input id="az-foam-addon" name="foamPartyAddOn" type="checkbox" value="Yes" disabled><span><strong>Add Foam Party (+$3,500)</strong><small data-foam-addon-helper>Choose a package first to unlock this add-on.</small></span></label></div>
         <div class="honeypot" aria-hidden="true"><label for="az-website">Website</label><input id="az-website" name="website" tabindex="-1" autocomplete="off"></div>
         <div class="field full"><label for="az-message">Tell Us About Your Event *</label><textarea id="az-message" name="message" required minlength="10" maxlength="4000" rows="6" placeholder="Tell us about your event, expected crowd, and what you are looking for."></textarea></div>
       </div>
       <div class="form-bottom"><p class="form-helper">Your message goes directly to our booking team. We'll follow up using the email address you provide.</p><button class="button" type="submit">Send Inquiry ${icon("send")}</button></div>
       <div class="status-slot"></div>
     </form>`;
+  }
+
+  function setupFoamAddOn(form, signal) {
+    const packageSelect = form.querySelector('[name="packageInterest"]');
+    const foamAddOn = form.querySelector('[name="foamPartyAddOn"]');
+    const helper = form.querySelector('[data-foam-addon-helper]');
+    if (!packageSelect || !foamAddOn || !helper) return;
+    const sync = () => {
+      const hasBasePackage = Boolean(packageSelect.value);
+      foamAddOn.disabled = !hasBasePackage;
+      if (!hasBasePackage) foamAddOn.checked = false;
+      helper.textContent = hasBasePackage
+        ? "Available to add to your selected package."
+        : "Choose a package first to unlock this add-on.";
+    };
+    packageSelect.addEventListener("change", sync, { signal });
+    form.addEventListener("reset", () => window.setTimeout(sync, 0), { signal });
+    sync();
   }
 
   function conventionWelcomeMarkup() {
@@ -1215,6 +1240,7 @@
       window.addEventListener("resize", () => this.updateResizeLayout(), { signal, passive: true });
       root.querySelector(".contact-form").addEventListener("submit", (event) => this.submitInquiry(event), { signal });
       root.querySelector(".contact-form").addEventListener("input", () => this.emitResize(), { signal, passive: true });
+      setupFoamAddOn(root.querySelector(".contact-form"), signal);
       root.querySelectorAll("[data-convention-package]").forEach((button) => {
         button.addEventListener("click", () => this.showConventionPackage(button.dataset.conventionPackage), { signal });
       });
@@ -1232,7 +1258,10 @@
     selectPackage(key) {
       const item = packageDefinitions().find(item => item.key === key);
       const select = this.shadowRoot.querySelector('[name="packageInterest"]');
-      if (item && select) select.value = item.title;
+      if (item && select) {
+        select.value = item.title;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      }
     }
 
     openPackageDialog(key, opener) {
@@ -1509,7 +1538,7 @@
         eventName: String(data.get("eventName") || "").trim(),
         eventDate: String(data.get("eventDate") || "").trim(),
         eventLocation: String(data.get("eventLocation") || "").trim(),
-        packageInterest: String(data.get("packageInterest") || "").trim(),
+        packageInterest: `${String(data.get("packageInterest") || "").trim()}${data.get("foamPartyAddOn") === "Yes" ? " + Foam Party Add-On" : ""}`.trim(),
         message: String(data.get("message") || "").trim(),
       };
     }
@@ -1701,8 +1730,7 @@
         this.shadowRoot.innerHTML = `<style>${styles}</style><div class="az-site package-page foam-page"><header class="package-page-header"><a href="/" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a></header>${foamPartyMarkup()}<section class="contact" id="contact"><h2 class="display">Ask About Your Event</h2>${formMarkup()}</section></div>`;
         this.abortController = new AbortController();
         const signal = this.abortController.signal;
-        const select = this.shadowRoot.querySelector('[name="packageInterest"]');
-        if (select) select.value = "Foam Party Add-On";
+        setupFoamAddOn(this.shadowRoot.querySelector('.contact-form'), signal);
         this.shadowRoot.querySelectorAll('[data-package-book]').forEach(button => button.addEventListener('click', () => {
           this.scrollToId('contact');
           this.shadowRoot.querySelector('[name="name"]').focus({ preventScroll: true });
@@ -1739,6 +1767,7 @@
         this.shadowRoot.querySelector('[name="name"]').focus({ preventScroll: true });
       }, { signal });
       this.shadowRoot.querySelector('.contact-form').addEventListener('submit', event => this.submitInquiry(event), { signal });
+      setupFoamAddOn(this.shadowRoot.querySelector('.contact-form'), signal);
       this.setupResizeEvents();
     }
   }
