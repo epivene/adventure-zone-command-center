@@ -11,6 +11,7 @@ import type {
 import { apiFetch } from "@/lib/auth-token";
 import { ProfileDetailSheet } from "@/components/profiles/profile-detail-sheet";
 import { dealModelLabels } from "@/components/profiles/profile-at-a-glance";
+import { createFollowUpWorkbook } from "./follow-up-workbook";
 
 function listHref(query: OrganizationListQuery) {
   const params = new URLSearchParams();
@@ -105,6 +106,7 @@ export function OrganizationList({
   );
   const [desktopSplit, setDesktopSplit] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [followUpExporting, setFollowUpExporting] = useState(false);
   const [exportError, setExportError] = useState("");
   const profileTypeLabel = profileTypeOptions.find(
     (option) => option.value === query.placeType,
@@ -269,6 +271,49 @@ export function OrganizationList({
     }
   }
 
+  async function exportFollowUps() {
+    if (followUpExporting) return;
+    setFollowUpExporting(true);
+    setExportError("");
+    try {
+      const exportUrl = listHref({
+        ...query,
+        quickFilter: "needs_follow_up",
+        page: 1,
+      }).replace(/^\/profiles\??/, "/follow-ups/export?");
+      const response = await apiFetch(exportUrl);
+      if (!response.ok) throw new Error(`Export failed (${response.status})`);
+      const payload = (await response.json()) as {
+        followUps: Parameters<typeof createFollowUpWorkbook>[0];
+      };
+      const workbook = createFollowUpWorkbook(
+        payload.followUps,
+        new Date(),
+      );
+      const workbookBytes = workbook.data.buffer.slice(
+        workbook.data.byteOffset,
+        workbook.data.byteOffset + workbook.data.byteLength,
+      ) as ArrayBuffer;
+      const blob = new Blob([workbookBytes], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = workbook.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setExportError(
+        cause instanceof Error
+          ? cause.message
+          : "The follow-up export could not be created.",
+      );
+    } finally {
+      setFollowUpExporting(false);
+    }
+  }
+
   return (
     <div className="grid gap-4">
       <form
@@ -330,6 +375,15 @@ export function OrganizationList({
             </select>
           </label>
           <div className="flex items-end gap-2">
+            <button
+              className="button-primary inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
+              disabled={followUpExporting}
+              onClick={() => void exportFollowUps()}
+              type="button"
+            >
+              <Download aria-hidden className="h-4 w-4" />
+              {followUpExporting ? "Exporting…" : "Export Follow-ups"}
+            </button>
             <button
               className="button-secondary inline-flex flex-1 items-center justify-center gap-2 sm:flex-none"
               disabled={exporting}

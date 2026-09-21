@@ -7,8 +7,10 @@ import { DrizzleActivityRepository } from "@/features/activities/activity-reposi
 import { DrizzleBookingRepository } from "@/features/bookings/booking-repository";
 import { BookingService } from "@/features/bookings/booking-service";
 import { DrizzleFollowUpRepository } from "@/features/follow-ups/follow-up-repository";
+import { listFilteredFollowUpExportRows } from "@/features/follow-ups/follow-up-export";
 import { FollowUpService } from "@/features/follow-ups/follow-up-service";
 import type { EditFollowUpInput } from "@/features/follow-ups/follow-up-types";
+import { organizationListQuerySchema } from "@/features/organizations/last-resort-input";
 import { OpportunityEmailActivityWriter } from "@/features/opportunity-email/opportunity-email-activity";
 import { OpportunityRepository } from "@/features/opportunities/opportunity-repository";
 import { OpportunityService } from "@/features/opportunities/opportunity-service";
@@ -102,6 +104,37 @@ export function createFollowUpsRouter(
   activity: FollowUpActivityWriter = defaultActivityWriter(),
 ): IRouter {
   const router: IRouter = Router();
+
+  router.get("/export", async (req, res): Promise<void> => {
+    const query = organizationListQuerySchema.parse({
+      q: req.query.q ?? undefined,
+      lastResort: req.query.lastResort ?? undefined,
+      filler: req.query.filler ?? undefined,
+      leg: req.query.leg ?? undefined,
+      type: req.query.type ?? undefined,
+      region: req.query.region ?? undefined,
+      hasPhone: req.query.hasPhone ?? undefined,
+      hasEmail: req.query.hasEmail ?? undefined,
+      hasFollowUp: req.query.hasFollowUp ?? undefined,
+      hasBooking: req.query.hasBooking ?? undefined,
+      hasLocations: req.query.hasLocations ?? undefined,
+      showMembers: req.query.showMembers ?? undefined,
+      contact: req.query.contact ?? undefined,
+      activity: req.query.activity ?? undefined,
+      quick: req.query.quick ?? undefined,
+      sort: req.query.sort ?? undefined,
+      includeRetired: req.query.includeRetired ?? undefined,
+      page: 1,
+      pageSize: 50,
+    });
+    try {
+      const followUps = await listFilteredFollowUpExportRows(db, query);
+      res.json({ followUps });
+    } catch (error) {
+      req.log.error({ error }, "Failed to export follow-ups");
+      res.status(500).json({ error: "Failed to export follow-ups." });
+    }
+  });
 
   router.post("/", async (req, res): Promise<void> => {
     const parsed = createSchema.safeParse(req.body ?? {});

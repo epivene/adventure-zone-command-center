@@ -1,9 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Router } from "wouter";
 
+import { apiFetch } from "@/lib/auth-token";
 import { OrganizationList } from "./organization-list";
 
+vi.mock("@/lib/auth-token", () => ({ apiFetch: vi.fn() }));
 vi.mock("@/components/profiles/profile-detail-sheet", () => ({
   ProfileDetailSheet: () => null,
 }));
@@ -28,7 +30,31 @@ const query = {
   pageSize: 50,
 };
 
-afterEach(cleanup);
+const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "createObjectURL",
+);
+const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "revokeObjectURL",
+);
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  if (originalCreateObjectUrl) {
+    Object.defineProperty(URL, "createObjectURL", originalCreateObjectUrl);
+  } else {
+    Reflect.deleteProperty(URL, "createObjectURL");
+  }
+  if (originalRevokeObjectUrl) {
+    Object.defineProperty(URL, "revokeObjectURL", originalRevokeObjectUrl);
+  } else {
+    Reflect.deleteProperty(URL, "revokeObjectURL");
+  }
+});
 
 describe("OrganizationList profile summary cards", () => {
   it("shows booking decision data with the review rating as secondary context", () => {
@@ -189,6 +215,72 @@ describe("OrganizationList profile summary cards", () => {
       expect.stringContaining("quick=booked"),
     );
     expect(screen.getByRole("button", { name: "Export CSV" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Export Follow-ups" }),
+    ).toBeVisible();
+  });
+
+  it("requests every filtered follow-up instead of only the visible page", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        followUps: [{
+          id: "1",
+          kind: "Email",
+          dueAt: "2026-09-28T17:00:00Z",
+          organizationName: "Killdeer Days",
+          city: "Killdeer",
+          region: "ND",
+        }],
+      }),
+    } as Response);
+    const createObjectUrl = vi.fn((_blob: Blob) => "blob:follow-ups");
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: vi.fn(),
+    });
+    const anchorClick = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+
+    render(
+      <Router>
+        <OrganizationList
+          organizations={{
+            records: [],
+            total: 0,
+            page: 4,
+            pageSize: 50,
+            pageCount: 6,
+          }}
+          query={{ ...query, region: "ND", quickFilter: "booked", page: 4 }}
+          travelLegs={[]}
+        />
+      </Router>,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Export Follow-ups" }),
+    );
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
+    const exportUrl = vi.mocked(apiFetch).mock.calls[0]?.[0];
+    expect(exportUrl).toContain("/follow-ups/export?");
+    expect(exportUrl).toContain("region=ND");
+    expect(exportUrl).toContain("quick=needs_follow_up");
+    expect(exportUrl).not.toContain("page=4");
+    await waitFor(() => expect(createObjectUrl).toHaveBeenCalledTimes(1));
+    expect(createObjectUrl.mock.calls[0]?.[0]).toBeInstanceOf(Blob);
+    const clickedAnchor = anchorClick.mock.contexts[0] as
+      | HTMLAnchorElement
+      | undefined;
+    expect(clickedAnchor?.download).toMatch(
+      /^adventure-zone-follow-ups-\d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
   });
 
   it("makes the profile summary box keyboard and pointer addressable", () => {
