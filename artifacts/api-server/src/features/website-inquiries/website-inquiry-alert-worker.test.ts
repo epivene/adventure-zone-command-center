@@ -57,7 +57,7 @@ function setup(input?: {
 }
 
 describe("WebsiteInquiryAlertWorker", () => {
-  it("emails each unique unsent recipient with concise secure inbox links", async () => {
+  it("emails each unique unsent recipient with one secure workspace link", async () => {
     const h = setup({
       claimed: claim({ alertDeliveredRecipients: ["owner@example.com"] }),
     });
@@ -83,9 +83,9 @@ describe("WebsiteInquiryAlertWorker", () => {
     expect(body).toContain(
       "https://command.example.com/website-inquiries?inquiry=20000000-0000-4000-8000-000000000002",
     );
-    expect(body).toContain(
-      "https://command.example.com/office/website-inquiries?inquiry=20000000-0000-4000-8000-000000000002",
-    );
+    expect(body).toContain("Open in the workspace:");
+    expect(body).not.toContain("Open in the owner workspace:");
+    expect(body).not.toContain("/office/website-inquiries?inquiry=");
     expect(body).not.toContain("complete private visitor message");
     expect(h.repository.recordRecipientDelivered).toHaveBeenCalledWith({
       inquiryId: claim().id,
