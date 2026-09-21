@@ -786,6 +786,8 @@
     .foam-gallery { position: relative; width: 100%; aspect-ratio: 16 / 9; min-height: 240px; overflow: hidden; border-bottom: 4px solid var(--az-navy); background: var(--az-navy); }
     .foam-gallery-slide { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity .65s ease; }
     .foam-gallery-slide.active { opacity: 1; }
+    .foam-gallery-toggle { position: absolute; right: 14px; bottom: 14px; z-index: 2; min-height: 44px; padding: 9px 14px; border: 3px solid var(--az-yellow); background: var(--az-navy); color: var(--az-white); font: inherit; font-size: 14px; font-weight: 900; cursor: pointer; box-shadow: 4px 4px 0 var(--az-pink); }
+    .foam-gallery-toggle:focus-visible { outline: 3px solid var(--az-white); outline-offset: 3px; }
     .foam-section { padding: clamp(40px, 7vw, 72px) clamp(20px, 5vw, 56px); border-bottom: 4px solid var(--az-navy); }
     .foam-section h2 { margin: 0 0 14px; font-size: clamp(38px, 7vw, 64px); line-height: .95; }
     .foam-section-intro { max-width: 760px; margin: 0 0 30px; font-size: 18px; }
@@ -924,7 +926,7 @@
       [IMAGE.foamHero, "A smiling boy wearing a hat of foam at the Foam Party"],
     ];
     return `<section class="foam-hero">
-      <div class="foam-gallery" role="region" aria-label="Foam Party photo gallery">${photos.slice(0, 5).map(([src, alt], index) => `<img class="foam-gallery-slide${index === 0 ? " active" : ""}" src="${src}" alt="${alt}" ${index === 0 ? "" : 'loading="lazy"'}>`).join("")}</div>
+      <div class="foam-gallery" role="region" aria-label="Foam Party photo gallery">${photos.slice(0, 5).map(([src, alt], index) => `<img class="foam-gallery-slide${index === 0 ? " active" : ""}" src="${src}" alt="${alt}" ${index === 0 ? "" : 'loading="lazy"'}>`).join("")}<button type="button" class="foam-gallery-toggle" data-foam-gallery-toggle aria-pressed="false">Pause photos</button></div>
       <div class="foam-hero-copy"><div class="foam-tag">NEW • PACKAGE ADD-ON</div><h1 class="display" id="package-detail-title">Foam Party</h1>
       <p class="foam-lede">Big bubbles. Bigger smiles. Give your event a whole new way to play with a foam-filled experience planned around your crowd.</p>
       <div class="foam-price display">$3,500</div><div class="foam-price-note">Available exclusively as a package addition</div>
@@ -1651,8 +1653,36 @@
       if (this.isConnected) { this.disconnectedCallback(); this.connectedCallback(); }
     }
     startFoamRotation() {
-      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-      this.timers.push(window.setInterval(() => this.rotateFoamGallery(), 5000));
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+        this.foamPaused = true;
+        this.updateFoamGalleryControl();
+        return;
+      }
+      if (this.foamPaused || this.foamTimer) return;
+      this.foamTimer = window.setInterval(() => this.rotateFoamGallery(), 5000);
+      this.timers.push(this.foamTimer);
+      this.updateFoamGalleryControl();
+    }
+
+    stopFoamRotation() {
+      if (!this.foamTimer) return;
+      window.clearInterval(this.foamTimer);
+      this.timers = this.timers.filter(timer => timer !== this.foamTimer);
+      this.foamTimer = null;
+    }
+
+    toggleFoamRotation() {
+      this.foamPaused = !this.foamPaused;
+      if (this.foamPaused) this.stopFoamRotation();
+      else this.startFoamRotation();
+      this.updateFoamGalleryControl();
+    }
+
+    updateFoamGalleryControl() {
+      const control = this.shadowRoot?.querySelector("[data-foam-gallery-toggle]");
+      if (!control) return;
+      control.setAttribute("aria-pressed", String(this.foamPaused));
+      control.textContent = this.foamPaused ? "Play photos" : "Pause photos";
     }
 
     rotateFoamGallery() {
@@ -1679,6 +1709,15 @@
         this.shadowRoot.querySelectorAll('.foam-faq').forEach(item => item.addEventListener('toggle', () => this.emitResize(), { signal }));
         this.shadowRoot.querySelector('.contact-form').addEventListener('submit', event => this.submitInquiry(event), { signal });
         this.foamIndex = 0;
+        this.foamPaused = false;
+        this.foamTimer = null;
+        const gallery = this.shadowRoot.querySelector(".foam-gallery");
+        const galleryToggle = this.shadowRoot.querySelector("[data-foam-gallery-toggle]");
+        galleryToggle.addEventListener("click", () => this.toggleFoamRotation(), { signal });
+        gallery.addEventListener("pointerenter", () => this.stopFoamRotation(), { signal });
+        gallery.addEventListener("pointerleave", () => this.startFoamRotation(), { signal });
+        gallery.addEventListener("focusin", () => this.stopFoamRotation(), { signal });
+        gallery.addEventListener("focusout", () => this.startFoamRotation(), { signal });
         this.startFoamRotation();
         this.setupResizeEvents();
         return;
