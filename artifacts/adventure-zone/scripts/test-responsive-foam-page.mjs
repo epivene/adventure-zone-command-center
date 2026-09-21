@@ -12,14 +12,14 @@ const homeSource = readFileSync(
   "utf8",
 );
 
-function mount(path, tag = "adventure-zone-package", packageKey = "") {
+function mount(path, tag = "adventure-zone-package", packageKey = "", reducedMotion = false) {
   const dom = new JSDOM("<body></body>", {
     url: `https://www.the-adventure-zone.com${path}`,
     runScripts: "outside-only",
     pretendToBeVisual: true,
   });
   const window = dom.window;
-  window.matchMedia = () => ({ matches: false });
+  window.matchMedia = () => ({ matches: reducedMotion });
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.eval(source);
   const element = window.document.createElement(tag);
@@ -103,6 +103,21 @@ test("Foam Party gallery gives visitors a pause and play control", () => {
     assert.match(control.textContent, /play/i);
     control.click();
     assert.equal(control.getAttribute("aria-pressed"), "false");
+  } finally {
+    page.dom.window.close();
+  }
+});
+
+
+test("reduced-motion visitors can explicitly start the gallery", () => {
+  const page = mount("/foam-party-add-on", "adventure-zone-package", "foam-party", true);
+  try {
+    const control = page.root.querySelector("[data-foam-gallery-toggle]");
+    assert.equal(control.getAttribute("aria-pressed"), "true");
+    assert.match(control.textContent, /play/i);
+    control.click();
+    assert.equal(control.getAttribute("aria-pressed"), "false");
+    assert.match(control.textContent, /pause/i);
   } finally {
     page.dom.window.close();
   }
