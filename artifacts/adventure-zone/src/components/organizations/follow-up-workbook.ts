@@ -1,45 +1,43 @@
 import * as XLSX from "xlsx";
 
+import { businessDateKey } from "@/lib/business-date";
+
 export type FollowUpWorkbook = {
   data: Uint8Array;
   filename: string;
 };
 
+export type FollowUpWorkbookRow = {
+  id: string;
+  kind: string;
+  dueAt: string;
+  organizationName: string;
+  city: string | null;
+  region: string | null;
+};
+
 export function createFollowUpWorkbook(
-  csv: ArrayBuffer | Uint8Array,
+  followUps: FollowUpWorkbookRow[],
   asOf: Date,
 ): FollowUpWorkbook {
-  const csvBytes = csv instanceof Uint8Array ? csv : new Uint8Array(csv);
-  const sourceWorkbook = XLSX.read(new TextDecoder().decode(csvBytes), {
-    type: "string",
-  });
-  const sourceSheet = sourceWorkbook.Sheets[sourceWorkbook.SheetNames[0] ?? ""];
-  if (!sourceSheet) throw new Error("The follow-up export was empty.");
-
-  const sourceRows = XLSX.utils.sheet_to_json<Record<string, string>>(
-    sourceSheet,
-    { defval: "" },
-  );
-  const asOfKey = dateKey(asOf);
+  const asOfKey = businessDateKey(asOf);
   const throughDate = new Date(`${asOfKey}T12:00:00Z`);
   throughDate.setUTCDate(throughDate.getUTCDate() + 7);
-  const throughKey = dateKey(throughDate);
-  const rows = sourceRows
-    .map((row) => {
-      const action = splitNextAction(row["Next action"] ?? "");
-      const status = !action.dueDate
-        ? "Unscheduled"
-        : action.dueDate < asOfKey
+  const throughKey = throughDate.toISOString().slice(0, 10);
+  const rows = followUps
+    .map((followUp) => {
+      const dueDate = businessDateKey(new Date(followUp.dueAt));
+      const status = dueDate < asOfKey
           ? "Overdue"
-          : action.dueDate === asOfKey
+          : dueDate === asOfKey
             ? "Due today"
             : "Upcoming";
       return {
-        dueDate: action.dueDate,
+        dueDate,
         status,
-        type: action.type,
-        name: row["Event name"] ?? "",
-        location: row.Location ?? "",
+        type: followUp.kind,
+        name: followUp.organizationName,
+        location: [followUp.city, followUp.region].filter(Boolean).join(", "),
       };
     })
     .sort(
@@ -102,10 +100,6 @@ export function createFollowUpWorkbook(
   };
 }
 
-function dateKey(value: Date): string {
-  return value.toISOString().slice(0, 10);
-}
-
 function dateAtNoon(value: string): Date {
   return new Date(`${value}T12:00:00Z`);
 }
@@ -116,14 +110,4 @@ function formatShortDate(value: Date): string {
     day: "numeric",
     timeZone: "UTC",
   });
-}
-
-function splitNextAction(value: string): {
-  type: string;
-  dueDate: string;
-} {
-  const match = value.match(/^(.*) — (\d{4}-\d{2}-\d{2})$/);
-  return match
-    ? { type: match[1] ?? "", dueDate: match[2] ?? "" }
-    : { type: value, dueDate: "" };
 }

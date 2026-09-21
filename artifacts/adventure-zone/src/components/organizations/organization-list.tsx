@@ -280,11 +280,14 @@ export function OrganizationList({
         ...query,
         quickFilter: "needs_follow_up",
         page: 1,
-      }).replace(/^\/profiles\??/, "/organizations/export?");
+      }).replace(/^\/profiles\??/, "/follow-ups/export?");
       const response = await apiFetch(exportUrl);
       if (!response.ok) throw new Error(`Export failed (${response.status})`);
+      const payload = (await response.json()) as {
+        followUps: Parameters<typeof createFollowUpWorkbook>[0];
+      };
       const workbook = createFollowUpWorkbook(
-        await response.arrayBuffer(),
+        payload.followUps,
         new Date(),
       );
       const workbookBytes = workbook.data.buffer.slice(

@@ -3,19 +3,14 @@ import * as XLSX from "xlsx";
 
 import { createFollowUpWorkbook } from "./follow-up-workbook";
 
-const encoder = new TextEncoder();
-
 describe("createFollowUpWorkbook", () => {
   it("creates a dated workbook with summary totals and chronological follow-ups", () => {
-    const csv = [
-      "Event name,Location,Next date,Deadline,Status,Recommended deal model,Next action,Contact name,Contact email,Contact phone",
-      "Future Fair,Minot ND,,,Needs follow-up,,Email — 2026-09-28,,,",
-      "Past Fair,Dickinson ND,,,Needs follow-up,,Call — 2026-09-20,,,",
-      "Today Fair,Bismarck ND,,,Needs follow-up,,Web — 2026-09-21,,,",
-    ].join("\r\n");
-
     const result = createFollowUpWorkbook(
-      encoder.encode(csv).buffer,
+      [
+        { id: "1", kind: "Email", dueAt: "2026-09-28T17:00:00Z", organizationName: "Future Fair", city: "Minot", region: "ND" },
+        { id: "2", kind: "Call", dueAt: "2026-09-20T17:00:00Z", organizationName: "Past Fair", city: "Dickinson", region: "ND" },
+        { id: "3", kind: "Web", dueAt: "2026-09-21T17:00:00Z", organizationName: "Today Fair", city: "Bismarck", region: "ND" },
+      ],
       new Date("2026-09-21T12:00:00Z"),
     );
     const workbook = XLSX.read(result.data, { type: "array", cellDates: true });
@@ -32,5 +27,16 @@ describe("createFollowUpWorkbook", () => {
     expect(sheet?.B10.v).toBe("Due today");
     expect(sheet?.D11.v).toBe("Future Fair");
     expect(sheet?.["!autofilter"]?.ref).toBe("A8:E11");
+  });
+
+  it("uses the Central business date for status and the filename", () => {
+    const result = createFollowUpWorkbook(
+      [{ id: "1", kind: "Call", dueAt: "2026-09-21T17:00:00Z", organizationName: "Evening Fair", city: null, region: "ND" }],
+      new Date("2026-09-22T01:00:00Z"),
+    );
+    const workbook = XLSX.read(result.data, { type: "array", cellDates: true });
+
+    expect(result.filename).toBe("adventure-zone-follow-ups-2026-09-21.xlsx");
+    expect(workbook.Sheets["Follow-ups"]?.B9.v).toBe("Due today");
   });
 });

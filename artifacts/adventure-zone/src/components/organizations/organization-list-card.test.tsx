@@ -30,9 +30,30 @@ const query = {
   pageSize: 50,
 };
 
+const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "createObjectURL",
+);
+const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(
+  URL,
+  "revokeObjectURL",
+);
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  if (originalCreateObjectUrl) {
+    Object.defineProperty(URL, "createObjectURL", originalCreateObjectUrl);
+  } else {
+    Reflect.deleteProperty(URL, "createObjectURL");
+  }
+  if (originalRevokeObjectUrl) {
+    Object.defineProperty(URL, "revokeObjectURL", originalRevokeObjectUrl);
+  } else {
+    Reflect.deleteProperty(URL, "revokeObjectURL");
+  }
 });
 
 describe("OrganizationList profile summary cards", () => {
@@ -200,13 +221,18 @@ describe("OrganizationList profile summary cards", () => {
   });
 
   it("requests every filtered follow-up instead of only the visible page", async () => {
-    const csv = [
-      "Event name,Location,Next date,Deadline,Status,Recommended deal model,Next action,Contact name,Contact email,Contact phone",
-      "Killdeer Days,Killdeer ND,,,Needs follow-up,,Email — 2026-09-28,,,",
-    ].join("\r\n");
     vi.mocked(apiFetch).mockResolvedValue({
       ok: true,
-      arrayBuffer: async () => new TextEncoder().encode(csv).buffer,
+      json: async () => ({
+        followUps: [{
+          id: "1",
+          kind: "Email",
+          dueAt: "2026-09-28T17:00:00Z",
+          organizationName: "Killdeer Days",
+          city: "Killdeer",
+          region: "ND",
+        }],
+      }),
     } as Response);
     const createObjectUrl = vi.fn((_blob: Blob) => "blob:follow-ups");
     Object.defineProperty(URL, "createObjectURL", {
@@ -243,7 +269,7 @@ describe("OrganizationList profile summary cards", () => {
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalledTimes(1));
     const exportUrl = vi.mocked(apiFetch).mock.calls[0]?.[0];
-    expect(exportUrl).toContain("/organizations/export?");
+    expect(exportUrl).toContain("/follow-ups/export?");
     expect(exportUrl).toContain("region=ND");
     expect(exportUrl).toContain("quick=needs_follow_up");
     expect(exportUrl).not.toContain("page=4");
