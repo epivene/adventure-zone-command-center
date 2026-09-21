@@ -818,7 +818,7 @@
       .foam-compare-item { min-height: 0; }
     }
     @media (max-width: 767px) {
-      :host { width: 100%; max-width: none; margin: 0; }
+      :host { width: 100vw !important; max-width: none !important; margin-left: calc((100% - 100vw) / 2) !important; }
       .az-site, .package-page, .foam-page { width: 100%; max-width: none; margin: 0; }
     }
 
