@@ -2,7 +2,7 @@ import type { EventProfile } from "@/features/event-profiles/event-profile-repos
 
 export type ResearchMode = "quick" | "deep";
 export type ResearchConfidence = "high" | "medium" | "low";
-export type ResearchTargetKind = "organization" | "contact" | "booking";
+export type ResearchTargetKind = "organization" | "contact" | "booking" | "event_date_fact";
 
 export type ProfileResearchGap = {
   field: string;
