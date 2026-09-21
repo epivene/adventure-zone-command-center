@@ -29,6 +29,8 @@ export async function listActiveFollowUpExportRows(
         f.id,
         f.kind,
         f.due_at,
+        f.booking_id,
+        f.organization_location_id,
         case
           when f.organization_id is not null then f.organization_id
           when f.booking_id is not null then (
@@ -52,11 +54,17 @@ export async function listActiveFollowUpExportRows(
       f.id,
       f.kind,
       f.due_at as "dueAt",
-      o.name as "organizationName",
-      o.city,
-      o.region
+      coalesce(b.name, follow_up_location.venue_name, follow_up_location.label, o.name)
+        as "organizationName",
+      coalesce(follow_up_location.city, b.city, booking_location.city, o.city) as city,
+      coalesce(follow_up_location.region, b.region, booking_location.region, o.region) as region
     from active_follow_ups f
     inner join organizations o on o.id = f.resolved_organization_id
+    left join bookings b on b.id = f.booking_id
+    left join organization_locations follow_up_location
+      on follow_up_location.id = f.organization_location_id
+    left join organization_locations booking_location
+      on booking_location.id = b.organization_location_id
     where o.id in (${idList})
     order by f.due_at, f.id
   `);
