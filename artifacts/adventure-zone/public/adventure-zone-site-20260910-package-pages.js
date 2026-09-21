@@ -15,6 +15,12 @@
     adventure: "https://static.wixstatic.com/media/0e6e2c_d18d32eac9704b44a2dc9a1c28f9158b~mv2.jpg",
     pirate: "https://adventure-zone-command-center-1.onrender.com/assets/pirates-rebellion-paddle-boats.jpg",
     warrior: "https://static.wixstatic.com/media/0e6e2c_a25608d697b146ac981ab5b6f074664c~mv2.jpg",
+    foamHero: "https://static.wixstatic.com/media/0e6e2c_dbb516154842403587e593ad7434567d~mv2.png",
+    foam01: "https://static.wixstatic.com/media/0e6e2c_7b68df3c306e4076b5aba9643b5d51f2~mv2.jpg",
+    foam02: "https://static.wixstatic.com/media/0e6e2c_33b6cd42c0ff4fc78c3b7cf73575e64d~mv2.jpg",
+    foam03: "https://static.wixstatic.com/media/0e6e2c_cda6fdbba12f4ae5a65173f5e865d096~mv2.jpg",
+    foam04: "https://static.wixstatic.com/media/0e6e2c_a6ef2d843c154cd0b11d71595e57dccb~mv2.jpg",
+    foam05: "https://static.wixstatic.com/media/0e6e2c_b654177a27904d27b2276d16d6e50042~mv2.jpg",
     spectacle01: "https://static.wixstatic.com/media/0e6e2c_2581795bc5464c6aabcb11f1ef326fd6~mv2.jpg",
     spectacle02: "https://static.wixstatic.com/media/0e6e2c_e5c8e9a8fde248a5a4d6be992aa40b6d~mv2.jpg",
     spectacle03: "https://static.wixstatic.com/media/0e6e2c_b043a1e76f0449ada6829f2ad2746a2a~mv2.jpg",
@@ -769,6 +775,52 @@
     .package-page-header { padding: 22px; background: var(--az-navy); }
     .package-page-header .logo { max-width: 240px; }
     .package-page .contact { padding: 20px; }
+    .foam-page { max-width: 1100px; }
+    .foam-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(280px, .95fr); min-height: 520px; border-bottom: 4px solid var(--az-navy); background: var(--az-yellow); }
+    .foam-hero-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 6vw, 72px); }
+    .foam-tag { align-self: flex-start; margin-bottom: 18px; padding: 8px 12px; border: 3px solid var(--az-navy); background: var(--az-pink); color: var(--az-white); font-size: 13px; font-weight: 900; letter-spacing: .08em; }
+    .foam-hero h1 { margin: 0 0 18px; font-size: clamp(58px, 10vw, 104px); line-height: .85; }
+    .foam-lede { max-width: 600px; margin: 0 0 26px; font-size: clamp(18px, 2.6vw, 25px); font-weight: 700; }
+    .foam-price { font-size: clamp(46px, 7vw, 72px); line-height: 1; }
+    .foam-price-note { margin-top: 8px; font-size: 14px; font-weight: 900; text-transform: uppercase; }
+    .foam-hero-media { min-height: 420px; border-left: 4px solid var(--az-navy); background: var(--az-cream); }
+    .foam-hero-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+    .foam-section { padding: clamp(40px, 7vw, 72px) clamp(20px, 5vw, 56px); border-bottom: 4px solid var(--az-navy); }
+    .foam-section h2 { margin: 0 0 14px; font-size: clamp(38px, 7vw, 64px); line-height: .95; }
+    .foam-section-intro { max-width: 760px; margin: 0 0 30px; font-size: 18px; }
+    .foam-highlights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; background: var(--az-cream); }
+    .foam-highlight { padding: 24px; border: 4px solid var(--az-navy); background: var(--az-white); box-shadow: 6px 6px 0 var(--az-pink); }
+    .foam-highlight strong { display: block; margin-bottom: 8px; font-family: "Bricolage Grotesque", Impact, "Arial Black", sans-serif; font-size: 25px; }
+    .foam-highlight span { line-height: 1.55; }
+    .foam-compare { background: var(--az-navy); color: var(--az-white); }
+    .foam-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; border: 4px solid var(--az-white); }
+    .foam-compare-column { min-width: 0; }
+    .foam-compare-column + .foam-compare-column { border-left: 4px solid var(--az-white); }
+    .foam-compare-title { padding: 18px 22px; background: var(--az-pink); color: var(--az-white); font-size: 20px; font-weight: 900; }
+    .foam-compare-column:first-child .foam-compare-title { background: var(--az-cream); color: var(--az-navy); }
+    .foam-compare-item { min-height: 150px; padding: 22px; border-top: 3px solid var(--az-white); }
+    .foam-compare-item strong { display: block; margin-bottom: 8px; color: var(--az-yellow); font-size: 18px; }
+    .foam-compare-column:first-child .foam-compare-item strong { color: var(--az-white); }
+    .foam-gallery { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .foam-gallery figure { margin: 0; overflow: hidden; aspect-ratio: 4 / 3; border: 4px solid var(--az-navy); background: var(--az-navy); }
+    .foam-gallery img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
+    .foam-gallery figure:hover img { transform: scale(1.035); }
+    .foam-faq-list { display: grid; gap: 12px; }
+    .foam-faq { border: 3px solid var(--az-navy); background: var(--az-white); }
+    .foam-faq summary { display: flex; justify-content: space-between; gap: 18px; padding: 18px 20px; cursor: pointer; font-weight: 900; }
+    .foam-faq summary::after { content: "+"; color: var(--az-pink); font-size: 24px; line-height: 1; }
+    .foam-faq[open] summary::after { content: "–"; }
+    .foam-faq p { margin: 0; padding: 0 20px 20px; line-height: 1.65; }
+    .foam-cta { background: var(--az-yellow); text-align: center; }
+    .foam-cta p { max-width: 620px; margin: 0 auto 24px; font-size: 19px; }
+    @media (max-width: 720px) {
+      .foam-hero { grid-template-columns: minmax(0, 1fr); }
+      .foam-hero-media { min-height: 360px; border-top: 4px solid var(--az-navy); border-left: 0; }
+      .foam-highlights, .foam-gallery { grid-template-columns: minmax(0, 1fr); }
+      .foam-compare-grid { grid-template-columns: minmax(0, 1fr); }
+      .foam-compare-column + .foam-compare-column { border-top: 4px solid var(--az-white); border-left: 0; }
+      .foam-compare-item { min-height: 0; }
+    }
     @media (max-width: 639px) {
       .package-dialog { width: 100%; height: 100dvh; max-height: 100dvh; border: 0; box-shadow: none; }
       .package-detail-actions { align-items: stretch; flex-direction: column; }
@@ -815,7 +867,7 @@
   }
 
   function packagePath(key) {
-    return "/" + ({ "adventure-zone": "adventure-zone-package", "pirates-rebellion": "pirates-rebellion-package", "weekend-warriors": "warriors-playground-package" })[key];
+    return "/" + ({ "adventure-zone": "adventure-zone-package", "pirates-rebellion": "pirates-rebellion-package", "weekend-warriors": "warriors-playground-package", "foam-party": "foam-party-add-on" })[key];
   }
 
   function packageDefinitions() {
@@ -846,6 +898,49 @@
       <p>Our crew handles setup, operation, and teardown. Tell us your location and dates so the booking team can confirm availability and site requirements.</p>
       <div class="package-detail-actions"><button type="button" class="button" data-package-book="${item.key}">Contact Us</button>${standalone ? '<a href="/?section=packages">Compare all packages</a>' : ""}</div>
       <h3 class="display">Possible Attraction Lineup</h3>${lineup}</div></div>`;
+  }
+
+  function foamPartyMarkup() {
+    const comparisons = [
+      ["✕ Open-lawn play", "Foam sprayed directly onto the ground can leave guests playing on wet grass.", "✓ A dedicated foam zone", "Our containment pool gives the foam party its own designated play area."],
+      ["✕ More work for the organizer", "With a machine-only rental, setup, operation, and cleanup may fall to your team.", "✓ We handle the work", "Our crew takes care of setup, operation, and teardown, so you can focus on your event."],
+      ["✕ One session, then it’s over", "A single-session booking gives your guests just one window to join the fun.", "✓ Keep the fun coming", "Multiple sessions a day, with times chosen by your sponsoring organization."],
+      ["✕ Crowd management is up to you", "Equipment alone doesn’t include someone to set limits and manage participation.", "✓ Staffed, managed &amp; insured", "Our on-site crew handles crowd control and safety. The Adventure Zone carries $2 million in liability insurance."],
+    ];
+    const faqs = [
+      ["How long does each foam session last?", "Plan on about an hour of total fun. We run one foam cannon for roughly 10–20 minutes, then guests keep playing until the foam naturally disappears. That means an hour of play, rather than an hour of continuous spraying."],
+      ["How many sessions are offered on weekdays and weekends?", "We offer 1–2 sessions per day on weekdays (Monday–Thursday) and 1–4 sessions per day on weekends (Friday–Sunday). Your sponsoring organization chooses the session times so they fit the rest of your event schedule."],
+      ["Can we add Foam Party to a pay-per-play package?", "Yes. If you book an event package under a pay-per-play arrangement, you can still add Foam Party. The $3,500 Foam Party add-on requires a 40% deposit, with the remaining 60% due when our crew arrives. It is not covered by the package’s pay-per-play arrangement."],
+      ["How many people can play at once?", "The pool generally accommodates about 75–100 participants at a time. The on-site manager sets the actual limit based on the crowd and conditions."],
+      ["Is the foam solution biodegradable and safe for grass?", "Yes. We use a biodegradable, grass-safe foam solution."],
+    ];
+    const photos = [
+      [IMAGE.foam01, "A little girl playing in the foam"],
+      [IMAGE.foam02, "Guests playing in foam under green party lights"],
+      [IMAGE.foam03, "Children playing in foam under colorful lights"],
+      [IMAGE.foam04, "A crowd enjoying the Foam Party"],
+      [IMAGE.foam05, "An Adventure Zone team member joining in the foam fun"],
+      [IMAGE.foamHero, "A smiling boy wearing a hat of foam at the Foam Party"],
+    ];
+    return `<section class="foam-hero">
+      <div class="foam-hero-copy"><div class="foam-tag">NEW • PACKAGE ADD-ON</div><h1 class="display">Foam Party</h1>
+      <p class="foam-lede">Big bubbles. Bigger smiles. Give your event a whole new way to play with a foam-filled experience planned around your crowd.</p>
+      <div class="foam-price display">$3,500</div><div class="foam-price-note">Available exclusively as a package addition</div>
+      <div class="package-detail-actions"><button type="button" class="button" data-package-book="foam-party">Contact Us</button><a href="/?section=packages">Compare all packages</a></div></div>
+      <div class="foam-hero-media"><img src="${IMAGE.foamHero}" alt="A smiling boy wearing a hat of foam at the Foam Party"></div>
+    </section>
+    <section class="foam-section"><div class="foam-highlights">
+      <div class="foam-highlight"><strong>Big foam. Big fun.</strong><span>About an hour of play each session</span></div>
+      <div class="foam-highlight"><strong>Keep the fun going</strong><span>Multiple foam sessions throughout the day</span></div>
+      <div class="foam-highlight"><strong>Your event. Your times.</strong><span>Your sponsoring organization picks the schedule</span></div>
+    </div></section>
+    <section class="foam-section foam-compare"><h2 class="display">Compare the whole experience.</h2><p class="foam-section-intro">Big event? Think beyond the machine. Here’s how a basic backyard setup compares with our staffed Foam Party experience.</p>
+      <div class="foam-compare-grid"><div class="foam-compare-column"><div class="foam-compare-title">A basic backyard setup</div>${comparisons.map(row => `<div class="foam-compare-item"><strong>${row[0]}</strong><span>${row[1]}</span></div>`).join("")}</div>
+      <div class="foam-compare-column"><div class="foam-compare-title">Our event experience</div>${comparisons.map(row => `<div class="foam-compare-item"><strong>${row[2]}</strong><span>${row[3]}</span></div>`).join("")}</div></div>
+    </section>
+    <section class="foam-section"><h2 class="display">Real foam. Real fun.</h2><div class="foam-gallery">${photos.map(([src, alt]) => `<figure><img src="${src}" alt="${alt}" loading="lazy"></figure>`).join("")}</div></section>
+    <section class="foam-section"><h2 class="display">A few things to know</h2><div class="foam-faq-list">${faqs.map(([question, answer]) => `<details class="foam-faq"><summary>${question}</summary><p>${answer}</p></details>`).join("")}</div></section>
+    <section class="foam-section foam-cta"><h2 class="display">Add a little extra epic.</h2><p>Let’s talk dates, packages, and the best session schedule for your event.</p><button type="button" class="button" data-package-book="foam-party">Contact Us</button></section>`;
   }
 
   function packageCard({ key, flag, image, alt, iconName, title, subtitle, copy, features, price, ammo, lineup }) {
@@ -895,7 +990,7 @@
         <div class="field"><label for="az-event">Event or Organization *</label><input id="az-event" name="eventName" required maxlength="160" placeholder="Fall Festival"></div>
         <div class="field"><label for="az-date">Event Date</label><input id="az-date" name="eventDate" type="date"></div>
         <div class="field"><label for="az-location">Event Location</label><input id="az-location" name="eventLocation" maxlength="200" placeholder="City, State"></div>
-        <div class="field"><label for="az-package">Package Interest</label><select id="az-package" name="packageInterest"><option value="">Not sure yet</option><option>Adventure Zone</option><option>Pirate's Rebellion</option><option>Warrior's Playground</option></select></div>
+        <div class="field"><label for="az-package">Package Interest</label><select id="az-package" name="packageInterest"><option value="">Not sure yet</option><option>Adventure Zone</option><option>Pirate's Rebellion</option><option>Warrior's Playground</option><option>Foam Party Add-On</option></select></div>
         <div class="honeypot" aria-hidden="true"><label for="az-website">Website</label><input id="az-website" name="website" tabindex="-1" autocomplete="off"></div>
         <div class="field full"><label for="az-message">Tell Us About Your Event *</label><textarea id="az-message" name="message" required minlength="10" maxlength="4000" rows="6" placeholder="Tell us about your event, expected crowd, and what you are looking for."></textarea></div>
       </div>
@@ -1558,6 +1653,21 @@
     connectedCallback() {
       const path = window.location.pathname.replace(/\/$/, "");
       const key = this.getAttribute("package-key");
+      if (key === "foam-party" || (!key && path === packagePath("foam-party"))) {
+        this.shadowRoot.innerHTML = `<style>${styles}</style><div class="az-site package-page foam-page"><header class="package-page-header"><a href="/" aria-label="The Adventure Zone home"><img class="logo" src="${IMAGE.logo}" alt="The Adventure Zone"></a></header>${foamPartyMarkup()}<section class="contact" id="contact"><h2 class="display">Ask About Your Event</h2>${formMarkup()}</section></div>`;
+        this.abortController = new AbortController();
+        const signal = this.abortController.signal;
+        const select = this.shadowRoot.querySelector('[name="packageInterest"]');
+        if (select) select.value = "Foam Party Add-On";
+        this.shadowRoot.querySelectorAll('[data-package-book]').forEach(button => button.addEventListener('click', () => {
+          this.scrollToId('contact');
+          this.shadowRoot.querySelector('[name="name"]').focus({ preventScroll: true });
+        }, { signal }));
+        this.shadowRoot.querySelectorAll('.foam-faq').forEach(item => item.addEventListener('toggle', () => this.emitResize(), { signal }));
+        this.shadowRoot.querySelector('.contact-form').addEventListener('submit', event => this.submitInquiry(event), { signal });
+        this.setupResizeEvents();
+        return;
+      }
       const item = packageDefinitions().find(item => key ? item.key === key : packagePath(item.key) === path);
       if (!item) {
         this.shadowRoot.innerHTML = `<style>${styles}</style><div class="az-site package-page"><p>Please choose a package from <a href="/?section=packages">The Adventure Zone homepage</a>.</p></div>`;
@@ -1587,5 +1697,4 @@
     customElements.define("adventure-zone-mascot", AdventureZoneMascot);
   }
 })();
-
 
