@@ -37,7 +37,11 @@ function profile(overrides: Partial<EventProfile> = {}): EventProfile {
       notes: null,
       actRecordId: null,
     }],
+    eventDateFacts: [],
+    effectiveEventDate: null,
     notes: [],
+    scoutNotes: [],
+    history: [],
     followUps: [],
     groups: [],
     sourceProvenance: [],
@@ -55,6 +59,20 @@ describe("profile research context", () => {
       "next_event_dates",
     ]));
     expect(gaps.map((gap) => gap.field)).not.toContain("location");
+  });
+
+  it("does not flag next event dates when a researched effective date exists", () => {
+    const complete = profile({
+      effectiveEventDate: {
+        startsOn: "2027-07-18",
+        endsOn: "2027-07-20",
+        displayStatus: "confirmed",
+        sourceId: "fact-1",
+      },
+    });
+
+    expect(detectProfileResearchGaps(complete, now).map((gap) => gap.field))
+      .not.toContain("next_event_dates");
   });
 
   it("builds search clues from structured profile facts", () => {
