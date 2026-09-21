@@ -19,7 +19,7 @@ function mount(path, tag = "adventure-zone-package", packageKey = "") {
     pretendToBeVisual: true,
   });
   const window = dom.window;
-  window.matchMedia = () => ({ matches: true });
+  window.matchMedia = () => ({ matches: false });
   window.HTMLElement.prototype.scrollIntoView = function () {};
   window.eval(source);
   const element = window.document.createElement(tag);
@@ -87,5 +87,23 @@ test("existing standalone packages keep their media-first details", () => {
     } finally {
       page.dom.window.close();
     }
+  }
+});
+
+
+test("Foam Party gallery gives visitors a pause and play control", () => {
+  const page = mount("/foam-party-add-on", "adventure-zone-package", "foam-party");
+  try {
+    const control = page.root.querySelector("[data-foam-gallery-toggle]");
+    assert.ok(control);
+    assert.equal(control.getAttribute("aria-pressed"), "false");
+    assert.match(control.textContent, /pause/i);
+    control.click();
+    assert.equal(control.getAttribute("aria-pressed"), "true");
+    assert.match(control.textContent, /play/i);
+    control.click();
+    assert.equal(control.getAttribute("aria-pressed"), "false");
+  } finally {
+    page.dom.window.close();
   }
 });
