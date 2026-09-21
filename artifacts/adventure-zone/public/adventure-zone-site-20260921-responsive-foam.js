@@ -1752,5 +1752,7 @@
   if (!customElements.get("adventure-zone-mascot")) {
     customElements.define("adventure-zone-mascot", AdventureZoneMascot);
   }
+  if (!customElements.get("adventure-zone-foam-page")) {
+    customElements.define("adventure-zone-foam-page", class extends AdventureZonePackage {});
+  }
 })();
-
