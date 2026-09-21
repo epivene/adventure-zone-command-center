@@ -57,7 +57,7 @@ test("Foam Party gallery advances and wraps", () => {
 test("mobile package surfaces explicitly remove desktop width caps and gutters", () => {
   assert.match(
     source,
-    /@media\s*\(max-width:\s*767px\)[\s\S]*?\.package-page[\s\S]*?max-width:\s*none[\s\S]*?width:\s*100%[\s\S]*?margin:\s*0/,
+    /@media\s*\(max-width:\s*767px\)[\s\S]*?:host[\s\S]*?width:\s*100vw\s*!important[\s\S]*?margin-left:\s*calc\(\(100%\s*-\s*100vw\)\s*\/\s*2\)[\s\S]*?\.package-page[\s\S]*?max-width:\s*none/,
   );
 });
 
@@ -65,7 +65,7 @@ test("mobile package surfaces explicitly remove desktop width caps and gutters",
 test("mobile homepage surface explicitly removes inherited width caps", () => {
   assert.match(
     homeSource,
-    /@media\s*\(max-width:\s*767px\)[\s\S]*?:host[\s\S]*?width:\s*100%[\s\S]*?\.az-site[\s\S]*?max-width:\s*none[\s\S]*?margin:\s*0/,
+    /@media\s*\(max-width:\s*767px\)[\s\S]*?:host[\s\S]*?width:\s*100vw\s*!important[\s\S]*?margin-left:\s*calc\(\(100%\s*-\s*100vw\)\s*\/\s*2\)[\s\S]*?\.az-site[\s\S]*?max-width:\s*none/,
   );
 });
 
