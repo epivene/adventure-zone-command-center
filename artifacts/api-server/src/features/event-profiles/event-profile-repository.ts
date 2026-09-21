@@ -10,11 +10,19 @@ import {
   callingListMemberships,
   callingLists,
   contacts,
+  eventDateFacts,
   followUps,
   organizationContacts,
   organizationLocations,
   organizations,
 } from "@/db/schema";
+import {
+  resolveEffectiveEventDate,
+} from "@/features/event-date-coverage/effective-event-date";
+import type {
+  EffectiveEventDate,
+  EventDateFactInput,
+} from "@/features/event-date-coverage/event-date-types";
 import {
   activeOrganizationContactCondition,
   organizationOwnedRecordCondition,
@@ -66,6 +74,8 @@ export type EventProfileBookingRecord = {
   notes: string | null;
   actRecordId: string | null;
 };
+
+export type EventProfileDateFact = typeof eventDateFacts.$inferSelect;
 
 export type EventProfileActivityRecord = {
   id: string;
@@ -142,6 +152,7 @@ export type EventProfileRecordSet = {
   place: EventProfilePlace;
   contacts: EventProfileContactRecord[];
   bookings: EventProfileBookingRecord[];
+  eventDateFacts: EventProfileDateFact[];
   activities: EventProfileActivityRecord[];
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
@@ -158,6 +169,8 @@ export type EventProfile = {
   contacts: EventProfileContact[];
   selectedContactId: string | null;
   bookings: EventProfileBookingRecord[];
+  eventDateFacts: EventProfileDateFact[];
+  effectiveEventDate: EffectiveEventDate | null;
   notes: EventProfileActivityRecord[];
   scoutNotes: EventProfileScoutNote[];
   history: EventProfileActivityRecord[];
@@ -172,6 +185,23 @@ export type EventProfile = {
     groupSourceIds: string[];
   };
 };
+
+export function resolveProfileEffectiveEventDate(input: {
+  today: string;
+  bookings: Array<Pick<EventProfileBookingRecord, "id" | "startsAt" | "endsAt" | "status">>;
+  facts: Array<Pick<EventProfileDateFact, "id" | "startsOn" | "endsOn" | "status" | "active">>;
+}): EffectiveEventDate | null {
+  return resolveEffectiveEventDate({
+    today: input.today,
+    bookings: input.bookings.map((booking) => ({
+      id: booking.id,
+      startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+      endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null,
+      status: booking.status,
+    })),
+    facts: input.facts as EventDateFactInput[],
+  });
+}
 
 export interface EventProfileRepository {
   getEventProfile(
@@ -520,6 +550,7 @@ export function buildEventProfile(
   migrationHistory: EventProfile["migrationHistory"] = {
     contactSourceIds: [], phones: [], notes: [], bookingSourceIds: [], groupSourceIds: [],
   },
+  today = new Date().toISOString().slice(0, 10),
 ): EventProfile {
   const contactGroups = canonicalProfileContacts(records.contacts);
   const contactIdMap = new Map<string, string>();
@@ -533,6 +564,11 @@ export function buildEventProfile(
   const selectedContactId = requestedContactGroup?.id ?? contacts[0]?.id ?? null;
 
   const bookingSelection = canonicalProfileBookings(records.bookings);
+  const effectiveEventDate = resolveProfileEffectiveEventDate({
+    today,
+    bookings: bookingSelection.bookings,
+    facts: records.eventDateFacts,
+  });
   const timeline = splitProfileActivities(records.activities.map((activity) => ({
     ...activity,
     contactId: canonicalRecordId(contactIdMap, activity.contactId),
@@ -548,6 +584,8 @@ export function buildEventProfile(
       ...booking,
       primaryContactId: canonicalRecordId(contactIdMap, booking.primaryContactId),
     })),
+    eventDateFacts: records.eventDateFacts,
+    effectiveEventDate,
     notes: timeline.notes,
     scoutNotes: timeline.scoutNotes,
     history: timeline.history,
@@ -593,7 +631,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
     if (!place) return null;
 
-    const [profileContacts, profileBookings] = await Promise.all([
+    const [profileContacts, profileBookings, profileDateFacts] = await Promise.all([
       this.database.select({
         id: contacts.id,
         firstName: contacts.firstName,
@@ -626,6 +664,11 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         actRecordId: bookings.actRecordId,
       }).from(bookings).where(eq(bookings.organizationId, profileId))
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+      this.database
+        .select()
+        .from(eventDateFacts)
+        .where(eq(eventDateFacts.organizationId, profileId))
+        .orderBy(desc(eventDateFacts.createdAt), desc(eventDateFacts.id)),
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
     const contactIds = profileContacts.map((contact) => contact.id);
@@ -776,6 +819,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       place,
       contacts: profileContacts,
       bookings: profileBookings,
+      eventDateFacts: profileDateFacts,
       activities: decoratedProfileActivities,
       followUps: profileFollowUps,
       groups,
