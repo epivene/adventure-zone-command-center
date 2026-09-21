@@ -654,6 +654,16 @@ const migrationFiles = [
             'office_email_drafts_design_version_fk'
           )) AS ready`,
   },
+  {
+    name: "20260921_event_date_coverage.sql",
+    markerSql: `SELECT
+      to_regclass(current_schema() || '.event_date_facts') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_runs') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_items') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_facts_one_active_per_org') IS NOT NULL
+      AND to_regclass(current_schema() || '.event_date_coverage_items_run_org_unique') IS NOT NULL
+      AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {
@@ -720,4 +730,3 @@ export async function runActReviewMigrations(options?: {
     client.release();
   }
 }
-
