@@ -775,7 +775,7 @@
     .package-page-header { padding: 22px; background: var(--az-navy); }
     .package-page-header .logo { max-width: 240px; }
     .package-page .contact { padding: 20px; }
-    .foam-page { max-width: 1100px; }
+        .foam-page { max-width: 1000px; }
     .foam-hero { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(280px, .95fr); min-height: 520px; border-bottom: 4px solid var(--az-navy); background: var(--az-yellow); }
     .foam-hero-copy { display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 6vw, 72px); }
     .foam-tag { align-self: flex-start; margin-bottom: 18px; padding: 8px 12px; border: 3px solid var(--az-navy); background: var(--az-pink); color: var(--az-white); font-size: 13px; font-weight: 900; letter-spacing: .08em; }
