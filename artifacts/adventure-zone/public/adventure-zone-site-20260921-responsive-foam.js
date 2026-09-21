@@ -1653,7 +1653,7 @@
       if (this.isConnected) { this.disconnectedCallback(); this.connectedCallback(); }
     }
     startFoamRotation() {
-      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+      if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches && !this.foamMotionOverride) {
         this.foamPaused = true;
         this.updateFoamGalleryControl();
         return;
@@ -1673,6 +1673,7 @@
 
     toggleFoamRotation() {
       this.foamPaused = !this.foamPaused;
+      this.foamMotionOverride = !this.foamPaused;
       if (this.foamPaused) this.stopFoamRotation();
       else this.startFoamRotation();
       this.updateFoamGalleryControl();
@@ -1710,6 +1711,7 @@
         this.shadowRoot.querySelector('.contact-form').addEventListener('submit', event => this.submitInquiry(event), { signal });
         this.foamIndex = 0;
         this.foamPaused = false;
+        this.foamMotionOverride = false;
         this.foamTimer = null;
         const gallery = this.shadowRoot.querySelector(".foam-gallery");
         const galleryToggle = this.shadowRoot.querySelector("[data-foam-gallery-toggle]");
