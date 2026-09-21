@@ -9,6 +9,7 @@ import {
   callingListMemberships,
   callingLists,
   contacts,
+  eventDateFacts,
   followUps,
   organizationContacts,
   organizationLocations,
@@ -66,6 +67,14 @@ export type EventProfileBookingRecord = {
   actRecordId: string | null;
 };
 
+export type EventProfileDateFact = typeof eventDateFacts.$inferSelect;
+export type EffectiveEventDate = {
+  startsOn: string;
+  endsOn: string | null;
+  displayStatus: "booked" | "confirmed" | "expected";
+  sourceId: string;
+};
+
 export type EventProfileActivityRecord = {
   id: string;
   contactId: string | null;
@@ -110,6 +119,7 @@ export type EventProfileRecordSet = {
   place: EventProfilePlace;
   contacts: EventProfileContactRecord[];
   bookings: EventProfileBookingRecord[];
+  eventDateFacts: EventProfileDateFact[];
   activities: EventProfileActivityRecord[];
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
@@ -126,6 +136,8 @@ export type EventProfile = {
   contacts: EventProfileContact[];
   selectedContactId: string | null;
   bookings: EventProfileBookingRecord[];
+  eventDateFacts: EventProfileDateFact[];
+  effectiveEventDate: EffectiveEventDate | null;
   notes: EventProfileActivityRecord[];
   followUps: EventProfileFollowUpRecord[];
   groups: EventProfileGroupRecord[];
@@ -143,6 +155,45 @@ export type EventProfile = {
     groupSourceIds: string[];
   };
 };
+
+function effectiveEventDate(
+  bookings: EventProfileBookingRecord[],
+  facts: EventProfileDateFact[],
+  today = new Date().toISOString().slice(0, 10),
+): EffectiveEventDate | null {
+  const eligibleBookings = bookings
+    .filter((booking) => !["cancelled", "declined"].includes(booking.status))
+    .map((booking) => ({
+      id: booking.id,
+      startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+      endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null,
+    }))
+    .filter((booking): booking is typeof booking & { startsOn: string } =>
+      booking.startsOn !== null && booking.startsOn >= today,
+    )
+    .toSorted((left, right) => left.startsOn.localeCompare(right.startsOn));
+  if (eligibleBookings[0]) {
+    return {
+      ...eligibleBookings[0],
+      displayStatus: "booked",
+      sourceId: eligibleBookings[0].id,
+    };
+  }
+  for (const status of ["confirmed", "expected"] as const) {
+    const fact = facts
+      .filter((candidate) =>
+        candidate.active && candidate.status === status && candidate.startsOn >= today,
+      )
+      .toSorted((left, right) => left.startsOn.localeCompare(right.startsOn))[0];
+    if (fact) return {
+      startsOn: fact.startsOn,
+      endsOn: fact.endsOn,
+      displayStatus: status,
+      sourceId: fact.id,
+    };
+  }
+  return null;
+}
 
 export interface EventProfileRepository {
   getEventProfile(
@@ -221,6 +272,7 @@ export function buildEventProfile(
     ? requestedContactId!
     : contacts[0]?.id ?? null;
 
+  const resolvedEventDate = effectiveEventDate(records.bookings, records.eventDateFacts);
   return {
     id: records.place.id,
     place: records.place,
@@ -231,6 +283,8 @@ export function buildEventProfile(
       || left.name.localeCompare(right.name)
       || left.id.localeCompare(right.id),
     ),
+    eventDateFacts: records.eventDateFacts,
+    effectiveEventDate: resolvedEventDate,
     notes: records.activities.toSorted((left, right) =>
       Number(right.occurredAt) - Number(left.occurredAt) || left.id.localeCompare(right.id),
     ),
@@ -268,7 +322,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
     }).from(organizations).where(eq(organizations.id, profileId)).limit(1);
     if (!place) return null;
 
-    const [profileContacts, profileBookings] = await Promise.all([
+    const [profileContacts, profileBookings, profileDateFacts] = await Promise.all([
       this.database.select({
         id: contacts.id,
         firstName: contacts.firstName,
@@ -301,6 +355,11 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
         actRecordId: bookings.actRecordId,
       }).from(bookings).where(eq(bookings.organizationId, profileId))
         .orderBy(desc(bookings.startsAt), asc(bookings.name), asc(bookings.id)),
+      this.database
+        .select()
+        .from(eventDateFacts)
+        .where(eq(eventDateFacts.organizationId, profileId))
+        .orderBy(desc(eventDateFacts.createdAt), desc(eventDateFacts.id)),
     ]);
     const bookingIds = profileBookings.map((booking) => booking.id);
     const contactIds = profileContacts.map((contact) => contact.id);
@@ -405,6 +464,7 @@ export class DrizzleEventProfileRepository implements EventProfileRepository {
       place,
       contacts: profileContacts,
       bookings: profileBookings,
+      eventDateFacts: profileDateFacts,
       activities: profileActivities,
       followUps: profileFollowUps,
       groups,
