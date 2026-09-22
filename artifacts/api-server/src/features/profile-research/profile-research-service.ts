@@ -63,6 +63,7 @@ export class ProfileResearchService {
     mode: ResearchMode;
     requestedBy?: string | null;
     contactId?: string;
+    coverageLease?: { itemId: string; workerId: string };
   }) {
     const profile = await this.profiles.getEventProfile(input.profileId, input.contactId);
     if (!profile) throw new Error("PROFILE_NOT_FOUND");
@@ -158,6 +159,7 @@ export class ProfileResearchService {
         sources: result.sources as ProfileResearchSource[],
         suggestions,
         summary,
+        coverageLease: input.coverageLease,
       });
       return await this.runs.getRun(input.profileId, runId);
     } catch (error) {
