@@ -5,6 +5,8 @@ import { buildBookingContextBundle } from "./booking-context-builder";
 import { BookingContextRepository } from "./booking-context-repository";
 import { PostgresBusinessKnowledgeRepository } from "./business-knowledge-repository";
 import type { BookingAssistantContextBundle } from "./assistant-types";
+import { resolveEffectiveEventDate } from "@/features/event-date-coverage/effective-event-date";
+import type { EffectiveEventDate } from "@/features/event-date-coverage/event-date-types";
 
 function dateOrNull(value: unknown): Date | null {
   if (!value) return null;
@@ -13,6 +15,17 @@ function dateOrNull(value: unknown): Date | null {
 
 function contactLabel(row: any): string {
   return `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim() || "Unnamed contact";
+}
+
+export function eventDateAssistantKnowledge(date: EffectiveEventDate | null) {
+  if (!date) return null;
+  const label = `${date.displayStatus[0]!.toUpperCase()}${date.displayStatus.slice(1)}`;
+  return {
+    id: `effective-event-date:${date.sourceId}`,
+    title: "Next event date",
+    body: `${label}: ${date.startsOn}${date.endsOn ? ` through ${date.endsOn}` : ""}. ${label === "Expected" ? "This is a researched expectation, not a booking." : ""}`.trim(),
+    sourceIds: [] as string[],
+  };
 }
 
 export class ProfileContextRepository {
@@ -34,6 +47,17 @@ export class ProfileContextRepository {
     const organization = organizationResult.rows[0];
     if (!organization) return null;
 
+    const [dateBookings, dateFacts] = await Promise.all([
+      this.pool.query(`SELECT id, starts_at, ends_at, status FROM bookings WHERE organization_id = $1`, [organizationId]),
+      this.pool.query(`SELECT id, starts_on, ends_on, status, active FROM event_date_facts WHERE organization_id = $1`, [organizationId]),
+    ]);
+    const effectiveEventDate = resolveEffectiveEventDate({
+      today: new Date().toISOString().slice(0, 10),
+      bookings: dateBookings.rows.map((row) => ({ id: row.id, startsOn: row.starts_at ? new Date(row.starts_at).toISOString().slice(0, 10) : null, endsOn: row.ends_at ? new Date(row.ends_at).toISOString().slice(0, 10) : null, status: row.status })),
+      facts: dateFacts.rows.map((row) => ({ id: row.id, startsOn: String(row.starts_on), endsOn: row.ends_on ? String(row.ends_on) : null, status: row.status, active: row.active })),
+    });
+    const dateKnowledge = eventDateAssistantKnowledge(effectiveEventDate);
+
     const latestBookingResult = await this.pool.query(
       `SELECT id
        FROM bookings
@@ -49,6 +73,7 @@ export class ProfileContextRepository {
       if (bundle) {
         return {
           ...bundle,
+          businessKnowledge: dateKnowledge ? [...bundle.businessKnowledge, dateKnowledge] : bundle.businessKnowledge,
           context: {
             kind: "organization",
             recordId: organizationId,
@@ -137,11 +162,11 @@ export class ProfileContextRepository {
       packageHistorySignals: [],
       routeContext: null,
       derivedFacts: [],
-      businessKnowledge: knowledge.map((entry) => ({
+      businessKnowledge: [...knowledge.map((entry) => ({
         id: entry.id,
         title: entry.title,
         body: entry.body,
-      })),
+      })), ...(dateKnowledge ? [{ id: dateKnowledge.id, title: dateKnowledge.title, body: dateKnowledge.body }] : [])],
       generatedAt: new Date(),
     });
   }
