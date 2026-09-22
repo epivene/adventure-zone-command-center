@@ -274,7 +274,10 @@ router.get("/organizations/export", async (req, res): Promise<void> => {
     const csv = createProfileCsv(records.map((record) => ({
       eventName: record.name,
       location: [record.city, record.region].filter(Boolean).join(", "),
-      nextDate: dateValue(record.nextEventDate),
+      nextDate: dateValue(record.effectiveEventDate?.startsOn ?? null),
+      nextEventStatus: record.effectiveEventDate
+        ? labels[record.effectiveEventDate.displayStatus] ?? record.effectiveEventDate.displayStatus
+        : "Date not found",
       deadline: dateValue(record.applicationDeadline),
       status: labels[record.decisionStatus] ?? record.decisionStatus,
       recommendedDealModel: record.recommendedDealModel ? labels[record.recommendedDealModel] : "",
