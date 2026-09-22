@@ -9,6 +9,7 @@ describe("createProfileCsv", () => {
         eventName: 'Fair, "Fall"',
         location: "Denver, CO",
         nextDate: "",
+        nextEventStatus: "Date not found",
         deadline: "",
         status: "Waiting",
         recommendedDealModel: "Either",
@@ -19,7 +20,7 @@ describe("createProfileCsv", () => {
       },
     ]);
     expect(csv).toContain(
-      "Event name,Location,Next date,Deadline,Status,Recommended deal model,Next action,Contact name,Contact email,Contact phone",
+      "Event name,Location,Next event date,Next event status,Deadline,Status,Recommended deal model,Next action,Contact name,Contact email,Contact phone",
     );
     expect(csv).toContain('"Fair, ""Fall"""');
     expect(csv).toContain('"Call\norganizer"');
@@ -31,6 +32,7 @@ describe("createProfileCsv", () => {
         eventName: '=HYPERLINK("https://example.test")',
         location: "+Denver",
         nextDate: "",
+        nextEventStatus: "Date not found",
         deadline: "",
         status: "Waiting",
         recommendedDealModel: "Either",
