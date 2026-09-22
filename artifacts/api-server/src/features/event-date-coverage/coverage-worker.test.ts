@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { CoverageWorker, ProfileInternalEvidenceService } from "./coverage-worker";
+import {
+  CoverageWorker,
+  ProfileInternalEvidenceService,
+  ProfileResearchCoverageProvider,
+} from "./coverage-worker";
 
 function setup(evidence: any[], publicResolution: "complete" | "needs_review" = "complete") {
   const jobs = {
@@ -95,5 +99,45 @@ describe("ProfileInternalEvidenceService", () => {
       startsOn: "2027-06-08",
       status: "confirmed",
     }), undefined);
+  });
+});
+
+
+describe("ProfileResearchCoverageProvider", () => {
+  it("applies trustworthy event-date suggestions so researched dates become active facts", async () => {
+    const research = {
+      start: vi.fn(async () => ({
+        id: "research-run-1",
+        suggestions: [
+          {
+            id: "date-suggestion-1",
+            targetKind: "event_date_fact",
+            confidence: "high",
+            conflict: false,
+          },
+          {
+            id: "phone-suggestion-1",
+            targetKind: "organization",
+            confidence: "high",
+            conflict: false,
+          },
+        ],
+      })),
+    };
+    const apply = {
+      apply: vi.fn(async () => ({
+        applied: ["date-suggestion-1"], stale: [], invalid: [], missing: [],
+      })),
+    };
+    const provider = new ProfileResearchCoverageProvider(research, apply);
+
+    const status = await provider.research("org-1", { itemId: "item-1", workerId: "worker-1" });
+
+    expect(status).toBe("complete");
+    expect(apply.apply).toHaveBeenCalledWith({
+      profileId: "org-1",
+      runId: "research-run-1",
+      suggestionIds: ["date-suggestion-1"],
+    });
   });
 });
