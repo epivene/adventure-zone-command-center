@@ -141,17 +141,32 @@ export class ProfileInternalEvidenceService implements InternalEvidenceService {
 }
 
 export class ProfileResearchCoverageProvider implements CoveragePublicResearch {
-  constructor(private readonly service: { start(input: { profileId: string; mode: "deep"; requestedBy: string; coverageLease: { itemId: string; workerId: string } }): Promise<any> }) {}
+  constructor(
+    private readonly service: { start(input: { profileId: string; mode: "quick"; requestedBy: string; coverageLease: { itemId: string; workerId: string } }): Promise<any> },
+    private readonly applyService: {
+      apply(input: { profileId: string; runId: string; suggestionIds: string[] }): Promise<{ applied: string[] }>;
+    },
+  ) {}
   async research(organizationId: string, lease: { itemId: string; workerId: string }): Promise<"complete" | "needs_review" | "skipped"> {
     const run = await this.service.start({
       profileId: organizationId,
-      mode: "deep",
+      mode: "quick",
       requestedBy: "event-date-coverage-worker",
       coverageLease: lease,
     });
     const suggestions = run?.suggestions ?? [];
-    return suggestions.some((item: any) => item.targetKind === "event_date_fact")
-      ? "needs_review"
-      : "skipped";
+    const eventDateSuggestions = suggestions.filter((item: any) => item.targetKind === "event_date_fact");
+    const trustworthyIds = eventDateSuggestions
+      .filter((item: any) => item.confidence === "high" && !item.conflict)
+      .map((item: any) => item.id);
+    if (run?.id && trustworthyIds.length) {
+      const applied = await this.applyService.apply({
+        profileId: organizationId,
+        runId: run.id,
+        suggestionIds: trustworthyIds,
+      });
+      if (applied.applied.length) return "complete";
+    }
+    return eventDateSuggestions.length ? "needs_review" : "skipped";
   }
 }

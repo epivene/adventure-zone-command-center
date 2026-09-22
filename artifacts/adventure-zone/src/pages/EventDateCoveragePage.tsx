@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useSearch } from "wouter";
 import { EventDateStatusBadge } from "@/features/event-date-coverage/event-date-status-badge";
@@ -25,6 +25,9 @@ export default function EventDateCoveragePage() {
   const run = useQuery({ queryKey: eventDateCoverageKeys.run(runId ?? ""), queryFn: () => getCoverageRun(runId!), enabled: Boolean(runId), refetchInterval: (query) => ["queued", "researching"].includes(query.state.data?.status ?? "") ? 2_000 : false });
   const start = useMutation({ mutationFn: startCoverageRun, onSuccess: (value) => { setRunId(value.id); setSelected(new Set()); } });
   const refresh = () => queryClient.invalidateQueries({ queryKey: eventDateCoverageKeys.all });
+  useEffect(() => {
+    if (run.data?.status === "complete") void refresh();
+  }, [run.data?.status]);
   const setFilter = (next: string, value: string) => { const copy = new URLSearchParams(params); value ? copy.set(next, value) : copy.delete(next); navigate(`/settings/event-date-coverage?${copy}`); };
   const summary = coverage.data?.summary;
   return <div className="mx-auto max-w-7xl space-y-6 pb-12">

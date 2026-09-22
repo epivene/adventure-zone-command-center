@@ -45,6 +45,7 @@ import {
 } from "./features/event-date-coverage/worker-loop";
 import { DrizzleEventProfileRepository } from "./features/event-profiles/event-profile-repository";
 import { ProfileResearchService } from "./features/profile-research/profile-research-service";
+import { ProfileResearchApplyService } from "./features/profile-research/profile-research-apply";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
 import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./features/approved-profile-import/startup-config";
@@ -258,7 +259,10 @@ const eventDateCoverageLoop = new CoverageWorkerLoop({
   worker: new CoverageWorker(
     new CoverageJobRepository(db),
     new ProfileInternalEvidenceService(new DrizzleEventProfileRepository(db), eventDateRepository),
-    new ProfileResearchCoverageProvider(new ProfileResearchService()),
+    new ProfileResearchCoverageProvider(
+      new ProfileResearchService(),
+      new ProfileResearchApplyService(),
+    ),
   ),
   workerId: `event-date-coverage-${randomUUID()}`,
   clock: { now: () => new Date() },
