@@ -26,6 +26,7 @@ import type { ContractVersion } from "@/features/contracts/contract-types";
 import { OutreachProfileSummary } from "@/components/today/outreach-planner";
 import { InvoiceContractSummaryCard } from "@/components/invoices/invoice-contract-summary-card";
 import { contractsWorkspaceApi, invoicesApi } from "@/lib/invoices-api";
+import { businessDocumentsApi } from "@/lib/business-documents-api";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -204,7 +205,7 @@ export default function EventProfilePage() {
           </div> : null}
         </section> : null}
 
-        {profileId ? <InvoiceContractSummaryCard contractApi={contractsWorkspaceApi} invoiceApi={invoicesApi} organizationId={profileId} /> : null}
+        {profileId ? <InvoiceContractSummaryCard contractApi={contractsWorkspaceApi} documentApi={businessDocumentsApi} invoiceApi={invoicesApi} organizationId={profileId} /> : null}
 
         <div className={profileEditing ? "" : "[&>div>section:last-child]:hidden"}>
           <SimpleFullProfile

@@ -210,6 +210,51 @@ router.patch("/event-profiles/:id", async (req, res): Promise<void> => {
   }
 });
 
+router.put("/event-profiles/:id/primary-contact", async (req, res): Promise<void> => {
+  const organizationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = z.object({ contactId: uuid }).strict().safeParse(req.body);
+  if (!uuid.safeParse(organizationId).success || !parsed.success) {
+    res.status(400).json({ ok: false, error: "Choose a valid profile contact." });
+    return;
+  }
+  try {
+    const updated = await db.transaction(async (transaction) => {
+      const [relationship] = await transaction
+        .select({ id: organizationContacts.id })
+        .from(organizationContacts)
+        .where(and(
+          eq(organizationContacts.organizationId, organizationId),
+          eq(organizationContacts.contactId, parsed.data.contactId),
+          eq(organizationContacts.active, true),
+        ))
+        .limit(1)
+        .for("update");
+      if (!relationship) return false;
+      const now = new Date();
+      await transaction
+        .update(organizationContacts)
+        .set({ isPrimary: false, updatedAt: now })
+        .where(and(
+          eq(organizationContacts.organizationId, organizationId),
+          eq(organizationContacts.active, true),
+        ));
+      await transaction
+        .update(organizationContacts)
+        .set({ isPrimary: true, updatedAt: now })
+        .where(eq(organizationContacts.id, relationship.id));
+      return true;
+    });
+    if (!updated) {
+      res.status(404).json({ ok: false, error: "That contact is not linked to this profile." });
+      return;
+    }
+    res.json({ ok: true, contactId: parsed.data.contactId });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to set primary profile contact");
+    res.status(500).json({ ok: false, error: "The primary contact could not be changed." });
+  }
+});
+
 router.get("/event-profiles/:id/seed", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!uuid.safeParse(id).success) { res.json(null); return; }
