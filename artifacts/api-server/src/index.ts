@@ -32,6 +32,19 @@ import {
   EarlyBirdPromoWorkerLoop,
   systemEarlyBirdPromoWorkerLoopScheduler,
 } from "./features/early-bird-promo/early-bird-promo-worker-loop";
+import { CoverageJobRepository } from "./features/event-date-coverage/coverage-job-repository";
+import { EventDateRepository } from "./features/event-date-coverage/event-date-repository";
+import {
+  CoverageWorker,
+  ProfileInternalEvidenceService,
+  ProfileResearchCoverageProvider,
+} from "./features/event-date-coverage/coverage-worker";
+import {
+  CoverageWorkerLoop,
+  systemCoverageWorkerLoopScheduler,
+} from "./features/event-date-coverage/worker-loop";
+import { DrizzleEventProfileRepository } from "./features/event-profiles/event-profile-repository";
+import { ProfileResearchService } from "./features/profile-research/profile-research-service";
 import { ensureEventChecklistTemplates } from "./features/leg-manager/event-checklist-seed";
 import { importApprovedProfilesAtStartup } from "./features/approved-profile-import/startup-import";
 import { APPROVED_PROFILE_STARTUP_TIMEOUT_MS } from "./features/approved-profile-import/startup-config";
@@ -240,6 +253,18 @@ const earlyBirdPromoLoop = new EarlyBirdPromoWorkerLoop({
   scheduler: systemEarlyBirdPromoWorkerLoopScheduler,
 });
 
+const eventDateRepository = new EventDateRepository(db);
+const eventDateCoverageLoop = new CoverageWorkerLoop({
+  worker: new CoverageWorker(
+    new CoverageJobRepository(db),
+    new ProfileInternalEvidenceService(new DrizzleEventProfileRepository(db), eventDateRepository),
+    new ProfileResearchCoverageProvider(new ProfileResearchService()),
+  ),
+  workerId: `event-date-coverage-${randomUUID()}`,
+  clock: { now: () => new Date() },
+  scheduler: systemCoverageWorkerLoopScheduler,
+});
+
 let extractionRuntime: ActExtractionRuntime | null = null;
 let extractionRuntimePromise: Promise<ActExtractionRuntime> | null = null;
 let opportunityEmailLoop:
@@ -289,6 +314,7 @@ const shutdown = createActServerShutdown({
       voicemailRetentionLoop.close(),
       marketingCampaignLoop.close(),
       earlyBirdPromoLoop.close(),
+      eventDateCoverageLoop.close(),
     ]);
   },
   closeServer() {
@@ -559,6 +585,7 @@ async function startBackgroundWorkers() {
   voicemailRetentionLoop.start();
   marketingCampaignLoop.start();
   earlyBirdPromoLoop.start();
+  eventDateCoverageLoop.start();
 
   try {
     opportunityEmailLoop = await createOpportunityEmailWorkerLoop();
