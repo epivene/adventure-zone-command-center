@@ -90,6 +90,7 @@ const SettingsPackagesResourcesPage = lazy(() => import("@/pages/SettingsPackage
 const SettingsGoogleWorkspacePage = lazy(() => import("@/pages/SettingsGoogleWorkspacePage"));
 const DriveBackupPage = lazy(() => import("@/pages/DriveBackupPage"));
 const SettingsContractsPage = lazy(() => import("@/pages/SettingsContractsPage"));
+const EventDateCoveragePage = lazy(() => import("@/pages/EventDateCoveragePage"));
 const BusinessDocumentsPage = lazy(() => import("@/pages/BusinessDocumentsPage"));
 const OwnerInvoicesContractsPage = lazy(() => import("@/pages/OwnerInvoicesContractsPage"));
 const OfficeInvoicesContractsPage = lazy(() => import("@/pages/OfficeInvoicesContractsPage"));
@@ -249,6 +250,7 @@ function SettingsStub() {
     ["Call scripts", "/settings/call-scripts", "Manage guided calling copy and branches."],
     ["Packages & resources", "/settings/packages-resources", "Maintain shared package and resource defaults."],
     ["Contracts & signing", "/settings/contracts", "Maintain future-draft signer and insurance recipient defaults."],
+    ["Event date coverage", "/settings/event-date-coverage", "Find, research, and review the next event date for every profile."],
   ] as const;
   return (
     <div className="mx-auto grid max-w-5xl gap-5">
@@ -414,6 +416,7 @@ function AdminProtectedApp() {
           <Route path="/settings/call-scripts" component={SettingsCallScriptsPage} />
           <Route path="/settings/packages-resources" component={SettingsPackagesResourcesPage} />
           <Route path="/settings/contracts" component={SettingsContractsPage} />
+          <Route path="/settings/event-date-coverage" component={EventDateCoveragePage} />
           <Route path="/settings/google-workspace/backup"><DriveBackupPage /></Route>
           <Route path="/settings/google-workspace"><SettingsGoogleWorkspacePage /></Route>
           <Route path="/settings/act-migration" component={ActMigrationPage} />

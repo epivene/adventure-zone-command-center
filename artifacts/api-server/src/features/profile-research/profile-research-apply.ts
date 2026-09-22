@@ -7,6 +7,9 @@ import { bookings, contacts, organizationContacts, organizations } from "@/db/sc
 import { patchContactInTransaction } from "@/features/contacts/contact-repository";
 import { normalizeNorthAmericanPhone } from "@/features/contacts/phone-normalization";
 import { ProfileResearchRepository, type ProfileResearchRun } from "./profile-research-repository";
+import { EventDateRepository } from "@/features/event-date-coverage/event-date-repository";
+import { calculateNextRecurrence } from "@/features/event-date-coverage/recurrence-date";
+import type { EventRecurrenceRule } from "@/features/event-date-coverage/event-date-types";
 
 const placeTypes = new Set([
   "fair", "city_government", "festival_event", "venue", "school", "tribe",
@@ -46,7 +49,6 @@ function validatedValue(field: string, value: string) {
   if (field === "phone" && !normalizeNorthAmericanPhone(trimmed)) throw new Error("The suggested phone number is invalid.");
   if (field === "region" && !/^[A-Za-z]{2}$/.test(trimmed)) throw new Error("Use a two-letter state/region.");
   if (field === "placeType" && !placeTypes.has(trimmed)) throw new Error("The suggested profile category is not supported.");
-  if ((field === "startsAt" || field === "endsAt") && !Number.isFinite(new Date(trimmed).getTime())) throw new Error("The suggested event date is invalid.");
   return field === "region" ? trimmed.toUpperCase() : trimmed;
 }
 
@@ -84,6 +86,7 @@ export class ProfileResearchApplyService {
   constructor(
     private readonly runs = new ProfileResearchRepository(),
     private readonly database = db,
+    private readonly eventDates = new EventDateRepository(database as any),
   ) {}
 
   async apply(input: { profileId: string; runId: string; suggestionIds: string[] }): Promise<ProfileResearchApplyResult> {
@@ -102,6 +105,66 @@ export class ProfileResearchApplyService {
       }
 
       try {
+        if (suggestion.targetKind === "event_date_fact") {
+          const parsed = z.object({
+            startsOn: z.string().nullable(),
+            endsOn: z.string().nullable(),
+            evidenceKind: z.enum(["published_exact", "recognized_recurrence", "ambiguous"]),
+            recurrenceRule: z.unknown().nullable(),
+            sourceId: z.string().min(1),
+            confidence: z.number().min(0).max(1),
+          }).parse(JSON.parse(suggestion.suggestedValue));
+          const source = run.sources.find((candidate) => candidate.id === parsed.sourceId);
+          if (!source) throw new Error("The event date evidence source is missing.");
+
+          let startsOn = parsed.startsOn;
+          let endsOn = parsed.endsOn;
+          let status: "confirmed" | "expected" | "needs_review" =
+            parsed.evidenceKind === "published_exact" ? "confirmed"
+              : parsed.evidenceKind === "recognized_recurrence" ? "expected"
+                : "needs_review";
+          if (parsed.evidenceKind === "recognized_recurrence") {
+            if (!parsed.recurrenceRule) throw new Error("The recurrence rule is missing.");
+            const calculated = calculateNextRecurrence({
+              today: new Date().toISOString().slice(0, 10),
+              rule: parsed.recurrenceRule as EventRecurrenceRule,
+            });
+            if (calculated.status === "needs_review") {
+              status = "needs_review";
+            } else {
+              startsOn = calculated.startsOn;
+              endsOn = calculated.endsOn;
+            }
+          }
+          if (!startsOn) throw new Error("The event date candidate needs review before it can be saved.");
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(startsOn) || (endsOn && !/^\d{4}-\d{2}-\d{2}$/.test(endsOn)))
+            throw new Error("The suggested event date is invalid.");
+          const fact = {
+            organizationId: input.profileId,
+            startsOn,
+            endsOn,
+            recurrenceRule: parsed.recurrenceRule as any,
+            rationale: suggestion.rationale,
+            sourceKind: source.kind,
+            sourceTitle: source.title,
+            sourceUrl: source.url,
+            sourceRecordType: null,
+            sourceRecordId: null,
+            sourcePointers: [],
+            researchedAt: new Date(source.retrievedAt),
+            verifiedAt: status === "confirmed" ? new Date() : null,
+            createdBy: run.requestedBy,
+          };
+          if (status === "needs_review" || suggestion.conflict) {
+            await this.eventDates.markNeedsReview(fact);
+          } else {
+            await this.eventDates.supersedeActiveFact({ ...fact, status });
+          }
+          await this.runs.setSuggestionReview({ profileId: input.profileId, runId: input.runId, suggestionId: id, status: "accepted" });
+          result.applied.push(id);
+          continue;
+        }
+
         const value = validatedValue(suggestion.field, suggestion.suggestedValue);
         const outcome = await commitmentTransaction(this.database, async (tx: any) => {
           if (suggestion.targetKind === "organization") {
@@ -133,12 +196,13 @@ export class ProfileResearchApplyService {
             return "applied" as const;
           }
 
+          if (suggestion.field === "startsAt" || suggestion.field === "endsAt")
+            throw new Error("Researched event dates must be stored as date facts.");
           const current = await currentBookingValue(tx, suggestion.targetId, suggestion.field);
           if (current === undefined) return "missing" as const;
           if (!same(current, suggestion.currentValue)) return "stale" as const;
-          const bookingValue = suggestion.field === "startsAt" || suggestion.field === "endsAt" ? new Date(value) : value;
           await tx.update(bookings)
-            .set({ [suggestion.field]: bookingValue, updatedAt: new Date() })
+            .set({ [suggestion.field]: value, updatedAt: new Date() })
             .where(and(eq(bookings.id, suggestion.targetId), eq(bookings.organizationId, input.profileId)));
           return "applied" as const;
         });

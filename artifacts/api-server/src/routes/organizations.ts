@@ -263,7 +263,7 @@ router.get("/organizations/export", async (req, res): Promise<void> => {
     } while (page <= pageCount);
     const labels: Record<string, string> = {
       deadline_soon: "Deadline soon", needs_follow_up: "Needs follow-up", contacted: "Contacted",
-      waiting: "Waiting", booked: "Booked", not_a_fit: "Not a fit", unrecorded: "",
+      waiting: "Waiting", booked: "Booked", confirmed: "Confirmed", expected: "Expected", not_a_fit: "Not a fit", unrecorded: "",
       flat_fee: "Flat fee", pay_per_play: "Pay-per-play", either: "Either",
     };
     const dateValue = (value: Date | string | null) => {
@@ -274,7 +274,10 @@ router.get("/organizations/export", async (req, res): Promise<void> => {
     const csv = createProfileCsv(records.map((record) => ({
       eventName: record.name,
       location: [record.city, record.region].filter(Boolean).join(", "),
-      nextDate: dateValue(record.nextEventDate),
+      nextDate: dateValue(record.effectiveEventDate?.startsOn ?? null),
+      nextEventStatus: record.effectiveEventDate
+        ? labels[record.effectiveEventDate.displayStatus] ?? record.effectiveEventDate.displayStatus
+        : "Date not found",
       deadline: dateValue(record.applicationDeadline),
       status: labels[record.decisionStatus] ?? record.decisionStatus,
       recommendedDealModel: record.recommendedDealModel ? labels[record.recommendedDealModel] : "",

@@ -4,6 +4,7 @@ import { boundedExcerpt, isSafeResearchUrl } from "./profile-research-matching";
 import { normalizeRelatedEvent, summarizeResearchFinding } from "./profile-research-discovery";
 import {
   ProfileResearchProviderUnavailableError,
+  type EventDateCandidate,
   type ProfileResearchCandidateFact,
   type ProfileResearchProvider,
   type ProfileResearchProviderResult,
@@ -40,6 +41,15 @@ type ParsedResearch = {
     venue?: string | null;
     url?: string;
     rationale?: string;
+  }>;
+  eventDateCandidates?: Array<{
+    startsOn?: string | null;
+    endsOn?: string | null;
+    evidenceKind?: string;
+    recurrenceRule?: unknown;
+    rationale?: string;
+    sourceUrl?: string;
+    confidence?: number;
   }>;
   deepSummary?: string | null;
 };
@@ -118,6 +128,9 @@ Return ONLY JSON with this shape:
   "candidates": [
     {"targetKind":"organization|contact|booking","targetId":null,"field":"website","value":"...","rationale":"...","sourceUrls":["https://..."]}
   ],
+  "eventDateCandidates": [
+    {"startsOn":"YYYY-MM-DD or null","endsOn":"YYYY-MM-DD or null","evidenceKind":"published_exact|recognized_recurrence|ambiguous","recurrenceRule":null,"rationale":"...","sourceUrl":"https://...","confidence":0.0}
+  ],
   "findings": [
     {"label":"2026 dates","value":"June 11–13, 2026","rationale":"...","sourceUrls":["https://..."]}
   ],
@@ -127,7 +140,7 @@ Return ONLY JSON with this shape:
   "deepSummary": ${input.mode === "deep" ? '"concise booking-agent brief synthesizing the most useful researched context"' : "null"}
 }
 
-Use only these writable field names in candidates when applicable: organization website, phone, address1, address2, city, region, postalCode, placeType; existing contact name, role, email, phone; existing booking name, city, region, startsAt, endsAt. Put useful facts that do not map cleanly to those writable fields in findings instead of dropping them. relatedEvents must be [] in Quick mode. sourceUrls and relatedEvents.url must be URLs from sources used/cited in this web-search response. Prefer official event/organization, government, tourism/chamber, or other clearly credible public sources. Do not propose booking status/probability, follow-ups, merges, deletions, or outreach actions as profile mutations. If identity is uncertain, return low confidence and no candidates that would write profile fields; you may still return clearly labeled low-risk research findings if their sources are valid.`;
+Use only these writable field names in candidates when applicable: organization website, phone, address1, address2, city, region, postalCode, placeType; existing contact name, role, email, phone; existing booking name, city, region. Never return startsAt or endsAt as a booking candidate. Put future dates only in eventDateCandidates. For a recognized recurrence, return the recurrence rule and evidence but leave startsOn and endsOn null; application code calculates the date. Put useful facts that do not map cleanly to those writable fields in findings instead of dropping them. relatedEvents must be [] in Quick mode. All evidence URLs must be URLs from sources used or cited in this web-search response. Prefer official event/organization, government, tourism/chamber, or other clearly credible public sources. Do not propose booking status/probability, follow-ups, merges, deletions, or outreach actions as profile mutations. If identity is uncertain, return low confidence and no candidates that would write profile fields; you may still return clearly labeled low-risk research findings if their sources are valid.`;
 }
 
 export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
@@ -185,6 +198,36 @@ export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
       }];
     });
 
+    const sourceByUrl = new Map(sources.flatMap((source) =>
+      source.url ? [[source.url, source] as const] : [],
+    ));
+    const eventDateCandidates: EventDateCandidate[] = (parsed.eventDateCandidates ?? []).flatMap((candidate) => {
+      const source = typeof candidate.sourceUrl === "string"
+        ? sourceByUrl.get(candidate.sourceUrl)
+        : undefined;
+      if (!source) return [];
+      if (
+        candidate.evidenceKind !== "published_exact" &&
+        candidate.evidenceKind !== "recognized_recurrence" &&
+        candidate.evidenceKind !== "ambiguous"
+      ) return [];
+      return [{
+        startsOn: typeof candidate.startsOn === "string" ? candidate.startsOn : null,
+        endsOn: typeof candidate.endsOn === "string" ? candidate.endsOn : null,
+        evidenceKind: candidate.evidenceKind as EventDateCandidate["evidenceKind"],
+        recurrenceRule: candidate.recurrenceRule && typeof candidate.recurrenceRule === "object"
+          ? candidate.recurrenceRule as any
+          : null,
+        rationale: typeof candidate.rationale === "string"
+          ? boundedExcerpt(candidate.rationale, 500)
+          : "Supported by the cited source.",
+        source,
+        confidence: typeof candidate.confidence === "number"
+          ? Math.max(0, Math.min(1, candidate.confidence))
+          : 0,
+      }];
+    });
+
     const findings = (parsed.findings ?? []).flatMap((finding) => {
       const normalized = summarizeResearchFinding({
         label: finding.label,
@@ -205,6 +248,7 @@ export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
 
     const usedUrls = new Set([
       ...candidates.flatMap((candidate) => candidate.sourceUrls),
+      ...eventDateCandidates.flatMap((candidate) => candidate.source.url ? [candidate.source.url] : []),
       ...findings.flatMap((finding) => finding.sourceUrls),
       ...relatedEvents.map((event) => event.url),
     ]);
@@ -221,6 +265,7 @@ export class OpenAiProfileResearchProvider implements ProfileResearchProvider {
       },
       sources: retainedSources,
       candidates,
+      eventDateCandidates,
       findings,
       relatedEvents,
       deepSummary: input.mode === "deep" && typeof parsed.deepSummary === "string"

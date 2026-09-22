@@ -76,8 +76,12 @@ export function detectProfileResearchGaps(profile: EventProfile, now = new Date(
     const primary = profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0];
     gaps.push({ field: "contact_method", label: "Contact email or phone", targetKind: "contact", targetId: primary?.id ?? null });
   }
-  if (hasHistoricalDatedBooking(profile, now) && !hasUpcomingDatedBooking(profile, now)) {
-    gaps.push({ field: "next_event_dates", label: "Next event dates", targetKind: "booking", targetId: null });
+  if (
+    hasHistoricalDatedBooking(profile, now) &&
+    !hasUpcomingDatedBooking(profile, now) &&
+    !profile.effectiveEventDate
+  ) {
+    gaps.push({ field: "next_event_dates", label: "Next event dates", targetKind: "event_date_fact", targetId: null });
   }
   return gaps;
 }

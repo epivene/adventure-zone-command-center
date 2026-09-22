@@ -34,6 +34,31 @@ describe("OpenAiProfileResearchProvider", () => {
               { targetKind: "organization", targetId: null, field: "website", value: "https://riverdays.example", rationale: "Official site", sourceUrls: ["https://riverdays.example"] },
               { targetKind: "organization", targetId: null, field: "phone", value: "701-555-1212", rationale: "Uncited number", sourceUrls: ["https://uncited.example"] },
             ],
+            eventDateCandidates: [{
+              startsOn: "2027-09-05",
+              endsOn: "2027-09-07",
+              evidenceKind: "published_exact",
+              recurrenceRule: null,
+              rationale: "The official site publishes the dates.",
+              sourceUrl: "https://riverdays.example",
+              confidence: 0.98,
+            }, {
+              startsOn: null,
+              endsOn: null,
+              evidenceKind: "recognized_recurrence",
+              recurrenceRule: { kind: "ordinal_weekday", month: 9, ordinal: 1, weekday: 6, durationDays: 3 },
+              rationale: "The event recurs on the first Saturday.",
+              sourceUrl: "https://riverdays.example",
+              confidence: 0.8,
+            }, {
+              startsOn: "2027-09-05",
+              endsOn: null,
+              evidenceKind: "ambiguous",
+              recurrenceRule: null,
+              rationale: "A second source conflicts.",
+              sourceUrl: "https://riverdays.example",
+              confidence: 0.45,
+            }],
             findings: [],
             relatedEvents: [],
             deepSummary: null,
@@ -50,6 +75,20 @@ describe("OpenAiProfileResearchProvider", () => {
     expect(result.candidates[0]).toEqual(expect.objectContaining({ field: "website", sourceUrls: ["https://riverdays.example"] }));
     expect(result.sources).toHaveLength(1);
     expect(result.sources[0]?.url).toBe("https://riverdays.example");
+    expect(result.eventDateCandidates).toEqual([
+      expect.objectContaining({
+        startsOn: "2027-09-05",
+        endsOn: "2027-09-07",
+        evidenceKind: "published_exact",
+        confidence: 0.98,
+        source: expect.objectContaining({ url: "https://riverdays.example" }),
+      }),
+      expect.objectContaining({
+        evidenceKind: "recognized_recurrence",
+        recurrenceRule: expect.objectContaining({ kind: "ordinal_weekday" }),
+      }),
+      expect.objectContaining({ evidenceKind: "ambiguous", confidence: 0.45 }),
+    ]);
     expect(result.relatedEvents).toEqual([]);
     expect(fetchMock).toHaveBeenCalledWith("https://api.openai.com/v1/responses", expect.objectContaining({ method: "POST" }));
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;

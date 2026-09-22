@@ -2,6 +2,7 @@ export type ProfileCsvRow = {
   eventName: string;
   location: string;
   nextDate: string;
+  nextEventStatus: string;
   deadline: string;
   status: string;
   recommendedDealModel: string;
@@ -14,7 +15,8 @@ export type ProfileCsvRow = {
 const headers: Array<[keyof ProfileCsvRow, string]> = [
   ["eventName", "Event name"],
   ["location", "Location"],
-  ["nextDate", "Next date"],
+  ["nextDate", "Next event date"],
+  ["nextEventStatus", "Next event status"],
   ["deadline", "Deadline"],
   ["status", "Status"],
   ["recommendedDealModel", "Recommended deal model"],

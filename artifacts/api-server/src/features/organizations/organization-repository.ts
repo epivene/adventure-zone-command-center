@@ -20,6 +20,7 @@ import {
   bookings,
   callSessions,
   contacts,
+  eventDateFacts,
   followUps,
   organizationContacts,
   organizationFamilyReviews,
@@ -28,6 +29,8 @@ import {
   organizations,
   travelLegs,
 } from "@/db/schema";
+import { resolveEffectiveEventDate } from "@/features/event-date-coverage/effective-event-date";
+import type { EffectiveEventDate } from "@/features/event-date-coverage/event-date-types";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { bookingStatusValues } from "@/features/bookings/booking-types";
 import { isActiveStatus } from "@/features/follow-ups/follow-up-policy";
@@ -138,6 +141,7 @@ export type OrganizationListRecord = Omit<
   /** Present when the search matched via an organization_locations record rather than the org's top-level fields. */
   matchedLocation: MatchedOrganizationLocation | null;
   parentContext: ProfileParentContext;
+  effectiveEventDate: EffectiveEventDate | null;
 };
 
 export type OrganizationListPage = {
@@ -950,6 +954,8 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
       primaryContacts,
       locationCounts,
       matchedLocationRows,
+      dateBookings,
+      activeDateFacts,
     ] = await Promise.all([
       this.database
         .select({
@@ -1031,6 +1037,23 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
               ),
             )
         : Promise.resolve([] as { organizationId: string; id: string; label: string; city: string | null; region: string | null }[]),
+      this.database
+        .select({
+          id: bookings.id,
+          organizationId: bookings.organizationId,
+          startsAt: bookings.startsAt,
+          endsAt: bookings.endsAt,
+          status: bookings.status,
+        })
+        .from(bookings)
+        .where(inArray(bookings.organizationId, organizationIds)),
+      this.database
+        .select()
+        .from(eventDateFacts)
+        .where(and(
+          inArray(eventDateFacts.organizationId, organizationIds),
+          eq(eventDateFacts.active, true),
+        )),
     ]);
     const contactCountByOrganization = new Map(
       contactCounts.map((record) => [record.organizationId, record.value]),
@@ -1049,6 +1072,20 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
     const locationCountByOrganization = new Map(
       locationCounts.map((record) => [record.organizationId, record.value]),
     );
+    const bookingsByOrganization = new Map<string, typeof dateBookings>();
+    for (const booking of dateBookings) {
+      if (!booking.organizationId) continue;
+      const rows = bookingsByOrganization.get(booking.organizationId) ?? [];
+      rows.push(booking);
+      bookingsByOrganization.set(booking.organizationId, rows);
+    }
+    const factsByOrganization = new Map<string, typeof activeDateFacts>();
+    for (const fact of activeDateFacts) {
+      const rows = factsByOrganization.get(fact.organizationId) ?? [];
+      rows.push(fact);
+      factsByOrganization.set(fact.organizationId, rows);
+    }
+    const today = new Date().toISOString().slice(0, 10);
     // Take the first matched location per organization (ORDER BY is not guaranteed, but any one is fine).
     const matchedLocationByOrganization = new Map<string, MatchedOrganizationLocation>();
     for (const row of matchedLocationRows) {
@@ -1079,6 +1116,22 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
         parentContext: organization.consolidatedIntoId
           ? { kind: "organization_group" as const, id: organization.consolidatedIntoId, name: parentNameById.get(organization.consolidatedIntoId) ?? "Parent profile" }
           : null,
+        effectiveEventDate: resolveEffectiveEventDate({
+          today,
+          bookings: (bookingsByOrganization.get(organization.id) ?? []).map((booking) => ({
+            id: booking.id,
+            startsOn: booking.startsAt?.toISOString().slice(0, 10) ?? null,
+            endsOn: booking.endsAt?.toISOString().slice(0, 10) ?? null,
+            status: booking.status,
+          })),
+          facts: (factsByOrganization.get(organization.id) ?? []).map((fact) => ({
+            id: fact.id,
+            startsOn: fact.startsOn,
+            endsOn: fact.endsOn,
+            status: fact.status,
+            active: fact.active,
+          })),
+        }),
       })),
       total,
       page,
@@ -1218,6 +1271,7 @@ export class DrizzleOrganizationRepository implements OrganizationRepository {
             locationCount: locationCountByOrganization.get(organization.id) ?? 0,
             matchedLocation: null,
             parentContext: null,
+            effectiveEventDate: null,
           } satisfies OrganizationListRecord];
         }),
       }))

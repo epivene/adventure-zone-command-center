@@ -8,6 +8,7 @@ export * from "./early-bird-promo-schema";
 export * from "./event-checklist-schema";
 export * from "./resource-source-candidate-schema";
 export * from "./event-attendance-history-schema";
+export * from "./event-date-coverage-schema";
 export * from "./office-coordinator-schema";
 export * from "./google-workspace-schema";
 export * from "./operational-calendar-schema";

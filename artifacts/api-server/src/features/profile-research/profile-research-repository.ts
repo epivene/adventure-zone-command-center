@@ -78,10 +78,23 @@ export class ProfileResearchRepository {
     sources: ProfileResearchSource[];
     suggestions: ProfileResearchSuggestion[];
     summary?: unknown;
+    coverageLease?: { itemId: string; workerId: string };
   }): Promise<void> {
     const client = await this.pool.connect();
     try {
       await client.query("begin");
+      if (input.coverageLease) {
+        const lease = await client.query(
+          `select id from event_date_coverage_items
+           where id = $1
+             and status = 'researching'
+             and lease_owner = $2
+             and lease_expires_at >= now()
+           for update`,
+          [input.coverageLease.itemId, input.coverageLease.workerId],
+        );
+        if (!lease.rows.length) throw new Error("COVERAGE_LEASE_LOST");
+      }
       const owner = await client.query(
         `select id from profile_research_runs where id = $1 and profile_id = $2 for update`,
         [input.runId, input.profileId],

@@ -111,6 +111,48 @@ describe("ProfileResearchService", () => {
     ]);
   });
 
+  it("creates a date-fact suggestion without targeting the historical booking", async () => {
+    const pastBooking = {
+      id: "past-booking",
+      name: "River Days 2026",
+      primaryContactId: null,
+      city: "Fargo",
+      region: "ND",
+      startsAt: new Date("2026-07-18T17:00:00Z"),
+      endsAt: new Date("2026-07-20T17:00:00Z"),
+      status: "completed",
+      probability: "possible",
+      notes: null,
+      actRecordId: null,
+    };
+    const test = harness({
+      identity: { confidence: "high", rationale: "Official source matched." },
+      sources: [citedSource],
+      candidates: [],
+      eventDateCandidates: [{
+        startsOn: "2027-07-17",
+        endsOn: "2027-07-19",
+        evidenceKind: "published_exact",
+        recurrenceRule: null,
+        rationale: "Official dates",
+        source: citedSource,
+        confidence: 0.98,
+      }],
+      deepSummary: null,
+    }, profile({ bookings: [pastBooking] }));
+
+    await test.service.start({ profileId: profile().id, mode: "quick" });
+
+    expect(test.saved().suggestions).toEqual([
+      expect.objectContaining({
+        targetKind: "event_date_fact",
+        targetId: null,
+        field: "eventDate",
+        currentValue: null,
+      }),
+    ]);
+  });
+
   it("flags a different non-empty current value as a conflict", async () => {
     const test = harness({
       identity: { confidence: "high", rationale: "Official source matched." },

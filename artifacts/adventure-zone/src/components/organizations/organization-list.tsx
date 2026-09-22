@@ -652,10 +652,9 @@ export function OrganizationList({
                               : "No deal recommendation"}
                           </strong>
                           <span className="text-right text-[#536064]">
-                            {formatDate(
-                              organization.nextEventDate,
-                              "Date not published",
-                            )}
+                            {organization.effectiveEventDate
+                              ? `${readableAction(organization.effectiveEventDate.displayStatus)} ${formatDate(organization.effectiveEventDate.startsOn, "")}${organization.effectiveEventDate.endsOn ? `–${formatDate(organization.effectiveEventDate.endsOn, "")}` : ""}`
+                              : "Date not found"}
                           </span>
                         </span>
                         <span className="mt-2.5 flex items-start gap-2 text-xs font-bold text-[#a63f35]">

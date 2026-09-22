@@ -1,4 +1,5 @@
 import type { EventProfile } from "@/features/event-profiles/event-profile-repository";
+import type { InternalEventDateEvidence } from "@/features/event-date-coverage/internal-event-date-evidence";
 
 const MAX_NOTES = 30;
 const MAX_CLUES = 8;
@@ -48,4 +49,36 @@ export function extractProfileHistoryIdentityClues(profile: EventProfile): strin
   }
 
   return [...clues].slice(0, MAX_CLUES);
+}
+
+const EXPLICIT_EVENT_DATE = /\b(?:event|festival|fair|show)\s+date(?:s)?\s*[:\-]\s*(\d{4}-\d{2}-\d{2})(?:\s*(?:to|through|–|—)\s*(\d{4}-\d{2}-\d{2}))?/i;
+
+/**
+ * Extract only explicitly labelled ISO event dates. This intentionally avoids
+ * treating arbitrary dates in call notes (deadlines, calls, invoices) as event
+ * evidence.
+ */
+export function extractProfileHistoryEventDateEvidence(
+  profile: EventProfile,
+): InternalEventDateEvidence[] {
+  return profile.notes.slice(0, MAX_NOTES).flatMap((note) => {
+    const text = String(note.body ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/https?:\/\/\S+/gi, " ")
+      .replace(/\b[\w.+-]+@[\w.-]+\.[a-z]{2,}\b/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const match = text.match(EXPLICIT_EVENT_DATE);
+    if (!match?.[1]) return [];
+    return [{
+      startsOn: match[1],
+      endsOn: match[2] ?? null,
+      evidenceKind: "unverified_clue" as const,
+      sourceKind: "internal" as const,
+      sourceType: note.importedFromAct ? "act_import" : "activity_note",
+      sourceId: note.id,
+      sourceLabel: note.subject?.trim() || "Profile activity",
+      excerpt: match[0].slice(0, 160),
+    }];
+  });
 }

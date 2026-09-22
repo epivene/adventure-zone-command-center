@@ -25,6 +25,12 @@ export type OrganizationListRecord = {
   primaryContactEmail?: string | null;
   primaryContactPhone?: string | null;
   nextEventDate?: string | null;
+  effectiveEventDate?: {
+    startsOn: string;
+    endsOn: string | null;
+    displayStatus: "booked" | "confirmed" | "expected";
+    sourceId: string;
+  } | null;
   applicationDeadline?: string | null;
   pipelineStatus?: string | null;
   priority?: string | null;

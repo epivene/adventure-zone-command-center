@@ -13,7 +13,7 @@ import type { ProfileResearchSource, ProfileResearchSuggestion, ResearchMode } f
 
 const ORGANIZATION_FIELDS = new Set(["website", "phone", "address1", "address2", "city", "region", "postalCode", "placeType"]);
 const CONTACT_FIELDS = new Set(["name", "role", "email", "phone"]);
-const BOOKING_FIELDS = new Set(["startsAt", "endsAt", "city", "region", "name"]);
+const BOOKING_FIELDS = new Set(["city", "region", "name"]);
 
 function clean(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
@@ -63,6 +63,7 @@ export class ProfileResearchService {
     mode: ResearchMode;
     requestedBy?: string | null;
     contactId?: string;
+    coverageLease?: { itemId: string; workerId: string };
   }) {
     const profile = await this.profiles.getEventProfile(input.profileId, input.contactId);
     if (!profile) throw new Error("PROFILE_NOT_FOUND");
@@ -87,7 +88,8 @@ export class ProfileResearchService {
       );
       const suggestions: ProfileResearchSuggestion[] = result.identity.confidence === "low"
         ? []
-        : result.candidates.flatMap((candidate) => {
+        : [
+          ...result.candidates.flatMap((candidate) => {
             const resolved = resolveCandidateTarget(profile, candidate);
             if (!resolved) return [];
             const sourceIds = candidate.sourceUrls.flatMap((url) => {
@@ -109,7 +111,33 @@ export class ProfileResearchService {
               sourceIds,
               conflict: Boolean(resolved.currentValue && !sameValue(resolved.currentValue, suggestedValue)),
             }];
-          });
+          }),
+          ...(result.eventDateCandidates ?? []).map((candidate) => ({
+            id: randomUUID(),
+            targetKind: "event_date_fact" as const,
+            targetId: null,
+            field: "eventDate",
+            currentValue: profile.effectiveEventDate
+              ? JSON.stringify(profile.effectiveEventDate)
+              : null,
+            suggestedValue: JSON.stringify({
+              startsOn: candidate.startsOn,
+              endsOn: candidate.endsOn,
+              evidenceKind: candidate.evidenceKind,
+              recurrenceRule: candidate.recurrenceRule,
+              sourceId: candidate.source.id,
+              confidence: candidate.confidence,
+            }),
+            confidence: candidate.confidence >= 0.85
+              ? "high" as const
+              : candidate.confidence >= 0.6
+                ? "medium" as const
+                : "low" as const,
+            rationale: candidate.rationale,
+            sourceIds: [candidate.source.id],
+            conflict: profile.effectiveEventDate !== null,
+          })),
+        ];
 
       const relatedEvents = input.mode === "deep"
         ? await this.matchRelatedEvents(result.relatedEvents ?? [])
@@ -131,6 +159,7 @@ export class ProfileResearchService {
         sources: result.sources as ProfileResearchSource[],
         suggestions,
         summary,
+        coverageLease: input.coverageLease,
       });
       return await this.runs.getRun(input.profileId, runId);
     } catch (error) {
