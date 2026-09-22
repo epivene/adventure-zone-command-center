@@ -41,12 +41,36 @@ describe("CoverageJobRepository", () => {
     const run = await repository.createRun({ organizationIds: ids.slice(0, 2), requestedBy: "owner", batchSize: 2 });
     const now = new Date("2026-09-21T12:00:00Z");
     const item = await repository.claimNext({ workerId: "worker", now, leaseMs: 1, maxAttempts: 1 });
-    await repository.failItem(item!.id, "failed", now, 1);
+    await repository.failItem(item!.id, "failed", now, 1, "worker");
     expect(await repository.claimNext({ workerId: "worker", now: new Date(now.getTime() + 10), leaseMs: 1, maxAttempts: 1 })).not.toMatchObject({ id: item!.id });
     await repository.retryItem(item!.id);
     expect(await repository.getItem(item!.id)).toMatchObject({ status: "queued", attempts: 0 });
     await repository.cancelRun(run.id);
     expect(await repository.getRun(run.id)).toMatchObject({ status: "cancelled" });
     expect((await repository.getRun(run.id))?.items.every((entry) => ["failed", "skipped"].includes(entry.status))).toBe(true);
+  });
+
+  it("rejects stale completions and never resurrects a cancelled run", async () => {
+    const run = await repository.createRun({ organizationIds: ids.slice(0, 1), requestedBy: "owner" });
+    const now = new Date("2026-09-21T12:00:00Z");
+    const item = await repository.claimNext({ workerId: "worker-a", now, leaseMs: 1_000, maxAttempts: 3 });
+    await repository.cancelRun(run.id);
+
+    expect(await repository.completeItem(item!.id, "complete", now, "worker-a")).toBeNull();
+    expect(await repository.getRun(run.id)).toMatchObject({ status: "cancelled" });
+    expect(await repository.getItem(item!.id)).toMatchObject({ status: "skipped" });
+  });
+
+  it("lets only the current lease owner renew and complete an item", async () => {
+    const run = await repository.createRun({ organizationIds: ids.slice(0, 1), requestedBy: "owner" });
+    const now = new Date("2026-09-21T12:00:00Z");
+    const stale = await repository.claimNext({ workerId: "worker-a", now, leaseMs: 1_000, maxAttempts: 3 });
+    const reclaimedAt = new Date(now.getTime() + 2_000);
+    await repository.claimNext({ workerId: "worker-b", now: reclaimedAt, leaseMs: 1_000, maxAttempts: 3 });
+
+    expect(await repository.renewLease(stale!.id, "worker-a", reclaimedAt, 1_000)).toBeNull();
+    expect(await repository.completeItem(stale!.id, "complete", reclaimedAt, "worker-a")).toBeNull();
+    expect(await repository.completeItem(stale!.id, "complete", reclaimedAt, "worker-b")).toMatchObject({ status: "complete" });
+    expect(await repository.getRun(run.id)).toMatchObject({ status: "complete" });
   });
 });
