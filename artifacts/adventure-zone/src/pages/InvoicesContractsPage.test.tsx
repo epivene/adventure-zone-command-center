@@ -103,10 +103,10 @@ describe("InvoicesContractsPage", () => {
       summary: vi.fn().mockResolvedValue({ summary: { totalInvoices: 2, overdueCount: 1, overdueCents: 1000000, depositDueCount: 0, outstandingCents: 1450000 } }),
       detail: vi.fn(), create: vi.fn(), update: vi.fn(), recordPayment: vi.fn(), voidPayment: vi.fn(),
     };
-    const contractDocument = (id: string, name: string, event: string) => ({
+    const contractDocument = (id: string, name: string, event: string, filename = `${name}.pdf`) => ({
       id,
       displayName: name,
-      originalFilename: `${name}.pdf`,
+      originalFilename: filename,
       category: "contract" as const,
       lifecycle: "active" as const,
       reviewState: "accepted" as const,
@@ -128,7 +128,7 @@ describe("InvoicesContractsPage", () => {
       documentApi={{
         upload: vi.fn(), deleteDocument: vi.fn(), open: vi.fn(), searchProfiles: vi.fn(), list: vi.fn(),
         listAll: vi.fn().mockResolvedValue({ documents: [
-          contractDocument("fairplay", "Fairplay Burro Days 2027 Contract", "Fairplay Burro Days"),
+          contractDocument("fairplay", "Fairplay Burro Days Contract", "Fairplay Burro Days", "Fairplay_Burro_Days_2027_Contract.pdf"),
           contractDocument("phillips", "Phillips County Fair 2027 Contract", "Phillips County Fair"),
           contractDocument("old", "Old County Fair 2024 Contract", "Old County Fair"),
         ] }),
@@ -138,10 +138,11 @@ describe("InvoicesContractsPage", () => {
     const year = await screen.findByLabelText("Year");
     expect(year).toHaveValue("2027");
     expect(screen.getByText("$4,500.00", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Fairplay Burro Days Contract" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Old County Fair 2024 Contract" })).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Event"), { target: { value: "Phillips County Fair" } });
     expect(screen.getByRole("heading", { name: "Phillips County Fair 2027 Contract" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Fairplay Burro Days 2027 Contract" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Fairplay Burro Days Contract" })).not.toBeInTheDocument();
   });
 });
