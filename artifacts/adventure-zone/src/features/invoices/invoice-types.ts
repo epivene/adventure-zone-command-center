@@ -16,6 +16,7 @@ export type InvoiceRecord = {
   organizationName: string;
   bookingId: string | null;
   bookingName: string | null;
+  bookingStartsAt?: string | null;
   documentId: string;
   documentName: string;
   invoiceNumber: string;
@@ -80,6 +81,7 @@ export type ContractWorkspaceRecord = {
   organizationName: string;
   bookingId: string;
   bookingName: string;
+  bookingStartsAt?: string | null;
   status: string;
   versionNumber: number;
   updatedAt: string;
