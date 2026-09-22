@@ -122,4 +122,35 @@ export class EventDateRepository {
     if (!created) throw new Error("Failed to create event date review fact");
     return created;
   }
+
+  async reviewFact(
+    factId: string,
+    decision: "approve_confirmed" | "approve_expected" | "dismiss",
+    actorId: string,
+  ): Promise<EventDateFact | null> {
+    return this.database.transaction(async (transaction) => {
+      const [fact] = await transaction.select().from(eventDateFacts)
+        .where(eq(eventDateFacts.id, factId)).for("update");
+      if (!fact) return null;
+      const now = new Date();
+      if (decision === "dismiss") {
+        const [dismissed] = await transaction.update(eventDateFacts).set({
+          active: false,
+          rationale: `${fact.rationale}\nDismissed by ${actorId || "owner"}.`,
+          updatedAt: now,
+        }).where(eq(eventDateFacts.id, factId)).returning();
+        return dismissed ?? null;
+      }
+      await transaction.update(eventDateFacts).set({ active: false, updatedAt: now })
+        .where(and(eq(eventDateFacts.organizationId, fact.organizationId), eq(eventDateFacts.active, true)));
+      const [approved] = await transaction.update(eventDateFacts).set({
+        status: decision === "approve_confirmed" ? "confirmed" : "expected",
+        active: true,
+        verifiedAt: now,
+        createdBy: actorId,
+        updatedAt: now,
+      }).where(eq(eventDateFacts.id, factId)).returning();
+      return approved ?? null;
+    });
+  }
 }
