@@ -137,6 +137,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
   const [loadingContact, setLoadingContact] = useState(Boolean(selectedContact?.id));
   const [contactLoaded, setContactLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [makingPrimary, setMakingPrimary] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -209,6 +210,20 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
     setContactLoaded(true);
     setLoadingContact(false);
     setError("");
+  }
+
+  async function makePrimaryContact() {
+    if (!selectedContact?.id || selectedContact.isPrimary || makingPrimary) return;
+    setMakingPrimary(true);
+    setError("");
+    try {
+      await apiPut(`/event-profiles/${profile.id}/primary-contact`, { contactId: selectedContact.id });
+      await onSaved();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The primary contact could not be changed.");
+    } finally {
+      setMakingPrimary(false);
+    }
   }
 
   async function save() {
@@ -323,7 +338,7 @@ export function ProfileInlineEditor({ profile, contactId, onSaved, onCancel }: {
 
         <div className="mt-4 flex items-center justify-between gap-3">
           <p className="font-semibold text-slate-800">{creatingContact ? "New contact" : selectedContact?.name || "Contact"}</p>
-          {loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : !contactLoaded ? <span className="text-xs text-slate-500">Contact editing unavailable</span> : null}
+          <div className="flex items-center gap-2">{!creatingContact && selectedContact && !selectedContact.isPrimary ? <button className="button-secondary text-xs" disabled={makingPrimary} onClick={() => void makePrimaryContact()} type="button">{makingPrimary ? "Updating…" : "Make primary contact"}</button> : null}{loadingContact ? <span className="text-xs text-slate-500">Loading contact…</span> : !contactLoaded ? <span className="text-xs text-slate-500">Contact editing unavailable</span> : null}</div>
         </div>
         <div className={`mt-3 grid gap-3 sm:grid-cols-2 ${contactLoaded ? "" : "opacity-60"}`} aria-disabled={!contactLoaded}>
           <label className="grid gap-1.5 text-sm font-medium">First name<input aria-label="First name" disabled={!contactLoaded} value={contactValues.firstName} onChange={(event) => setContactField("firstName", event.target.value)} /></label>
