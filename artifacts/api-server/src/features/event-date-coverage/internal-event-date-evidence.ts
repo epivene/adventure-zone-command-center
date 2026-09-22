@@ -4,7 +4,7 @@ import type { EventRecurrenceRule } from "./event-date-types";
 export type InternalEventDateEvidence = {
   startsOn: string;
   endsOn: string | null;
-  evidenceKind: "booking" | "published_exact" | "recurrence_clue";
+  evidenceKind: "booking" | "published_exact" | "recurrence_clue" | "unverified_clue";
   sourceKind: "internal";
   sourceType: string;
   sourceId: string;
@@ -33,6 +33,7 @@ export function auditInternalEventDateEvidence(input: {
   };
 
   const exact = future.filter((item) => item.evidenceKind === "published_exact");
+  const unverified = future.filter((item) => item.evidenceKind === "unverified_clue");
   const recurrence = input.evidence.filter((item) => item.evidenceKind === "recurrence_clue");
   const calculated = recurrence.flatMap((item) => {
     if (!item.recurrenceRule) return [];
@@ -40,12 +41,12 @@ export function auditInternalEventDateEvidence(input: {
     return result.status === "expected" ? [{ item, result }] : [];
   });
   const dates = new Set([
-    ...exact.map((item) => item.startsOn),
-    ...calculated.map(({ result }) => result.startsOn),
+    ...exact.map((item) => `${item.startsOn}|${item.endsOn ?? ""}`),
+    ...calculated.map(({ result }) => `${result.startsOn}|${result.endsOn ?? ""}`),
   ]);
-  if (dates.size > 1) return {
+  if (dates.size > 1 || (unverified.length > 0 && dates.size === 0)) return {
     resolution: "needs_review", startsOn: null, endsOn: null,
-    evidence: [...exact, ...recurrence],
+    evidence: [...exact, ...recurrence, ...unverified],
   };
   if (exact[0]) return {
     resolution: "confirmed", startsOn: exact[0].startsOn,
