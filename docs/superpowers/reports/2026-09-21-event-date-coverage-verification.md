@@ -16,6 +16,15 @@ The feature-specific schema, migration, resolver, recurrence, research safety, r
 - Operational isolation: 7 assertions verify researched facts are absent from calendar, operational calendar, map, route, and manager-map sources.
 - Query-count protection: a 100-profile coverage page performs exactly three bulk reads.
 - Booking preservation regression: applying a researched date leaves historical booking timestamps byte-for-byte unchanged.
+- Post-review integrity suite: 4 files, 22 tests pass for lease ownership/cancellation, internal evidence trust, and merge-safe event-date history. The two configured research-apply suites add 7 passing tests.
+
+## Post-review integrity hardening
+
+- Worker completion, failure, and lease renewal are compare-and-set operations constrained by item status, lease owner, and unexpired lease. Cancelled runs cannot be changed back to complete by an old worker.
+- Workers renew ownership after loading evidence and stop before applying it if ownership was lost.
+- Dates parsed from free-form profile activity are unverified clues and create review records; they are never auto-promoted to confirmed dates.
+- A newly inferred date that conflicts with an active fact creates a review record instead of silently superseding the active fact.
+- Organization merges reparent event-date facts and coverage items before duplicate deletion. Conflicting active facts are retained as inactive review records; duplicate items in the same run have their operational history folded into the surviving item.
 
 ## Repository-wide checks
 
@@ -34,7 +43,7 @@ The runtime is Node 24 while the repository declares Node 22; every command reco
 
 ## Operational boundary
 
-Only `bookings` feed Schedule, calendar sync, maps, route planning, manager operations, booking counts, and booking exports. `event_date_facts` is referenced by informational profile, coverage, research, and assistant-context modules only. A researched expected date therefore cannot create a calendar event, map marker, route stop, or operational booking count.
+Only `bookings` feed Schedule, calendar sync, maps, route planning, manager operations, booking counts, and booking exports. `event_date_facts` is referenced by informational profile, coverage, research, and assistant-context modules only. A researched expected date therefore cannot create a calendar event, map marker, route stop, or operational booking count. The automated guard is a source-boundary regression check; it is not a substitute for the remaining deployment-environment smoke test.
 
 ## Manual/browser status
 
