@@ -232,7 +232,9 @@ export async function reparentAdditionalOrganizationReferences(
         'directory_import_records',
         'google_workspace_profile_labels',
         'google_workspace_gmail_mutations',
-        'google_workspace_gmail_thread_intents'
+        'google_workspace_gmail_thread_intents',
+        'event_date_facts',
+        'event_date_coverage_items'
       )
   `);
   const optionalTables = new Set(
@@ -333,6 +335,72 @@ export async function reparentAdditionalOrganizationReferences(
   if (optionalTables.has("google_workspace_gmail_thread_intents")) {
     await transaction.execute(sql`
       UPDATE google_workspace_gmail_thread_intents
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  await reparentEventDateCoverageReferences(transaction, primaryId, duplicateId, {
+    facts: optionalTables.has("event_date_facts"),
+    items: optionalTables.has("event_date_coverage_items"),
+  });
+}
+
+export async function reparentEventDateCoverageReferences(
+  transaction: Pick<OrganizationMergeTransaction, "execute">,
+  primaryId: string,
+  duplicateId: string,
+  tables: { facts: boolean; items: boolean },
+): Promise<void> {
+  if (tables.facts) {
+    // Preserve both histories. A duplicate active fact cannot remain active when
+    // the surviving profile already has one, so retain it as an explicit review
+    // record instead of allowing the organization cascade to erase it.
+    await transaction.execute(sql`
+      UPDATE event_date_facts duplicate_fact
+      SET active = false,
+          status = 'needs_review',
+          rationale = duplicate_fact.rationale || E'\nNeeds review after organization merge: the surviving profile already had an active event-date fact.',
+          updated_at = now()
+      WHERE duplicate_fact.organization_id = ${duplicateId}
+        AND duplicate_fact.active
+        AND EXISTS (
+          SELECT 1 FROM event_date_facts surviving_fact
+          WHERE surviving_fact.organization_id = ${primaryId}
+            AND surviving_fact.active
+        )
+    `);
+    await transaction.execute(sql`
+      UPDATE event_date_facts
+      SET organization_id = ${primaryId}, updated_at = now()
+      WHERE organization_id = ${duplicateId}
+    `);
+  }
+  if (tables.items) {
+    // A run can contain both profiles. Fold the duplicate item's operational
+    // history into the surviving row before removing the uniqueness conflict.
+    await transaction.execute(sql`
+      UPDATE event_date_coverage_items surviving_item
+      SET attempts = GREATEST(surviving_item.attempts, duplicate_item.attempts),
+          error_detail = concat_ws(E'\n', surviving_item.error_detail,
+            'Merged duplicate profile item (' || duplicate_item.id || '): ' ||
+            coalesce(duplicate_item.error_detail, duplicate_item.status)),
+          started_at = LEAST(surviving_item.started_at, duplicate_item.started_at),
+          completed_at = GREATEST(surviving_item.completed_at, duplicate_item.completed_at),
+          updated_at = now()
+      FROM event_date_coverage_items duplicate_item
+      WHERE duplicate_item.organization_id = ${duplicateId}
+        AND surviving_item.organization_id = ${primaryId}
+        AND surviving_item.run_id = duplicate_item.run_id
+    `);
+    await transaction.execute(sql`
+      DELETE FROM event_date_coverage_items duplicate_item
+      USING event_date_coverage_items surviving_item
+      WHERE duplicate_item.organization_id = ${duplicateId}
+        AND surviving_item.organization_id = ${primaryId}
+        AND surviving_item.run_id = duplicate_item.run_id
+    `);
+    await transaction.execute(sql`
+      UPDATE event_date_coverage_items
       SET organization_id = ${primaryId}, updated_at = now()
       WHERE organization_id = ${duplicateId}
     `);
