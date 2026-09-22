@@ -8,7 +8,7 @@ const evidence = (sourceType: string, startsOn: string, kind: InternalEventDateE
 });
 
 describe("auditInternalEventDateEvidence", () => {
-  it.each(["activity_note", "email", "source_document", "act_import", "attendance_history", "prior_research"])(
+  it.each(["email", "source_document", "act_import", "attendance_history", "prior_research"])(
     "accepts unambiguous exact evidence from %s",
     (sourceType) => {
       expect(auditInternalEventDateEvidence({
@@ -31,6 +31,23 @@ describe("auditInternalEventDateEvidence", () => {
     }).resolution).toBe("needs_review");
   });
 
+  it("sends a profile-note date clue to review instead of confirming it", () => {
+    expect(auditInternalEventDateEvidence({
+      today: "2026-09-21",
+      evidence: [evidence("activity_note", "2027-06-01", "unverified_clue")],
+    })).toMatchObject({ resolution: "needs_review" });
+  });
+
+  it("treats the same start with a different end as a conflict", () => {
+    expect(auditInternalEventDateEvidence({
+      today: "2026-09-21",
+      evidence: [
+        { ...evidence("email", "2027-06-01"), endsOn: "2027-06-02" },
+        { ...evidence("source_document", "2027-06-01"), endsOn: "2027-06-03" },
+      ],
+    }).resolution).toBe("needs_review");
+  });
+
   it("sends an exact and recurrence disagreement to review", () => {
     expect(auditInternalEventDateEvidence({
       today: "2026-09-21",
@@ -47,7 +64,7 @@ describe("auditInternalEventDateEvidence", () => {
       { id: "note-2", body: "Invoice due 2027-07-01", subject: null, importedFromAct: false },
     ];
     expect(extractProfileHistoryEventDateEvidence({ notes } as never)).toEqual([
-      expect.objectContaining({ startsOn: "2027-06-10", endsOn: "2027-06-12", sourceId: "note-1" }),
+      expect.objectContaining({ startsOn: "2027-06-10", endsOn: "2027-06-12", sourceId: "note-1", evidenceKind: "unverified_clue" }),
     ]);
   });
 
