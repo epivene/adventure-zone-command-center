@@ -53,13 +53,14 @@ function contractYear(contract: ContractWorkspaceRecord) {
 }
 
 function documentYear(document: BusinessDocumentRecord) {
-  return yearFrom(
-    document.effectiveDate,
-    document.issueDate,
+  const eventYear = yearFrom(
     document.displayName,
     document.originalFilename,
     ...document.links.map((link) => link.targetLabel),
   );
+  return eventYear === unknownYear
+    ? yearFrom(document.effectiveDate, document.issueDate)
+    : eventYear;
 }
 
 function invoiceEvent(invoice: InvoiceRecord) {
@@ -71,10 +72,112 @@ function contractEvent(contract: ContractWorkspaceRecord) {
 }
 
 function documentEvents(document: BusinessDocumentRecord) {
-  const linked = document.links
+  const linkedEvents = document.links
+    .filter((link) => link.targetKind !== "profile")
     .map((link) => link.targetLabel?.trim())
     .filter((label): label is string => Boolean(label));
-  return linked.length ? linked : [document.displayName];
+  if (linkedEvents.length) return linkedEvents;
+  const eventLabel = documentEventLabel(document);
+  return [eventLabel ?? document.displayName];
+}
+
+function normalizedContractEvent(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/\b(?:19|20)\d{2}\b/g, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const contractMetadataWords = new Set([
+  "agreement", "completed", "contract", "copy", "draft", "executed", "final",
+  "fully", "not", "partially", "signed", "unsigned", "yet",
+]);
+
+function eventLabelFromDocumentName(value: string) {
+  const tokens = value
+    .replace(/\.[a-z0-9]{1,8}$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\b(?:19|20)\d{2}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ");
+  const suffixStart = tokens.findIndex((token, index) => index > 0
+    && contractMetadataWords.has(token.toLowerCase())
+    && tokens.slice(index).every((suffixToken) => {
+      const normalized = suffixToken.toLowerCase();
+      return contractMetadataWords.has(normalized) || /^v?\d+$/.test(normalized) || /^[a-z]$/.test(normalized);
+    }));
+  const eventTokens = suffixStart > 0 ? tokens.slice(0, suffixStart) : tokens;
+  const label = eventTokens.join(" ").trim();
+  return label || null;
+}
+
+function documentEventLabel(document: BusinessDocumentRecord) {
+  const labels = [document.displayName, document.originalFilename]
+    .map(eventLabelFromDocumentName)
+    .filter((label): label is string => Boolean(label));
+  const identities = new Set(labels.map(normalizedContractEvent));
+  return identities.size === 1 ? labels[0] : null;
+}
+
+function documentContractKeys(document: BusinessDocumentRecord) {
+  const year = documentYear(document);
+  const preferredLinks = (["booking", "event_family", "profile"] as const)
+    .map((kind) => document.links.filter((link) => link.targetKind === kind))
+    .find((links) => links.length) ?? [];
+  return preferredLinks.flatMap((link) => {
+    if (link.targetKind !== "profile") return [`${link.targetKind}:${link.targetId}:${year}`];
+    const eventName = normalizedContractEvent(documentEventLabel(document) ?? "");
+    return eventName ? [`profile:${link.targetId}:${year}:${eventName}`] : [];
+  });
+}
+
+function contractKeys(contract: ContractWorkspaceRecord) {
+  const year = contractYear(contract);
+  const eventName = normalizedContractEvent(contractEvent(contract));
+  return [
+    ...(contract.bookingId ? [`booking:${contract.bookingId}:${year}`] : []),
+    ...(eventName ? [`profile:${contract.organizationId}:${year}:${eventName}`] : []),
+  ];
+}
+
+function isSignedContractDocument(document: BusinessDocumentRecord) {
+  const name = `${document.displayName} ${document.originalFilename}`.toLowerCase().replace(/[_-]+/g, " ");
+  if (/\b(?:unsigned|partially\s+(?:signed|executed|completed)|not(?:\s+\w+){0,2}\s+(?:signed|executed|completed))\b/.test(name)) return false;
+  return /\b(?:signed|executed|completed)\b/.test(name);
+}
+
+function eligibleDocumentKey(document: BusinessDocumentRecord) {
+  if (document.reviewState !== "accepted") return null;
+  const keys = [...new Set(documentContractKeys(document))];
+  return keys.length === 1 ? keys[0] : null;
+}
+
+function compareDocumentRecency(left: BusinessDocumentRecord, right: BusinessDocumentRecord) {
+  const updatedDifference = Date.parse(right.updatedAt) - Date.parse(left.updatedAt);
+  if (updatedDifference) return updatedDifference;
+  const createdDifference = Date.parse(right.createdAt) - Date.parse(left.createdAt);
+  return createdDifference || right.id.localeCompare(left.id);
+}
+
+function currentContractDocuments(documents: BusinessDocumentRecord[]) {
+  const active = documents.filter((document) => document.lifecycle === "active");
+  const newestSignedByKey = new Map<string, BusinessDocumentRecord>();
+  for (const document of active.filter(isSignedContractDocument).sort(compareDocumentRecency)) {
+    const key = eligibleDocumentKey(document);
+    if (key && !newestSignedByKey.has(key)) newestSignedByKey.set(key, document);
+  }
+  return active.filter((document) => {
+    const key = eligibleDocumentKey(document);
+    const newestSigned = key ? newestSignedByKey.get(key) : undefined;
+    return !newestSigned || newestSigned.id === document.id;
+  });
+}
+
+function isOutstandingInvoice(invoice: InvoiceRecord) {
+  return !["draft", "cancelled", "paid"].includes(invoice.effectiveStatus)
+    && invoice.remainingCents > 0;
 }
 
 function newestYear(values: string[]) {
@@ -118,10 +221,11 @@ export default function InvoicesContractsPage({
       setInvoices(invoiceResult.invoices);
       setContracts(contractResult.contracts);
       setContractDocuments(contractDocumentResult.documents);
+      const currentDocuments = currentContractDocuments(contractDocumentResult.documents);
       const years = Array.from(new Set([
         ...invoiceResult.invoices.map(invoiceYear),
         ...contractResult.contracts.map(contractYear),
-        ...contractDocumentResult.documents.map(documentYear),
+        ...currentDocuments.map(documentYear),
       ]));
       setSelectedYear((current) => current && years.includes(current) ? current : newestYear(years));
     } catch (cause) {
@@ -142,10 +246,11 @@ export default function InvoicesContractsPage({
     }
   }
 
+  const currentDocuments = currentContractDocuments(contractDocuments);
   const years = Array.from(new Set([
     ...invoices.map(invoiceYear),
     ...contracts.map(contractYear),
-    ...contractDocuments.map(documentYear),
+    ...currentDocuments.map(documentYear),
   ])).sort((a, b) => {
     if (a === unknownYear) return 1;
     if (b === unknownYear) return -1;
@@ -155,7 +260,7 @@ export default function InvoicesContractsPage({
   const availableEvents = Array.from(new Set([
     ...invoices.filter((invoice) => inSelectedYear(invoiceYear(invoice))).map(invoiceEvent),
     ...contracts.filter((contract) => inSelectedYear(contractYear(contract))).map(contractEvent),
-    ...contractDocuments
+    ...currentDocuments
       .filter((document) => inSelectedYear(documentYear(document)))
       .flatMap(documentEvents),
   ])).sort((a, b) => a.localeCompare(b));
@@ -164,19 +269,28 @@ export default function InvoicesContractsPage({
     inSelectedYear(invoiceYear(invoice)) && eventMatches([invoiceEvent(invoice)]),
   );
   const visibleInvoices = scopedInvoices.filter((invoice) => !status || invoice.status === status);
-  const visibleContracts = contracts.filter((contract) =>
-    inSelectedYear(contractYear(contract)) && eventMatches([contractEvent(contract)]),
+  const signedDocumentKeys = new Set(
+    currentDocuments
+      .filter(isSignedContractDocument)
+      .map(eligibleDocumentKey)
+      .filter((key): key is string => Boolean(key)),
   );
-  const visibleContractDocuments = contractDocuments.filter((document) =>
+  const visibleContracts = contracts.filter((contract) =>
+    inSelectedYear(contractYear(contract))
+    && eventMatches([contractEvent(contract)])
+    && !contractKeys(contract).some((key) => signedDocumentKeys.has(key)),
+  );
+  const visibleContractDocuments = currentDocuments.filter((document) =>
     inSelectedYear(documentYear(document)) && eventMatches(documentEvents(document)),
   );
+  const outstandingInvoices = scopedInvoices.filter(isOutstandingInvoice);
   const summary = {
     totalInvoices: scopedInvoices.length,
     overdueCount: scopedInvoices.filter((invoice) => invoice.effectiveStatus === "overdue").length,
     overdueCents: scopedInvoices.filter((invoice) => invoice.effectiveStatus === "overdue")
       .reduce((total, invoice) => total + invoice.remainingCents, 0),
     depositDueCount: scopedInvoices.filter((invoice) => invoice.effectiveStatus === "deposit_due").length,
-    outstandingCents: scopedInvoices.reduce((total, invoice) => total + invoice.remainingCents, 0),
+    outstandingCents: outstandingInvoices.reduce((total, invoice) => total + invoice.remainingCents, 0),
   };
 
   return <div className="grid gap-6">
@@ -221,7 +335,7 @@ export default function InvoicesContractsPage({
         {visibleContractDocuments.map((document) => {
           const linkedLabel = document.links.map((link) => link.targetLabel).filter(Boolean).join(" · ");
           return <article className="grid gap-3 rounded-xl border bg-card p-4" key={`document-${document.id}`}>
-            <div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{document.displayName}</h3><p className="text-sm text-muted-foreground">{linkedLabel || document.originalFilename}</p></div><span className="rounded-full border px-2 py-1 text-xs font-bold capitalize">{document.lifecycle === "archived" ? "Archived" : "Contract file"}</span></div>
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{document.displayName}</h3><p className="text-sm text-muted-foreground">{linkedLabel || document.originalFilename}</p></div><span className="rounded-full border px-2 py-1 text-xs font-bold capitalize">{isSignedContractDocument(document) ? "Signed contract" : "Contract file"}</span></div>
             <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Updated {document.updatedAt.slice(0, 10)}</p><Button disabled={!document.fileAvailable} onClick={() => void openDocument(document.id)} size="sm" type="button" variant="outline">Open PDF</Button></div>
           </article>;
         })}
