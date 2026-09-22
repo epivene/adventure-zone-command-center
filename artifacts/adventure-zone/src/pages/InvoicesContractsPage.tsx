@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { FileSignature, Plus, ReceiptText, RefreshCw } from "lucide-react";
 import { Button } from "@workspace/avz-crm/components/ui/button";
-import type { BusinessDocumentProfileOption } from "@/lib/business-documents-api";
+import type { BusinessDocumentProfileOption, BusinessDocumentRecord } from "@/lib/business-documents-api";
 import type {
   ContractWorkspaceRecord,
   InvoiceAttentionSummary,
@@ -24,6 +24,7 @@ type DocumentClient = {
   list(filters: { profileId: string; category: "invoice"; limit: number }): Promise<{
     documents: Array<{ id: string; displayName: string }>;
   }>;
+  listAll(filters: { category: "contract" }): Promise<{ documents: BusinessDocumentRecord[] }>;
 };
 
 const emptySummary: InvoiceAttentionSummary = {
@@ -48,6 +49,7 @@ export default function InvoicesContractsPage({
 }) {
   const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [contracts, setContracts] = useState<ContractWorkspaceRecord[]>([]);
+  const [contractDocuments, setContractDocuments] = useState<BusinessDocumentRecord[]>([]);
   const [summary, setSummary] = useState(emptySummary);
   const [status, setStatus] = useState<InvoiceStatus | "">("");
   const [loading, setLoading] = useState(true);
@@ -59,14 +61,16 @@ export default function InvoicesContractsPage({
     setLoading(true);
     setError("");
     try {
-      const [invoiceResult, summaryResult, contractResult] = await Promise.all([
+      const [invoiceResult, summaryResult, contractResult, contractDocumentResult] = await Promise.all([
         invoiceApi.list(status ? { status } : {}),
         invoiceApi.summary(),
         contractApi.list(),
+        documentApi.listAll({ category: "contract" }),
       ]);
       setInvoices(invoiceResult.invoices);
       setSummary(summaryResult.summary);
       setContracts(contractResult.contracts);
+      setContractDocuments(contractDocumentResult.documents);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not load invoice and contract records.");
     } finally {
@@ -81,7 +85,7 @@ export default function InvoicesContractsPage({
       const url = await documentApi.open(documentId);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not open the invoice PDF.");
+      setError(cause instanceof Error ? cause.message : "Could not open the PDF.");
     }
   }
 
@@ -107,8 +111,17 @@ export default function InvoicesContractsPage({
     </section>
 
     <section className="grid gap-4">
-      <div><h2 className="flex items-center gap-2 text-2xl font-black"><FileSignature className="h-5 w-5" />Contracts</h2><p className="text-sm text-muted-foreground">This list uses the existing contract lifecycle; no duplicate contract records are created.</p></div>
-      {contracts.length ? <div className="grid gap-3 lg:grid-cols-2">{contracts.map((contract) => <article className="grid gap-2 rounded-xl border bg-card p-4" key={contract.id}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{contract.organizationName}</h3><p className="text-sm text-muted-foreground">{contract.bookingName}</p></div><span className="rounded-full border px-2 py-1 text-xs font-bold capitalize">{contract.status.replaceAll("_", " ")}</span></div><p className="text-xs text-muted-foreground">Version {contract.versionNumber} · Updated {contract.updatedAt.slice(0, 10)}</p></article>)}</div> : !loading ? <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">No contracts to show.</p> : null}
+      <div><h2 className="flex items-center gap-2 text-2xl font-black"><FileSignature className="h-5 w-5" />Contracts</h2><p className="text-sm text-muted-foreground">Contract workflow records and uploaded contract PDFs are shown together.</p></div>
+      {contracts.length || contractDocuments.length ? <div className="grid gap-3 lg:grid-cols-2">
+        {contracts.map((contract) => <article className="grid gap-2 rounded-xl border bg-card p-4" key={`lifecycle-${contract.id}`}><div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{contract.organizationName}</h3><p className="text-sm text-muted-foreground">{contract.bookingName}</p></div><span className="rounded-full border px-2 py-1 text-xs font-bold capitalize">{contract.status.replaceAll("_", " ")}</span></div><p className="text-xs text-muted-foreground">Version {contract.versionNumber} · Updated {contract.updatedAt.slice(0, 10)}</p></article>)}
+        {contractDocuments.map((document) => {
+          const linkedLabel = document.links.map((link) => link.targetLabel).filter(Boolean).join(" · ");
+          return <article className="grid gap-3 rounded-xl border bg-card p-4" key={`document-${document.id}`}>
+            <div className="flex items-start justify-between gap-3"><div><h3 className="font-black">{document.displayName}</h3><p className="text-sm text-muted-foreground">{linkedLabel || document.originalFilename}</p></div><span className="rounded-full border px-2 py-1 text-xs font-bold capitalize">{document.lifecycle === "archived" ? "Archived" : "Contract file"}</span></div>
+            <div className="flex items-center justify-between gap-3"><p className="text-xs text-muted-foreground">Updated {document.updatedAt.slice(0, 10)}</p><Button disabled={!document.fileAvailable} onClick={() => void openDocument(document.id)} size="sm" type="button" variant="outline">Open PDF</Button></div>
+          </article>;
+        })}
+      </div> : !loading ? <p className="rounded-xl border border-dashed bg-card p-6 text-center text-sm text-muted-foreground">No contracts to show.</p> : null}
     </section>
   </div>;
 }
