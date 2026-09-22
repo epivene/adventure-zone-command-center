@@ -3,6 +3,7 @@ import { db } from "@/db/client";
 import { isSafeResearchUrl } from "./profile-research-matching";
 import { matchRelatedEventsAgainstCrm } from "./profile-research-related-event-matcher";
 import { OpenAiSourceScoutProvider } from "./profile-research-source-scout";
+import type { InternalEventDateEvidence } from "@/features/event-date-coverage/internal-event-date-evidence";
 
 export type SavedResearchSource = {
   id: string;
@@ -28,6 +29,31 @@ function rowToSource(row: any): SavedResearchSource {
     lastScoutEndDate: row.last_scout_end_date,
     lastScoutResults: Array.isArray(row.last_scout_results) ? row.last_scout_results : [],
   };
+}
+
+export function extractSavedSourceEventDateEvidence(
+  source: SavedResearchSource,
+): InternalEventDateEvidence[] {
+  return source.lastScoutResults.flatMap((result, index) => {
+    if (!result || typeof result !== "object") return [];
+    const startsOn = typeof result.startsOn === "string"
+      ? result.startsOn
+      : typeof result.startDate === "string" ? result.startDate : null;
+    const endsOn = typeof result.endsOn === "string"
+      ? result.endsOn
+      : typeof result.endDate === "string" ? result.endDate : null;
+    if (!startsOn || !/^\d{4}-\d{2}-\d{2}$/.test(startsOn)) return [];
+    return [{
+      startsOn,
+      endsOn: endsOn && /^\d{4}-\d{2}-\d{2}$/.test(endsOn) ? endsOn : null,
+      evidenceKind: "published_exact" as const,
+      sourceKind: "internal" as const,
+      sourceType: "prior_research",
+      sourceId: `${source.id}:${String(result.id ?? index)}`,
+      sourceLabel: source.title,
+      excerpt: typeof result.name === "string" ? result.name.slice(0, 160) : null,
+    }];
+  });
 }
 
 export class ProfileResearchSourceLibraryService {
