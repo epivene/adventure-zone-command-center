@@ -76,7 +76,7 @@ export default function InvoicesContractsPage({
     } finally {
       setLoading(false);
     }
-  }, [contractApi, invoiceApi, status, reload]);
+  }, [contractApi, documentApi, invoiceApi, status, reload]);
 
   useEffect(() => { void load(); }, [load]);
 
