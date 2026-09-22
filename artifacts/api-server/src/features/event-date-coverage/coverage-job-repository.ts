@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import type { PgDatabase } from "drizzle-orm/pg-core";
 import { eventDateCoverageItems, eventDateCoverageRuns } from "@/db/schema";
 
@@ -62,24 +62,48 @@ export class CoverageJobRepository {
     });
   }
 
-  async completeItem(itemId: string, status: "complete" | "needs_review" | "skipped", now: Date) {
+  async renewLease(itemId: string, workerId: string, now: Date, leaseMs: number) {
+    const [item] = await this.database.update(eventDateCoverageItems).set({
+      leaseExpiresAt: new Date(now.getTime() + leaseMs),
+      updatedAt: now,
+    }).where(and(
+      eq(eventDateCoverageItems.id, itemId),
+      eq(eventDateCoverageItems.status, "researching"),
+      eq(eventDateCoverageItems.leaseOwner, workerId),
+      gte(eventDateCoverageItems.leaseExpiresAt, now),
+    )).returning();
+    return item ?? null;
+  }
+
+  async completeItem(itemId: string, status: "complete" | "needs_review" | "skipped", now: Date, workerId: string) {
     const [item] = await this.database.update(eventDateCoverageItems).set({
       status, completedAt: now, leaseOwner: null, leaseExpiresAt: null, updatedAt: now,
-    }).where(eq(eventDateCoverageItems.id, itemId)).returning();
+    }).where(and(
+      eq(eventDateCoverageItems.id, itemId),
+      eq(eventDateCoverageItems.status, "researching"),
+      eq(eventDateCoverageItems.leaseOwner, workerId),
+      gte(eventDateCoverageItems.leaseExpiresAt, now),
+    )).returning();
     if (item) await this.finishRunIfSettled(item.runId, now);
     return item ?? null;
   }
 
-  async failItem(itemId: string, errorDetail: string, now: Date, maxAttempts: number) {
+  async failItem(itemId: string, errorDetail: string, now: Date, maxAttempts: number, workerId: string) {
     const item = await this.getItem(itemId);
     if (!item) return null;
     const status = item.attempts >= maxAttempts ? "failed" : "queued";
     const [updated] = await this.database.update(eventDateCoverageItems).set({
       status, errorDetail, completedAt: status === "failed" ? now : null,
       leaseOwner: null, leaseExpiresAt: null, updatedAt: now,
-    }).where(eq(eventDateCoverageItems.id, itemId)).returning();
+    }).where(and(
+      eq(eventDateCoverageItems.id, itemId),
+      eq(eventDateCoverageItems.status, "researching"),
+      eq(eventDateCoverageItems.leaseOwner, workerId),
+      gte(eventDateCoverageItems.leaseExpiresAt, now),
+    )).returning();
+    if (!updated) return null;
     if (status === "failed") await this.finishRunIfSettled(item.runId, now);
-    return updated ?? null;
+    return updated;
   }
 
   async retryItem(itemId: string) {
@@ -107,6 +131,9 @@ export class CoverageJobRepository {
     const remaining = await this.database.select({ id: eventDateCoverageItems.id }).from(eventDateCoverageItems)
       .where(and(eq(eventDateCoverageItems.runId, runId), inArray(eventDateCoverageItems.status, ["queued", "researching"]))).limit(1);
     if (!remaining.length) await this.database.update(eventDateCoverageRuns).set({ status: "complete", completedAt: now, updatedAt: now })
-      .where(eq(eventDateCoverageRuns.id, runId));
+      .where(and(
+        eq(eventDateCoverageRuns.id, runId),
+        inArray(eventDateCoverageRuns.status, ["queued", "researching"]),
+      ));
   }
 }
