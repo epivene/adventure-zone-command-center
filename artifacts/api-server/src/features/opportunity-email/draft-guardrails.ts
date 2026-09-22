@@ -32,7 +32,7 @@ export const ADVENTURE_ZONE_EMAIL_RULES = {
     piratesRebellion: "$8,000 / 1–4 days",
     warriorsPlayground: "$8,000 / 1–4 days (ammo extra)",
   },
-  insurance: "$2M",
+  insurance: "Fully insured. Certificate of insurance available upon request",
   payForPlay:
     "In some instances, we may also be able to come at no up-front charge, charge the public to play, and pay your event a percentage of our ticket box sales.",
   forbiddenClaims: [

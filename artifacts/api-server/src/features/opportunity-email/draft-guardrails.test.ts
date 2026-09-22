@@ -91,7 +91,7 @@ describe("Adventure Zone email generation rule contract", () => {
       piratesRebellion: "$8,000 / 1–4 days",
       warriorsPlayground: "$8,000 / 1–4 days (ammo extra)",
     });
-    expect(ADVENTURE_ZONE_EMAIL_RULES.insurance).toBe("$2M");
+    expect(ADVENTURE_ZONE_EMAIL_RULES.insurance).toBe("Fully insured. Certificate of insurance available upon request");
     expect(ADVENTURE_ZONE_EMAIL_RULES.payForPlay).toBe(
       "In some instances, we may also be able to come at no up-front charge, charge the public to play, and pay your event a percentage of our ticket box sales.",
     );
