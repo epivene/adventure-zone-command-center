@@ -31,7 +31,7 @@ export type NewEventDateFact = {
 
 export type NeedsReviewFact = Omit<NewEventDateFact, "status">;
 
-type CoverageDatabase = PgDatabase<any, any, any>;
+export type CoverageDatabase = PgDatabase<any, any, any>;
 
 export class EventDateRepository {
   constructor(private readonly database: CoverageDatabase) {}
@@ -109,8 +109,8 @@ export class EventDateRepository {
     });
   }
 
-  async markNeedsReview(input: NeedsReviewFact): Promise<EventDateFact> {
-    const [created] = await this.database
+  async markNeedsReview(input: NeedsReviewFact, database: CoverageDatabase = this.database): Promise<EventDateFact> {
+    const [created] = await database
       .insert(eventDateFacts)
       .values({
         ...input,
@@ -121,6 +121,40 @@ export class EventDateRepository {
       .returning();
     if (!created) throw new Error("Failed to create event date review fact");
     return created;
+  }
+
+  async applyWithoutSupersedingConflict(
+    input: NewEventDateFact,
+    database?: CoverageDatabase,
+  ): Promise<EventDateFact> {
+    const apply = async (transaction: CoverageDatabase) => {
+      const [active] = await transaction.select().from(eventDateFacts)
+        .where(and(
+          eq(eventDateFacts.organizationId, input.organizationId),
+          eq(eventDateFacts.active, true),
+        ))
+        .for("update");
+      if (active) {
+        const unchanged = active.startsOn === input.startsOn
+          && active.endsOn === input.endsOn
+          && active.status === input.status;
+        if (unchanged) return active;
+        return this.markNeedsReview({
+          ...input,
+          rationale: `${input.rationale}\nConflicts with active ${active.status} fact ${active.startsOn}${active.endsOn ? ` to ${active.endsOn}` : ""}.`,
+        }, transaction);
+      }
+      const [created] = await transaction.insert(eventDateFacts).values({
+        ...input,
+        active: true,
+        supersededById: null,
+      }).returning();
+      if (!created) throw new Error("Failed to create event date fact");
+      return created;
+    };
+    return database
+      ? apply(database)
+      : this.database.transaction((transaction) => apply(transaction));
   }
 
   async reviewFact(
