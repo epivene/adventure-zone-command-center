@@ -59,4 +59,15 @@ describe("EventDateCoveragePage", () => {
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Date status" }), "missing");
     expect(window.location.search).toContain("status=missing");
   });
+
+  it("refreshes profile dates when a research run completes", async () => {
+    renderPage();
+    await screen.findByText("River Days");
+    const initialRequests = api.getCoverageProfiles.mock.calls.length;
+
+    await userEvent.click(screen.getByRole("button", { name: "Research next 25" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Run complete"));
+    await waitFor(() => expect(api.getCoverageProfiles.mock.calls.length).toBeGreaterThan(initialRequests));
+  });
 });
