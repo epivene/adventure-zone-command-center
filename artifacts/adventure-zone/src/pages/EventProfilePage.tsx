@@ -27,6 +27,7 @@ import { OutreachProfileSummary } from "@/components/today/outreach-planner";
 import { InvoiceContractSummaryCard } from "@/components/invoices/invoice-contract-summary-card";
 import { contractsWorkspaceApi, invoicesApi } from "@/lib/invoices-api";
 import { businessDocumentsApi } from "@/lib/business-documents-api";
+import { ProfileBookingCreator } from "@/components/profiles/profile-booking-creator";
 
 const ACT_PREVIEW_LENGTH = 280;
 
@@ -204,6 +205,8 @@ export default function EventProfilePage() {
             {contractVersions.map((contract) => <ContractHistoryCard key={contract.id} version={contract} />)}
           </div> : null}
         </section> : null}
+
+        {profileId && data.place?.city && data.place?.region ? <ProfileBookingCreator city={data.place.city} onCreated={loadProfile} profileId={profileId} region={data.place.region} /> : null}
 
         {profileId ? <InvoiceContractSummaryCard contractApi={contractsWorkspaceApi} documentApi={businessDocumentsApi} invoiceApi={invoicesApi} organizationId={profileId} /> : null}
 
