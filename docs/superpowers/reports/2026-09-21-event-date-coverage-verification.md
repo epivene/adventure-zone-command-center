@@ -6,6 +6,8 @@ Date: 2026-09-22
 
 The feature-specific schema, migration, resolver, recurrence, research safety, repository, queue, owner API, admin UI, profile display, CSV, assistant context, and operational-isolation checks pass. Repository-wide checks remain blocked by known stale-checkout failures unrelated to event-date coverage; those failures are recorded below rather than hidden.
 
+Final manual re-review: **Ready — yes.** No critical correctness issue remains in the lease/cancellation, evidence-trust, or organization-merge paths. A non-blocking future optimization is to make public research-result persistence and queue-item completion exactly-once in one transaction; the current fence already prevents stale workers from applying date facts.
+
 ## Passing evidence
 
 - DB schema and migration: 2 files, 6 tests. The migration ran twice against PGlite and preserved the seeded organization and booking.
