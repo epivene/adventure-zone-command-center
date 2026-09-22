@@ -134,6 +134,12 @@ describe("ProfileResearchCoverageProvider", () => {
     const status = await provider.research("org-1", { itemId: "item-1", workerId: "worker-1" });
 
     expect(status).toBe("complete");
+    expect(research.start).toHaveBeenCalledWith({
+      profileId: "org-1",
+      mode: "quick",
+      requestedBy: "event-date-coverage-worker",
+      coverageLease: { itemId: "item-1", workerId: "worker-1" },
+    });
     expect(apply.apply).toHaveBeenCalledWith({
       profileId: "org-1",
       runId: "research-run-1",
