@@ -41,6 +41,8 @@ describe("CoverageJobRepository", () => {
     const run = await repository.createRun({ organizationIds: ids.slice(0, 2), requestedBy: "owner", batchSize: 2 });
     const now = new Date("2026-09-21T12:00:00Z");
     const item = await repository.claimNext({ workerId: "worker", now, leaseMs: 1, maxAttempts: 1 });
+    expect(await repository.retryItem(item!.id)).toBeNull();
+    expect(await repository.getItem(item!.id)).toMatchObject({ status: "researching", attempts: 1 });
     await repository.failItem(item!.id, "failed", now, 1, "worker");
     expect(await repository.claimNext({ workerId: "worker", now: new Date(now.getTime() + 10), leaseMs: 1, maxAttempts: 1 })).not.toMatchObject({ id: item!.id });
     await repository.retryItem(item!.id);
