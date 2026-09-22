@@ -18,6 +18,19 @@ type AtAGlanceProfile = {
     startsAt?: Date | string | null;
     status?: string | null;
   }>;
+  effectiveEventDate?: {
+    startsOn: string;
+    endsOn: string | null;
+    displayStatus: "booked" | "confirmed" | "expected";
+    sourceId: string;
+  } | null;
+  eventDateFacts?: Array<{
+    id: string;
+    sourceTitle?: string | null;
+    sourceUrl?: string | null;
+    sourceRecordType?: string | null;
+    sourceRecordId?: string | null;
+  }>;
   followUps?: Array<unknown>;
   decisionSummary?: {
     priority?: string | null;
@@ -88,19 +101,14 @@ export function ProfileAtAGlance({
   profile: AtAGlanceProfile;
   now?: Date;
 }) {
-  const today = new Date(
-    `${now.toISOString().slice(0, 10)}T00:00:00Z`,
-  ).getTime();
-  const nextEvent =
-    profile.bookings
-      .filter(
-        (booking) => !["cancelled", "declined"].includes(booking.status ?? ""),
-      )
-      .map((booking) => dateValue(booking.startsAt))
-      .filter((date): date is Date =>
-        date !== null && date.getTime() >= today,
-      )
-      .sort((left, right) => left.getTime() - right.getTime())[0] ?? null;
+  void now;
+  const nextEvent = profile.effectiveEventDate ?? null;
+  const nextEventLabel = nextEvent
+    ? `${readable(nextEvent.displayStatus)} ${formatDate(nextEvent.startsOn)}${nextEvent.endsOn ? `–${formatDate(nextEvent.endsOn)}` : ""}`
+    : "Date not found";
+  const dateFact = nextEvent && nextEvent.displayStatus !== "booked"
+    ? profile.eventDateFacts?.find((fact) => fact.id === nextEvent.sourceId)
+    : null;
   const primaryContact =
     profile.contacts.find((contact) => contact.isPrimary) ?? null;
   const dealModel = profile.place.recommendedDealModel
@@ -140,8 +148,9 @@ export function ProfileAtAGlance({
           </dt>
           <dd className="mt-1 flex items-center gap-2 text-sm font-bold text-[#182225]">
             <CalendarDays className="h-4 w-4 text-[#157d78]" />
-            {formatDate(nextEvent) ?? "Date not published"}
+            {nextEventLabel}
           </dd>
+          {dateFact ? <dd className="mt-2 text-xs"><a className="font-semibold text-[#157d78] underline" href={dateFact.sourceUrl ?? `/settings/event-date-coverage?search=${encodeURIComponent(profile.place.name ?? "")}`}>{dateFact.sourceUrl ? "View source" : "View evidence"}</a></dd> : null}
         </div>
         <div className="border-b border-[#ddd6ca] p-4 lg:border-r">
           <dt className="text-[10px] font-bold uppercase tracking-[0.08em] text-[#6d777a]">
