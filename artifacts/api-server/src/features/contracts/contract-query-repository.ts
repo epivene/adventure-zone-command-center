@@ -37,6 +37,7 @@ export class DrizzleContractQueryRepository {
       version: contractVersions,
       organizationName: organizations.name,
       bookingName: bookings.name,
+      bookingStartsAt: bookings.startsAt,
     }).from(contractVersions)
       .innerJoin(organizations, eq(organizations.id, contractVersions.organizationId))
       .innerJoin(bookings, eq(bookings.id, contractVersions.bookingId))
@@ -44,10 +45,11 @@ export class DrizzleContractQueryRepository {
       .orderBy(desc(contractVersions.updatedAt));
     const files = await this.database.select().from(contractFiles)
       .orderBy(desc(contractFiles.revision));
-    return rows.map(({ version, organizationName, bookingName }) => ({
+    return rows.map(({ version, organizationName, bookingName, bookingStartsAt }) => ({
       ...version,
       organizationName,
       bookingName,
+      bookingStartsAt,
       files: files.filter((file) => file.contractVersionId === version.id).map(safeFile),
     }));
   }
