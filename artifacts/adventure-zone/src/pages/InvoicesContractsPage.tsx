@@ -31,8 +31,8 @@ const unknownYear = "unknown";
 
 function yearFrom(...values: Array<string | null | undefined>) {
   for (const value of values) {
-    const match = value?.match(/\b(?:19|20)\d{2}\b/);
-    if (match) return match[0];
+    const match = value?.match(/(?:^|[^0-9])((?:19|20)\d{2})(?!\d)/);
+    if (match?.[1]) return match[1];
   }
   return unknownYear;
 }
