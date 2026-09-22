@@ -92,6 +92,20 @@ describe("EventDateRepository", () => {
       .toEqual([active]);
   });
 
+  it("atomically retains an active fact when a worker proposes a conflicting date", async () => {
+    const active = await repository.supersedeActiveFact(baseFact);
+    const proposed = await repository.applyWithoutSupersedingConflict({
+      ...baseFact,
+      startsOn: "2027-09-19",
+      endsOn: null,
+      rationale: "New internal evidence",
+    });
+
+    expect(proposed).toMatchObject({ status: "needs_review", active: false });
+    expect(proposed.rationale).toContain("Conflicts with active confirmed fact 2027-09-05 to 2027-09-07");
+    expect((await repository.listActiveFacts([organizationId])).get(organizationId)).toEqual([active]);
+  });
+
   it("relies on the unique active constraint to reject conflicting direct writes", async () => {
     await repository.supersedeActiveFact(baseFact);
 
