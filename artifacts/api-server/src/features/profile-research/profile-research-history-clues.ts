@@ -73,7 +73,7 @@ export function extractProfileHistoryEventDateEvidence(
     return [{
       startsOn: match[1],
       endsOn: match[2] ?? null,
-      evidenceKind: "published_exact" as const,
+      evidenceKind: "unverified_clue" as const,
       sourceKind: "internal" as const,
       sourceType: note.importedFromAct ? "act_import" : "activity_note",
       sourceId: note.id,
