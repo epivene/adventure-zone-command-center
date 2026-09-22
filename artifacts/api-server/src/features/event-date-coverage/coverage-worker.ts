@@ -110,9 +110,9 @@ export class ProfileInternalEvidenceService implements InternalEvidenceService {
 }
 
 export class ProfileResearchCoverageProvider implements CoveragePublicResearch {
-  constructor(private readonly research: { start(input: { profileId: string; mode: "deep"; requestedBy: string }): Promise<any> }) {}
+  constructor(private readonly service: { start(input: { profileId: string; mode: "deep"; requestedBy: string }): Promise<any> }) {}
   async research(organizationId: string): Promise<"complete" | "needs_review" | "skipped"> {
-    const run = await this.research.start({
+    const run = await this.service.start({
       profileId: organizationId,
       mode: "deep",
       requestedBy: "event-date-coverage-worker",
