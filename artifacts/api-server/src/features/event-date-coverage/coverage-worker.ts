@@ -4,8 +4,9 @@ import type { EventDateRepository } from "./event-date-repository";
 
 type JobStore = {
   claimNext(input: { workerId: string; now: Date; leaseMs: number; maxAttempts: number }): Promise<{ id: string; organizationId: string; attempts: number } | null>;
-  completeItem(itemId: string, status: "complete" | "needs_review" | "skipped", now: Date): Promise<unknown>;
-  failItem(itemId: string, errorDetail: string, now: Date, maxAttempts: number): Promise<unknown>;
+  renewLease(itemId: string, workerId: string, now: Date, leaseMs: number): Promise<unknown | null>;
+  completeItem(itemId: string, status: "complete" | "needs_review" | "skipped", now: Date, workerId: string): Promise<unknown | null>;
+  failItem(itemId: string, errorDetail: string, now: Date, maxAttempts: number, workerId: string): Promise<unknown | null>;
 };
 
 export type InternalEvidenceService = {
@@ -29,22 +30,36 @@ export class CoverageWorker {
     const item = await this.jobs.claimNext({ ...input, ...this.options });
     if (!item) return { kind: "idle" as const };
     try {
+      const leaseNow = () => new Date(Math.max(input.now.getTime(), Date.now()));
       const audit = auditInternalEventDateEvidence({
         today: input.now.toISOString().slice(0, 10),
         evidence: await this.internal.load(item.organizationId),
       });
       if (audit.resolution !== "missing") {
+        const lease = await this.jobs.renewLease(item.id, input.workerId, leaseNow(), this.options.leaseMs);
+        if (!lease) return { kind: "lost_lease" as const };
         await this.internal.apply(item.organizationId, audit);
         const status = audit.resolution === "needs_review" ? "needs_review" : "complete";
-        await this.jobs.completeItem(item.id, status, input.now);
+        const completed = await this.jobs.completeItem(item.id, status, leaseNow(), input.workerId);
+        if (!completed) return { kind: "lost_lease" as const };
         return { kind: "progress" as const };
       }
+      const lease = await this.jobs.renewLease(item.id, input.workerId, leaseNow(), this.options.leaseMs);
+      if (!lease) return { kind: "lost_lease" as const };
       const status = await this.publicResearch.research(item.organizationId);
-      await this.jobs.completeItem(item.id, status, input.now);
+      const completed = await this.jobs.completeItem(item.id, status, leaseNow(), input.workerId);
+      if (!completed) return { kind: "lost_lease" as const };
       return { kind: "progress" as const };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Event date research failed";
-      await this.jobs.failItem(item.id, message, input.now, this.options.maxAttempts);
+      const failed = await this.jobs.failItem(
+        item.id,
+        message,
+        new Date(Math.max(input.now.getTime(), Date.now())),
+        this.options.maxAttempts,
+        input.workerId,
+      );
+      if (!failed) return { kind: "lost_lease" as const };
       return {
         kind: "failed" as const,
         retryAfterMs: Math.min(60_000, 1_000 * 2 ** item.attempts),
@@ -105,7 +120,21 @@ export class ProfileInternalEvidenceService implements InternalEvidenceService {
       createdBy: this.actorId,
     };
     if (audit.resolution === "needs_review") await this.dates.markNeedsReview(input);
-    else await this.dates.supersedeActiveFact({ ...input, status: audit.resolution });
+    else {
+      const active = (await this.dates.listActiveFacts([organizationId])).get(organizationId)?.[0];
+      if (active) {
+        const unchanged = active.startsOn === input.startsOn
+          && active.endsOn === input.endsOn
+          && active.status === audit.resolution;
+        if (unchanged) return;
+        await this.dates.markNeedsReview({
+          ...input,
+          rationale: `${input.rationale}\nConflicts with active ${active.status} fact ${active.startsOn}${active.endsOn ? ` to ${active.endsOn}` : ""}.`,
+        });
+        return;
+      }
+      await this.dates.supersedeActiveFact({ ...input, status: audit.resolution });
+    }
   }
 }
 
