@@ -843,11 +843,11 @@
       <section class="marquee" aria-label="Adventure Zone benefits"><div class="marquee-track">
         <span class="marquee-item">${icon("check")}Fully Staffed</span><span class="marquee-item marquee-dot">•</span>
         <span class="marquee-item">${icon("hardhat")}Setup &amp; Tear-Down</span><span class="marquee-item marquee-dot">•</span>
-        <span class="marquee-item">${icon("shield")}$2M Insurance</span><span class="marquee-item marquee-dot">•</span>
+        <span class="marquee-item">${icon("shield")}Fully Insured</span><span class="marquee-item marquee-dot">•</span>
         <span class="marquee-item">${icon("star")}25+ Years of Fun</span><span class="marquee-item marquee-dot">•</span>
         <span class="marquee-item">${icon("check")}Fully Staffed</span><span class="marquee-item marquee-dot">•</span>
         <span class="marquee-item">${icon("hardhat")}Setup &amp; Tear-Down</span><span class="marquee-item marquee-dot">•</span>
-        <span class="marquee-item">${icon("shield")}$2M Insurance</span><span class="marquee-item marquee-dot">•</span>
+        <span class="marquee-item">${icon("shield")}Fully Insured</span><span class="marquee-item marquee-dot">•</span>
         <span class="marquee-item">${icon("star")}25+ Years of Fun</span>
       </div></section>
 
@@ -885,7 +885,7 @@
 
       <section class="section safety" id="safety"><div class="container">
         ${icon("shield")}<h2 class="display">Safety Isn't A Feature.<br>It's Our Foundation.</h2>
-        <div class="safety-copy"><p>When you organize a major event, liability is your biggest concern. We operate with the strict protocols of a professional traveling carnival.</p><p>With <span class="safety-highlight">$2M in liability insurance</span> and nearly 30 years of operational experience, our team brings established procedures to every setup.</p></div>
+        <div class="safety-copy"><p>When you organize a major event, liability is your biggest concern. We operate with the strict protocols of a professional traveling carnival.</p><p><span class="safety-highlight">Fully insured</span> with nearly 30 years of operational experience, our team brings established procedures to every setup. A certificate of insurance is available upon request.</p></div>
         <div class="safety-grid">
           <article class="safety-card"><div class="number display">500+</div><h3 class="display">Events Across the West</h3><p>Experience supporting fairs, festivals, rodeos, and community events across multiple states.</p></article>
           <article class="safety-card">${icon("shield")}<h3 class="display">Certified Know-How</h3><p>A NAARSO-certified inspector is part of the Adventure Zone team.</p></article>

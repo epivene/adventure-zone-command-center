@@ -176,7 +176,7 @@ function PackagesPreview() {
         <div className="bg-white p-1.5 shadow-[3px_3px_0_#ffd21a]"><img alt="Pirate's Rebellion" className="h-10 w-full object-cover" src={PHOTOS.pirate} /><p className="mt-1 text-[5px] font-black">⚓ PIRATE'S REBELLION</p><p className="text-[8px] font-black text-[#ef1763]">$8,000</p></div>
         <div className="bg-white p-1.5 shadow-[3px_3px_0_#ef1763]"><img alt="Warrior's Playground" className="h-10 w-full object-cover" src={PHOTOS.joust} /><p className="mt-1 text-[5px] font-black">◎ WARRIOR'S PLAYGROUND</p><p className="text-[8px] font-black text-[#ef1763]">$8,000</p></div>
       </div>
-      <Brush className="absolute bottom-3 left-3 right-3 text-center text-[6px]">SETUP • STAFFING • $2M INSURANCE • TEARDOWN</Brush>
+      <Brush className="absolute bottom-3 left-3 right-3 text-center text-[6px]">SETUP • STAFFING • FULLY INSURED • TEARDOWN</Brush>
     </div>
   );
 }

@@ -220,7 +220,7 @@ const openDateCanvas = document("last-minute-booking", 1080, 1350, CREAM, [
   shape("od-card-1", "rectangle", 84, 884, 420, 184, { name: "Feature card", fill: WHITE, stroke: BLACK, strokeWidth: 7, rotation: 1 }),
   shape("od-card-2", "rectangle", 572, 884, 420, 184, { name: "Feature card", fill: WHITE, stroke: BLACK, strokeWidth: 7, rotation: -1 }),
   text("od-features-1", "✓ SETUP & TEARDOWN\n✓ FULL STAFFING", 114, 930, 360, 95, { color: BLACK, fontSize: 29, fontFamily: "Trebuchet MS", lineHeight: 1.25 }),
-  text("od-features-2", "✓ $2M INSURANCE\n✓ TURNKEY FUN", 602, 930, 360, 95, { color: BLACK, fontSize: 29, fontFamily: "Trebuchet MS", lineHeight: 1.25 }),
+  text("od-features-2", "✓ FULLY INSURED\n✓ TURNKEY FUN", 602, 930, 360, 95, { color: BLACK, fontSize: 29, fontFamily: "Trebuchet MS", lineHeight: 1.25 }),
   shape("od-cta-bg", "rectangle", 126, 1125, 828, 122, { name: "CTA sticker", fill: PINK, stroke: BLACK, strokeWidth: 8, rotation: -1 }),
   text("od-cta", "LET'S TALK DATES • (435) 760-5583", 154, 1161, 772, 56, { color: WHITE, fontSize: 39, align: "center" }),
 ]);
@@ -245,7 +245,7 @@ const packageCanvas = document("package-overview", 816, 1056, BLACK, [
   text("pk-name-warrior", "◎ WARRIOR'S PLAYGROUND", 398, 770, 330, 50, { color: BLACK, fontSize: 25 }),
   text("pk-copy-warrior", "Paintball • AirSoft • Orbeez\n+ four additional attractions", 402, 826, 318, 67, { color: BLACK, fontSize: 18, fontFamily: "Trebuchet MS", lineHeight: 1.2 }),
   text("pk-price-warrior", "$8,000", 405, 900, 190, 42, { color: PINK, fontSize: 35 }),
-  text("pk-footer", "SETUP • STAFFING • $2M INSURANCE • TEARDOWN", 120, 998, 580, 30, { color: YELLOW, fontSize: 19, fontFamily: "Trebuchet MS", align: "center" }),
+  text("pk-footer", "SETUP • STAFFING • FULLY INSURED • TEARDOWN", 120, 998, 580, 30, { color: YELLOW, fontSize: 19, fontFamily: "Trebuchet MS", align: "center" }),
 ]);
 
 const reviewCanvas = document("review-request", 1080, 1080, CREAM, [
@@ -314,7 +314,7 @@ export const CANVA_STARTERS: CanvaStarter[] = [
     canvasSize: "1080 × 1350",
     accent: "orange",
     canvas: openDateCanvas,
-    content: `THE ADVENTURE ZONE\n\nOPEN DATE ALERT\nFILL THE GAP. BRING THE FUN.\n[REGION / ROUTE]\n[AVAILABLE DATE]\n\n✓ SETUP & TEARDOWN\n✓ FULL STAFFING\n✓ $2M INSURANCE\n✓ TURNKEY FUN\n\nLET'S TALK DATES • (435) 760-5583`,
+    content: `THE ADVENTURE ZONE\n\nOPEN DATE ALERT\nFILL THE GAP. BRING THE FUN.\n[REGION / ROUTE]\n[AVAILABLE DATE]\n\n✓ SETUP & TEARDOWN\n✓ FULL STAFFING\n✓ FULLY INSURED\n✓ TURNKEY FUN\n\nLET'S TALK DATES • (435) 760-5583`,
   },
   {
     id: "package-overview",
@@ -326,7 +326,7 @@ export const CANVA_STARTERS: CanvaStarter[] = [
     canvasSize: "US Letter",
     accent: "blue",
     canvas: packageCanvas,
-    content: `THE ADVENTURE ZONE\n\nEPIC PACKAGES\n\nADVENTURE ZONE — $9,000 / 1–4 DAYS\nPIRATE'S REBELLION — $8,000 / 1–4 DAYS\nWARRIOR'S PLAYGROUND — $8,000 / 1–4 DAYS\n\nSETUP • STAFFING • $2M INSURANCE • TEARDOWN`,
+    content: `THE ADVENTURE ZONE\n\nEPIC PACKAGES\n\nADVENTURE ZONE — $9,000 / 1–4 DAYS\nPIRATE'S REBELLION — $8,000 / 1–4 DAYS\nWARRIOR'S PLAYGROUND — $8,000 / 1–4 DAYS\n\nSETUP • STAFFING • FULLY INSURED • TEARDOWN`,
   },
   {
     id: "review-request",
