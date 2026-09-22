@@ -255,6 +255,112 @@ router.put("/event-profiles/:id/primary-contact", async (req, res): Promise<void
   }
 });
 
+router.post("/event-profiles/:id/bookings", async (req, res): Promise<void> => {
+  const organizationId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const parsed = z.object({
+    name: z.string().trim().min(1).max(240),
+    city: z.string().trim().min(1).max(120),
+    region: z.string().trim().length(2).transform((value) => value.toUpperCase()),
+    startsAt: z.string().date(),
+    endsAt: z.string().date(),
+    status: z.literal("pending_contract"),
+    nextActionKind: z.string().trim().min(1).max(80),
+    nextActionDueAt: z.string().date(),
+  }).strict().superRefine((input, context) => {
+    if (input.endsAt < input.startsAt) {
+      context.addIssue({ code: "custom", path: ["endsAt"], message: "End date cannot be before start date." });
+    }
+  }).safeParse(req.body);
+  if (!uuid.safeParse(organizationId).success || !parsed.success) {
+    res.status(400).json({ ok: false, error: parsed.success ? "Choose a valid profile." : parsed.error.issues[0]?.message ?? "Review the booking details." });
+    return;
+  }
+
+  try {
+    const result = await db.transaction(async (transaction) => {
+      const [organization] = await transaction
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(eq(organizations.id, organizationId))
+        .limit(1);
+      if (!organization) return null;
+
+      const startsAt = parseBusinessDateInput(parsed.data.startsAt);
+      const endsAt = parseBusinessDateInput(parsed.data.endsAt);
+      const dueAt = parseBusinessDateInput(parsed.data.nextActionDueAt);
+      if (!startsAt || !endsAt || !dueAt) throw new Error("INVALID_BOOKING_DATE");
+
+      const [existing] = await transaction
+        .select({ id: bookings.id })
+        .from(bookings)
+        .where(and(
+          eq(bookings.organizationId, organizationId),
+          eq(bookings.name, parsed.data.name),
+          eq(bookings.startsAt, startsAt),
+          eq(bookings.endsAt, endsAt),
+        ))
+        .limit(1);
+      if (existing) return { bookingId: existing.id, reused: true };
+
+      const [primary] = await transaction
+        .select({ contactId: organizationContacts.contactId })
+        .from(organizationContacts)
+        .where(and(
+          eq(organizationContacts.organizationId, organizationId),
+          eq(organizationContacts.active, true),
+          eq(organizationContacts.isPrimary, true),
+        ))
+        .limit(1);
+
+      const now = new Date();
+      const [booking] = await transaction.insert(bookings).values({
+        organizationId,
+        primaryContactId: primary?.contactId ?? null,
+        name: parsed.data.name,
+        city: parsed.data.city,
+        region: parsed.data.region,
+        startsAt,
+        endsAt,
+        status: parsed.data.status,
+        probability: "possible",
+        createdAt: now,
+        updatedAt: now,
+      }).returning({ id: bookings.id });
+      if (!booking) throw new Error("BOOKING_CREATE_FAILED");
+
+      if (primary?.contactId) {
+        await transaction.insert(bookingContacts).values({
+          bookingId: booking.id,
+          contactId: primary.contactId,
+          isPrimary: true,
+          source: "local",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+      await transaction.insert(followUps).values({
+        bookingId: booking.id,
+        organizationId,
+        contactId: primary?.contactId ?? null,
+        kind: parsed.data.nextActionKind,
+        dueAt,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { bookingId: booking.id, reused: false };
+    });
+
+    if (!result) {
+      res.status(404).json({ ok: false, error: "Profile not found." });
+      return;
+    }
+    res.status(result.reused ? 200 : 201).json({ ok: true, ...result });
+  } catch (error) {
+    req.log.error({ err: error }, "Failed to create profile booking");
+    res.status(500).json({ ok: false, error: "The booking could not be created." });
+  }
+});
+
 router.get("/event-profiles/:id/seed", async (req, res): Promise<void> => {
   const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   if (!uuid.safeParse(id).success) { res.json(null); return; }
