@@ -1,21 +1,29 @@
 import { auditInternalEventDateEvidence, type InternalEventDateEvidence, type InternalEvidenceAudit } from "./internal-event-date-evidence";
 import { extractProfileHistoryEventDateEvidence } from "@/features/profile-research/profile-research-history-clues";
-import type { EventDateRepository } from "./event-date-repository";
+import { EventDateRepository, type CoverageDatabase } from "./event-date-repository";
 
 type JobStore = {
   claimNext(input: { workerId: string; now: Date; leaseMs: number; maxAttempts: number }): Promise<{ id: string; organizationId: string; attempts: number } | null>;
   renewLease(itemId: string, workerId: string, now: Date, leaseMs: number): Promise<unknown | null>;
+  completeWithLease(
+    itemId: string,
+    status: "complete" | "needs_review" | "skipped",
+    now: Date,
+    workerId: string,
+    leaseMs: number,
+    work: (transaction: CoverageDatabase) => Promise<void>,
+  ): Promise<unknown | null>;
   completeItem(itemId: string, status: "complete" | "needs_review" | "skipped", now: Date, workerId: string): Promise<unknown | null>;
   failItem(itemId: string, errorDetail: string, now: Date, maxAttempts: number, workerId: string): Promise<unknown | null>;
 };
 
 export type InternalEvidenceService = {
   load(organizationId: string): Promise<InternalEventDateEvidence[]>;
-  apply(organizationId: string, audit: InternalEvidenceAudit): Promise<void>;
+  apply(organizationId: string, audit: InternalEvidenceAudit, database?: CoverageDatabase): Promise<void>;
 };
 
 export type CoveragePublicResearch = {
-  research(organizationId: string): Promise<"complete" | "needs_review" | "skipped">;
+  research(organizationId: string, lease: { itemId: string; workerId: string }): Promise<"complete" | "needs_review" | "skipped">;
 };
 
 export class CoverageWorker {
@@ -36,17 +44,24 @@ export class CoverageWorker {
         evidence: await this.internal.load(item.organizationId),
       });
       if (audit.resolution !== "missing") {
-        const lease = await this.jobs.renewLease(item.id, input.workerId, leaseNow(), this.options.leaseMs);
-        if (!lease) return { kind: "lost_lease" as const };
-        await this.internal.apply(item.organizationId, audit);
         const status = audit.resolution === "needs_review" ? "needs_review" : "complete";
-        const completed = await this.jobs.completeItem(item.id, status, leaseNow(), input.workerId);
+        const completed = await this.jobs.completeWithLease(
+          item.id,
+          status,
+          leaseNow(),
+          input.workerId,
+          this.options.leaseMs,
+          (transaction) => this.internal.apply(item.organizationId, audit, transaction),
+        );
         if (!completed) return { kind: "lost_lease" as const };
         return { kind: "progress" as const };
       }
       const lease = await this.jobs.renewLease(item.id, input.workerId, leaseNow(), this.options.leaseMs);
       if (!lease) return { kind: "lost_lease" as const };
-      const status = await this.publicResearch.research(item.organizationId);
+      const status = await this.publicResearch.research(item.organizationId, {
+        itemId: item.id,
+        workerId: input.workerId,
+      });
       const completed = await this.jobs.completeItem(item.id, status, leaseNow(), input.workerId);
       if (!completed) return { kind: "lost_lease" as const };
       return { kind: "progress" as const };
@@ -96,7 +111,7 @@ export class ProfileInternalEvidenceService implements InternalEvidenceService {
     return [...bookingEvidence, ...extractProfileHistoryEventDateEvidence(profile)];
   }
 
-  async apply(organizationId: string, audit: InternalEvidenceAudit): Promise<void> {
+  async apply(organizationId: string, audit: InternalEvidenceAudit, database?: CoverageDatabase): Promise<void> {
     if (audit.resolution === "booked" || audit.resolution === "missing") return;
     const primary = audit.evidence[0];
     const startsOn = audit.startsOn ?? primary?.startsOn;
@@ -119,32 +134,20 @@ export class ProfileInternalEvidenceService implements InternalEvidenceService {
       verifiedAt: audit.resolution === "confirmed" ? new Date() : null,
       createdBy: this.actorId,
     };
-    if (audit.resolution === "needs_review") await this.dates.markNeedsReview(input);
-    else {
-      const active = (await this.dates.listActiveFacts([organizationId])).get(organizationId)?.[0];
-      if (active) {
-        const unchanged = active.startsOn === input.startsOn
-          && active.endsOn === input.endsOn
-          && active.status === audit.resolution;
-        if (unchanged) return;
-        await this.dates.markNeedsReview({
-          ...input,
-          rationale: `${input.rationale}\nConflicts with active ${active.status} fact ${active.startsOn}${active.endsOn ? ` to ${active.endsOn}` : ""}.`,
-        });
-        return;
-      }
-      await this.dates.supersedeActiveFact({ ...input, status: audit.resolution });
-    }
+    const dates = database ? new EventDateRepository(database) : this.dates;
+    if (audit.resolution === "needs_review") await dates.markNeedsReview(input, database);
+    else await dates.applyWithoutSupersedingConflict({ ...input, status: audit.resolution }, database);
   }
 }
 
 export class ProfileResearchCoverageProvider implements CoveragePublicResearch {
-  constructor(private readonly service: { start(input: { profileId: string; mode: "deep"; requestedBy: string }): Promise<any> }) {}
-  async research(organizationId: string): Promise<"complete" | "needs_review" | "skipped"> {
+  constructor(private readonly service: { start(input: { profileId: string; mode: "deep"; requestedBy: string; coverageLease: { itemId: string; workerId: string } }): Promise<any> }) {}
+  async research(organizationId: string, lease: { itemId: string; workerId: string }): Promise<"complete" | "needs_review" | "skipped"> {
     const run = await this.service.start({
       profileId: organizationId,
       mode: "deep",
       requestedBy: "event-date-coverage-worker",
+      coverageLease: lease,
     });
     const suggestions = run?.suggestions ?? [];
     return suggestions.some((item: any) => item.targetKind === "event_date_fact")
