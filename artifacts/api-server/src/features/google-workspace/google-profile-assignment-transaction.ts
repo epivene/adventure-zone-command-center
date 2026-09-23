@@ -173,14 +173,17 @@ implements GoogleProfileAssignmentTransactionPort {
       await client.query(
         `UPDATE google_workspace_validation_review_items
             SET review_state = 'resolved',
-                resolved_organization_id = $3,
-                evidence_codes = $4::jsonb,
-                reviewed_by = $5,
-                reviewed_at = $6,
-                updated_at = $6
-          WHERE connection_id = $1 AND message_id = $2`,
+                resolved_organization_id = $4,
+                evidence_codes = $5::jsonb,
+                reviewed_by = $6,
+                reviewed_at = $7,
+                updated_at = $7
+          WHERE connection_id = $1
+            AND thread_id = $2
+            AND (review_state = 'pending' OR message_id = $3)`,
         [
           connectionId,
+          threadId,
           input.messageId,
           input.organizationId,
           JSON.stringify(manualEvidence),
@@ -531,10 +534,10 @@ implements GoogleProfileAssignmentTransactionPort {
               gmail_sync_error_code = $4,
               gmail_sync_mutation_id = $5,
               updated_at = GREATEST(updated_at, $6)
-        WHERE connection_id = $1 AND message_id = $2`,
+        WHERE connection_id = $1 AND thread_id = $2`,
       [
         input.connectionId,
-        input.messageId,
+        input.threadId,
         projectedState(mutation.state),
         mutation.lastErrorCode,
         mutation.id,
