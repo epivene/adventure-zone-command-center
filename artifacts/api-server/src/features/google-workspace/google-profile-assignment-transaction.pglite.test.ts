@@ -119,6 +119,10 @@ async function fixture(options?: { failMutation?: boolean }) {
       (
         '${connectionId}', 'message-2', 'thread-1', 'Re: Subject',
         'theadventurezone12@gmail.com', 'sender@example.com'
+      ),
+      (
+        '${connectionId}', 'message-3', 'thread-2', 'Subject',
+        'sender@example.com', 'other@example.com'
       );
   `);
   const client = {
@@ -171,7 +175,7 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
       const reviews = await db.query<{ review_state: string; resolved_organization_id: string }>(
         "SELECT review_state, resolved_organization_id::text FROM google_workspace_validation_review_items ORDER BY message_id",
       );
-      expect(reviews.rows).toHaveLength(2);
+      expect(reviews.rows).toHaveLength(3);
       expect(reviews.rows.every((row) =>
         row.review_state === "resolved" &&
         row.resolved_organization_id === organizationA
