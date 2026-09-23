@@ -92,10 +92,15 @@ async function fixture() {
     INSERT INTO google_workspace_validation_review_items(
       connection_id, message_id, thread_id, review_state,
       resolved_organization_id, gmail_sync_state, gmail_sync_error_code
-    ) VALUES (
-      '20000000-0000-4000-8000-000000000001', 'message-1', 'thread-1', 'resolved',
-      '10000000-0000-4000-8000-000000000001', 'retryable_error', 'temporary'
-    );
+    ) VALUES
+      (
+        '20000000-0000-4000-8000-000000000001', 'message-1', 'thread-1', 'resolved',
+        '10000000-0000-4000-8000-000000000001', 'retryable_error', 'temporary'
+      ),
+      (
+        '20000000-0000-4000-8000-000000000001', 'message-2', 'thread-1', 'pending',
+        NULL, 'not_requested', NULL
+      );
     INSERT INTO google_workspace_validation_mappings(
       connection_id, message_id, thread_id, organization_id
     ) VALUES (
@@ -160,12 +165,13 @@ describe("PostgresGoogleThreadIgnoreTransaction", () => {
                gmail_sync_state, gmail_sync_mutation_id::text
           FROM google_workspace_validation_review_items
       `);
-      expect(review.rows[0]).toEqual({
-        review_state: "ignored",
-        resolved_organization_id: null,
-        gmail_sync_state: "not_requested",
-        gmail_sync_mutation_id: null,
-      });
+      expect(review.rows).toHaveLength(2);
+      expect(review.rows.every((row) =>
+        row.review_state === "ignored" &&
+        row.resolved_organization_id === null &&
+        row.gmail_sync_state === "not_requested" &&
+        row.gmail_sync_mutation_id === null
+      )).toBe(true);
 
       const states = await db.query<{
         state: string;
