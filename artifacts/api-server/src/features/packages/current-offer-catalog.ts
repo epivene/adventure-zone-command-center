@@ -32,6 +32,7 @@ export type CurrentOfferCatalog = {
       code: "foam_party";
       name: "Foam Party Add-On";
       priceCents: 350000;
+      availability: "add_on_only";
     };
   };
 };
@@ -89,6 +90,7 @@ export function buildCurrentOfferCatalog(
         code: "foam_party",
         name: "Foam Party Add-On",
         priceCents: 350000,
+        availability: "add_on_only",
       },
     },
   };
