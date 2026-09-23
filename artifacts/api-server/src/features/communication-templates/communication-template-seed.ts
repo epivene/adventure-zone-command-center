@@ -524,6 +524,25 @@ async function repairLegacyApprovedLeadSourceProvenance(database: Database): Pro
     ));
 }
 
+async function repairAccidentallyArchivedApprovedLeadTemplate(database: Database): Promise<void> {
+  const expected = APPROVED_LEAD_INTRODUCTION_2026;
+  await database
+    .update(communicationTemplates)
+    .set({
+      state: "active",
+      updatedAt: new Date(),
+    })
+    .where(and(
+      eq(communicationTemplates.code, expected.code),
+      eq(communicationTemplates.templateVersion, expected.version),
+      eq(communicationTemplates.state, "archived"),
+      eq(communicationTemplates.ownerKind, "company"),
+      eq(communicationTemplates.createdByKind, "system"),
+      eq(communicationTemplates.sourceNote, expected.sourceNote),
+      eq(communicationTemplates.reviewedBy, expected.reviewedBy),
+    ));
+}
+
 async function loadApprovedCommunicationTemplateCandidate(database: Database) {
   const [candidate] = await database
       .select({
@@ -592,6 +611,7 @@ export async function ensureCommunicationTemplateSeed(
 ): Promise<void> {
   await (options?.ensureSourceSeed ?? ensureBusinessSourceSeed)(database);
   await repairLegacyApprovedLeadSourceProvenance(database);
+  await repairAccidentallyArchivedApprovedLeadTemplate(database);
   const sourceRows = await database
     .select({ id: businessSourceDocuments.id })
     .from(businessSourceDocuments)

@@ -135,6 +135,21 @@ describe("approved communication-template startup", () => {
       .resolves.toEqual(["sourceStorageReference"]);
   }, 20_000);
 
+  it("recovers the exact approved system seed after an accidental archive", async () => {
+    const client = new PGlite(); clients.push(client);
+    await createTemplateTables(client, true);
+    const db = drizzle(client, { schema });
+    const repository = new CommunicationTemplateRepository(db as never);
+    await repository.seed([seed], sourceId);
+    await client.exec(`update communication_templates set state = 'archived' where code = '${seed.code}'`);
+
+    await ensureCommunicationTemplateSeed(db as never, { ensureSourceSeed: async () => undefined });
+
+    await expect(isApprovedCommunicationTemplateSeedReady(db as never)).resolves.toBe(true);
+    expect((await client.query(`select state from communication_templates where code = '${seed.code}'`)).rows)
+      .toEqual([{ state: "active" }]);
+  }, 20_000);
+
   it("handles concurrent first seed attempts atomically", async () => {
     const client = new PGlite(); clients.push(client);
     await createTemplateTables(client, true);
