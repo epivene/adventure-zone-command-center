@@ -220,7 +220,7 @@ const duplicateSchema = z
   .object({ name: z.string().trim().min(1).max(160).optional() })
   .strict();
 const instantiateTemplateSchema = z.object({
-  linkedOrganizationId: z.string().uuid(),
+  linkedOrganizationId: z.string().uuid().nullable().optional(),
   linkedContactId: z.string().uuid().nullable().optional(),
   linkedBookingId: z.string().uuid().nullable().optional(),
   documentYear: z.number().int().min(2020).max(2100),
