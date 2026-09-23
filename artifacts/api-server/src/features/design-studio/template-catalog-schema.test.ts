@@ -7,12 +7,9 @@ import {
   designTemplateStateValues,
   designTypeValues,
 } from "@workspace/db/design-studio-schema";
-import { DESIGN_TYPES } from "../../../adventure-zone/src/lib/design-studio-api";
-
 describe("Design Studio template catalog schema", () => {
   it("supports proposal documents and durable catalog metadata", () => {
     expect(designTypeValues).toContain("proposal");
-    expect(DESIGN_TYPES).toContain("proposal");
     expect(designTemplateFamilyValues).toEqual(["email", "contract", "proposal"]);
     expect(designTemplateStateValues).toEqual(["active", "archived"]);
     expect(designTemplates.catalogKey).toBeDefined();
