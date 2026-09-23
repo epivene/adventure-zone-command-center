@@ -176,6 +176,11 @@ export const designStudioApi = {
   async list(): Promise<DesignProject[]> {
     return projectsFromResponse(await apiGet<CollectionResponse>("/office/design-studio/projects"));
   },
+  async listForProfile(organizationId: string): Promise<DesignProject[]> {
+    return projectsFromResponse(await apiGet<CollectionResponse>(
+      `/office/design-studio/projects?linkedOrganizationId=${encodeURIComponent(organizationId)}`,
+    ));
+  },
   async listTemplates(): Promise<DesignTemplate[]> {
     const response = await apiGet<{ templates: DesignTemplate[] }>("/office/design-studio/templates");
     return response.templates ?? [];
@@ -183,6 +188,17 @@ export const designStudioApi = {
   async listAssets(): Promise<DesignAsset[]> {
     const response = await apiGet<{ assets: DesignAsset[] }>("/office/design-studio/assets");
     return response.assets ?? [];
+  },
+  instantiateTemplate(id: string, input: {
+    linkedOrganizationId: string;
+    linkedContactId?: string | null;
+    linkedBookingId?: string | null;
+    documentYear: number;
+  }) {
+    return apiPost<DesignProject>(
+      `/office/design-studio/templates/${encodeURIComponent(id)}/instantiate`,
+      input,
+    );
   },
   favoriteTemplate(id: string) {
     return apiPost<{ isFavorite: boolean }>(`/office/design-studio/templates/${encodeURIComponent(id)}/favorite`, {});
