@@ -203,6 +203,12 @@ export const designStudioApi = {
   favoriteTemplate(id: string) {
     return apiPost<{ isFavorite: boolean }>(`/office/design-studio/templates/${encodeURIComponent(id)}/favorite`, {});
   },
+  useForNewYear(id: string, documentYear: number) {
+    return apiPost<DesignProject>(
+      `/office/design-studio/projects/${encodeURIComponent(id)}/use-for-new-year`,
+      { documentYear },
+    );
+  },
   duplicate(id: string, name?: string) {
     return apiPost<DesignProject>(`/office/design-studio/projects/${encodeURIComponent(id)}/duplicate`, name ? { name } : {});
   },
