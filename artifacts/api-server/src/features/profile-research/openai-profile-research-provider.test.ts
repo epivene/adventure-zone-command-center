@@ -124,6 +124,48 @@ describe("OpenAiProfileResearchProvider", () => {
     expect(result.deepSummary).toContain("broader event calendar");
   });
 
+  it("requests a structured recurrence when the next event date is missing", async () => {
+    process.env.OPENAI_API_KEY = "test-key";
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      output: [{ type: "message", content: [{
+        type: "output_text",
+        text: JSON.stringify({
+          identity: { confidence: "high", rationale: "Official event source matched." },
+          candidates: [],
+          eventDateCandidates: [],
+          findings: [],
+          relatedEvents: [],
+          deepSummary: null,
+        }),
+        annotations: [],
+      }] }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new OpenAiProfileResearchProvider().research({
+      context: {
+        ...context,
+        knownFacts: [
+          ...context.knownFacts,
+          { key: "booking:booking-1:date", value: "2026-09-18", source: "crm" },
+        ],
+        gaps: [{
+          field: "next_event_dates",
+          label: "Next event dates",
+          targetKind: "event_date_fact",
+          targetId: null,
+        }],
+      },
+      mode: "quick",
+    });
+
+    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    const prompt = JSON.parse(String(request.body)).input as string;
+    expect(prompt).toContain("If no future exact date is published, check recent prior years");
+    expect(prompt).toContain('{"kind":"ordinal_weekday","month":9,"ordinal":3,"weekday":5,"durationDays":2}');
+    expect(prompt).toContain("weekday uses 0=Sunday through 6=Saturday");
+  });
+
   it("fails clearly when no public research provider key is configured", async () => {
     delete process.env.OPENAI_API_KEY;
     await expect(new OpenAiProfileResearchProvider().research({ context, mode: "quick" }))
