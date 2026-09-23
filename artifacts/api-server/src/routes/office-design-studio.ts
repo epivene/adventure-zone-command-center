@@ -20,6 +20,10 @@ import {
   instantiateTemplate,
   TemplateInstantiationError,
 } from "@/features/design-studio/template-instantiation-service";
+import {
+  reuseProfileDocument,
+  ProfileDocumentReuseError,
+} from "@/features/design-studio/profile-document-reuse";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { resolveOfficeSession } from "@/features/office/office-middleware";
 import { verifyOfficeToken } from "@/features/office/office-auth";
@@ -221,6 +225,9 @@ const instantiateTemplateSchema = z.object({
   linkedBookingId: z.string().uuid().nullable().optional(),
   documentYear: z.number().int().min(2020).max(2100),
 }).strict();
+const reuseDocumentSchema = z.object({
+  documentYear: z.number().int().min(2020).max(2100),
+}).strict();
 const outputSchema = z
   .object({
     outputType: z.enum([
@@ -410,6 +417,37 @@ router.post("/office/design-studio/projects", requireStudio, async (req, res): P
   } catch (err) {
     req.log.error({ err }, "Failed to create Design Studio project");
     res.status(500).json({ error: "Could not create the Design Studio project." });
+  }
+});
+
+router.post("/office/design-studio/projects/:projectId/use-for-new-year", requireStudio, async (req, res): Promise<void> => {
+  const projectId = routeParam(req.params.projectId);
+  const parsed = reuseDocumentSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(projectId).success || !parsed.success) {
+    res.status(400).json({ error: "Review the project and target year." });
+    return;
+  }
+  try {
+    const project = await reuseProfileDocument(db, {
+      accountId: req.officeAccount!.accountId,
+      projectId,
+      documentYear: parsed.data.documentYear,
+    });
+    res.status(201).json(projectJson(project));
+  } catch (error) {
+    if (error instanceof ProfileDocumentReuseError) {
+      const messages = {
+        PROJECT_NOT_FOUND: "That profile document could not be found.",
+        CURRENT_DRAFT: "This is already an editable current draft.",
+        SOURCE_TEMPLATE_NOT_FOUND: "The current source template is unavailable.",
+      } as const;
+      res.status(error.code === "PROJECT_NOT_FOUND" ? 404 : 409).json({
+        error: messages[error.code],
+      });
+      return;
+    }
+    req.log.error({ err: error }, "Failed to reuse profile document");
+    res.status(500).json({ error: "Could not create the next-year draft." });
   }
 });
 
