@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 
-import type { db as database } from "@/db/client";
+import type { db as databaseClient } from "@/db/client";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { loadCurrentOfferCatalog } from "@/features/packages/current-offer-catalog";
 import {
@@ -124,7 +124,7 @@ export class ProfileDocumentReuseError extends Error {
 }
 
 export async function reuseProfileDocument(
-  database: typeof database,
+  database: typeof databaseClient,
   input: { accountId: string; projectId: string; documentYear: number },
 ) {
   const [source] = await database
