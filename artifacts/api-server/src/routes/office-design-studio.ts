@@ -182,6 +182,7 @@ const typeValues = [
   "brochure",
   "review_request",
   "contract",
+  "proposal",
   "blank",
 ] as const;
 const typeSchema = z.enum(typeValues);
@@ -893,7 +894,11 @@ router.post("/office/design-studio/outputs/:outputId/void", requireStudio, async
 router.get("/office/design-studio/templates", requireStudio, async (req, res): Promise<void> => {
   try {
     await seedTemplates();
-    const templates = await db.select().from(designTemplates).orderBy(asc(designTemplates.name));
+    const templates = await db
+      .select()
+      .from(designTemplates)
+      .where(eq(designTemplates.state, "active"))
+      .orderBy(asc(designTemplates.name));
     const favorites = await db.select({ templateId: designTemplateFavorites.templateId }).from(designTemplateFavorites).where(eq(designTemplateFavorites.accountId, req.officeAccount!.accountId));
     const favoriteIds = new Set(favorites.map((item) => item.templateId));
     res.json({ templates: templates.map((template) => ({ ...template, type: uiType(template.type), tags: template.tags ?? [], isFavorite: favoriteIds.has(template.id) })) });
