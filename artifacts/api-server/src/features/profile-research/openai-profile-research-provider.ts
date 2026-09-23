@@ -96,6 +96,16 @@ function promptFor(input: Parameters<ProfileResearchProvider["research"]>[0]) {
   const gaps = input.context.gaps.map((gap) => `${gap.targetKind}.${gap.field}`).join(", ") || "general verification";
   const facts = input.context.knownFacts.slice(0, 20).map((fact) => `${fact.key}: ${fact.value}`).join("\n");
   const clues = input.context.searchClues.slice(0, 12).map((clue) => `- ${clue}`).join("\n");
+  const needsEventDate = input.context.gaps.some((gap) =>
+    gap.targetKind === "event_date_fact" || gap.field === "next_event_dates",
+  );
+  const eventDateInstructions = needsEventDate ? `
+NEXT EVENT DATE RESEARCH:
+- First look for an exact future date published by an official or otherwise authoritative source.
+- If no future exact date is published, check recent prior years and official recurrence wording. Return recognized_recurrence only when cited evidence establishes the same stable rule across at least two occurrences or explicitly states the recurring schedule. Never infer a recurrence from one prior date.
+- A recurrenceRule must be exactly one of {"kind":"annual_date","month":9,"day":18,"durationDays":2}, {"kind":"ordinal_weekday","month":9,"ordinal":3,"weekday":5,"durationDays":2}, or {"kind":"unrecognized","raw":"..."}. weekday uses 0=Sunday through 6=Saturday.
+- For recognized_recurrence, leave startsOn and endsOn null. The application calculates and labels the result as Expected, never Confirmed or Booked.
+` : "";
   const deepInstructions = input.mode === "deep" ? `
 DEEP RESEARCH BEHAVIOR:
 - Do not stop after finding the first official page or one profile field.
@@ -122,6 +132,7 @@ ${facts}
 Safe search clues:
 ${clues}
 ${deepInstructions}
+${eventDateInstructions}
 Return ONLY JSON with this shape:
 {
   "identity": {"confidence":"high|medium|low","rationale":"..."},
