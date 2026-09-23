@@ -3,16 +3,11 @@ import { Link } from "wouter";
 import { ResearchSourcesAttention } from "./research-sources-attention";
 
 export function NeedsAttention({
-  contractCount,
   visibleRouteWarningCount,
 }: {
-  followUpCount: number;
-  newLeadCount: number;
-  contractCount: number;
   visibleRouteWarningCount: number;
 }) {
   const items = [
-    contractCount > 0 ? { label: "Contracts needing attention", count: contractCount, href: "/bookings" } : null,
     visibleRouteWarningCount > 0 ? { label: "Route issues", count: visibleRouteWarningCount, href: "/manager-issues" } : null,
   ].filter((item): item is { label: string; count: number; href: string } => Boolean(item));
 
