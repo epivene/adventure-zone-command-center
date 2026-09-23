@@ -18,7 +18,7 @@ import {
 export type InstantiateTemplateInput = {
   accountId: string;
   templateId: string;
-  organizationId: string;
+  organizationId?: string | null;
   contactId?: string | null;
   bookingId?: string | null;
   documentYear: number;
@@ -128,14 +128,16 @@ export async function instantiateTemplate(
   if (!template) throw new TemplateInstantiationError("TEMPLATE_NOT_FOUND");
   if (template.state !== "active") throw new TemplateInstantiationError("TEMPLATE_ARCHIVED");
 
-  const [organization] = await database
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(eq(organizations.id, input.organizationId))
-    .limit(1);
-  if (!organization) throw new TemplateInstantiationError("ORGANIZATION_NOT_FOUND");
+  if (input.organizationId) {
+    const [organization] = await database
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.id, input.organizationId))
+      .limit(1);
+    if (!organization) throw new TemplateInstantiationError("ORGANIZATION_NOT_FOUND");
+  }
 
-  if (input.contactId) {
+  if (input.contactId && input.organizationId) {
     const [contact] = await database
       .select({ id: contacts.id })
       .from(contacts)
@@ -147,7 +149,7 @@ export async function instantiateTemplate(
     if (!contact) throw new TemplateInstantiationError("CONTACT_ORGANIZATION_MISMATCH");
   }
 
-  if (input.bookingId) {
+  if (input.bookingId && input.organizationId) {
     const [booking] = await database
       .select({ id: bookings.id })
       .from(bookings)
@@ -175,7 +177,7 @@ export async function instantiateTemplate(
         name: `${template.name} | ${input.documentYear}`,
         type: template.type,
         content: resolved.content,
-        linkedOrganizationId: input.organizationId,
+        linkedOrganizationId: input.organizationId ?? null,
         linkedContactId: input.contactId ?? null,
         linkedBookingId: input.bookingId ?? null,
         sourceTemplateId: template.id,
@@ -214,7 +216,7 @@ export async function instantiateTemplate(
     after: {
       sourceTemplateId: template.id,
       sourceCatalogRevision: template.catalogRevision,
-      linkedOrganizationId: input.organizationId,
+      linkedOrganizationId: input.organizationId ?? null,
       documentYear: input.documentYear,
     },
   });
