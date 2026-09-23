@@ -8,7 +8,7 @@ import {
   designSmartFields,
   designTemplates,
 } from "@workspace/db/design-studio-schema";
-import { bookings, contacts, organizations } from "@workspace/db";
+import { bookings, contacts, organizations } from "@workspace/db/schema";
 import {
   loadCurrentOfferCatalog,
   type CurrentOfferCatalog,
