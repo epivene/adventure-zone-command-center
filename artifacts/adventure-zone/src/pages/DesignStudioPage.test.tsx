@@ -2,12 +2,11 @@ import React from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
 import DesignStudioPage from "./DesignStudioPage";
-import { designStudioApi } from "@/lib/design-studio-api";
+import { designStudioApi, type DesignTemplate } from "@/lib/design-studio-api";
 
-const { apiFetch, setLocation } = vi.hoisted(() => ({ apiFetch: vi.fn(), setLocation: vi.fn() }));
-
-vi.mock("@/lib/auth-token", () => ({ apiFetch }));
+const { setLocation } = vi.hoisted(() => ({ setLocation: vi.fn() }));
 
 vi.mock("wouter", () => ({
   Link: ({ href, children, ...props }: React.ComponentProps<"a"> & { href: string }) => (
@@ -16,62 +15,42 @@ vi.mock("wouter", () => ({
   useLocation: () => ["/design-studio", setLocation] as const,
 }));
 
-describe("DesignStudioPage starter creation", () => {
+const templates: DesignTemplate[] = [
+  { id: "e1", name: "General first outreach", type: "email", templateFamily: "email", state: "active" },
+  { id: "c1", name: "Adventure Zone | Guaranteed fee", type: "contract", templateFamily: "contract", state: "active" },
+  { id: "p1", name: "Mini Zone prepaid", type: "proposal", templateFamily: "proposal", state: "active" },
+];
+
+describe("DesignStudioPage current catalog", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     setLocation.mockReset();
-    apiFetch.mockReset();
-    apiFetch.mockResolvedValue(new Response(JSON.stringify({
-      templates: [{
-        id: "template-1",
-        code: "returning_event",
-        name: "Returning Event",
-        category: "Outreach",
-        state: "active",
-        bodyFormat: "html",
-      }],
-    }), { status: 200 }));
     vi.spyOn(designStudioApi, "list").mockResolvedValue([]);
+    vi.spyOn(designStudioApi, "listTemplates").mockResolvedValue(templates);
   });
 
-  it("creates a project with the selected starter canvas", async () => {
+  it("shows only the current email, contract, and proposal catalog", async () => {
+    render(<DesignStudioPage />);
+    expect(await screen.findByRole("tab", { name: "Emails (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Contracts (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Proposals (1)" })).toBeInTheDocument();
+    expect(screen.queryByText("Fun, photo-heavy starter templates")).not.toBeInTheDocument();
+    expect(screen.queryByText("Agreement outline")).not.toBeInTheDocument();
+  });
+
+  it("creates an editable draft without sending it", async () => {
     const user = userEvent.setup();
-    const create = vi.spyOn(designStudioApi, "create").mockResolvedValue({
+    const instantiate = vi.spyOn(designStudioApi, "instantiateTemplate").mockResolvedValue({
       id: "project-1",
-      name: "Big Day Event Flyer",
-      type: "flyer",
+      name: "General first outreach",
+      type: "email",
+      status: "draft",
     });
-
     render(<DesignStudioPage />);
-    await user.click((await screen.findAllByRole("button", { name: /use this design/i }))[0]!);
-
-    expect(create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: "Big Day Event Flyer",
-        canvas: expect.objectContaining({ pages: expect.any(Array) }),
-      }),
-    );
+    await user.click(await screen.findByRole("button", { name: "Use this template" }));
+    expect(instantiate).toHaveBeenCalledWith("e1", {
+      documentYear: new Date().getFullYear(),
+    });
     expect(setLocation).toHaveBeenCalledWith("/design-studio/project-1");
-  });
-
-  it("shows the current $8,000 Pirate and Warrior prices in the package preview", async () => {
-    render(<DesignStudioPage />);
-
-    expect((await screen.findAllByText("$8,000"))).toHaveLength(2);
-    expect(screen.queryByText("$7,500")).not.toBeInTheDocument();
-  });
-
-  it("shows saved email templates in Design Studio and opens the selected template", async () => {
-    render(<DesignStudioPage />);
-
-    const link = await screen.findByRole("link", { name: /Returning Event/i });
-    expect(link).toHaveAttribute("href", "/design-studio/email-templates?template=template-1");
-  });
-
-  it("starts a new reusable email from Design Studio", async () => {
-    render(<DesignStudioPage />);
-
-    const link = await screen.findByRole("link", { name: /New email template/i });
-    expect(link).toHaveAttribute("href", "/design-studio/email-templates?new=1");
   });
 });
