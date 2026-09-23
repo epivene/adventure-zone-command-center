@@ -1,8 +1,5 @@
 import type { db as databaseClient } from "@/db/client";
-import {
-  DrizzlePackageIntelligenceSettingsRepository,
-  type PackageIntelligenceSettingsRecord,
-} from "./package-intelligence-settings";
+import type { PackageIntelligenceSettingsRecord } from "./package-intelligence-settings";
 
 export const PACKAGE_CODES = [
   "adventure_zone",
@@ -99,6 +96,7 @@ export function buildCurrentOfferCatalog(
 export async function loadCurrentOfferCatalog(
   database: typeof databaseClient,
 ): Promise<CurrentOfferCatalog> {
+  const { DrizzlePackageIntelligenceSettingsRepository } = await import("./package-intelligence-settings");
   const repository = new DrizzlePackageIntelligenceSettingsRepository(database);
   return buildCurrentOfferCatalog(await repository.listPackageTemplates());
 }
