@@ -190,7 +190,7 @@ export const designStudioApi = {
     return response.assets ?? [];
   },
   instantiateTemplate(id: string, input: {
-    linkedOrganizationId: string;
+    linkedOrganizationId?: string | null;
     linkedContactId?: string | null;
     linkedBookingId?: string | null;
     documentYear: number;
