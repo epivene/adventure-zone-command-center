@@ -78,6 +78,18 @@ export function clearReconfirmationContent(
   }
 }
 
+function parseCatalogSnapshot(value: string | null | undefined): Record<string, any> | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, any>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function refreshOfferFacts(
   content: string,
   previousSnapshot: Record<string, any> | null,
@@ -156,9 +168,7 @@ export async function reuseProfileDocument(
     .where(eq(designSmartFields.projectId, source.id))
     .orderBy(desc(designSmartFields.updatedAt));
   const priorCatalogField = fields.find((field) => field.fieldKey === "current_offer_catalog");
-  const previousSnapshot = priorCatalogField?.valueSnapshot
-    ? JSON.parse(priorCatalogField.valueSnapshot) as Record<string, unknown>
-    : null;
+  const previousSnapshot = parseCatalogSnapshot(priorCatalogField?.valueSnapshot);
 
   const offers = await loadCurrentOfferCatalog(database);
   const currentSnapshot = {
