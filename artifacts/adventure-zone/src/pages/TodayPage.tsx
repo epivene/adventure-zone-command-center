@@ -5,6 +5,7 @@ import { FollowUpList } from "@/components/today/follow-up-list";
 import { CallQueueWorkspace } from "@/components/today/call-queue-workspace";
 import { NextCallCard, eventProfileHref } from "@/components/today/next-call-card";
 import { BookingOperations } from "@/components/today/booking-operations";
+import { InvoiceContractWorkspaceCard } from "@/components/today/invoice-contract-workspace-card";
 import { RenewalsSection } from "@/components/today/renewals-section";
 import { ScoutAlertsSection, type ScoutAlertView } from "@/components/today/scout-alerts-section";
 import { BUSINESS_TIME_ZONE, classifyBusinessDueDate } from "@/lib/business-date";
@@ -245,15 +246,7 @@ export default function TodayPage() {
           </details>
         ) : null}
 
-        {contractCount > 0 ? (
-          <details className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <summary className="cursor-pointer font-bold">Contracts <span className="ml-1 text-slate-500">({contractCount})</span></summary>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-slate-600">Booking and contract work that needs your attention.</p>
-              <Link className="text-sm font-bold text-orange-700 hover:underline" href="/bookings?attention=contracts">Open contract work</Link>
-            </div>
-          </details>
-        ) : null}
+        <InvoiceContractWorkspaceCard />
 
         <ScoutAlertsSection
           alerts={scoutAlerts}

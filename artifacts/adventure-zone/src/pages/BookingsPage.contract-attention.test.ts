@@ -1,17 +1,23 @@
-import { readFileSync } from "node:fs";
+import { render, screen } from "@testing-library/react";
+import { createElement } from "react";
 import { describe, expect, it } from "vitest";
-import { isContractAttentionBooking } from "./BookingsPage";
+import { Route, Router } from "wouter";
+import { memoryLocation } from "wouter/memory-location";
 
-describe("contract attention queue", () => {
-  it("matches exactly the statuses counted by Today", () => {
-    expect(isContractAttentionBooking({ status: "pending_contract" })).toBe(true);
-    expect(isContractAttentionBooking({ status: "contract_received" })).toBe(true);
-    expect(isContractAttentionBooking({ status: "pending_decision" })).toBe(false);
-    expect(isContractAttentionBooking({ status: "confirmed" })).toBe(false);
-  });
+import BookingsPage from "./BookingsPage";
 
-  it("routes the Today contract action to the focused queue", () => {
-    const todaySource = readFileSync("src/pages/TodayPage.tsx", "utf8");
-    expect(todaySource).toContain('href="/bookings?attention=contracts"');
+describe("retired contract attention queue", () => {
+  it("redirects the old focused queue to Profiles", async () => {
+    const { hook } = memoryLocation({ path: "/bookings?attention=contracts" });
+
+    render(createElement(
+      Router,
+      { hook },
+      createElement(BookingsPage),
+      createElement(Route, { path: "/profiles" }, createElement("p", null, "Profiles workspace")),
+    ));
+
+    expect(await screen.findByText("Profiles workspace")).toBeVisible();
+    expect(screen.queryByText(/contracts needing attention/i)).not.toBeInTheDocument();
   });
 });
