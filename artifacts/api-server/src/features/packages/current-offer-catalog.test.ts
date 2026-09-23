@@ -46,6 +46,7 @@ describe("current offer catalog", () => {
       code: "foam_party",
       name: "Foam Party Add-On",
       priceCents: 350000,
+      availability: "add_on_only",
     });
     expect("foam_party" in catalog.packages).toBe(false);
   });
