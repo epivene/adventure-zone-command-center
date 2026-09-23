@@ -18,8 +18,7 @@ jobs:
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @workspace/api-server typecheck
-      - run: pnpm --filter @workspace/adventure-zone typecheck
+      - run: pnpm run typecheck
       - run: >-
           pnpm --filter @workspace/api-server exec vitest run --config vitest.config.ts
           src/features/packages/current-offer-catalog.test.ts
