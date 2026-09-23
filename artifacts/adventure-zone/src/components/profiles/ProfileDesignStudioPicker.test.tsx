@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProfileDesignStudioPicker } from "./ProfileDesignStudioPicker";
@@ -17,6 +18,7 @@ describe("ProfileDesignStudioPicker", () => {
   });
 
   it("creates a draft linked to the open profile", async () => {
+    const user = userEvent.setup();
     const instantiate = vi.spyOn(designStudioApi, "instantiateTemplate").mockResolvedValue({
       id: "d1",
       name: "Mini Zone prepaid | 2027",
@@ -33,8 +35,8 @@ describe("ProfileDesignStudioPicker", () => {
         documentYear={2027}
       />,
     );
-    fireEvent.click(await screen.findByRole("tab", { name: "Proposals (1)" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Use this template" }));
+    await user.click(await screen.findByRole("tab", { name: "Proposals (1)" }));
+    await user.click(await screen.findByRole("button", { name: "Use this template" }));
     await waitFor(() => expect(instantiate).toHaveBeenCalledWith("t1", {
       linkedOrganizationId: "00000000-0000-4000-8000-000000000001",
       linkedContactId: "00000000-0000-4000-8000-000000000002",
