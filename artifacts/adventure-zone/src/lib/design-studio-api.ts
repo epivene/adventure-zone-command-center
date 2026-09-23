@@ -1,6 +1,6 @@
 import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
-export const DESIGN_TYPES = ["flyer", "social post", "email", "brochure", "review request", "contract", "blank"] as const;
+export const DESIGN_TYPES = ["flyer", "social post", "email", "brochure", "review request", "contract", "proposal", "blank"] as const;
 export type DesignType = (typeof DESIGN_TYPES)[number];
 
 export type DesignProject = {
@@ -15,6 +15,10 @@ export type DesignProject = {
   canvas?: Record<string, unknown> | null;
   linkedOrganizationId?: string | null;
   linkedContactId?: string | null;
+  linkedBookingId?: string | null;
+  sourceTemplateId?: string | null;
+  sourceCatalogRevision?: number | null;
+  documentYear?: number | null;
 };
 
 export type DesignTemplate = {
@@ -26,6 +30,10 @@ export type DesignTemplate = {
   visibility?: "private" | "shared" | "approved";
   isApproved?: boolean;
   isFavorite?: boolean;
+  catalogKey?: string | null;
+  catalogRevision?: number;
+  templateFamily?: "email" | "contract" | "proposal" | null;
+  state?: "active" | "archived";
 };
 
 export type CreateDesignProjectInput = Pick<DesignProject, "name" | "type"> & {
