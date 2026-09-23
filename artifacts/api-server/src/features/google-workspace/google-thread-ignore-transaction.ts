@@ -100,14 +100,16 @@ implements GoogleThreadIgnoreTransactionPort {
                   THEN evidence_codes
                   ELSE evidence_codes || '["manual_ignore"]'::jsonb
                 END,
-                reviewed_by = $3,
-                reviewed_at = $4,
+                reviewed_by = $4,
+                reviewed_at = $5,
                 gmail_sync_state = 'not_requested',
                 gmail_sync_error_code = NULL,
                 gmail_sync_mutation_id = NULL,
-                updated_at = $4
-          WHERE connection_id = $1 AND message_id = $2`,
-        [connectionId, input.messageId, input.actorId, input.now],
+                updated_at = $5
+          WHERE connection_id = $1
+            AND thread_id = $2
+            AND (review_state <> 'ignored' OR message_id = $3)`,
+        [connectionId, threadId, input.messageId, input.actorId, input.now],
       );
       await this.finishIgnore(client, {
         connectionId,
@@ -244,7 +246,13 @@ implements GoogleThreadIgnoreTransactionPort {
   ): Promise<void> {
     await client.query(
       `DELETE FROM google_workspace_validation_mappings
-        WHERE connection_id = $1 AND message_id = $2`,
+        WHERE connection_id = $1
+          AND thread_id = (
+            SELECT thread_id
+              FROM google_workspace_validation_review_items
+             WHERE connection_id = $1 AND message_id = $2
+             LIMIT 1
+          )`,
       [input.connectionId, input.messageId],
     );
     input.stage.set("audit");
