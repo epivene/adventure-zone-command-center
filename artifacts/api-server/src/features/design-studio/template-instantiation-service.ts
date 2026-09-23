@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 
-import type { db as database } from "@/db/client";
+import type { db as databaseClient } from "@/db/client";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import {
   designProjectVersions,
@@ -117,7 +117,7 @@ export class TemplateInstantiationError extends Error {
 }
 
 export async function instantiateTemplate(
-  database: typeof database,
+  database: typeof databaseClient,
   input: InstantiateTemplateInput,
 ) {
   const [template] = await database
