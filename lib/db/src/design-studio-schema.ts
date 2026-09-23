@@ -4,6 +4,7 @@ import {
   check,
   date,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -23,6 +24,7 @@ export const designTypeValues = [
   "brochure",
   "review_request",
   "contract",
+  "proposal",
   "blank",
 ] as const;
 export type DesignType = (typeof designTypeValues)[number];
@@ -46,6 +48,12 @@ export const designTemplateVisibilityValues = [
 ] as const;
 export type DesignTemplateVisibility =
   (typeof designTemplateVisibilityValues)[number];
+
+export const designTemplateStateValues = ["active", "archived"] as const;
+export type DesignTemplateState = (typeof designTemplateStateValues)[number];
+
+export const designTemplateFamilyValues = ["email", "contract", "proposal"] as const;
+export type DesignTemplateFamily = (typeof designTemplateFamilyValues)[number];
 
 export const designAssetScopeValues = [
   "company",
@@ -103,6 +111,9 @@ export const designProjects = pgTable(
     linkedBookingId: uuid("linked_booking_id").references(() => bookings.id, {
       onDelete: "set null",
     }),
+    sourceTemplateId: uuid("source_template_id"),
+    sourceCatalogRevision: integer("source_catalog_revision"),
+    documentYear: integer("document_year"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -114,7 +125,7 @@ export const designProjects = pgTable(
   (table) => [
     check(
       "design_projects_type_valid",
-      sql`${table.type} in ('flyer','social_post','email','brochure','review_request','contract','blank')`,
+      sql`${table.type} in ('flyer','social_post','email','brochure','review_request','contract','proposal','blank')`,
     ),
     check(
       "design_projects_status_valid",
@@ -182,6 +193,11 @@ export const designTemplates = pgTable(
     ),
     name: text("name").notNull(),
     type: text("type").$type<DesignType>().notNull(),
+    catalogKey: text("catalog_key"),
+    catalogRevision: integer("catalog_revision").default(1).notNull(),
+    templateFamily: text("template_family").$type<DesignTemplateFamily>(),
+    state: text("state").$type<DesignTemplateState>().default("active").notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
     description: text("description"),
     tags: jsonb("tags").$type<string[]>().default(sql`'[]'::jsonb`).notNull(),
     visibility: text("visibility")
@@ -201,7 +217,7 @@ export const designTemplates = pgTable(
   (table) => [
     check(
       "design_templates_type_valid",
-      sql`${table.type} in ('flyer','social_post','email','brochure','review_request','contract','blank')`,
+      sql`${table.type} in ('flyer','social_post','email','brochure','review_request','contract','proposal','blank')`,
     ),
     check(
       "design_templates_visibility_valid",
@@ -210,6 +226,13 @@ export const designTemplates = pgTable(
     index("design_templates_type_visibility_idx").on(
       table.type,
       table.visibility,
+    ),
+    uniqueIndex("design_templates_catalog_key_unique").on(table.catalogKey),
+    index("design_templates_family_state_idx").on(table.templateFamily, table.state),
+    check("design_templates_state_valid", sql`${table.state} in ('active','archived')`),
+    check(
+      "design_templates_family_valid",
+      sql`${table.templateFamily} is null or ${table.templateFamily} in ('email','contract','proposal')`,
     ),
   ],
 );
