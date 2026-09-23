@@ -34,7 +34,7 @@ describe("ProfileDesignStudioPicker", () => {
       />,
     );
     fireEvent.click(await screen.findByRole("tab", { name: "Proposals (1)" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use this template" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Use this template" }));
     await waitFor(() => expect(instantiate).toHaveBeenCalledWith("t1", {
       linkedOrganizationId: "00000000-0000-4000-8000-000000000001",
       linkedContactId: "00000000-0000-4000-8000-000000000002",
