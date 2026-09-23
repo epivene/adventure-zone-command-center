@@ -86,10 +86,9 @@ export class ProfileResearchService {
       const sourceByUrl = new Map(
         result.sources.flatMap((source) => source.url ? [[source.url, source] as const] : []),
       );
-      const suggestions: ProfileResearchSuggestion[] = result.identity.confidence === "low"
+      const writableSuggestions: ProfileResearchSuggestion[] = result.identity.confidence === "low"
         ? []
-        : [
-          ...result.candidates.flatMap((candidate) => {
+        : result.candidates.flatMap((candidate) => {
             const resolved = resolveCandidateTarget(profile, candidate);
             if (!resolved) return [];
             const sourceIds = candidate.sourceUrls.flatMap((url) => {
@@ -111,7 +110,9 @@ export class ProfileResearchService {
               sourceIds,
               conflict: Boolean(resolved.currentValue && !sameValue(resolved.currentValue, suggestedValue)),
             }];
-          }),
+          });
+      const suggestions: ProfileResearchSuggestion[] = [
+          ...writableSuggestions,
           ...(result.eventDateCandidates ?? []).map((candidate) => ({
             id: randomUUID(),
             targetKind: "event_date_fact" as const,
@@ -137,7 +138,7 @@ export class ProfileResearchService {
             sourceIds: [candidate.source.id],
             conflict: profile.effectiveEventDate !== null,
           })),
-        ];
+      ];
 
       const relatedEvents = input.mode === "deep"
         ? await this.matchRelatedEvents(result.relatedEvents ?? [])
