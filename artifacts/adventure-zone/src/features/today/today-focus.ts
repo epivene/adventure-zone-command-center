@@ -1,7 +1,6 @@
 export type TodayFocusKind =
   | "overdue_followups"
   | "followups"
-  | "contracts"
   | "decisions"
   | "schedule"
   | "caught_up";
@@ -55,15 +54,6 @@ export function deriveTodayFocus(input: TodayFocusInput): TodayFocus {
       detail: followUpDetail(input),
       primaryLabel: "Start",
       primaryHref: "#today-next-task",
-    };
-  }
-  if (input.contractCount > 0) {
-    return {
-      kind: "contracts",
-      headline: attentionHeadline(input.contractCount),
-      detail: "Booking or contract work needs your attention",
-      primaryLabel: "Start",
-      primaryHref: "/profiles",
     };
   }
   if (input.decisionCount > 0) {
