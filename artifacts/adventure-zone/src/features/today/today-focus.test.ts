@@ -51,15 +51,16 @@ describe("deriveTodayFocus", () => {
     }).kind).toBe("followups");
   });
 
-  it("does not treat future follow-ups as today's active workload", () => {
+  it("does not treat future follow-ups or contract counts as today's active workload", () => {
     expect(deriveTodayFocus({
       ...base,
       followUpCount: 39,
       laterFollowUpCount: 39,
       contractCount: 2,
     })).toMatchObject({
-      kind: "contracts",
-      headline: "2 need attention",
+      kind: "caught_up",
+      headline: "You're caught up for now",
+      primaryHref: "#later-work",
     });
   });
 
@@ -85,8 +86,8 @@ describe("deriveTodayFocus", () => {
     });
   });
 
-  it("uses contracts before unscheduled next-step decisions", () => {
-    expect(deriveTodayFocus({ ...base, contractCount: 3, decisionCount: 4 }).kind).toBe("contracts");
+  it("keeps contract counts out of Today action prioritization", () => {
+    expect(deriveTodayFocus({ ...base, contractCount: 3, decisionCount: 4 }).kind).toBe("decisions");
   });
 
   it("uses decision work before schedule-only context", () => {
