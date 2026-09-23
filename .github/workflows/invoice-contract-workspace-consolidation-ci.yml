@@ -2,17 +2,6 @@ name: Invoice Contract Workspace Consolidation CI
 
 on:
   pull_request:
-    paths:
-      - "artifacts/adventure-zone/src/components/today/invoice-contract-workspace-card.tsx"
-      - "artifacts/adventure-zone/src/components/today/invoice-contract-workspace-card.test.tsx"
-      - "artifacts/adventure-zone/src/components/today/needs-attention.tsx"
-      - "artifacts/adventure-zone/src/components/today/needs-attention-semantics.test.ts"
-      - "artifacts/adventure-zone/src/features/today/today-focus.ts"
-      - "artifacts/adventure-zone/src/features/today/today-focus.test.ts"
-      - "artifacts/adventure-zone/src/pages/BookingsPage.tsx"
-      - "artifacts/adventure-zone/src/pages/BookingsPage.contract-attention.test.ts"
-      - "artifacts/adventure-zone/src/pages/TodayPage.tsx"
-      - ".github/workflows/invoice-contract-workspace-consolidation-ci.yml"
   workflow_dispatch:
 
 permissions:
