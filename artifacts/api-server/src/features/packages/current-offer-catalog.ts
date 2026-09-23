@@ -1,4 +1,4 @@
-import type { db as database } from "@/db/client";
+import type { db as databaseClient } from "@/db/client";
 import {
   DrizzlePackageIntelligenceSettingsRepository,
   type PackageIntelligenceSettingsRecord,
@@ -97,7 +97,7 @@ export function buildCurrentOfferCatalog(
 }
 
 export async function loadCurrentOfferCatalog(
-  database: typeof database,
+  database: typeof databaseClient,
 ): Promise<CurrentOfferCatalog> {
   const repository = new DrizzlePackageIntelligenceSettingsRepository(database);
   return buildCurrentOfferCatalog(await repository.listPackageTemplates());
