@@ -43,8 +43,7 @@ ALTER TABLE design_templates
   CHECK (template_family IS NULL OR template_family IN ('email','contract','proposal'));
 
 CREATE UNIQUE INDEX IF NOT EXISTS design_templates_catalog_key_unique
-  ON design_templates(catalog_key)
-  WHERE catalog_key IS NOT NULL;
+  ON design_templates(catalog_key);
 CREATE INDEX IF NOT EXISTS design_templates_family_state_idx
   ON design_templates(template_family, state);
 CREATE INDEX IF NOT EXISTS design_projects_organization_year_idx
