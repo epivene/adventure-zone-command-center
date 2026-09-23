@@ -272,7 +272,7 @@ export class PostgresGoogleValidationRepository {
   async listReviewItems(): Promise<GoogleValidationReviewItem[]> {
     const connectionId = await this.currentConnectionId();
     const result = await this.pool.query(
-      `SELECT DISTINCT ON (item.thread_id) item.message_id,
+      `SELECT DISTINCT ON (lower(btrim(item.from_header)), lower(btrim(item.subject))) item.message_id,
               item.thread_id,
               item.subject,
               item.from_header,
@@ -294,7 +294,8 @@ export class PostgresGoogleValidationRepository {
          LEFT JOIN google_workspace_gmail_mutations mutation
            ON mutation.id = item.gmail_sync_mutation_id
         WHERE item.connection_id = $1
-        ORDER BY item.thread_id,
+        ORDER BY lower(btrim(item.from_header)),
+                 lower(btrim(item.subject)),
                  CASE item.review_state
                    WHEN 'pending' THEN 0
                    WHEN 'resolved' THEN 1
