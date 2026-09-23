@@ -74,7 +74,7 @@ implements GoogleThreadIgnoreTransactionPort {
     await this.transaction(async (client, connectionId, stage) => {
       stage.set("review");
       const review = await client.query(
-        `SELECT thread_id
+        `SELECT thread_id, subject, from_header
            FROM google_workspace_validation_review_items
           WHERE connection_id = $1 AND message_id = $2
           FOR UPDATE`,
@@ -107,9 +107,17 @@ implements GoogleThreadIgnoreTransactionPort {
                 gmail_sync_mutation_id = NULL,
                 updated_at = $5
           WHERE connection_id = $1
-            AND thread_id = $2
+            AND (
+              thread_id = $2
+              OR (
+                lower(btrim(subject)) = lower(btrim($6))
+                AND lower(btrim(from_header)) = lower(btrim($7))
+              )
+            )
             AND (review_state <> 'ignored' OR message_id = $3)`,
-        [connectionId, threadId, input.messageId, input.actorId, input.now],
+        [connectionId, threadId, input.messageId, input.actorId, input.now,
+          typeof review.rows[0]?.subject === "string" ? review.rows[0].subject : "",
+          typeof review.rows[0]?.from_header === "string" ? review.rows[0].from_header : ""],
       );
       await this.finishIgnore(client, {
         connectionId,
