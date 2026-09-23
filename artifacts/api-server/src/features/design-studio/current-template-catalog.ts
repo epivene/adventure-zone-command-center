@@ -152,7 +152,7 @@ export const CURRENT_EMAIL_TEMPLATES: EmailTemplateDefinition[] = [
     category: "after_event",
     subject: "Thank you from The Adventure Zone",
     intro: "Thank you for having us",
-    body: "<p>We had a great time at {{event_name}} and appreciate the opportunity to be part of it.</p><p>If you have a moment, we would love to hear how we did.</p><p><a href="{{review_link}}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#df1762;color:#fff;text-decoration:none;font-weight:700">Leave a Review</a></p>",
+    body: `<p>We had a great time at {{event_name}} and appreciate the opportunity to be part of it.</p><p>If you have a moment, we would love to hear how we did.</p><p><a href="{{review_link}}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#df1762;color:#fff;text-decoration:none;font-weight:700">Leave a Review</a></p>`,
   },
   {
     code: "email.contract_ready",
@@ -160,7 +160,7 @@ export const CURRENT_EMAIL_TEMPLATES: EmailTemplateDefinition[] = [
     category: "contract",
     subject: "The Adventure Zone contract for {{event_name}}",
     intro: "Your contract is ready",
-    body: "<p>Your contract for {{event_name}} is ready to review.</p><p><a href="{{contract_link}}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#df1762;color:#fff;text-decoration:none;font-weight:700">Review the Contract</a></p><p>Please let us know if any event detail needs to be corrected before signing.</p>",
+    body: `<p>Your contract for {{event_name}} is ready to review.</p><p><a href="{{contract_link}}" style="display:inline-block;padding:12px 18px;border-radius:10px;background:#df1762;color:#fff;text-decoration:none;font-weight:700">Review the Contract</a></p><p>Please let us know if any event detail needs to be corrected before signing.</p>`,
   },
   {
     code: "email.signed_contract_received",
