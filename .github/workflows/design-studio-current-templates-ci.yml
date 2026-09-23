@@ -1,9 +1,9 @@
 name: Design Studio Current Templates CI
 
 on:
-  push:
+  pull_request:
     branches:
-      - "codex/design-studio-current-templates-20260923"
+      - main
   workflow_dispatch:
 
 jobs:
