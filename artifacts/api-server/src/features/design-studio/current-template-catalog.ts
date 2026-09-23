@@ -307,6 +307,16 @@ export async function ensureCurrentTemplateCatalog(
   }
 
   const designDefinitions = [
+    ...CURRENT_EMAIL_TEMPLATES.map((definition) => ({
+      catalogKey: definition.code,
+      name: definition.name,
+      type: "email" as const,
+      templateFamily: "email" as const,
+      description: "Current branded Adventure Zone email template.",
+      tags: ["email", definition.category],
+      content: brandedEmail(definition),
+      lockedContent: { brand: true, communicationCode: definition.code },
+    })),
     ...CURRENT_CONTRACT_TEMPLATES.map((definition) => ({
       catalogKey: definition.catalogKey,
       name: definition.name,
