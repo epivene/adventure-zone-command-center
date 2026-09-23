@@ -100,6 +100,10 @@ async function fixture() {
       (
         '20000000-0000-4000-8000-000000000001', 'message-2', 'thread-1', 'pending',
         NULL, 'not_requested', NULL
+      ),
+      (
+        '20000000-0000-4000-8000-000000000001', 'message-3', 'thread-2', 'pending',
+        NULL, 'not_requested', NULL
       );
     INSERT INTO google_workspace_validation_mappings(
       connection_id, message_id, thread_id, organization_id
@@ -165,7 +169,7 @@ describe("PostgresGoogleThreadIgnoreTransaction", () => {
                gmail_sync_state, gmail_sync_mutation_id::text
           FROM google_workspace_validation_review_items
       `);
-      expect(review.rows).toHaveLength(2);
+      expect(review.rows).toHaveLength(3);
       expect(review.rows.every((row) =>
         row.review_state === "ignored" &&
         row.resolved_organization_id === null &&
