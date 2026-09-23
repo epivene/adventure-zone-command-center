@@ -10,7 +10,7 @@ const catalog: CurrentOfferCatalog = {
     pirates_rebellion: { code: "pirates_rebellion", name: "Pirate's Rebellion", priceCents: 800000, attractionCount: 3, marketingFootprint: "5,000–7,000 sq ft", customerDescription: "Water package", bookingTalkingPoints: "", operationalRequirements: "", setupNotes: "" },
     mini_zone: { code: "mini_zone", name: "Mini Zone", priceCents: 500000, attractionCount: 5, marketingFootprint: "3,000–5,000 sq ft", customerDescription: "Smaller package", bookingTalkingPoints: "", operationalRequirements: "", setupNotes: "" },
   },
-  addOns: { foamParty: { code: "foam_party", name: "Foam Party Add-On", priceCents: 350000 } },
+  addOns: { foamParty: { code: "foam_party", name: "Foam Party Add-On", priceCents: 350000, availability: "add_on_only" } },
 };
 
 describe("template instantiation content", () => {
