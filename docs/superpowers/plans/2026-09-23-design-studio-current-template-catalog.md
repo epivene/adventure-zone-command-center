@@ -400,7 +400,7 @@ Expected: zero failures.
 - [ ] **Step 2: Run full repository verification**
 
 ```bash
-pnpm test
+pnpm -r --if-present test
 pnpm run typecheck
 pnpm run build
 ```
