@@ -111,10 +111,15 @@ async function fixture(options?: { failMutation?: boolean }) {
     );
     INSERT INTO google_workspace_validation_review_items(
       connection_id, message_id, thread_id, subject, from_header, to_header
-    ) VALUES (
-      '${connectionId}', 'message-1', 'thread-1', 'Subject',
-      'sender@example.com', 'theadventurezone12@gmail.com'
-    );
+    ) VALUES
+      (
+        '${connectionId}', 'message-1', 'thread-1', 'Subject',
+        'sender@example.com', 'theadventurezone12@gmail.com'
+      ),
+      (
+        '${connectionId}', 'message-2', 'thread-1', 'Re: Subject',
+        'theadventurezone12@gmail.com', 'sender@example.com'
+      );
   `);
   const client = {
     query: async (text: string, values?: unknown[]) => {
@@ -163,6 +168,14 @@ describe("PostgresGoogleProfileAssignmentTransaction", () => {
       );
 
       expect(second.mutation.id).toBe(first.mutation.id);
+      const reviews = await db.query<{ review_state: string; resolved_organization_id: string }>(
+        "SELECT review_state, resolved_organization_id::text FROM google_workspace_validation_review_items ORDER BY message_id",
+      );
+      expect(reviews.rows).toHaveLength(2);
+      expect(reviews.rows.every((row) =>
+        row.review_state === "resolved" &&
+        row.resolved_organization_id === organizationA
+      )).toBe(true);
       const mutations = await db.query<{ count: string }>(
         "SELECT count(*)::text AS count FROM google_workspace_gmail_mutations",
       );
