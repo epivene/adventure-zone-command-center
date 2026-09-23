@@ -31,6 +31,7 @@ import { ProfileActionsMenu } from "@/components/profiles/profile-actions-menu";
 import { ProfileInlineEditor } from "@/components/profiles/profile-inline-editor";
 import { ProfileAtAGlance } from "@/components/profiles/profile-at-a-glance";
 import { ProfileEmailSummary } from "@/components/profiles/profile-email-summary";
+import { ProfileDesignDocuments } from "@/components/profiles/ProfileDesignDocuments";
 import { historyCategory, simplifyHistoryText } from "@/components/profiles/history-summary";
 import { mergeOptimisticActivities } from "@/components/profiles/profile-note-display";
 import {
@@ -201,6 +202,17 @@ export function SimpleFullProfile({
 
   const primaryContact =
     profile.contacts.find((contact) => contact.isPrimary) ?? profile.contacts[0] ?? null;
+  const currentBooking =
+    [...profile.bookings]
+      .filter((booking) => !["cancelled", "declined"].includes(booking.status))
+      .sort((left, right) =>
+        (left.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER) -
+        (right.startsAt?.getTime() ?? Number.MAX_SAFE_INTEGER),
+      )[0] ?? null;
+  const profileDocumentYear =
+    Number(profile.effectiveEventDate?.startsOn.slice(0, 4)) ||
+    currentBooking?.startsAt?.getFullYear() ||
+    new Date().getFullYear();
   const websiteHref = normalizeExternalWebsite(profile.place.website);
   const location = [profile.place.city, profile.place.region].filter(Boolean).join(", ");
   const meaningfulNotes = useMemo(
@@ -697,6 +709,13 @@ export function SimpleFullProfile({
         contacts={profile.contacts}
         organizationId={profile.id}
         organizationName={profile.place.name}
+      />
+
+      <ProfileDesignDocuments
+        organizationId={profile.id}
+        contactId={primaryContact?.id ?? null}
+        bookingId={currentBooking?.id ?? null}
+        documentYear={profileDocumentYear}
       />
 
       <ProfileAtAGlance profile={profile} />
