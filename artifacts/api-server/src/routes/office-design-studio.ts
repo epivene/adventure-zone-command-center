@@ -15,6 +15,7 @@ import {
 } from "@workspace/db/design-studio-schema";
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { sanitizeDesignStudioCanvas } from "@/features/design-studio/canvas-sanitizer";
+import { ensureCurrentTemplateCatalog } from "@/features/design-studio/current-template-catalog";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { resolveOfficeSession } from "@/features/office/office-middleware";
 import { verifyOfficeToken } from "@/features/office/office-auth";
@@ -326,21 +327,6 @@ async function snapshotProject(
     })
     .returning();
   return version;
-}
-
-async function seedTemplates() {
-  const existing = await db
-    .select({ id: designTemplates.id })
-    .from(designTemplates)
-    .limit(1);
-  if (existing.length > 0) return;
-  await db.insert(designTemplates).values([
-    { name: "Adventure flyer", type: "flyer", description: "A bold, print-ready event promotion.", tags: ["event", "print"], visibility: "approved", isApproved: true, lockedContent: { brand: true } },
-    { name: "Social story", type: "social_post", description: "A quick, warm update for your next story.", tags: ["social"], visibility: "approved", isApproved: true, lockedContent: { brand: true } },
-    { name: "Family email", type: "email", description: "A useful, welcoming message for families.", tags: ["email"], visibility: "approved", isApproved: true, lockedContent: { footer: true } },
-    { name: "Review request", type: "review_request", description: "Invite guests to share their experience.", tags: ["reviews"], visibility: "approved", isApproved: true, lockedContent: { legal: true } },
-    { name: "Agreement outline", type: "contract", description: "A protected contract starting point.", tags: ["legal"], visibility: "approved", isApproved: true, lockedContent: { legal: true } },
-  ]);
 }
 
 router.get("/office/design-studio/projects", requireStudio, async (req, res): Promise<void> => {
@@ -893,7 +879,7 @@ router.post("/office/design-studio/outputs/:outputId/void", requireStudio, async
 
 router.get("/office/design-studio/templates", requireStudio, async (req, res): Promise<void> => {
   try {
-    await seedTemplates();
+    await ensureCurrentTemplateCatalog(db);
     const templates = await db
       .select()
       .from(designTemplates)
