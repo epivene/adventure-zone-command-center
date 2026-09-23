@@ -41,6 +41,7 @@ function profile(overrides: any = {}) {
     followUps: [],
     groups: [],
     sourceProvenance: [],
+    effectiveEventDate: overrides.effectiveEventDate ?? null,
   } as any;
 }
 
@@ -176,6 +177,41 @@ describe("ProfileResearchService", () => {
 
     await test.service.start({ profileId: profile().id, mode: "quick" });
     expect(test.saved().suggestions).toEqual([]);
+  });
+
+  it("keeps a strongly sourced date candidate when only the overall identity is low", async () => {
+    const test = harness({
+      identity: { confidence: "low", rationale: "The event name is generic." },
+      sources: [citedSource],
+      candidates: [{
+        targetKind: "organization",
+        targetId: null,
+        field: "website",
+        value: "https://riverdays.example",
+        rationale: "Possible match",
+        sourceUrls: ["https://riverdays.example"],
+      }],
+      eventDateCandidates: [{
+        startsOn: "2027-07-04",
+        endsOn: null,
+        evidenceKind: "published_exact",
+        recurrenceRule: null,
+        rationale: "The official city calendar lists the 2027 date.",
+        source: citedSource,
+        confidence: 0.95,
+      }],
+      deepSummary: null,
+    });
+
+    await test.service.start({ profileId: profile().id, mode: "quick" });
+
+    expect(test.saved().suggestions).toEqual([
+      expect.objectContaining({
+        targetKind: "event_date_fact",
+        confidence: "high",
+        conflict: false,
+      }),
+    ]);
   });
 
   it("does not turn a discovered organizer into a brand-new contact automatically", async () => {
