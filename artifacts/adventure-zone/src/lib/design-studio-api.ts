@@ -1,6 +1,6 @@
 import { apiDelete, apiFetch, apiGet, apiPatch, apiPost } from "@/lib/auth-token";
 
-export const DESIGN_TYPES = ["flyer", "social post", "email", "brochure", "review request", "contract", "blank"] as const;
+export const DESIGN_TYPES = ["flyer", "social post", "email", "brochure", "review request", "contract", "proposal", "blank"] as const;
 export type DesignType = (typeof DESIGN_TYPES)[number];
 
 export type DesignProject = {
@@ -15,6 +15,10 @@ export type DesignProject = {
   canvas?: Record<string, unknown> | null;
   linkedOrganizationId?: string | null;
   linkedContactId?: string | null;
+  linkedBookingId?: string | null;
+  sourceTemplateId?: string | null;
+  sourceCatalogRevision?: number | null;
+  documentYear?: number | null;
 };
 
 export type DesignTemplate = {
@@ -26,6 +30,10 @@ export type DesignTemplate = {
   visibility?: "private" | "shared" | "approved";
   isApproved?: boolean;
   isFavorite?: boolean;
+  catalogKey?: string | null;
+  catalogRevision?: number;
+  templateFamily?: "email" | "contract" | "proposal" | null;
+  state?: "active" | "archived";
 };
 
 export type CreateDesignProjectInput = Pick<DesignProject, "name" | "type"> & {
@@ -168,6 +176,11 @@ export const designStudioApi = {
   async list(): Promise<DesignProject[]> {
     return projectsFromResponse(await apiGet<CollectionResponse>("/office/design-studio/projects"));
   },
+  async listForProfile(organizationId: string): Promise<DesignProject[]> {
+    return projectsFromResponse(await apiGet<CollectionResponse>(
+      `/office/design-studio/projects?linkedOrganizationId=${encodeURIComponent(organizationId)}`,
+    ));
+  },
   async listTemplates(): Promise<DesignTemplate[]> {
     const response = await apiGet<{ templates: DesignTemplate[] }>("/office/design-studio/templates");
     return response.templates ?? [];
@@ -176,8 +189,25 @@ export const designStudioApi = {
     const response = await apiGet<{ assets: DesignAsset[] }>("/office/design-studio/assets");
     return response.assets ?? [];
   },
+  instantiateTemplate(id: string, input: {
+    linkedOrganizationId?: string | null;
+    linkedContactId?: string | null;
+    linkedBookingId?: string | null;
+    documentYear: number;
+  }) {
+    return apiPost<DesignProject>(
+      `/office/design-studio/templates/${encodeURIComponent(id)}/instantiate`,
+      input,
+    );
+  },
   favoriteTemplate(id: string) {
     return apiPost<{ isFavorite: boolean }>(`/office/design-studio/templates/${encodeURIComponent(id)}/favorite`, {});
+  },
+  useForNewYear(id: string, documentYear: number) {
+    return apiPost<DesignProject>(
+      `/office/design-studio/projects/${encodeURIComponent(id)}/use-for-new-year`,
+      { documentYear },
+    );
   },
   duplicate(id: string, name?: string) {
     return apiPost<DesignProject>(`/office/design-studio/projects/${encodeURIComponent(id)}/duplicate`, name ? { name } : {});
