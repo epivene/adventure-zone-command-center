@@ -32,6 +32,17 @@ describe("reviewed package defaults", () => {
     });
   });
 
+  it("uses the approved 2026 marketing footprints", () => {
+    expect(REVIEWED_PACKAGE_DEFAULTS.adventure_zone.operationalRequirements)
+      .toContain("10,000–15,000 sq ft");
+    expect(REVIEWED_PACKAGE_DEFAULTS.weekend_warriors.operationalRequirements)
+      .toContain("7,000–10,000 sq ft");
+    expect(REVIEWED_PACKAGE_DEFAULTS.pirates_rebellion.operationalRequirements)
+      .toContain("5,000–7,000 sq ft");
+    expect(REVIEWED_PACKAGE_DEFAULTS.mini_zone.operationalRequirements)
+      .toContain("3,000–5,000 sq ft");
+  });
+
   it("keeps the Mini Zone barrel disagreement out of approved operational requirements", () => {
     const mini = REVIEWED_PACKAGE_DEFAULTS.mini_zone;
     expect(mini.operationalRequirements).not.toMatch(/44 barrels|50 barrels/i);
