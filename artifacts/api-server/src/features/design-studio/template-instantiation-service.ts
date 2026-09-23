@@ -128,6 +128,13 @@ export async function instantiateTemplate(
   if (!template) throw new TemplateInstantiationError("TEMPLATE_NOT_FOUND");
   if (template.state !== "active") throw new TemplateInstantiationError("TEMPLATE_ARCHIVED");
 
+  if (input.contactId && !input.organizationId) {
+    throw new TemplateInstantiationError("CONTACT_ORGANIZATION_MISMATCH");
+  }
+  if (input.bookingId && !input.organizationId) {
+    throw new TemplateInstantiationError("BOOKING_ORGANIZATION_MISMATCH");
+  }
+
   if (input.organizationId) {
     const [organization] = await database
       .select({ id: organizations.id })
