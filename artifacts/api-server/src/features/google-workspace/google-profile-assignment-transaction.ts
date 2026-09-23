@@ -156,7 +156,7 @@ implements GoogleProfileAssignmentTransactionPort {
     return this.transaction(input, async (client, connectionId, stage) => {
       stage.set("review");
       const locked = await client.query(
-        `SELECT thread_id, evidence_codes, review_state,
+        `SELECT thread_id, subject, from_header, evidence_codes, review_state,
                 resolved_organization_id::text
            FROM google_workspace_validation_review_items
           WHERE connection_id = $1 AND message_id = $2
@@ -179,7 +179,13 @@ implements GoogleProfileAssignmentTransactionPort {
                 reviewed_at = $7,
                 updated_at = $7
           WHERE connection_id = $1
-            AND thread_id = $2
+            AND (
+              thread_id = $2
+              OR (
+                lower(btrim(subject)) = lower(btrim($8))
+                AND lower(btrim(from_header)) = lower(btrim($9))
+              )
+            )
             AND (review_state = 'pending' OR message_id = $3)`,
         [
           connectionId,
@@ -189,6 +195,8 @@ implements GoogleProfileAssignmentTransactionPort {
           JSON.stringify(manualEvidence),
           input.actorId,
           input.now,
+          typeof previous.subject === "string" ? previous.subject : "",
+          typeof previous.from_header === "string" ? previous.from_header : "",
         ],
       );
 
@@ -534,7 +542,24 @@ implements GoogleProfileAssignmentTransactionPort {
               gmail_sync_error_code = $4,
               gmail_sync_mutation_id = $5,
               updated_at = GREATEST(updated_at, $6)
-        WHERE connection_id = $1 AND thread_id = $2`,
+        WHERE connection_id = $1
+          AND (
+            thread_id = $2
+            OR (
+              lower(btrim(subject)) = (
+                SELECT lower(btrim(subject))
+                  FROM google_workspace_validation_review_items
+                 WHERE connection_id = $1 AND message_id = $7
+                 LIMIT 1
+              )
+              AND lower(btrim(from_header)) = (
+                SELECT lower(btrim(from_header))
+                  FROM google_workspace_validation_review_items
+                 WHERE connection_id = $1 AND message_id = $7
+                 LIMIT 1
+              )
+            )
+          )`,
       [
         input.connectionId,
         input.threadId,
@@ -542,6 +567,7 @@ implements GoogleProfileAssignmentTransactionPort {
         mutation.lastErrorCode,
         mutation.id,
         input.now,
+        input.messageId,
       ],
     );
 
