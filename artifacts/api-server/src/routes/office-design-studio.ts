@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, asc, desc, eq, ilike, or } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, ne, or } from "drizzle-orm";
 import { z } from "zod";
 
 import { db } from "@workspace/db";
@@ -16,6 +16,10 @@ import {
 import { recordAuditEntry } from "@/features/audit/audit-service";
 import { sanitizeDesignStudioCanvas } from "@/features/design-studio/canvas-sanitizer";
 import { ensureCurrentTemplateCatalog } from "@/features/design-studio/current-template-catalog";
+import {
+  instantiateTemplate,
+  TemplateInstantiationError,
+} from "@/features/design-studio/template-instantiation-service";
 import { DrizzleOfficeAccountRepository } from "@/features/office/office-account-repository";
 import { resolveOfficeSession } from "@/features/office/office-middleware";
 import { verifyOfficeToken } from "@/features/office/office-auth";
@@ -211,6 +215,12 @@ const patchProjectSchema = createProjectSchema.partial().extend({
 const duplicateSchema = z
   .object({ name: z.string().trim().min(1).max(160).optional() })
   .strict();
+const instantiateTemplateSchema = z.object({
+  linkedOrganizationId: z.string().uuid(),
+  linkedContactId: z.string().uuid().nullable().optional(),
+  linkedBookingId: z.string().uuid().nullable().optional(),
+  documentYear: z.number().int().min(2020).max(2100),
+}).strict();
 const outputSchema = z
   .object({
     outputType: z.enum([
@@ -332,10 +342,21 @@ async function snapshotProject(
 router.get("/office/design-studio/projects", requireStudio, async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const linkedOrganizationId =
+    typeof req.query.linkedOrganizationId === "string"
+      ? req.query.linkedOrganizationId
+      : undefined;
+  if (linkedOrganizationId && !z.string().uuid().safeParse(linkedOrganizationId).success) {
+    res.status(400).json({ error: "Invalid profile ID." });
+    return;
+  }
   try {
     const filters = [
       eq(designProjects.officeAccountId, req.officeAccount!.accountId),
-      status ? eq(designProjects.status, status as never) : undefined,
+      status ? eq(designProjects.status, status as never) : ne(designProjects.status, "archived"),
+      linkedOrganizationId
+        ? eq(designProjects.linkedOrganizationId, linkedOrganizationId)
+        : undefined,
       search
         ? or(
             ilike(designProjects.name, `%${search}%`),
@@ -891,6 +912,45 @@ router.get("/office/design-studio/templates", requireStudio, async (req, res): P
   } catch (err) {
     req.log.error({ err }, "Failed to list Design Studio templates");
     res.status(500).json({ error: "Could not load Design Studio templates." });
+  }
+});
+
+router.post("/office/design-studio/templates/:templateId/instantiate", requireStudio, async (req, res): Promise<void> => {
+  const templateId = routeParam(req.params.templateId);
+  const parsed = instantiateTemplateSchema.safeParse(req.body);
+  if (!projectIdSchema.safeParse(templateId).success || !parsed.success) {
+    res.status(400).json({
+      error: parsed.success
+        ? "Invalid template ID."
+        : parsed.error.issues[0]?.message ?? "Review the profile document details.",
+    });
+    return;
+  }
+  try {
+    const project = await instantiateTemplate(db, {
+      accountId: req.officeAccount!.accountId,
+      templateId,
+      organizationId: parsed.data.linkedOrganizationId,
+      contactId: parsed.data.linkedContactId,
+      bookingId: parsed.data.linkedBookingId,
+      documentYear: parsed.data.documentYear,
+    });
+    res.status(201).json(projectJson(project));
+  } catch (error) {
+    if (error instanceof TemplateInstantiationError) {
+      const status = error.code === "TEMPLATE_NOT_FOUND" ? 404 : 409;
+      const messages = {
+        TEMPLATE_NOT_FOUND: "That template is no longer available.",
+        TEMPLATE_ARCHIVED: "That template has been archived. Choose a current template.",
+        ORGANIZATION_NOT_FOUND: "That profile could not be found.",
+        CONTACT_ORGANIZATION_MISMATCH: "The selected contact does not belong to this profile.",
+        BOOKING_ORGANIZATION_MISMATCH: "The selected booking does not belong to this profile.",
+      } as const;
+      res.status(status).json({ error: messages[error.code] });
+      return;
+    }
+    req.log.error({ err: error }, "Failed to instantiate Design Studio template");
+    res.status(500).json({ error: "Could not create the profile document." });
   }
 });
 
