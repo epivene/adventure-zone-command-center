@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 
-import type { db as database } from "@/db/client";
+import type { db as databaseClient } from "@/db/client";
 import { contractTemplateV1 } from "@/features/contracts/contract-template-v1";
 import { communicationTemplates } from "@workspace/db/business-source-schema";
 import { designTemplates } from "@workspace/db/design-studio-schema";
@@ -263,7 +263,7 @@ function revisionOf(value: string | null): number {
 }
 
 export async function ensureCurrentTemplateCatalog(
-  database: typeof database,
+  database: typeof databaseClient,
 ): Promise<void> {
   for (const definition of CURRENT_EMAIL_TEMPLATES) {
     const [existing] = await database
