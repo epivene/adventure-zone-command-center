@@ -42,6 +42,7 @@ async function buildAll() {
       // AI SDKs — complex builds that can't be bundled; resolved at runtime from node_modules
       "@anthropic-ai/sdk",
       "openai",
+      "pdfjs-dist",
       "sharp",
       "better-sqlite3",
       "sqlite3",

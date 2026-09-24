@@ -60,7 +60,7 @@ export const initialBusinessKnowledgeSeed: readonly BusinessKnowledgeSeedEntry[]
     target: { kind: "global" },
     title: "Event-specific pricing",
     body:
-      "Adventure Zone prices by event, not by individual inflatable. Some events may use no up-front fee with a percentage of ticket-box sales paid back to the event holder; other events pay an event fee so attractions are free to attendees. Treat every ACT note or prior quote as historical pricing evidence tied to its source/year, not as the current price. Confirm current pricing before quoting a new event.",
+      "Adventure Zone uses event-specific pricing, not pricing by individual inflatable. Some events may use no up-front fee with a percentage of ticket-box sales paid back to the event holder; other events pay an event fee so attractions are free to attendees. Treat every ACT note or prior quote as historical pricing evidence tied to its source/year, not as the current price. Confirm current pricing before quoting a new event.",
     sourceUrl: faqUrl,
     sourceLabel: websiteFaqLabel,
   },
@@ -265,7 +265,8 @@ implements BusinessKnowledgeRepository {
              body = excluded.body,
              source_url = excluded.source_url,
              source_label = excluded.source_label,
-             updated_at = now()`,
+             updated_at = now()
+           WHERE business_knowledge_entries.last_reviewed_at IS NULL`,
           [
             entry.seedKey,
             scope,

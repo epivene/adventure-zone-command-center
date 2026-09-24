@@ -3,7 +3,7 @@ import {
   deleteFollowUpInputSchema,
   editFollowUpInputSchema,
 } from "@/features/follow-ups/follow-up-input";
-import type { FollowUpRepository } from "@/features/follow-ups/follow-up-repository";
+import type { FollowUpRepository, FollowUpCreateOptions } from "@/features/follow-ups/follow-up-repository";
 import type {
   CreateFollowUpInput,
   EditFollowUpInput,
@@ -17,6 +17,7 @@ export class FollowUpService {
 
   async create(
     input: CreateFollowUpInput,
+    options?: FollowUpCreateOptions,
   ): Promise<Result<FollowUpRecord, FollowUpError>> {
     const parsed = createFollowUpInputSchema.safeParse(input);
     if (!parsed.success) {
@@ -25,7 +26,7 @@ export class FollowUpService {
         message: parsed.error.issues[0]?.message ?? "Review the follow-up.",
       });
     }
-    return this.repository.create(parsed.data);
+    return this.repository.create(parsed.data, options);
   }
 
   async edit(

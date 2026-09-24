@@ -67,9 +67,7 @@ describe("Gmail atomic reviewed draft send", () => {
         draftId: "draft",
         raw: "YWJj",
         beforeSend: async () => {
-          throw Object.assign(new Error("Stale"), {
-            code: "OUTREACH_SEND_RECHECK_FAILED",
-          });
+          throw new Error("ASSISTANT_SOURCES_CHANGED");
         },
       }),
     ).rejects.toMatchObject({ code: "OUTREACH_SEND_RECHECK_FAILED" });

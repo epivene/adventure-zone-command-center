@@ -1,3 +1,4 @@
+import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
@@ -364,6 +365,8 @@ function AdminProtectedApp() {
     <AssistantContextProvider>
       <AppShell>
         <Switch>
+          <Route path="/assistant/workspace/:conversationId">{params=><AssistantWorkspacePage key={params.conversationId} conversationId={params.conversationId}/>}</Route>
+          <Route path="/assistant/workspace"><AssistantWorkspacePage/></Route>
           <Route path="/command" component={AdminCommandPanelPage} />
           <Route path="/marketing" component={MarketingHomePage} />
           <Route path="/design-studio/email-templates" component={SettingsCommunicationTemplatesPage} />

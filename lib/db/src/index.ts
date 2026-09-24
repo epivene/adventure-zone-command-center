@@ -1,4 +1,5 @@
-import { drizzle } from "drizzle-orm/node-postgres";
+import * as assistantWorkspaceSchema from "./assistant-workspace-schema";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as coreSchema from "./schema";
 import * as eventFamilySchema from "./event-family-schema";
@@ -42,7 +43,8 @@ import {
 
 const { Pool } = pg;
 
-const connectionString = process.env.RENDER_DATABASE_URL ?? process.env.DATABASE_URL;
+const connectionString =
+  process.env.RENDER_DATABASE_URL ?? process.env.DATABASE_URL;
 
 if (!connectionString) {
   throw new Error(
@@ -53,13 +55,18 @@ if (!connectionString) {
 // Render's external PostgreSQL connection requires TLS. Use the explicit mode
 // matching pg's current secure behavior so future pg/libpq changes cannot silently
 // weaken certificate and hostname verification, and preserve existing URL params.
-const finalConnectionString = normalizeDatabaseConnectionString(connectionString, {
-  isRender: Boolean(process.env.RENDER_DATABASE_URL),
-});
+const finalConnectionString = normalizeDatabaseConnectionString(
+  connectionString,
+  {
+    isRender: Boolean(process.env.RENDER_DATABASE_URL),
+  },
+);
 
 export const pool = new Pool({
   connectionString: finalConnectionString,
-  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true"
+    ? { options: "-c outreach.enforced=true" }
+    : {}),
   application_name: "adventure-zone-command-center-api",
   ...databasePoolTimeouts(),
 });
@@ -69,13 +76,54 @@ export const pool = new Pool({
 // leaving the main pool available to resolve labels and persist job state.
 export const gmailThreadLockPool = new Pool({
   connectionString: finalConnectionString,
-  ...(process.env.OUTREACH_PLANNER_ENABLED === "true" ? { options: "-c outreach.enforced=true" } : {}),
+  ...(process.env.OUTREACH_PLANNER_ENABLED === "true"
+    ? { options: "-c outreach.enforced=true" }
+    : {}),
   application_name: "adventure-zone-command-center-gmail-thread-lock",
   max: 2,
   ...databasePoolTimeouts(),
 });
 import * as outreachPlannerSchema from "./outreach-planner-schema";
-const schema = {
+type DatabaseSchema = typeof assistantWorkspaceSchema &
+  typeof outreachPlannerSchema &
+  typeof coreSchema &
+  typeof eventFamilySchema &
+  typeof paperNoteSchema &
+  typeof businessSourceSchema &
+  typeof commercialOfferSchema &
+  typeof earlyBirdPromoSchema &
+  typeof eventChecklistSchema &
+  typeof resourceSourceCandidateSchema &
+  typeof eventAttendanceHistorySchema &
+  typeof eventDateCoverageSchema &
+  typeof officeCoordinatorSchema &
+  typeof bossSchema &
+  typeof bossWorkRequestSchema &
+  typeof websiteInquirySchema &
+  typeof googleWorkspaceSchema &
+  typeof operationalCalendarSchema &
+  typeof leadIntakeSchema &
+  typeof bookingOpportunitySchema &
+  typeof bookingOpportunityEmailSchema &
+  typeof legAssignmentSchema &
+  typeof designStudioCanvaSchema &
+  typeof contractSchema &
+  typeof marketingSchema &
+  typeof businessDocumentSchema &
+  typeof invoiceSchema &
+  typeof googleDriveBackupSchema &
+  typeof yearEndInspectionSchema & {
+    designAssets: typeof designAssets;
+    designCertificates: typeof designCertificates;
+    designOutputs: typeof designOutputs;
+    designProjectVersions: typeof designProjectVersions;
+    designProjects: typeof designProjects;
+    designSmartFields: typeof designSmartFields;
+    designTemplateFavorites: typeof designTemplateFavorites;
+    designTemplates: typeof designTemplates;
+  };
+const schema: DatabaseSchema = {
+  ...assistantWorkspaceSchema,
   ...outreachPlannerSchema,
   ...coreSchema,
   ...eventFamilySchema,
@@ -113,7 +161,10 @@ const schema = {
   designTemplateFavorites,
   designTemplates,
 };
-export const db = drizzle(pool, { schema });
+export const db: NodePgDatabase<typeof schema> & { $client: pg.Pool } = drizzle(
+  pool,
+  { schema },
+);
 
 export * from "./schema";
 export * from "./event-family-schema";
@@ -144,3 +195,5 @@ export * from "./invoice-schema";
 export * from "./google-drive-backup-schema";
 export * from "./year-end-inspection-schema";
 export * from "./outreach-planner-schema";
+
+export * from "./assistant-workspace-schema";

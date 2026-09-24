@@ -151,9 +151,11 @@ export type GoogleGmailDraft = {
   messageId: string;
   threadId?: string | null;
 };
+export type GoogleGmailDraftRaw = GoogleGmailDraft & {raw:string};
 export type GoogleGmailDraftClient = {
-  createGmailDraft(input: { raw: string }): Promise<GoogleGmailDraft>;
-  updateGmailDraft?(input: { draftId: string; raw: string }): Promise<GoogleGmailDraft>;
+  getGmailDraftRaw?(draftId:string):Promise<GoogleGmailDraftRaw>;
+  createGmailDraft(input: { raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
+  updateGmailDraft?(input: { draftId: string; raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
 };
 
 export type GoogleCalendarEvent = {
@@ -202,10 +204,13 @@ export interface GoogleWorkspaceReadClient {
   }): Promise<GoogleMessagePage>;
   getMessageMetadata?(id: string): Promise<GoogleMessageMetadata>;
   getThreadDetail?(threadId: string): Promise<GoogleThreadDetail>;
+  getGmailDraftRaw?(draftId:string):Promise<GoogleGmailDraftRaw>;
+  getGmailMessageRaw?(messageId:string):Promise<{messageId:string;threadId:string;raw:string;labelIds:string[]}>;
+  listGmailDrafts?(query:string):Promise<{drafts:{id:string;message:{id:string;threadId:string}}[];nextPageToken:string|null}>;
   getThreadLabelIds?(threadId: string): Promise<string[]>;
   getAttachment?(input: { messageId: string; attachmentId: string }): Promise<Uint8Array>;
-  createGmailDraft?(input: { raw: string }): Promise<GoogleGmailDraft>;
-  updateGmailDraft?(input: { draftId: string; raw: string }): Promise<GoogleGmailDraft>;
+  createGmailDraft?(input: { raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
+  updateGmailDraft?(input: { draftId: string; raw: string; threadId?: string | null }): Promise<GoogleGmailDraft>;
   deleteLabel?(labelId: string): Promise<void>;
   listDriveFiles?(parentId: string, pageToken?: string | null): Promise<GoogleDrivePage>;
   downloadDriveFile?(fileId: string, mimeType?: string): Promise<Uint8Array>;

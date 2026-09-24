@@ -1,3 +1,4 @@
+import {sql} from "drizzle-orm";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { readFile } from "node:fs/promises";
@@ -57,4 +58,19 @@ describe("signed contract completion", () => {
       expect(count.rows[0]?.count).toBe(1);
     }
   });
+});
+
+it("keeps assistant confirmation hooks and canonical completion in one rollback boundary", async () => {
+  const {client}=await setup();
+  await client.exec("create table confirmation_receipts (id text primary key)");
+  const repository=new DrizzleContractLifecycleRepository(drizzle(client) as never, async(tx,work)=>{
+    const saved=await work();
+    await tx.execute(sql`insert into confirmation_receipts values ('receipt')`);
+    throw new Error("receipt failure");
+  });
+  const service=new ContractLifecycleService(repository);
+  await expect(service.confirmSignedFile({contractVersionId:"55555555-5555-4555-8555-555555555555",fileId:"77777777-7777-4777-8777-777777777777",actorId:"owner"})).rejects.toThrow("receipt failure");
+  expect((await client.query<{status:string}>("select status::text from contract_versions")).rows[0].status).toBe("sent_for_signature");
+  expect((await client.query("select id from confirmation_receipts")).rows).toHaveLength(0);
+  expect((await client.query("select id from contract_files where confirmed_at is not null")).rows).toHaveLength(0);
 });

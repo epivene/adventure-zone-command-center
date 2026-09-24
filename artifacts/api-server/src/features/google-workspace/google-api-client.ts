@@ -822,6 +822,21 @@ export function createGoogleWorkspaceReadClient(input: {
       };
     },
 
+    async getGmailDraftRaw(draftId) {
+      const payload=await authorizedJson(`${draftsEndpoint}/${encodeURIComponent(draftId)}?format=raw`);
+      const message=payload.message as Record<string,unknown>|undefined;
+      if(typeof payload.id!=="string"||typeof message?.id!=="string"||typeof message?.raw!=="string")throw clientError("GOOGLE_WORKSPACE_GMAIL_DRAFT_RESPONSE_INVALID");
+      return {draftId:payload.id,messageId:message.id,threadId:typeof message.threadId==="string"?message.threadId:null,raw:message.raw};
+    },
+    async getGmailMessageRaw(messageId) {
+      const payload=await authorizedJson(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(messageId)}?format=raw`);
+      if(typeof payload.id!=="string"||typeof payload.threadId!=="string"||typeof payload.raw!=="string")throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_RESPONSE_INVALID");
+      return {messageId:payload.id,threadId:payload.threadId,raw:payload.raw,labelIds:Array.isArray(payload.labelIds)?payload.labelIds.filter((v):v is string=>typeof v==="string"):[]};
+    },
+    async listGmailDrafts(query) {
+      const payload=await authorizedJson(`${draftsEndpoint}?maxResults=100&q=${encodeURIComponent(query)}`);
+      return {drafts:Array.isArray(payload.drafts)?payload.drafts as {id:string;message:{id:string;threadId:string}}[]:[],nextPageToken:typeof payload.nextPageToken==="string"?payload.nextPageToken:null};
+    },
     async createGmailDraft(input): Promise<GoogleGmailDraft> {
       if (!/^[A-Za-z0-9_-]+$/.test(input.raw)) throw clientError("GOOGLE_WORKSPACE_GMAIL_MESSAGE_INVALID");
       let response: Response;
@@ -836,7 +851,7 @@ export function createGoogleWorkspaceReadClient(input: {
             authorization: `Bearer ${token}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ message: { raw: input.raw } }),
+          body: JSON.stringify({ message: { raw: input.raw, ...(input.threadId ? {threadId: input.threadId} : {}) } }),
           signal: controller.signal,
         });
         payload = await responseJson(response);
@@ -885,7 +900,7 @@ export function createGoogleWorkspaceReadClient(input: {
               authorization: `Bearer ${token}`,
               "content-type": "application/json",
             },
-            body: JSON.stringify({ message: { raw: input.raw } }),
+            body: JSON.stringify({ message: { raw: input.raw, ...(input.threadId ? {threadId: input.threadId} : {}) } }),
             signal: controller.signal,
           },
         );

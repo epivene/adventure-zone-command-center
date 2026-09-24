@@ -1,3 +1,6 @@
+import {startWorkspaceRuntime} from "./features/assistant-workspace/runtime";
+import {installApprovedWorkspaceRules} from "./features/assistant-workspace/seed";
+import { ensureAssistantWorkspaceSchema } from "./db/assistant-workspace-startup-migration";
 import { randomUUID } from "node:crypto";
 
 import app from "./app";
@@ -399,6 +402,10 @@ async function runPostListenMaintenance() {
     );
   }
 
+  if (process.env.ASSISTANT_WORKSPACE_ENABLED === "true") {
+    await runStartupStep("assistant workspace schema", () => ensureAssistantWorkspaceSchema(pool));
+    await runStartupStep("assistant workspace approved rules", () => installApprovedWorkspaceRules(pool));
+  }
   await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
   await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
   const assistantSchemaApplied = await runStartupStep(
@@ -583,6 +590,11 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
+  if(process.env.ASSISTANT_WORKSPACE_ENABLED==="true") {
+    const stopAssistant=startWorkspaceRuntime();
+    process.once("SIGTERM",stopAssistant);
+    process.once("SIGINT",stopAssistant);
+  }
   historicalGmailBackfillLoop.start();
   googleDocumentLoop.start();
   googleDriveBackupLoop?.start();
