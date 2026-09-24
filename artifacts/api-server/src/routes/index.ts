@@ -1,3 +1,4 @@
+import assistantWorkspaceRouter from "./assistant-workspace";
 import { createOutreachPlannerRouter } from "./outreach-planner";
 import { Router, type IRouter } from "express";
 import { db } from "@workspace/db";
@@ -284,6 +285,7 @@ router.use(todayRouter);
 router.use(opportunityEmailLiveRuntimeRouter);
 router.use(assistantCommandJobsRouter);
 router.use(assistantGeneralConversationsRouter);
+router.use("/assistant/workspace",assistantWorkspaceRouter);
 router.use(assistantRouter);
 router.use(assistantLeadScoutRouter);
 router.use(bookingPackageEditorRouter);

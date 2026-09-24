@@ -13,9 +13,12 @@ import { err, ok, type Result } from "@/lib/result";
 
 export type { CreateFollowUpInput, EditFollowUpInput, FollowUpError, FollowUpRecord };
 
+export type FollowUpCreateOptions = {preserveExisting?:boolean;idempotencyId?:string};
+
 export interface FollowUpRepository {
   create(
     input: CreateFollowUpInput,
+    options?: FollowUpCreateOptions,
   ): Promise<Result<FollowUpRecord, FollowUpError>>;
   edit(
     input: EditFollowUpInput,
@@ -44,11 +47,19 @@ export class DrizzleFollowUpRepository implements FollowUpRepository {
 
   async create(
     input: CreateFollowUpInput,
+    options?: FollowUpCreateOptions,
   ): Promise<Result<FollowUpRecord, FollowUpError>> {
     return this.database.transaction(async (transaction) => {
       const now = new Date();
 
-      if (input.bookingId) {
+      if (options?.idempotencyId) {
+        const [prior]=await transaction.select().from(followUps).where(eq(followUps.id,options.idempotencyId)).limit(1);
+        if(prior) {
+          if(prior.organizationId!==input.organizationId||prior.bookingId!==input.bookingId||prior.kind!==input.kind||prior.dueAt.getTime()!==input.dueAt.getTime()) return err({code:"INVALID_FOLLOW_UP_INPUT",message:"Reminder request conflicts with a previous action."});
+          return ok(toFollowUpRecord(prior));
+        }
+      }
+      if (input.bookingId && !options?.preserveExisting) {
         await transaction
           .update(followUps)
           .set({
@@ -67,6 +78,7 @@ export class DrizzleFollowUpRepository implements FollowUpRepository {
       const [created] = await transaction
         .insert(followUps)
         .values({
+          ...(options?.idempotencyId?{id:options.idempotencyId}:{}),
           organizationId: input.organizationId,
           contactId: input.contactId,
           bookingId: input.bookingId,

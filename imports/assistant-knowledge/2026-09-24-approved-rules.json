@@ -1,0 +1,95 @@
+{
+  "seedVersion": 1,
+  "rules": [
+    {
+      "ruleKey": "space-adventure-zone",
+      "body": "Adventure Zone requires 10,000\u201315,000 sq ft.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "space-warriors",
+      "body": "Warrior\u2019s Playground requires 7,000\u201310,000 sq ft.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "space-pirates",
+      "body": "Pirate\u2019s Rebellion space requirement is unverified. Obtain a current approved specification before including a size.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "prepaid-terms",
+      "body": "Prepaid events use 40% deposit and 60% on arrival. These payment terms do not establish a pay-per-play revenue split.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "customer-exceptions",
+      "body": "WYO Bounce Bash has a context-specific 50/50 arrangement. Verify its actual agreement, event year, and split direction before use. Never generalize it to other customers.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "promotion-timing",
+      "body": "A 30-day promotional offer starts on the actual send date. Preserve existing and manually set follow-ups.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "coi-renewal",
+      "body": "Certificates for periods after June renewal are unavailable until renewal. Verify the exact renewal day and current coverage. Sample COIs and historical contracts never establish universal current coverage.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "foam-party",
+      "body": "Foam Party is a $3,500 add-on with one shared pool/resource and a separate team. Verify availability and applicability to the customer before making an offer.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "writing",
+      "body": "Use warm, compact branded HTML and no em dash in customer emails. Verify current package/template links from the app.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    },
+    {
+      "ruleKey": "evidence",
+      "body": "Before commercial output, check complete history, incoming and sent email, attachments, contacts, dates, calendar and applicable agreements. Conflicting or unavailable sources require clarification, not invented terms.",
+      "sourceLabel": "Owner-approved assistant upgrade, September 24, 2026",
+      "organizationId": null,
+      "eventYear": null,
+      "effectiveFrom": "2026-09-24",
+      "effectiveTo": null
+    }
+  ]
+}

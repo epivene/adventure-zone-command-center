@@ -117,11 +117,23 @@ export function createGoogleGmailDeliveryClient(input: {
   async function bounded<T>(
     uncertainCode: string,
     operation: (token: string, signal: AbortSignal) => Promise<T>,
+    beforeOperation?: () => Promise<void>,
   ): Promise<T> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    let timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const token = await currentAccessToken(controller.signal);
+      if (beforeOperation) {
+        if (controller.signal.aborted)
+          throw clientError("OUTREACH_SEND_RECHECK_FAILED");
+        clearTimeout(timeout);
+        try {
+          await beforeOperation();
+        } catch {
+          throw clientError("OUTREACH_SEND_RECHECK_FAILED");
+        }
+        timeout = setTimeout(() => controller.abort(), timeoutMs);
+      }
       return await operation(token, controller.signal);
     } catch (error) {
       if (
@@ -236,7 +248,6 @@ export function createGoogleGmailDeliveryClient(input: {
       return bounded(
         "GOOGLE_WORKSPACE_GMAIL_SEND_OUTCOME_UNCERTAIN",
         async (token, signal) => {
-          await beforeSend?.();
           const response = await fetcher(`${gmailDraftsEndpoint}/send`, {
             method: "POST",
             headers: {
@@ -276,6 +287,7 @@ export function createGoogleGmailDeliveryClient(input: {
                 : null,
           };
         },
+        beforeSend,
       );
     },
   };

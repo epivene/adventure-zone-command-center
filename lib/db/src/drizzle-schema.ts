@@ -19,3 +19,5 @@ export * from "./leg-assignment-schema";
 export * from "./design-studio-schema";
 
 export * from "./outreach-planner-schema";
+
+export * from "./assistant-workspace-schema";

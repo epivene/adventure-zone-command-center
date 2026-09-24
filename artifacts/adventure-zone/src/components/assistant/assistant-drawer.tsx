@@ -1,3 +1,4 @@
+import {workspaceHref} from "@/features/assistant-workspace/api";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Bot, WifiOff, X } from "lucide-react";
 import { useLocation } from "wouter";
@@ -394,6 +395,7 @@ export function AssistantDrawer() {
           <div className="grid h-10 w-10 place-items-center rounded-full bg-orange-100 text-orange-700"><Bot className="h-5 w-5" /></div>
           <div className="min-w-0 flex-1"><h2 className="font-bold text-slate-950">Booking Assistant</h2><p className="truncate text-xs text-slate-500">{activeContext?.label ?? "General Command Terminal · No profile selected"}</p></div>
           {explicitContext ? <button className="text-xs font-semibold text-orange-700 hover:underline" onClick={clearExplicitContext} type="button">Clear selected context</button> : null}
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={()=>{closeAssistant();setLocation(workspaceHref())}}>Open workspace</button>
           <button aria-label="Close Booking Assistant" className="grid h-10 w-10 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900" onClick={closeAssistant} type="button"><X className="h-5 w-5" /></button>
         </header>
         {offline ? <div className="flex items-center gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs font-semibold text-amber-800"><WifiOff className="h-4 w-4" />Offline — using saved Command Terminal data{savedAt ? ` from ${new Date(savedAt).toLocaleString()}` : ""}.</div> : null}

@@ -1,3 +1,4 @@
+import {createAssistantTimedCalendarClient} from "./calendar/assistant-timed-calendar-client";
 import { rawCalendarFactQuery } from "@/features/outreach-planner/outreach-raw-reconciliation";
 import { pool as defaultPool } from "@workspace/db";
 
@@ -341,6 +342,17 @@ export class PostgresGoogleConnectionRepository {
     return { connectionId: row.id, calendarId, client: this.createCalendarClient({ environment, refreshToken }) };
   }
 
+  async createAssistantCalendarClient() {
+    const row=await this.currentRow("operational_calendar");
+    if(!row)return null;
+    if(row.status==="reauthorization_required"||!scopes(row.granted_scopes).includes(GOOGLE_OPERATIONAL_CALENDAR_SCOPE))throw new Error("GOOGLE_WORKSPACE_REAUTHORIZATION_REQUIRED");
+    const environment=this.requireEnvironment();
+    const refreshToken=decryptGoogleSecret(row.encrypted_refresh_token,environment.tokenEncryptionKey);
+    const calendarId=row.operational_calendar_id?.trim()||row.account_email.trim();
+    if(!calendarId)throw new Error("GOOGLE_OPERATIONAL_CALENDAR_ID_REQUIRED");
+    return {connectionId:row.id,calendarId,client:createAssistantTimedCalendarClient({environment,refreshToken})};
+  }
+
   async createGmailDraftClient(): Promise<{ connectionId: string; client: GoogleGmailDraftClient } | null> {
     const row = await this.currentRow("workspace");
     if (!row) return null;
@@ -356,6 +368,7 @@ export class PostgresGoogleConnectionRepository {
     return {
       connectionId: row.id,
       client: {
+        getGmailDraftRaw: client.getGmailDraftRaw?.bind(client),
         createGmailDraft: client.createGmailDraft.bind(client),
         updateGmailDraft: client.updateGmailDraft.bind(client),
       },
