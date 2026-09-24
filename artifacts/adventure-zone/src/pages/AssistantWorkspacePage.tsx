@@ -1,3 +1,6 @@
+import { DocumentResults } from "@/components/assistant-workspace/DocumentResults";
+import { businessDocumentsApi } from "@/lib/business-documents-api";
+import type { HumanConfirmation } from "@/components/assistant-workspace/ActionResults";
 import { SendReview } from "@/components/assistant-workspace/SendReview";
 import {
   useCallback,
@@ -31,6 +34,24 @@ function friendly(error: unknown) {
   if (/RATE_LIMIT/.test(code))
     return "A few requests are still running. Please try again shortly.";
   return "This request could not finish. Your saved conversation is still available.";
+}
+function commercialActionSummary(kind: string, raw: unknown) {
+  if (!raw || typeof raw !== "object") return undefined;
+  const a = raw as Record<string, unknown>;
+  const money = (value: unknown) =>
+    typeof value === "number"
+      ? new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+        }).format(value / 100)
+      : "Unknown";
+  if (kind === "record_invoice_payment")
+    return `Record ${money(a.amountCents)} received ${a.receivedDate} by ${a.method}.\nReference: ${a.receiptReference} · Event year ${a.eventYear}`;
+  if (kind === "register_invoice")
+    return `Create draft invoice ${a.invoiceNumber}: ${money(a.totalCents)} total, ${money(a.depositCents)} deposit. Event year ${a.eventYear}.`;
+  if (kind === "confirm_signed_contract")
+    return `Confirm the reviewed signed file for event year ${a.eventYear}.\nReview: ${a.reviewNote}`;
+  return undefined;
 }
 export default function AssistantWorkspacePage({
   conversationId,
@@ -188,7 +209,7 @@ export default function AssistantWorkspacePage({
       setBusy(false);
     }
   }
-  async function action(id: string) {
+  async function action(id: string, confirmation?: HumanConfirmation) {
     const saved = conversation?.actions.find((a) => a.id === id);
     if (!saved) return;
     setBusy(true);
@@ -196,6 +217,7 @@ export default function AssistantWorkspacePage({
     try {
       await workspaceApi(`/actions/${id}/execute`, "POST", {
         revision: saved.expectedRevision,
+        ...(confirmation ? { confirmation } : {}),
         requestKey: crypto.randomUUID(),
       });
       await refresh();
@@ -203,6 +225,22 @@ export default function AssistantWorkspacePage({
       setError(friendly(e));
     } finally {
       setBusy(false);
+    }
+  }
+  async function openDocument(id: string) {
+    const tab = window.open("about:blank", "_blank");
+    if (tab) tab.opener = null;
+    try {
+      const url = await businessDocumentsApi.open(id);
+      if (new URL(url, window.location.origin).protocol !== "https:")
+        throw new Error("ASSISTANT_DOCUMENT_UNAVAILABLE");
+      if (tab) tab.location.href = url;
+      else window.location.assign(url);
+    } catch {
+      tab?.close();
+      setError(
+        "This file could not be opened. Check the document in Business Documents.",
+      );
     }
   }
   async function saveDraft(draft: Draft) {
@@ -429,6 +467,10 @@ export default function AssistantWorkspacePage({
             </form>
           </section>
           <aside className="space-y-4">
+            <DocumentResults
+              items={conversation?.documentResults ?? []}
+              onOpen={(id) => void openDocument(id)}
+            />
             <h2 className="font-semibold">Drafts and actions</h2>
             {!conversation?.drafts.length && !conversation?.actions.length && (
               <p className="rounded-xl border border-dashed p-4 text-sm text-slate-500">
@@ -460,15 +502,35 @@ export default function AssistantWorkspacePage({
               items={
                 conversation?.actions.map((a) => ({
                   id: a.id,
-                  label: a.kind.replaceAll("_", " "),
+                  label: a.preview?.title ?? a.kind.replaceAll("_", " "),
+                  targetId: a.targetId,
+                  revision: a.expectedRevision,
+                  approvalBlocked: a.preview?.available === false,
                   status: a.status,
                   href: a.result?.receipts?.[0]?.href ?? null,
                   details: a.arguments,
+                  confirmation:
+                    a.kind === "record_invoice_payment"
+                      ? ("payment_received" as const)
+                      : a.kind === "confirm_signed_contract"
+                        ? ("signatures_reviewed" as const)
+                        : undefined,
+                  summary: [
+                    a.preview?.summary,
+                    commercialActionSummary(a.kind, a.arguments),
+                  ]
+                    .filter(Boolean)
+                    .join("\n"),
+                  reviewHref:
+                    a.preview?.reviewHref ??
+                    (a.kind === "confirm_signed_contract"
+                      ? `/contracts/${a.targetId}/handoff`
+                      : undefined),
                   trackingRepair:
                     a.result?.code === "ASSISTANT_TRACKING_REPAIR_REQUIRED",
                 })) ?? []
               }
-              onApprove={(id) => void action(id)}
+              onApprove={(id, confirmation) => void action(id, confirmation)}
               onCheck={(id) => void action(id)}
             />
           </aside>

@@ -1,3 +1,5 @@
+import { useState } from "react";
+export type HumanConfirmation = "payment_received" | "signatures_reviewed";
 const labels: Record<string, string> = {
   prepared: "Ready for review",
   queued: "Queued",
@@ -23,11 +25,18 @@ export function ActionResults({
     href: string | null;
     details?: unknown;
     trackingRepair?: boolean;
+    confirmation?: HumanConfirmation;
+    summary?: string;
+    reviewHref?: string;
+    targetId?: string;
+    revision?: string | null;
+    approvalBlocked?: boolean;
   }[];
-  onApprove?: (id: string) => void;
+  onApprove?: (id: string, confirmation?: HumanConfirmation) => void;
   onCheck?: (id: string) => void;
   busy?: boolean;
 }) {
+  const [verified, setVerified] = useState<Record<string, boolean>>({});
   return (
     <ul className="space-y-3" aria-label="Action results">
       {items.map((item) => (
@@ -45,6 +54,26 @@ export function ActionResults({
                 : (labels[item.status] ?? item.status)}
             </span>
           </div>
+          {item.targetId && (
+            <p className="mt-2 break-all text-xs text-slate-500">
+              Record: {item.targetId} · Revision: {item.revision ?? "new"}
+            </p>
+          )}
+          {item.summary && (
+            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
+              {item.summary}
+            </p>
+          )}
+          {item.reviewHref && item.status === "prepared" && (
+            <a
+              className="mt-2 inline-block text-sm text-teal-800 underline"
+              href={item.reviewHref}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Review record details and files
+            </a>
+          )}
           {item.href && item.status === "succeeded" && (
             <a
               className="mt-2 inline-block text-sm text-teal-800 underline"
@@ -62,14 +91,38 @@ export function ActionResults({
             </details>
           )}
           {item.status === "prepared" && onApprove && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => onApprove(item.id)}
-              className="mt-3 rounded-lg bg-teal-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            >
-              Approve this action
-            </button>
+            <div>
+              {item.confirmation && (
+                <label className="mt-3 flex items-start gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={verified[item.id] ?? false}
+                    onChange={(e) =>
+                      setVerified((v) => ({
+                        ...v,
+                        [item.id]: e.target.checked,
+                      }))
+                    }
+                  />
+                  {item.confirmation === "payment_received"
+                    ? "I verified that this payment was received and the amount, date and reference are correct."
+                    : "I reviewed this exact uploaded file and verified all required signatures."}
+                </label>
+              )}
+              <button
+                type="button"
+                disabled={
+                  busy ||
+                  item.approvalBlocked ||
+                  (!!item.confirmation && !verified[item.id])
+                }
+                onClick={() => onApprove(item.id, item.confirmation)}
+                className="mt-3 rounded-lg bg-teal-800 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Approve this action
+              </button>
+            </div>
           )}
           {(item.trackingRepair ||
             ["uncertain", "provider_started", "running"].includes(

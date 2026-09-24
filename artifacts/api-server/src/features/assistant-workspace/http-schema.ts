@@ -10,5 +10,8 @@ export const actionInput = z
   .object({
     requestKey: z.string().min(1).max(128),
     revision: z.string().nullable(),
+    confirmation: z
+      .enum(["payment_received", "signatures_reviewed"])
+      .optional(),
   })
   .strict();

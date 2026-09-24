@@ -1,4 +1,4 @@
-# Assistant workspace: Stage 1 review and rollout
+# Assistant workspace: foundation and document workflow review
 
 The upgrade adds a persistent owner workspace at `/assistant/workspace`, backed by the OpenAI Responses API and the app's existing Gmail, CRM, document, reminder, and operational-calendar services. It is disabled by default. This branch is a review candidate, not a production activation.
 
@@ -12,6 +12,16 @@ The upgrade adds a persistent owner workspace at `/assistant/workspace`, backed 
 - Send review binds current email history, profile, linked documents, approved rules and template versions. Changed sources require renewed review. Event year and booking are stored in draft context.
 - Proposed record/reminder/calendar actions, existing reminder preservation, exact-target approval, timed events without attendee invitations.
 - Versioned sourced business rules with explicit approval; current customer/year scopes refresh after selection changes. Seed does not overwrite reviewed rules.
+
+## Document workflow additions
+
+- Read contracts, invoices and recorded payments for a selected customer and canonical booking-opportunity event year. Unknown-year records are explicitly excluded; invoice issue date never substitutes for event year. Outstanding balances exclude drafts/cancelled invoices; cash totals retain their nonvoided receipts.
+- Compare two to four linked documents with full page evidence, version checks and explicit unreadable-page reporting. Source cards persist across refresh and open originals through authenticated routes. Text or visual extraction never establishes execution, receipt of money, or current event-specific insurance.
+- Create document projects from active approved Design Studio templates, and start/save/finalize contract drafts through existing contract services. Contract PDFs use the existing versioned renderer and storage. Invoice registration creates a draft record from an existing linked invoice document; invoice layouts and exports stay in the existing approved Design Studio workflow.
+- Record reviewed invoice payments through the existing invoice service. Confirm an exact signed-file checksum through the canonical lifecycle/capacity transaction. Both require a dedicated human verification control, exact target/revision/customer/booking/year, and a durable receipt in the same database transaction. Financial approval cards display trusted invoice identity and before/after paid totals, balances and status; signed-file cards show filename, file revision and checksum. Changed records disable the approval preview. Local record actions remain usable when Google is unavailable. They do not send mail or submit signature requests.
+- Repeated action requests return saved receipts. Repeated assistant payment references on the same invoice are rejected; arbitrary manual receipts without that reference still need human reconciliation.
+
+Contract actions require the existing `CONTRACT_BUILDER_ENABLED` configuration and current active template. PDF generation also requires configured document object storage. Missing approved layouts block creation instead of inventing contractual or invoice terms. Failed external PDF storage may leave an unreferenced object; uncertain actions require inspection and are not automatically repeated.
 
 ## Configuration
 
@@ -41,6 +51,12 @@ Approvals apply to exact saved revisions and targets. A changed draft, contact, 
 
 Automated coverage includes PGlite-backed ownership, atomic submission, worker fencing, deduplication, draft revisions, send/reconcile paths, source-change rejection, real PostgreSQL DATE parsing, rule scope, document completeness, API authentication and React interactions. Provider tests use controlled doubles; no customer emails were sent during development. Both API and browser production builds were exercised. Full repository typechecks also expose pre-existing unrelated errors; do not describe the entire repository as type-clean.
 
+Latest document-stage verification: Node 22 passed 33 backend test files / 141 tests, including actual PGlite invoice/lifecycle services, action replay/rollback, scoped draft reads, payment previews, HTTP human verification and existing workspace regressions. React passed 3 files / 8 tests. API and UI production builds passed. Repository-wide typechecks retain the same 94 API and 135 UI baseline errors; none are reported in the changed workspace/lifecycle files. Final independent review findings were fixed and the focused re-review found no further critical or important issue.
+
+Additional local acceptance used the actual bundled authentication/router/stores with disk-backed PGlite and a controlled provider runtime: 31/31 checks covered sign-in, access denial, atomic duplicate submissions, process-restart recovery, expired lease reclamation, feature-off behavior and repeat migrations. This did not run the full built server, native PostgreSQL, or live providers. Real supplied-PDF reader checks read both text contracts completely and marked the image-only COI partial with its unreadable page. Private PDFs were not committed.
+
+Browser navigation to the local app was explicitly blocked by environment URL policy. Native PostgreSQL binaries were unavailable, and package setup could not complete under the environment's UID/GID restrictions. These remain release gates, not passing checks.
+
 Before production activation:
 
 1. Apply migration on disposable real PostgreSQL and run concurrent multi-process claim/lease/submit tests.
@@ -51,6 +67,6 @@ Before production activation:
 
 ## Remaining scope
 
-This branch is Stage 1. Document creation/comparison, contract and invoice workflows, researched campaigns/batches, and staff operations/handoffs (Stages 2–4) are not delivered here.
+This branch contains the foundation and document-workflow implementation candidates. Researched campaigns/batches and staff operations/handoffs (Stages 3–4) retain their separate specification and implementation boundaries; they are not delivered here.
 
-Further Stage 1 work remains explicit: automatic bounded conversation summaries and reusable document-extraction cache; complete browser/live-provider acceptance; polished source provenance display and direct natural-language grants. Record writes currently require explicit action-card approval. Very large conversations stop with a clear context-limit message; create a new conversation and reload the same profile to continue. Saved drafts remain editable in their original conversation. Original messages and evidence checkpoints remain stored. Scanned/signature content remains unverified even after visual transcription.
+Further Stage 1 work remains explicit: automatic bounded conversation summaries and reusable document-extraction cache; complete browser/live-provider acceptance; broader source provenance display beyond the new document/commercial cards and direct natural-language grants. Record writes currently require explicit action-card approval. Very large conversations stop with a clear context-limit message; create a new conversation and reload the same profile to continue. Saved drafts remain editable in their original conversation. Original messages and evidence checkpoints remain stored. Scanned/signature content remains unverified even after visual transcription.

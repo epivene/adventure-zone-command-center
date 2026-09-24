@@ -23,3 +23,71 @@ it("does not offer resend for uncertain delivery", () => {
   expect(screen.getByText("Checking result")).toBeTruthy();
   expect(screen.queryByText("Send again")).toBeNull();
 });
+
+import { fireEvent } from "@testing-library/react";
+import { vi } from "vitest";
+it("requires the owner to verify payment receipt before approving a financial action", () => {
+  const approve = vi.fn();
+  render(
+    <ActionResults
+      items={[
+        {
+          id: "payment",
+          label: "Record payment",
+          status: "prepared",
+          href: null,
+          confirmation: "payment_received",
+        } as any,
+      ]}
+      onApprove={approve}
+    />,
+  );
+  const button = screen.getByRole("button", { name: "Approve this action" });
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(button);
+  expect(approve).toHaveBeenCalledWith("payment", "payment_received");
+});
+
+it("distinguishes invoices with identical payment amounts and blocks stale previews", () => {
+  render(
+    <ActionResults
+      items={[
+        {
+          id: "a",
+          label: "Payment · INV-001",
+          status: "prepared",
+          href: null,
+          targetId: "invoice-one",
+          revision: "rev-one",
+          summary: "Balance $500 → $400",
+          confirmation: "payment_received",
+        },
+        {
+          id: "b",
+          label: "Payment · INV-002",
+          status: "prepared",
+          href: null,
+          targetId: "invoice-two",
+          revision: "rev-two",
+          summary: "Refresh invoice details",
+          confirmation: "payment_received",
+          approvalBlocked: true,
+        },
+      ]}
+      onApprove={vi.fn()}
+    />,
+  );
+  expect(screen.getByText(/invoice-one.*rev-one/)).toBeTruthy();
+  expect(screen.getByText(/invoice-two.*rev-two/)).toBeTruthy();
+  expect(screen.getByText("Payment · INV-001")).toBeTruthy();
+  expect(screen.getByText("Payment · INV-002")).toBeTruthy();
+  fireEvent.click(screen.getAllByRole("checkbox")[1]);
+  expect(
+    (
+      screen.getAllByRole("button", {
+        name: "Approve this action",
+      })[1] as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
+});

@@ -139,3 +139,39 @@ it("keeps disabled and unallowlisted access away from runtime data", async () =>
     ).status,
   ).toBe(403);
 });
+it.each([
+  ["record_invoice_payment", "payment_received"],
+  ["confirm_signed_contract", "signatures_reviewed"],
+])(
+  "requires human verification before approving %s",
+  async (kind, confirmation) => {
+    const f = await fixture();
+    const action = {
+      id: "760b0ae0-76ca-4175-a018-5cbd41cbd156",
+      kind,
+      status: "prepared",
+      targetId: "target",
+      expectedRevision: "revision",
+      conversationId: f.c.id,
+      sourceMessageId: "source",
+      connectionId: null,
+    };
+    f.runtime.actions = { get: async () => action };
+    f.runtime.google.getCurrent = async () => {
+      throw new Error("Google unavailable");
+    };
+    f.runtime.executor = { execute: vi.fn(async () => ({ status: "ok" })) };
+    const send = (extra = {}) =>
+      request(f.app)
+        .post(`/actions/${action.id}/execute`)
+        .set("Authorization", f.authorization)
+        .send({ requestKey: "approval", revision: "revision", ...extra });
+    expect((await send()).status).toBe(422);
+    expect(f.runtime.executor.execute).not.toHaveBeenCalled();
+    expect((await send({ confirmation })).status).toBe(200);
+    expect(f.runtime.executor.execute).toHaveBeenCalledTimes(1);
+    expect(
+      (await f.runtime.conversations.get("owner", f.c.id)).messages.at(-1).text,
+    ).toContain(`Human verification: ${confirmation}`);
+  },
+);

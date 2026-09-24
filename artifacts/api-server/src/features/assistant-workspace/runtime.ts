@@ -1,3 +1,9 @@
+import {
+  commercialAdapters,
+  commercialActionPreview,
+} from "./commercial-adapters";
+import type { ActionIntent, RunContext } from "./contracts";
+import { createCommercialTools } from "./commercial-tools";
 import { createWorkspaceSendService } from "./gmail-send";
 import { externalAdapters } from "./external-actions";
 import { gmailDraftAdapter } from "./gmail-drafts";
@@ -36,12 +42,20 @@ export function createWorkspaceRuntime() {
   });
   const executor = new ActionExecutor(ownerId, actions, {
     ...productionRecordAdapters(db, pool),
+    ...commercialAdapters(db, pool),
     ...externalAdapters(pool, google),
     save_gmail_draft: gmailDraftAdapter(drafts, google),
     send_draft: send.adapter,
   });
   const tools = createToolRegistry([
     createReadTools({ ownerId, ...reads }),
+    createCommercialTools({
+      ownerId,
+      db: pool,
+      reader: reads.reader,
+      executor,
+      runs,
+    }),
     createWorkspaceTools({
       ownerId,
       db: pool,
@@ -89,6 +103,8 @@ export function createWorkspaceRuntime() {
       })),
   });
   return {
+    actionPreview: (context: RunContext, intent: ActionIntent) =>
+      commercialActionPreview(pool, context, intent),
     config,
     ownerId,
     conversations,

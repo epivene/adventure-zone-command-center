@@ -110,9 +110,12 @@ export class ContractLifecycleService {
 }
 
 type Database = typeof database;
+type LifecycleTransaction = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type ConfirmationResult = Awaited<ReturnType<ContractLifecycleRepository["confirmSignedFile"]>>;
+export type ConfirmationTransactionHook = (transaction: LifecycleTransaction, work: () => Promise<ConfirmationResult>) => Promise<ConfirmationResult>;
 
 export class DrizzleContractLifecycleRepository implements ContractLifecycleRepository {
-  constructor(private readonly database: Database) {}
+  constructor(private readonly database: Database, private readonly confirmationTransaction: ConfirmationTransactionHook = (_tx, work) => work()) {}
 
   async get(contractVersionId: string) {
     const [row] = await this.database.select({
@@ -195,7 +198,7 @@ export class DrizzleContractLifecycleRepository implements ContractLifecycleRepo
 
   async confirmSignedFile(input: Parameters<ContractLifecycleRepository["confirmSignedFile"]>[0]) {
     const allocationBooking = allocationEnabled() && true ? await this.get(input.contractVersionId) : null;
-    return commitmentTransaction(this.database, async (transaction) => {
+    return commitmentTransaction(this.database, async (transaction) => this.confirmationTransaction(transaction, async () => {
       const [locked] = await transaction.select({
         contractVersionId: contractVersions.id,
         bookingId: contractVersions.bookingId,
@@ -252,6 +255,6 @@ export class DrizzleContractLifecycleRepository implements ContractLifecycleRepo
         contractVersionId: locked.contractVersionId, bookingId: locked.bookingId,
         contractStatus: "completed" as const, bookingStatus,
       }, reused: false };
-    }, {source:"contract-lifecycle",actor:input.actorId,bookingIds:allocationBooking?[allocationBooking.bookingId]:[]});
+    }), {source:"contract-lifecycle",actor:input.actorId,bookingIds:allocationBooking?[allocationBooking.bookingId]:[]});
   }
 }

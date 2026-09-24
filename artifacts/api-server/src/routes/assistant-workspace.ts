@@ -1,3 +1,5 @@
+import { confirmationFor } from "../features/assistant-workspace/commercial-actions";
+import { publicDocumentResults } from "../features/assistant-workspace/document-results";
 import { randomUUID } from "node:crypto";
 import {
   Router,
@@ -103,8 +105,27 @@ export function createAssistantWorkspaceRouter(
       ]);
       s.json({
         ...conversation,
-        actions,
+        actions: await Promise.all(
+          actions.map(async (action) => ({
+            ...action,
+            preview:
+              action.status === "prepared" && r.actionPreview
+                ? await r.actionPreview(
+                    {
+                      actor: { id: a, role: "owner", connectionId: null },
+                      conversationId: id,
+                      runId: "review",
+                      selection: conversation.selection,
+                      grants: [],
+                      signal: new AbortController().signal,
+                    },
+                    action,
+                  )
+                : null,
+          })),
+        ),
         drafts,
+        documentResults: publicDocumentResults(runs),
         runs: runs.map((run) => ({
           id: run.id,
           status: run.status,
@@ -234,6 +255,15 @@ export function createAssistantWorkspaceRouter(
         s.status(404).json({ code: "ASSISTANT_ACTION_NOT_FOUND" });
         return;
       }
+      const confirmation = confirmationFor(action.kind);
+      if (
+        confirmation &&
+        input.confirmation !== confirmation &&
+        action.status === "prepared"
+      ) {
+        s.status(422).json({ code: "ASSISTANT_HUMAN_VERIFICATION_REQUIRED" });
+        return;
+      }
       if (input.revision !== action.expectedRevision) {
         s.status(409).json({ code: "ASSISTANT_VERSION_CONFLICT" });
         return;
@@ -245,9 +275,11 @@ export function createAssistantWorkspaceRouter(
       }
       await r.conversations.append(a, c.id, `approve:${input.requestKey}`, {
         role: "user",
-        text: `Approve ${action.kind} on ${action.targetId}, revision ${input.revision ?? "new"}, action ${action.id}.`,
+        text: `Approve ${action.kind} on ${action.targetId}, revision ${input.revision ?? "new"}, action ${action.id}.${input.confirmation ? ` Human verification: ${input.confirmation}.` : ""}`,
       });
-      const connectionId = (await r.google.getCurrent())?.id ?? null;
+      const connectionId = action.connectionId
+        ? ((await r.google.getCurrent())?.id ?? null)
+        : null;
       const output = await r.executor.execute(
         {
           actor: { id: a, role: "owner", connectionId },

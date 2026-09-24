@@ -12,6 +12,13 @@ export type Receipt = {
   verifiedAt: string;
 };
 export type Action = {
+  preview?: {
+    available: boolean;
+    title: string;
+    summary: string;
+    reviewHref: string | null;
+    revision: string | null;
+  } | null;
   id: string;
   kind: string;
   targetId: string;
@@ -45,12 +52,48 @@ export type Conversation = {
   messages: { id: string; role: "user" | "assistant"; text: string }[];
   actions: Action[];
   drafts: Draft[];
+  documentResults?: DocumentResult[];
   runs: {
     id: string;
     status: string;
     usage: { steps: number; tokens: number };
     result: { text: string; receipts: Receipt[] } | null;
   }[];
+};
+export type DocumentResult = {
+  id: string;
+  retrievedAt: string | null;
+  data:
+    | {
+        view: "document_comparison";
+        complete: boolean;
+        sources: {
+          id: string;
+          title: string;
+          category: string;
+          organizationIds: string[];
+          eventYear: number | null;
+          version: string;
+          complete: boolean;
+          totalPages: number | null;
+          missingPages: number[];
+        }[];
+      }
+    | {
+        view: "commercial_records";
+        profile: { id: string; name: string };
+        eventYear: number;
+        totals: {
+          outstandingCents: number;
+          depositRemainingCents: number;
+          recordedPaidCents: number;
+        };
+        unclassified: {
+          invoices: { id: string }[];
+          contracts: { id: string }[];
+        };
+        historicalCount: number;
+      };
 };
 export type Rule = {
   id: string;
