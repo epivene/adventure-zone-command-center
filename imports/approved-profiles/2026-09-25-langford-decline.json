@@ -1,32 +1,36 @@
-[
-  {
-    "organizationId": "7a678287-6c31-41fb-bc1d-1754298a0581",
-    "eventProfile": {
-      "event": {
-        "name": "Town of Langford",
-        "city": "Langford",
-        "region": "SD"
-      },
-      "profile": {
-        "placeType": "festival_event",
-        "description": "Town of Langford requested a Pirate's Rebellion quote for tentative July 23–25, 2027 after seeing the bumper boats in Forman, North Dakota. Kaitie Stiegelmeier later declined because the pricing was outside the town's budget. Adventure Zone offered a guaranteed pay-per-play alternative, which the town also declined on Sept. 25, 2026. No current follow-up is needed."
-      }
-    },
-    "profileContacts": [
-      {
-        "name": "Kaitie Stiegelmeier",
-        "email": "townoflangford@venturecomm.net",
-        "phone": "605-493-6610",
-        "role": "Finance Officer",
-        "primary": true
-      }
-    ],
-    "notes": [
-      {
-        "subject": "Sept. 25, 2026 final reply — Town of Langford passed",
-        "body": "Kaitie Stiegelmeier, Finance Officer for the Town of Langford, declined the Adventure Zone offer. The original Pirate's Rebellion quote was outside the town's price range. Adventure Zone then offered a guaranteed pay-per-play arrangement as another option, and Kaitie replied on Sept. 25, 2026: 'Thank you for the offer, but we will have to pass.' Treat the 2027 opportunity as closed unless the town reaches back out. Contact: townoflangford@venturecomm.net, 605-493-6610. Gmail thread 19fd83502c1a9820."
-      }
-    ],
-    "clearFollowUps": true
-  }
-]
+{
+  "importRevision": 2,
+  "matchExisting": true,
+  "requireExisting": true,
+  "aliases": [
+    "Town of Langford",
+    "Langford SD"
+  ],
+  "event": {
+    "id": null,
+    "name": "Town of Langford",
+    "city": "Langford",
+    "region": "SD"
+  },
+  "profile": {
+    "placeType": "festival_event",
+    "description": "Town of Langford requested a Pirate's Rebellion quote for tentative July 23–25, 2027 after seeing the bumper boats in Forman, North Dakota. Kaitie Stiegelmeier later declined because the pricing was outside the town's budget. Adventure Zone offered a guaranteed pay-per-play alternative, which the town also declined on Sept. 25, 2026. No current follow-up is needed."
+  },
+  "contacts": [
+    {
+      "id": null,
+      "name": "Kaitie Stiegelmeier",
+      "email": "townoflangford@venturecomm.net",
+      "phone": "605-493-6610",
+      "role": "Finance Officer",
+      "primary": true
+    }
+  ],
+  "notes": [
+    {
+      "subject": "Sept. 25, 2026 final reply — Town of Langford passed",
+      "body": "Kaitie Stiegelmeier, Finance Officer for the Town of Langford, declined the Adventure Zone offer. The original Pirate's Rebellion quote was outside the town's price range. Adventure Zone then offered a guaranteed pay-per-play arrangement as another option, and Kaitie replied on Sept. 25, 2026: 'Thank you for the offer, but we will have to pass.' Treat the 2027 opportunity as closed unless the town reaches back out. Contact: townoflangford@venturecomm.net, 605-493-6610. Gmail thread 19fd83502c1a9820."
+    }
+  ],
+  "clearFollowUps": true
+}
