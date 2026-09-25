@@ -9,7 +9,9 @@ import type {
   Evidence,
   Receipt,
 } from "./contracts";
+import type { SavedConversationContext } from "./conversation-context";
 export type TurnCheckpoint = {
+  context?: SavedConversationContext;
   providerItems: unknown[];
   pending: ToolCall[];
   results: Record<string, ToolResult>;
@@ -25,6 +27,7 @@ export interface TurnStore {
     state: Selection;
     evidence: Evidence[];
     checkpoint?: TurnCheckpoint;
+    context?: SavedConversationContext;
   }>;
   save(checkpoint: TurnCheckpoint): Promise<void>;
   check(): Promise<void>;
@@ -58,6 +61,12 @@ export async function runTurn(
     return cp.final;
   };
   if (cp.final) return cp.final;
+  if (!cp.context && loaded.context) {
+    cp.context = structuredClone(loaded.context);
+    await store.check();
+    await store.save(cp);
+  }
+  const turns = cp.context?.turns ?? loaded.turns;
   if (cp.selection) Object.assign(context.selection, cp.selection);
   while (true) {
     if (context.signal.aborted)
@@ -69,7 +78,7 @@ export async function runTurn(
     if (Object.values(cp.results).some((r) => r.usageUnknown))
       return finish(
         "partial",
-        "Research was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
+        "An AI reading was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
       );
     if (cp.tokens >= limits.maxTokens)
       return finish(
@@ -89,7 +98,10 @@ export async function runTurn(
           "This run reached its usage limit. Completed actions are shown below.",
         );
       if (!cp.results[call.id]) {
-        const output = await tools.execute(context, call);
+        const output = await tools.execute(
+          { ...context, toolCallId: call.id },
+          call,
+        );
         cp.results[call.id] = output;
         cp.tokens +=
           (output.usage?.inputTokens ?? 0) + (output.usage?.outputTokens ?? 0);
@@ -105,7 +117,7 @@ export async function runTurn(
       if (cp.results[call.id]?.usageUnknown)
         return finish(
           "partial",
-          "Research was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
+          "An AI reading was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
         );
     }
     cp.pending = [];
@@ -120,18 +132,20 @@ export async function runTurn(
         "This run reached its step limit. You can continue from the saved results.",
       );
     const size = JSON.stringify([
-      loaded.turns,
+      turns,
+      cp.context?.memory,
       cp.providerItems,
       cp.evidence,
     ]).length;
     if (size > 600000)
       return finish(
         "partial",
-        "This conversation reached its context limit. Start a new conversation and reload the same profile; saved drafts remain in this conversation; the original history is saved.",
+        "This run collected too much source material. Continue with a narrower question; the original history and saved drafts remain available.",
       );
     const step = await model.next({
       instructions: workspaceInstructions,
-      turns: loaded.turns,
+      turns,
+      memory: cp.context?.memory,
       state: context.selection,
       evidence: cp.evidence,
       providerItems: cp.providerItems,

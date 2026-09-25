@@ -16,9 +16,24 @@ const comparison = z.object({
         complete: z.boolean(),
         totalPages: z.number().nullable(),
         missingPages: z.array(z.number()),
+        cacheHit: z.boolean().optional(),
+        extractedAt: z.iso.datetime().nullable().optional(),
       }),
     )
     .max(4),
+});
+const reading = z.object({
+  view: z.literal("document_reading"),
+  documentId: z.string().uuid().nullable(),
+  sourceLabel: z.string().max(120),
+  version: z.string().nullable(),
+  eventYear: z.number().nullable(),
+  complete: z.boolean(),
+  totalPages: z.number(),
+  missingPages: z.array(z.number()).max(100),
+  cacheHit: z.boolean().optional(),
+  extractedAt: z.iso.datetime().optional(),
+  extractionModel: z.string().nullable().optional(),
 });
 const commercial = z.object({
   view: z.literal("commercial_records"),
@@ -37,6 +52,7 @@ const commercial = z.object({
 });
 const schema = z.discriminatedUnion("view", [
   comparison,
+  reading,
   commercial,
   publicResearchSchema,
 ]);

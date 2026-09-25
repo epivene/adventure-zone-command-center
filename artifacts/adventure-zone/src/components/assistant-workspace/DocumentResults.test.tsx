@@ -1,6 +1,36 @@
 import { it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { DocumentResults } from "./DocumentResults";
+it("labels reused readings while preserving visual review and the protected-file action", () => {
+  const open = vi.fn();
+  render(
+    <DocumentResults
+      onOpen={open}
+      items={[
+        {
+          id: "r",
+          retrievedAt: "2026-09-25T01:00:00Z",
+          data: {
+            view: "document_reading",
+            documentId: "doc",
+            sourceLabel: "Business document",
+            eventYear: 2027,
+            version: "hash",
+            complete: false,
+            totalPages: 2,
+            missingPages: [2],
+            cacheHit: true,
+            extractedAt: "2026-09-25T00:00:00Z",
+          },
+        },
+      ]}
+    />,
+  );
+  expect(screen.getByText(/Reused reading/)).toBeTruthy();
+  expect(screen.getByText(/Visual review needed · Pages 2/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Open protected file" }));
+  expect(open).toHaveBeenCalledWith("doc");
+});
 it("shows incomplete page evidence and opens the selected protected document", () => {
   const open = vi.fn();
   render(

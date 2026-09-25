@@ -46,6 +46,7 @@ export type Draft = {
   };
 };
 export type Conversation = {
+  summary?: unknown;
   id: string;
   title: string;
   version: number;
@@ -69,6 +70,19 @@ export type DocumentResult = {
   retrievedAt: string | null;
   data:
     | {
+        view: "document_reading";
+        documentId: string | null;
+        sourceLabel: string;
+        eventYear: number | null;
+        version: string | null;
+        complete: boolean;
+        totalPages: number;
+        missingPages: number[];
+        cacheHit?: boolean;
+        extractedAt?: string;
+        extractionModel?: string | null;
+      }
+    | {
         view: "document_comparison";
         complete: boolean;
         sources: {
@@ -81,6 +95,8 @@ export type DocumentResult = {
           complete: boolean;
           totalPages: number | null;
           missingPages: number[];
+          cacheHit?: boolean;
+          extractedAt?: string | null;
         }[];
       }
     | {

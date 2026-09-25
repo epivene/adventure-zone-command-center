@@ -122,3 +122,25 @@ it("retains visual usage when a later source is missing or changed", async () =>
   expect(out.code).toBe("ASSISTANT_DOCUMENT_UNAVAILABLE");
   expect(out.usage).toEqual({ inputTokens: 40, outputTokens: 10 });
 });
+it("stops comparison after uncertain billed extraction and retains known usage", async () => {
+  const read = vi.fn(async () => ({
+    ...source("a", true),
+    usageUnknown: true,
+    usage: { inputTokens: 20, outputTokens: 3 },
+  }));
+  const out = await compareDocuments(
+    ctx,
+    ["a", "b"].map((documentId) => ({ documentId, expectedVersion: null })),
+    { read } as any,
+    async (id) => ({
+      id,
+      title: id,
+      category: "contract",
+      organizationIds: ["org"],
+      eventYear: 2027,
+    }),
+  );
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(out.usageUnknown).toBe(true);
+  expect(out.usage).toEqual({ inputTokens: 20, outputTokens: 3 });
+});

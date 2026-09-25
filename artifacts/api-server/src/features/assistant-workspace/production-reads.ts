@@ -1,6 +1,12 @@
 import { db } from "@workspace/db";
 import { createProductionOutreachAllocation } from "../outreach-planner/production-outreach-allocation";
-import { createVisualReader } from "./visual-reader";
+import { createOwnedVisualReader } from "./visual-reader";
+import { RunStore } from "./run-store";
+import { DocumentExtractionStore } from "./document-extraction-store";
+import {
+  documentSourceMetadata,
+  assertAttachmentScope,
+} from "./document-source-access";
 import { readModelConfig } from "./model-config";
 import type { Pool } from "pg";
 import type { RunContext, Evidence } from "./contracts";
@@ -56,17 +62,24 @@ export function productionReads(
   });
   const reader = new DocumentReader({
     ownerId,
-    visualExtract: createVisualReader(readModelConfig(process.env)),
+    cache: new DocumentExtractionStore(pool),
+    visualExtract: createOwnedVisualReader(
+      readModelConfig(process.env),
+      new RunStore(pool),
+    ),
     load: async (context, source) => {
       if ("documentId" in source) {
-        const metadata = await documents.detail(source.documentId);
+        const metadata = await documentSourceMetadata(
+          pool,
+          context,
+          source.documentId,
+        );
         const file = await files.getOpenableFile(source.documentId);
-        if (!file || metadata.lifecycle === "deleted")
-          throw new Error("ASSISTANT_DOCUMENT_UNAVAILABLE");
+        if (!file) throw new Error("ASSISTANT_DOCUMENT_UNAVAILABLE");
         return {
           bytes: await storage.get(file.storageKey),
           recordId: source.documentId,
-          eventYear: null,
+          eventYear: metadata.eventYear,
         };
       }
       const connection = await gmail(context);
@@ -76,8 +89,18 @@ export function productionReads(
         !connection.client.getAttachment
       )
         throw new Error("ASSISTANT_CONNECTION_CHANGED");
+      await assertAttachmentScope(
+        pool,
+        context,
+        source,
+        connection.client,
+        connection.connectionId,
+      );
+      const bytes = await connection.client.getAttachment(source);
+      if ((await google.getCurrent())?.id !== connection.connectionId)
+        throw new Error("ASSISTANT_CONNECTION_CHANGED");
       return {
-        bytes: await connection.client.getAttachment(source),
+        bytes,
         recordId: `${connection.connectionId}:${source.messageId}:${source.attachmentId}`,
         eventYear: null,
       };

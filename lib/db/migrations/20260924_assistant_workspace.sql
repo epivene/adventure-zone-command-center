@@ -77,7 +77,6 @@ CREATE TABLE IF NOT EXISTS assistant_workspace_send_reviews (
 
 ALTER TABLE assistant_workspace_drafts DROP CONSTRAINT IF EXISTS assistant_workspace_drafts_status_check;
 ALTER TABLE assistant_workspace_drafts ADD CONSTRAINT assistant_workspace_drafts_status_check CHECK(status IN ('local','saving','saved','sending','uncertain','sent'));
-
 CREATE TABLE IF NOT EXISTS assistant_workspace_campaign_batches (
  id uuid PRIMARY KEY, actor_id text NOT NULL, conversation_id uuid NOT NULL,
  source_message_id uuid NOT NULL REFERENCES assistant_workspace_messages(id),
@@ -99,4 +98,9 @@ CREATE TABLE IF NOT EXISTS assistant_workspace_research_calls (
  call_id text NOT NULL,input_fingerprint text NOT NULL,state text NOT NULL CHECK(state IN ('started','completed')),result jsonb,
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(conversation_id,actor_id) REFERENCES assistant_workspace_conversations(id,actor_id), UNIQUE(run_id,call_id)
+);
+CREATE TABLE IF NOT EXISTS assistant_workspace_document_extractions (
+ cache_key text PRIMARY KEY,actor_id text NOT NULL,run_id uuid NOT NULL REFERENCES assistant_workspace_runs(id),call_id text,
+ state text NOT NULL CHECK(state IN ('started','completed')),result jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
 );
