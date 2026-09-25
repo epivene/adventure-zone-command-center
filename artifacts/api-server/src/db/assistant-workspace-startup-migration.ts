@@ -99,6 +99,11 @@ CREATE TABLE IF NOT EXISTS assistant_workspace_research_calls (
  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
  FOREIGN KEY(conversation_id,actor_id) REFERENCES assistant_workspace_conversations(id,actor_id), UNIQUE(run_id,call_id)
 );
+CREATE TABLE IF NOT EXISTS assistant_workspace_document_extractions (
+ cache_key text PRIMARY KEY,actor_id text NOT NULL,run_id uuid NOT NULL REFERENCES assistant_workspace_runs(id),call_id text,
+ state text NOT NULL CHECK(state IN ('started','completed')),result jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
+);
 `;
 export async function ensureAssistantWorkspaceSchema(db: {
   query(sql: string): Promise<unknown>;

@@ -1,4 +1,5 @@
 import { CampaignPanel } from "@/components/assistant-workspace/CampaignPanel";
+import { ConversationContext } from "@/components/assistant-workspace/ConversationContext";
 import { DocumentResults } from "@/components/assistant-workspace/DocumentResults";
 import { businessDocumentsApi } from "@/lib/business-documents-api";
 import type { HumanConfirmation } from "@/components/assistant-workspace/ActionResults";
@@ -387,6 +388,7 @@ export default function AssistantWorkspacePage({
                   : "Start by naming a profile or describing your task."}
               </p>
             </div>
+            <ConversationContext summary={conversation?.summary} />
             <div
               className="flex-1 space-y-5 overflow-auto p-4"
               aria-label="Conversation"
@@ -415,6 +417,7 @@ export default function AssistantWorkspacePage({
               {conversation?.messages.map((m) => (
                 <article
                   key={m.id}
+                  id={`message-${m.id}`}
                   className={`rounded-xl p-4 ${m.role === "user" ? "ml-6 bg-slate-100" : "mr-3 bg-teal-50/40"}`}
                 >
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">

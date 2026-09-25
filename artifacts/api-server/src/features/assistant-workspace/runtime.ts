@@ -1,4 +1,5 @@
 import { CampaignStore } from "./campaign-store";
+import { createHistoryTools } from "./history-tools";
 import { createCampaignTools } from "./campaign-tools";
 import { campaignAdapters, campaignActionPreview } from "./campaign-actions";
 import { createOperationsTools } from "./operations-tools";
@@ -59,6 +60,7 @@ export function createWorkspaceRuntime() {
     send_draft: send.adapter,
   });
   const tools = createToolRegistry([
+    createHistoryTools({ ownerId, conversations, runs }),
     createCampaignTools({
       ownerId,
       database: db,

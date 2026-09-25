@@ -5,6 +5,12 @@ import {
   type Selection,
   type Turn,
 } from "./contracts";
+import { z } from "zod";
+import {
+  buildConversationContext,
+  type ConversationMemory,
+  type HistoricalMessage,
+} from "./conversation-context";
 export type Message = Turn & {
   id: string;
   sequence: number;
@@ -26,6 +32,26 @@ const message = (r: any): Message => ({
   sequence: Number(r.sequence),
   createdAt: new Date(r.created_at).toISOString(),
 });
+const historicalMessage = (r: any): HistoricalMessage => ({
+  ...message(r),
+  runId: r.run_id ?? null,
+  requestedScope: selectionSchema.safeParse(r.requested_scope).data ?? null,
+  resultScope: selectionSchema.safeParse(r.result_scope).data ?? null,
+});
+const historyOptions = z
+  .object({
+    beforeSequence: z
+      .number()
+      .int()
+      .positive()
+      .max(Number.MAX_SAFE_INTEGER)
+      .nullable()
+      .optional(),
+    query: z.string().max(200).nullable().optional(),
+  })
+  .strict();
+const scopeJoin = `LEFT JOIN assistant_workspace_runs r ON r.conversation_id=m.conversation_id AND r.actor_id=m.actor_id AND r.request_key=m.request_key`;
+const scopeColumns = `m.*, r.id AS run_id, r.checkpoint->'input'->'selection' AS requested_scope, r.checkpoint->'turn'->'selection' AS result_scope`;
 const conversation = (r: any): Conversation => ({
   id: r.id,
   title: r.title,
@@ -37,6 +63,65 @@ const conversation = (r: any): Conversation => ({
 });
 export class ConversationStore {
   constructor(private readonly db: Queryable) {}
+  private async cutoff(actorId: string, id: string, sourceMessageId: string) {
+    const r = await this.db.query(
+      `SELECT m.sequence FROM assistant_workspace_messages m
+      JOIN assistant_workspace_conversations c ON c.id=m.conversation_id AND c.actor_id=m.actor_id
+      WHERE m.id=$1 AND m.conversation_id=$2 AND m.actor_id=$3 AND m.role='user'`,
+      [sourceMessageId, id, actorId],
+    );
+    if (!r.rows[0]) throw new Error("ASSISTANT_SOURCE_MESSAGE_MISSING");
+    return Number(r.rows[0].sequence);
+  }
+  async context(actorId: string, id: string, sourceMessageId: string) {
+    const cutoff = await this.cutoff(actorId, id, sourceMessageId);
+    const rows = await this.db.query(
+      `SELECT ${scopeColumns} FROM assistant_workspace_messages m ${scopeJoin}
+      WHERE m.conversation_id=$1 AND m.actor_id=$2 AND m.sequence<=$3 ORDER BY m.sequence DESC LIMIT 30`,
+      [id, actorId, cutoff],
+    );
+    const count = await this.db.query(
+      `SELECT count(*) AS total FROM assistant_workspace_messages WHERE conversation_id=$1 AND actor_id=$2 AND sequence<=$3`,
+      [id, actorId, cutoff],
+    );
+    return buildConversationContext(
+      rows.rows.reverse().map(historicalMessage),
+      Number(count.rows[0].total),
+    );
+  }
+  async history(
+    actorId: string,
+    id: string,
+    sourceMessageId: string,
+    options: z.infer<typeof historyOptions>,
+  ) {
+    const args = historyOptions.parse(options);
+    const cutoff = await this.cutoff(actorId, id, sourceMessageId);
+    const rows = await this.db.query(
+      `SELECT ${scopeColumns} FROM assistant_workspace_messages m ${scopeJoin}
+      WHERE m.conversation_id=$1 AND m.actor_id=$2 AND m.sequence<=$3
+      AND ($4::bigint IS NULL OR m.sequence<$4) AND ($5::text IS NULL OR position(lower($5) in lower(m.body))>0)
+      ORDER BY m.sequence DESC LIMIT 4`,
+      [id, actorId, cutoff, args.beforeSequence ?? null, args.query || null],
+    );
+    const messages = rows.rows.slice(0, 3).map(historicalMessage);
+    return {
+      messages,
+      sourceSequence: cutoff,
+      nextBeforeSequence:
+        rows.rows.length > 3 ? messages.at(-1)!.sequence : null,
+      complete: rows.rows.length <= 3,
+      query: args.query || null,
+    };
+  }
+  async saveSummary(actorId: string, id: string, summary: ConversationMemory) {
+    await this.db.query(
+      `UPDATE assistant_workspace_conversations SET summary=$3::jsonb
+      WHERE id=$1 AND actor_id=$2 AND
+      CASE WHEN summary->>'throughSequence' ~ '^[0-9]+$' THEN (summary->>'throughSequence')::numeric ELSE 0 END <= $4`,
+      [id, actorId, JSON.stringify(summary), summary.throughSequence],
+    );
+  }
   async create(actorId: string, title: string): Promise<Conversation> {
     const rows = await this.db.query(
       `insert into assistant_workspace_conversations(actor_id,title,selection) values($1,$2,$3::jsonb) returning *`,

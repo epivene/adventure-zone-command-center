@@ -3,6 +3,20 @@ const dollars = (cents: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(
     cents / 100,
   );
+function ReadingStatus({
+  cacheHit,
+  extractedAt,
+}: {
+  cacheHit?: boolean;
+  extractedAt?: string | null;
+}) {
+  return extractedAt ? (
+    <p className="mt-1 text-xs text-slate-500">
+      {cacheHit ? "Reused reading" : "Read"} ·{" "}
+      {new Date(extractedAt).toLocaleString()}
+    </p>
+  ) : null;
+}
 export function DocumentResults({
   items,
   onOpen,
@@ -17,7 +31,40 @@ export function DocumentResults({
           key={item.id}
           className="rounded-xl border bg-white p-4 text-sm"
         >
-          {item.data.view === "document_comparison" ? (
+          {item.data.view === "document_reading" ? (
+            <>
+              <h3 className="font-semibold">{item.data.sourceLabel}</h3>
+              <p className="my-2 text-xs text-slate-600">
+                {item.data.eventYear ?? "Year unconfirmed"} ·{" "}
+                {item.data.totalPages} page(s)
+              </p>
+              <p
+                className={`text-xs ${item.data.complete ? "text-teal-800" : "text-amber-800"}`}
+              >
+                {item.data.complete
+                  ? "All pages read"
+                  : `Visual review needed${item.data.missingPages.length ? ` · Pages ${item.data.missingPages.join(", ")}` : ""}`}
+              </p>
+              <ReadingStatus
+                cacheHit={item.data.cacheHit}
+                extractedAt={item.data.extractedAt}
+              />
+              <p className="mt-2 text-xs text-slate-600">
+                A reading does not verify signatures, payments or insurance
+                coverage.
+              </p>
+              {item.data.documentId && (
+                <button
+                  className="mt-2 text-teal-800 underline"
+                  onClick={() =>
+                    onOpen((item.data as { documentId: string }).documentId)
+                  }
+                >
+                  Open protected file
+                </button>
+              )}
+            </>
+          ) : item.data.view === "document_comparison" ? (
             <>
               <h3 className="font-semibold">Document sources</h3>
               <p className="my-2 text-xs text-slate-600">
@@ -42,6 +89,10 @@ export function DocumentResults({
                           ? `Unreadable pages: ${s.missingPages.join(", ")} — visual review needed`
                           : "Source incomplete — review the original"}
                     </p>
+                    <ReadingStatus
+                      cacheHit={s.cacheHit}
+                      extractedAt={s.extractedAt}
+                    />
                     <button
                       type="button"
                       onClick={() => onOpen(s.id)}

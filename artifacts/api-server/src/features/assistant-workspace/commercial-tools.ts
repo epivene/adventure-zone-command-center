@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { documentEventYearSql } from "./document-source-access";
 import { z } from "zod";
 import type {
   Queryable,
@@ -64,7 +65,7 @@ export function createCommercialTools(deps: {
   const metadata = async (id: string): Promise<ComparisonSource> => {
     const row = (
       await deps.db.query(
-        `SELECT d.id,d.display_name AS title,d.category,coalesce((SELECT jsonb_agg(DISTINCT coalesce(l.organization_id,b.organization_id)) FROM business_document_links l LEFT JOIN bookings b ON b.id=l.booking_id WHERE l.document_id=d.id),'[]'::jsonb) AS organizations,(SELECT CASE WHEN count(DISTINCT o.event_year)=1 THEN min(o.event_year) ELSE NULL END FROM business_document_links l JOIN booking_opportunities o ON o.booking_id=l.booking_id WHERE l.document_id=d.id) AS event_year FROM business_documents d WHERE d.id=$1 AND d.lifecycle<>'deleted'`,
+        `SELECT d.id,d.display_name AS title,d.category,coalesce((SELECT jsonb_agg(DISTINCT coalesce(l.organization_id,b.organization_id)) FROM business_document_links l LEFT JOIN bookings b ON b.id=l.booking_id WHERE l.document_id=d.id),'[]'::jsonb) AS organizations,${documentEventYearSql} AS event_year FROM business_documents d WHERE d.id=$1 AND d.lifecycle<>'deleted'`,
         [id],
       )
     ).rows[0];

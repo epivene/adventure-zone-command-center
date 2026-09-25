@@ -41,16 +41,21 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
         if (!deps.allowedActorIds.includes(run.actorId))
           throw new Error("ASSISTANT_ACCESS_DENIED");
         if (run.cancelRequested) control.abort();
-        const conversation = await deps.conversations.get(
+        const savedContext =
+          run.turn?.context ??
+          (await deps.conversations.context(
+            run.actorId,
+            run.conversationId,
+            run.input.sourceMessageId,
+          ));
+        if (savedContext.sourceMessageId !== run.input.sourceMessageId)
+          throw new Error("ASSISTANT_SOURCE_MESSAGE_MISSING");
+        await deps.runs.check(run.actorId, run.id, run.leaseToken);
+        await deps.conversations.saveSummary(
           run.actorId,
           run.conversationId,
+          savedContext.memory,
         );
-        if (!conversation) throw new Error("ASSISTANT_CONVERSATION_NOT_FOUND");
-        const sourceIndex = conversation.messages.findIndex(
-          (m) => m.id === run.input.sourceMessageId,
-        );
-        if (sourceIndex < 0)
-          throw new Error("ASSISTANT_SOURCE_MESSAGE_MISSING");
         await deps.runs.event(run.actorId, run.id, run.leaseToken, "progress", {
           text: "Reading conversation and current business rules",
         });
@@ -93,7 +98,8 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
           },
           {
             load: async () => ({
-              turns: conversation.messages.slice(0, sourceIndex + 1),
+              turns: savedContext.turns,
+              context: savedContext,
               state: run.input.selection,
               evidence: (
                 await Promise.all(

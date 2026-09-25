@@ -115,3 +115,79 @@ it("includes visual transcription without asserting scanned-page completeness", 
   expect(output.evidence[0].text).toContain("handwritten delivery note");
   expect(output.evidence[0].complete).toBe(false);
 });
+it("revalidates sources before cache reuse and rebinds current metadata", async () => {
+  const saved = new Map<string, any>();
+  const cache = {
+    execute: vi.fn(async (_context, key, work) => {
+      if (saved.has(key)) {
+        const result = structuredClone(saved.get(key));
+        delete result.usage;
+        result.data.cacheHit = true;
+        return result;
+      }
+      const result = await work();
+      saved.set(key, structuredClone(result));
+      return result;
+    }),
+  };
+  let bytes = await pdf("Invoice", true),
+    allowed = true,
+    year = 2027;
+  const load = vi.fn(async () => {
+    if (!allowed) throw new Error("Access removed");
+    return { bytes, recordId: "doc", eventYear: year };
+  });
+  const visualExtract = vi.fn(async () => ({
+    text: "Unsigned",
+    usage: { inputTokens: 20, outputTokens: 5 },
+  }));
+  const reader = new DocumentReader({
+    ownerId: "owner",
+    load,
+    visualExtract,
+    cache,
+  } as any);
+  const source = { messageId: "m", attachmentId: "a" };
+  await reader.read(context, source);
+  year = 2028;
+  const reused = await reader.read(context, source);
+  expect(visualExtract).toHaveBeenCalledTimes(1);
+  expect(reused.usage).toBeUndefined();
+  expect(reused.evidence[0]).toMatchObject({
+    eventYear: 2028,
+    complete: false,
+  });
+  expect(reused.data).toMatchObject({ missingPages: [2], cacheHit: true });
+  allowed = false;
+  expect((await reader.read(context, source)).status).toBe("blocked");
+  expect(cache.execute).toHaveBeenCalledTimes(2);
+  allowed = true;
+  bytes = await pdf("Changed", true);
+  await reader.read(context, source);
+  await reader.read(
+    { ...context, actor: { ...context.actor, connectionId: "another" } },
+    source,
+  );
+  await reader.read(context, { ...source, attachmentId: "different" });
+  expect(visualExtract).toHaveBeenCalledTimes(4);
+  expect(load).toHaveBeenCalledTimes(6);
+});
+it("preserves unknown visual usage instead of silently allowing another model step", async () => {
+  const reader = new DocumentReader({
+    ownerId: "owner",
+    load: async () => ({
+      bytes: await pdf("Contract", true),
+      recordId: "doc",
+      eventYear: null,
+    }),
+    visualExtract: async () => {
+      throw new Error("Interrupted provider body");
+    },
+  });
+  const output = await reader.read(context, {
+    messageId: "m",
+    attachmentId: "a",
+  });
+  expect(output.usageUnknown).toBe(true);
+  expect(output.evidence[0].text).toContain("Contract");
+});

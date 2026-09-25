@@ -25,6 +25,7 @@ export async function compareDocuments(
   let chars = 0;
   const withUsage = (output: ToolResult): ToolResult => ({
     ...output,
+    usageUnknown: outputs.some((o) => o.usageUnknown),
     usage: outputs.reduce(
       (s, o) => ({
         inputTokens: s.inputTokens + (o.usage?.inputTokens ?? 0),
@@ -55,6 +56,7 @@ export async function compareDocuments(
       return withUsage(blocked("ASSISTANT_DOCUMENT_UNAVAILABLE"));
     }
     outputs.push(output);
+    if (output.usageUnknown) return withUsage(output);
     if (!output.evidence.length)
       return withUsage({
         ...output,
@@ -69,6 +71,8 @@ export async function compareDocuments(
     const data = output.data as {
       totalPages?: number;
       missingPages?: number[];
+      cacheHit?: boolean;
+      extractedAt?: string;
     };
     items.push({
       ...info,
@@ -76,6 +80,8 @@ export async function compareDocuments(
       complete: evidence.complete,
       totalPages: data?.totalPages ?? null,
       missingPages: data?.missingPages ?? [],
+      cacheHit: data?.cacheHit ?? false,
+      extractedAt: data?.extractedAt ?? null,
       reviewPath: `/business-documents`,
     });
   }

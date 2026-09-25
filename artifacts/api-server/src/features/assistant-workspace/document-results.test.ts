@@ -1,5 +1,44 @@
 import { it, expect } from "vitest";
 import { publicDocumentResults } from "./document-results";
+it("shows reused reading dates without exposing extraction bodies", () => {
+  const data = {
+    view: "document_reading",
+    documentId: null,
+    sourceLabel: "Email attachment",
+    eventYear: null,
+    version: "hash",
+    complete: false,
+    totalPages: 1,
+    missingPages: [1],
+    cacheHit: true,
+    extractedAt: "2026-09-25T00:00:00Z",
+    pages: [{ text: "private document" }],
+  };
+  const cards = publicDocumentResults([
+    {
+      id: "run",
+      turn: {
+        results: {
+          c: {
+            data,
+            evidence: [
+              { retrievedAt: "2026-09-25T01:00:00Z", text: "private document" },
+            ],
+          },
+        },
+      },
+    },
+  ] as any);
+  expect(cards[0]).toMatchObject({
+    retrievedAt: "2026-09-25T01:00:00Z",
+    data: {
+      cacheHit: true,
+      extractedAt: "2026-09-25T00:00:00Z",
+      missingPages: [1],
+    },
+  });
+  expect(JSON.stringify(cards)).not.toContain("private document");
+});
 it("exposes document metadata without stored source text or provider reasoning", () => {
   const runs = [
     {

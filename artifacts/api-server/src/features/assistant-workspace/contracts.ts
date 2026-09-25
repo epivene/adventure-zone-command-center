@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ConversationMemory } from "./conversation-context";
 export const selectionSchema = z
   .object({
     organizationIds: z.array(z.string().uuid()).max(100),
@@ -55,6 +56,7 @@ export type Grant = {
   connectionId: string | null;
 };
 export type RunContext = {
+  toolCallId?: string;
   actor: Actor;
   conversationId: string;
   runId: string;
@@ -74,6 +76,7 @@ export type ActionIntent = {
   sourceMessageId: string;
 };
 export type ModelInput = {
+  memory?: ConversationMemory;
   instructions: string;
   turns: Turn[];
   state: Selection;
