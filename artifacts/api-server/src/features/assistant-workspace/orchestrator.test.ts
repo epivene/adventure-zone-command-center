@@ -263,3 +263,53 @@ it("freezes context before provider work and reuses it after recovery without mi
   expect(output.receipts).toEqual([]);
   expect(context.grants).toEqual([]);
 });
+it("resumes a historical screenshot read with metadata only in the checkpoint", async () => {
+  const store = memory();
+  const screenshot = {
+    id: "old-image",
+    filename: "source.png",
+    contentType: "image/png",
+    byteSize: 4000000,
+    sha256: "hash",
+  };
+  const imageCall = {
+    id: "image-call",
+    name: "read_conversation_screenshot",
+    arguments: '{"screenshotId":"old-image"}',
+  };
+  const tools = {
+    definitions: () => [],
+    execute: vi
+      .fn()
+      .mockResolvedValue({
+        ...ok,
+        data: { screenshot },
+        screenshots: [screenshot],
+      }),
+  };
+  const next = vi
+    .fn()
+    .mockResolvedValueOnce({
+      text: "",
+      calls: [imageCall],
+      providerItems: [{ type: "function_call", call_id: imageCall.id }],
+      inputTokens: 1,
+      outputTokens: 1,
+    })
+    .mockRejectedValueOnce(new Error("restart"))
+    .mockResolvedValueOnce({
+      text: "Image reviewed",
+      calls: [],
+      providerItems: [],
+      inputTokens: 2,
+      outputTokens: 2,
+    });
+  await expect(runTurn(context, { next }, tools, store)).rejects.toThrow(
+    "restart",
+  );
+  expect(store.get()?.screenshots).toEqual([screenshot]);
+  expect(JSON.stringify(store.get())).not.toMatch(/base64|data:image/);
+  await runTurn(context, { next }, tools, store);
+  expect(next.mock.calls[2][0].screenshots).toEqual([screenshot]);
+  expect(tools.execute).toHaveBeenCalledTimes(1);
+});

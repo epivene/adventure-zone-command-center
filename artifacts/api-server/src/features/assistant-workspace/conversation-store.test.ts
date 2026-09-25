@@ -16,6 +16,40 @@ afterEach(async () => {
   await db.close();
 });
 
+it("persists screenshot references atomically and rejects changed-image request replay", async () => {
+  const c = await store.create("owner", "Screenshots");
+  const screenshots = [
+    {
+      id: "11111111-1111-4111-8111-111111111111",
+      filename: "screen.png",
+      contentType: "image/png",
+      byteSize: 3,
+      sha256: "hash",
+    },
+  ];
+  const runs = new RunStore(db);
+  const input = {
+    actor: { id: "owner", role: "owner" as const, connectionId: null },
+    conversationId: c.id,
+    requestKey: "screen",
+    selection: emptySelection(),
+    grants: [],
+  };
+  const first = await runs.submit(input, "", screenshots);
+  expect((await runs.submit(input, "", screenshots)).id).toBe(first.id);
+  expect((await store.get("owner", c.id))?.messages[0].attachments).toEqual(
+    screenshots,
+  );
+  expect(
+    (await store.context("owner", c.id, first.input.sourceMessageId)).turns[0]
+      .attachments,
+  ).toEqual(screenshots);
+  await expect(runs.submit(input, "", [])).rejects.toThrow(
+    "ASSISTANT_MESSAGE_CONFLICT",
+  );
+  expect((await store.get("owner", c.id))?.messages).toHaveLength(1);
+});
+
 it("rejects client-supplied authority", () => {
   expect(
     selectionSchema.safeParse({ ...emptySelection(), actorId: "other" })

@@ -50,7 +50,11 @@ export function buildConversationContext(
   return {
     sourceMessageId: source.id,
     sourceSequence: source.sequence,
-    turns: recent.map(({ role, text }) => ({ role, text })),
+    turns: recent.map(({ role, text, attachments }) => ({
+      role,
+      text,
+      ...(attachments?.length ? { attachments } : {}),
+    })),
     memory: {
       schemaVersion: 1,
       throughSequence: source.sequence,

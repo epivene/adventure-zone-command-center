@@ -29,6 +29,7 @@ const message = (r: any): Message => ({
   id: r.id,
   role: r.role,
   text: r.body,
+  ...(r.attachments?.length ? { attachments: r.attachments } : {}),
   sequence: Number(r.sequence),
   createdAt: new Date(r.created_at).toISOString(),
 });
@@ -100,7 +101,8 @@ export class ConversationStore {
     const rows = await this.db.query(
       `SELECT ${scopeColumns} FROM assistant_workspace_messages m ${scopeJoin}
       WHERE m.conversation_id=$1 AND m.actor_id=$2 AND m.sequence<=$3
-      AND ($4::bigint IS NULL OR m.sequence<$4) AND ($5::text IS NULL OR position(lower($5) in lower(m.body))>0)
+      AND ($4::bigint IS NULL OR m.sequence<$4) AND ($5::text IS NULL OR position(lower($5) in lower(m.body))>0
+        OR EXISTS(SELECT 1 FROM jsonb_array_elements(m.attachments) attachment WHERE position(lower($5) in lower(attachment->>'filename'))>0))
       ORDER BY m.sequence DESC LIMIT 4`,
       [id, actorId, cutoff, args.beforeSequence ?? null, args.query || null],
     );

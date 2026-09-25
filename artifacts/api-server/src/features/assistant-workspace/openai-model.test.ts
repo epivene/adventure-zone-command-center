@@ -54,6 +54,56 @@ it("passes prior conversation and retains complete function calls", async () => 
   ]);
   expect(result.inputTokens).toBe(7);
 });
+it("sends private screenshot bytes as vision input without changing the saved turn", async () => {
+  let request: any;
+  const screenshot = {
+    id: "11111111-1111-4111-8111-111111111111",
+    filename: "screen.png",
+    contentType: "image/png",
+    byteSize: 3,
+    sha256: "hash",
+  };
+  const turn: any = {
+    ...input(),
+    turns: [
+      { role: "user", text: "What does this say?", attachments: [screenshot] },
+    ],
+    attachmentScope: {
+      actorId: "owner",
+      conversationId: "conversation",
+      sourceMessageId: "message",
+    },
+  };
+  const before = JSON.stringify(turn);
+  const model = createOpenAiModel(
+    config(),
+    async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return sse([]);
+    },
+    async (scope: any, id: string) => {
+      expect(scope).toEqual({
+        actorId: "owner",
+        conversationId: "conversation",
+        sourceMessageId: "message",
+      });
+      expect(id).toBe(screenshot.id);
+      return { attachment: screenshot, bytes: new Uint8Array([1, 2, 3]) };
+    },
+  );
+  await model.next(turn);
+  expect(request.input[0].content).toContainEqual({
+    type: "input_image",
+    image_url: "data:image/png;base64,AQID",
+    detail: "high",
+  });
+  expect(request.input[0].content).toContainEqual({
+    type: "input_text",
+    text: "What does this say?",
+  });
+  expect(request.store).toBe(false);
+  expect(JSON.stringify(turn)).toBe(before);
+});
 it("sends historical quotations separately with source scope and no authority", async () => {
   const memory = buildConversationContext(
     Array.from({ length: 8 }, (_, n) => ({
@@ -121,4 +171,94 @@ it("fails closed on provider rejection without a fallback provider", async () =>
   await expect(model.next(input())).rejects.toThrow(
     "ASSISTANT_MODEL_UNAVAILABLE",
   );
+});
+it("cancels screenshot hydration even when storage never resolves", async () => {
+  const controller = new AbortController();
+  let started!: () => void;
+  const reading = new Promise<void>((r) => {
+    started = r;
+  });
+  const screenshot = {
+    id: "a",
+    filename: "a.png",
+    contentType: "image/png",
+    byteSize: 3,
+    sha256: "hash",
+  };
+  const model = createOpenAiModel(
+    config(),
+    async () => sse([]),
+    async () => {
+      started();
+      return new Promise(() => {});
+    },
+  );
+  const promise = model.next({
+    ...input(),
+    signal: controller.signal,
+    turns: [{ role: "user", text: "", attachments: [screenshot] }],
+    attachmentScope: {
+      actorId: "owner",
+      conversationId: "c",
+      sourceMessageId: "m",
+    },
+  });
+  const rejection = expect(promise).rejects.toThrow();
+  await reading;
+  controller.abort();
+  await rejection;
+}, 1000);
+it("caps visual input at four and prioritizes explicitly retrieved older images", async () => {
+  const attachments = Array.from({ length: 7 }, (_, i) => ({
+    id: String(i),
+    filename: `${i}.png`,
+    contentType: "image/png",
+    byteSize: 1,
+    sha256: String(i),
+  }));
+  let request: any;
+  const readIds: string[] = [];
+  const model = createOpenAiModel(
+    config(),
+    async (_url, init) => {
+      request = JSON.parse(String(init?.body));
+      return sse([]);
+    },
+    async (_, id) => {
+      readIds.push(id);
+      return {
+        attachment: attachments[Number(id)],
+        bytes: new Uint8Array([Number(id)]),
+      };
+    },
+  );
+  await model.next({
+    ...input(),
+    turns: [
+      { role: "user", text: "New question", attachments: attachments.slice(1) },
+    ],
+    screenshots: [attachments[0]],
+    attachmentScope: {
+      actorId: "owner",
+      conversationId: "c",
+      sourceMessageId: "m",
+    },
+    providerItems: [
+      { type: "function_call_output", call_id: "read-old", output: "metadata" },
+    ],
+  });
+  expect(readIds).toEqual(["0", "6", "5", "4"]);
+  expect(JSON.stringify(request).match(/"type":"input_image"/g)).toHaveLength(
+    4,
+  );
+  expect(request.input.at(-1).content).toContainEqual({
+    type: "input_image",
+    image_url: "data:image/png;base64,AA==",
+    detail: "high",
+  });
+  expect(request.input.at(-2)).toMatchObject({
+    type: "function_call_output",
+    call_id: "read-old",
+  });
+  expect(JSON.stringify(request)).toContain("read_conversation_screenshot");
 });

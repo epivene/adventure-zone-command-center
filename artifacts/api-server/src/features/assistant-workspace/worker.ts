@@ -59,6 +59,7 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
         await deps.runs.event(run.actorId, run.id, run.leaseToken, "progress", {
           text: "Reading conversation and current business rules",
         });
+        const model = deps.modelFor?.(run.input.model) ?? deps.model;
         const output = await runTurn(
           {
             actor: run.input.actor,
@@ -68,7 +69,17 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
             grants: run.input.grants,
             signal: control.signal,
           },
-          deps.modelFor?.(run.input.model) ?? deps.model,
+          {
+            next: (input) =>
+              model.next({
+                ...input,
+                attachmentScope: {
+                  actorId: run.actorId,
+                  conversationId: run.conversationId,
+                  sourceMessageId: run.input.sourceMessageId,
+                },
+              }),
+          },
           {
             definitions: deps.tools.definitions.bind(deps.tools),
             async execute(context, call) {
@@ -144,7 +155,14 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
           (error instanceof Error && error.message === "ASSISTANT_CANCELLED");
         // Never expose provider payloads, tokens or source bodies in public errors.
         await deps.runs.event(run.actorId, run.id, run.leaseToken, "error", {
-          code: cancelled ? "ASSISTANT_CANCELLED" : "ASSISTANT_RUN_FAILED",
+          code: cancelled
+            ? "ASSISTANT_CANCELLED"
+            : error instanceof Error &&
+                /^ASSISTANT_SCREENSHOT_(READ_FAILED|CHANGED|NOT_FOUND)$/.test(
+                  error.message,
+                )
+              ? "ASSISTANT_SCREENSHOT_READ_FAILED"
+              : "ASSISTANT_RUN_FAILED",
         });
         await deps.runs
           .finish(

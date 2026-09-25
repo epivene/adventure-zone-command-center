@@ -12,6 +12,24 @@ it("rejects actor spoofing", () => {
     }).success,
   ).toBe(false);
 });
+it("accepts image-only questions but rejects empty or duplicate-image submissions", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+  expect(
+    messageInput.safeParse({ requestKey: "s", text: "", attachmentIds: [id] })
+      .success,
+  ).toBe(true);
+  expect(
+    messageInput.safeParse({ requestKey: "s", text: "", attachmentIds: [] })
+      .success,
+  ).toBe(false);
+  expect(
+    messageInput.safeParse({
+      requestKey: "s",
+      text: "Review",
+      attachmentIds: [id, id],
+    }).success,
+  ).toBe(false);
+});
 it("denies unauthenticated requests before constructing providers", async () => {
   const runtime = vi.fn();
   const app = express();
@@ -286,4 +304,74 @@ it("rejects conversation access when initialization failed before constructing r
     .set("Authorization", `Bearer ${issueToken()!.token}`);
   expect(response.status).toBe(503);
   expect(response.body.code).toBe("ASSISTANT_STARTUP_REQUIRED");
+});
+it("uploads and reads private binary screenshots behind owner gates, then binds canonical metadata to messages", async () => {
+  const { ScreenshotStore } =
+    await import("../features/assistant-workspace/screenshots");
+  const f = await fixture();
+  const objects = new Map<string, Uint8Array>();
+  f.runtime.screenshots = new ScreenshotStore(database, () => ({
+    put: async (key, bytes) => {
+      objects.set(key, bytes);
+    },
+    get: async (key) => objects.get(key)!,
+  }));
+  const id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const path = `/conversations/${f.c.id}/screenshots/${id}`;
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  expect(
+    (await request(f.app).put(path).set("Content-Type", "image/png").send(png))
+      .status,
+  ).toBe(401);
+  const upload = await request(f.app)
+    .put(path)
+    .set("Authorization", f.authorization)
+    .set("Content-Type", "image/png")
+    .set("X-File-Name", "screenshot.png")
+    .send(png);
+  expect(upload.status).toBe(201);
+  expect(upload.body).not.toHaveProperty("objectKey");
+  expect((await request(f.app).get(path)).status).toBe(401);
+  const read = await request(f.app)
+    .get(path)
+    .set("Authorization", f.authorization);
+  expect(read.status).toBe(200);
+  expect(read.headers["cache-control"]).toBe("private, no-store");
+  expect(read.body).toEqual(png);
+  const sent = await request(f.app)
+    .post(`/conversations/${f.c.id}/messages`)
+    .set("Authorization", f.authorization)
+    .send({ requestKey: "screenshot", text: "", attachmentIds: [id] });
+  expect(sent.status).toBe(202);
+  expect(
+    (await f.runtime.conversations.get("owner", f.c.id)).messages[0]
+      .attachments,
+  ).toEqual([upload.body]);
+  const other = await f.runtime.conversations.create("owner", "Other");
+  const foreign = await request(f.app)
+    .post(`/conversations/${other.id}/messages`)
+    .set("Authorization", f.authorization)
+    .send({ requestKey: "foreign-image", text: "", attachmentIds: [id] });
+  expect(foreign.status).toBe(404);
+  const oversized = await request(f.app)
+    .put(path)
+    .set("Authorization", f.authorization)
+    .set("Content-Type", "image/png")
+    .send(Buffer.alloc(5 * 1024 * 1024 + 1));
+  expect(oversized.status).toBe(413);
+  expect(oversized.body.code).toBe("ASSISTANT_SCREENSHOT_SIZE_INVALID");
+  const invalid = await request(f.app)
+    .put(path)
+    .set("Authorization", f.authorization)
+    .set("Content-Type", "image/svg+xml")
+    .send("<svg/>");
+  expect(invalid.status).toBe(422);
+  process.env.ASSISTANT_WORKSPACE_ENABLED = "false";
+  expect(
+    (await request(f.app).get(path).set("Authorization", f.authorization))
+      .status,
+  ).toBe(503);
 });
