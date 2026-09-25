@@ -262,3 +262,115 @@ it("caps visual input at four and prioritizes explicitly retrieved older images"
   });
   expect(JSON.stringify(request)).toContain("read_conversation_screenshot");
 });
+it("sends profile evidence once while preserving saved results, provenance and changed versions", async () => {
+  const data = {
+    contacts: [{ name: "Contact" }],
+    profile: { name: "BBQ Days", note: "UNIQUE_CURRENT_DEPOSIT_RECORD" },
+  };
+  const source: any = {
+    id: "profile",
+    kind: "profile",
+    recordId: "profile",
+    eventYear: 2027,
+    occurredAt: null,
+    retrievedAt: "now",
+    version: "v2",
+    complete: false,
+    text: JSON.stringify(data),
+  };
+  const old = { ...source, version: "v1", text: "OLDER_DEPOSIT_RECORD" };
+  const result = {
+    status: "partial",
+    data: { profile: data.profile, contacts: data.contacts },
+    evidence: [source],
+    receipts: [],
+    code: "ASSISTANT_HISTORY_CONTINUES",
+  };
+  const value = {
+    ...input(),
+    evidence: [old, source, source],
+    providerItems: [
+      {
+        type: "function_call_output",
+        call_id: "profile-read",
+        output: JSON.stringify(result),
+      },
+    ],
+  };
+  const original = JSON.stringify(value);
+  let request: any;
+  const model = createOpenAiModel(config(), async (_url, init) => {
+    request = JSON.parse(String(init?.body));
+    return sse([]);
+  });
+  await model.next(value);
+  expect(
+    JSON.stringify(request).match(/UNIQUE_CURRENT_DEPOSIT_RECORD/g),
+  ).toHaveLength(1);
+  expect(JSON.stringify(request)).toContain("OLDER_DEPOSIT_RECORD");
+  expect(JSON.stringify(request)).toContain("ASSISTANT_HISTORY_CONTINUES");
+  expect(JSON.parse(request.input.at(-1).output).evidence[0]).toMatchObject({
+    id: "profile",
+    version: "v2",
+    complete: false,
+  });
+  expect(JSON.stringify(value)).toBe(original);
+});
+it("sends complete incoming and sent thread bodies once without losing attachments", async () => {
+  const messages = [
+    {
+      id: "in",
+      direction: "incoming",
+      bodyText: "INCOMING_DEPOSIT_QUESTION",
+      attachments: [{ attachmentId: "file" }],
+    },
+    {
+      id: "out",
+      direction: "outgoing",
+      bodyText: "OUTGOING_DEPOSIT_REPLY",
+      attachments: [],
+    },
+  ];
+  const e: any = {
+    id: "thread",
+    kind: "email",
+    recordId: "thread",
+    eventYear: null,
+    occurredAt: null,
+    retrievedAt: "now",
+    version: null,
+    complete: true,
+    text: messages
+      .map((m) => `[${m.id}; ${m.direction}]\n${m.bodyText}`)
+      .join("\n\n"),
+  };
+  let request: any;
+  const model = createOpenAiModel(config(), async (_url, init) => {
+    request = JSON.parse(String(init?.body));
+    return sse([]);
+  });
+  await model.next({
+    ...input(),
+    evidence: [e],
+    providerItems: [
+      {
+        type: "function_call_output",
+        call_id: "thread",
+        output: JSON.stringify({
+          status: "ok",
+          data: { id: "thread", messages, complete: true },
+          evidence: [e],
+          receipts: [],
+          code: null,
+        }),
+      },
+    ],
+  });
+  expect(
+    JSON.stringify(request).match(/INCOMING_DEPOSIT_QUESTION/g),
+  ).toHaveLength(1);
+  expect(JSON.stringify(request).match(/OUTGOING_DEPOSIT_REPLY/g)).toHaveLength(
+    1,
+  );
+  expect(JSON.stringify(request)).toContain("attachmentId");
+});
