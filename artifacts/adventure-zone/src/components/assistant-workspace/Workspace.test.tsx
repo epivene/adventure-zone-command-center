@@ -1,5 +1,11 @@
 import { it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
 import { DraftPreview } from "./DraftPreview";
 import { workspaceApi } from "@/features/assistant-workspace/api";
@@ -23,6 +29,9 @@ beforeEach(() => {
     if (path === "/status")
       return {
         enabled: true,
+        ready: true,
+        providerVerification: "not_checked",
+        checks: [],
         model: "configured-model",
         models: ["configured-model"],
       } as any;
@@ -95,6 +104,9 @@ it("does not display an old conversation response after switching chats", async 
     if (path === "/status")
       return {
         enabled: true,
+        ready: true,
+        providerVerification: "not_checked",
+        checks: [],
         model: "configured-model",
         models: ["configured-model"],
       } as any;
@@ -111,4 +123,54 @@ it("does not display an old conversation response after switching chats", async 
   await waitFor(() =>
     expect(screen.queryByText("Keep the deposit at 40%")).toBeNull(),
   );
+});
+
+it("holds saved conversation reads until setup is ready and recovers through refresh", async () => {
+  let ready = false;
+  vi.mocked(workspaceApi).mockImplementation(async (path) => {
+    if (path === "/status")
+      return {
+        enabled: true,
+        ready,
+        model: "configured-model",
+        models: ["configured-model"],
+        providerVerification: "not_checked",
+        checks: [],
+      } as any;
+    if (path === "/conversations") return [conversation] as any;
+    return conversation as any;
+  });
+  render(<AssistantWorkspacePage conversationId={conversation.id} />);
+  expect(
+    await screen.findByRole("button", { name: "Refresh setup status" }),
+  ).toBeTruthy();
+  expect(
+    vi
+      .mocked(workspaceApi)
+      .mock.calls.some(([path]) => path.startsWith("/conversations")),
+  ).toBe(false);
+  ready = true;
+  fireEvent.click(screen.getByRole("button", { name: "Refresh setup status" }));
+  expect(await screen.findByText("Keep the deposit at 40%")).toBeTruthy();
+});
+
+it("shows a retry when a setup refresh fails after chat was available", async () => {
+  render(<AssistantWorkspacePage conversationId={conversation.id} />);
+  expect(await screen.findByText("Keep the deposit at 40%")).toBeTruthy();
+  vi.mocked(workspaceApi).mockRejectedValueOnce(
+    new Error("network unavailable"),
+  );
+  await act(async () => {
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh setup status" }),
+    );
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Setup status could not be loaded",
+  );
+  expect(
+    screen.getByRole("button", { name: "Refresh setup status" }),
+  ).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh setup status" }));
+  expect(await screen.findByText("Keep the deposit at 40%")).toBeTruthy();
 });

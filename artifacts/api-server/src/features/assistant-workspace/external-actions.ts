@@ -14,7 +14,8 @@ export function externalAdapters(
   pool: Pool,
   google: PostgresGoogleConnectionRepository,
 ): Record<string, MutationAdapter> {
-  const documents = new BusinessDocumentService();
+  let documentService: BusinessDocumentService | undefined;
+  const documents = () => (documentService ??= new BusinessDocumentService());
   async function profile(context: RunContext, id: string) {
     if (
       !context.selection.organizationIds.includes(id) ||
@@ -105,7 +106,7 @@ export function externalAdapters(
           bookingId: string | null;
         };
         await profile(c, args.organizationId);
-        const d = await documents.detail(i.targetId);
+        const d = await documents().detail(i.targetId);
         if (
           d.lifecycle === "deleted" ||
           d.currentVersionId !== i.expectedRevision
@@ -127,7 +128,7 @@ export function externalAdapters(
           organizationId: string;
           bookingId: string | null;
         };
-        await documents.addLink(
+        await documents().addLink(
           i.targetId,
           {
             targetKind: "profile",
@@ -139,7 +140,7 @@ export function externalAdapters(
           c.actor.id,
         );
         if (args.bookingId)
-          await documents.addLink(
+          await documents().addLink(
             i.targetId,
             {
               targetKind: "booking",
@@ -150,7 +151,7 @@ export function externalAdapters(
             },
             c.actor.id,
           );
-        const d = await documents.detail(i.targetId);
+        const d = await documents().detail(i.targetId);
         if (!d.links.some((l) => l.targetId === args.organizationId))
           throw new Error("ASSISTANT_DOCUMENT_LINK_UNVERIFIED");
         return receipt(
@@ -166,7 +167,7 @@ export function externalAdapters(
           bookingId: string | null;
         };
         await profile(c, args.organizationId);
-        const d = await documents.detail(i.targetId);
+        const d = await documents().detail(i.targetId);
         if (
           !d.links.some((l) => l.targetId === args.organizationId) ||
           (args.bookingId &&

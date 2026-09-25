@@ -1,3 +1,5 @@
+import { workspaceStartup } from "./features/assistant-workspace/startup";
+import { readModelConfig } from "./features/assistant-workspace/model-config";
 import {startWorkspaceRuntime} from "./features/assistant-workspace/runtime";
 import {installApprovedWorkspaceRules} from "./features/assistant-workspace/seed";
 import { ensureAssistantWorkspaceSchema } from "./db/assistant-workspace-startup-migration";
@@ -403,8 +405,10 @@ async function runPostListenMaintenance() {
   }
 
   if (process.env.ASSISTANT_WORKSPACE_ENABLED === "true") {
-    await runStartupStep("assistant workspace schema", () => ensureAssistantWorkspaceSchema(pool));
-    await runStartupStep("assistant workspace approved rules", () => installApprovedWorkspaceRules(pool));
+    await workspaceStartup.initialize(async () => {
+      await runStartupStep("assistant workspace schema", () => ensureAssistantWorkspaceSchema(pool));
+      await runStartupStep("assistant workspace approved rules", () => installApprovedWorkspaceRules(pool));
+    });
   }
   await runStartupStep("booking probability schema", ensureBookingProbabilitySchema);
   await runStartupStep("package intelligence schema", ensurePackageIntelligenceSchema);
@@ -590,10 +594,14 @@ async function startBackgroundWorkers() {
   assistantJobLoop.start();
   paperNoteLoop.start();
   gmailProfileLinkSweepLoop.start();
-  if(process.env.ASSISTANT_WORKSPACE_ENABLED==="true") {
-    const stopAssistant=startWorkspaceRuntime();
-    process.once("SIGTERM",stopAssistant);
-    process.once("SIGINT",stopAssistant);
+  if (readModelConfig(process.env).enabled) {
+    try {
+      const stopAssistant = workspaceStartup.start(startWorkspaceRuntime);
+      process.once("SIGTERM", stopAssistant);
+      process.once("SIGINT", stopAssistant);
+    } catch {
+      logger.error("Assistant workspace worker failed to start; check server configuration");
+    }
   }
   historicalGmailBackfillLoop.start();
   googleDocumentLoop.start();

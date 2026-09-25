@@ -20,23 +20,40 @@ import {
 } from "../features/assistant-workspace/runtime";
 import { readModelConfig } from "../features/assistant-workspace/model-config";
 import { selectionSchema } from "../features/assistant-workspace/contracts";
+import { pool } from "@workspace/db";
+import { readWorkspaceReadiness } from "../features/assistant-workspace/readiness";
+import {
+  workspaceStartup,
+  type WorkspaceStartupState,
+} from "../features/assistant-workspace/startup";
+import { PostgresGoogleConnectionRepository } from "../features/google-workspace/google-connection-repository";
 const uuid = (value: unknown) => z.string().uuid().parse(value);
 export function createAssistantWorkspaceRouter(
   runtime: () => WorkspaceRuntime = getWorkspaceRuntime,
+  options: {
+    startup?: () => WorkspaceStartupState;
+    readiness?: (actorId: string) => ReturnType<typeof readWorkspaceReadiness>;
+  } = {},
 ) {
   const router = Router();
   router.use(requireOwnerMiddleware);
   const windows = new Map<string, { start: number; count: number }>();
-  router.get("/status", (_req, res) => {
-    const config = readModelConfig(process.env);
-    res.json({
-      enabled: config.enabled,
-      model: config.model || null,
-      models: config.models,
-      error: config.error,
-      maxSteps: config.maxSteps,
-      maxRunTokens: config.maxRunTokens,
-    });
+  const startup = options.startup ?? workspaceStartup.state;
+  const readiness =
+    options.readiness ??
+    ((actorId: string) =>
+      readWorkspaceReadiness({
+        env: process.env,
+        actorId,
+        db: pool,
+        startup: startup(),
+        google: new PostgresGoogleConnectionRepository(),
+      }));
+  router.get("/status", (req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    void readiness((req as Request & { userId: string }).userId || "owner")
+      .then((status) => res.json(status))
+      .catch(next);
   });
   router.use((req, res, next) => {
     const config = readModelConfig(process.env);
@@ -47,6 +64,10 @@ export function createAssistantWorkspaceRouter(
     }
     if (!config.allowedActorIds.includes(actor)) {
       res.status(403).json({ code: "ASSISTANT_ACCESS_DENIED" });
+      return;
+    }
+    if (startup() !== "ready") {
+      res.status(503).json({ code: "ASSISTANT_STARTUP_REQUIRED" });
       return;
     }
     res.locals.actorId = actor;

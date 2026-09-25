@@ -20,7 +20,8 @@ beforeEach(() => {
 describe("CurrentOpportunityCard", () => {
   it("shows current status, next action, and existing working actions", async () => {
     render(<CurrentOpportunityCard organizationId="20000000-0000-4000-8000-000000000001" year={2026} />);
-    expect(await screen.findByText("Follow Up")).toBeInTheDocument();
+    expect(await screen.findByText("Follow Up", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Status" })).toHaveValue("follow_up");
     expect(screen.getByText(/Email/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Schedule follow-up" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Call" })).toBeInTheDocument();

@@ -49,8 +49,8 @@ export function gmailDraftAdapter(
   drafts: DraftStore,
   google: PostgresGoogleConnectionRepository,
 ): MutationAdapter {
-  const files = new BusinessDocumentRepository(),
-    storage = new BusinessDocumentStorage();
+  const files = new BusinessDocumentRepository();
+  let storage: BusinessDocumentStorage | undefined;
   async function access(context: RunContext, intent: ActionIntent) {
     const draft = await drafts.get(context.actor.id, intent.targetId);
     if (
@@ -110,7 +110,9 @@ export function gmailDraftAdapter(
         throw new Error("ASSISTANT_ATTACHMENT_PROFILE_MISMATCH");
       const file = await files.getOpenableFile(id);
       if (!file) throw new Error("ASSISTANT_ATTACHMENT_UNAVAILABLE");
-      const bytes = await storage.get(file.storageKey);
+      const bytes = await (storage ??= new BusinessDocumentStorage()).get(
+        file.storageKey,
+      );
       if (hash(bytes) !== draft.content.attachmentHashes[i])
         throw new Error("ASSISTANT_ATTACHMENT_CHANGED");
       if (Buffer.from(bytes.subarray(0, 5)).toString() !== "%PDF-")

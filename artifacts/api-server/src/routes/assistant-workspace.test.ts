@@ -34,7 +34,7 @@ beforeEach(() => {
 });
 afterEach(async () => {
   process.env = priorEnv;
-  if (database) await database.close();
+  if (database && !database.closed) await database.close();
 });
 async function fixture() {
   process.env.SESSION_SECRET = "assistant-test-session-secret";
@@ -57,7 +57,9 @@ async function fixture() {
   };
   const app = express();
   app.use(express.json());
-  app.use(createAssistantWorkspaceRouter(() => runtime));
+  app.use(
+    createAssistantWorkspaceRouter(() => runtime, { startup: () => "ready" }),
+  );
   const authorization = `Bearer ${issueToken()!.token}`;
   return { app, authorization, c, runs, runtime };
 }
@@ -226,4 +228,62 @@ it("restores saved campaign membership and selected model without exposing provi
   expect(response.body.campaigns[0].id).toBe(batch.id);
   expect(response.body.campaigns[0].members).toHaveLength(1);
   expect(JSON.stringify(response.body)).not.toContain("private-provider-state");
+});
+
+it("keeps owner setup status available while disabled and never constructs a runtime", async () => {
+  process.env.SESSION_SECRET = "setup-status-test-secret";
+  process.env.OWNER_PASSWORD = "test";
+  process.env.ASSISTANT_WORKSPACE_ENABLED = "false";
+  const app = express();
+  app.use(
+    createAssistantWorkspaceRouter(
+      () => {
+        throw new Error("must not construct providers");
+      },
+      {
+        readiness: async (actor) => ({
+          enabled: false,
+          ready: false,
+          model: null,
+          models: [],
+          error: null,
+          maxSteps: 12,
+          maxRunTokens: 100000,
+          providerVerification: "not_checked",
+          checks: [
+            {
+              id: "owner",
+              label: "Owner access",
+              state: actor === "owner" ? "ready" : "needs_setup",
+              required: true,
+              message: "Owner check",
+            },
+          ],
+        }),
+      },
+    ),
+  );
+  const response = await request(app)
+    .get("/status")
+    .set("Authorization", `Bearer ${issueToken()!.token}`);
+  expect(response.status).toBe(200);
+  expect(response.body.ready).toBe(false);
+  expect(response.body.checks[0].state).toBe("ready");
+});
+it("rejects conversation access when initialization failed before constructing runtime", async () => {
+  await fixture();
+  const app = express();
+  app.use(
+    createAssistantWorkspaceRouter(
+      () => {
+        throw new Error("must not construct runtime");
+      },
+      { startup: () => "failed" },
+    ),
+  );
+  const response = await request(app)
+    .get("/conversations")
+    .set("Authorization", `Bearer ${issueToken()!.token}`);
+  expect(response.status).toBe(503);
+  expect(response.body.code).toBe("ASSISTANT_STARTUP_REQUIRED");
 });
