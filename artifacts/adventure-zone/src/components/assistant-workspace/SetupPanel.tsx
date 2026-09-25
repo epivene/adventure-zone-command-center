@@ -32,34 +32,46 @@ export function SetupPanel({
   return (
     <section
       aria-label="Assistant setup"
-      className="mb-5 rounded-2xl border border-slate-200 bg-white p-5"
+      className={`relative rounded-xl border border-slate-200 bg-white ${status.ready ? "mb-3 p-3" : "mb-5 p-5"}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-semibold text-slate-950">
-            {status.ready
-              ? "Assistant setup"
-              : "Finish connecting your assistant"}
-          </h2>
-          <p className="mt-1 text-sm text-slate-600">
-            {status.ready
-              ? "Local setup is ready. OpenAI access has not been tested."
-              : "Complete the required setup below to open chat. OpenAI access has not been tested."}
-          </p>
-        </div>
+      <div
+        className={
+          status.ready
+            ? "absolute right-3 top-3"
+            : "flex flex-wrap items-start justify-between gap-3"
+        }
+      >
+        {!status.ready && (
+          <div>
+            <h2 className="font-semibold text-slate-950">
+              Finish connecting your assistant
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Complete the required setup below to open chat. OpenAI access has
+              not been tested.
+            </p>
+          </div>
+        )}
         <button
           type="button"
           disabled={refreshing}
           onClick={onRefresh}
-          className="rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
+          className="min-h-11 rounded-lg border px-3 py-2 text-sm font-medium disabled:opacity-50"
         >
           {refreshing ? "Refreshing setup status…" : "Refresh setup status"}
         </button>
       </div>
-      <details open={!status.ready} className="mt-4">
-        <summary className="cursor-pointer text-sm font-medium">
+      <details open={!status.ready} className={status.ready ? "" : "mt-4"}>
+        <summary
+          className={`cursor-pointer text-sm font-medium ${status.ready ? "min-h-11 py-3 pr-48" : ""}`}
+        >
           Setup and connections
         </summary>
+        {status.ready && (
+          <p className="mt-3 text-sm text-slate-600">
+            Local setup is ready. OpenAI access has not been tested.
+          </p>
+        )}
         {[true, false].map((required) => (
           <div key={String(required)} className="mt-4">
             <h3 className="mb-2 text-sm font-semibold">

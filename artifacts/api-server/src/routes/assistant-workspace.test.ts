@@ -375,3 +375,76 @@ it("uploads and reads private binary screenshots behind owner gates, then binds 
       .status,
   ).toBe(503);
 });
+
+it("saves manual edits without an AI run and invalidates the old Gmail revision", async () => {
+  const { DraftStore } =
+    await import("../features/assistant-workspace/draft-store");
+  const f = await fixture();
+  f.runtime.drafts = new DraftStore(database);
+  const draft = await f.runtime.drafts.create("owner", f.c.id, {
+    to: ["janet@example.test"],
+    cc: [],
+    subject: "Deposit",
+    html: "<p>Original</p>",
+    text: "Original",
+    threadId: "thread-one",
+    attachmentHashes: [],
+    attachmentIds: [],
+    organizationId: null,
+    templateId: null,
+    templateVersion: "1",
+  });
+  await f.runtime.drafts.claimSave(
+    "owner",
+    draft.id,
+    draft.revision,
+    "connection",
+  );
+  await f.runtime.drafts.saved(
+    "owner",
+    draft.id,
+    draft.revision,
+    "gmail-existing",
+    "original-hash",
+  );
+  const response = await request(f.app)
+    .patch(`/drafts/${draft.id}`)
+    .set("Authorization", f.authorization)
+    .send({
+      revision: draft.revision,
+      subject: "Quick check",
+      html: "<p>Has the check been sent?</p>",
+      text: "Has the check been sent?",
+    });
+  expect(response.status).toBe(200);
+  expect(response.body.status).toBe("local");
+  expect(response.body.gmailDraftId).toBe("gmail-existing");
+  expect(response.body.content.to).toEqual(["janet@example.test"]);
+  expect(response.body.content.threadId).toBe("thread-one");
+  expect(response.body.revision).not.toBe(draft.revision);
+  expect(f.runtime.worker.tick).not.toHaveBeenCalled();
+  await expect(
+    f.runtime.drafts.claimSend("owner", draft.id, draft.revision),
+  ).rejects.toThrow("ASSISTANT_DRAFT_VERSION_CONFLICT");
+  const stale = await request(f.app)
+    .patch(`/drafts/${draft.id}`)
+    .set("Authorization", f.authorization)
+    .send({
+      revision: draft.revision,
+      subject: "Stale",
+      html: "<p>Old</p>",
+      text: "Old",
+    });
+  expect(stale.status).toBe(409);
+  const extra = await request(f.app)
+    .patch(`/drafts/${draft.id}`)
+    .set("Authorization", f.authorization)
+    .send({
+      revision: response.body.revision,
+      subject: "Change recipient",
+      html: "<p>Old</p>",
+      text: "Old",
+      to: ["other@example.test"],
+    });
+  expect(extra.status).toBe(422);
+});

@@ -23,7 +23,10 @@ export function ScreenshotPicker({
   return (
     <div className="space-y-2">
       {!!files.length && (
-        <ul className="flex flex-wrap gap-2" aria-label="Attached screenshots">
+        <ul
+          className="flex max-h-32 flex-wrap gap-2 overflow-y-auto"
+          aria-label="Attached screenshots"
+        >
           {files.map((f) => (
             <li
               key={f.id}
