@@ -54,6 +54,56 @@ export function DocumentResults({
                 ))}
               </ul>
             </>
+          ) : item.data.view === "public_research" ? (
+            <>
+              <h3 className="font-semibold">Public research</h3>
+              <p className="mt-1 text-xs text-slate-600">
+                {item.data.query} · {item.data.model}
+              </p>
+              {!item.data.complete && (
+                <p className="mt-2 text-amber-800">Research incomplete</p>
+              )}
+              {item.data.parts.map((part, index) => (
+                <div key={index} className="mt-3">
+                  <p className="whitespace-pre-wrap">{part.text}</p>
+                  <p className="mt-1 flex flex-wrap gap-2">
+                    {part.citations.map((c, n) => (
+                      <a
+                        key={`${c.url}:${n}`}
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-800 underline"
+                      >
+                        {c.title}
+                      </a>
+                    ))}
+                  </p>
+                </div>
+              ))}
+              <details className="mt-3">
+                <summary>Consulted sources</summary>
+                <ul>
+                  {item.data.consultedSources.map((s) => (
+                    <li key={s.url}>
+                      <a
+                        href={s.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-800 underline"
+                      >
+                        {s.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+              {item.data.warnings.map((w) => (
+                <p key={w} className="mt-2 text-xs text-amber-800">
+                  {w}
+                </p>
+              ))}
+            </>
           ) : (
             <>
               <h3 className="font-semibold">

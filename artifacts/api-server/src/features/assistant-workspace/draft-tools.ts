@@ -9,6 +9,8 @@ export type DraftContent = {
   threadId: string | null;
   attachmentHashes: string[];
   text?: string;
+  batchId?: string | null;
+  contactId?: string | null;
   eventYear?: number | null;
   bookingId?: string | null;
   organizationId?: string | null;
@@ -27,6 +29,8 @@ export function draftFingerprint(content: DraftContent) {
         threadId: content.threadId,
         attachmentHashes: content.attachmentHashes,
         text: content.text,
+        batchId: content.batchId,
+        contactId: content.contactId,
         eventYear: content.eventYear,
         bookingId: content.bookingId,
         organizationId: content.organizationId,

@@ -2,6 +2,7 @@ import { z } from "zod";
 export const selectionSchema = z
   .object({
     organizationIds: z.array(z.string().uuid()).max(100),
+    batchId: z.string().uuid().nullable().optional(),
     bookingId: z.string().uuid().nullable(),
     threadId: z.string().min(1).max(256).nullable(),
     draftId: z.string().min(1).max(256).nullable(),
@@ -20,7 +21,7 @@ export type Actor = { id: string; role: "owner"; connectionId: string | null };
 export type Turn = { role: "user" | "assistant"; text: string };
 export type Evidence = {
   id: string;
-  kind: "profile" | "email" | "document" | "calendar" | "rule";
+  kind: "profile" | "email" | "document" | "calendar" | "rule" | "web";
   recordId: string;
   eventYear: number | null;
   occurredAt: string | null;
@@ -36,6 +37,7 @@ export type Receipt = {
   verifiedAt: string;
 };
 export type ToolResult = {
+  usageUnknown?: boolean;
   usage?: { inputTokens: number; outputTokens: number };
   status: "ok" | "partial" | "blocked" | "uncertain" | "failed";
   data: unknown;

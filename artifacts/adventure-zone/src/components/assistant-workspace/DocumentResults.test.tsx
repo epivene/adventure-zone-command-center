@@ -42,3 +42,46 @@ it("shows incomplete page evidence and opens the selected protected document", (
   );
   expect(open).toHaveBeenCalledWith("doc");
 });
+it("shows public research with cited and consulted sources and incomplete evidence", () => {
+  render(
+    <DocumentResults
+      onOpen={vi.fn()}
+      items={[
+        {
+          id: "research",
+          retrievedAt: null,
+          data: {
+            view: "public_research",
+            query: "City fair dates",
+            model: "chosen-model",
+            complete: false,
+            parts: [
+              {
+                text: "The public listing is historical.",
+                citations: [
+                  {
+                    url: "https://city.example/fair",
+                    title: "City fair listing",
+                    startIndex: 0,
+                    endIndex: 31,
+                  },
+                ],
+              },
+            ],
+            consultedSources: [
+              { url: "https://city.example/events", title: "Events calendar" },
+            ],
+            warnings: ["Confirm current event dates."],
+          },
+        } as any,
+      ]}
+    />,
+  );
+  expect(
+    screen
+      .getByRole("link", { name: "City fair listing" })
+      .getAttribute("href"),
+  ).toBe("https://city.example/fair");
+  expect(screen.getByText("Research incomplete")).toBeTruthy();
+  expect(screen.getByText("Consulted sources")).toBeTruthy();
+});

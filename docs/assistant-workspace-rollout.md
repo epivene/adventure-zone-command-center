@@ -1,4 +1,4 @@
-# Assistant workspace: foundation and document workflow review
+# Assistant workspace: campaign and operations workflow review
 
 The upgrade adds a persistent owner workspace at `/assistant/workspace`, backed by the OpenAI Responses API and the app's existing Gmail, CRM, document, reminder, and operational-calendar services. It is disabled by default. This branch is a review candidate, not a production activation.
 
@@ -53,6 +53,8 @@ Automated coverage includes PGlite-backed ownership, atomic submission, worker f
 
 Latest document-stage verification: Node 22 passed 33 backend test files / 141 tests, including actual PGlite invoice/lifecycle services, action replay/rollback, scoped draft reads, payment previews, HTTP human verification and existing workspace regressions. React passed 3 files / 8 tests. API and UI production builds passed. Repository-wide typechecks retain the same 94 API and 135 UI baseline errors; none are reported in the changed workspace/lifecycle files. Final independent review findings were fixed and the focused re-review found no further critical or important issue.
 
+Campaign/operations verification (2026-09-25): Node 22 passed 42 backend files / 189 tests, including the complete workspace, authenticated router, canonical invoice/contract services, office tasks and inspection service regressions. React passed 4 files / 10 tests. Final API and UI builds passed. Final typechecks remain exactly 94 API / 135 UI pre-existing errors, with none in the changed workspace files. The fresh independent review's booking selection, recipient normalization, URL root-dot and inspection-year findings were fixed and regression-tested. Additional integration coverage fixed UUID array binding and added batch/contact identity to draft revisions. Focused re-review found no further blocking issue. These checks used controlled provider fixtures and PGlite; no customer messages or production activation occurred.
+
 Additional local acceptance used the actual bundled authentication/router/stores with disk-backed PGlite and a controlled provider runtime: 31/31 checks covered sign-in, access denial, atomic duplicate submissions, process-restart recovery, expired lease reclamation, feature-off behavior and repeat migrations. This did not run the full built server, native PostgreSQL, or live providers. Real supplied-PDF reader checks read both text contracts completely and marked the image-only COI partial with its unreadable page. Private PDFs were not committed.
 
 Browser navigation to the local app was explicitly blocked by environment URL policy. Native PostgreSQL binaries were unavailable, and package setup could not complete under the environment's UID/GID restrictions. These remain release gates, not passing checks.
@@ -65,8 +67,16 @@ Before production activation:
 4. Using an explicitly authorized test mailbox, verify Gmail MIME/thread/attachment draft readback and controlled delivery, then tracking repair. Validate calendar timezone and no-invitation behavior on a test calendar.
 5. Review source freshness/performance with actual customer record sizes; histories beyond the bounded readback limit must block rather than truncate silently.
 
-## Remaining scope
+## Campaign and operations delivery
 
-This branch contains the foundation and document-workflow implementation candidates. Researched campaigns/batches and staff operations/handoffs (Stages 3–4) retain their separate specification and implementation boundaries; they are not delivered here.
+Stages 3–4 now add saved campaign batches, current eligibility checks, sourced public research, bound member drafts, actual-send follow-ups, operations reads and reviewed office tasks. The new owner-only tools use the same action-card approvals and feature gate as the foundation. No production flag was changed.
+
+Campaigns freeze up to 100 ordered members and a planning year; a user message advances at most one page of 1–10 members. Retries return the same page. Bound drafts retain the selected contact identity through Gmail review. Existing sent/uncertain delivery is included even when the corresponding office draft says failed. Unbooked leads use an explicit planning year; it does not establish dates or availability. New public discoveries still need reviewed CRM intake before joining a campaign.
+
+Research uses the run's selected allowlisted model, store=false, no SDK retries, three built-in calls at most, output capped at 4,000 tokens and a whole-response deadline. The installed SDK needs a typed extension for the documented max_tool_calls request field. Citations and consulted sources are separate. Unknown provider usage stops the run, and a started call without a saved outcome is never automatically repeated. The per-run token limit is checked between calls; it is not a guaranteed dollar cap and does not include web-tool fees. Saved evidence cards show the latest 30 conversation runs, capped at 12 cards; full checkpoints remain stored.
+
+Operations readbacks keep suggested routes, missing dates, historical inspection snapshots and current equipment state distinct. Photos are not read by these tools. Lists are bounded and report truncation. Staff accounts expose display names and revisions, never authentication fields. Task changes require an enabled coordinator and exact revision, recheck profile/contact membership, and commit the canonical write, audit and receipt together. Partial edits retain due dates and coordinator notes. Actual-send follow-ups keep existing reminders and use a stable message-based identity.
+
+## Remaining scope
 
 Further Stage 1 work remains explicit: automatic bounded conversation summaries and reusable document-extraction cache; complete browser/live-provider acceptance; broader source provenance display beyond the new document/commercial cards and direct natural-language grants. Record writes currently require explicit action-card approval. Very large conversations stop with a clear context-limit message; create a new conversation and reload the same profile to continue. Saved drafts remain editable in their original conversation. Original messages and evidence checkpoints remain stored. Scanned/signature content remains unverified even after visual transcription.

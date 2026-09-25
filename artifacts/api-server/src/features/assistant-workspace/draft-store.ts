@@ -20,6 +20,8 @@ export const draftContentSchema = z
     organizationId: z.string().uuid().nullable(),
     templateId: z.string().uuid().nullable(),
     templateVersion: z.string().nullable(),
+    batchId: z.string().uuid().nullable().optional(),
+    contactId: z.string().uuid().nullable().optional(),
     eventYear: z.number().int().min(2000).max(2200).nullable().optional(),
     bookingId: z.string().uuid().nullable().optional(),
   })
@@ -110,6 +112,23 @@ export class DraftStore {
     const prior = await this.get(actorId, id);
     if (!prior) throw new Error("ASSISTANT_DRAFT_NOT_FOUND");
     const content = clean({ ...prior.content, ...patch });
+    if (
+      prior.content.batchId &&
+      [
+        "batchId",
+        "contactId",
+        "organizationId",
+        "bookingId",
+        "eventYear",
+        "to",
+        "cc",
+      ].some(
+        (key) =>
+          JSON.stringify((content as any)[key]) !==
+          JSON.stringify((prior.content as any)[key]),
+      )
+    )
+      throw new Error("ASSISTANT_BATCH_DRAFT_SCOPE_IMMUTABLE");
     const r = await this.db.query(
       `UPDATE assistant_workspace_drafts SET content=$4::jsonb,revision=$5,status='local',updated_at=now() WHERE actor_id=$1 AND id=$2 AND revision=$3 AND status IN ('local','saved') RETURNING *`,
       [

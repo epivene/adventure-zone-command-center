@@ -1,3 +1,4 @@
+import { publicResearchSchema } from "./public-research";
 import { z } from "zod";
 import type { SavedRun } from "./run-store";
 const comparison = z.object({
@@ -34,7 +35,11 @@ const commercial = z.object({
   }),
   historicalCount: z.number(),
 });
-const schema = z.discriminatedUnion("view", [comparison, commercial]);
+const schema = z.discriminatedUnion("view", [
+  comparison,
+  commercial,
+  publicResearchSchema,
+]);
 // Only these presentation fields leave the durable checkpoint. Source bodies,
 // provider state and model reasoning are never serialized by the HTTP route.
 export function publicDocumentResults(runs: Pick<SavedRun, "id" | "turn">[]) {
