@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 
 /** A single mounted panel: a modal sheet when compact, an inline rail when wide. */
@@ -6,34 +6,19 @@ export function WorkspacePanel({
   title,
   open,
   onOpenChange,
-  minWidth,
+  inline,
   side = "right",
   children,
 }: {
   title: string;
   open: boolean;
   onOpenChange(open: boolean): void;
-  minWidth: number;
+  inline: boolean;
   side?: "left" | "right";
   children: ReactNode;
 }) {
-  const query = `(min-width: ${minWidth}px)`;
-  const [inline, setInline] = useState(
-    () =>
-      typeof window.matchMedia === "function" &&
-      window.matchMedia(query).matches,
-  );
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-
-  useEffect(() => {
-    if (typeof window.matchMedia !== "function") return;
-    const media = window.matchMedia(query);
-    const update = () => setInline(media.matches);
-    update();
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, [query]);
 
   useEffect(() => {
     const node = dialog.current;
@@ -78,6 +63,7 @@ export function WorkspacePanel({
       }
     >
       <div
+        hidden={inline}
         className={
           inline ? "hidden" : "mb-4 flex items-center justify-between gap-3"
         }
@@ -89,7 +75,7 @@ export function WorkspacePanel({
           type="button"
           onClick={() => onOpenChange(false)}
           aria-label={`Close ${title.toLowerCase()}`}
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border bg-white"
+          className="inline-flex min-h-[48px] min-w-[48px] items-center justify-center rounded-lg border bg-white"
         >
           <X aria-hidden="true" className="h-5 w-5" />
         </button>

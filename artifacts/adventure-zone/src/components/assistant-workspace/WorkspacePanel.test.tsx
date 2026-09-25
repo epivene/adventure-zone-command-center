@@ -1,27 +1,11 @@
 import { useState } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { WorkspacePanel } from "./WorkspacePanel";
 import { mockNativeDialog } from "@/test/native-dialog";
 
-let wide = false;
-let change: (() => void) | undefined;
 let restoreDialog: () => void;
 beforeEach(() => {
-  wide = false;
-  change = undefined;
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({
-      get matches() {
-        return wide;
-      },
-      addEventListener: (_: string, listener: () => void) => {
-        change = listener;
-      },
-      removeEventListener: vi.fn(),
-    })),
-  );
   restoreDialog = mockNativeDialog();
 });
 afterEach(() => {
@@ -42,16 +26,20 @@ function DraftEditor() {
 }
 function Harness() {
   const [open, setOpen] = useState(false);
+  const [inline, setInline] = useState(false);
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>
         Open drafts
       </button>
+      <button type="button" onClick={() => setInline(!inline)}>
+        Change layout
+      </button>
       <WorkspacePanel
         title="Drafts and actions"
         open={open}
         onOpenChange={setOpen}
-        minWidth={1280}
+        inline={inline}
       >
         <DraftEditor />
       </WorkspacePanel>
@@ -83,10 +71,7 @@ it("keeps one editor while switching between a compact sheet and desktop rail", 
   fireEvent.click(screen.getByRole("button", { name: "Open drafts" }));
   const editor = screen.getByRole("textbox", { name: "Draft wording" });
   fireEvent.change(editor, { target: { value: "Keep this while unfolding" } });
-  act(() => {
-    wide = true;
-    change?.();
-  });
+  fireEvent.click(screen.getByRole("button", { name: "Change layout" }));
   const rail = screen.getByRole("complementary", {
     name: "Drafts and actions",
   });
@@ -94,10 +79,7 @@ it("keeps one editor while switching between a compact sheet and desktop rail", 
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.getAllByRole("textbox")).toHaveLength(1);
   expect(screen.getByRole("textbox")).toBe(editor);
-  act(() => {
-    wide = false;
-    change?.();
-  });
+  fireEvent.click(screen.getByRole("button", { name: "Change layout" }));
   expect(
     screen.getByRole("dialog", { name: "Drafts and actions" }),
   ).toHaveAttribute("open");

@@ -12,7 +12,7 @@ import type { Pool } from "pg";
 import type { RunContext, Evidence } from "./contracts";
 import type { ReadDependencies } from "./read-tools";
 import { result, blocked } from "./read-tools";
-import { PostgresProfileSearchRepository } from "../assistant/profile-search-repository";
+import { searchWorkspaceProfiles } from "./profile-search";
 import { BusinessDocumentService } from "../business-documents/business-document-service";
 import { BusinessDocumentRepository } from "../business-documents/business-document-repository";
 import { BusinessDocumentStorage } from "../business-documents/business-document-storage";
@@ -109,13 +109,14 @@ export function productionReads(
     },
   });
   const adapters: ReadDependencies["adapters"] = {
-    search_profiles: async (_c, a) =>
-      result(
-        await new PostgresProfileSearchRepository(pool).search({
-          query: a.query,
-          limit: 20,
-        }),
-      ),
+    search_profiles: async (_c, a) => {
+      const data = await searchWorkspaceProfiles(pool, a);
+      return {
+        ...result(data),
+        status: data.complete ? "ok" : "partial",
+        code: data.complete ? null : "ASSISTANT_PROFILES_CONTINUE",
+      };
+    },
     read_profile: async (_c, a) => {
       const organization = await profile(a.organizationId);
       const contacts = await pool.query(
