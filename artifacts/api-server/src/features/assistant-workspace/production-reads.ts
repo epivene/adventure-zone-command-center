@@ -23,9 +23,11 @@ export function productionReads(
   ownerId: string,
   google: PostgresGoogleConnectionRepository,
 ) {
-  const documents = new BusinessDocumentService();
+  let documentService: BusinessDocumentService | undefined;
+  const documents = () => (documentService ??= new BusinessDocumentService());
   const files = new BusinessDocumentRepository();
-  const storage = new BusinessDocumentStorage();
+  let documentStorage: BusinessDocumentStorage | undefined;
+  const storage = () => (documentStorage ??= new BusinessDocumentStorage());
   const gmail: ReadDependencies["gmail"] = async () => {
     const before = await google.getCurrent();
     if (!before) return null;
@@ -77,7 +79,7 @@ export function productionReads(
         const file = await files.getOpenableFile(source.documentId);
         if (!file) throw new Error("ASSISTANT_DOCUMENT_UNAVAILABLE");
         return {
-          bytes: await storage.get(file.storageKey),
+          bytes: await storage().get(file.storageKey),
           recordId: source.documentId,
           eventYear: metadata.eventYear,
         };
@@ -155,7 +157,7 @@ export function productionReads(
     },
     list_documents: async (_c, a) => {
       await profile(a.organizationId);
-      const docs = await documents.list({
+      const docs = await documents().list({
         profileId: a.organizationId,
         limit: 100,
         offset: a.offset ?? 0,

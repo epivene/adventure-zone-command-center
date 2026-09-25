@@ -1,3 +1,7 @@
+import {
+  SetupPanel,
+  type WorkspaceStatus,
+} from "@/components/assistant-workspace/SetupPanel";
 import { CampaignPanel } from "@/components/assistant-workspace/CampaignPanel";
 import { ConversationContext } from "@/components/assistant-workspace/ConversationContext";
 import { DocumentResults } from "@/components/assistant-workspace/DocumentResults";
@@ -27,6 +31,8 @@ function friendly(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (/STATE_CHANGED|CONFLICT|CHANGED/.test(code))
     return "The saved information changed. Review the latest version and try again.";
+  if (/STARTUP/.test(code))
+    return "Assistant startup is incomplete. Refresh setup status for details.";
   if (/CONFIGURATION|DISABLED|MODEL/.test(code))
     return "The assistant needs its OpenAI connection configured.";
   if (/APPROVAL/.test(code))
@@ -61,11 +67,7 @@ export default function AssistantWorkspacePage({
   conversationId?: string;
 }) {
   const [, navigate] = useLocation();
-  const [status, setStatus] = useState<{
-      enabled: boolean;
-      model: string | null;
-      models: string[];
-    } | null>(null),
+  const [status, setStatus] = useState<WorkspaceStatus | null>(null),
     [list, setList] = useState<{ id: string; title: string }[]>([]),
     [conversation, setConversation] = useState<Conversation | null>(null),
     [text, setText] = useState(""),
@@ -74,6 +76,9 @@ export default function AssistantWorkspacePage({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState<"chat" | "knowledge">("chat"),
     [progress, setProgress] = useState("");
+  const [setupError, setSetupError] = useState("");
+  const [setupRevision, setSetupRevision] = useState(0);
+  const [refreshingSetup, setRefreshingSetup] = useState(false);
   const [sendDraft, setSendDraft] = useState<Draft | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const requestRef = useRef<{ text: string; key: string } | null>(null);
@@ -97,18 +102,16 @@ export default function AssistantWorkspacePage({
   }, [conversationId]);
   useEffect(() => {
     let live = true;
-    void workspaceApi<{
-      enabled: boolean;
-      model: string | null;
-      models: string[];
-    }>("/status")
+    setRefreshingSetup(true);
+    setSetupError("");
+    void workspaceApi<WorkspaceStatus>("/status")
       .then(async (s) => {
         if (!live) return;
         setStatus(s);
         setModel((current) =>
           modelConversation.current ? current : (s.model ?? ""),
         );
-        if (s.enabled) {
+        if (s.ready) {
           const items =
             await workspaceApi<{ id: string; title: string }[]>(
               "/conversations",
@@ -117,12 +120,20 @@ export default function AssistantWorkspacePage({
         }
       })
       .catch((e) => {
-        if (live) setError(friendly(e));
+        if (live) {
+          setStatus(null);
+          setSetupError(
+            "Setup status could not be loaded. Refresh to try again.",
+          );
+        }
+      })
+      .finally(() => {
+        if (live) setRefreshingSetup(false);
       });
     return () => {
       live = false;
     };
-  }, []);
+  }, [setupRevision]);
   useEffect(() => {
     modelConversation.current = undefined;
     setConversation(null);
@@ -131,11 +142,11 @@ export default function AssistantWorkspacePage({
     setError("");
     requestRef.current = null;
     setProgress("");
-    if (conversationId) {
+    if (conversationId && status?.ready) {
       localStorage.setItem(lastConversationKey, conversationId);
       void refresh().catch((e) => setError(friendly(e)));
     }
-  }, [conversationId, refresh]);
+  }, [conversationId, refresh, status?.ready]);
   const active = conversation?.runs.find((r) =>
     ["queued", "running"].includes(r.status),
   );
@@ -309,31 +320,35 @@ export default function AssistantWorkspacePage({
           </button>
         </div>
       </header>
-      {error && (
+      {(setupError || error) && (
         <p
           role="alert"
           className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-800"
         >
-          {error}
+          {setupError || error}
         </p>
       )}
-      {status && !status.enabled ? (
-        <section className="rounded-2xl border bg-white p-6">
-          <h2 className="font-semibold">Connect the assistant</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            The new workspace is waiting for its OpenAI connection and owner
-            access to be enabled. Your existing assistant remains available.
-          </p>
-          <a
-            href="/settings"
-            className="mt-4 inline-block text-teal-800 underline"
+      {status && (
+        <SetupPanel
+          status={status}
+          refreshing={refreshingSetup}
+          onRefresh={() => setSetupRevision((n) => n + 1)}
+        />
+      )}
+      {!status ? (
+        setupError ? (
+          <button
+            type="button"
+            className={button}
+            disabled={refreshingSetup}
+            onClick={() => setSetupRevision((n) => n + 1)}
           >
-            Open settings
-          </a>
-        </section>
-      ) : !status ? (
-        <p role="status">Loading assistant…</p>
-      ) : tab === "knowledge" ? (
+            Refresh setup status
+          </button>
+        ) : (
+          <p role="status">Loading assistant…</p>
+        )
+      ) : !status.ready ? null : tab === "knowledge" ? (
         <KnowledgePanel />
       ) : (
         <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)_340px]">

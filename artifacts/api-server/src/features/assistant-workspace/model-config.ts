@@ -9,6 +9,7 @@ export type ModelConfig = {
   maxRunTokens: number;
   timeoutMs: number;
   error: string | null;
+  configurationIssues: string[];
 };
 export function readModelConfig(
   env: Record<string, string | undefined>,
@@ -25,11 +26,11 @@ export function readModelConfig(
     ["ASSISTANT_MAX_RUN_TOKENS", 100000, 1000, 500000],
     ["ASSISTANT_MODEL_TIMEOUT_MS", 120000, 1000, 180000],
   ];
-  let invalid = false;
+  const configurationIssues: string[] = [];
   const values = limits.map(([key, fallback, min, max]) => {
     const n = env[key] === undefined ? fallback : Number(env[key]);
     if (!Number.isInteger(n) || n < min || n > max) {
-      invalid = true;
+      configurationIssues.push(key);
       return fallback;
     }
     return n;
@@ -42,13 +43,22 @@ export function readModelConfig(
         .filter((x) => /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(x)),
     ),
   ];
-  const configured =
-    allowedActorIds.length > 0 &&
-    models.includes(model) &&
-    /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(model) &&
-    Boolean(apiKey.trim()) &&
-    !invalid;
+  if (!allowedActorIds.length)
+    configurationIssues.push("ASSISTANT_WORKSPACE_ACTOR_IDS");
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(model))
+    configurationIssues.push("ASSISTANT_OPENAI_MODEL");
+  if (
+    env.ASSISTANT_OPENAI_MODELS !== undefined &&
+    (!models.includes(model) ||
+      env.ASSISTANT_OPENAI_MODELS.split(",").some(
+        (x) => !/^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/.test(x.trim()),
+      ))
+  )
+    configurationIssues.push("ASSISTANT_OPENAI_MODELS");
+  if (!apiKey.trim()) configurationIssues.push("OPENAI_API_KEY");
+  const configured = configurationIssues.length === 0;
   return {
+    configurationIssues,
     enabled: env.ASSISTANT_WORKSPACE_ENABLED === "true" && configured,
     allowedActorIds,
     model,

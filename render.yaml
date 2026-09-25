@@ -23,6 +23,17 @@ services:
       # The owner password used to sign in to the app.
       - key: OWNER_PASSWORD
         sync: false
+      # New assistant pilot: configure server-side only; keep disabled until approved.
+      - key: ASSISTANT_WORKSPACE_ENABLED
+        value: "false"
+      - key: ASSISTANT_WORKSPACE_ACTOR_IDS
+        value: owner
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: ASSISTANT_OPENAI_MODEL
+        sync: false
+      # Optional ASSISTANT_OPENAI_MODELS includes the default model.
+      # Usage limits have bounded server defaults; see docs/assistant-workspace-rollout.md.
       # Public Wix inquiry intake. Keep alert recipients in Render only.
       - key: WEBSITE_INQUIRY_ALLOWED_ORIGINS
         value: https://the-adventure-zone.com,https://www.the-adventure-zone.com

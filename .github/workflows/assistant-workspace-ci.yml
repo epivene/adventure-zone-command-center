@@ -1,0 +1,63 @@
+name: Assistant Workspace CI
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "artifacts/api-server/**"
+      - "artifacts/adventure-zone/**"
+      - "lib/db/**"
+      - "lib/api-*/**"
+      - "imports/assistant-knowledge/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "tsconfig*.json"
+      - ".nvmrc"
+      - "render.yaml"
+      - ".github/workflows/assistant-workspace-ci.yml"
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: assistant-workspace-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://test:test@127.0.0.1:5432/assistant_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Assistant and connected business workflow regression tests
+        run: >-
+          pnpm --filter @workspace/api-server exec vitest run
+          --maxWorkers=1 --hookTimeout=30000 --testTimeout=30000
+          src/features/assistant-workspace
+          src/routes/assistant-workspace.test.ts
+          src/features/office/office-task-repository.test.ts
+          src/features/year-end-inspections/inspection-service.pglite.test.ts
+          src/features/contracts/contract-completion.pglite.test.ts
+          src/features/contracts/contract-lifecycle-service.test.ts
+          src/features/contracts/contract-draft-service.test.ts
+          src/features/contracts/contract-pdf-service.test.ts
+          src/features/invoices
+      - name: Assistant workspace UI tests
+        run: pnpm --filter @workspace/adventure-zone exec vitest run src/components/assistant-workspace
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server build
+      - name: Build frontend
+        run: pnpm --filter @workspace/adventure-zone build
