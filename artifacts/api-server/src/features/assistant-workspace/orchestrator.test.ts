@@ -170,3 +170,39 @@ it("accounts for visual tool usage before another model step", async () => {
   expect(next).toHaveBeenCalledTimes(1);
   expect(store.get()?.tokens).toBe(115);
 });
+it("stops before another tool or model call when research usage is unknown, including replay", async () => {
+  const store = memory();
+  await store.save({
+    providerItems: [],
+    pending: [call, { ...call, id: "call2" }],
+    results: {},
+    evidence: [],
+    steps: 1,
+    tokens: 10,
+  });
+  const tools = {
+      definitions: () => [],
+      execute: vi.fn(async () => ({
+        ...ok,
+        status: "uncertain" as const,
+        usageUnknown: true,
+      })),
+    },
+    next = vi.fn(async () => ({
+      text: "Unexpected continuation",
+      calls: [],
+      providerItems: [],
+      inputTokens: 0,
+      outputTokens: 0,
+    }));
+  expect((await runTurn(context, { next }, tools, store)).status).toBe(
+    "partial",
+  );
+  expect(tools.execute).toHaveBeenCalledTimes(1);
+  expect(next).not.toHaveBeenCalled();
+  const checkpoint = store.get()!;
+  delete checkpoint.final;
+  await store.save(checkpoint);
+  await runTurn(context, { next }, tools, store);
+  expect(tools.execute).toHaveBeenCalledTimes(1);
+});

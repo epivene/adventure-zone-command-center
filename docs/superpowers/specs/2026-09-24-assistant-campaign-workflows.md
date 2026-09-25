@@ -1,0 +1,17 @@
+# Assistant campaign workflows
+
+Continues the already approved Stage 3 roadmap after merged PR #947 (main 342184b3f01cc1ece71eedcf983550c78c5fd1e5). Implement in the existing isolated workspace, without enabling the production feature.
+
+## Outcome
+The owner can save an ordered customer/contact/booking list for an explicit event year, resume it across visits, work through small pages, check prior outreach and prepare individually sourced drafts. “Next batch” returns stable saved membership; “just this customer” narrows the working selection. Reopening a conversation preserves batch progress and evidence.
+
+## Design
+1. Owner/conversation-owned batches contain at most 100 immutable members and an explicit planning year. Pages contain 1–10 members and are committed under row lock. The actual user message identifies a next-page request; replay returns the same page and conflicting request reuse fails. Batch selection can only name members of that saved list.
+2. Eligibility is a fresh preparation check. Reuse canonical contact/protected-record policy and inspect normalized-email duplicates, active contact membership, canonical event-year opportunity, current drafts/scheduled/uncertain/sent outreach and open follow-ups. Missing or conflicting data remains visible. Eligibility never authorizes delivery.
+3. Personalization uses existing profile/full-thread/document/rule tools and reviewed templates. Batch drafts bind one exact member, recipient, customer, booking and year; creation and linkage share a transaction. Repeated preparation returns the existing draft. Delivery remains the existing exact-revision Gmail/OutreachDispatch workflow; no bulk-send shortcut.
+4. Public web research uses the owned run's configured OpenAI model, a bounded public query, at most three built-in web calls, capped output and a whole-response deadline. It stores source annotations and consulted URLs separately; sources remain untrusted and partial evidence. Public URLs reject credentials and local/private address forms. It never sends private thread bodies or attachments automatically. Search capability failures never silently switch models.
+5. Research calls have durable started/completed state. A started call without saved outcome is not automatically repeated after restart. Unknown usage stops the current run, rather than reporting zero verified spend. Results persist with the batch and conversation. Research does not automatically import a new CRM profile; existing reviewed prospect intake remains available separately.
+6. A reviewed follow-up action may use a verified workspace send receipt and a 1–365 day offset. Its date derives from actual sentAt, not draft/schedule time. Existing manual follow-ups remain intact; failed/uncertain delivery creates none. Promotion dates continue through the existing confirmed-send service.
+
+## Limits and verification
+Owner-only access remains unchanged. No credentials or account secrets in model/UI results. No production activation or customer sends during implementation. Node 22; existing shared database and services; additive SQL mirrored in startup migration. Test actor/conversation isolation, replay/concurrency, narrowed membership, contact movement, duplicates, unknown years, actual send dates, source URLs, selected model, deadline/usage and restart uncertainty. Existing browser/native PostgreSQL/live Google gates remain open.

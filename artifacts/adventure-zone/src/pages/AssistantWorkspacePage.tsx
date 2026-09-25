@@ -1,3 +1,4 @@
+import { CampaignPanel } from "@/components/assistant-workspace/CampaignPanel";
 import { DocumentResults } from "@/components/assistant-workspace/DocumentResults";
 import { businessDocumentsApi } from "@/lib/business-documents-api";
 import type { HumanConfirmation } from "@/components/assistant-workspace/ActionResults";
@@ -75,6 +76,7 @@ export default function AssistantWorkspacePage({
   const [sendDraft, setSendDraft] = useState<Draft | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
   const requestRef = useRef<{ text: string; key: string } | null>(null);
+  const modelConversation = useRef<string | undefined>(undefined);
   const currentId = useRef(conversationId);
   currentId.current = conversationId;
   const refresh = useCallback(async () => {
@@ -82,7 +84,15 @@ export default function AssistantWorkspacePage({
     const c = await workspaceApi<Conversation>(
       `/conversations/${conversationId}`,
     );
-    if (currentId.current === conversationId) setConversation(c);
+    if (currentId.current === conversationId) {
+      setConversation(c);
+      // Restore the saved model only when entering a conversation. Polling must
+      // not overwrite an explicit model choice for the next message.
+      if (modelConversation.current !== conversationId) {
+        modelConversation.current = conversationId;
+        setModel(c.selectedModel ?? "");
+      }
+    }
   }, [conversationId]);
   useEffect(() => {
     let live = true;
@@ -94,7 +104,9 @@ export default function AssistantWorkspacePage({
       .then(async (s) => {
         if (!live) return;
         setStatus(s);
-        setModel(s.model ?? "");
+        setModel((current) =>
+          modelConversation.current ? current : (s.model ?? ""),
+        );
         if (s.enabled) {
           const items =
             await workspaceApi<{ id: string; title: string }[]>(
@@ -111,6 +123,7 @@ export default function AssistantWorkspacePage({
     };
   }, []);
   useEffect(() => {
+    modelConversation.current = undefined;
     setConversation(null);
     setSendDraft(null);
     setText("");
@@ -467,6 +480,16 @@ export default function AssistantWorkspacePage({
             </form>
           </section>
           <aside className="space-y-4">
+            <CampaignPanel
+              batches={conversation?.campaigns ?? []}
+              reviews={conversation?.campaignReviews ?? []}
+              selectedBatchId={conversation?.selection.batchId ?? null}
+              busy={busy || !!active}
+              onRequest={(message) => {
+                setText(message);
+                composer.current?.focus();
+              }}
+            />
             <DocumentResults
               items={conversation?.documentResults ?? []}
               onOpen={(id) => void openDocument(id)}

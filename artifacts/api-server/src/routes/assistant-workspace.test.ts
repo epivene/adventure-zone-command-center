@@ -175,3 +175,55 @@ it.each([
     ).toContain(`Human verification: ${confirmation}`);
   },
 );
+
+import { CampaignStore } from "../features/assistant-workspace/campaign-store";
+import { drizzle } from "drizzle-orm/pglite";
+import { randomUUID } from "node:crypto";
+it("restores saved campaign membership and selected model without exposing provider checkpoints", async () => {
+  const f = await fixture();
+  f.runtime.config.models.push("alternate-model");
+  const submitted = await request(f.app)
+    .post(`/conversations/${f.c.id}/messages`)
+    .set("Authorization", f.authorization)
+    .send({
+      requestKey: "campaign",
+      text: "Save a campaign",
+      model: "alternate-model",
+    });
+  const run = (await f.runs.get("owner", submitted.body.runId))!;
+  f.runtime.campaigns = new CampaignStore(drizzle(database), database);
+  const batch = await f.runtime.campaigns.create(
+    { ...run.input, runId: run.id, signal: new AbortController().signal },
+    run.input.sourceMessageId,
+    {
+      title: "Saved fair batch",
+      eventYear: 2027,
+      criteria: "Selected profiles",
+      members: [
+        { organizationId: randomUUID(), contactId: null, bookingId: null },
+      ],
+    },
+  );
+  f.runtime.actions = { list: async () => [] };
+  f.runtime.drafts = { list: async () => [] };
+  await database.query(
+    "UPDATE assistant_workspace_runs SET checkpoint=jsonb_set(checkpoint,'{turn}',$2::jsonb) WHERE id=$1",
+    [
+      run.id,
+      JSON.stringify({
+        providerItems: [{ secret: "private-provider-state" }],
+        results: {},
+        steps: 1,
+        tokens: 5,
+      }),
+    ],
+  );
+  const response = await request(f.app)
+    .get(`/conversations/${f.c.id}`)
+    .set("Authorization", f.authorization);
+  expect(response.status).toBe(200);
+  expect(response.body.selectedModel).toBe("alternate-model");
+  expect(response.body.campaigns[0].id).toBe(batch.id);
+  expect(response.body.campaigns[0].members).toHaveLength(1);
+  expect(JSON.stringify(response.body)).not.toContain("private-provider-state");
+});

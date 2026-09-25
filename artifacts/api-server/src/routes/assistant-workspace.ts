@@ -1,3 +1,4 @@
+import { publicCampaignReviews } from "../features/assistant-workspace/campaign-tools";
 import { confirmationFor } from "../features/assistant-workspace/commercial-actions";
 import { publicDocumentResults } from "../features/assistant-workspace/document-results";
 import { randomUUID } from "node:crypto";
@@ -125,6 +126,12 @@ export function createAssistantWorkspaceRouter(
           })),
         ),
         drafts,
+        campaignReviews: publicCampaignReviews(runs),
+        campaigns: r.campaigns
+          ? await r.campaigns.list(a, conversation.id)
+          : [],
+        selectedModel:
+          runs.find((run) => run.input?.model)?.input?.model ?? r.config.model,
         documentResults: publicDocumentResults(runs),
         runs: runs.map((run) => ({
           id: run.id,

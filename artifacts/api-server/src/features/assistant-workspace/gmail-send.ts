@@ -115,11 +115,14 @@ export function createWorkspaceSendService(deps: {
       throw new Error("ASSISTANT_EVENT_YEAR_REQUIRED");
     const contacts = (
       await pool.query(
-        `SELECT c.id FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true AND lower(c.email)=lower($2)`,
+        `SELECT c.id FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true AND lower(trim(c.email))=lower(trim($2))`,
         [draft.content.organizationId, draft.content.to[0]],
       )
     ).rows;
-    if (contacts.length !== 1)
+    if (
+      contacts.length !== 1 ||
+      (draft.content.contactId && contacts[0]?.id !== draft.content.contactId)
+    )
       throw new Error("ASSISTANT_RECIPIENT_REVIEW_REQUIRED");
     if (
       draft.content.bookingId &&
@@ -317,11 +320,15 @@ export function createWorkspaceSendService(deps: {
       : []) {
       const contacts = (
         await pool.query(
-          `SELECT c.id FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true AND lower(c.email)=lower($2)`,
+          `SELECT c.id FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true AND lower(trim(c.email))=lower(trim($2))`,
           [draft.content.organizationId, email],
         )
       ).rows;
-      if (contacts.length !== 1) throw new Error("ASSISTANT_RECIPIENT_CHANGED");
+      if (
+        contacts.length !== 1 ||
+        (draft.content.contactId && contacts[0]?.id !== draft.content.contactId)
+      )
+        throw new Error("ASSISTANT_RECIPIENT_CHANGED");
       const blocked = await (deps.protectContact ?? outreachDispatchProtection)(
         db,
         {

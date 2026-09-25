@@ -1,3 +1,4 @@
+import type { CampaignStore } from "./campaign-store";
 import { ActionStore } from "./action-store";
 import { KnowledgeRepository } from "./knowledge";
 import { assertApprovedDraftLinks } from "./draft-tools";
@@ -94,6 +95,7 @@ const schemas = {
   ),
 };
 export function createWorkspaceTools(deps: {
+  campaigns?: CampaignStore;
   ownerId: string;
   db: Queryable;
   conversations: ConversationStore;
@@ -196,6 +198,22 @@ export function createWorkspaceTools(deps: {
           };
         }
         if (call.name === "select_profiles") {
+          if (context.selection.batchId) {
+            const batch = await deps.campaigns?.get(
+              context.actor.id,
+              context.conversationId,
+              context.selection.batchId,
+            );
+            if (
+              !batch ||
+              args.eventYear !== batch.eventYear ||
+              args.organizationIds.some(
+                (id: string) =>
+                  !batch.members.some((m) => m.organizationId === id),
+              )
+            )
+              return blocked("ASSISTANT_TARGET_NOT_IN_BATCH");
+          }
           const found = await deps.db.query(
             `SELECT id FROM organizations WHERE id=ANY($1::uuid[]) AND consolidated_into_id IS NULL`,
             [args.organizationIds],
@@ -244,6 +262,8 @@ export function createWorkspaceTools(deps: {
               : { messageId: args.messageId, attachmentId: args.attachmentId },
           );
         if (call.name === "prepare_draft") {
+          args.batchId = context.selection.batchId ?? null;
+          args.contactId = null;
           args.eventYear = context.selection.eventYear;
           args.bookingId = context.selection.bookingId;
           if (
@@ -268,22 +288,29 @@ export function createWorkspaceTools(deps: {
             args.html,
           );
           const contacts = await deps.db.query(
-            `SELECT lower(c.email) AS email FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true`,
+            `SELECT lower(trim(c.email)) AS email FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true`,
             [args.organizationId],
           );
           const emails = new Set(contacts.rows.map((c) => c.email));
           if (
             [...args.to, ...args.cc].some(
-              (email: string) => !emails.has(email.toLowerCase()),
+              (email: string) => !emails.has(email.trim().toLowerCase()),
             )
           )
             return blocked("ASSISTANT_RECIPIENT_REVIEW_REQUIRED");
-          const draft = await deps.drafts.create(
-            context.actor.id,
-            context.conversationId,
-            args,
-            stableId(`${context.runId}:${call.id}`),
-          );
+          const draft =
+            context.selection.batchId && deps.campaigns
+              ? await deps.campaigns.prepareDraft(
+                  context,
+                  context.selection.batchId,
+                  args,
+                )
+              : await deps.drafts.create(
+                  context.actor.id,
+                  context.conversationId,
+                  args,
+                  stableId(`${context.runId}:${call.id}`),
+                );
           context.selection.draftId = draft.id;
           const current = await deps.conversations.get(
             context.actor.id,

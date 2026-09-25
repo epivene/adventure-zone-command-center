@@ -1,3 +1,11 @@
+import { CampaignStore } from "./campaign-store";
+import { createCampaignTools } from "./campaign-tools";
+import { campaignAdapters, campaignActionPreview } from "./campaign-actions";
+import { createOperationsTools } from "./operations-tools";
+import {
+  operationsAdapters,
+  operationsActionPreview,
+} from "./operations-actions";
 import {
   commercialAdapters,
   commercialActionPreview,
@@ -32,6 +40,7 @@ export function createWorkspaceRuntime() {
     drafts = new DraftStore(pool),
     knowledge = new KnowledgeRepository(pool),
     google = new PostgresGoogleConnectionRepository();
+  const campaigns = new CampaignStore(db, pool);
   const reads = productionReads(pool, ownerId, google);
   const send = createWorkspaceSendService({
     pool,
@@ -41,6 +50,8 @@ export function createWorkspaceRuntime() {
     google,
   });
   const executor = new ActionExecutor(ownerId, actions, {
+    ...campaignAdapters(db, pool),
+    ...operationsAdapters(db, pool),
     ...productionRecordAdapters(db, pool),
     ...commercialAdapters(db, pool),
     ...externalAdapters(pool, google),
@@ -48,6 +59,17 @@ export function createWorkspaceRuntime() {
     send_draft: send.adapter,
   });
   const tools = createToolRegistry([
+    createCampaignTools({
+      ownerId,
+      database: db,
+      db: pool,
+      campaigns,
+      conversations,
+      runs,
+      executor,
+      config,
+    }),
+    createOperationsTools({ ownerId, database: db, db: pool, runs, executor }),
     createReadTools({ ownerId, ...reads }),
     createCommercialTools({
       ownerId,
@@ -57,6 +79,7 @@ export function createWorkspaceRuntime() {
       runs,
     }),
     createWorkspaceTools({
+      campaigns,
       ownerId,
       db: pool,
       conversations,
@@ -103,8 +126,25 @@ export function createWorkspaceRuntime() {
       })),
   });
   return {
-    actionPreview: (context: RunContext, intent: ActionIntent) =>
-      commercialActionPreview(pool, context, intent),
+    actionPreview: async (context: RunContext, intent: ActionIntent) => {
+      try {
+        return (
+          (await campaignActionPreview(pool, context, intent)) ??
+          (await operationsActionPreview(pool, context, intent)) ??
+          (await commercialActionPreview(pool, context, intent))
+        );
+      } catch {
+        return {
+          available: false,
+          title: "Action needs refreshed information",
+          summary:
+            "The reviewed record or selected scope changed. Ask the assistant to refresh this action.",
+          revision: intent.expectedRevision,
+          reviewHref: null,
+        };
+      }
+    },
+    campaigns,
     config,
     ownerId,
     conversations,

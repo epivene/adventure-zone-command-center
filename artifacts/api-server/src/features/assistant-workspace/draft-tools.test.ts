@@ -127,3 +127,17 @@ it("binds booking, event year and template to the draft revision", () => {
     original,
   );
 });
+it("binds a campaign member contact and batch to the reviewed draft revision", () => {
+  const d = {
+    ...content,
+    attachmentHashes: [],
+    batchId: "batch",
+    contactId: "first-contact",
+  };
+  expect(draftFingerprint({ ...d, contactId: "replacement-contact" })).not.toBe(
+    draftFingerprint(d),
+  );
+  expect(draftFingerprint({ ...d, batchId: "other-batch" })).not.toBe(
+    draftFingerprint(d),
+  );
+});

@@ -1,4 +1,5 @@
 export type Selection = {
+  batchId?: string | null;
   organizationIds: string[];
   bookingId: string | null;
   threadId: string | null;
@@ -52,6 +53,9 @@ export type Conversation = {
   messages: { id: string; role: "user" | "assistant"; text: string }[];
   actions: Action[];
   drafts: Draft[];
+  selectedModel?: string;
+  campaigns?: CampaignBatch[];
+  campaignReviews?: CampaignReview[];
   documentResults?: DocumentResult[];
   runs: {
     id: string;
@@ -78,6 +82,23 @@ export type DocumentResult = {
           totalPages: number | null;
           missingPages: number[];
         }[];
+      }
+    | {
+        view: "public_research";
+        query: string;
+        model: string;
+        complete: boolean;
+        parts: {
+          text: string;
+          citations: {
+            url: string;
+            title: string;
+            startIndex: number;
+            endIndex: number;
+          }[];
+        }[];
+        consultedSources: { url: string; title: string }[];
+        warnings: string[];
       }
     | {
         view: "commercial_records";
@@ -107,4 +128,28 @@ export type Rule = {
   effectiveFrom: string;
   effectiveTo: string | null;
   reviewedAt: string | null;
+};
+
+export type CampaignBatch = {
+  id: string;
+  title: string;
+  eventYear: number;
+  criteria: string;
+  revision: number;
+  cursor: number;
+  members: {
+    organizationId: string;
+    contactId?: string | null;
+    bookingId?: string | null;
+  }[];
+  draftLinks: Record<string, string>;
+};
+export type CampaignReview = {
+  batchId: string;
+  member: { organizationId: string };
+  profileName: string | null;
+  eligible: boolean;
+  reasons: string[];
+  cautions: string[];
+  checkedAt: string;
 };

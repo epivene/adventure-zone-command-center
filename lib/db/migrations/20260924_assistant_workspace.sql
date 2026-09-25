@@ -77,3 +77,26 @@ CREATE TABLE IF NOT EXISTS assistant_workspace_send_reviews (
 
 ALTER TABLE assistant_workspace_drafts DROP CONSTRAINT IF EXISTS assistant_workspace_drafts_status_check;
 ALTER TABLE assistant_workspace_drafts ADD CONSTRAINT assistant_workspace_drafts_status_check CHECK(status IN ('local','saving','saved','sending','uncertain','sent'));
+
+CREATE TABLE IF NOT EXISTS assistant_workspace_campaign_batches (
+ id uuid PRIMARY KEY, actor_id text NOT NULL, conversation_id uuid NOT NULL,
+ source_message_id uuid NOT NULL REFERENCES assistant_workspace_messages(id),
+ title text NOT NULL,event_year integer NOT NULL CHECK(event_year BETWEEN 2000 AND 2200),criteria text NOT NULL,
+ input_fingerprint text NOT NULL,members jsonb NOT NULL CHECK(jsonb_array_length(members) BETWEEN 1 AND 100),
+ revision integer NOT NULL DEFAULT 1,cursor integer NOT NULL DEFAULT 0 CHECK(cursor BETWEEN 0 AND 100),
+ draft_links jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(conversation_id,actor_id) REFERENCES assistant_workspace_conversations(id,actor_id),
+ UNIQUE(actor_id,conversation_id,source_message_id)
+);
+CREATE TABLE IF NOT EXISTS assistant_workspace_campaign_pages (
+ batch_id uuid NOT NULL REFERENCES assistant_workspace_campaign_batches(id),
+ source_message_id uuid NOT NULL REFERENCES assistant_workspace_messages(id),request_fingerprint text NOT NULL,
+ start_index integer NOT NULL,end_index integer NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(batch_id,source_message_id)
+);
+CREATE TABLE IF NOT EXISTS assistant_workspace_research_calls (
+ id uuid PRIMARY KEY,actor_id text NOT NULL,conversation_id uuid NOT NULL,run_id uuid NOT NULL REFERENCES assistant_workspace_runs(id),
+ call_id text NOT NULL,input_fingerprint text NOT NULL,state text NOT NULL CHECK(state IN ('started','completed')),result jsonb,
+ created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),
+ FOREIGN KEY(conversation_id,actor_id) REFERENCES assistant_workspace_conversations(id,actor_id), UNIQUE(run_id,call_id)
+);

@@ -66,6 +66,11 @@ export async function runTurn(
         "Stopped. Check action results for work already completed.",
       );
     await store.check();
+    if (Object.values(cp.results).some((r) => r.usageUnknown))
+      return finish(
+        "partial",
+        "Research was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
+      );
     if (cp.tokens >= limits.maxTokens)
       return finish(
         "partial",
@@ -97,6 +102,11 @@ export async function runTurn(
         });
         await store.save(cp);
       }
+      if (cp.results[call.id]?.usageUnknown)
+        return finish(
+          "partial",
+          "Research was interrupted and its usage could not be verified. Saved results are available; this run has stopped.",
+        );
     }
     cp.pending = [];
     if (cp.tokens >= limits.maxTokens)

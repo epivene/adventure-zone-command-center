@@ -45,3 +45,41 @@ it("exposes document metadata without stored source text or provider reasoning",
   expect(data.sources[0].missingPages).toEqual([1]);
   expect(JSON.stringify(cards)).not.toMatch(/private|reasoning|providerItems/);
 });
+it("projects sourced research without provider state and excludes unsafe saved citation URLs", () => {
+  const make = (url: string) => [
+    {
+      id: "run",
+      turn: {
+        providerItems: [{ secret: "hidden" }],
+        results: {
+          call: {
+            evidence: [],
+            data: {
+              view: "public_research",
+              query: "Public fair dates",
+              model: "selected",
+              complete: false,
+              parts: [
+                {
+                  text: "Historical listing",
+                  citations: [
+                    { url, title: "Fair", startIndex: 0, endIndex: 10 },
+                  ],
+                },
+              ],
+              consultedSources: [],
+              warnings: [],
+              providerState: "hidden",
+            },
+          },
+        },
+      },
+    },
+  ];
+  const safe = publicDocumentResults(make("https://city.example/fair") as any);
+  expect(safe).toHaveLength(1);
+  expect(JSON.stringify(safe)).not.toContain("hidden");
+  expect(
+    publicDocumentResults(make("http://127.0.0.1/private") as any),
+  ).toEqual([]);
+});
