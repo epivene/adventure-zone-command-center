@@ -4,6 +4,7 @@ import { publicDocumentResults } from "../features/assistant-workspace/document-
 import { randomUUID } from "node:crypto";
 import {
   Router,
+  raw,
   type Request,
   type Response,
   type NextFunction,
@@ -27,6 +28,7 @@ import {
   type WorkspaceStartupState,
 } from "../features/assistant-workspace/startup";
 import { PostgresGoogleConnectionRepository } from "../features/google-workspace/google-connection-repository";
+import { MAX_SCREENSHOT_BYTES } from "../features/assistant-workspace/screenshots";
 const uuid = (value: unknown) => z.string().uuid().parse(value);
 export function createAssistantWorkspaceRouter(
   runtime: () => WorkspaceRuntime = getWorkspaceRuntime,
@@ -197,6 +199,9 @@ export function createAssistantWorkspaceRouter(
         s.status(422).json({ code: "ASSISTANT_MODEL_UNAVAILABLE" });
         return;
       }
+      const attachments = input.attachmentIds.length
+        ? await r.screenshots.metadataForSend(a, id, input.attachmentIds)
+        : [];
       let connectionId: string | null = null;
       try {
         connectionId = (await r.google.getCurrent())?.id ?? null;
@@ -213,9 +218,53 @@ export function createAssistantWorkspaceRouter(
           model: input.model ?? r.config.model,
         },
         input.text,
+        attachments,
       );
       s.status(202).json({ runId: run.id, status: run.status });
       void r.worker.tick().catch(() => {});
+    }),
+  );
+  router.put(
+    "/conversations/:id/screenshots/:screenshotId",
+    raw({
+      type: ["image/png", "image/jpeg", "image/webp"],
+      limit: MAX_SCREENSHOT_BYTES,
+      inflate: false,
+    }),
+    wrap(async (q, s, r, a) => {
+      if (!Buffer.isBuffer(q.body))
+        throw new Error("ASSISTANT_SCREENSHOT_INVALID");
+      let filename: string;
+      try {
+        filename = decodeURIComponent(q.get("X-File-Name") ?? "Screenshot");
+      } catch {
+        throw new Error("ASSISTANT_SCREENSHOT_INVALID");
+      }
+      s.status(201).json(
+        await r.screenshots.upload(
+          a,
+          uuid(q.params.id),
+          uuid(q.params.screenshotId),
+          filename,
+          q.get("Content-Type")?.split(";")[0].trim().toLowerCase() ?? "",
+          q.body,
+        ),
+      );
+    }),
+  );
+  router.get(
+    "/conversations/:id/screenshots/:screenshotId",
+    wrap(async (q, s, r, a) => {
+      const file = await r.screenshots.read(
+        a,
+        uuid(q.params.id),
+        uuid(q.params.screenshotId),
+      );
+      s.set({
+        "Content-Type": file.attachment.contentType,
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      }).send(Buffer.from(file.bytes));
     }),
   );
   router.get(
@@ -549,6 +598,20 @@ export function createAssistantWorkspaceRouter(
     (error: unknown, _q: Request, s: Response, _next: NextFunction) => {
       const code =
         error instanceof Error ? error.message : "ASSISTANT_REQUEST_FAILED";
+      if (
+        (error as any)?.type === "entity.too.large" ||
+        code === "ASSISTANT_SCREENSHOT_SIZE_INVALID"
+      ) {
+        s.status(413).json({ code: "ASSISTANT_SCREENSHOT_SIZE_INVALID" });
+        return;
+      }
+      if (
+        code === "ASSISTANT_SCREENSHOT_INVALID" ||
+        (error as any)?.type === "encoding.unsupported"
+      ) {
+        s.status(422).json({ code: "ASSISTANT_SCREENSHOT_INVALID" });
+        return;
+      }
       if (error instanceof z.ZodError) {
         s.status(422).json({ code: "ASSISTANT_INPUT_INVALID" });
         return;

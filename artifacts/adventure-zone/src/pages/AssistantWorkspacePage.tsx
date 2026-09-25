@@ -1,4 +1,10 @@
 import {
+  ScreenshotPicker,
+  SavedScreenshot,
+  type PendingScreenshot,
+} from "@/components/assistant-workspace/ScreenshotAttachments";
+import { uploadScreenshot } from "@/features/assistant-workspace/screenshots";
+import {
   SetupPanel,
   type WorkspaceStatus,
 } from "@/components/assistant-workspace/SetupPanel";
@@ -29,6 +35,14 @@ const button =
   "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50";
 function friendly(error: unknown) {
   const code = error instanceof Error ? error.message : "";
+  if (/SCREENSHOT_SIZE/.test(code))
+    return "Each screenshot must be 5 MB or smaller.";
+  if (/SCREENSHOT_INVALID/.test(code))
+    return "Choose a valid, still PNG, JPEG or WebP image.";
+  if (/SCREENSHOT_UPLOAD/.test(code))
+    return "The screenshot could not upload. Your message and images are still here; try sending again.";
+  if (/SCREENSHOT_READ|SCREENSHOT_NOT_FOUND/.test(code))
+    return "A saved screenshot could not be read. Try attaching it again.";
   if (/STATE_CHANGED|CONFLICT|CHANGED/.test(code))
     return "The saved information changed. Review the latest version and try again.";
   if (/STARTUP/.test(code))
@@ -81,7 +95,60 @@ export default function AssistantWorkspacePage({
   const [refreshingSetup, setRefreshingSetup] = useState(false);
   const [sendDraft, setSendDraft] = useState<Draft | null>(null);
   const composer = useRef<HTMLTextAreaElement>(null);
-  const requestRef = useRef<{ text: string; key: string } | null>(null);
+  const requestRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const [files, setFiles] = useState<PendingScreenshot[]>([]);
+  const filesRef = useRef<PendingScreenshot[]>([]);
+  const pendingConversation = useRef<string | undefined>(undefined);
+  const submission = useRef<AbortController | null>(null);
+  const composerSession = useRef(0);
+  function clearFiles() {
+    for (const f of filesRef.current) URL.revokeObjectURL(f.url);
+    filesRef.current = [];
+    setFiles([]);
+  }
+  function addFiles(incoming: File[]) {
+    if (busy || active || !incoming.length) return;
+    if (filesRef.current.length + incoming.length > 4) {
+      setError("Attach up to four screenshots per message.");
+      return;
+    }
+    if (
+      incoming.some(
+        (f) => !["image/png", "image/jpeg", "image/webp"].includes(f.type),
+      )
+    ) {
+      setError("Choose PNG, JPEG or WebP screenshots.");
+      return;
+    }
+    if (incoming.some((f) => !f.size || f.size > 5 * 1024 * 1024)) {
+      setError("Each screenshot must be between 1 byte and 5 MB.");
+      return;
+    }
+    setError("");
+    filesRef.current = [
+      ...filesRef.current,
+      ...incoming.map((file) => ({
+        id: crypto.randomUUID(),
+        file,
+        url: URL.createObjectURL(file),
+      })),
+    ];
+    setFiles(filesRef.current);
+  }
+  function removeFile(id: string) {
+    const removed = filesRef.current.find((f) => f.id === id);
+    if (removed) URL.revokeObjectURL(removed.url);
+    filesRef.current = filesRef.current.filter((f) => f.id !== id);
+    setFiles(filesRef.current);
+  }
+  useEffect(
+    () => () => {
+      composerSession.current++;
+      submission.current?.abort();
+      for (const f of filesRef.current) URL.revokeObjectURL(f.url);
+    },
+    [],
+  );
   const modelConversation = useRef<string | undefined>(undefined);
   const currentId = useRef(conversationId);
   currentId.current = conversationId;
@@ -141,6 +208,12 @@ export default function AssistantWorkspacePage({
     setText("");
     setError("");
     requestRef.current = null;
+    composerSession.current++;
+    submission.current?.abort();
+    submission.current = null;
+    pendingConversation.current = undefined;
+    clearFiles();
+    setBusy(false);
     setProgress("");
     if (conversationId && status?.ready) {
       localStorage.setItem(lastConversationKey, conversationId);
@@ -160,7 +233,12 @@ export default function AssistantWorkspacePage({
           {
             sequence: string | number;
             kind: string;
-            payload: { name?: string; text?: string; status?: string };
+            payload: {
+              name?: string;
+              text?: string;
+              status?: string;
+              code?: string;
+            };
           }[]
         >(`/runs/${active.id}/events?after=${after}`);
         if (!live) return;
@@ -170,6 +248,11 @@ export default function AssistantWorkspacePage({
             setProgress(
               `${e.payload.name?.replaceAll("_", " ")} · ${e.payload.status}`,
             );
+          else if (
+            e.kind === "error" &&
+            e.payload.code !== "ASSISTANT_CANCELLED"
+          )
+            setError(friendly(new Error(e.payload.code)));
           else if (e.payload.text) setProgress(e.payload.text);
         }
         await refresh();
@@ -201,37 +284,87 @@ export default function AssistantWorkspacePage({
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!text.trim() || busy || active) return;
+    if (
+      (!text.trim() && !filesRef.current.length) ||
+      busy ||
+      active ||
+      submission.current
+    )
+      return;
+    const controller = new AbortController();
+    submission.current = controller;
+    const session = composerSession.current,
+      body = text.trim(),
+      attached = [...filesRef.current];
+    const stillHere = () =>
+      composerSession.current === session && !controller.signal.aborted;
     setBusy(true);
     setError("");
-    const body = text.trim();
     try {
-      let id = conversationId;
+      let id = conversationId ?? pendingConversation.current;
       if (!id) {
-        const c = await workspaceApi<Conversation>("/conversations", "POST", {
-          title: body.slice(0, 80),
-        });
+        const c = await workspaceApi<Conversation>(
+          "/conversations",
+          "POST",
+          {
+            title:
+              body.slice(0, 80) ||
+              attached[0]?.file.name.slice(0, 80) ||
+              "Screenshots",
+          },
+          controller.signal,
+        );
+        if (!stillHere()) return;
         id = c.id;
+        pendingConversation.current = id;
         setList((items) => [{ id: c.id, title: c.title }, ...items]);
       }
-      const req =
-        requestRef.current?.text === body
-          ? requestRef.current
-          : { text: body, key: crypto.randomUUID() };
-      requestRef.current = req;
-      await workspaceApi(`/conversations/${id}/messages`, "POST", {
+      const fingerprint = JSON.stringify({
+        conversationId: id,
         text: body,
-        requestKey: req.key,
+        attachments: attached.map((f) => f.id),
         model,
       });
+      const req =
+        requestRef.current?.fingerprint === fingerprint
+          ? requestRef.current
+          : { fingerprint, key: crypto.randomUUID() };
+      requestRef.current = req;
+      for (const f of attached) {
+        if (!stillHere()) return;
+        if (f.uploadedTo !== id) {
+          await uploadScreenshot(id, f.id, f.file, controller.signal);
+          f.uploadedTo = id;
+        }
+      }
+      if (!stillHere()) return;
+      await workspaceApi(
+        `/conversations/${id}/messages`,
+        "POST",
+        {
+          text: body,
+          requestKey: req.key,
+          model,
+          ...(attached.length
+            ? { attachmentIds: attached.map((f) => f.id) }
+            : {}),
+        },
+        controller.signal,
+      );
+      if (!stillHere()) return;
       setText("");
+      clearFiles();
       requestRef.current = null;
+      pendingConversation.current = undefined;
       if (id === conversationId) await refresh();
       else navigate(`/assistant/workspace/${id}`);
     } catch (e) {
-      setError(friendly(e));
+      if (stillHere()) setError(friendly(e));
     } finally {
-      setBusy(false);
+      if (stillHere()) {
+        setBusy(false);
+        submission.current = null;
+      }
     }
   }
   async function action(id: string, confirmation?: HumanConfirmation) {
@@ -390,7 +523,7 @@ export default function AssistantWorkspacePage({
                   className="ml-2 rounded border p-1 text-sm"
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
-                  disabled={!!active}
+                  disabled={busy || !!active}
                 >
                   {status.models.map((m) => (
                     <option key={m}>{m}</option>
@@ -438,6 +571,17 @@ export default function AssistantWorkspacePage({
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
                     {m.role === "user" ? "You" : "Assistant"}
                   </p>
+                  {!!m.attachments?.length && conversation && (
+                    <div className="flex flex-wrap gap-2">
+                      {m.attachments.map((a) => (
+                        <SavedScreenshot
+                          key={a.id}
+                          conversationId={conversation.id}
+                          attachment={a}
+                        />
+                      ))}
+                    </div>
+                  )}
                   <p className="whitespace-pre-wrap break-words text-sm leading-6">
                     {m.text}
                   </p>
@@ -455,13 +599,46 @@ export default function AssistantWorkspacePage({
                   ? `${conversation.runs[0].usage.tokens.toLocaleString()} tokens · ${conversation.runs[0].usage.steps} steps`
                   : ""}
             </div>
-            <form onSubmit={submit} className="space-y-2 border-t p-4">
+            {conversation?.runs[0]?.status === "failed" && (
+              <p
+                role="alert"
+                className="mx-4 rounded-lg bg-red-50 p-3 text-sm text-red-800"
+              >
+                The assistant could not complete this reply. Your message and
+                screenshots are saved. Send a follow-up to try again.
+              </p>
+            )}
+            <form
+              onSubmit={submit}
+              className="space-y-2 border-t p-4"
+              onPaste={(e) => {
+                const images = Array.from(e.clipboardData.files);
+                if (images.length) {
+                  e.preventDefault();
+                  addFiles(images);
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                addFiles(Array.from(e.dataTransfer.files));
+              }}
+            >
+              <ScreenshotPicker
+                files={files}
+                disabled={busy || !!active}
+                onAdd={addFiles}
+                onRemove={removeFile}
+              />
               <label className="sr-only" htmlFor="workspace-message">
                 Message the assistant
               </label>
               <textarea
                 id="workspace-message"
                 ref={composer}
+                disabled={busy}
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Ask a follow-up or describe what you want done…"
@@ -487,7 +664,7 @@ export default function AssistantWorkspacePage({
                 ) : (
                   <button
                     type="submit"
-                    disabled={busy || !text.trim()}
+                    disabled={busy || (!text.trim() && !files.length)}
                     className="rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                   >
                     <Send className="mr-2 inline h-4 w-4" />

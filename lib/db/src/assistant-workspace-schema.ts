@@ -51,6 +51,7 @@ export const assistantWorkspaceMessages = pgTable(
     requestKey: text("request_key").notNull(),
     role: text("role").notNull(),
     body: text("body").notNull(),
+    attachments: jsonb("attachments").notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -307,6 +308,45 @@ export const assistantWorkspaceSendReviews = pgTable(
     check(
       "assistant_workspace_payment_model_valid",
       sql`${t.paymentModel} in ('prepaid','pay_per_play','administrative')`,
+    ),
+  ],
+);
+
+export const assistantWorkspaceScreenshots = pgTable(
+  "assistant_workspace_screenshots",
+  {
+    id: uuid("id").primaryKey(),
+    conversationId: uuid("conversation_id").notNull(),
+    actorId: text("actor_id").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    byteSize: integer("byte_size").notNull(),
+    sha256: text("sha256").notNull(),
+    objectKey: text("object_key").notNull().unique(),
+    ready: boolean("ready").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.conversationId, t.actorId],
+      foreignColumns: [
+        assistantWorkspaceConversations.id,
+        assistantWorkspaceConversations.actorId,
+      ],
+    }),
+    index("assistant_workspace_screenshot_owner_idx").on(
+      t.actorId,
+      t.conversationId,
+    ),
+    check(
+      "assistant_workspace_screenshot_size",
+      sql`${t.byteSize}>0 AND ${t.byteSize}<=5242880`,
+    ),
+    check(
+      "assistant_workspace_screenshot_type",
+      sql`${t.contentType} IN ('image/png','image/jpeg','image/webp')`,
     ),
   ],
 );

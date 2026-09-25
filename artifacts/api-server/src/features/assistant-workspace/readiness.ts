@@ -42,8 +42,10 @@ const tables = [
   "campaign_pages",
   "research_calls",
   "document_extractions",
+  "screenshots",
 ].map((name) => `assistant_workspace_${name}`);
 const additions = [
+  "assistant_workspace_messages.attachments",
   "assistant_workspace_conversations.summary",
   "assistant_workspace_conversations.version",
   "assistant_workspace_document_extractions.call_id",

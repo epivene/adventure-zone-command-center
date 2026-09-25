@@ -19,7 +19,23 @@ export const emptySelection = (): Selection => ({
   eventYear: null,
 });
 export type Actor = { id: string; role: "owner"; connectionId: string | null };
-export type Turn = { role: "user" | "assistant"; text: string };
+export type Screenshot = {
+  id: string;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+};
+export type AttachmentScope = {
+  actorId: string;
+  conversationId: string;
+  sourceMessageId: string;
+};
+export type Turn = {
+  role: "user" | "assistant";
+  text: string;
+  attachments?: Screenshot[];
+};
 export type Evidence = {
   id: string;
   kind: "profile" | "email" | "document" | "calendar" | "rule" | "web";
@@ -38,6 +54,7 @@ export type Receipt = {
   verifiedAt: string;
 };
 export type ToolResult = {
+  screenshots?: Screenshot[];
   usageUnknown?: boolean;
   usage?: { inputTokens: number; outputTokens: number };
   status: "ok" | "partial" | "blocked" | "uncertain" | "failed";
@@ -76,6 +93,8 @@ export type ActionIntent = {
   sourceMessageId: string;
 };
 export type ModelInput = {
+  attachmentScope?: AttachmentScope;
+  screenshots?: Screenshot[];
   memory?: ConversationMemory;
   instructions: string;
   turns: Turn[];

@@ -1,4 +1,6 @@
 import { CampaignStore } from "./campaign-store";
+import { ScreenshotStore } from "./screenshots";
+import { createScreenshotTools } from "./screenshot-tools";
 import { createHistoryTools } from "./history-tools";
 import { createCampaignTools } from "./campaign-tools";
 import { campaignAdapters, campaignActionPreview } from "./campaign-actions";
@@ -42,6 +44,8 @@ export function createWorkspaceRuntime() {
     knowledge = new KnowledgeRepository(pool),
     google = new PostgresGoogleConnectionRepository();
   const campaigns = new CampaignStore(db, pool);
+  const screenshots = new ScreenshotStore(pool);
+  const readScreenshot = screenshots.readForModel.bind(screenshots);
   const reads = productionReads(pool, ownerId, google);
   const send = createWorkspaceSendService({
     pool,
@@ -60,6 +64,7 @@ export function createWorkspaceRuntime() {
     send_draft: send.adapter,
   });
   const tools = createToolRegistry([
+    createScreenshotTools({ ownerId, screenshots, runs }),
     createHistoryTools({ ownerId, conversations, runs }),
     createCampaignTools({
       ownerId,
@@ -98,11 +103,15 @@ export function createWorkspaceRuntime() {
   const worker = createWorkspaceWorker({
     runs,
     conversations,
-    model: createOpenAiModel(config),
+    model: createOpenAiModel(config, undefined, readScreenshot),
     modelFor: (model) => {
       if (model && !config.models.includes(model))
         throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
-      return createOpenAiModel({ ...config, model: model ?? config.model });
+      return createOpenAiModel(
+        { ...config, model: model ?? config.model },
+        undefined,
+        readScreenshot,
+      );
     },
     tools,
     allowedActorIds: config.allowedActorIds,
@@ -128,6 +137,7 @@ export function createWorkspaceRuntime() {
       })),
   });
   return {
+    screenshots,
     actionPreview: async (context: RunContext, intent: ActionIntent) => {
       try {
         return (

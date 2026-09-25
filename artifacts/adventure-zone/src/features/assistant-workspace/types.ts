@@ -1,3 +1,10 @@
+export type Screenshot = {
+  id: string;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+};
 export type Selection = {
   batchId?: string | null;
   organizationIds: string[];
@@ -51,7 +58,12 @@ export type Conversation = {
   title: string;
   version: number;
   selection: Selection;
-  messages: { id: string; role: "user" | "assistant"; text: string }[];
+  messages: {
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+    attachments?: Screenshot[];
+  }[];
   actions: Action[];
   drafts: Draft[];
   selectedModel?: string;

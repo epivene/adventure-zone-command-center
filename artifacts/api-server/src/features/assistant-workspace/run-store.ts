@@ -1,4 +1,10 @@
-import type { Actor, Selection, Grant, Queryable } from "./contracts";
+import type {
+  Actor,
+  Selection,
+  Grant,
+  Queryable,
+  Screenshot,
+} from "./contracts";
 import type { TurnCheckpoint } from "./orchestrator";
 export type RunInput = {
   actor: Actor;
@@ -38,12 +44,13 @@ export class RunStore {
   async submit(
     input: Omit<RunInput, "sourceMessageId">,
     text: string,
+    attachments: Screenshot[] = [],
   ): Promise<SavedRun> {
     const r = await this.db.query(
       `WITH message AS (
-      INSERT INTO assistant_workspace_messages(conversation_id,actor_id,request_key,role,body)
-      SELECT id,actor_id,$3,'user',$4 FROM assistant_workspace_conversations WHERE id=$1 AND actor_id=$2
-      ON CONFLICT(conversation_id,request_key,role) DO UPDATE SET body=excluded.body WHERE assistant_workspace_messages.body=excluded.body RETURNING id,conversation_id,actor_id
+      INSERT INTO assistant_workspace_messages(conversation_id,actor_id,request_key,role,body,attachments)
+      SELECT id,actor_id,$3,'user',$4,$6::jsonb FROM assistant_workspace_conversations WHERE id=$1 AND actor_id=$2
+      ON CONFLICT(conversation_id,request_key,role) DO UPDATE SET body=excluded.body WHERE assistant_workspace_messages.body=excluded.body AND assistant_workspace_messages.attachments=excluded.attachments RETURNING id,conversation_id,actor_id
     ), run AS (
       INSERT INTO assistant_workspace_runs(conversation_id,actor_id,request_key,source_message_id,checkpoint)
       SELECT conversation_id,actor_id,$3,id,jsonb_build_object('input',$5::jsonb || jsonb_build_object('sourceMessageId',id)) FROM message
@@ -55,12 +62,19 @@ export class RunStore {
         input.requestKey,
         text,
         JSON.stringify(input),
+        JSON.stringify(attachments),
       ],
     );
     if (r.rows[0]) return map(r.rows[0]);
     const existing = await this.db.query(
-      `SELECT r.* FROM assistant_workspace_runs r JOIN assistant_workspace_messages m ON m.id=r.source_message_id WHERE r.conversation_id=$1 AND r.actor_id=$2 AND r.request_key=$3 AND m.body=$4`,
-      [input.conversationId, input.actor.id, input.requestKey, text],
+      `SELECT r.* FROM assistant_workspace_runs r JOIN assistant_workspace_messages m ON m.id=r.source_message_id WHERE r.conversation_id=$1 AND r.actor_id=$2 AND r.request_key=$3 AND m.body=$4 AND m.attachments=$5::jsonb`,
+      [
+        input.conversationId,
+        input.actor.id,
+        input.requestKey,
+        text,
+        JSON.stringify(attachments),
+      ],
     );
     if (!existing.rows[0]) throw new Error("ASSISTANT_MESSAGE_CONFLICT");
     return map(existing.rows[0]);
