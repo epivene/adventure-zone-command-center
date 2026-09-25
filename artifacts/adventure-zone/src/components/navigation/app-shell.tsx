@@ -64,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [pendingEmailReviewCount, setPendingEmailReviewCount] = useState(0);
   const [officeAttention, setOfficeAttention] = useState<OfficeCoordinatorAttentionData | null>(null);
   const immersiveProfile = location.startsWith("/profiles/") || location.startsWith("/event-profiles/");
+  const assistantWorkspace = location === "/assistant/workspace" || location.startsWith("/assistant/workspace/");
 
   useEffect(() => {
     if (immersiveProfile) return;
@@ -189,14 +190,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       ) : null}
 
-      <main className="min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0">
+      <main className={cn("min-h-screen px-3 py-4 pb-24 md:px-8 md:py-7 md:pb-8 print:min-h-0 print:p-0", assistantWorkspace && "md:px-4 md:py-4")}>
         {location === "/today" ? <Suspense fallback={null}><div className="mx-auto mb-6 max-w-5xl"><OfficeCoordinatorAttention attention={officeAttention} /></div></Suspense> : null}
         {children}
         <div className="print:hidden"><IncomingCallPanel /></div>
         {location.startsWith("/office-coordinator") ? <Suspense fallback={null}><OfficeUpdateHistory /></Suspense> : null}
       </main>
 
-      {!immersiveProfile ? <div className="print:hidden"><AssistantLauncher placement="floating" /></div> : null}
+      {!immersiveProfile && !assistantWorkspace ? <div className="print:hidden"><AssistantLauncher placement="floating" /></div> : null}
       {assistantRequested ? <div className="print:hidden"><Suspense fallback={null}><AssistantDrawer /></Suspense></div> : null}
       {!immersiveProfile ? <div className="print:hidden"><MobileBottomNav workspace={workspace} websiteInquiryCount={websiteInquiryCount} pendingEmailReviewCount={pendingEmailReviewCount} /></div> : null}
     </div></IncomingCallingProvider>

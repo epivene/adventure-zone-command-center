@@ -63,3 +63,22 @@ it("labels provider access as unverified even when local chat is ready", () => {
       .hasAttribute("disabled"),
   ).toBe(true);
 });
+
+it("keeps ready setup collapsed while refresh remains available", () => {
+  const refresh = vi.fn();
+  const view = render(
+    <SetupPanel
+      status={{ ...status, enabled: true, ready: true }}
+      refreshing={false}
+      onRefresh={refresh}
+    />,
+  );
+  expect(view.container.querySelector("details")?.open).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Refresh setup status" }));
+  expect(refresh).toHaveBeenCalledOnce();
+  view.rerender(
+    <SetupPanel status={status} refreshing={false} onRefresh={refresh} />,
+  );
+  expect(view.container.querySelector("details")?.open).toBe(true);
+  expect(screen.getByText("Finish connecting your assistant")).toBeVisible();
+});
