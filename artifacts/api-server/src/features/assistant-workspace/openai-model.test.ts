@@ -374,3 +374,41 @@ it("sends complete incoming and sent thread bodies once without losing attachmen
   );
   expect(JSON.stringify(request)).toContain("attachmentId");
 });
+
+it("allows independent tools in one response and explicitly disables tools for closeout", async () => {
+  const requests: any[] = [];
+  const calls = ["read_profile", "read_templates"].map((name, n) => ({
+    type: "function_call",
+    id: `fc${n}`,
+    call_id: `c${n}`,
+    name,
+    arguments: "{}",
+  }));
+  const model = createOpenAiModel(config(), async (_url, init) => {
+    requests.push(JSON.parse(String(init?.body)));
+    return sse(
+      requests.length === 1
+        ? calls
+        : [
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "Draft ready" }],
+            },
+          ],
+    );
+  });
+  const out = await model.next({
+    ...input(),
+    toolDefinitions: calls.map((c) => ({
+      type: "function",
+      name: c.name,
+      parameters: { type: "object" },
+    })),
+  });
+  expect(requests[0].parallel_tool_calls).toBe(true);
+  expect(out.calls.map((c) => c.id)).toEqual(["c0", "c1"]);
+  await model.next(input());
+  expect(requests[1].tools).toEqual([]);
+  expect(requests[1].tool_choice).toBe("none");
+});

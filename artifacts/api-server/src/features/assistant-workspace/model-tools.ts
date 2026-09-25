@@ -2,6 +2,7 @@ import { z } from "zod";
 import { blocked, result } from "./read-tools";
 const common = new Set([
   "search_profiles",
+  "read_profile",
   "select_profiles",
   "read_profile_history",
   "search_email",

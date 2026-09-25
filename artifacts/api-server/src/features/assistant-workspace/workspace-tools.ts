@@ -139,7 +139,7 @@ export function createWorkspaceTools(deps: {
         name,
         description:
           name === "prepare_draft"
-            ? "Prepare an editable in-app draft using a currently active reviewed template. This never sends email. Read sources first, keep verified terms, and do not invent URLs."
+            ? "Prepare an editable in-app draft using a currently active reviewed template and its exact version. Every To/CC address must be an active contact linked to the selected profile; read_profile lists these. This never sends email. Read relevant sources first, keep verified terms, use only approved template links, and do not invent URLs. Uncertain payment status can be phrased as a neutral question; a payment record is not required to draft."
             : `Perform ${name.replaceAll("_", " ")}. Changes require the selected profile and exact record revision.`,
         parameters: z.toJSONSchema(schema, {
           io: "input",
