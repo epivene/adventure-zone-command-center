@@ -172,11 +172,32 @@ export function productionReads(
       );
       return result(r.rows, [evidence(a.organizationId, "profile", r.rows)]);
     },
-    read_templates: async () => {
+    read_templates: async (_c, a) => {
       const r = await pool.query(
-        `SELECT id,code,name,template_version,subject_template,body_template,body_format,required_placeholders,reviewed_at FROM communication_templates WHERE state='active' AND reviewed_at IS NOT NULL ORDER BY name,id`,
+        `SELECT id,code,name,template_version,subject_template,body_format,required_placeholders,reviewed_at,char_length(body_template) AS body_characters FROM communication_templates WHERE state='active' AND reviewed_at IS NOT NULL ORDER BY name,id LIMIT 26 OFFSET $1`,
+        [a.offset ?? 0],
       );
-      return result(r.rows);
+      const complete = r.rows.length <= 25;
+      return {
+        ...result({
+          templates: r.rows.slice(0, 25),
+          complete,
+          nextOffset: complete ? null : (a.offset ?? 0) + 25,
+          instruction:
+            "Read one selected template with read_template before preparing a draft.",
+        }),
+        status: complete ? "ok" : "partial",
+        code: complete ? null : "ASSISTANT_TEMPLATES_CONTINUE",
+      };
+    },
+    read_template: async (_c, a) => {
+      const r = await pool.query(
+        `SELECT id,code,name,template_version,subject_template,body_template,body_format,required_placeholders,reviewed_at FROM communication_templates WHERE id=$1 AND state='active' AND reviewed_at IS NOT NULL`,
+        [a.templateId],
+      );
+      return r.rows[0]
+        ? result(r.rows[0])
+        : blocked("ASSISTANT_CURRENT_TEMPLATE_REQUIRED");
     },
     read_availability: async (_c, a) => {
       if (a.bookingId) {
