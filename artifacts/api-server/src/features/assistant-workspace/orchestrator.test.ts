@@ -522,3 +522,245 @@ it.each([
     expect(execute).not.toHaveBeenCalled();
   },
 );
+
+it("reserves the final configured round for a grounded answer without more tools", async () => {
+  const store = memory();
+  const execute = vi.fn().mockResolvedValue({
+    ...ok,
+    status: "blocked",
+    code: "ASSISTANT_RECIPIENT_REVIEW_REQUIRED",
+  });
+  const next = vi
+    .fn()
+    .mockImplementationOnce(async (input) => {
+      expect(input.instructions).toContain("2 model rounds remaining");
+      return {
+        text: "",
+        calls: [call],
+        providerItems: [],
+        inputTokens: 1,
+        outputTokens: 1,
+      };
+    })
+    .mockImplementationOnce(async (input) => {
+      expect(input.toolDefinitions).toEqual([]);
+      expect(input.instructions).toContain("final response");
+      expect(input.instructions).toContain("Do not claim a draft was saved");
+      return {
+        text: "The recipient needs review in this profile before I can save the draft.",
+        calls: [],
+        providerItems: [],
+        inputTokens: 1,
+        outputTokens: 1,
+      };
+    });
+  const answer = await runTurn(
+    context,
+    { next },
+    {
+      definitions: () => [{ type: "function", name: "read_profile" }],
+      execute,
+    },
+    store,
+    { maxSteps: 2, maxTokens: 100 },
+  );
+  expect(answer.status).toBe("partial");
+  expect(answer.text).toContain("recipient needs review");
+  expect(next).toHaveBeenCalledTimes(2);
+  expect(execute).toHaveBeenCalledTimes(1);
+  expect(store.get()?.steps).toBe(2);
+});
+it("refuses unexpected calls returned in a forced final response", async () => {
+  const execute = vi.fn();
+  const answer = await runTurn(
+    context,
+    {
+      next: async () => ({
+        text: "Sent",
+        calls: [{ id: "send", name: "send_email", arguments: "{}" }],
+        providerItems: [],
+        inputTokens: 1,
+        outputTokens: 1,
+      }),
+    },
+    { definitions: () => [], execute },
+    memory(),
+    { maxSteps: 1, maxTokens: 100 },
+  );
+  expect(execute).not.toHaveBeenCalled();
+  expect(answer.status).toBe("partial");
+  expect(answer.text).toContain("No draft was saved");
+  expect(answer.text).not.toContain("Sent");
+});
+it.each(["app_draft", "gmail_draft", "sent_email", "uncertain", "blocked"])(
+  "reports %s at a legacy step cutoff without claiming checkpoint continuation",
+  async (kind) => {
+    const store = memory();
+    await store.save({
+      steps: 12,
+      tokens: 1,
+      pending: [],
+      providerItems: [],
+      evidence: [],
+      results: {
+        action: {
+          ...ok,
+          status:
+            kind === "uncertain"
+              ? "uncertain"
+              : kind === "blocked"
+                ? "blocked"
+                : "ok",
+          code:
+            kind === "blocked" ? "ASSISTANT_RECIPIENT_REVIEW_REQUIRED" : null,
+          receipts: ["uncertain", "blocked"].includes(kind)
+            ? []
+            : [{ kind, id: "saved", href: "/saved", verifiedAt: "now" }],
+        },
+      },
+    });
+    const next = vi.fn();
+    const answer = await runTurn(
+      context,
+      { next },
+      { definitions: () => [], execute: vi.fn() },
+      store,
+    );
+    expect(next).not.toHaveBeenCalled();
+    expect(answer.text).not.toContain("continue from the saved results");
+    expect(answer.text).toContain(
+      kind === "sent_email"
+        ? "An email was sent"
+        : kind === "uncertain"
+          ? "could not confirm"
+          : kind === "blocked"
+            ? "recipient"
+            : "A draft was saved",
+    );
+  },
+);
+it("checkpoints each batched call sequentially and resumes without replaying a completed write", async () => {
+  const store = memory();
+  const calls = [
+    { id: "one", name: "prepare_draft", arguments: "{}" },
+    { id: "two", name: "read_profile", arguments: "{}" },
+  ];
+  const executed: string[] = [];
+  let interrupt = true;
+  const tools = {
+    definitions: () => [],
+    execute: async (_c: RunContext, c: any) => {
+      executed.push(c.id);
+      if (c.id === "two" && interrupt) {
+        interrupt = false;
+        throw new Error("restart");
+      }
+      if (c.id === "two")
+        expect(store.get()?.results.one.receipts[0].id).toBe("draft");
+      return {
+        ...ok,
+        receipts:
+          c.id === "one"
+            ? [
+                {
+                  kind: "app_draft",
+                  id: "draft",
+                  href: "/draft",
+                  verifiedAt: "now",
+                },
+              ]
+            : [],
+      };
+    },
+  };
+  const next = vi
+    .fn()
+    .mockResolvedValueOnce({
+      text: "",
+      calls,
+      providerItems: [],
+      inputTokens: 1,
+      outputTokens: 1,
+    })
+    .mockResolvedValueOnce({
+      text: "Draft ready",
+      calls: [],
+      providerItems: [],
+      inputTokens: 1,
+      outputTokens: 1,
+    });
+  await expect(runTurn(context, { next }, tools, store)).rejects.toThrow(
+    "restart",
+  );
+  await runTurn(context, { next }, tools, store);
+  expect(executed).toEqual(["one", "two", "two"]);
+  expect(store.get()?.results.one.receipts).toHaveLength(1);
+});
+it("checks cancellation between calls from the same model response", async () => {
+  const control = new AbortController(),
+    execute = vi.fn(async () => {
+      control.abort();
+      return ok;
+    });
+  const out = await runTurn(
+    { ...context, signal: control.signal },
+    {
+      next: async () => ({
+        text: "",
+        calls: [
+          { ...call, id: "first" },
+          { ...call, id: "second" },
+        ],
+        providerItems: [],
+        inputTokens: 1,
+        outputTokens: 1,
+      }),
+    },
+    { definitions: () => [], execute },
+    memory(),
+  );
+  expect(out.status).toBe("cancelled");
+  expect(execute).toHaveBeenCalledTimes(1);
+});
+it("persists the final answer atomically with final-round usage before recovery", async () => {
+  const store = memory(),
+    next = vi
+      .fn()
+      .mockResolvedValue({
+        text: "I need the recipient confirmed.",
+        calls: [],
+        providerItems: [],
+        inputTokens: 3,
+        outputTokens: 2,
+      });
+  let savedOnce = false;
+  const durable = {
+    ...store,
+    save: async (cp: TurnCheckpoint) => {
+      await store.save(cp);
+      if (!savedOnce) {
+        savedOnce = true;
+        throw new Error("lost acknowledgment");
+      }
+    },
+  };
+  await expect(
+    runTurn(
+      context,
+      { next },
+      { definitions: () => [], execute: vi.fn() },
+      durable,
+      { maxSteps: 1, maxTokens: 100 },
+    ),
+  ).rejects.toThrow("lost acknowledgment");
+  const out = await runTurn(
+    context,
+    { next },
+    { definitions: () => [], execute: vi.fn() },
+    durable,
+    { maxSteps: 1, maxTokens: 100 },
+  );
+  expect(out.text).toBe("I need the recipient confirmed.");
+  expect(next).toHaveBeenCalledTimes(1);
+  expect(store.get()?.tokens).toBe(5);
+});

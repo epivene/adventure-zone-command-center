@@ -129,7 +129,9 @@ export function createOpenAiModel(
             model: config.model,
             store: false,
             stream: true,
-            parallel_tool_calls: false,
+            // The orchestrator still executes/checkpoints every call sequentially.
+            parallel_tool_calls: true,
+            tool_choice: input.toolDefinitions.length ? "auto" : "none",
             max_output_tokens: config.maxOutputTokens,
             include: ["reasoning.encrypted_content"],
             instructions:

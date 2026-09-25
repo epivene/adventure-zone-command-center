@@ -116,6 +116,29 @@ export function productionReads(
           limit: 20,
         }),
       ),
+    read_profile: async (_c, a) => {
+      const organization = await profile(a.organizationId);
+      const contacts = await pool.query(
+        `SELECT c.* FROM contacts c JOIN organization_contacts oc ON oc.contact_id=c.id WHERE oc.organization_id=$1 AND oc.active=true ORDER BY c.id`,
+        [a.organizationId],
+      );
+      const data = {
+        organization,
+        contacts: contacts.rows,
+        historyIncluded: false,
+        instruction:
+          "Current profile and active contacts only. Use read_profile_history when past notes or bookings are needed; this is not complete history.",
+      };
+      return result(data, [
+        evidence(
+          a.organizationId,
+          "profile",
+          data,
+          false,
+          new Date(organization.updated_at).toISOString(),
+        ),
+      ]);
+    },
     read_profile_history: async (_c, a) => {
       const organization = await profile(a.organizationId);
       const [contacts, bookings, activities] = await Promise.all([
