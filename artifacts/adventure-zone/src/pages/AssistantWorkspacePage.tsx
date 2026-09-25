@@ -36,12 +36,14 @@ import {
 } from "@/components/assistant-workspace/DraftPreview";
 import { KnowledgePanel } from "@/components/assistant-workspace/KnowledgePanel";
 import { WorkspacePanel } from "@/components/assistant-workspace/WorkspacePanel";
+import { AssistantMessage } from "@/components/assistant-workspace/AssistantMessage";
+import { useWorkspaceLayout } from "@/features/assistant-workspace/useWorkspaceLayout";
 import {
   modelHelp,
   modelLabel,
 } from "@/features/assistant-workspace/model-labels";
-const button =
-  "min-h-11 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50";
+const buttonStyle =
+  "rounded-lg border border-slate-200 bg-white px-3 py-2 font-medium hover:bg-slate-50 disabled:opacity-50";
 function friendly(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (/SCREENSHOT_SIZE/.test(code))
@@ -90,6 +92,9 @@ export default function AssistantWorkspacePage({
   conversationId?: string;
 }) {
   const [, navigate] = useLocation();
+  const { focused, setFocused, historyInline, resultsInline } =
+    useWorkspaceLayout();
+  const button = `${buttonStyle} ${focused ? "min-h-[48px] text-[16px]" : "min-h-11 text-sm"}`;
   const [status, setStatus] = useState<WorkspaceStatus | null>(null),
     [list, setList] = useState<{ id: string; title: string }[]>([]),
     [conversation, setConversation] = useState<Conversation | null>(null),
@@ -104,8 +109,26 @@ export default function AssistantWorkspacePage({
   const [refreshingSetup, setRefreshingSetup] = useState(false);
   const [sendDraft, setSendDraft] = useState<Draft | null>(null);
   const [editingDraftId, setEditingDraftId] = useState<string | null>(null);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [resultsOpen, setResultsOpen] = useState(false);
+  const [openPanel, setOpenPanel] = useState<"history" | "results" | null>(
+    null,
+  );
+  const historyOpen = openPanel === "history";
+  const resultsOpen = openPanel === "results";
+  const setHistoryOpen = useCallback((open: boolean) => {
+    setOpenPanel((current) =>
+      open ? "history" : current === "history" ? null : current,
+    );
+  }, []);
+  const setResultsOpen = useCallback((open: boolean) => {
+    setOpenPanel((current) =>
+      open ? "results" : current === "results" ? null : current,
+    );
+  }, []);
+  useEffect(() => {
+    // An active editor stays visible when a rail becomes a sheet. Its children
+    // remain mounted whether the user subsequently closes that sheet or not.
+    if (!resultsInline && editingDraftId) setOpenPanel("results");
+  }, [resultsInline, editingDraftId]);
   const composer = useRef<HTMLTextAreaElement>(null);
   const messageList = useRef<HTMLDivElement>(null);
   const followMessages = useRef(true);
@@ -492,7 +515,9 @@ export default function AssistantWorkspacePage({
     }
   }
   return (
-    <div className="mx-auto min-w-0 max-w-[1600px]">
+    <div
+      className={`mx-auto min-w-0 ${focused ? "max-w-4xl" : "max-w-[1600px]"}`}
+    >
       <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="rounded-xl bg-teal-900 p-2 text-white">
@@ -507,7 +532,18 @@ export default function AssistantWorkspacePage({
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className={`${button} aria-pressed:border-teal-700 aria-pressed:bg-teal-50`}
+            aria-pressed={focused}
+            onClick={() => {
+              setOpenPanel(editingDraftId ? "results" : null);
+              setFocused(!focused);
+            }}
+          >
+            Focus chat
+          </button>
           <button
             type="button"
             className={button}
@@ -561,35 +597,45 @@ export default function AssistantWorkspacePage({
         <KnowledgePanel />
       ) : (
         <>
-          <div className="mx-auto mb-3 flex max-w-4xl flex-wrap gap-2 xl:max-w-none 2xl:hidden">
-            <button
-              type="button"
-              className={button}
-              aria-haspopup="dialog"
-              aria-expanded={historyOpen}
-              onClick={() => setHistoryOpen(true)}
+          {(!historyInline || !resultsInline) && (
+            <div
+              className={`mx-auto mb-3 flex flex-wrap gap-2 ${resultsInline ? "max-w-none" : "max-w-4xl"}`}
             >
-              Conversations
-            </button>
-            <button
-              type="button"
-              className={`${button} xl:hidden`}
-              aria-haspopup="dialog"
-              aria-expanded={resultsOpen}
-              onClick={() => setResultsOpen(true)}
-            >
-              Drafts and actions
-              {conversation
-                ? ` (${conversation.drafts.length + conversation.actions.length})`
-                : ""}
-            </button>
-          </div>
-          <div className="mx-auto grid max-w-4xl min-w-0 gap-4 xl:max-w-none xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[220px_minmax(0,1fr)_360px]">
+              {!historyInline && (
+                <button
+                  type="button"
+                  className={button}
+                  aria-haspopup="dialog"
+                  aria-expanded={historyOpen}
+                  onClick={() => setHistoryOpen(true)}
+                >
+                  Conversations
+                </button>
+              )}
+              {!resultsInline && (
+                <button
+                  type="button"
+                  className={button}
+                  aria-haspopup="dialog"
+                  aria-expanded={resultsOpen}
+                  onClick={() => setResultsOpen(true)}
+                >
+                  Drafts and actions
+                  {conversation
+                    ? ` (${conversation.drafts.length + conversation.actions.length})`
+                    : ""}
+                </button>
+              )}
+            </div>
+          )}
+          <div
+            className={`mx-auto grid min-w-0 gap-4 ${historyInline ? "max-w-none grid-cols-[220px_minmax(0,1fr)_360px]" : resultsInline ? "max-w-none grid-cols-[minmax(0,1fr)_360px]" : "max-w-4xl grid-cols-1"}`}
+          >
             <WorkspacePanel
               title="Conversations"
               open={historyOpen}
               onOpenChange={setHistoryOpen}
-              minWidth={1536}
+              inline={historyInline}
               side="left"
             >
               <aside className="min-w-0 rounded-xl border bg-white p-3">
@@ -641,7 +687,7 @@ export default function AssistantWorkspacePage({
                 <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
                   Model{" "}
                   <select
-                    className="min-h-11 min-w-0 max-w-full flex-1 rounded border bg-white px-2 text-base sm:flex-none"
+                    className={`${focused ? "min-h-[48px]" : "min-h-11"} min-w-0 max-w-full flex-1 rounded border bg-white px-2 text-[16px] sm:flex-none`}
                     aria-describedby="workspace-model-help"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
@@ -718,9 +764,15 @@ export default function AssistantWorkspacePage({
                         ))}
                       </div>
                     )}
-                    <p className="whitespace-pre-wrap break-words text-base leading-7">
-                      {m.text}
-                    </p>
+                    <div
+                      className={`break-words ${focused ? "text-[18px] leading-8" : "text-base leading-7"}`}
+                    >
+                      {m.role === "assistant" ? (
+                        <AssistantMessage text={m.text} />
+                      ) : (
+                        <p className="whitespace-pre-wrap">{m.text}</p>
+                      )}
+                    </div>
                   </article>
                 ))}
               </div>
@@ -778,7 +830,7 @@ export default function AssistantWorkspacePage({
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder="Ask a follow-up or describe what you want done…"
-                  className="min-h-24 max-h-48 w-full resize-y rounded-xl border p-3 text-base focus:outline-teal-700"
+                  className="min-h-24 max-h-48 w-full resize-y rounded-xl border p-3 text-[16px] focus:outline-teal-700"
                 />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span className="text-xs text-slate-500">
@@ -805,7 +857,7 @@ export default function AssistantWorkspacePage({
                     <button
                       type="submit"
                       disabled={busy || (!text.trim() && !files.length)}
-                      className="min-h-11 rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                      className={`${focused ? "min-h-[48px] text-[16px]" : "min-h-11 text-sm"} rounded-lg bg-teal-800 px-4 py-2 font-semibold text-white disabled:opacity-50`}
                     >
                       <Send className="mr-2 inline h-4 w-4" />
                       Send message
@@ -818,7 +870,7 @@ export default function AssistantWorkspacePage({
               title="Drafts and actions"
               open={resultsOpen}
               onOpenChange={setResultsOpen}
-              minWidth={1280}
+              inline={resultsInline}
             >
               <aside className="min-w-0 space-y-4">
                 <CampaignPanel

@@ -94,6 +94,30 @@ it("isolates an HTML draft preview without script or same-origin permissions", (
   expect(frame.getAttribute("referrerpolicy")).toBe("no-referrer");
 });
 
+it("formats assistant messages while keeping user wording literal", async () => {
+  const original = vi.mocked(workspaceApi).getMockImplementation()!;
+  vi.mocked(workspaceApi).mockImplementation(async (path, ...args) => {
+    if (path === `/conversations/${conversation.id}`)
+      return {
+        ...conversation,
+        messages: [
+          { id: "user-markup", role: "user", text: "Keep **these asterisks**" },
+          {
+            id: "assistant-markup",
+            role: "assistant",
+            text: "This is **ready for review**.",
+          },
+        ],
+      } as any;
+    return original(path, ...args);
+  });
+  render(<AssistantWorkspacePage conversationId={conversation.id} />);
+  expect(
+    await screen.findByText("ready for review", { selector: "strong" }),
+  ).toBeVisible();
+  expect(screen.getByText("Keep **these asterisks**")).toBeVisible();
+});
+
 it("does not display an old conversation response after switching chats", async () => {
   let finishOld!: (value: any) => void;
   const old = new Promise((resolve) => {
