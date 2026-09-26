@@ -21,6 +21,7 @@ export const assistantWorkspaceConversations = pgTable(
     id: uuid("id").defaultRandom().primaryKey(),
     actorId: text("actor_id").notNull(),
     title: text("title").notNull(),
+    lifecycle: text("lifecycle").notNull().default("active"),
     selection: jsonb("selection").notNull(),
     summary: jsonb("summary").notNull().default({}),
     version: integer("version").notNull().default(1),
@@ -33,6 +34,15 @@ export const assistantWorkspaceConversations = pgTable(
   },
   (t) => [
     unique().on(t.id, t.actorId),
+    check(
+      "assistant_workspace_conversation_lifecycle_valid",
+      sql`${t.lifecycle} IN ('active','archived','trashed')`,
+    ),
+    index("assistant_workspace_conversation_lifecycle_idx").on(
+      t.actorId,
+      t.lifecycle,
+      t.updatedAt,
+    ),
     index("assistant_workspace_conversation_owner_idx").on(
       t.actorId,
       t.updatedAt,

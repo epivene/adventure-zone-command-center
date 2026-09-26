@@ -23,6 +23,8 @@ export type RuleProposal = z.infer<typeof proposalSchema>;
 export interface Rule extends RuleProposal {
   id: string;
   version: number | null;
+  /** Current scope revision, including retirements; use for the next reviewed change. */
+  headVersion?: number;
   status: string;
   supersedesId: string | null;
   approvedBy: string | null;
@@ -43,6 +45,7 @@ function map(r: any): Rule {
     effectiveFrom: ruleDate(r.effective_from),
     effectiveTo: r.effective_to ? ruleDate(r.effective_to) : null,
     version: r.version,
+    headVersion: r.head_version,
     status: r.status,
     supersedesId: r.supersedes_id,
     approvedBy: r.approved_by,
@@ -56,9 +59,11 @@ export class KnowledgeRepository {
     if (!actorId) throw new Error("ASSISTANT_ACCESS_DENIED");
     const scope = JSON.stringify([p.ruleKey, p.organizationId, p.eventYear]);
     const r = await this.db.query(
-      `WITH head AS (INSERT INTO assistant_workspace_rule_heads(scope_key) VALUES($1) ON CONFLICT(scope_key) DO UPDATE SET scope_key=excluded.scope_key RETURNING scope_key)
+      `WITH head AS (INSERT INTO assistant_workspace_rule_heads(scope_key) VALUES($1) ON CONFLICT(scope_key) DO UPDATE SET scope_key=excluded.scope_key RETURNING scope_key,version),
+   proposed AS (
    INSERT INTO assistant_workspace_rules(scope_key,rule_key,body,source_label,organization_id,event_year,effective_from,effective_to,proposed_by)
-   SELECT scope_key,$2,$3,$4,$5,$6,$7,$8,$9 FROM head RETURNING *`,
+   SELECT scope_key,$2,$3,$4,$5,$6,$7,$8,$9 FROM head RETURNING *)
+   SELECT p.*,h.version AS head_version FROM proposed p JOIN head h ON h.scope_key=p.scope_key`,
       [
         scope,
         p.ruleKey,
@@ -85,8 +90,27 @@ export class KnowledgeRepository {
    advanced AS (UPDATE assistant_workspace_rule_heads h SET version=h.version+1,current_id=c.id FROM candidate c WHERE h.scope_key=c.scope_key AND h.version=$2 RETURNING h.version,c.id,c.scope_key),
    retired AS (UPDATE assistant_workspace_rules r SET status='superseded' FROM advanced a WHERE r.scope_key=a.scope_key AND r.status='approved' RETURNING r.id),
    approved AS (UPDATE assistant_workspace_rules r SET status='approved',version=a.version,approved_by=$3,reviewed_at=now(),supersedes_id=(SELECT id FROM retired LIMIT 1) FROM advanced a WHERE r.id=a.id RETURNING r.*)
-   SELECT * FROM approved`,
+   SELECT *,version AS head_version FROM approved`,
       [id, expectedVersion, actorId],
+    );
+    if (!r.rows[0]) throw new Error("ASSISTANT_RULE_VERSION_CONFLICT");
+    return map(r.rows[0]);
+  }
+  async retire(
+    actorId: string,
+    id: string,
+    expectedVersion: number,
+  ): Promise<Rule> {
+    if (!actorId || !Number.isInteger(expectedVersion) || expectedVersion < 0)
+      throw new Error("ASSISTANT_ACCESS_DENIED");
+    // Advancing the head also invalidates approvals prepared before this retirement.
+    // Keep the original approval metadata and body as history, but remove the active head.
+    const r = await this.db.query(
+      `WITH candidate AS (SELECT * FROM assistant_workspace_rules WHERE id=$1 AND status='approved'),
+   advanced AS (UPDATE assistant_workspace_rule_heads h SET version=h.version+1,current_id=NULL FROM candidate c WHERE h.scope_key=c.scope_key AND h.current_id=c.id AND h.version=$2 RETURNING h.version,c.id),
+   retired AS (UPDATE assistant_workspace_rules r SET status='superseded' FROM advanced a WHERE r.id=a.id RETURNING r.*)
+   SELECT r.*,a.version AS head_version FROM retired r JOIN advanced a ON a.id=r.id`,
+      [id, expectedVersion],
     );
     if (!r.rows[0]) throw new Error("ASSISTANT_RULE_VERSION_CONFLICT");
     return map(r.rows[0]);
@@ -97,7 +121,7 @@ export class KnowledgeRepository {
     at: string;
   }): Promise<Rule[]> {
     const r = await this.db.query(
-      `SELECT * FROM assistant_workspace_rules WHERE status='approved' AND (organization_id IS NULL OR organization_id=$1) AND (event_year IS NULL OR event_year=$2) AND effective_from<=$3::date AND (effective_to IS NULL OR effective_to>=$3::date) ORDER BY rule_key,organization_id NULLS FIRST,event_year NULLS FIRST`,
+      `SELECT r.*,h.version AS head_version FROM assistant_workspace_rules r JOIN assistant_workspace_rule_heads h ON h.scope_key=r.scope_key AND h.current_id=r.id WHERE r.status='approved' AND (r.organization_id IS NULL OR r.organization_id=$1) AND (r.event_year IS NULL OR r.event_year=$2) AND r.effective_from<=$3::date AND (r.effective_to IS NULL OR r.effective_to>=$3::date) ORDER BY r.rule_key,r.organization_id NULLS FIRST,r.event_year NULLS FIRST`,
       [input.organizationId, input.eventYear, input.at],
     );
     return r.rows.map(map);
@@ -105,7 +129,7 @@ export class KnowledgeRepository {
   async history(): Promise<Rule[]> {
     return (
       await this.db.query(
-        `SELECT * FROM assistant_workspace_rules ORDER BY created_at,id`,
+        `SELECT r.*,h.version AS head_version FROM assistant_workspace_rules r JOIN assistant_workspace_rule_heads h ON h.scope_key=r.scope_key ORDER BY r.created_at,r.id`,
       )
     ).rows.map(map);
   }

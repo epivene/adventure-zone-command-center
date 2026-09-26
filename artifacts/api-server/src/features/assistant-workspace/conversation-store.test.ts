@@ -16,6 +16,91 @@ afterEach(async () => {
   await db.close();
 });
 
+it("archives and trashes reversibly with actor isolation and version checks", async () => {
+  const c = await store.create("owner", "Keep history");
+  await store.append("owner", c.id, "original", {
+    role: "user",
+    text: "Important details",
+  });
+  expect(c.lifecycle).toBe("active");
+  await expect(
+    store.setLifecycle("other", c.id, c.version, "archived"),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_NOT_FOUND");
+  const archived = await store.setLifecycle(
+    "owner",
+    c.id,
+    c.version,
+    "archived",
+  );
+  expect(archived.lifecycle).toBe("archived");
+  expect(await store.list("owner")).toEqual([]);
+  expect(
+    (await store.list("owner", "archived")).map((item) => item.id),
+  ).toEqual([c.id]);
+  await expect(
+    store.setLifecycle("owner", c.id, c.version, "trashed"),
+  ).rejects.toThrow("ASSISTANT_VERSION_CONFLICT");
+  const trashed = await store.setLifecycle(
+    "owner",
+    c.id,
+    archived.version,
+    "trashed",
+  );
+  expect((await store.list("owner", "trashed"))[0].id).toBe(c.id);
+  const restored = await store.setLifecycle(
+    "owner",
+    c.id,
+    trashed.version,
+    "active",
+  );
+  expect(restored.version).toBe(c.version + 3);
+  expect((await store.get("owner", c.id))?.messages[0].text).toBe(
+    "Important details",
+  );
+});
+
+it("keeps inactive history readable and idempotent but rejects new conversation writes", async () => {
+  const c = await store.create("owner", "History");
+  const message = await store.append("owner", c.id, "original", {
+    role: "user",
+    text: "Saved",
+  });
+  await store.setLifecycle("owner", c.id, c.version, "trashed");
+  expect(
+    (
+      await store.append("owner", c.id, "original", {
+        role: "user",
+        text: "Saved",
+      })
+    ).id,
+  ).toBe(message.id);
+  await expect(
+    store.append("owner", c.id, "new", { role: "user", text: "New work" }),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  await expect(
+    store.setSelection("owner", c.id, c.version + 1, {
+      ...emptySelection(),
+      eventYear: 2027,
+    }),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  expect((await store.context("owner", c.id, message.id)).turns).toHaveLength(
+    1,
+  );
+});
+
+it("upgrades existing conversations to active without replacing history and repeats safely", async () => {
+  const c = await store.create("owner", "Existing");
+  await db.query(
+    "ALTER TABLE assistant_workspace_conversations DROP COLUMN lifecycle CASCADE",
+  );
+  await ensureAssistantWorkspaceSchema(db);
+  await ensureAssistantWorkspaceSchema(db);
+  expect(await store.get("owner", c.id)).toMatchObject({
+    title: "Existing",
+    lifecycle: "active",
+  });
+});
+
 it("persists screenshot references atomically and rejects changed-image request replay", async () => {
   const c = await store.create("owner", "Screenshots");
   const screenshots = [

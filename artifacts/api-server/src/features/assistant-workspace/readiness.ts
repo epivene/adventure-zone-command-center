@@ -48,9 +48,24 @@ const additions = [
   "assistant_workspace_messages.attachments",
   "assistant_workspace_conversations.summary",
   "assistant_workspace_conversations.version",
+  "assistant_workspace_conversations.lifecycle",
   "assistant_workspace_document_extractions.call_id",
   "assistant_workspace_campaign_batches.draft_links",
   "assistant_workspace_research_calls.input_fingerprint",
+];
+const requiredTriggers = [
+  "assistant_workspace_conversations.assistant_workspace_guard_lifecycle",
+  ...[
+    "messages",
+    "runs",
+    "actions",
+    "drafts",
+    "screenshots",
+    "send_reviews",
+  ].map(
+    (table) =>
+      `assistant_workspace_${table}.assistant_workspace_${table}_new_work`,
+  ),
 ];
 const googleKeys = [
   "GOOGLE_WORKSPACE_CLIENT_ID",
@@ -77,11 +92,25 @@ async function databaseReady(db: Queryable) {
     `SELECT i.indisunique, i.indisvalid FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND c.relname='assistant_workspace_one_active_run_idx'`,
   );
   if (!index.rows.some((r) => r.indisunique && r.indisvalid)) return false;
-  const rules = await db.query(
-    `SELECT DISTINCT r.rule_key FROM assistant_workspace_rules r JOIN assistant_workspace_rule_heads h ON h.current_id=r.id WHERE r.status='approved' AND r.organization_id IS NULL AND r.event_year IS NULL AND r.effective_from<=CURRENT_DATE AND (r.effective_to IS NULL OR r.effective_to>=CURRENT_DATE)`,
+  const triggers = await db.query(
+    `SELECT c.relname AS table_name,t.tgname FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=current_schema() AND NOT t.tgisinternal AND t.tgenabled IN ('O','A')`,
   );
-  const approved = new Set(rules.rows.map((r) => r.rule_key));
-  return manifest.rules.every((r) => approved.has(r.ruleKey));
+  const enabledTriggers = new Set(
+    triggers.rows.map((r) => `${r.table_name}.${r.tgname}`),
+  );
+  if (requiredTriggers.some((trigger) => !enabledTriggers.has(trigger)))
+    return false;
+  const rules = await db.query(
+    `SELECT DISTINCT r.rule_key FROM assistant_workspace_rules r JOIN assistant_workspace_rule_heads h ON h.scope_key=r.scope_key
+     WHERE r.organization_id IS NULL AND r.event_year IS NULL AND (
+       (r.status='approved' AND h.current_id=r.id AND r.effective_from<=CURRENT_DATE AND (r.effective_to IS NULL OR r.effective_to>=CURRENT_DATE))
+       OR (h.current_id IS NULL AND r.status='superseded' AND r.version>0 AND h.version=r.version+1 AND r.approved_by IS NOT NULL AND r.reviewed_at IS NOT NULL)
+     )`,
+  );
+  // An intentional retirement retains reviewed initialization evidence. Never
+  // turn the workspace off or reinstall a rule solely because its owner stopped it.
+  const initialized = new Set(rules.rows.map((r) => r.rule_key));
+  return manifest.rules.every((r) => initialized.has(r.ruleKey));
 }
 export async function readWorkspaceReadiness(deps: Dependencies) {
   const { env, actorId } = deps;
@@ -128,8 +157,8 @@ export async function readWorkspaceReadiness(deps: Dependencies) {
       required: true,
       state: ready ? "ready" : "needs_setup",
       message: ready
-        ? "Required storage and approved business rules are present."
-        : "Workspace storage or approved rules need initialization. Deploy the latest API and check its assistant startup logs.",
+        ? "Required storage and reviewed business-rule setup are present."
+        : "Workspace storage or initial business rules need initialization. Deploy the latest API and check its assistant startup logs.",
     });
   } catch {
     checks.push({

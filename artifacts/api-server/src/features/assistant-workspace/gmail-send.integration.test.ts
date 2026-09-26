@@ -1,6 +1,8 @@
 import { it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createHash, randomUUID } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { sql } from "drizzle-orm";
 import { ensureAssistantWorkspaceSchema } from "../../db/assistant-workspace-startup-migration";
 import { ConversationStore } from "./conversation-store";
 import { DraftStore } from "./draft-store";
@@ -17,7 +19,7 @@ beforeEach(async () => {
   db = new PGlite();
   await ensureAssistantWorkspaceSchema(db);
   await db.exec(
-    `CREATE TABLE contacts(id uuid,email text);CREATE TABLE organization_contacts(organization_id uuid,contact_id uuid,active boolean);CREATE TABLE outreach_dispatches(id uuid,draft_kind text,draft_id uuid,state text,payload jsonb,confirmation jsonb,created_at timestamptz DEFAULT now());`,
+    `CREATE TABLE contacts(id uuid,email text);CREATE TABLE organization_contacts(organization_id uuid,contact_id uuid,active boolean);CREATE TABLE outreach_dispatches(id uuid,draft_kind text,draft_id uuid,state text,payload jsonb,confirmation jsonb,created_at timestamptz DEFAULT now());CREATE TABLE approval_test_log(note text);`,
   );
 });
 afterEach(async () => {
@@ -53,6 +55,7 @@ async function setup() {
     organizationId: org,
     templateId: null,
     templateVersion: null,
+    eventYear: 2027,
   });
   const raw = Buffer.from(
     "To: recipient@example.test\r\nSubject: Reply\r\nMessage-ID: " +
@@ -80,6 +83,7 @@ async function setup() {
     confirmation: null,
   };
   const safety: any = {
+    approve: vi.fn().mockResolvedValue({ approved: true }),
     review: vi.fn().mockResolvedValue({
       approvalCurrent: true,
       draft: { content: { body: draft.content.html } },
@@ -132,14 +136,32 @@ async function setup() {
   const sync = vi.fn().mockResolvedValue(true);
   const protect = vi.fn().mockResolvedValue(null);
   const captureSources = vi.fn().mockResolvedValue("source-v1");
+  const connectionQueries: string[] = [];
+  const release = vi.fn();
+  const pinnedQuery = vi.fn(async (sql: string, values?: any[]) => {
+    connectionQueries.push(sql);
+    return db.query(sql, values);
+  });
+  const pool = {
+    query: db.query.bind(db),
+    connect: vi.fn(async () => ({ query: pinnedQuery, release })),
+  };
+  const approvalQueries: string[] = [];
+  const database = drizzle(db, {
+    logger: { logQuery: (query) => approvalQueries.push(query) },
+  });
+  let approvalDatabase: any;
   const service = createWorkspaceSendService({
     captureSources,
-    pool: db as any,
-    db: {} as any,
+    pool: pool as any,
+    db: database as any,
     drafts,
     conversations,
     google,
-    dispatchFactory: () => safety,
+    dispatchFactory: (_payment, transaction) => {
+      approvalDatabase = transaction;
+      return safety;
+    },
     protectContact: protect,
     syncSent: sync,
   });
@@ -188,8 +210,108 @@ async function setup() {
     drafts,
     draft,
     service,
+    conversations,
+    conversation: c,
+    pool,
+    connectionQueries,
+    release,
+    approvalQueries,
+    approvalDatabase: () => approvalDatabase,
   };
 }
+const approvalInput = {
+  digest: "a".repeat(64),
+  intent: "administrative" as const,
+  holdId: null,
+  stage: null,
+  reason: "Reviewed",
+  evidenceReviewed: true,
+};
+it("rejects archived approval before touching outreach approval, including an already approved revision", async () => {
+  const s = await setup();
+  await s.conversations.setLifecycle(
+    "owner",
+    s.conversation.id,
+    s.conversation.version,
+    "archived",
+  );
+  await expect(
+    s.service.approve("owner", s.draft.id, s.draft.revision, approvalInput),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  expect(s.safety.approve).not.toHaveBeenCalled();
+  expect(s.approvalQueries).toHaveLength(1);
+  expect(s.approvalQueries[0]).toMatch(
+    /assistant_workspace_conversations.*FOR UPDATE/s,
+  );
+  expect(s.pool.connect).not.toHaveBeenCalled();
+});
+it("locks the active conversation before outreach approval and completes on the same connection", async () => {
+  const s = await setup();
+  s.safety.approve.mockImplementation(async () => {
+    expect(s.approvalQueries[0]).toMatch(
+      /assistant_workspace_conversations.*FOR UPDATE/s,
+    );
+    await s
+      .approvalDatabase()
+      .execute(sql`INSERT INTO approval_test_log VALUES ('approved')`);
+  });
+  expect(
+    await s.service.approve(
+      "owner",
+      s.draft.id,
+      s.draft.revision,
+      approvalInput,
+    ),
+  ).toEqual({ approved: true, revision: s.draft.revision });
+  expect(s.approvalQueries.at(-1)).toMatch(
+    /UPDATE assistant_workspace_send_reviews/,
+  );
+  expect((await db.query("SELECT * FROM approval_test_log")).rows).toEqual([
+    { note: "approved" },
+  ]);
+  expect(s.pool.connect).not.toHaveBeenCalled();
+});
+it("rolls back and releases the lifecycle lock when outreach approval fails", async () => {
+  const s = await setup();
+  s.safety.approve.mockImplementation(async () => {
+    await s
+      .approvalDatabase()
+      .execute(sql`INSERT INTO approval_test_log VALUES ('must roll back')`);
+    throw new Error("Approval changed");
+  });
+  await expect(
+    s.service.approve("owner", s.draft.id, s.draft.revision, approvalInput),
+  ).rejects.toThrow("Approval changed");
+  expect((await db.query("SELECT * FROM approval_test_log")).rows).toEqual([]);
+  expect(s.pool.connect).not.toHaveBeenCalled();
+  expect(
+    (
+      await s.conversations.setLifecycle(
+        "owner",
+        s.conversation.id,
+        s.conversation.version,
+        "archived",
+      )
+    ).lifecycle,
+  ).toBe("archived");
+});
+it("checks lifecycle before taking office locks during send review", async () => {
+  const s = await setup();
+  await s.conversations.setLifecycle(
+    "owner",
+    s.conversation.id,
+    s.conversation.version,
+    "trashed",
+  );
+  await expect(
+    s.service.review("owner", s.draft.id, s.draft.revision, "administrative"),
+  ).rejects.toThrow("ASSISTANT_CONVERSATION_INACTIVE");
+  expect(
+    s.connectionQueries.some((sql) => /office_email_drafts/.test(sql)),
+  ).toBe(false);
+  expect(s.connectionQueries.at(-1)).toBe("ROLLBACK");
+  expect(s.release).toHaveBeenCalledTimes(1);
+});
 it("sends once, verifies Sent, and preserves delivery when tracking fails", async () => {
   const s = await setup();
   s.sync.mockRejectedValue(new Error("tracking unavailable"));

@@ -47,6 +47,72 @@ it("reports local readiness without claiming provider verification or requiring 
   );
   expect(JSON.stringify(status)).not.toContain("secret-do-not-return");
 });
+it("remains ready after the owner intentionally stops using an initialized seed rule", async () => {
+  const f = await fixture();
+  const knowledge = new KnowledgeRepository(db);
+  const saved = (await knowledge.history()).find(
+    (rule) => rule.ruleKey === manifest.rules[0].ruleKey,
+  )!;
+  await knowledge.retire("owner", saved.id, saved.headVersion!);
+  expect((await readWorkspaceReadiness(f)).ready).toBe(true);
+  expect(
+    (
+      await knowledge.list({
+        organizationId: null,
+        eventYear: null,
+        at: "2026-09-26",
+      })
+    ).some((rule) => rule.id === saved.id),
+  ).toBe(false);
+  const pending = await knowledge.propose("owner", {
+    ...manifest.rules[0],
+    body: "New proposed correction",
+  });
+  expect(pending.headVersion).toBe(saved.headVersion! + 1);
+  expect((await readWorkspaceReadiness(f)).ready).toBe(true);
+});
+it("does not count a retired customer exception as an initialized global seed", async () => {
+  const f = await fixture();
+  const knowledge = new KnowledgeRepository(db);
+  const saved = (await knowledge.history()).find(
+    (rule) => rule.ruleKey === manifest.rules[0].ruleKey,
+  )!;
+  const scoped = await knowledge.propose("owner", {
+    ...manifest.rules[0],
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    eventYear: 2027,
+  });
+  await knowledge.approve("owner", scoped.id, 0);
+  await knowledge.retire("owner", scoped.id, 1);
+  await db.query(
+    "UPDATE assistant_workspace_rules SET status='proposed' WHERE id=$1",
+    [saved.id],
+  );
+  expect((await readWorkspaceReadiness(f)).ready).toBe(false);
+});
+it.each(["approval", "version"])(
+  "requires retirement %s evidence before considering a stopped seed initialized",
+  async (missing) => {
+    const f = await fixture();
+    const knowledge = new KnowledgeRepository(db);
+    const saved = (await knowledge.history()).find(
+      (rule) => rule.ruleKey === manifest.rules[0].ruleKey,
+    )!;
+    await knowledge.retire("owner", saved.id, saved.headVersion!);
+    if (missing === "approval") {
+      await db.query(
+        "UPDATE assistant_workspace_rules SET approved_by=NULL,reviewed_at=NULL WHERE id=$1",
+        [saved.id],
+      );
+    } else {
+      await db.query(
+        "UPDATE assistant_workspace_rule_heads SET version=version-1 WHERE scope_key=(SELECT scope_key FROM assistant_workspace_rules WHERE id=$1)",
+        [saved.id],
+      );
+    }
+    expect((await readWorkspaceReadiness(f)).ready).toBe(false);
+  },
+);
 it("identifies missing keys, invalid limits and the actual owner's excluded access without echoing input", async () => {
   const f = await fixture();
   const status = await readWorkspaceReadiness({
@@ -78,7 +144,10 @@ it("identifies missing keys, invalid limits and the actual owner's excluded acce
 it.each([
   "DROP TABLE assistant_workspace_document_extractions",
   "ALTER TABLE assistant_workspace_conversations DROP COLUMN summary",
+  "ALTER TABLE assistant_workspace_conversations DROP COLUMN lifecycle CASCADE",
   "DROP INDEX assistant_workspace_one_active_run_idx",
+  "DROP TRIGGER assistant_workspace_guard_lifecycle ON assistant_workspace_conversations",
+  "ALTER TABLE assistant_workspace_messages DISABLE TRIGGER assistant_workspace_messages_new_work",
   "UPDATE assistant_workspace_rules SET status='proposed'",
 ])("detects incomplete schema or rules: %s", async (mutation) => {
   const f = await fixture();

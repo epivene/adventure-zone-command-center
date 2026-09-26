@@ -30,6 +30,7 @@ import {
 } from "../features/assistant-workspace/startup";
 import { PostgresGoogleConnectionRepository } from "../features/google-workspace/google-connection-repository";
 import { MAX_SCREENSHOT_BYTES } from "../features/assistant-workspace/screenshots";
+import { conversationLifecycleSchema } from "../features/assistant-workspace/conversation-store";
 const uuid = (value: unknown) => z.string().uuid().parse(value);
 export function createAssistantWorkspaceRouter(
   runtime: () => WorkspaceRuntime = getWorkspaceRuntime,
@@ -102,7 +103,14 @@ export function createAssistantWorkspaceRouter(
     };
   router.get(
     "/conversations",
-    wrap(async (_q, s, r, a) => s.json(await r.conversations.list(a))),
+    wrap(async (q, s, r, a) => s.json(await r.conversations.list(a, conversationLifecycleSchema.parse(q.query.lifecycle ?? "active")))),
+  );
+  router.patch(
+    "/conversations/:id/lifecycle",
+    wrap(async (q, s, r, a) => {
+      const input = z.object({ version: z.number().int().positive(), lifecycle: conversationLifecycleSchema }).strict().parse(q.body);
+      s.json(await r.conversations.setLifecycle(a, uuid(q.params.id), input.version, input.lifecycle));
+    }),
   );
   router.post(
     "/conversations",
@@ -361,10 +369,14 @@ export function createAssistantWorkspaceRouter(
         s.status(404).json({ code: "ASSISTANT_CONVERSATION_NOT_FOUND" });
         return;
       }
-      await r.conversations.append(a, c.id, `approve:${input.requestKey}`, {
-        role: "user",
-        text: `Approve ${action.kind} on ${action.targetId}, revision ${input.revision ?? "new"}, action ${action.id}.${input.confirmation ? ` Human verification: ${input.confirmation}.` : ""}`,
-      });
+      // Checking an existing receipt or reconciling a dispatched action is not
+      // new approval. It remains possible from archived conversation history.
+      if (!["succeeded", "provider_started", "uncertain"].includes(action.status)) {
+        await r.conversations.append(a, c.id, `approve:${input.requestKey}`, {
+          role: "user",
+          text: `Approve ${action.kind} on ${action.targetId}, revision ${input.revision ?? "new"}, action ${action.id}.${input.confirmation ? ` Human verification: ${input.confirmation}.` : ""}`,
+        });
+      }
       const connectionId = action.connectionId
         ? ((await r.google.getCurrent())?.id ?? null)
         : null;
@@ -605,10 +617,24 @@ export function createAssistantWorkspaceRouter(
       );
     }),
   );
+  router.post(
+    "/knowledge/:id/retire",
+    wrap(async (q, s, r, a) => {
+      const input = z
+        .object({ expectedVersion: z.number().int().min(0) })
+        .strict()
+        .parse(q.body);
+      s.json(await r.knowledge.retire(a, uuid(q.params.id), input.expectedVersion));
+    }),
+  );
   router.use(
     (error: unknown, _q: Request, s: Response, _next: NextFunction) => {
       const code =
         error instanceof Error ? error.message : "ASSISTANT_REQUEST_FAILED";
+      if (code === "ASSISTANT_RULE_VERSION_CONFLICT") {
+        s.status(409).json({ code });
+        return;
+      }
       if (
         (error as any)?.type === "entity.too.large" ||
         code === "ASSISTANT_SCREENSHOT_SIZE_INVALID"
@@ -625,6 +651,10 @@ export function createAssistantWorkspaceRouter(
       }
       if (error instanceof z.ZodError) {
         s.status(422).json({ code: "ASSISTANT_INPUT_INVALID" });
+        return;
+      }
+      if (code === "ASSISTANT_CONVERSATION_INACTIVE" || code === "ASSISTANT_CONVERSATION_BUSY") {
+        s.status(409).json({ code });
         return;
       }
       if (

@@ -61,7 +61,15 @@ export type UsageCost = {
   pricingVersions: string[];
   excluded: string[];
 };
+export type ConversationLifecycle = "active" | "archived" | "trashed";
+export type ConversationListItem = {
+  id: string;
+  title: string;
+  version: number;
+  lifecycle?: ConversationLifecycle;
+};
 export type Conversation = {
+  lifecycle?: ConversationLifecycle;
   usage?: { cost: UsageCost };
   summary?: unknown;
   id: string;
@@ -155,6 +163,7 @@ export type DocumentResult = {
       };
 };
 export type Rule = {
+  headVersion?: number;
   id: string;
   ruleKey: string;
   body: string;

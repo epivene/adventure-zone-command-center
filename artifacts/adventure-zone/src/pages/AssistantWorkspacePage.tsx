@@ -23,17 +23,23 @@ import {
   type FormEvent,
 } from "react";
 import { useLocation } from "wouter";
-import { Bot, Plus, Send, Square, BookOpen, MessageSquare } from "lucide-react";
+import { Bot, Send, Square, BookOpen, MessageSquare } from "lucide-react";
 import {
   workspaceApi,
   lastConversationKey,
 } from "@/features/assistant-workspace/api";
-import type { Conversation, Draft } from "@/features/assistant-workspace/types";
+import type {
+  Conversation,
+  ConversationLifecycle,
+  ConversationListItem,
+  Draft,
+} from "@/features/assistant-workspace/types";
 import { ActionResults } from "@/components/assistant-workspace/ActionResults";
 import {
   DraftPreview,
   type DraftEdits,
 } from "@/components/assistant-workspace/DraftPreview";
+import { ConversationHistory } from "@/components/assistant-workspace/ConversationHistory";
 import { KnowledgePanel } from "@/components/assistant-workspace/KnowledgePanel";
 import { WorkspacePanel } from "@/components/assistant-workspace/WorkspacePanel";
 import { AssistantMessage } from "@/components/assistant-workspace/AssistantMessage";
@@ -56,6 +62,10 @@ function friendly(error: unknown) {
     return "The screenshot could not upload. Your message and images are still here; try sending again.";
   if (/SCREENSHOT_READ|SCREENSHOT_NOT_FOUND/.test(code))
     return "A saved screenshot could not be read. Try attaching it again.";
+  if (/CONVERSATION_BUSY/.test(code))
+    return "This conversation is running or needs its result checked. Finish or check the action before moving it.";
+  if (/CONVERSATION_INACTIVE/.test(code))
+    return "Restore this conversation before making changes.";
   if (/STATE_CHANGED|CONFLICT|CHANGED/.test(code))
     return "The saved information changed. Review the latest version and try again.";
   if (/STARTUP/.test(code))
@@ -98,7 +108,7 @@ export default function AssistantWorkspacePage({
     useWorkspaceLayout();
   const button = `${buttonStyle} ${focused ? "min-h-[48px] text-[16px]" : "min-h-11 text-sm"}`;
   const [status, setStatus] = useState<WorkspaceStatus | null>(null),
-    [list, setList] = useState<{ id: string; title: string }[]>([]),
+    [list, setList] = useState<ConversationListItem[]>([]),
     [conversation, setConversation] = useState<Conversation | null>(null),
     [text, setText] = useState(""),
     [model, setModel] = useState(""),
@@ -106,6 +116,17 @@ export default function AssistantWorkspacePage({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState<"chat" | "knowledge">("chat"),
     [progress, setProgress] = useState("");
+  const [historyView, setHistoryView] =
+    useState<ConversationLifecycle>("active");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [knowledgeDirty, setKnowledgeDirty] = useState(false);
+  const [initialNote, setInitialNote] = useState<{
+    id: string;
+    text: string;
+    sourceLabel: string;
+  }>();
+  const lifecycleWrite = useRef(false);
   const [setupError, setSetupError] = useState("");
   const [setupRevision, setSetupRevision] = useState(0);
   const [refreshingSetup, setRefreshingSetup] = useState(false);
@@ -146,7 +167,7 @@ export default function AssistantWorkspacePage({
     setFiles([]);
   }
   function addFiles(incoming: File[]) {
-    if (busy || active || !incoming.length) return;
+    if (busy || active || readOnly || !incoming.length) return;
     if (filesRef.current.length + incoming.length > 4) {
       setError("Attach up to four screenshots per message.");
       return;
@@ -222,13 +243,6 @@ export default function AssistantWorkspacePage({
         setModel((current) =>
           modelConversation.current ? current : (s.model ?? ""),
         );
-        if (s.ready) {
-          const items =
-            await workspaceApi<{ id: string; title: string }[]>(
-              "/conversations",
-            );
-          if (live) setList(items);
-        }
       })
       .catch((e) => {
         if (live) {
@@ -245,6 +259,27 @@ export default function AssistantWorkspacePage({
       live = false;
     };
   }, [setupRevision]);
+  useEffect(() => {
+    if (!status?.ready) return;
+    let live = true;
+    setHistoryLoading(true);
+    setList([]);
+    void workspaceApi<ConversationListItem[]>(
+      `/conversations?lifecycle=${historyView}`,
+    )
+      .then((items) => {
+        if (live) setList(items);
+      })
+      .catch((e) => {
+        if (live) setError(friendly(e));
+      })
+      .finally(() => {
+        if (live) setHistoryLoading(false);
+      });
+    return () => {
+      live = false;
+    };
+  }, [status?.ready, historyView, historyRevision]);
   useEffect(() => {
     modelConversation.current = undefined;
     setConversation(null);
@@ -266,10 +301,16 @@ export default function AssistantWorkspacePage({
   }, [conversationId]);
   useEffect(() => {
     if (conversationId && status?.ready) {
-      localStorage.setItem(lastConversationKey, conversationId);
       void refresh().catch((e) => setError(friendly(e)));
     }
   }, [conversationId, refresh, status?.ready]);
+  useEffect(() => {
+    if (!conversation || conversation.id !== conversationId) return;
+    if ((conversation.lifecycle ?? "active") === "active")
+      localStorage.setItem(lastConversationKey, conversation.id);
+    else if (localStorage.getItem(lastConversationKey) === conversation.id)
+      localStorage.removeItem(lastConversationKey);
+  }, [conversation?.id, conversation?.lifecycle, conversationId]);
   useLayoutEffect(() => {
     const node = messageList.current;
     if (node && followMessages.current) node.scrollTop = node.scrollHeight;
@@ -277,6 +318,79 @@ export default function AssistantWorkspacePage({
   const active = conversation?.runs.find((r) =>
     ["queued", "running"].includes(r.status),
   );
+  const readOnly =
+    !!conversation && (conversation.lifecycle ?? "active") !== "active";
+  const writesDisabled =
+    busy || readOnly || (!!conversationId && !conversation);
+  function canLeave() {
+    if (busy || lifecycleWrite.current) return false;
+    if (editingDraftId || knowledgeDirty) {
+      setError("Save or cancel your edits before leaving this view.");
+      return false;
+    }
+    return (
+      (!text.trim() && !filesRef.current.length) ||
+      window.confirm("Discard your unsent message and screenshots?")
+    );
+  }
+  async function moveConversation(
+    item: ConversationListItem,
+    lifecycle: ConversationLifecycle,
+  ) {
+    if (busy || lifecycleWrite.current) return;
+    if (item.id === conversationId && !canLeave()) return;
+    if (
+      lifecycle === "trashed" &&
+      !window.confirm(
+        `Move “${item.title}” to Trash? You can restore it later. Saved information and offline copies are kept separately.`,
+      )
+    )
+      return;
+    lifecycleWrite.current = true;
+    draftWriteVersion.current++;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await workspaceApi<ConversationListItem>(
+        `/conversations/${item.id}/lifecycle`,
+        "PATCH",
+        {
+          version:
+            item.id === conversation?.id ? conversation.version : item.version,
+          lifecycle,
+        },
+      );
+      draftWriteVersion.current++;
+      setList((items) => items.filter((c) => c.id !== saved.id));
+      setHistoryRevision((n) => n + 1);
+      if (saved.id === currentId.current) {
+        setConversation((current) =>
+          current?.id === saved.id
+            ? {
+                ...current,
+                lifecycle: saved.lifecycle ?? lifecycle,
+                version: saved.version,
+              }
+            : current,
+        );
+        setSendDraft(null);
+        setText("");
+        clearFiles();
+      }
+      if (
+        lifecycle !== "active" &&
+        localStorage.getItem(lastConversationKey) === saved.id
+      )
+        localStorage.removeItem(lastConversationKey);
+    } catch (e) {
+      setError(friendly(e));
+      setHistoryRevision((n) => n + 1);
+      await refresh().catch(() => undefined);
+    } finally {
+      lifecycleWrite.current = false;
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     if (!active) return;
     let live = true;
@@ -320,19 +434,15 @@ export default function AssistantWorkspacePage({
     };
   }, [active?.id, refresh]);
   async function create() {
-    if (editingDraftId) {
-      setError(
-        "Save or cancel your draft edits before opening another conversation.",
-      );
-      return null;
-    }
+    if (!canLeave()) return null;
     setBusy(true);
     setError("");
     try {
       const c = await workspaceApi<Conversation>("/conversations", "POST", {
         title: "New conversation",
       });
-      setList((items) => [{ id: c.id, title: c.title }, ...items]);
+      setHistoryView("active");
+      setHistoryRevision((n) => n + 1);
       navigate(`/assistant/workspace/${c.id}`);
       return c.id;
     } catch (e) {
@@ -352,7 +462,7 @@ export default function AssistantWorkspacePage({
     }
     if (
       (!text.trim() && !filesRef.current.length) ||
-      busy ||
+      writesDisabled ||
       active ||
       submission.current
     )
@@ -384,7 +494,8 @@ export default function AssistantWorkspacePage({
         if (!stillHere()) return;
         id = c.id;
         pendingConversation.current = id;
-        setList((items) => [{ id: c.id, title: c.title }, ...items]);
+        setHistoryView("active");
+        setHistoryRevision((n) => n + 1);
       }
       const fingerprint = JSON.stringify({
         conversationId: id,
@@ -435,6 +546,7 @@ export default function AssistantWorkspacePage({
     }
   }
   async function action(id: string, confirmation?: HumanConfirmation) {
+    if (writesDisabled) return;
     const saved = conversation?.actions.find((a) => a.id === id);
     if (!saved) return;
     setBusy(true);
@@ -469,6 +581,7 @@ export default function AssistantWorkspacePage({
     }
   }
   async function editDraft(draft: Draft, changes: DraftEdits) {
+    if (writesDisabled) throw new Error("ASSISTANT_CONVERSATION_INACTIVE");
     const id = conversationId;
     draftWriteVersion.current++;
     // Use the draft returned by PATCH immediately. A later conversation refresh
@@ -502,6 +615,7 @@ export default function AssistantWorkspacePage({
     }
   }
   async function saveDraft(draft: Draft) {
+    if (writesDisabled) return;
     setBusy(true);
     setError("");
     try {
@@ -549,7 +663,16 @@ export default function AssistantWorkspacePage({
           <button
             type="button"
             className={button}
-            onClick={() => setTab("chat")}
+            onClick={() => {
+              if (knowledgeDirty) {
+                setError(
+                  "Save or cancel your saved info edits before returning to chat.",
+                );
+                return;
+              }
+              setInitialNote(undefined);
+              setTab("chat");
+            }}
             aria-pressed={tab === "chat"}
           >
             <MessageSquare className="mr-1 inline h-4 w-4" />
@@ -563,7 +686,7 @@ export default function AssistantWorkspacePage({
             aria-pressed={tab === "knowledge"}
           >
             <BookOpen className="mr-1 inline h-4 w-4" />
-            Business rules
+            Saved info & rules
           </button>
         </div>
       </header>
@@ -600,7 +723,11 @@ export default function AssistantWorkspacePage({
           <p role="status">Loading assistant…</p>
         )
       ) : !status.ready ? null : tab === "knowledge" ? (
-        <KnowledgePanel />
+        <KnowledgePanel
+          selection={conversation?.selection}
+          initialNote={initialNote}
+          onDirtyChange={setKnowledgeDirty}
+        />
       ) : (
         <>
           {(!historyInline || !resultsInline) && (
@@ -644,51 +771,49 @@ export default function AssistantWorkspacePage({
               inline={historyInline}
               side="left"
             >
-              <aside className="min-w-0 rounded-xl border bg-white p-3">
-                <button
-                  type="button"
-                  className={`${button} w-full`}
-                  onClick={() => {
-                    setHistoryOpen(false);
-                    void create();
-                  }}
-                  disabled={busy}
-                >
-                  <Plus className="mr-1 inline h-4 w-4" />
-                  New conversation
-                </button>
-                <nav
-                  aria-label="Saved conversations"
-                  className="mt-3 flex max-h-[75dvh] flex-col gap-2 overflow-auto"
-                >
-                  {list.map((c) => (
-                    <a
-                      key={c.id}
-                      href={`/assistant/workspace/${c.id}`}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        if (editingDraftId) {
-                          setError(
-                            "Save or cancel your draft edits before opening another conversation.",
-                          );
-                          setHistoryOpen(false);
-                          return;
-                        }
-                        setHistoryOpen(false);
-                        navigate(`/assistant/workspace/${c.id}`);
-                      }}
-                      aria-current={
-                        conversationId === c.id ? "page" : undefined
-                      }
-                      className={`min-w-32 rounded-lg p-3 text-sm ${conversationId === c.id ? "bg-teal-50 font-semibold text-teal-900" : "hover:bg-slate-50"}`}
-                    >
-                      {c.title}
-                    </a>
-                  ))}
-                </nav>
-              </aside>
+              <ConversationHistory
+                items={list}
+                view={historyView}
+                selectedId={conversationId}
+                busy={busy || !!editingDraftId}
+                loading={historyLoading}
+                button={button}
+                onView={setHistoryView}
+                onCreate={() => void create()}
+                onOpen={(id) => {
+                  if (id !== conversationId && !canLeave()) return;
+                  setHistoryOpen(false);
+                  navigate(`/assistant/workspace/${id}`);
+                }}
+                onMove={(item, lifecycle) =>
+                  void moveConversation(item, lifecycle)
+                }
+              />
             </WorkspacePanel>
             <section className="flex h-[calc(100dvh-19rem)] min-h-[26rem] min-w-0 flex-col rounded-xl border bg-white md:h-[calc(100dvh-16rem)]">
+              {readOnly && conversation && (
+                <div className="border-b bg-amber-50 p-3 text-sm">
+                  <p>
+                    This conversation is{" "}
+                    {conversation.lifecycle === "trashed"
+                      ? "in Trash"
+                      : "archived"}
+                    . Restore it to send messages or change drafts and actions.
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Saved information and offline copies are managed separately.
+                  </p>
+                  <button
+                    className={`${button} mt-2`}
+                    disabled={busy}
+                    onClick={() =>
+                      void moveConversation(conversation, "active")
+                    }
+                  >
+                    Restore conversation
+                  </button>
+                </div>
+              )}
               <div className="border-b p-4">
                 <label className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
                   Model{" "}
@@ -697,7 +822,7 @@ export default function AssistantWorkspacePage({
                     aria-describedby="workspace-model-help"
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
-                    disabled={busy || !!active}
+                    disabled={writesDisabled || !!active}
                   >
                     {status.models.map((m) => (
                       <option key={m} value={m}>
@@ -729,7 +854,7 @@ export default function AssistantWorkspacePage({
                 }}
               >
                 <ConversationContext summary={conversation?.summary} />
-                {!conversation?.messages.length && (
+                {!readOnly && !conversation?.messages.length && (
                   <div className="py-10">
                     <h2 className="text-xl font-semibold">What needs doing?</h2>
                     <p className="mt-2 text-sm text-slate-600">
@@ -779,6 +904,29 @@ export default function AssistantWorkspacePage({
                         <p className="whitespace-pre-wrap">{m.text}</p>
                       )}
                     </div>
+                    {m.text.trim() && (
+                      <button
+                        type="button"
+                        className="mt-2 min-h-11 rounded-lg border px-3 py-2 text-sm text-teal-900 disabled:opacity-50"
+                        disabled={busy || !!editingDraftId}
+                        onClick={() => {
+                          if (knowledgeDirty) {
+                            setError(
+                              "Save or cancel your saved info edits first.",
+                            );
+                            return;
+                          }
+                          setInitialNote({
+                            id: m.id,
+                            text: m.text,
+                            sourceLabel: `Conversation: ${conversation.title}`,
+                          });
+                          setTab("knowledge");
+                        }}
+                      >
+                        Remember this
+                      </button>
+                    )}
                   </article>
                 ))}
               </div>
@@ -828,7 +976,7 @@ export default function AssistantWorkspacePage({
               >
                 <ScreenshotPicker
                   files={files}
-                  disabled={busy || !!active}
+                  disabled={writesDisabled || !!active}
                   onAdd={addFiles}
                   onRemove={removeFile}
                 />
@@ -838,7 +986,7 @@ export default function AssistantWorkspacePage({
                 <textarea
                   id="workspace-message"
                   ref={composer}
-                  disabled={busy}
+                  disabled={writesDisabled}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
                   placeholder="Ask a follow-up or describe what you want done…"
@@ -868,7 +1016,9 @@ export default function AssistantWorkspacePage({
                   ) : (
                     <button
                       type="submit"
-                      disabled={busy || (!text.trim() && !files.length)}
+                      disabled={
+                        writesDisabled || (!text.trim() && !files.length)
+                      }
                       className={`${focused ? "min-h-[48px] text-[16px]" : "min-h-11 text-sm"} rounded-lg bg-teal-800 px-4 py-2 font-semibold text-white disabled:opacity-50`}
                     >
                       <Send className="mr-2 inline h-4 w-4" />
@@ -889,8 +1039,9 @@ export default function AssistantWorkspacePage({
                   batches={conversation?.campaigns ?? []}
                   reviews={conversation?.campaignReviews ?? []}
                   selectedBatchId={conversation?.selection.batchId ?? null}
-                  busy={busy || !!active}
+                  busy={writesDisabled || !!active}
                   onRequest={(message) => {
+                    if (writesDisabled) return;
                     setText(message);
                     setResultsOpen(false);
                     requestAnimationFrame(() => composer.current?.focus());
@@ -913,7 +1064,7 @@ export default function AssistantWorkspacePage({
                     key={d.id}
                     draft={d}
                     busy={
-                      busy ||
+                      writesDisabled ||
                       !!active ||
                       (!!editingDraftId && editingDraftId !== d.id)
                     }
@@ -923,15 +1074,18 @@ export default function AssistantWorkspacePage({
                       setSendDraft(null);
                     }}
                     onRevise={() => {
+                      if (writesDisabled) return;
                       setText(`Revise draft ${d.id}: `);
                       setResultsOpen(false);
                       requestAnimationFrame(() => composer.current?.focus());
                     }}
                     onSave={() => void saveDraft(d)}
-                    onReviewSend={() => setSendDraft(d)}
+                    onReviewSend={() => {
+                      if (!writesDisabled) setSendDraft(d);
+                    }}
                   />
                 ))}
-                {sendDraft && (
+                {sendDraft && !readOnly && (
                   <SendReview
                     draft={sendDraft}
                     onClose={() => setSendDraft(null)}
@@ -939,7 +1093,7 @@ export default function AssistantWorkspacePage({
                   />
                 )}
                 <ActionResults
-                  busy={busy || !!editingDraftId}
+                  busy={writesDisabled || !!editingDraftId}
                   items={
                     conversation?.actions.map((a) => ({
                       id: a.id,

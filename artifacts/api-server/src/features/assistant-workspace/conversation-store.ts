@@ -19,12 +19,19 @@ export type Message = Turn & {
 export type Conversation = {
   id: string;
   title: string;
+  lifecycle: ConversationLifecycle;
   selection: Selection;
   summary: unknown;
   version: number;
   updatedAt: string;
   messages: Message[];
 };
+export const conversationLifecycleSchema = z.enum([
+  "active",
+  "archived",
+  "trashed",
+]);
+export type ConversationLifecycle = z.infer<typeof conversationLifecycleSchema>;
 const message = (r: any): Message => ({
   id: r.id,
   role: r.role,
@@ -56,6 +63,7 @@ const scopeColumns = `m.*, r.id AS run_id, r.checkpoint->'input'->'selection' AS
 const conversation = (r: any): Conversation => ({
   id: r.id,
   title: r.title,
+  lifecycle: conversationLifecycleSchema.parse(r.lifecycle),
   selection: selectionSchema.parse(r.selection),
   summary: r.summary,
   version: r.version,
@@ -135,12 +143,42 @@ export class ConversationStore {
     );
     return conversation(rows.rows[0]);
   }
-  async list(actorId: string): Promise<Conversation[]> {
+  async list(
+    actorId: string,
+    lifecycle: ConversationLifecycle = "active",
+  ): Promise<Conversation[]> {
     const r = await this.db.query(
-      `select * from assistant_workspace_conversations where actor_id=$1 order by updated_at desc,id desc limit 100`,
-      [actorId],
+      `select * from assistant_workspace_conversations where actor_id=$1 and lifecycle=$2 order by updated_at desc,id desc limit 100`,
+      [actorId, conversationLifecycleSchema.parse(lifecycle)],
     );
     return r.rows.map(conversation);
+  }
+  async setLifecycle(
+    actorId: string,
+    id: string,
+    expectedVersion: number,
+    lifecycle: ConversationLifecycle,
+  ): Promise<Conversation> {
+    const parsed = conversationLifecycleSchema.parse(lifecycle);
+    // The database trigger shares a conversation row lock with new-work guards.
+    // It rejects active/uncertain work atomically, including direct Gmail actions.
+    const result = await this.db.query(
+      `UPDATE assistant_workspace_conversations SET lifecycle=$4,version=version+1,updated_at=now()
+       WHERE id=$1 AND actor_id=$2 AND version=$3 RETURNING *`,
+      [id, actorId, expectedVersion, parsed],
+    );
+    if (!result.rows[0]) {
+      const owned = await this.db.query(
+        "SELECT id FROM assistant_workspace_conversations WHERE id=$1 AND actor_id=$2",
+        [id, actorId],
+      );
+      throw new Error(
+        owned.rows.length
+          ? "ASSISTANT_VERSION_CONFLICT"
+          : "ASSISTANT_CONVERSATION_NOT_FOUND",
+      );
+    }
+    return conversation(result.rows[0]);
   }
   async get(actorId: string, id: string): Promise<Conversation | null> {
     const r = await this.db.query(
@@ -196,10 +234,18 @@ export class ConversationStore {
   ): Promise<Conversation> {
     const parsed = selectionSchema.parse(selection);
     const r = await this.db.query(
-      `update assistant_workspace_conversations set selection=$4::jsonb,version=version+1,updated_at=now() where id=$1 and actor_id=$2 and version=$3 returning *`,
+      `update assistant_workspace_conversations set selection=$4::jsonb,version=version+1,updated_at=now() where id=$1 and actor_id=$2 and version=$3 and lifecycle='active' returning *`,
       [id, actorId, expectedVersion, JSON.stringify(parsed)],
     );
-    if (!r.rows[0]) throw new Error("ASSISTANT_VERSION_CONFLICT");
+    if (!r.rows[0]) {
+      const current = await this.db.query(
+        "SELECT lifecycle FROM assistant_workspace_conversations WHERE id=$1 AND actor_id=$2",
+        [id, actorId],
+      );
+      if (current.rows[0] && current.rows[0].lifecycle !== "active")
+        throw new Error("ASSISTANT_CONVERSATION_INACTIVE");
+      throw new Error("ASSISTANT_VERSION_CONFLICT");
+    }
     return conversation(r.rows[0]);
   }
 }

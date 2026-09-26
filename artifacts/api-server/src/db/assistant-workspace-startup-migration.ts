@@ -1,3 +1,4 @@
+import { assistantWorkspaceLifecycleSql } from "./assistant-workspace-lifecycle";
 export const assistantWorkspaceSql = `CREATE TABLE IF NOT EXISTS assistant_workspace_conversations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id text NOT NULL,
  title text NOT NULL, selection jsonb NOT NULL,
@@ -118,6 +119,7 @@ export async function ensureAssistantWorkspaceSchema(db: {
   query(sql: string): Promise<unknown>;
   exec?(sql: string): Promise<unknown>;
 }) {
-  if (db.exec) await db.exec(assistantWorkspaceSql);
-  else await db.query(assistantWorkspaceSql);
+  if (db.exec)
+    await db.exec(assistantWorkspaceSql + assistantWorkspaceLifecycleSql);
+  else await db.query(assistantWorkspaceSql + assistantWorkspaceLifecycleSql);
 }
