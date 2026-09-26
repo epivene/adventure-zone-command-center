@@ -16,7 +16,13 @@ const config = () =>
 const response = (status = "completed") => ({
   id: "response",
   status,
-  usage: { input_tokens: 17, output_tokens: 13 },
+  model: "gpt-6-sol",
+  service_tier: "default",
+  usage: {
+    input_tokens: 17,
+    output_tokens: 13,
+    input_tokens_details: { cached_tokens: 2, cache_write_tokens: 0 },
+  },
   output: [
     {
       type: "web_search_call",
@@ -85,6 +91,24 @@ it("uses the chosen model and bounded public research, retaining citations separ
   });
   expect(r.status).toBe("partial");
   expect(r.usage).toEqual({ inputTokens: 17, outputTokens: 13 });
+  expect((r.data as any).model).toBe("gpt-6-sol");
+  expect(r.costCalls).toHaveLength(1);
+  expect(r.costCalls?.[0]).toMatchObject({
+    responseId: "response",
+    source: "research",
+    model: "gpt-6-sol",
+    serviceTier: "default",
+    inputTokens: 17,
+    cachedInputTokens: 2,
+    cacheWriteTokens: 0,
+    outputTokens: 13,
+    observedAt: expect.any(String),
+    pricingVersion: expect.any(String),
+    estimatedUsd: expect.any(Number),
+    excluded: [
+      "Public research tool fees and any separately billed search content are excluded.",
+    ],
+  });
   expect((r.data as any).parts[0].citations).toHaveLength(1);
   expect((r.data as any).consultedSources).toHaveLength(1);
   expect(JSON.stringify(r)).not.toContain("password");
@@ -172,4 +196,52 @@ it("rejects DNS-root-dot local and internal URLs", () => {
     "http://foo.localhost./",
   ])
     expect(safePublicUrl(url)).toBeNull();
+});
+
+it("keeps metering when a paid research response cannot be parsed", async () => {
+  const result = await researchPublicSources(
+    config(),
+    "chosen-model",
+    "query",
+    new AbortController().signal,
+    async () =>
+      new Response(JSON.stringify({ ...response(), output: {} }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  expect(result.status).toBe("uncertain");
+  expect(result.usage).toEqual({ inputTokens: 17, outputTokens: 13 });
+  expect(result.usageUnknown).toBe(false);
+  expect(result.costCalls).toHaveLength(1);
+  expect(result.costCalls?.[0]).toMatchObject({
+    responseId: "response",
+    source: "research",
+    model: "gpt-6-sol",
+    cachedInputTokens: 2,
+    excluded: [
+      "Public research tool fees and any separately billed search content are excluded.",
+    ],
+  });
+});
+it("retains response metadata when research usage is unreported", async () => {
+  const result = await researchPublicSources(
+    config(),
+    "chosen-model",
+    "query",
+    new AbortController().signal,
+    async () =>
+      new Response(JSON.stringify({ ...response(), usage: undefined }), {
+        headers: { "Content-Type": "application/json" },
+      }),
+  );
+  expect(result.usageUnknown).toBe(true);
+  expect(result.usage).toBeUndefined();
+  expect(result.costCalls).toHaveLength(1);
+  expect(result.costCalls?.[0]).toMatchObject({
+    responseId: "response",
+    model: "gpt-6-sol",
+    inputTokens: null,
+    outputTokens: null,
+    estimatedUsd: null,
+  });
 });

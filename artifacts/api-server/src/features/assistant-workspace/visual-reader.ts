@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import type { ModelConfig } from "./model-config";
 import type { RunStore } from "./run-store";
 import type { DocumentReaderDependencies } from "./document-reader";
+import type { ToolResult } from "./contracts";
+import { meterOpenAiResponse } from "./usage-cost";
 export function createOwnedVisualReader(
   config: ModelConfig,
   runs: Pick<RunStore, "get">,
@@ -59,6 +61,9 @@ export function createVisualReader(
       AbortSignal.timeout(config.timeoutMs),
     ]);
     const data = `data:${input.mimeType};base64,${Buffer.from(input.bytes).toString("base64")}`;
+    let usage: ToolResult["usage"];
+    let costCalls: ToolResult["costCalls"];
+    let model = config.model;
     try {
       const response = await client.responses.create(
         {
@@ -96,7 +101,9 @@ export function createVisualReader(
         },
         { signal },
       );
-      const usage =
+      costCalls = [meterOpenAiResponse(response, "document")];
+      model = response.model || config.model;
+      usage =
         response.usage &&
         Number.isFinite(response.usage.input_tokens) &&
         Number.isFinite(response.usage.output_tokens)
@@ -122,13 +129,16 @@ export function createVisualReader(
             .slice(0, 80000),
         usage,
         usageUnknown: !usage,
-        model: config.model,
+        costCalls,
+        model,
       };
     } catch {
       return {
-        text: "Visual reading interrupted; review the original. Provider usage could not be verified.",
-        usageUnknown: true,
-        model: config.model,
+        text: `Visual reading interrupted; review the original.${usage ? "" : " Provider usage could not be verified."}`,
+        usage,
+        usageUnknown: !usage,
+        costCalls,
+        model,
       };
     }
   };

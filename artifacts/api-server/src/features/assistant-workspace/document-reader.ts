@@ -40,6 +40,7 @@ export interface DocumentReaderDependencies {
   }): Promise<{
     text: string;
     usage?: { inputTokens: number; outputTokens: number };
+    costCalls?: ToolResult["costCalls"];
     usageUnknown?: boolean;
     model?: string;
   }>;
@@ -150,6 +151,7 @@ export class DocumentReader {
         status: "partial",
         usage: visualResult.usage,
         usageUnknown: visualResult.usageUnknown,
+        costCalls: visualResult.costCalls,
         data: {
           extractionModel: visualResult.model ?? null,
           executionStatus: "unverified",
@@ -231,6 +233,7 @@ export class DocumentReader {
       const version = `${hash}:pdfjs-text-v1`;
       let visual = "";
       let usage: ToolResult["usage"];
+      let costCalls: ToolResult["costCalls"];
       let usageUnknown = false;
       let extractionModel: string | undefined;
       if (!completeness.complete && this.deps.visualExtract) {
@@ -243,6 +246,7 @@ export class DocumentReader {
         });
         visual = visualResult.text;
         usage = visualResult.usage;
+        costCalls = visualResult.costCalls;
         usageUnknown = visualResult.usageUnknown ?? false;
         extractionModel = visualResult.model;
       }
@@ -250,6 +254,7 @@ export class DocumentReader {
       return {
         status: completeness.complete ? "ok" : "partial",
         ...(usage ? { usage } : {}),
+        ...(costCalls ? { costCalls } : {}),
         usageUnknown,
         data: {
           ...completeness,

@@ -2,6 +2,20 @@ import { it, expect, vi } from "vitest";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import { DocumentReader, documentCompleteness } from "./document-reader";
 import { emptySelection, type RunContext } from "./contracts";
+const visualCostCall = {
+  responseId: "visual-response",
+  source: "document" as const,
+  model: "gpt-6-sol",
+  serviceTier: "default",
+  inputTokens: 12,
+  cachedInputTokens: 2,
+  cacheWriteTokens: 0,
+  outputTokens: 7,
+  observedAt: "2026-09-25T00:00:00.000Z",
+  pricingVersion: "test-rate-card",
+  estimatedUsd: 0.0002,
+  excluded: [],
+};
 const context: RunContext = {
   actor: { id: "owner", role: "owner", connectionId: "g" },
   conversationId: "c",
@@ -99,6 +113,8 @@ it("includes visual transcription without asserting scanned-page completeness", 
   const visualExtract = vi.fn().mockResolvedValue({
     text: "Page 2: handwritten delivery note, verify date.",
     usage: { inputTokens: 12, outputTokens: 7 },
+    model: "gpt-6-sol",
+    costCalls: [visualCostCall],
   });
   const r = new DocumentReader({
     ownerId: "owner",
@@ -112,6 +128,8 @@ it("includes visual transcription without asserting scanned-page completeness", 
   const output = await r.read(context, { messageId: "m", attachmentId: "a" });
   expect(visualExtract).toHaveBeenCalledTimes(1);
   expect(output.usage).toEqual({ inputTokens: 12, outputTokens: 7 });
+  expect(output.costCalls).toEqual([visualCostCall]);
+  expect(output.data).toMatchObject({ extractionModel: "gpt-6-sol" });
   expect(output.evidence[0].text).toContain("handwritten delivery note");
   expect(output.evidence[0].complete).toBe(false);
 });
@@ -190,4 +208,31 @@ it("preserves unknown visual usage instead of silently allowing another model st
   });
   expect(output.usageUnknown).toBe(true);
   expect(output.evidence[0].text).toContain("Contract");
+});
+
+it("retains metering for image transcriptions that still require review", async () => {
+  const reader = new DocumentReader({
+    ownerId: "owner",
+    load: async () => ({
+      bytes: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      recordId: "image",
+      eventYear: 2027,
+    }),
+    visualExtract: async () => ({
+      text: "Handwritten date: 2027",
+      model: "gpt-6-sol",
+      usage: { inputTokens: 12, outputTokens: 7 },
+      costCalls: [visualCostCall],
+    }),
+  });
+  const output = await reader.read(context, {
+    messageId: "m",
+    attachmentId: "a",
+  });
+  expect(output.costCalls).toEqual([visualCostCall]);
+  expect(output.data).toMatchObject({
+    extractionModel: "gpt-6-sol",
+    complete: false,
+  });
+  expect(output.evidence[0].text).toContain("Handwritten date: 2027");
 });

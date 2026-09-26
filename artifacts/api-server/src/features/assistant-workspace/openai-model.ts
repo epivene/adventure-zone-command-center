@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { meterOpenAiResponse, ModelCostError } from "./usage-cost";
 import type {
   ResponseInputItem,
   Tool,
@@ -169,45 +170,67 @@ export function createOpenAiModel(
             event.type === "response.failed" ||
             event.type === "response.incomplete" ||
             event.type === "error"
-          )
+          ) {
+            if (event.type !== "error") final = event.response;
             throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
+          }
         }
       } catch (error) {
-        if (input.signal.aborted) throw new Error("ASSISTANT_CANCELLED");
-        throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
+        throw new ModelCostError(
+          input.signal.aborted
+            ? "ASSISTANT_CANCELLED"
+            : "ASSISTANT_MODEL_UNAVAILABLE",
+          meterOpenAiResponse(final, "assistant"),
+        );
       }
       if (!final || final.status !== "completed")
-        throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
-      const calls = final.output.flatMap((item) => {
-        if (item.type !== "function_call") return [];
-        let args: unknown;
-        try {
-          args = JSON.parse(item.arguments);
-        } catch {
-          throw new Error("ASSISTANT_MODEL_ARGUMENTS_INVALID");
-        }
-        if (!args || typeof args !== "object" || Array.isArray(args))
-          throw new Error("ASSISTANT_MODEL_ARGUMENTS_INVALID");
-        return [
-          { id: item.call_id, name: item.name, arguments: item.arguments },
-        ];
-      });
-      const text = final.output
-        .flatMap((item) =>
-          item.type === "message"
-            ? item.content.flatMap((c) =>
-                c.type === "output_text" ? [c.text] : [],
-              )
-            : [],
-        )
-        .join("\n");
-      return {
-        text,
-        calls,
-        providerItems: final.output,
-        inputTokens: final.usage?.input_tokens ?? 0,
-        outputTokens: final.usage?.output_tokens ?? 0,
-      };
+        throw new ModelCostError(
+          "ASSISTANT_MODEL_UNAVAILABLE",
+          meterOpenAiResponse(final, "assistant"),
+        );
+      const costCall = meterOpenAiResponse(final, "assistant");
+      try {
+        const calls = final.output.flatMap((item) => {
+          if (item.type !== "function_call") return [];
+          let args: unknown;
+          try {
+            args = JSON.parse(item.arguments);
+          } catch {
+            throw new ModelCostError(
+              "ASSISTANT_MODEL_ARGUMENTS_INVALID",
+              costCall,
+            );
+          }
+          if (!args || typeof args !== "object" || Array.isArray(args))
+            throw new ModelCostError(
+              "ASSISTANT_MODEL_ARGUMENTS_INVALID",
+              costCall,
+            );
+          return [
+            { id: item.call_id, name: item.name, arguments: item.arguments },
+          ];
+        });
+        const text = final.output
+          .flatMap((item) =>
+            item.type === "message"
+              ? item.content.flatMap((c) =>
+                  c.type === "output_text" ? [c.text] : [],
+                )
+              : [],
+          )
+          .join("\n");
+        return {
+          costCall,
+          text,
+          calls,
+          providerItems: final.output,
+          inputTokens: final.usage?.input_tokens ?? 0,
+          outputTokens: final.usage?.output_tokens ?? 0,
+        };
+      } catch (error) {
+        if (error instanceof ModelCostError) throw error;
+        throw new ModelCostError("ASSISTANT_MODEL_UNAVAILABLE", costCall);
+      }
     },
   };
 }

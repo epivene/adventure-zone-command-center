@@ -1,3 +1,8 @@
+import {
+  meterOpenAiResponse,
+  ModelCostError,
+  type CostCheckpoint,
+} from "./usage-cost";
 import type {
   RunContext,
   ModelPort,
@@ -14,6 +19,7 @@ import type { SavedConversationContext } from "./conversation-context";
 import { projectModelContext } from "./model-context";
 import { discoverModelTools, modelToolDefinitions } from "./model-tools";
 export type TurnCheckpoint = {
+  cost?: CostCheckpoint;
   context?: SavedConversationContext;
   providerItems: unknown[];
   pending: ToolCall[];
@@ -59,6 +65,17 @@ export async function runTurn(
     steps: 0,
     tokens: 0,
   };
+  const cost = (cp.cost ??= {
+    calls: {},
+    excluded: loaded.checkpoint
+      ? ["Historical or unmetered checkpoint usage is unavailable."]
+      : [],
+  });
+  if (cost.pendingModel) {
+    cost.calls[`interrupted:${Object.keys(cost.calls).length}`] =
+      meterOpenAiResponse(null, "assistant");
+    cost.pendingModel = false;
+  }
   const receipts = () => Object.values(cp.results).flatMap((r) => r.receipts);
   const limitStop = (reason: "usage" | "step") => {
     const verified = receipts();
@@ -152,6 +169,18 @@ export async function runTurn(
             ...new Set([...(cp.discoveredTools ?? []), ...discovery.names]),
           ];
         cp.results[call.id] = output;
+        for (const [index, measured] of (output.costCalls ?? []).entries())
+          cost.calls[`tool:${call.id}:${index}`] = measured;
+        if (
+          !output.costCalls?.length &&
+          (output.usageUnknown ||
+            (output.usage &&
+              output.usage.inputTokens + output.usage.outputTokens > 0))
+        )
+          cost.calls[`tool:${call.id}:unknown`] = meterOpenAiResponse(
+            null,
+            call.name === "research_public_sources" ? "research" : "document",
+          );
         if (output.screenshots?.length) {
           const next = new Map((cp.screenshots ?? []).map((a) => [a.id, a]));
           for (const a of output.screenshots) {
@@ -204,18 +233,34 @@ export async function runTurn(
         "partial",
         "This run collected too much source material. Continue with a narrower question; the original history and saved drafts remain available.",
       );
-    const step = await model.next({
-      instructions:
-        workspaceInstructions + budgetInstructions + closingInstructions,
-      turns,
-      memory: cp.context?.memory,
-      state: context.selection,
-      evidence: cp.evidence,
-      providerItems: cp.providerItems,
-      screenshots: cp.screenshots,
-      toolDefinitions: definitions,
-      signal: context.signal,
-    });
+    cost.pendingModel = true;
+    await store.save(cp);
+    let step;
+    try {
+      step = await model.next({
+        instructions:
+          workspaceInstructions + budgetInstructions + closingInstructions,
+        turns,
+        memory: cp.context?.memory,
+        state: context.selection,
+        evidence: cp.evidence,
+        providerItems: cp.providerItems,
+        screenshots: cp.screenshots,
+        toolDefinitions: definitions,
+        signal: context.signal,
+      });
+    } catch (error) {
+      cost.pendingModel = false;
+      cost.calls[`model:${Object.keys(cost.calls).length}`] =
+        error instanceof ModelCostError
+          ? error.costCall
+          : meterOpenAiResponse(null, "assistant");
+      await store.save(cp);
+      throw error;
+    }
+    cost.pendingModel = false;
+    cost.calls[`model:${Object.keys(cost.calls).length}`] =
+      step.costCall ?? meterOpenAiResponse(null, "assistant");
     cp.steps++;
     cp.tokens += step.inputTokens + step.outputTokens;
     cp.providerItems.push(...step.providerItems);

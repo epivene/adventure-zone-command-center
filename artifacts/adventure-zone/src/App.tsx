@@ -1,4 +1,5 @@
 import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
+import AssistantOfflinePage from "@/pages/AssistantOfflinePage";
 import { ManagerAuthProvider, useManagerAuth } from "@/lib/manager-auth-context";
 import { MANAGER_PROTECTED_PATH } from "@/lib/manager-route-pattern";
 import { ADMIN_AFTERMATH_PATH, ADMIN_WRAP_UP_PATH } from "@/lib/admin-aftermath-route";
@@ -185,12 +186,13 @@ function SignInPage() {
         {error ? <p className="mt-3 text-sm font-medium text-destructive" role="alert">{error}</p> : null}
         <Button className="mt-4 w-full" disabled={submitting || password.length === 0} type="submit">{submitting ? "Signing in…" : "Sign in"}</Button>
       </form>
+      <Link href="/assistant/offline" className="mt-4 inline-flex min-h-12 items-center text-sm text-teal-800 underline">Open saved offline workspace</Link>
     </AuthScreen>
   );
 }
 
 function Landing() {
-  return <CommandTerminalLanding />;
+  return <><CommandTerminalLanding /><div className="p-4 text-center"><Link href="/assistant/offline" className="inline-flex min-h-12 items-center text-sm text-teal-800 underline">Open saved offline workspace</Link></div></>;
 }
 
 function LoadingScreen() {
@@ -446,6 +448,7 @@ function AppRoutes() {
   return (
     <Suspense fallback={<LoadingScreen />}>
       <Switch>
+        <Route path="/assistant/offline" component={AssistantOfflinePage} />
         <Route path="/" component={HomeRoute} />
         <Route path="/sign-in" component={SignInPage} />
         <Route path="/office/sign-in"><OfficeAuthProvider><OfficeSignInPage /></OfficeAuthProvider></Route>

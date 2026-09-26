@@ -448,3 +448,79 @@ it("saves manual edits without an AI run and invalidates the old Gmail revision"
     });
   expect(extra.status).toBe(422);
 });
+
+import { meterOpenAiResponse } from "../features/assistant-workspace/usage-cost";
+it("exposes persisted estimates and totals every conversation run beyond the recent-run window", async () => {
+  const f = await fixture();
+  f.runtime.actions = { list: async () => [] };
+  f.runtime.drafts = { list: async () => [] };
+  const submitted = await request(f.app)
+    .post(`/conversations/${f.c.id}/messages`)
+    .set("Authorization", f.authorization)
+    .send({ requestKey: "cost-0", text: "Review" });
+  const costCall = meterOpenAiResponse(
+    {
+      id: "private-provider-id",
+      model: "gpt-6-sol",
+      service_tier: "default",
+      status: "completed",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 10,
+        input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 },
+      },
+    },
+    "assistant",
+  );
+  await database.query(
+    "UPDATE assistant_workspace_runs SET status='succeeded', checkpoint=jsonb_set(checkpoint,'{turn}',$2::jsonb) WHERE id=$1",
+    [
+      submitted.body.runId,
+      JSON.stringify({
+        steps: 1,
+        tokens: 110,
+        results: {},
+        cost: { calls: { one: costCall }, excluded: [] },
+        final: { status: "succeeded", text: "Done", receipts: [] },
+      }),
+    ],
+  );
+  await database.query(
+    "INSERT INTO assistant_workspace_runs(conversation_id,actor_id,request_key,source_message_id,status,checkpoint) SELECT conversation_id,actor_id,'cost-' || n,source_message_id,status,checkpoint FROM assistant_workspace_runs CROSS JOIN generate_series(1,31) n WHERE id=$1",
+    [submitted.body.runId],
+  );
+  const read = await request(f.app)
+    .get(`/conversations/${f.c.id}`)
+    .set("Authorization", f.authorization);
+  expect(read.status).toBe(200);
+  expect(read.body.runs).toHaveLength(30);
+  expect(read.body.usage.cost).toMatchObject({
+    estimatedUsd: 0.007616,
+    status: "complete",
+    pricedCalls: 32,
+  });
+  expect(read.body.runs[0].usage.cost).toMatchObject({
+    estimatedUsd: 0.000238,
+    status: "complete",
+  });
+  expect(JSON.stringify(read.body)).not.toContain("private-provider-id");
+  const single = await request(f.app)
+    .get(`/runs/${submitted.body.runId}`)
+    .set("Authorization", f.authorization);
+  expect(single.body.usage.cost).toMatchObject({
+    estimatedUsd: 0.000238,
+    status: "complete",
+  });
+  await database.query(
+    "UPDATE assistant_workspace_runs SET checkpoint=checkpoint-'turn' WHERE id=$1",
+    [submitted.body.runId],
+  );
+  const legacy = await request(f.app)
+    .get(`/conversations/${f.c.id}`)
+    .set("Authorization", f.authorization);
+  expect(legacy.body.usage.cost).toMatchObject({
+    estimatedUsd: 0.007378,
+    status: "partial",
+    pricedCalls: 31,
+  });
+});

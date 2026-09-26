@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
+import { offlineShellManifest } from './build/offline-shell-manifest';
 
 // PORT is only needed for the dev/preview servers; production builds don't
 // bind a port. BASE_PATH defaults to the artifact's root mount ('/').
@@ -22,6 +23,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     runtimeErrorOverlay(),
+    offlineShellManifest(),
     ...(process.env.NODE_ENV !== 'production' &&
     process.env.REPL_ID !== undefined
       ? [

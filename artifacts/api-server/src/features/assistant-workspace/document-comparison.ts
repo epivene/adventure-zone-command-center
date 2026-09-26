@@ -1,6 +1,7 @@
 import type { RunContext, ToolResult } from "./contracts";
 import type { DocumentReader } from "./document-reader";
 import { blocked, result } from "./read-tools";
+import { meterOpenAiResponse } from "./usage-cost";
 export type ComparisonSource = {
   id: string;
   title: string;
@@ -23,9 +24,24 @@ export async function compareDocuments(
   const outputs: ToolResult[] = [];
   const items = [];
   let chars = 0;
+  const costCalls = () =>
+    outputs.flatMap((output) => {
+      if (output.costCalls?.length) return output.costCalls;
+      if (
+        output.usageUnknown ||
+        (output.usage?.inputTokens ?? 0) + (output.usage?.outputTokens ?? 0) > 0
+      )
+        return [
+          meterOpenAiResponse(null, "document", [
+            "Some document reading usage lacks provider pricing metadata.",
+          ]),
+        ];
+      return [];
+    });
   const withUsage = (output: ToolResult): ToolResult => ({
     ...output,
     usageUnknown: outputs.some((o) => o.usageUnknown),
+    costCalls: costCalls(),
     usage: outputs.reduce(
       (s, o) => ({
         inputTokens: s.inputTokens + (o.usage?.inputTokens ?? 0),
@@ -120,6 +136,7 @@ export async function compareDocuments(
       outputs.flatMap((o) => o.evidence),
     ),
     usage,
+    costCalls: costCalls(),
     status: complete ? "ok" : "partial",
     code: complete ? null : "ASSISTANT_DOCUMENT_VISUAL_REVIEW_REQUIRED",
   };
