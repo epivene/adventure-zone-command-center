@@ -95,6 +95,12 @@ export type ActionIntent = {
   sourceMessageId: string;
 };
 export type ModelInput = {
+  spendingScope?: {
+    actorId: string;
+    conversationId: string;
+    runId: string;
+    callId: string;
+  };
   attachmentScope?: AttachmentScope;
   screenshots?: Screenshot[];
   memory?: ConversationMemory;

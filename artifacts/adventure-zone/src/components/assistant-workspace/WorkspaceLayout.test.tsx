@@ -4,6 +4,7 @@ import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
 import { workspaceApi } from "@/features/assistant-workspace/api";
 import type { Conversation } from "@/features/assistant-workspace/types";
 import { mockNativeDialog } from "@/test/native-dialog";
+import { spendingSummary } from "@/test/assistant-spending";
 
 vi.mock("@/features/assistant-workspace/api", () => ({
   workspaceApi: vi.fn(),
@@ -84,6 +85,7 @@ beforeEach(() => {
   localStorage.clear();
   restoreDialog = mockNativeDialog();
   vi.mocked(workspaceApi).mockImplementation(async (path) => {
+    if (path === "/spending") return spendingSummary;
     if (path === "/status")
       return {
         enabled: true,

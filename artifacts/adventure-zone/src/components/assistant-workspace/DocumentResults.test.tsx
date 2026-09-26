@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, it, expect, vi } from "vitest";
-import { cleanup, render, screen, fireEvent, within } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 import type { DocumentResult } from "@/features/assistant-workspace/types";
 import { DocumentResults } from "./DocumentResults";
 import { WorkspacePanel } from "./WorkspacePanel";
@@ -300,4 +306,67 @@ it("opens research in the native top layer above a compact workspace sheet and c
   expect(parent).toHaveAttribute("open");
   expect(changed).not.toHaveBeenCalled();
   expect(trigger).toHaveFocus();
+});
+
+it("shows the original research time and explicit reuse in the preview and full report", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-26T13:00:00Z"));
+  const item = research("The cited original report.");
+  if (item.data.view !== "public_research") throw new Error("fixture type");
+  item.retrievedAt = "2026-09-26T12:30:00Z";
+  item.data.savedResearch = {
+    id: "33333333-3333-4333-8333-333333333333",
+    generatedAt: "2026-09-26T10:00:00Z",
+    expiresAt: "2026-09-27T10:00:00Z",
+    reusedAt: "2026-09-26T12:30:00Z",
+    stale: false,
+  };
+  const { container } = render(
+    <DocumentResults items={[item]} onOpen={vi.fn()} />,
+  );
+  expect(screen.getByText(/Saved research ·/)).toBeTruthy();
+  expect(
+    screen.getByText("Reused saved report; no new web search was made."),
+  ).toBeTruthy();
+  expect(container.querySelector("time")).toHaveAttribute(
+    "datetime",
+    "2026-09-26T10:00:00Z",
+  );
+  expect(screen.queryByText(/older than 24 hours/)).toBeNull();
+  expect(screen.queryByText(/Saved snapshot/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "View full report" }));
+  const dialog = screen.getByRole("dialog", { name: "Public research report" });
+  expect(
+    within(dialog).getByText(
+      "Reused saved report; no new web search was made.",
+    ),
+  ).toBeTruthy();
+  expect(dialog.querySelector("time")).toHaveAttribute(
+    "datetime",
+    "2026-09-26T10:00:00Z",
+  );
+  expect(
+    within(dialog).getByRole("link", { name: "Fair source" }),
+  ).toBeTruthy();
+});
+
+it("warns when saved research has expired even if its last server snapshot was fresh", () => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-09-28T10:00:00Z"));
+  const item = research("Historical research.");
+  if (item.data.view !== "public_research") throw new Error("fixture type");
+  item.data.savedResearch = {
+    id: "33333333-3333-4333-8333-333333333333",
+    generatedAt: "2026-09-26T10:00:00Z",
+    expiresAt: "2026-09-27T10:00:00Z",
+    reusedAt: null,
+    stale: false,
+  };
+  render(<DocumentResults items={[item]} onOpen={vi.fn()} />);
+  expect(screen.getByText(/This research is older than 24 hours/)).toBeTruthy();
+  expect(screen.queryByText(/no new web search was made/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "View full report" }));
+  expect(
+    within(screen.getByRole("dialog")).getByText(
+      /This research is older than 24 hours/,
+    ),
+  ).toBeTruthy();
 });

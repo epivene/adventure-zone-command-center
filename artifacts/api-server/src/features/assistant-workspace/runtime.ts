@@ -34,8 +34,12 @@ import { createReadTools } from "./read-tools";
 import { createToolRegistry } from "./tool-registry";
 import { createWorkspaceTools } from "./workspace-tools";
 import { createWorkspaceWorker } from "./worker";
+import { SpendingStore } from "./spending-store";
+import { SavedResearchCache } from "./research-cache";
 export function createWorkspaceRuntime() {
   const config = readModelConfig(process.env);
+  const spending = new SpendingStore(db, pool);
+  const researchCache = new SavedResearchCache(pool);
   const ownerId = "owner";
   const conversations = new ConversationStore(pool),
     runs = new RunStore(pool),
@@ -46,7 +50,7 @@ export function createWorkspaceRuntime() {
   const campaigns = new CampaignStore(db, pool);
   const screenshots = new ScreenshotStore(pool);
   const readScreenshot = screenshots.readForModel.bind(screenshots);
-  const reads = productionReads(pool, ownerId, google);
+  const reads = productionReads(pool, ownerId, google, spending);
   const send = createWorkspaceSendService({
     pool,
     db,
@@ -75,6 +79,8 @@ export function createWorkspaceRuntime() {
       runs,
       executor,
       config,
+      spending,
+      researchCache,
     }),
     createOperationsTools({ ownerId, database: db, db: pool, runs, executor }),
     createReadTools({ ownerId, ...reads }),
@@ -103,7 +109,7 @@ export function createWorkspaceRuntime() {
   const worker = createWorkspaceWorker({
     runs,
     conversations,
-    model: createOpenAiModel(config, undefined, readScreenshot),
+    model: createOpenAiModel(config, undefined, readScreenshot, spending),
     modelFor: (model) => {
       if (model && !config.models.includes(model))
         throw new Error("ASSISTANT_MODEL_UNAVAILABLE");
@@ -111,12 +117,14 @@ export function createWorkspaceRuntime() {
         { ...config, model: model ?? config.model },
         undefined,
         readScreenshot,
+        spending,
       );
     },
     tools,
     allowedActorIds: config.allowedActorIds,
     maxSteps: config.maxSteps,
     maxTokens: config.maxRunTokens,
+    historicalEvidence: (context) => researchCache.listIndex(context),
     evidence: async (organizationId, eventYear) =>
       (
         await knowledge.list({
@@ -137,6 +145,8 @@ export function createWorkspaceRuntime() {
       })),
   });
   return {
+    spending,
+    researchCache,
     screenshots,
     actionPreview: async (context: RunContext, intent: ActionIntent) => {
       try {

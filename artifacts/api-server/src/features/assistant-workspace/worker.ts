@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { Evidence, ModelPort, ToolRegistry } from "./contracts";
+import type {
+  Evidence,
+  ModelPort,
+  ToolRegistry,
+  RunContext,
+} from "./contracts";
 import type { ConversationStore } from "./conversation-store";
 import { runTurn } from "./orchestrator";
 import type { RunStore } from "./run-store";
@@ -12,6 +17,7 @@ export interface WorkerDependencies {
   allowedActorIds: string[];
   maxSteps: number;
   maxTokens: number;
+  historicalEvidence?(context: RunContext): Promise<Evidence[]>;
   evidence(
     organizationId: string | null,
     eventYear: number | null,
@@ -60,15 +66,16 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
           text: "Reading conversation and current business rules",
         });
         const model = deps.modelFor?.(run.input.model) ?? deps.model;
+        const context: RunContext = {
+          actor: run.input.actor,
+          conversationId: run.conversationId,
+          runId: run.id,
+          selection: run.input.selection,
+          grants: run.input.grants,
+          signal: control.signal,
+        };
         const output = await runTurn(
-          {
-            actor: run.input.actor,
-            conversationId: run.conversationId,
-            runId: run.id,
-            selection: run.input.selection,
-            grants: run.input.grants,
-            signal: control.signal,
-          },
+          context,
           {
             next: (input) =>
               model.next({
@@ -112,16 +119,19 @@ export function createWorkspaceWorker(deps: WorkerDependencies) {
               turns: savedContext.turns,
               context: savedContext,
               state: run.input.selection,
-              evidence: (
-                await Promise.all(
-                  (run.input.selection.organizationIds.length
-                    ? run.input.selection.organizationIds
-                    : [null]
-                  ).map((id) =>
-                    deps.evidence(id, run.input.selection.eventYear),
-                  ),
-                )
-              ).flat(),
+              evidence: [
+                ...(
+                  await Promise.all(
+                    (run.input.selection.organizationIds.length
+                      ? run.input.selection.organizationIds
+                      : [null]
+                    ).map((id) =>
+                      deps.evidence(id, run.input.selection.eventYear),
+                    ),
+                  )
+                ).flat(),
+                ...((await deps.historicalEvidence?.(context)) ?? []),
+              ],
               checkpoint: run.turn,
             }),
             save: (turn) =>

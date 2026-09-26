@@ -31,6 +31,7 @@ import {
 import { PostgresGoogleConnectionRepository } from "../features/google-workspace/google-connection-repository";
 import { MAX_SCREENSHOT_BYTES } from "../features/assistant-workspace/screenshots";
 import { conversationLifecycleSchema } from "../features/assistant-workspace/conversation-store";
+import { chooseEconomyModel } from "../features/assistant-workspace/spending-policy";
 const uuid = (value: unknown) => z.string().uuid().parse(value);
 export function createAssistantWorkspaceRouter(
   runtime: () => WorkspaceRuntime = getWorkspaceRuntime,
@@ -102,14 +103,63 @@ export function createAssistantWorkspaceRouter(
       void fn(req, res, runtime(), res.locals.actorId).catch(next);
     };
   router.get(
+    "/spending",
+    wrap(async (_q, s, r, a) => {
+      s.set("Cache-Control", "no-store");
+      s.json({
+        ...(await r.spending.summary(a)),
+        economyModel: chooseEconomyModel(r.config.models) ?? null,
+      });
+    }),
+  );
+  router.patch(
+    "/spending",
+    wrap(async (q, s, r, a) => {
+      const input = z
+        .object({
+          version: z.number().int().positive(),
+          dailyLimitUsd: z.number().finite().min(0).max(1000),
+          monthlyLimitUsd: z.number().finite().min(0).max(1000).optional(),
+          economyMode: z.boolean(),
+        })
+        .strict()
+        .parse(q.body);
+      s.set("Cache-Control", "no-store");
+      s.json({
+        ...(await r.spending.update(a, input)),
+        economyModel: chooseEconomyModel(r.config.models) ?? null,
+      });
+    }),
+  );
+  router.get(
     "/conversations",
-    wrap(async (q, s, r, a) => s.json(await r.conversations.list(a, conversationLifecycleSchema.parse(q.query.lifecycle ?? "active")))),
+    wrap(async (q, s, r, a) =>
+      s.json(
+        await r.conversations.list(
+          a,
+          conversationLifecycleSchema.parse(q.query.lifecycle ?? "active"),
+        ),
+      ),
+    ),
   );
   router.patch(
     "/conversations/:id/lifecycle",
     wrap(async (q, s, r, a) => {
-      const input = z.object({ version: z.number().int().positive(), lifecycle: conversationLifecycleSchema }).strict().parse(q.body);
-      s.json(await r.conversations.setLifecycle(a, uuid(q.params.id), input.version, input.lifecycle));
+      const input = z
+        .object({
+          version: z.number().int().positive(),
+          lifecycle: conversationLifecycleSchema,
+        })
+        .strict()
+        .parse(q.body);
+      s.json(
+        await r.conversations.setLifecycle(
+          a,
+          uuid(q.params.id),
+          input.version,
+          input.lifecycle,
+        ),
+      );
     }),
   );
   router.post(
@@ -165,7 +215,7 @@ export function createAssistantWorkspaceRouter(
           ? await r.campaigns.list(a, conversation.id)
           : [],
         selectedModel:
-          runs.find((run) => run.input?.model)?.input?.model ?? r.config.model,
+          runs.find((run) => run.input?.model)?.input?.model ?? null,
         documentResults: publicDocumentResults(runs),
         runs: runs.map((run) => ({
           id: run.id,
@@ -217,6 +267,31 @@ export function createAssistantWorkspaceRouter(
       const attachments = input.attachmentIds.length
         ? await r.screenshots.metadataForSend(a, id, input.attachmentIds)
         : [];
+      const existing = await r.runs.findSubmitted?.(
+        a,
+        id,
+        input.requestKey,
+        input.text,
+        attachments,
+      );
+      if (existing) {
+        // A lost HTTP response is a read-only reconciliation, not new spending.
+        s.status(202).json({ runId: existing.id, status: existing.status });
+        return;
+      }
+      if (input.reconcileOnly) {
+        // Checking a lost response must never become a new paid submission,
+        // even if another tab raised the budget or the UTC day changed.
+        s.status(404).json({ code: "ASSISTANT_REQUEST_NOT_FOUND" });
+        return;
+      }
+      // The provider also reserves atomically just before each generation.
+      // This cheap check avoids queueing new work when the owner has paused AI.
+      const spending = await r.spending?.summary(a);
+      if (spending?.paused) {
+        s.status(409).json({ code: "ASSISTANT_BUDGET_LIMIT" });
+        return;
+      }
       let connectionId: string | null = null;
       try {
         connectionId = (await r.google.getCurrent())?.id ?? null;
@@ -230,7 +305,12 @@ export function createAssistantWorkspaceRouter(
           requestKey: input.requestKey,
           selection: c.selection,
           grants: [],
-          model: input.model ?? r.config.model,
+          model:
+            input.model ??
+            (spending?.economyMode
+              ? chooseEconomyModel(r.config.models)
+              : undefined) ??
+            r.config.model,
         },
         input.text,
         attachments,
@@ -371,7 +451,9 @@ export function createAssistantWorkspaceRouter(
       }
       // Checking an existing receipt or reconciling a dispatched action is not
       // new approval. It remains possible from archived conversation history.
-      if (!["succeeded", "provider_started", "uncertain"].includes(action.status)) {
+      if (
+        !["succeeded", "provider_started", "uncertain"].includes(action.status)
+      ) {
         await r.conversations.append(a, c.id, `approve:${input.requestKey}`, {
           role: "user",
           text: `Approve ${action.kind} on ${action.targetId}, revision ${input.revision ?? "new"}, action ${action.id}.${input.confirmation ? ` Human verification: ${input.confirmation}.` : ""}`,
@@ -624,13 +706,26 @@ export function createAssistantWorkspaceRouter(
         .object({ expectedVersion: z.number().int().min(0) })
         .strict()
         .parse(q.body);
-      s.json(await r.knowledge.retire(a, uuid(q.params.id), input.expectedVersion));
+      s.json(
+        await r.knowledge.retire(a, uuid(q.params.id), input.expectedVersion),
+      );
     }),
   );
   router.use(
     (error: unknown, _q: Request, s: Response, _next: NextFunction) => {
       const code =
         error instanceof Error ? error.message : "ASSISTANT_REQUEST_FAILED";
+      if (
+        code === "ASSISTANT_SPENDING_CONFLICT" ||
+        code === "ASSISTANT_BUDGET_LIMIT"
+      ) {
+        s.status(409).json({ code });
+        return;
+      }
+      if (code === "ASSISTANT_SPENDING_INVALID") {
+        s.status(400).json({ code });
+        return;
+      }
       if (code === "ASSISTANT_RULE_VERSION_CONFLICT") {
         s.status(409).json({ code });
         return;
@@ -653,7 +748,10 @@ export function createAssistantWorkspaceRouter(
         s.status(422).json({ code: "ASSISTANT_INPUT_INVALID" });
         return;
       }
-      if (code === "ASSISTANT_CONVERSATION_INACTIVE" || code === "ASSISTANT_CONVERSATION_BUSY") {
+      if (
+        code === "ASSISTANT_CONVERSATION_INACTIVE" ||
+        code === "ASSISTANT_CONVERSATION_BUSY"
+      ) {
         s.status(409).json({ code });
         return;
       }

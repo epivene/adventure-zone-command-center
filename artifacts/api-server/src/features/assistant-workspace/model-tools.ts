@@ -20,6 +20,8 @@ const common = new Set([
   "list_followups",
   "read_conversation_history",
   "read_conversation_screenshot",
+  "list_saved_research",
+  "read_saved_research",
 ]);
 type Definition = {
   type: "function";

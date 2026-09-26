@@ -10,6 +10,7 @@ import AssistantWorkspacePage from "@/pages/AssistantWorkspacePage";
 import { DraftPreview } from "./DraftPreview";
 import { workspaceApi } from "@/features/assistant-workspace/api";
 import { mockNativeDialog } from "@/test/native-dialog";
+import { spendingSummary } from "@/test/assistant-spending";
 vi.mock("@/features/assistant-workspace/api", () => ({
   workspaceApi: vi.fn(),
   lastConversationKey: "test-last-conversation",
@@ -29,6 +30,7 @@ beforeEach(() => {
   restoreDialog = mockNativeDialog();
   vi.mocked(workspaceApi).mockReset();
   vi.mocked(workspaceApi).mockImplementation(async (path) => {
+    if (path === "/spending") return spendingSummary;
     if (path === "/status")
       return {
         enabled: true,
@@ -38,7 +40,8 @@ beforeEach(() => {
         model: "configured-model",
         models: ["configured-model"],
       } as any;
-    if (path === "/conversations") return [conversation] as any;
+    if (path === "/conversations" || path.startsWith("/conversations?"))
+      return [conversation] as any;
     return conversation as any;
   });
 });
@@ -205,6 +208,7 @@ it("shows a retry when a setup refresh fails after chat was available", async ()
 
 it("opens named compact panels without clearing the message and closes history after selection", async () => {
   render(<AssistantWorkspacePage conversationId={conversation.id} />);
+  await screen.findByText("Keep the deposit at 40%");
   const composer = await screen.findByLabelText("Message the assistant");
   fireEvent.change(composer, { target: { value: "Keep this follow-up" } });
   fireEvent.click(screen.getByRole("button", { name: "Conversations" }));
@@ -212,7 +216,7 @@ it("opens named compact panels without clearing the message and closes history a
     "aria-modal",
     "true",
   );
-  const saved = screen.getByRole("link", { name: "Saved reply" });
+  const saved = await screen.findByRole("link", { name: "Saved reply" });
   expect(saved).toHaveAttribute("aria-current", "page");
   fireEvent.click(saved);
   expect(screen.queryByRole("dialog")).toBeNull();

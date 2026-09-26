@@ -1,8 +1,9 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { createOpenAiModel } from "./openai-model";
 import { readModelConfig } from "./model-config";
 import { emptySelection, type ModelInput } from "./contracts";
 import { buildConversationContext } from "./conversation-context";
+import { SpendingPreflightError, type SpendingPort } from "./spending-provider";
 const config = () =>
   readModelConfig({
     ASSISTANT_WORKSPACE_ENABLED: "true",
@@ -457,4 +458,122 @@ it("retains completed usage if provider message content is malformed", async () 
     message: "ASSISTANT_MODEL_UNAVAILABLE",
     costCall: { responseId: "malformed", estimatedUsd: 0.000238 },
   });
+});
+
+const budget = (): SpendingPort => ({
+  summary: vi.fn(async () => ({ economyMode: true })),
+  reserve: vi.fn(async () => {}),
+  settle: vi.fn(async () => {}),
+});
+const spendingScope = {
+  actorId: "owner",
+  conversationId: "c",
+  runId: "run",
+  callId: "run:assistant:0",
+};
+const pricedConfig = () => ({
+  ...config(),
+  model: "gpt-6-sol",
+  models: ["gpt-6-sol", "gpt-6-luna"],
+});
+it("preflights before generation, keeps the explicitly selected model and settles streamed usage", async () => {
+  const ledger = budget();
+  const order: string[] = [];
+  vi.mocked(ledger.reserve).mockImplementation(async () => {
+    order.push("reserve");
+  });
+  let generated: any;
+  const model = createOpenAiModel(
+    pricedConfig(),
+    async (url, init) => {
+      if (String(url).endsWith("/input_tokens")) {
+        order.push("count");
+        return Response.json({
+          input_tokens: 600,
+          object: "response.input_tokens",
+        });
+      }
+      order.push("generate");
+      generated = JSON.parse(String(init?.body));
+      return new Response(
+        `data: ${JSON.stringify({ type: "response.completed", response: { id: "r", model: "gpt-6-sol", service_tier: "default", status: "completed", output: [], usage: { input_tokens: 600, output_tokens: 20 } } })}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      );
+    },
+    undefined,
+    ledger,
+  );
+  await model.next({ ...input(), spendingScope });
+  expect(order).toEqual(["count", "reserve", "generate"]);
+  expect(generated).toMatchObject({
+    model: "gpt-6-sol",
+    max_output_tokens: 2048,
+    service_tier: "default",
+  });
+  expect(ledger.reserve).toHaveBeenCalledWith(
+    { ...spendingScope, source: "assistant", model: "gpt-6-sol" },
+    600 * 2500 + 2048 * 10000,
+  );
+  expect(ledger.settle).toHaveBeenCalledExactlyOnceWith(
+    "owner",
+    spendingScope.callId,
+    600 * 2500 + 20 * 10000,
+  );
+});
+it("never generates when the owner's remaining allowance is zero or token counting fails", async () => {
+  for (const countFails of [false, true]) {
+    const ledger = budget();
+    vi.mocked(ledger.reserve).mockRejectedValue(
+      new Error("ASSISTANT_BUDGET_LIMIT"),
+    );
+    const urls: string[] = [];
+    const model = createOpenAiModel(
+      pricedConfig(),
+      async (url) => {
+        urls.push(String(url));
+        if (countFails) return new Response("unavailable", { status: 503 });
+        return Response.json({
+          input_tokens: 10,
+          object: "response.input_tokens",
+        });
+      },
+      undefined,
+      ledger,
+    );
+    await expect(
+      model.next({ ...input(), spendingScope }),
+    ).rejects.toBeInstanceOf(SpendingPreflightError);
+    expect(urls).toHaveLength(1);
+    expect(urls[0]).toContain("/input_tokens");
+    expect(ledger.settle).not.toHaveBeenCalled();
+  }
+});
+it("retains a durable hold after an interrupted stream without issuing a retry", async () => {
+  const ledger = budget();
+  let requests = 0;
+  const model = createOpenAiModel(
+    pricedConfig(),
+    async (url) => {
+      requests++;
+      if (String(url).endsWith("/input_tokens"))
+        return Response.json({
+          input_tokens: 10,
+          object: "response.input_tokens",
+        });
+      return new Response("data: [DONE]\n\n", {
+        headers: { "Content-Type": "text/event-stream" },
+      });
+    },
+    undefined,
+    ledger,
+  );
+  await expect(model.next({ ...input(), spendingScope })).rejects.toThrow(
+    "ASSISTANT_MODEL_UNAVAILABLE",
+  );
+  expect(requests).toBe(2);
+  expect(ledger.settle).toHaveBeenCalledExactlyOnceWith(
+    "owner",
+    spendingScope.callId,
+    null,
+  );
 });

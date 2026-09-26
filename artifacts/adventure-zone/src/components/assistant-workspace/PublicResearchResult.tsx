@@ -6,6 +6,30 @@ import { AssistantMessage } from "./AssistantMessage";
 type Research = Extract<DocumentResult["data"], { view: "public_research" }>;
 type Source = { title: string; url: string };
 
+function SavedResearchStatus({ saved }: { saved: Research["savedResearch"] }) {
+  if (!saved) return null;
+  const stale = saved.stale || Date.parse(saved.expiresAt) <= Date.now();
+  return (
+    <div className="mt-2 space-y-1 text-xs text-slate-600">
+      <p>
+        Saved research ·{" "}
+        <time dateTime={saved.generatedAt}>
+          {new Date(saved.generatedAt).toLocaleString()}
+        </time>
+      </p>
+      {saved.reusedAt && (
+        <p>Reused saved report; no new web search was made.</p>
+      )}
+      {stale && (
+        <p className="text-amber-800">
+          This research is older than 24 hours. Ask to refresh for current
+          information.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function SourceLink({ source }: { source: Source }) {
   let url: URL | null = null;
   try {
@@ -74,6 +98,7 @@ export function PublicResearchResult({ data }: { data: Research }) {
       <p className="mt-1 line-clamp-2 break-words text-xs text-slate-600 [overflow-wrap:anywhere]">
         {data.query}
       </p>
+      <SavedResearchStatus saved={data.savedResearch} />
       {!data.complete && (
         <p className="mt-2 text-amber-800">Research incomplete</p>
       )}
@@ -150,6 +175,7 @@ export function PublicResearchResult({ data }: { data: Research }) {
               {data.model} · Saved research; ask to refresh for current
               information.
             </p>
+            <SavedResearchStatus saved={data.savedResearch} />
           </header>
           <button
             ref={closeButton}

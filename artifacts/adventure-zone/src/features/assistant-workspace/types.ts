@@ -84,7 +84,7 @@ export type Conversation = {
   }[];
   actions: Action[];
   drafts: Draft[];
-  selectedModel?: string;
+  selectedModel?: string | null;
   campaigns?: CampaignBatch[];
   campaignReviews?: CampaignReview[];
   documentResults?: DocumentResult[];
@@ -145,6 +145,13 @@ export type DocumentResult = {
         }[];
         consultedSources: { url: string; title: string }[];
         warnings: string[];
+        savedResearch?: {
+          id: string;
+          generatedAt: string;
+          expiresAt: string;
+          reusedAt: string | null;
+          stale: boolean;
+        };
       }
     | {
         view: "commercial_records";

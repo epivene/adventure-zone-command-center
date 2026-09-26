@@ -360,3 +360,97 @@ export const assistantWorkspaceScreenshots = pgTable(
     ),
   ],
 );
+
+export const assistantWorkspaceSpendingSettings = pgTable(
+  "assistant_workspace_spending_settings",
+  {
+    actorId: text("actor_id").primaryKey(),
+    version: integer("version").notNull().default(1),
+    dailyLimitNanos: bigint("daily_limit_nanos", { mode: "number" })
+      .notNull()
+      .default(1_000_000_000),
+    monthlyLimitNanos: bigint("monthly_limit_nanos", { mode: "number" })
+      .notNull()
+      .default(30_000_000_000),
+    economyMode: boolean("economy_mode").notNull().default(true),
+    trackingStartedAt: timestamp("tracking_started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    check(
+      "assistant_workspace_spending_settings_version_check",
+      sql`${t.version}>0`,
+    ),
+    check(
+      "assistant_workspace_spending_settings_daily_limit_nanos_check",
+      sql`${t.dailyLimitNanos} BETWEEN 0 AND 1000000000000 AND ${t.dailyLimitNanos} % 10000000 = 0`,
+    ),
+    check(
+      "assistant_workspace_spending_settings_monthly_limit_nanos_check",
+      sql`${t.monthlyLimitNanos} BETWEEN 0 AND 1000000000000 AND ${t.monthlyLimitNanos} % 10000000 = 0`,
+    ),
+  ],
+);
+
+export const assistantWorkspaceSpendingCalls = pgTable(
+  "assistant_workspace_spending_calls",
+  {
+    callId: text("call_id").primaryKey(),
+    actorId: text("actor_id")
+      .notNull()
+      .references(() => assistantWorkspaceSpendingSettings.actorId),
+    conversationId: uuid("conversation_id").notNull(),
+    runId: uuid("run_id")
+      .notNull()
+      .references(() => assistantWorkspaceRuns.id),
+    source: text("source").notNull(),
+    model: text("model").notNull(),
+    budgetDay: date("budget_day").notNull(),
+    reservedNanos: bigint("reserved_nanos", { mode: "number" }).notNull(),
+    chargedNanos: bigint("charged_nanos", { mode: "number" }),
+    state: text("state").notNull().default("reserved"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.conversationId, t.actorId],
+      foreignColumns: [
+        assistantWorkspaceConversations.id,
+        assistantWorkspaceConversations.actorId,
+      ],
+    }),
+    check(
+      "assistant_workspace_spending_calls_source_check",
+      sql`${t.source} IN ('assistant','research','document')`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_reserved_nanos_check",
+      sql`${t.reservedNanos}>0 AND ${t.reservedNanos}<=9007199254740991`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_charged_nanos_check",
+      sql`${t.chargedNanos}>=0 AND ${t.chargedNanos}<=9007199254740991`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_state_check",
+      sql`${t.state} IN ('reserved','uncertain','settled')`,
+    ),
+    check(
+      "assistant_workspace_spending_calls_check",
+      sql`(${t.state}='settled' AND ${t.chargedNanos} IS NOT NULL) OR (${t.state} IN ('reserved','uncertain') AND ${t.chargedNanos} IS NULL)`,
+    ),
+    index("assistant_workspace_spending_day_idx").on(t.actorId, t.budgetDay),
+    index("assistant_workspace_spending_hold_idx")
+      .on(t.actorId)
+      .where(sql`${t.state} IN ('reserved','uncertain')`),
+  ],
+);

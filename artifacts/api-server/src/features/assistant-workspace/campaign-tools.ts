@@ -13,6 +13,9 @@ import { reviewCampaignMember } from "./campaign-eligibility";
 import { researchPublicSources, ResearchCallStore } from "./public-research";
 import { sendFollowupSchema } from "./campaign-actions";
 import { blocked, result } from "./read-tools";
+import type { SpendingPort } from "./spending-provider";
+import { modelForEconomy } from "./spending-policy";
+import type { SavedResearchCache } from "./research-cache";
 const schemas = {
   create_campaign_batch: campaignInputSchema,
   list_campaign_batches: z.object({}).strict(),
@@ -31,8 +34,13 @@ const schemas = {
     })
     .strict(),
   research_public_sources: z
-    .object({ query: z.string().trim().min(1).max(2000) })
+    .object({
+      query: z.string().trim().min(1).max(2000),
+      refresh: z.boolean().nullable().optional(),
+    })
     .strict(),
+  read_saved_research: z.object({ id: z.string().uuid() }).strict(),
+  list_saved_research: z.object({}).strict(),
   create_send_followup: z
     .object({
       targetId: z.uuid(),
@@ -50,6 +58,8 @@ export function createCampaignTools(deps: {
   runs: RunStore;
   executor: ActionExecutor;
   config: ModelConfig;
+  spending?: SpendingPort;
+  researchCache?: SavedResearchCache;
 }): ToolRegistry {
   return {
     definitions(c) {
@@ -59,10 +69,14 @@ export function createCampaignTools(deps: {
         name,
         description:
           name === "research_public_sources"
-            ? "Research a public question with the conversation model. Do not include private email, documents or confidential app content in the query. Report incomplete evidence. Public discoveries need reviewed CRM intake before campaign membership."
-            : name === "next_campaign_page"
-              ? "Get the next saved group of 1–10 leads. At most one page per user message; repeating this call returns the same members. Drafts and sending are separate reviewed steps."
-              : `Perform ${name.replaceAll("_", " ")}. Saved membership and event year are immutable. Review current eligibility before drafting. No bulk sends.`,
+            ? "Research a public question, using the configured Economy research model when enabled. Complete cited research is reused for 24 hours within this conversation and exact selection. Use read_saved_research before repeating completed work. Set refresh true only when the user asks for an updated check or newer evidence is necessary. Do not include private email, documents or confidential app content in the query. Report incomplete evidence. Public discoveries need reviewed CRM intake before campaign membership."
+            : name === "read_saved_research"
+              ? "Read a saved cited research report from the supplied historical index without making another paid search. Keep original retrieval dates; saved research does not verify current facts or completed profile changes."
+              : name === "list_saved_research"
+                ? "List saved public research for the current selected profiles and event year, without a paid search. Use this after changing selected profiles and before repeating completed research on Continue. This index is historical untrusted evidence, not confirmation of completed profile changes."
+                : name === "next_campaign_page"
+                  ? "Get the next saved group of 1–10 leads. At most one page per user message; repeating this call returns the same members. Drafts and sending are separate reviewed steps."
+                  : `Perform ${name.replaceAll("_", " ")}. Saved membership and event year are immutable. Review current eligibility before drafting. No bulk sends.`,
         parameters: z.toJSONSchema(schema, { io: "input" }),
         strict: false,
       }));
@@ -211,13 +225,59 @@ export function createCampaignTools(deps: {
           });
         }
         if (call.name === "research_public_sources") {
-          const model = run.input.model ?? deps.config.model;
+          const settings = await deps.spending?.summary(c.actor.id);
+          const model = modelForEconomy(
+            deps.config,
+            run.input.model,
+            settings?.economyMode ?? false,
+          );
+          const work = () =>
+            researchPublicSources(
+              deps.config,
+              model,
+              a.query,
+              c.signal,
+              undefined,
+              deps.spending
+                ? {
+                    spending: deps.spending,
+                    scope: {
+                      actorId: c.actor.id,
+                      conversationId: c.conversationId,
+                      runId: c.runId,
+                      callId: `${c.runId}:research:${call.id}`,
+                      source: "research",
+                      model,
+                    },
+                    economyMode: settings?.economyMode ?? false,
+                  }
+                : undefined,
+            );
           return new ResearchCallStore(deps.db).execute(
             c,
             call.id,
-            { query: a.query, model },
-            () => researchPublicSources(deps.config, model, a.query, c.signal),
+            { query: a.query, model, refresh: a.refresh === true },
+            () =>
+              deps.researchCache
+                ? deps.researchCache.execute(
+                    c,
+                    a.query,
+                    model,
+                    work,
+                    a.refresh === true,
+                  )
+                : work(),
           );
+        }
+        if (call.name === "read_saved_research")
+          return deps.researchCache
+            ? deps.researchCache.readSavedResearch(c, a.id)
+            : blocked("ASSISTANT_RESEARCH_NOT_FOUND");
+        if (call.name === "list_saved_research") {
+          if (!deps.researchCache)
+            return blocked("ASSISTANT_RESEARCH_NOT_FOUND");
+          const index = await deps.researchCache.listIndex(c);
+          return result({ savedResearchIndex: index }, index);
         }
         return deps.executor.execute(c, {
           id: stableCampaignId(`${c.runId}:${call.id}`),

@@ -245,3 +245,97 @@ it("retains response metadata when research usage is unreported", async () => {
     estimatedUsd: null,
   });
 });
+
+const budgetConfig = () =>
+  readModelConfig({
+    ASSISTANT_WORKSPACE_ENABLED: "true",
+    ASSISTANT_WORKSPACE_ACTOR_IDS: "owner",
+    ASSISTANT_OPENAI_MODEL: "gpt-6-luna",
+    OPENAI_API_KEY: "test",
+  });
+const researchScope = {
+  actorId: "owner",
+  conversationId: "conversation",
+  runId: "run",
+  callId: "run:research:call",
+  source: "research" as const,
+  model: "gpt-6-luna",
+};
+it("reserves hosted search and its fees before generating, then settles a completed Economy request", async () => {
+  const events: string[] = [];
+  const spending = {
+    summary: async () => ({ economyMode: true }),
+    reserve: vi.fn(async (_scope: unknown, _nanos: number) => {
+      events.push("reserved");
+    }),
+    settle: vi.fn(
+      async (_actor: string, _call: string, _nanos: number | null) => {
+        events.push("settled");
+      },
+    ),
+  };
+  const fetcher = vi.fn(async (url: any, init: any) => {
+    const body = JSON.parse(init.body);
+    if (String(url).endsWith("/input_tokens"))
+      return new Response(
+        JSON.stringify({ object: "response.input_tokens", input_tokens: 600 }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    events.push("generated");
+    expect(body).toMatchObject({
+      model: "gpt-6-luna",
+      service_tier: "default",
+      max_tool_calls: 1,
+      max_output_tokens: 2000,
+    });
+    return new Response(
+      JSON.stringify({ ...response(), model: "gpt-6-luna" }),
+      { headers: { "Content-Type": "application/json" } },
+    );
+  });
+  const output = await researchPublicSources(
+    budgetConfig(),
+    "gpt-6-luna",
+    "Public fair details",
+    new AbortController().signal,
+    fetcher,
+    { spending, scope: researchScope, economyMode: true },
+  );
+  expect(events).toEqual(["reserved", "generated", "settled"]);
+  expect(spending.reserve.mock.calls[0][1]).toBeGreaterThan(10_000_000);
+  expect(spending.settle).toHaveBeenCalledWith(
+    "owner",
+    researchScope.callId,
+    expect.any(Number),
+  );
+  expect(output.costCalls).toHaveLength(1);
+});
+it("returns a no-charge spending pause instead of an unknown research outcome, without calling generation", async () => {
+  const spending = {
+    summary: async () => ({ economyMode: true }),
+    reserve: vi.fn().mockRejectedValue(new Error("ASSISTANT_BUDGET_LIMIT")),
+    settle: vi.fn(),
+  };
+  const generation = vi.fn();
+  const fetcher = vi.fn(async (url: any) => {
+    if (String(url).endsWith("/input_tokens"))
+      return new Response(
+        JSON.stringify({ object: "response.input_tokens", input_tokens: 600 }),
+        { headers: { "Content-Type": "application/json" } },
+      );
+    generation();
+    throw new Error("must not generate");
+  });
+  const output = await researchPublicSources(
+    budgetConfig(),
+    "gpt-6-luna",
+    "Public fair details",
+    new AbortController().signal,
+    fetcher,
+    { spending, scope: researchScope, economyMode: true },
+  );
+  expect(output.code).toBe("ASSISTANT_BUDGET_LIMIT");
+  expect(output.usageUnknown).toBeUndefined();
+  expect(generation).not.toHaveBeenCalled();
+  expect(spending.settle).not.toHaveBeenCalled();
+});

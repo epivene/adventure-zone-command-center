@@ -43,6 +43,8 @@ const tables = [
   "research_calls",
   "document_extractions",
   "screenshots",
+  "spending_settings",
+  "spending_calls",
 ].map((name) => `assistant_workspace_${name}`);
 const additions = [
   "assistant_workspace_messages.attachments",
@@ -52,6 +54,29 @@ const additions = [
   "assistant_workspace_document_extractions.call_id",
   "assistant_workspace_campaign_batches.draft_links",
   "assistant_workspace_research_calls.input_fingerprint",
+  ...[
+    "actor_id",
+    "version",
+    "daily_limit_nanos",
+    "monthly_limit_nanos",
+    "economy_mode",
+    "tracking_started_at",
+    "updated_at",
+  ].map((name) => `assistant_workspace_spending_settings.${name}`),
+  ...[
+    "call_id",
+    "actor_id",
+    "conversation_id",
+    "run_id",
+    "source",
+    "model",
+    "budget_day",
+    "reserved_nanos",
+    "charged_nanos",
+    "state",
+    "created_at",
+    "updated_at",
+  ].map((name) => `assistant_workspace_spending_calls.${name}`),
 ];
 const requiredTriggers = [
   "assistant_workspace_conversations.assistant_workspace_guard_lifecycle",

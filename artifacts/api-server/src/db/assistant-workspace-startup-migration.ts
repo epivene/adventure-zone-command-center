@@ -1,4 +1,5 @@
 import { assistantWorkspaceLifecycleSql } from "./assistant-workspace-lifecycle";
+import { assistantWorkspaceSpendingSql } from "./assistant-workspace-spending";
 export const assistantWorkspaceSql = `CREATE TABLE IF NOT EXISTS assistant_workspace_conversations (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), actor_id text NOT NULL,
  title text NOT NULL, selection jsonb NOT NULL,
@@ -120,6 +121,15 @@ export async function ensureAssistantWorkspaceSchema(db: {
   exec?(sql: string): Promise<unknown>;
 }) {
   if (db.exec)
-    await db.exec(assistantWorkspaceSql + assistantWorkspaceLifecycleSql);
-  else await db.query(assistantWorkspaceSql + assistantWorkspaceLifecycleSql);
+    await db.exec(
+      assistantWorkspaceSql +
+        assistantWorkspaceLifecycleSql +
+        assistantWorkspaceSpendingSql,
+    );
+  else
+    await db.query(
+      assistantWorkspaceSql +
+        assistantWorkspaceLifecycleSql +
+        assistantWorkspaceSpendingSql,
+    );
 }

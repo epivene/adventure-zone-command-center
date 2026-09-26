@@ -44,6 +44,10 @@ import { KnowledgePanel } from "@/components/assistant-workspace/KnowledgePanel"
 import { WorkspacePanel } from "@/components/assistant-workspace/WorkspacePanel";
 import { AssistantMessage } from "@/components/assistant-workspace/AssistantMessage";
 import { UsageCostSummary } from "@/components/assistant-workspace/UsageCost";
+import {
+  SpendingControls,
+  type SpendingSummary,
+} from "@/components/assistant-workspace/SpendingControls";
 import { OfflinePreparation } from "@/components/assistant-workspace/OfflinePreparation";
 import { useWorkspaceLayout } from "@/features/assistant-workspace/useWorkspaceLayout";
 import {
@@ -52,6 +56,19 @@ import {
 } from "@/features/assistant-workspace/model-labels";
 const buttonStyle =
   "rounded-lg border border-slate-200 bg-white px-3 py-2 font-medium hover:bg-slate-50 disabled:opacity-50";
+function messageFingerprint(
+  conversationId: string,
+  text: string,
+  attachments: string[],
+  model: string,
+) {
+  return JSON.stringify({
+    conversationId,
+    text: text.trim(),
+    attachments,
+    model,
+  });
+}
 function friendly(error: unknown) {
   const code = error instanceof Error ? error.message : "";
   if (/SCREENSHOT_SIZE/.test(code))
@@ -66,6 +83,8 @@ function friendly(error: unknown) {
     return "This conversation is running or needs its result checked. Finish or check the action before moving it.";
   if (/CONVERSATION_INACTIVE/.test(code))
     return "Restore this conversation before making changes.";
+  if (/BUDGET_LIMIT/.test(code))
+    return "The next request does not fit your available budget. Open Spending controls to review your limit and held requests before trying again.";
   if (/STATE_CHANGED|CONFLICT|CHANGED/.test(code))
     return "The saved information changed. Review the latest version and try again.";
   if (/STARTUP/.test(code))
@@ -121,6 +140,12 @@ export default function AssistantWorkspacePage({
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyRevision, setHistoryRevision] = useState(0);
   const [knowledgeDirty, setKnowledgeDirty] = useState(false);
+  const [spending, setSpending] = useState<SpendingSummary | null>(null);
+  const spendingRef = useRef<SpendingSummary | null>(null);
+  const explicitModelChoice = useRef(false);
+  const modelChoiceVersion = useRef(0);
+  const displayedModelChoiceVersion = modelChoiceVersion.current;
+  const savedConversationModel = useRef(false);
   const [initialNote, setInitialNote] = useState<{
     id: string;
     text: string;
@@ -155,7 +180,11 @@ export default function AssistantWorkspacePage({
   const composer = useRef<HTMLTextAreaElement>(null);
   const messageList = useRef<HTMLDivElement>(null);
   const followMessages = useRef(true);
-  const requestRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const requestRef = useRef<{
+    fingerprint: string;
+    key: string;
+    dispatched: boolean;
+  } | null>(null);
   const [files, setFiles] = useState<PendingScreenshot[]>([]);
   const filesRef = useRef<PendingScreenshot[]>([]);
   const pendingConversation = useRef<string | undefined>(undefined);
@@ -228,10 +257,32 @@ export default function AssistantWorkspacePage({
       // not overwrite an explicit model choice for the next message.
       if (modelConversation.current !== conversationId) {
         modelConversation.current = conversationId;
-        setModel(c.selectedModel ?? "");
+        savedConversationModel.current = !!c.selectedModel;
+        if (!explicitModelChoice.current)
+          setModel(
+            c.selectedModel ||
+              (spendingRef.current?.economyMode
+                ? spendingRef.current.economyModel
+                : null) ||
+              status?.model ||
+              "",
+          );
       }
     }
-  }, [conversationId]);
+  }, [conversationId, status?.model]);
+  const receiveSpending = useCallback((value: SpendingSummary) => {
+    spendingRef.current = value;
+    setSpending(value);
+    if (
+      value.economyMode &&
+      value.economyModel &&
+      !explicitModelChoice.current &&
+      (!currentId.current ||
+        (modelConversation.current === currentId.current &&
+          !savedConversationModel.current))
+    )
+      setModel(value.economyModel);
+  }, []);
   useEffect(() => {
     let live = true;
     setRefreshingSetup(true);
@@ -241,7 +292,13 @@ export default function AssistantWorkspacePage({
         if (!live) return;
         setStatus(s);
         setModel((current) =>
-          modelConversation.current ? current : (s.model ?? ""),
+          modelConversation.current || explicitModelChoice.current
+            ? current
+            : (spendingRef.current?.economyMode
+                ? spendingRef.current.economyModel
+                : null) ||
+              s.model ||
+              "",
         );
       })
       .catch((e) => {
@@ -282,6 +339,9 @@ export default function AssistantWorkspacePage({
   }, [status?.ready, historyView, historyRevision]);
   useEffect(() => {
     modelConversation.current = undefined;
+    explicitModelChoice.current = false;
+    modelChoiceVersion.current++;
+    savedConversationModel.current = false;
     setConversation(null);
     followMessages.current = true;
     setEditingDraftId(null);
@@ -322,6 +382,22 @@ export default function AssistantWorkspacePage({
     !!conversation && (conversation.lifecycle ?? "active") !== "active";
   const writesDisabled =
     busy || readOnly || (!!conversationId && !conversation);
+  function matchesPendingRequest() {
+    const id = conversationId ?? pendingConversation.current;
+    return (
+      !!id &&
+      requestRef.current?.dispatched === true &&
+      filesRef.current.every((file) => file.uploadedTo === id) &&
+      requestRef.current?.fingerprint ===
+        messageFingerprint(
+          id,
+          text,
+          filesRef.current.map((file) => file.id),
+          model,
+        )
+    );
+  }
+  const canCheckPreviousRequest = matchesPendingRequest();
   function canLeave() {
     if (busy || lifecycleWrite.current) return false;
     if (editingDraftId || knowledgeDirty) {
@@ -454,6 +530,9 @@ export default function AssistantWorkspacePage({
   }
   async function submit(event: FormEvent) {
     event.preventDefault();
+    // A budget-paused check only reconciles the already-dispatched request.
+    // Capture this intent before usage refreshes or any awaited operation.
+    const reconcileOnly = !!spending?.paused && matchesPendingRequest();
     if (editingDraftId) {
       setError(
         "Save or cancel your draft edits before asking the assistant to continue.",
@@ -463,6 +542,7 @@ export default function AssistantWorkspacePage({
     if (
       (!text.trim() && !filesRef.current.length) ||
       writesDisabled ||
+      (spending?.paused && !reconcileOnly) ||
       active ||
       submission.current
     )
@@ -479,6 +559,7 @@ export default function AssistantWorkspacePage({
     setError("");
     try {
       let id = conversationId ?? pendingConversation.current;
+      if (reconcileOnly && !id) throw new Error("ASSISTANT_REQUEST_NOT_FOUND");
       if (!id) {
         const c = await workspaceApi<Conversation>(
           "/conversations",
@@ -497,25 +578,35 @@ export default function AssistantWorkspacePage({
         setHistoryView("active");
         setHistoryRevision((n) => n + 1);
       }
-      const fingerprint = JSON.stringify({
-        conversationId: id,
-        text: body,
-        attachments: attached.map((f) => f.id),
+      const fingerprint = messageFingerprint(
+        id,
+        body,
+        attached.map((f) => f.id),
         model,
-      });
+      );
+      if (
+        reconcileOnly &&
+        (requestRef.current?.fingerprint !== fingerprint ||
+          !requestRef.current.dispatched ||
+          attached.some((file) => file.uploadedTo !== id))
+      )
+        throw new Error("ASSISTANT_REQUEST_NOT_FOUND");
       const req =
         requestRef.current?.fingerprint === fingerprint
           ? requestRef.current
-          : { fingerprint, key: crypto.randomUUID() };
+          : { fingerprint, key: crypto.randomUUID(), dispatched: false };
       requestRef.current = req;
-      for (const f of attached) {
-        if (!stillHere()) return;
-        if (f.uploadedTo !== id) {
-          await uploadScreenshot(id, f.id, f.file, controller.signal);
-          f.uploadedTo = id;
+      if (!reconcileOnly) {
+        for (const f of attached) {
+          if (!stillHere()) return;
+          if (f.uploadedTo !== id) {
+            await uploadScreenshot(id, f.id, f.file, controller.signal);
+            f.uploadedTo = id;
+          }
         }
       }
       if (!stillHere()) return;
+      req.dispatched = true;
       await workspaceApi(
         `/conversations/${id}/messages`,
         "POST",
@@ -523,6 +614,7 @@ export default function AssistantWorkspacePage({
           text: body,
           requestKey: req.key,
           model,
+          ...(reconcileOnly ? { reconcileOnly: true } : {}),
           ...(attached.length
             ? { attachmentIds: attached.map((f) => f.id) }
             : {}),
@@ -537,7 +629,18 @@ export default function AssistantWorkspacePage({
       if (id === conversationId) await refresh();
       else navigate(`/assistant/workspace/${id}`);
     } catch (e) {
-      if (stillHere()) setError(friendly(e));
+      if (stillHere()) {
+        if (
+          reconcileOnly &&
+          e instanceof Error &&
+          e.message === "ASSISTANT_REQUEST_NOT_FOUND"
+        ) {
+          requestRef.current = null;
+          setError(
+            "No saved request was found. Your message is still here; refresh spending and send it when ready.",
+          );
+        } else setError(friendly(e));
+      }
     } finally {
       if (stillHere()) {
         setBusy(false);
@@ -709,6 +812,22 @@ export default function AssistantWorkspacePage({
           onRefresh={() => setSetupRevision((n) => n + 1)}
         />
       )}
+      <SpendingControls
+        active={!!active || busy}
+        refreshKey={`${conversationId ?? "new"}:${conversation?.runs[0]?.id ?? ""}:${conversation?.runs[0]?.status ?? ""}`}
+        onSummary={receiveSpending}
+        onEconomyEnabled={(economyModel) => {
+          if (
+            economyModel &&
+            currentId.current === conversationId &&
+            modelChoiceVersion.current === displayedModelChoiceVersion
+          ) {
+            explicitModelChoice.current = true;
+            modelChoiceVersion.current++;
+            setModel(economyModel);
+          }
+        }}
+      />
       {!status ? (
         setupError ? (
           <button
@@ -821,7 +940,11 @@ export default function AssistantWorkspacePage({
                     className={`${focused ? "min-h-[48px]" : "min-h-11"} min-w-0 max-w-full flex-1 rounded border bg-white px-2 text-[16px] sm:flex-none`}
                     aria-describedby="workspace-model-help"
                     value={model}
-                    onChange={(e) => setModel(e.target.value)}
+                    onChange={(e) => {
+                      explicitModelChoice.current = true;
+                      modelChoiceVersion.current++;
+                      setModel(e.target.value);
+                    }}
                     disabled={writesDisabled || !!active}
                   >
                     {status.models.map((m) => (
@@ -1017,15 +1140,35 @@ export default function AssistantWorkspacePage({
                     <button
                       type="submit"
                       disabled={
-                        writesDisabled || (!text.trim() && !files.length)
+                        writesDisabled ||
+                        (spending?.paused && !canCheckPreviousRequest) ||
+                        (!text.trim() && !files.length)
                       }
                       className={`${focused ? "min-h-[48px] text-[16px]" : "min-h-11 text-sm"} rounded-lg bg-teal-800 px-4 py-2 font-semibold text-white disabled:opacity-50`}
                     >
                       <Send className="mr-2 inline h-4 w-4" />
-                      Send message
+                      {spending?.paused && canCheckPreviousRequest
+                        ? "Check previous request"
+                        : "Send message"}
                     </button>
                   )}
                 </div>
+                {spending?.paused && (
+                  <p className="text-sm text-amber-900">
+                    {canCheckPreviousRequest
+                      ? "You can check whether your previous submission was accepted. New paid work stays paused. Review "
+                      : "Paid AI is paused. Your message stays here while you "}
+                    <a
+                      href="#assistant-spending"
+                      className="font-medium underline"
+                    >
+                      {canCheckPreviousRequest
+                        ? "spending controls"
+                        : "adjust spending"}
+                    </a>
+                    .
+                  </p>
+                )}
               </form>
             </section>
             <WorkspacePanel
