@@ -89,6 +89,20 @@ describe("explicit production offline shell", () => {
     expect([...app.stored.values()].flatMap((cache) => [...cache.keys()])).toEqual([]);
   });
 
+  it("shows a self-contained recovery page when reopened offline before preparation", async () => {
+    const app = worker();
+    await app.lifecycle("install");
+    app.disconnect();
+    const response = (await app.request("assistant/workspace/c1"))!;
+    expect(response.headers.get("Content-Type")).toContain("text/html");
+    const html = await response.text();
+    expect(html).toContain("Offline workspace is not ready");
+    expect(html).toContain("Prepare for offline");
+    expect(html).toContain('href="https://workspace.example/office/assistant/workspace"');
+    expect(html).not.toMatch(/<script|<link|<img/i);
+    expect(app.stored.size).toBe(0);
+  });
+
   it("reports ready only after every shell, script, stylesheet and font is stored", async () => {
     const app = worker();
     app.publish();
@@ -123,7 +137,9 @@ describe("explicit production offline shell", () => {
     for (const cache of app.stored.values()) cache.delete(`${base}assets/main.css`);
     expect(await app.message("OFFLINE_SHELL_STATUS")).toEqual([{ type: "ready", ready: false }]);
     app.disconnect();
-    expect((await app.request("assistant/offline"))!.type).toBe("error");
+    const recovery = (await app.request("assistant/offline"))!;
+    expect(await recovery.text()).toContain("Offline workspace is not ready");
+    expect((await app.request("assets/missing.js", "cors", "script"))!.type).toBe("error");
   });
 
   it("does not publish preparation when storage loses a file during the download", async () => {
