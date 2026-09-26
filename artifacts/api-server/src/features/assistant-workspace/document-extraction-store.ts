@@ -50,8 +50,10 @@ export class DocumentExtractionStore {
         !context.toolCallId ||
         prior.run_id !== context.runId ||
         prior.call_id !== context.toolCallId
-      )
+      ) {
         delete output.usage;
+        delete output.costCalls;
+      }
       output.data = { ...(output.data as object), cacheHit: true };
       return output;
     }

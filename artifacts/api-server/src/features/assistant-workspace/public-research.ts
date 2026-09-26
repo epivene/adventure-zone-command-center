@@ -7,6 +7,7 @@ import type { ModelConfig } from "./model-config";
 import { blocked } from "./read-tools";
 import { fingerprint } from "./action-store";
 import { stableCampaignId } from "./campaign-store";
+import { meterOpenAiResponse } from "./usage-cost";
 export function safePublicUrl(value: unknown): string | null {
   try {
     if (typeof value !== "string" || value.length > 2048) return null;
@@ -117,6 +118,11 @@ export async function researchPublicSources(
   } catch {
     return uncertain();
   }
+  const costCalls = [
+    meterOpenAiResponse(response, "research", [
+      "Public research tool fees and any separately billed search content are excluded.",
+    ]),
+  ];
   const usage =
     response.usage &&
     Number.isFinite(response.usage.input_tokens) &&
@@ -202,7 +208,7 @@ export async function researchPublicSources(
     const data = publicResearchSchema.parse({
       view: "public_research",
       query,
-      model: selectedModel,
+      model: response.model || selectedModel,
       complete,
       parts,
       consultedSources: [...sources.values()],
@@ -230,10 +236,15 @@ export async function researchPublicSources(
       ),
       receipts: [],
       code: complete ? null : "ASSISTANT_RESEARCH_INCOMPLETE",
+      costCalls,
       ...(usage ? { usage } : { usageUnknown: true }),
     };
   } catch {
-    return { ...uncertain(), ...(usage ? { usage, usageUnknown: false } : {}) };
+    return {
+      ...uncertain(),
+      costCalls,
+      ...(usage ? { usage, usageUnknown: false } : {}),
+    };
   }
 }
 export class ResearchCallStore {

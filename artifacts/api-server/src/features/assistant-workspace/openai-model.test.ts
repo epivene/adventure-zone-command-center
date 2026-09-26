@@ -412,3 +412,49 @@ it("allows independent tools in one response and explicitly disables tools for c
   expect(requests[1].tools).toEqual([]);
   expect(requests[1].tool_choice).toBe("none");
 });
+
+it("meters actual response metadata rather than the configured model", async () => {
+  const model = createOpenAiModel(
+    config(),
+    async () =>
+      new Response(
+        `data: ${JSON.stringify({ type: "response.completed", response: { id: "billable", model: "gpt-6-sol", service_tier: "default", status: "completed", output: [], usage: { input_tokens: 100, output_tokens: 10, input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } } })}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+  );
+  expect((await model.next(input())).costCall).toMatchObject({
+    model: "gpt-6-sol",
+    serviceTier: "default",
+    cachedInputTokens: 40,
+    cacheWriteTokens: 20,
+    estimatedUsd: 0.000238,
+  });
+});
+it("retains provider usage when a billed response is incomplete", async () => {
+  const model = createOpenAiModel(
+    config(),
+    async () =>
+      new Response(
+        `data: ${JSON.stringify({ type: "response.incomplete", response: { id: "incomplete", model: "gpt-6-sol", service_tier: "default", status: "incomplete", output: [], usage: { input_tokens: 100, output_tokens: 10, input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } } })}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+  );
+  await expect(model.next(input())).rejects.toMatchObject({
+    message: "ASSISTANT_MODEL_UNAVAILABLE",
+    costCall: { responseId: "incomplete", estimatedUsd: 0.000238 },
+  });
+});
+it("retains completed usage if provider message content is malformed", async () => {
+  const model = createOpenAiModel(
+    config(),
+    async () =>
+      new Response(
+        `data: ${JSON.stringify({ type: "response.completed", response: { id: "malformed", model: "gpt-6-sol", service_tier: "default", status: "completed", output: [{ type: "message", content: null }], usage: { input_tokens: 100, output_tokens: 10, input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 } } } })}\n\n`,
+        { headers: { "Content-Type": "text/event-stream" } },
+      ),
+  );
+  await expect(model.next(input())).rejects.toMatchObject({
+    message: "ASSISTANT_MODEL_UNAVAILABLE",
+    costCall: { responseId: "malformed", estimatedUsd: 0.000238 },
+  });
+});

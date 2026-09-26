@@ -6,6 +6,20 @@ import { RunStore } from "./run-store";
 import { DocumentExtractionStore } from "./document-extraction-store";
 import { emptySelection, type RunContext, type ToolResult } from "./contracts";
 let db: PGlite, store: DocumentExtractionStore, context: RunContext;
+const visualCostCall = {
+  responseId: "visual-response",
+  source: "document" as const,
+  model: "gpt-6-sol",
+  serviceTier: "default",
+  inputTokens: 12,
+  cachedInputTokens: 2,
+  cacheWriteTokens: 0,
+  outputTokens: 7,
+  observedAt: "2026-09-25T00:00:00.000Z",
+  pricingVersion: "test-rate-card",
+  estimatedUsd: 0.0002,
+  excluded: [],
+};
 const output: ToolResult = {
   status: "partial",
   data: { missingPages: [1], complete: false },
@@ -13,6 +27,7 @@ const output: ToolResult = {
   receipts: [],
   code: "ASSISTANT_DOCUMENT_VISUAL_REVIEW_REQUIRED",
   usage: { inputTokens: 40, outputTokens: 10 },
+  costCalls: [visualCostCall],
 };
 beforeEach(async () => {
   db = new PGlite();
@@ -53,7 +68,10 @@ it("reuses partial readings and charges recovery once to the original tool call"
   );
   expect(work).toHaveBeenCalledTimes(1);
   expect(replay.usage).toEqual(first.usage);
+  expect(first.costCalls).toEqual([visualCostCall]);
+  expect(replay.costCalls).toEqual([visualCostCall]);
   expect(reuse.usage).toBeUndefined();
+  expect(reuse.costCalls).toBeUndefined();
   expect(reuse.data).toMatchObject({
     missingPages: [1],
     complete: false,
@@ -120,4 +138,28 @@ it("rejects forged run ownership before disclosing a cached reading", async () =
     ),
   ).rejects.toThrow("ASSISTANT_RUN_NOT_FOUND");
   expect(work).not.toHaveBeenCalled();
+});
+
+it("does not charge a reused extraction to another run with the same tool call ID", async () => {
+  await store.execute(context, "reused", async () => structuredClone(output));
+  const runs = new RunStore(db);
+  const conversation = await new ConversationStore(db).create("owner", "Reuse");
+  const run = await runs.submit(
+    {
+      ...context,
+      conversationId: conversation.id,
+      requestKey: "another-run",
+    },
+    "Read it again",
+  );
+  const reused = await store.execute(
+    { ...context, runId: run.id, conversationId: conversation.id },
+    "reused",
+    async () => {
+      throw new Error("Cached extraction must not call the provider");
+    },
+  );
+  expect(reused.data).toMatchObject({ cacheHit: true });
+  expect(reused.usage).toBeUndefined();
+  expect(reused.costCalls).toBeUndefined();
 });

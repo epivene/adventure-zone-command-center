@@ -52,7 +52,17 @@ export type Draft = {
     templateVersion: string | null;
   };
 };
+export type UsageCost = {
+  currency: "USD";
+  estimatedUsd: number | null;
+  status: "complete" | "partial" | "unavailable";
+  pricedCalls: number;
+  unpricedCalls: number;
+  pricingVersions: string[];
+  excluded: string[];
+};
 export type Conversation = {
+  usage?: { cost: UsageCost };
   summary?: unknown;
   id: string;
   title: string;
@@ -73,7 +83,7 @@ export type Conversation = {
   runs: {
     id: string;
     status: string;
-    usage: { steps: number; tokens: number };
+    usage: { steps: number; tokens: number; cost?: UsageCost };
     result: { text: string; receipts: Receipt[] } | null;
   }[];
 };

@@ -37,6 +37,8 @@ import {
 import { KnowledgePanel } from "@/components/assistant-workspace/KnowledgePanel";
 import { WorkspacePanel } from "@/components/assistant-workspace/WorkspacePanel";
 import { AssistantMessage } from "@/components/assistant-workspace/AssistantMessage";
+import { UsageCostSummary } from "@/components/assistant-workspace/UsageCost";
+import { OfflinePreparation } from "@/components/assistant-workspace/OfflinePreparation";
 import { useWorkspaceLayout } from "@/features/assistant-workspace/useWorkspaceLayout";
 import {
   modelHelp,
@@ -573,6 +575,10 @@ export default function AssistantWorkspacePage({
           {setupError || error}
         </p>
       )}
+      <OfflinePreparation
+        conversation={conversation}
+        busy={busy || !!active || !!editingDraftId}
+      />
       {status && (
         <SetupPanel
           status={status}
@@ -787,6 +793,12 @@ export default function AssistantWorkspacePage({
                     ? `${conversation.runs[0].usage.tokens.toLocaleString()} tokens · ${conversation.runs[0].usage.steps} steps`
                     : ""}
               </div>
+              {!!conversation?.runs.length && (
+                <UsageCostSummary
+                  latest={conversation.runs[0]?.usage.cost}
+                  conversation={conversation.usage?.cost}
+                />
+              )}
               {conversation?.runs[0]?.status === "failed" && (
                 <p
                   role="alert"

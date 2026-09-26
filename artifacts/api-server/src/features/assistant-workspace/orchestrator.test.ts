@@ -724,15 +724,13 @@ it("checks cancellation between calls from the same model response", async () =>
 });
 it("persists the final answer atomically with final-round usage before recovery", async () => {
   const store = memory(),
-    next = vi
-      .fn()
-      .mockResolvedValue({
-        text: "I need the recipient confirmed.",
-        calls: [],
-        providerItems: [],
-        inputTokens: 3,
-        outputTokens: 2,
-      });
+    next = vi.fn().mockResolvedValue({
+      text: "I need the recipient confirmed.",
+      calls: [],
+      providerItems: [],
+      inputTokens: 3,
+      outputTokens: 2,
+    });
   let savedOnce = false;
   const durable = {
     ...store,
@@ -763,4 +761,154 @@ it("persists the final answer atomically with final-round usage before recovery"
   expect(out.text).toBe("I need the recipient confirmed.");
   expect(next).toHaveBeenCalledTimes(1);
   expect(store.get()?.tokens).toBe(5);
+});
+
+import { meterOpenAiResponse, summarizeRunCost } from "./usage-cost";
+const measured = () =>
+  meterOpenAiResponse(
+    {
+      id: "measured",
+      model: "gpt-6-sol",
+      service_tier: "default",
+      status: "completed",
+      usage: {
+        input_tokens: 100,
+        output_tokens: 10,
+        input_tokens_details: { cached_tokens: 40, cache_write_tokens: 20 },
+      },
+    },
+    "assistant",
+  );
+it("persists each model and document call once across a checkpoint resume", async () => {
+  const store = memory();
+  let round = 0;
+  const model = {
+    next: async () => ({
+      text: "done",
+      calls: round++ === 0 ? [call] : [],
+      providerItems: [],
+      inputTokens: 100,
+      outputTokens: 10,
+      costCall: measured(),
+    }),
+  };
+  let executions = 0;
+  const tools = {
+    definitions: () => [],
+    execute: async () => {
+      executions++;
+      return {
+        ...ok,
+        usage: { inputTokens: 100, outputTokens: 10 },
+        costCalls: [{ ...measured(), source: "document" as const }],
+      };
+    },
+  };
+  let failAfterTool = true;
+  await expect(
+    runTurn(context, model, tools, {
+      ...store,
+      save: async (cp) => {
+        await store.save(cp);
+        if (cp.results.call1 && failAfterTool) {
+          failAfterTool = false;
+          throw new Error("crash");
+        }
+      },
+    }),
+  ).rejects.toThrow("crash");
+  await runTurn(context, model, tools, store);
+  expect(executions).toBe(1);
+  expect(
+    summarizeRunCost({ status: "succeeded", turn: store.get() }),
+  ).toMatchObject({
+    estimatedUsd: 0.000714,
+    status: "complete",
+    pricedCalls: 3,
+  });
+});
+it("checkpoints uncertainty before a model call so a resumed crash cannot appear complete", async () => {
+  const store = memory();
+  await expect(
+    runTurn(
+      context,
+      {
+        next: async () => {
+          throw new Error("connection lost");
+        },
+      },
+      { definitions: () => [], execute: async () => ok },
+      store,
+    ),
+  ).rejects.toThrow("connection lost");
+  expect(
+    summarizeRunCost({ status: "failed", turn: store.get() }),
+  ).toMatchObject({
+    estimatedUsd: null,
+    status: "unavailable",
+    unpricedCalls: 1,
+  });
+  await runTurn(
+    context,
+    {
+      next: async () => ({
+        text: "done",
+        calls: [],
+        providerItems: [],
+        inputTokens: 100,
+        outputTokens: 10,
+        costCall: measured(),
+      }),
+    },
+    { definitions: () => [], execute: async () => ok },
+    store,
+  );
+  expect(
+    summarizeRunCost({ status: "succeeded", turn: store.get() }),
+  ).toMatchObject({
+    estimatedUsd: 0.000238,
+    status: "partial",
+    pricedCalls: 1,
+    unpricedCalls: 1,
+  });
+});
+it("counts a tool response with missing usage once as unpriced", async () => {
+  const store = memory();
+  const model = {
+    next: async () => ({
+      text: "",
+      calls: [call],
+      providerItems: [],
+      inputTokens: 100,
+      outputTokens: 10,
+      costCall: measured(),
+    }),
+  };
+  const tools = {
+    definitions: () => [],
+    execute: async () => ({
+      ...ok,
+      usageUnknown: true,
+      costCalls: [
+        meterOpenAiResponse(
+          {
+            id: "missing-usage",
+            model: "gpt-6-sol",
+            service_tier: "default",
+            status: "completed",
+          },
+          "document",
+        ),
+      ],
+    }),
+  };
+  await runTurn(context, model, tools, store);
+  expect(
+    summarizeRunCost({ status: "partial", turn: store.get() }),
+  ).toMatchObject({
+    estimatedUsd: 0.000238,
+    status: "partial",
+    pricedCalls: 1,
+    unpricedCalls: 1,
+  });
 });

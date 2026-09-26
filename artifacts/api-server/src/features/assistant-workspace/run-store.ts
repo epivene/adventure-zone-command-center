@@ -1,3 +1,4 @@
+import { combineCostSummaries, summarizeRunCost } from "./usage-cost";
 import type {
   Actor,
   Selection,
@@ -115,6 +116,16 @@ export class RunStore {
         [actorId, conversationId],
       )
     ).rows.map(map);
+  }
+  async cost(actorId: string, conversationId: string) {
+    // The recent-run list is capped at 30. Conversation cost includes all runs.
+    const result = await this.db.query(
+      "SELECT status, checkpoint->'turn' AS turn FROM assistant_workspace_runs WHERE actor_id=$1 AND conversation_id=$2",
+      [actorId, conversationId],
+    );
+    return combineCostSummaries(
+      result.rows.map((run) => summarizeRunCost(run)),
+    );
   }
   async claim(workerId: string): Promise<SavedRun | null> {
     const r = await this.db.query(

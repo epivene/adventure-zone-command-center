@@ -7,7 +7,19 @@ const listeners = new Set<AuthChangeListener>();
 
 export function onAuthChange(listener: AuthChangeListener): () => void {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  const onStorage = (event: StorageEvent) => {
+    if (
+      event.storageArea === localStorage &&
+      (event.key === STORAGE_KEY || event.key === null)
+    ) {
+      listener(getAuthToken());
+    }
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
 }
 
 export function setAuthToken(token: string | null) {
@@ -56,7 +68,12 @@ export async function apiFetch(
   }
   const res = await fetch(`${apiRoot()}${path}`, { ...options, headers });
   // Expired/invalid token: clear it so the app returns to sign-in.
-  if (res.status === 401 && token && path !== "/auth/login") {
+  if (
+    res.status === 401 &&
+    token &&
+    getAuthToken() === token &&
+    path !== "/auth/login"
+  ) {
     setAuthToken(null);
   }
   return res;
@@ -74,7 +91,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as any;
+    const err = (await res.json().catch(() => ({}))) as any;
     throw new Error(err?.error ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;
@@ -90,7 +107,7 @@ export async function apiUpload<T>(path: string, file: File): Promise<T> {
     body: file,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as any;
+    const err = (await res.json().catch(() => ({}))) as any;
     throw new Error(err?.error ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;
@@ -102,7 +119,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as any;
+    const err = (await res.json().catch(() => ({}))) as any;
     throw new Error(err?.error ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;
@@ -114,7 +131,7 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as any;
+    const err = (await res.json().catch(() => ({}))) as any;
     throw new Error(err?.error ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;
@@ -126,7 +143,7 @@ export async function apiDelete<T>(path: string, body?: unknown): Promise<T> {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as any;
+    const err = (await res.json().catch(() => ({}))) as any;
     throw new Error(err?.error ?? `API ${res.status}`);
   }
   return res.json() as Promise<T>;

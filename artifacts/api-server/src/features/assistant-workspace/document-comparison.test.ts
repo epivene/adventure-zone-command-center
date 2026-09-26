@@ -1,6 +1,20 @@
 import { it, expect, vi } from "vitest";
 import { compareDocuments } from "./document-comparison";
 import { emptySelection } from "./contracts";
+const visualCostCall = {
+  responseId: "visual-response",
+  source: "document" as const,
+  model: "gpt-6-sol",
+  serviceTier: "default",
+  inputTokens: 12,
+  cachedInputTokens: 2,
+  cacheWriteTokens: 0,
+  outputTokens: 7,
+  observedAt: "2026-09-25T00:00:00.000Z",
+  pricingVersion: "test-rate-card",
+  estimatedUsd: 0.0002,
+  excluded: [],
+};
 const ctx: any = {
   actor: { id: "owner", role: "owner" },
   selection: { ...emptySelection(), organizationIds: ["org"] },
@@ -99,6 +113,7 @@ it("retains visual usage when a later source is missing or changed", async () =>
     read: async (_c: any, s: any) => ({
       ...source(s.documentId),
       usage: { inputTokens: 40, outputTokens: 10 },
+      costCalls: [visualCostCall],
     }),
   };
   const out = await compareDocuments(
@@ -121,12 +136,14 @@ it("retains visual usage when a later source is missing or changed", async () =>
   );
   expect(out.code).toBe("ASSISTANT_DOCUMENT_UNAVAILABLE");
   expect(out.usage).toEqual({ inputTokens: 40, outputTokens: 10 });
+  expect(out.costCalls).toEqual([visualCostCall]);
 });
 it("stops comparison after uncertain billed extraction and retains known usage", async () => {
   const read = vi.fn(async () => ({
     ...source("a", true),
     usageUnknown: true,
     usage: { inputTokens: 20, outputTokens: 3 },
+    costCalls: [visualCostCall],
   }));
   const out = await compareDocuments(
     ctx,
@@ -143,4 +160,75 @@ it("stops comparison after uncertain billed extraction and retains known usage",
   expect(read).toHaveBeenCalledTimes(1);
   expect(out.usageUnknown).toBe(true);
   expect(out.usage).toEqual({ inputTokens: 20, outputTokens: 3 });
+  expect(out.costCalls).toEqual([visualCostCall]);
 });
+
+it("includes every paid visual read exactly once in a completed comparison", async () => {
+  const out = await compareDocuments(
+    ctx,
+    ["a", "b"].map((documentId) => ({ documentId, expectedVersion: null })),
+    {
+      read: async (_context: any, input: any) => ({
+        ...source(input.documentId),
+        usage: { inputTokens: 12, outputTokens: 7 },
+        costCalls: [{ ...visualCostCall, responseId: input.documentId }],
+      }),
+    } as any,
+    async (id) => ({
+      id,
+      title: id,
+      category: "contract",
+      organizationIds: ["org"],
+      eventYear: 2027,
+    }),
+  );
+  expect(out.status).toBe("ok");
+  expect(out.costCalls).toEqual([
+    { ...visualCostCall, responseId: "a" },
+    { ...visualCostCall, responseId: "b" },
+  ]);
+  expect(out.usage).toEqual({ inputTokens: 24, outputTokens: 14 });
+});
+it.each([false, true])(
+  "marks legacy reading usage as unpriced when comparison stops early: %s",
+  async (unavailable) => {
+    const out = await compareDocuments(
+      ctx,
+      ["legacy", "metered"].map((documentId) => ({
+        documentId,
+        expectedVersion: null,
+      })),
+      {
+        read: async (_context: any, input: any) => ({
+          ...source(input.documentId),
+          usage: { inputTokens: 12, outputTokens: 7 },
+          ...(input.documentId === "metered"
+            ? { costCalls: [visualCostCall] }
+            : {}),
+        }),
+      } as any,
+      async (id) => {
+        if (unavailable && id === "metered") throw new Error("deleted");
+        return {
+          id,
+          title: id,
+          category: "contract",
+          organizationIds: ["org"],
+          eventYear: 2027,
+        };
+      },
+    );
+    expect(out.status).toBe(unavailable ? "blocked" : "ok");
+    expect(out.costCalls).toHaveLength(unavailable ? 1 : 2);
+    expect(out.costCalls?.[0]).toMatchObject({
+      source: "document",
+      responseId: null,
+      model: null,
+      estimatedUsd: null,
+      excluded: expect.arrayContaining([
+        "Some document reading usage lacks provider pricing metadata.",
+      ]),
+    });
+    if (!unavailable) expect(out.costCalls?.[1]).toEqual(visualCostCall);
+  },
+);

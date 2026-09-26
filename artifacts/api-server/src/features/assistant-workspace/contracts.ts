@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ProviderCostCall } from "./usage-cost";
 import type { ConversationMemory } from "./conversation-context";
 export const selectionSchema = z
   .object({
@@ -54,6 +55,7 @@ export type Receipt = {
   verifiedAt: string;
 };
 export type ToolResult = {
+  costCalls?: ProviderCostCall[];
   screenshots?: Screenshot[];
   usageUnknown?: boolean;
   usage?: { inputTokens: number; outputTokens: number };
@@ -105,6 +107,7 @@ export type ModelInput = {
   signal: AbortSignal;
 };
 export type ModelStep = {
+  costCall?: ProviderCostCall;
   text: string;
   calls: ToolCall[];
   providerItems: unknown[];

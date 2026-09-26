@@ -1,3 +1,4 @@
+import { summarizeRunCost } from "../features/assistant-workspace/usage-cost";
 import { publicCampaignReviews } from "../features/assistant-workspace/campaign-tools";
 import { confirmationFor } from "../features/assistant-workspace/commercial-actions";
 import { publicDocumentResults } from "../features/assistant-workspace/document-results";
@@ -122,13 +123,15 @@ export function createAssistantWorkspaceRouter(
         s.status(404).json({ code: "ASSISTANT_CONVERSATION_NOT_FOUND" });
         return;
       }
-      const [actions, drafts, runs] = await Promise.all([
+      const [actions, drafts, runs, cost] = await Promise.all([
         r.actions.list(a, id),
         r.drafts.list(a, id),
         r.runs.list(a, id),
+        r.runs.cost(a, id),
       ]);
       s.json({
         ...conversation,
+        usage: { cost },
         actions: await Promise.all(
           actions.map(async (action) => ({
             ...action,
@@ -159,7 +162,11 @@ export function createAssistantWorkspaceRouter(
         runs: runs.map((run) => ({
           id: run.id,
           status: run.status,
-          usage: { steps: run.turn?.steps ?? 0, tokens: run.turn?.tokens ?? 0 },
+          usage: {
+            steps: run.turn?.steps ?? 0,
+            tokens: run.turn?.tokens ?? 0,
+            cost: summarizeRunCost(run),
+          },
           result: run.turn?.final ?? null,
         })),
       });
@@ -279,7 +286,11 @@ export function createAssistantWorkspaceRouter(
         id: run.id,
         status: run.status,
         result: run.turn?.final ?? null,
-        usage: { steps: run.turn?.steps ?? 0, tokens: run.turn?.tokens ?? 0 },
+        usage: {
+          steps: run.turn?.steps ?? 0,
+          tokens: run.turn?.tokens ?? 0,
+          cost: summarizeRunCost(run),
+        },
       });
     }),
   );
