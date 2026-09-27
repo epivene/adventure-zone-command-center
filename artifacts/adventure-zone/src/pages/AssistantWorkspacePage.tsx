@@ -1,3 +1,4 @@
+import { ProfileTaskList } from "@/components/assistant-workspace/ProfileTaskList";
 import {
   ScreenshotPicker,
   SavedScreenshot,
@@ -997,6 +998,14 @@ export default function AssistantWorkspacePage({
                       Review a customer conversation
                     </button>
                   </div>
+                )}
+                {conversation?.profileTasksEnabled && (
+                  <ProfileTaskList
+                    conversationId={conversation.id}
+                    initialTasks={conversation.profileTasks}
+                    readOnly={readOnly}
+                    onChanged={refresh}
+                  />
                 )}
                 {conversation?.messages.map((m) => (
                   <article

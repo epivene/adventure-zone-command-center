@@ -1,3 +1,4 @@
+import { assistantWorkspaceProfileTasksSql } from "./assistant-workspace-profile-tasks";
 import { assistantWorkspaceLifecycleSql } from "./assistant-workspace-lifecycle";
 import { assistantWorkspaceSpendingSql } from "./assistant-workspace-spending";
 export const assistantWorkspaceSql = `CREATE TABLE IF NOT EXISTS assistant_workspace_conversations (
@@ -124,12 +125,14 @@ export async function ensureAssistantWorkspaceSchema(db: {
     await db.exec(
       assistantWorkspaceSql +
         assistantWorkspaceLifecycleSql +
-        assistantWorkspaceSpendingSql,
+        assistantWorkspaceSpendingSql +
+        assistantWorkspaceProfileTasksSql,
     );
   else
     await db.query(
       assistantWorkspaceSql +
         assistantWorkspaceLifecycleSql +
-        assistantWorkspaceSpendingSql,
+        assistantWorkspaceSpendingSql +
+        assistantWorkspaceProfileTasksSql,
     );
 }

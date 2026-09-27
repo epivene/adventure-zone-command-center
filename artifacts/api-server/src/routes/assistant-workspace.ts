@@ -1,3 +1,5 @@
+import { resolveContinuation } from "../features/assistant-workspace/profile-task-context";
+import { createProfileTaskRouter } from "./assistant-workspace-tasks";
 import { summarizeRunCost } from "../features/assistant-workspace/usage-cost";
 import { publicCampaignReviews } from "../features/assistant-workspace/campaign-tools";
 import { confirmationFor } from "../features/assistant-workspace/commercial-actions";
@@ -102,6 +104,7 @@ export function createAssistantWorkspaceRouter(
     (req: Request, res: Response, next: NextFunction) => {
       void fn(req, res, runtime(), res.locals.actorId).catch(next);
     };
+  router.use(createProfileTaskRouter(runtime));
   router.get(
     "/spending",
     wrap(async (_q, s, r, a) => {
@@ -189,6 +192,14 @@ export function createAssistantWorkspaceRouter(
       ]);
       s.json({
         ...conversation,
+        profileTasksEnabled:
+          process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true",
+        profileTasks:
+          process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true"
+            ? await Promise.all(
+                (await r.profileTasks.list(a, id)).map((t) => r.taskView(t)),
+              )
+            : [],
         usage: { cost },
         actions: await Promise.all(
           actions.map(async (action) => ({
@@ -284,6 +295,50 @@ export function createAssistantWorkspaceRouter(
         // even if another tab raised the budget or the UTC day changed.
         s.status(404).json({ code: "ASSISTANT_REQUEST_NOT_FOUND" });
         return;
+      }
+      if (
+        process.env.ASSISTANT_PROFILE_TASKS_ENABLED === "true" &&
+        !attachments.length &&
+        /^\s*(continue|resume)\s*[.!]?\s*$/i.test(input.text)
+      ) {
+        const tasks = await r.profileTasks.list(a, id),
+          choice = resolveContinuation(tasks);
+        if (choice.kind !== "none") {
+          await r.conversations.append(a, id, input.requestKey, {
+            role: "user",
+            text: input.text,
+          });
+          if (choice.kind === "choose") {
+            await r.conversations.append(a, id, input.requestKey, {
+              role: "assistant",
+              text: "Choose the task you want to resume from the task cards below.",
+            });
+            s.status(202).json({
+              status: "choose_task",
+              taskIds: choice.taskIds,
+            });
+            return;
+          }
+          const task = tasks.find((t) => t.id === choice.taskId)!;
+          const prior = (
+            await r.profileTasks.db.query(
+              "SELECT task_id FROM assistant_profile_task_commands WHERE task_id=$1 AND request_key=$2",
+              [task.id, input.requestKey],
+            )
+          ).rows[0];
+          if (task.state !== "running" && !prior)
+            await r.profileTasks.command(
+              a,
+              task.id,
+              task.version,
+              "resume",
+              [],
+              input.requestKey,
+            );
+          void r.worker.tick().catch(() => {});
+          s.status(202).json({ taskId: task.id, status: "task_resumed" });
+          return;
+        }
       }
       // The provider also reserves atomically just before each generation.
       // This cheap check avoids queueing new work when the owner has paused AI.

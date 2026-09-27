@@ -69,6 +69,8 @@ export type ConversationListItem = {
   lifecycle?: ConversationLifecycle;
 };
 export type Conversation = {
+  profileTasksEnabled?: boolean;
+  profileTasks?: ProfileTask[];
   lifecycle?: ConversationLifecycle;
   usage?: { cost: UsageCost };
   summary?: unknown;
@@ -206,4 +208,54 @@ export type CampaignReview = {
   reasons: string[];
   cautions: string[];
   checkedAt: string;
+};
+export type ProfileTaskCommand =
+  "pause" | "resume" | "cancel" | "retry" | "skip";
+export type ProfileTaskChange = {
+  actionId: string;
+  itemId: string;
+  profileName: string;
+  kind?: string;
+  revision: string | null;
+  available: boolean;
+  conflict?: string | null;
+  fields: { field: string; oldValue: unknown; newValue: unknown }[];
+  sources: string[];
+};
+export type ProfileTask = {
+  id: string;
+  version: number;
+  state:
+    | "proposed"
+    | "running"
+    | "paused"
+    | "waiting_review"
+    | "completed"
+    | "cancelled";
+  pauseReason: string | null;
+  scope: {
+    objective: string;
+    completionMode?: "manual" | "sourced_notes" | "profile_fields";
+    profileIds: string[];
+    eventYear: number | null;
+    requestedFields: string[];
+    taskCapUsd: number | null;
+  };
+  authority: { actionKinds: string[]; allowedFields: string[] };
+  counts: {
+    total: number;
+    completed: number;
+    needsReview: number;
+    failed: number;
+    remaining: number;
+  };
+  items: {
+    id: string;
+    profileId: string;
+    profileName?: string;
+    state: string;
+    reason: string | null;
+    actionIds: string[];
+  }[];
+  changes: ProfileTaskChange[];
 };

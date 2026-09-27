@@ -233,6 +233,31 @@ export class SpendingStore {
         [scope.runId, scope.conversationId, scope.actorId],
       );
       if (!owned.rows.length) throw invalid();
+      const task = (
+        await q.query(
+          `SELECT t.id,t.state,t.scope FROM assistant_profile_tasks t JOIN assistant_profile_task_runs b ON b.task_id=t.id WHERE b.run_id=$1 AND t.actor_id=$2 FOR UPDATE OF t`,
+          [scope.runId, scope.actorId],
+        )
+      ).rows[0];
+      if (task) {
+        if (task.state !== "running") throw new Error("ASSISTANT_TASK_PAUSED");
+        if (
+          task.scope.taskCapUsd !== null &&
+          task.scope.taskCapUsd !== undefined
+        ) {
+          const total = (
+            await q.query(
+              `SELECT COALESCE(SUM(CASE WHEN s.state='settled' THEN s.charged_nanos ELSE s.reserved_nanos END),0)::text AS amount FROM assistant_workspace_spending_calls s JOIN assistant_profile_task_runs b ON b.run_id=s.run_id WHERE b.task_id=$1`,
+              [task.id],
+            )
+          ).rows[0];
+          if (
+            BigInt(total.amount) + BigInt(amountNanos) >
+            BigInt(Math.round(task.scope.taskCapUsd * NANOS_PER_USD))
+          )
+            throw new Error("ASSISTANT_BUDGET_LIMIT");
+        }
+      }
       const existing = await q.query(
         `SELECT call_id FROM assistant_workspace_spending_calls WHERE call_id=$1`,
         [scope.callId],
