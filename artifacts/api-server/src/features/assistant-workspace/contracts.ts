@@ -75,6 +75,9 @@ export type Grant = {
   connectionId: string | null;
 };
 export type RunContext = {
+  taskId?: string;
+  taskReview?: boolean;
+  taskVersion?: number;
   toolCallId?: string;
   actor: Actor;
   conversationId: string;

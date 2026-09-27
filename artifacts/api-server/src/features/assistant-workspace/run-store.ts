@@ -8,6 +8,8 @@ import type {
 } from "./contracts";
 import type { TurnCheckpoint } from "./orchestrator";
 export type RunInput = {
+  taskId?: string;
+  itemIds?: string[];
   actor: Actor;
   conversationId: string;
   sourceMessageId: string;

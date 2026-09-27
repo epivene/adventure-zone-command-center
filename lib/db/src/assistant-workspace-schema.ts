@@ -454,3 +454,80 @@ export const assistantWorkspaceSpendingCalls = pgTable(
       .where(sql`${t.state} IN ('reserved','uncertain')`),
   ],
 );
+
+export const assistantProfileTasks = pgTable("assistant_profile_tasks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  actorId: text("actor_id").notNull(),
+  conversationId: uuid("conversation_id").notNull(),
+  sourceMessageId: uuid("source_message_id").notNull(),
+  requestKey: text("request_key").notNull(),
+  scope: jsonb("scope").notNull(),
+  authority: jsonb("authority").notNull(),
+  state: text("state").notNull().default("proposed"),
+  version: integer("version").notNull().default(1),
+  pauseReason: text("pause_reason"),
+  leaseToken: integer("lease_token").notNull().default(0),
+  leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  workerId: text("worker_id"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+export const assistantProfileTaskItems = pgTable(
+  "assistant_profile_task_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    profileNameSnapshot: text("profile_name_snapshot")
+      .notNull()
+      .default("Unavailable profile"),
+    eventYear: integer("event_year"),
+    state: text("state").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    reason: text("reason"),
+    evidenceIds: jsonb("evidence_ids").notNull().default([]),
+    receiptIds: jsonb("receipt_ids").notNull().default([]),
+    actionIds: jsonb("action_ids").notNull().default([]),
+    ordinal: integer("ordinal").notNull(),
+  },
+);
+export const assistantProfileTaskRuns = pgTable("assistant_profile_task_runs", {
+  taskId: uuid("task_id").notNull(),
+  runId: uuid("run_id").notNull(),
+  batchNumber: integer("batch_number").notNull(),
+  itemIds: jsonb("item_ids").notNull(),
+  settled: boolean("settled").notNull().default(false),
+});
+
+export const assistantProfileTaskCommands = pgTable(
+  "assistant_profile_task_commands",
+  {
+    taskId: uuid("task_id").notNull(),
+    requestKey: text("request_key").notNull(),
+    payload: jsonb("payload").notNull(),
+  },
+);
+export const assistantProfileTaskEvidence = pgTable(
+  "assistant_profile_task_evidence",
+  {
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    evidenceId: text("evidence_id").notNull(),
+    data: jsonb("data").notNull(),
+  },
+);
+export const assistantProfileTaskChangeEvidence = pgTable(
+  "assistant_profile_task_change_evidence",
+  {
+    taskId: uuid("task_id").notNull(),
+    profileId: uuid("profile_id").notNull(),
+    kind: text("kind").notNull(),
+    fingerprint: text("fingerprint").notNull(),
+    arguments: jsonb("arguments").notNull(),
+    evidenceIds: jsonb("evidence_ids").notNull(),
+  },
+);
