@@ -664,6 +664,15 @@ const migrationFiles = [
       AND to_regclass(current_schema() || '.event_date_coverage_items_run_org_unique') IS NOT NULL
       AS ready`,
   },
+  {
+    name: "20260929_profile_research_event_date_target.sql",
+    markerSql: `SELECT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conrelid = 'profile_research_suggestions'::regclass
+        AND conname = 'profile_research_suggestions_target_kind_check'
+        AND pg_get_constraintdef(oid) LIKE '%event_date_fact%'
+    ) AS ready`,
+  },
 ] as const;
 
 async function resolveMigrationDirectory(): Promise<URL> {

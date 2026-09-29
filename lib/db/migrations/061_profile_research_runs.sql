@@ -33,7 +33,7 @@ create table if not exists profile_research_sources (
 create table if not exists profile_research_suggestions (
   id uuid primary key default gen_random_uuid(),
   run_id uuid not null references profile_research_runs(id) on delete cascade,
-  target_kind text not null check (target_kind in ('organization', 'contact', 'booking')),
+  target_kind text not null check (target_kind in ('organization', 'contact', 'booking', 'event_date_fact')),
   target_id uuid,
   field text not null,
   current_value text,
